@@ -8972,3 +8972,28 @@ This resolves the design block **without authorizing runtime or motion**.
   manifest; the Rollout-set exclusion; then Task 11A's parallel collection and recovery modules.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-768 — Task 11: closed payload and the two selection gates
+
+- **Delivered:** `build_collection_payload(...)` and `require_collection_selection(manifest, *,
+  qualification_mode)` in `act/collection.py`, with tests.
+  - payload: `backend` fixed to `mujoco`; every referenced artifact **digested** (manifest, calibration
+    report, policy, activation receipt) so the spec carries evidence, not paths alone; absolute
+    non-symlink `evidence_root`; boolean `qualification_mode`; `limit >= 1`; closed key set. The service's
+    epoch and binding are deliberately **not** invented.
+  - selection: formal mode -> Train/Validation/Offline Test only; qualification mode -> the 8 functional
+    and 40 load scenes only; each mode answers `COLLECTION_SELECTION_EMPTY` with nothing of its own, so
+    qualification scenes cannot enter training and formal scenes cannot enter a qualification run.
+- **A design error of mine, caught by the test:** I first had a Rollout row **refuse the whole manifest**
+  (`COLLECTION_ROLLOUT_FORBIDDEN`), which would make the CLI unusable against a real five-split manifest.
+  The sets legitimately live there; they must merely never receive expert labels, so the gate now
+  **excludes** them and the test asserts the exclusion.
+- **Also mine, and fixed:** a stray `assert ... == [] or True` line called the gate outside
+  `pytest.raises` and raised uncaught; removed, since the `pytest.raises` block below already carried the
+  real assertion.
+- **Verification:** focused tests **7 passed** (`gate6-batch3-py-gate/task11g.{log,junit.xml}`).
+- **Remaining in Task 11:** the thin `cli/act_collect.py` wrapper (+ `setup.py` entry) over these two
+  functions, with the plan's failure-matrix tests (admission refusal -> zero resets, actions and children;
+  one reset per attempt; re-entry cannot overwrite a terminal state), then Task 11A.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
