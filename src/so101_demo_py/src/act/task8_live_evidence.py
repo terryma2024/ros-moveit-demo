@@ -332,3 +332,33 @@ def require_case_journal_row(row: dict, *, mode: str) -> dict:
     elif not isinstance(row["live_evidence_path"], str) or not row["live_evidence_path"]:
         raise ValueError("TASK8_JOURNAL_PATH_INVALID")
     return dict(row)
+
+
+def require_campaign_cases(manifest: dict, *, prefix_count: int = 9,
+                           full_count: int = 5) -> tuple[str, ...]:
+    """The exact ordered case list a canonical run must execute in one production call.
+
+    The list comes from the frozen manifest, never from a caller: nine prefixes in phase order
+    followed by five full cases, every id unique, so a run cannot drop, repeat or reorder a case.
+    """
+
+    if type(manifest) is not dict:
+        raise ValueError("TASK8_CAMPAIGN_MANIFEST_INVALID")
+    prefixes = manifest.get("prefix_cases")
+    fulls = manifest.get("full_cases")
+    if not isinstance(prefixes, list) or not isinstance(fulls, list):
+        raise ValueError("TASK8_CAMPAIGN_MANIFEST_INVALID")
+    if len(prefixes) != prefix_count or len(fulls) != full_count:
+        raise ValueError("TASK8_CAMPAIGN_CASE_COUNT_INVALID")
+    ids = []
+    for case in (*prefixes, *fulls):
+        case_id = case.get("case_id") if isinstance(case, dict) else None
+        if type(case_id) is not str or _CASE_ID.fullmatch(case_id) is None:
+            raise ValueError("TASK8_CAMPAIGN_CASE_ID_INVALID")
+        ids.append(case_id)
+    if len(set(ids)) != len(ids):
+        raise ValueError("TASK8_CAMPAIGN_CASE_DUPLICATE")
+    if any(not case_id.startswith("prefix-") for case_id in ids[:prefix_count]) or \
+            any(not case_id.startswith("full-") for case_id in ids[prefix_count:]):
+        raise ValueError("TASK8_CAMPAIGN_CASE_ORDER_INVALID")
+    return tuple(ids)
