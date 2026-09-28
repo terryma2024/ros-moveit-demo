@@ -7324,3 +7324,41 @@ by production code.
 - **Boundaries:** no process, controller goal or motion started; no measurement run; the authored
   artifact lives in the evidence root, not the source tree; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED; evidence preserved.
+
+## CP-697 — PLANNED: artifact completion, calibration and the smallest prefix ladder
+
+Pre-motion checks completed and recorded (`experiments/gate6-runtime/premotion-checks.txt`), all at
+HEAD `0e614d94` on the existing Gate-6 evidence root:
+
+1. **Conflicting stack:** `matching_processes = 0` for `ros2|move_group|gz sim|mujoco|ros2_control|rviz`;
+   only the two attached tmux sessions exist, owning no such processes.
+2. **Exact executable/overlay:** test venv `Python 3.12.3` (executable check OK), perception venv
+   `/data/work/venvs/so101-grounded-sam/bin/python` OK, install base `i/` and build base `b/` present;
+   source<->install **MATCH** for `adapters/act/command_broker.py` (`6d31d8017cd1`),
+   `act/pick_place_validation_campaign.py` (`64042c6ab429`),
+   `cli/act_run_pick_place_validation.py` (`7f06d310f3dc`) and `unified/ros_child.py` (`e22e496d4e9b`).
+3. **NVMe evidence/scratch:** runtime scratch under the registered durable root; a fresh test scratch
+   `scratch/exp573-premotion.*` with `tempfile.gettempdir()` resolving inside it (**PASS**); IPC base
+   `700` perms. Honest caveat: `df --output=target` reports the target as `/`, so this probe does
+   **not** prove a distinct NVMe mount — the path requirement (under the task's `/data` evidence
+   root) is satisfied, the separate-filesystem claim is not asserted.
+4. **Calibration stop boundary:** if `act_preflight` or the head-search measurement refuses, the
+   ladder stops before motion — no fallback calibration, no relabelling of partial documents, no
+   threshold relaxation.
+5. **Cleanup ownership:** this task owns the gate runner (which reaps all children) and any stack it
+   starts later; no other ROS/Gazebo/MuJoCo process is owned by this session.
+
+**Planned work, in order (single variable per step, fail-closed):**
+author the remaining artifacts -> produce the `head_search_qualification` sample + `TASK8_READY`
+calibration matching the authored runtime_config descriptor -> `act_preflight` -> prepare the
+Task-8 live manifest -> verify every hash -> start the ladder at prefix-01 on `ROS_DOMAIN_ID=197`
+with restricted recovery/reset acquire-release first and only the exact `owner == act` acquire
+consuming the one-shot session, preserving startup-only resource binding, the authorized
+fingerprint `0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11`, generation-scoped
+single-flight cleanup, per-case FULL_RESTART ownership and detach-before-open.
+
+**Open inputs (owner: user):** the head-search qualification producer (or authorization to build
+it), the `collection_config` definition, and the file `source_sha256` binds.
+
+- **Boundaries:** no process, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED; evidence preserved.
