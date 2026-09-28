@@ -11,7 +11,7 @@ from so101_demo.adapters.act.physics_clock_history import PhysicsClockHistory
 from so101_demo.adapters.act.ros_physics_clock import RosPhysicsClockAdapter
 from so101_demo.core.simulation.types import ObjectState, SimulationEvidence
 
-from test_act_physics_clock_history import NOW_NS, _chunk, _sample
+from test_act_physics_clock_history import NOW_NS, SOURCE_BASE_NS, STEP_NS, _chunk, _sample
 
 
 class FakeNode:
@@ -244,3 +244,31 @@ def test_invalid_reset_proof_does_not_clear_current_history():
         adapter.arm(replace(_reset(2), paused=False))
     assert history.step_at(1)["sample"].reset_epoch == 1
     assert hazards == []
+
+
+def test_adapter_health_check_latches_silence_and_notifies_once_per_epoch():
+    """The owner must be able to poll one bounded health contract on the adapter."""
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = PhysicsClockHistory(
+        "clock-session", nq=2, nv=1, max_age_s=.2, max_source_step_gap_ns=3_000_000,
+        max_silence_s=.05, first_chunk_timeout_s=.1, clock_ns=lambda: now[0])
+    node = FakeNode()
+    hazards = []
+    adapter = RosPhysicsClockAdapter(node, history, on_hazard=hazards.append)
+    assert adapter.check_health() is False
+    assert hazards == []
+    adapter.arm(_reset(1))
+    assert adapter.check_health() is True
+    adapter.accept_message(_chunk(0, _sample(1)))
+    assert adapter.check_health() is True
+    assert hazards == []
+    now[0] += 60_000_000
+    assert adapter.check_health() is False
+    assert history.hazard == "PHYSICS_CLOCK_SILENT"
+    assert hazards == ["PHYSICS_CLOCK_SILENT"]
+    now[0] += 60_000_000
+    assert adapter.check_health() is False
+    assert hazards == ["PHYSICS_CLOCK_SILENT"]  # one notification per epoch
+    with pytest.raises(ValueError):
+        history.step_at(1)
