@@ -10498,3 +10498,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   deletion candidates after readback and none was deleted.
 - **Boundaries:** no runtime or motion, no hardware, no gate lowered, no push, no evidence deleted; user's
   31 modified and 12 untracked paths untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-834 (b643b48b) — Task 12 lock resolver GREEN; LeRobot 3.12 compatibility confirmed by the index
+
+- **Source change:** new `src/cli/act_resolve_training_requirements.py` (plus its `setup.py` console entry,
+  which I verified was clean before my edit: the whole file changes by exactly this one insertion) and
+  `test/test_act_training_lock_resolver.py`. TDD order: RED first with
+  `ModuleNotFoundError: No module named 'so101_demo.cli.act_resolve_training_requirements'` and **5 failed**
+  (`beh-lock-resolver-red.log`), then **8 passed** together with the requirements tests
+  (`beh-lock-resolver-green.log`). One of my own RED cases was wrong - it asserted that a minimal but perfectly
+  valid report must be refused - and the implementation was right, so the test case was corrected rather than
+  the code, with the correction recorded here.
+- **What the resolver enforces:** every package must carry the artifact SHA from the uv report
+  (`sha256=<64 hex>`), a report entry without a hash fails with `TRAINING_REPORT_UNHASHED`, an unhashable shape
+  with `TRAINING_REPORT_INVALID`, and the resolver records the interpreter, the UTC resolution time and a
+  digest over the exact index set. The generated document validates through `require_resolved_requirements`.
+- **LeRobot compatibility checked against the index rather than assumed:** `pypi.tuna.tsinghua.edu.cn` lists
+  LeRobot 0.6.1 (newest) with `data-requires-python=">=3.12"`, while 0.4.3/0.4.4 declare `>=3.10`. The training
+  venv is CPython **3.12.3**, so the newest release is in range and the user's stop condition (LeRobot not
+  supporting the planned Python version) does **not** trigger.
+- **CUDA line decided by the hardware, not by preference:** `nvidia-smi` reports the RTX 5060 Ti at compute
+  capability **12.0** (Blackwell), which needs cu128-or-newer wheels, so torch and torchvision are resolved from
+  `https://download.pytorch.org/whl/cu128` (HTTP 200 verified) and LeRobot from the TUNA mirror (HTTP 200
+  verified), with `NO_PROXY`/`no_proxy` set for both hosts in that command only, per the repository's
+  dependency-install note.
+- **Independent interpreter, never ROS Python:** `task12-training/venv-a` (CPython 3.12.3) under the registered
+  evidence root; resolution log `task12-training/logs/resolve-venv-a.log`; uv cache reached 3.1 GB while
+  fetching the CUDA wheels. A second clean environment rebuilt from the lock is still required before the smoke
+  is accepted.
+- **Scratch discipline:** fresh verified scratch for each focused run (`pg17.6PiL` RED, `pg18.VEYc` first GREEN,
+  `pg19.TK52` corrected GREEN), all verified through the exact interpreter and all deletion candidates.
+- **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered;
+  user's 31 modified and 12 untracked paths untouched (setup.py was clean before my one-line addition and is
+  committed with it); formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
