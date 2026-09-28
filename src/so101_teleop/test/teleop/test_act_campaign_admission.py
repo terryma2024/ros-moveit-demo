@@ -136,6 +136,14 @@ def _calibration(tmp_path, *, status, head_search):
     report = {"schema_version": 1, "status": status, "source_commit": "a" * 40,
               "config_sha256": "b" * 64, "source_provenance_sha256": "c" * 64,
               "measurements": measurements, "checks": checks}
+    if status == "QUALIFIED":
+        # a QUALIFIED report must trace to the live campaign that produced it (8P4)
+        report["live_campaign"] = {
+            "case_root": str(tmp_path / "task8-live"),
+            "campaign_result_sha256": "d" * 64,
+            "preparation_receipt_sha256": "e" * 64,
+            "journal_sha256": ["f" * 64] * 14,
+        }
     path = tmp_path / f"calibration-{status}.json"
     path.write_text(json.dumps(report))
     return str(path), hashlib.sha256(path.read_bytes()).hexdigest()
@@ -534,8 +542,10 @@ def test_task8_start_rejects_semantically_invalid_manifest_before_resources(tmp_
     else:
         manifest["source_sha256"] = "f" * 64
         expected = "TASK8_MANIFEST_BINDING_MISMATCH"
-    manifest["manifest_sha256"] = hashlib.sha256(_canonical({
-        key: value for key, value in manifest.items() if key != "manifest_sha256"
+    # v2 names the document digest manifest_document_sha256 (manifest_sha256 is the FILE digest,
+    # computed below), so a mutated document must recompute the v2 key or it is simply invalid
+    manifest["manifest_document_sha256"] = hashlib.sha256(_canonical({
+        key: value for key, value in manifest.items() if key != "manifest_document_sha256"
     })).hexdigest()
     manifest_path.write_bytes(_canonical(manifest))
     spec = replace(spec, payload={**spec.payload,
