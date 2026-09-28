@@ -9180,3 +9180,31 @@ This resolves the design block **without authorizing runtime or motion**.
   runtime/results adapters, then the teleop-side modifications and the live Steps 6–7.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-777 — Task 11A: fixed-collection composition and the parallel CLI
+
+- **Delivered:** `runtime/act_fixed_collection_composition.py`, `cli/act_collect_parallel.py` (+ its
+  `setup.py` entry) and `test_act_parallel_collection_integration.py`.
+  - **closed spec:** 21 keys, every referenced artifact digested; `require_worker_count` demands an
+    explicit positive count and refuses a mismatch with the runtime config's declaration.
+  - **qualification plane:** an explicitly passed contract path is **required** and created atomically
+    before spawn; a second run is `QUALIFICATION_CONTRACT_EXISTS` rather than inheriting the first run's
+    evidence.
+  - **formal plane:** exact `W8` under a contract that is present, **unrevoked** and exactly **40
+    scenes**.
+  - **resume:** requires the campaign index a previous run published
+    (`FIXED_COLLECTION_RESUME_INDEX_MISSING`) and passes its path through, so recovery is anchored to the
+    run's own partition.
+  - **no resources before admission:** the spec is composed — and every refusal taken — before a service
+    exists; the CLI is a thin wrapper over an injected factory (late `compose_services` on the production
+    path only).
+- **Two of my test assumptions were wrong and the guards were right:** the formal contract is a
+  **separate input** (the composition reads `--qualification-contract`, not a manifest field), and the
+  fixture-directory ordering slipped a third time. Both fixed in the tests; no guard was relaxed.
+- **Verification:** focused tests **4 passed** (`gate6-batch3-py-gate/task11a9.{log,junit.xml}`); Task 11A
+  focused total **20 passed**.
+- **Remaining in 11A:** `adapters/act/parallel_collection_runtime.py` and results wiring, the
+  `parallel_batch/worker.py` and `config/act/parallel_collection_v3.yaml` consumption, then the
+  teleop-side modifications and the live Steps 6–7.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
