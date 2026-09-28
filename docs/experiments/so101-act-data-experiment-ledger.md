@@ -6404,3 +6404,11 @@ status: PLANNED_ISOLATED_STACK
 - **诚实状态**：六模块 **19 failed / 139 passed**。失败原因是**测试夹具尚未迁移**到“已 seal、无调用方依赖”的 claim 域（`test_act_authority_transaction.py` 中的 stub registry 与若干 helper 仍按旧签名调用），不是新实现的行为缺陷；失败清单与 partial diff 已存 `experiments/exp571-recovery/`（`partial-edits.diff`、`green2-attempt.log`、`inventory.json`）。scratch 为新建且探针 PASS（`scratch/exp571-green2.ucEKoZIh`）。**未声明任何 GREEN 或关闭**。
 - 下一步（下一轮）：迁移夹具到 sealed 域 → 用同一命名集合在 `b917ae46` 基线上跑行为 RED（append-only 目录、独立 scratch）→ 当前树 GREEN → 六模块同集门禁 → 更新契约/audit/ledger/inventory 后停在 Gate 5 请求第九次复核。
 - 边界：Gate 5 仍 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-631 — EXP-571：provenance 更正（mirror + SHA 相等证明），行为 RED 6/7 可区分，第 7 项仍不可区分
+
+- **用户指出的 provenance 缺陷已确认并更正**：此前“current source”运行实际从 `b/so101_demo_py` 构建树加载模块，已全部在 `experiments/exp571-recovery/NONQUALIFYING.md` 标记为**不可采纳**（保留未删）。更正方法：把当前 worktree 的包源码**逐字节镜像**到 `experiments/exp571-recovery/current-source-mirror/so101_demo/`，PYTHONPATH 去掉所有 `b/so101_demo_py` 与已安装 `so101_demo` 条目并置 mirror 于首位；运行前逐个 import 四个模块并断言 `__file__` 位于 mirror 之下**且 SHA-256 与 worktree 文件相等** —— `prov-current2.txt`：**CURRENT_PROVENANCE PASS**（四个模块 under_mirror=True、equals_worktree_sha=True）。说明：字面路径 `<worktree>/src/so101_demo_py/src` 无法作为导入根，因为 `src/so101_demo/` 是空目录（包布局由构建树的硬链接农场提供），因此在源码根不可直接导入时采用字节等价镜像并给出哈希证明。
+- **基线 RED**：`experiments/exp571-recovery/baseline-red8`（`git archive b917ae46`），运行前断言四个模块位于基线之下且与 `git show b917ae46:<path>` **逐字节相等** —— `red-mirror-provenance.txt`：**BASELINE_PROVENANCE PASS**。
+- **结果**（每次 pytest 使用各自新建 scratch + tempfile 探针）：行为模块 GREEN **7 passed**（`scratch/exp571-beh-green5.*`）；六模块 GREEN **151 passed**（`scratch/exp571-six-mirror.*`）；同一行为模块在 `b917ae46` 上 **6 failed / 1 passed** —— 6 项为**可区分**的行为 RED（timeout 终止化、malformed 终止化、错误 boot 化身、冻结 receipt、端口代次权威、legacy claim 移除）。
+- **未完成（如实记录，不计入 RED）**：`test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations` 在 `b917ae46` 上仍**通过**——我加的时钟接缝落在 owner 复检之前，尚未位于“owner 复检之后、READY->IN_FLIGHT 之前”。该项必须改成真正命中该窗口的线程/事件交错后才算达标；契约/audit/ledger/inventory 的更新亦待完成。
+- 结论：**包尚未达到可请求第九次复核的条件**（7 项行为探针中仍有 1 项不可区分）。Gate 5 保持 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未跑 full suite；42 个既有 dirty entries 未改动；无证据被删除或覆盖。
