@@ -8446,3 +8446,27 @@ test that a shorter gate run root clears.
   real-composition integration test.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-746 — Per-case evidence driver: readback fields to a sealed case artifact
+
+- **Delivered:** `CaseEvidenceDriver` in `act/task8_live_evidence.py`. It validates its staging root
+  (absolute, `..`-free, non-symlink) and case id, creates the case's **private** directory
+  `<staging_root>/<case_id>/`, builds the recorder there through an injectable `recorder_factory`,
+  composes one canonical sample per observation via `build_live_evidence_sample`, routes it to the
+  frozen grid or the edge-event stream, and seals through `LiveEvidenceWindow` so `FINAL_CHECK`, the
+  10 Hz cadence and the one-shot seal all apply on this path.
+- **Verification:** **79 passed** across `test_act_task8_live_evidence.py`,
+  `test_act_task8_readback.py` (user-modified) and `test_act_task8.py`
+  (`gate6-batch3-py-gate/driver6.{log,junit.xml}`). The test drives all seven required phases plus a
+  release-epoch edge event and asserts `grid_count == 7`, `event_count == 1`, which is the concrete
+  meaning of "events never substitute for grid points".
+- **Three of my own test mistakes were caught by guards and fixed in the test, not the guard:** CLOSE
+  routed as an event (so the window never opened), raw records materialised in the wrong root, and
+  placeholder bytes failing the digest check — the last fixed by copying the fixture's real record
+  bytes rather than weakening hash verification.
+- **Remaining for this boundary:** have the port drive the driver (open at CLOSE, grid samples from
+  `capture_evidence_fields`, edge events at phase/release-epoch/contact transitions, seal after
+  FINAL_CHECK) through the search port's existing `evidence_recorder` hook (CP-710), then the canonical
+  live CLI and the 8P4 real-composition integration test.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
