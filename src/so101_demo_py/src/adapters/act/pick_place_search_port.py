@@ -20,16 +20,19 @@ class PickPlaceSearchPortError(RuntimeError):
 class PickPlaceSearchPhasePort:
     """Expose only SEARCH while later physical phases remain unprovisioned."""
 
-    def __init__(self, boundary, *, expert_route_factory=None) -> None:
+    def __init__(self, boundary, *, expert_route_factory=None, evidence_recorder=None) -> None:
         if (not callable(getattr(boundary, "begin", None))
                 or not callable(getattr(boundary, "search", None))
                 or not callable(getattr(boundary, "safe_stop", None))
                 or not callable(getattr(boundary.neck_sweep_checker, "check", None))
                 or expert_route_factory is not None
-                and not callable(expert_route_factory)):
+                and not callable(expert_route_factory)
+                or evidence_recorder is not None
+                and not callable(getattr(evidence_recorder, "append", None))):
             raise ValueError("TASK8_SEARCH_PORT_CONFIG_INVALID")
         self.boundary = boundary
         self._expert_route_factory = expert_route_factory
+        self._evidence_recorder = evidence_recorder
         self._expert_route = None
         self._startup_receipt = None
         self._request = None
@@ -127,6 +130,39 @@ class PickPlaceSearchPhasePort:
             self._expert_route = None
             self._stop_or_raise("TASK8_BEGIN_ABORT", request)
             raise PickPlaceSearchPortError("TASK8_BEGIN_EVIDENCE_INVALID") from error
+
+    def record_evidence(self, sample) -> None:
+        """Forward one complete canonical sample; a refusal invalidates the case.
+
+        The SEARCH observation alone cannot fill the canonical sample shape, so a partial sample is
+        refused here rather than recorded: evidence loss must make the case INVALID instead of
+        producing a record that looks complete.
+        """
+
+        recorder = self._evidence_recorder
+        if recorder is None:
+            return
+        if type(sample) is not dict or len(sample) != 24:
+            raise ValueError("TASK8_SEARCH_PORT_EVIDENCE_INVALID")
+        try:
+            recorder.append(sample)
+        except ValueError as error:
+            raise ValueError(f"TASK8_SEARCH_PORT_EVIDENCE_INVALID: {error}") from error
+
+    def seal_live_evidence(self, request: dict) -> dict:
+        """Seal this case's live evidence through the recorder, if one is attached."""
+
+        recorder = self._evidence_recorder
+        if recorder is None or not callable(getattr(recorder, "seal", None)):
+            raise ValueError("LIVE_EVIDENCE_SEAL_UNAVAILABLE")
+        identity = {
+            "case_id": request["scenario_id"],
+            "session_id": request["session_id"],
+            "attempt_id": request["attempt_id"],
+            "reset_epoch": request["reset_epoch"],
+            "release_epoch": request["release_epoch"],
+        }
+        return recorder.seal(identity)
 
     def _search_evidence(self, observed: PickPlaceSearchObservation,
                          request: dict) -> dict:
