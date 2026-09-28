@@ -60,6 +60,9 @@ class OfflineDispatchTransaction:
     # ------------------------------------------------------------ transaction
     def run(self, *, stage, role, goal_uuid, target_digest, controller_generation,
             controller_incarnation, timeout_ns=None, stop_at=None):
+        if self.unusable:
+            # a closed transaction stays closed: this refusal is not an outcome
+            raise AuthorityRefused("AUTHORITY_TRANSACTION_UNUSABLE")
         try:
             return self._run_guarded(
                 stage=stage, role=role, goal_uuid=goal_uuid, target_digest=target_digest,
@@ -79,8 +82,6 @@ class OfflineDispatchTransaction:
                      controller_incarnation, timeout_ns=None, stop_at=None):
         """Run the transaction; ``stop_at`` halts after that node (test seam)."""
 
-        if self.unusable:
-            raise AuthorityRefused("AUTHORITY_TRANSACTION_UNUSABLE")
         if stop_at is not None and stop_at not in NODES:
             raise ValueError(f"DISPATCH_NODE_UNKNOWN:{stop_at}")
         changed = stop_at is not None
