@@ -6868,3 +6868,9 @@ status: PLANNED_ISOLATED_STACK
   - 新测试已收集并通过（XML 逐套件）：`test_gate6_bound_reservation_frame` tests=2/failures=0/errors=0；`test_gate6_bound_admission_state` tests=9/0/0；`test_gate6_sha256_vectors` tests=2/0/0；旧套件 `test_controller_goal_admission` 10/0/0、`test_controller_reservation_protocol` 5/0/0、`test_broker_owned_trajectory_controller` 9/0/0 全绿。
   - **provenance**：五个头文件 source 与 install 逐文件 SHA-256 **完全一致**（`provenance-headers.txt`）；`provenance-library.txt` 记录安装库路径、其 SHA-256 及 `parse_bound_controller_reservation_frame` 符号计数。
 - 不变量：Gate 5 DONE（范围仅源码/设计与离线契约）；正式 accepted **0/0/0**；Task 12 **NOT_STARTED**；Gate 6 runtime 关闭；**未启动 Phase 3b**、无 socket/handshake/client 迁移、无 runtime/运动/正式采集；证据追加式，gate1/gate2 失败证据保留，无删除或覆盖。
+
+## CP-681 — CP-680 的两处更正（如实）
+
+- **库 provenance 更正**：上一节的 `provenance-library.txt` 最初因 `find` 匹配到**头文件**而记录错误（符号计数 0 是对头文件而言）。现更正为真实静态库 `gate3/build/so101_mujoco_support/libso101_controller_reservation_protocol.a`：已记录其 SHA256、`ar t` 成员列表与 `parse_bound_controller_reservation_frame` 符号计数（见该文件首行标注 CORRECTED）。头文件 source/install 逐文件一致的结论不受影响。
+- **仓库清洁**：删除两个 `patch` 生成的备份文件（`controller_goal_admission.hpp.orig`、`test_gate6_bound_admission_state.cpp.orig`）——它们是格式补丁的过程产物，补丁本身保存在 `experiments/gate6-batch3-protocol-audit/uncrustify2.diff` 且应用结果已提交，删除后工作树回到 **42 项既有 dirty 基线**，无任务自有残留。
+- 其余结论不变：Phase 3a 提交 `43dc8b89`、本 ledger 单独提交；gate1/gate2 判为环境无效，gate3 **114 tests / 0 failures / rc=0**（新三测试 2/9/2 全绿）；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 关闭；**未启动 Phase 3b**。
