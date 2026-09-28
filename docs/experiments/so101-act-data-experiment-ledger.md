@@ -8085,3 +8085,24 @@ Gate status: **NOT PASSED** (5/8 shards), reported as-is; the triage above is th
 partial credit is claimed.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-729 — Task 8P3 sub-slice B: the Task 8 payload shape and its exclusivity rule
+
+- **Delivered:** `require_task8_payload(payload, *, collection_only_keys=())` in
+  `act/task8_artifact_bundle.py`: the payload must carry an absolute `preparation_receipt_path` and a
+  64-hex `preparation_receipt_sha256` (`TASK8_PAYLOAD_INVALID`), and must not carry any
+  collection-only key (`TASK8_PAYLOAD_SHAPE_CONFLICT`).
+- **Design reason:** the plan places the key groups in admission's `_ACT_PAYLOAD_KEYS`, and the
+  collection group's exact keys were not read anywhere in this session, so they are taken as a
+  parameter instead of being invented. This module owns the Task 8 half and the exclusivity rule;
+  admission supplies its own list. A mixed payload is refused rather than resolved by preference,
+  because admission could not otherwise decide which lifecycle it is authorising.
+- **Verification:** bundle suite **9 passed** against the rebuilt in-worktree overlay
+  (`gate6-batch3-py-gate/payload.{log,junit.xml}`) — happy path plus empty payload, missing digest,
+  non-hex digest, relative path, and the shape-conflict case.
+- **Remaining for sub-slice B:** the admission wiring that consumes this (`admission.py` is
+  **clean** — no user hunks — so it needs no hunk-level staging), receipt verification inside
+  `UnifiedWorkloadService.start(spec)` before any mutation/GPU acquisition, `ActArtifactBinding` from
+  the verified bundle, and the byte-for-byte policy copies.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
