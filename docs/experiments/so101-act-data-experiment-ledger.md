@@ -10707,3 +10707,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime or motion started, no hardware, no Gazebo, no push, no evidence deleted, no gate
   lowered, no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-841 — Task 8L generation 2 provenance recorded; the typo cannot reach the runtime
+
+- **Provenance written before any process starts** (`runtime-task8l-gen2/provenance/generation2-provenance.md`),
+  every value read from the machine rather than assumed: source commit
+  `a6266beebe6c8290ec7d9af802998128eaf2217f`, branch `codex/so101-act-data-0917a`, submodule
+  `54463fce3bfa6192976e74113f5ed7152f708a3f` (`so101-0.0.3-r8-99-g54463fc`), ROS distro `jazzy`, the three
+  overlays (`/opt/ros/jazzy/setup.bash`, the dependency overlay `$R/i/setup.bash`, the worktree
+  `$W/install/setup.bash`) each confirmed present, the runtime interpreter
+  `$R/test-venv/bin/python` confirmed executable, `ROS_DOMAIN_ID` and `GZ_PARTITION` recorded as unset,
+  the CUDA device as the RTX 5060 Ti at capability 12.0, MuJoCo-only with no Gazebo started or requested, and
+  CPU fallback forbidden.
+- **No runtime process was running when provenance was taken** (the process scan returned none), so the
+  generation starts from a clean process table rather than inheriting an earlier stack.
+- **The concern I raised last round is resolved by evidence, and the answer is favourable:** the
+  `Pairs.fingerprin` typo appears in **exactly one place, a test file**
+  (`test/test_act_pick_place_approach_source_binding.py:63`), and **zero production modules contain it**. The 28
+  gate failures are therefore confined to the test layer and cannot break the live approach-reset path, so the
+  runtime ladder may proceed. The user's file is still left untouched: fixing their uncommitted work is theirs to
+  decide, not mine to do silently.
+- **Boundaries:** still no runtime or motion started in this round, no hardware, no Gazebo, no push, no evidence
+  deleted, no gate lowered, no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal
+  accepted 0/0/0; `collection_*` NOT_PROVISIONED.
