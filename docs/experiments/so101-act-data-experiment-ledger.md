@@ -9833,3 +9833,17 @@ This resolves the design block **without authorizing runtime or motion**.
   humanizer skill under `docs/guides/` as the repo requires for human-facing prose.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-805 — Task 16 guide
+
+- **Delivered:** `docs/guides/so101-act-head-wrist-rgb.md`, written with the project's humanizer skill as the
+  repo requires for human-facing prose. It describes each entry point and the refusals it makes, the bundle,
+  training-config and dependency-lock contracts, how to run the focused tests, and what has not been run.
+- **It states limits rather than results:** no runtime has been started, manifests remain unfrozen because
+  the candidate source and reachability evidence come from the runtime ladder, the dependency lock is
+  unresolved, the LeRobot adapter is absent, the teleop HTTP and React pieces are not implemented, and the
+  formal accepted Train/Validation/Offline Test counts are zero.
+- **Verification:** the file contains no em dashes, en dashes or curly quotes (checked by counting), and the
+  commit passed both guards.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
