@@ -106,6 +106,7 @@ def test_token_identity_must_equal_the_record_identity():
               "incarnation": history.incarnation, "reset_epoch": admission.identity[4],
               "physics_step": 1}
     try:
+        registry.capture_controller_identity(handle)
         registry.claim_bound(handle, identity=admission.identity, controller_generation=1,
                              token=forged)
     except Exception:

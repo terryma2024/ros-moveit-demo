@@ -99,6 +99,7 @@ class AuthorityTransactionRegistry:
         self._terminal_reasons = {}
         self._claim_boot = {}
         self._claim_instant = {}
+        self._controller_snapshots = {}
         self._sealed = False
         self._revoked = None
 
@@ -161,8 +162,7 @@ class AuthorityTransactionRegistry:
 
         raise AuthorityRefused("AUTHORITY_LEGACY_CLAIM_REMOVED")
 
-    def claim_bound(self, handle, *, identity, controller_generation, token,
-                    controller_snapshot=None):
+    def claim_bound(self, handle, *, identity, controller_generation, token):
         """Broker-internal claim bound to the live owner, generation and history receipt.
 
         The admission/history objects are supplied by the broker itself, never by the
@@ -174,7 +174,7 @@ class AuthorityTransactionRegistry:
         if not isinstance(handle, PermitHandle):
             raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
         admission, history, port = self._domain()
-        if not hasattr(admission, "claim_guard"):
+        if not hasattr(admission, "claim_context"):
             raise AuthorityRefused("AUTHORITY_ADMISSION_DOMAIN_REQUIRED")
         with self._lock, admission.claim_context():
             record = self._records.get(handle.permit_id)
@@ -199,14 +199,14 @@ class AuthorityTransactionRegistry:
                     or controller_generation != record.identity[3]):
                 # the generation must agree with the admission identity *and* the record
                 raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
-            if controller_snapshot is not None:
-                # P2 design B: the snapshot was taken by the broker before this
-                # boundary, so no controller-port mutex is nested inside it
-                if (type(controller_snapshot) is not dict
-                        or controller_snapshot.get("generation") != record.controller_generation
-                        or not isinstance(controller_snapshot.get("boot_incarnation"), str)
-                        or not controller_snapshot["boot_incarnation"]):
-                    raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
+            snapshot = self._controller_snapshots.get(record.permit_id)
+            if (snapshot is None or len(snapshot) != 3
+                    or snapshot[0] != record.controller_generation
+                    or snapshot[1] != record.controller_incarnation
+                    or snapshot[0] != record.identity[3]):
+                # the broker-owned capture is mandatory: without it (or with a
+                # changed controller identity) the claim refuses
+                raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
             # identities and owner state are validated while the boundary is held,
             # *before* the single final history validation, so nothing can change
             # between them and no clock is read after that validation
@@ -243,8 +243,7 @@ class AuthorityTransactionRegistry:
                 raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED_AT_COMMIT")
             self._states[record.permit_id] = IN_FLIGHT
             self._claim_instant[record.permit_id] = receipt["commit_monotonic_ns"]
-            if controller_snapshot is not None:
-                self._claim_boot[record.permit_id] = controller_snapshot["boot_incarnation"]
+            self._claim_boot[record.permit_id] = snapshot[2]
             return ClaimReceipt(permit_id=record.permit_id, identity=record.identity,
                                 stage=record.stage, step=record.step,
                                 history_version=receipt["version"],
@@ -252,6 +251,45 @@ class AuthorityTransactionRegistry:
                                 commit_monotonic_ns=receipt["commit_monotonic_ns"],
                                 selected_age_ns=receipt["age_ns"],
                                 deadline_ns=record.deadline_ns)
+
+    def capture_controller_identity(self, handle):
+        """Broker-owned capture: read the port snapshot, then attach it.
+
+        The port mutex is taken alone (no registry/admission/history lock is held);
+        the snapshot is then attached to the still-READY record under the registry
+        lock alone. No caller-supplied value is accepted.
+        """
+
+        if not isinstance(handle, PermitHandle):
+            raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
+        port = self._port
+        if port is None or not hasattr(port, "identity_snapshot"):
+            raise AuthorityRefused("AUTHORITY_PORT_REQUIRED")
+        snapshot = port.identity_snapshot()
+        if (type(snapshot) is not tuple or len(snapshot) != 3
+                or type(snapshot[0]) is not int
+                or type(snapshot[1]) is not str or not snapshot[1]
+                or type(snapshot[2]) is not str or not snapshot[2]):
+            raise AuthorityRefused("AUTHORITY_CONTROLLER_SNAPSHOT_INVALID")
+        with self._lock:
+            record = self._records.get(handle.permit_id)
+            if record is None:
+                raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
+            if self._states[record.permit_id] != READY:
+                raise AuthorityRefused(
+                    f"AUTHORITY_PERMIT_NOT_READY:{self._states[record.permit_id]}")
+            if (snapshot[0] != record.controller_generation
+                    or snapshot[1] != record.controller_incarnation
+                    or snapshot[0] != record.identity[3]):
+                raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
+            self._controller_snapshots[record.permit_id] = snapshot
+        return True
+
+    def controller_snapshot_of(self, handle):
+        """Read-only accessor for the frozen snapshot (no caller data involved)."""
+
+        with self._lock:
+            return self._controller_snapshots.get(handle.permit_id)
 
     def bind(self, *, admission=None, history=None, port=None):
         """Broker-only wiring; refused once the domain is sealed."""
@@ -391,7 +429,8 @@ class ReservationFakeControllerPort:
 
     def reserve(self, *, permit_id, goal_uuid, role, target_digest, generation,
                 controller_incarnation, deadline_ns, stage, session_id="clock-session",
-                broker_incarnation=None, claim_monotonic_ns=None):
+                broker_incarnation=None, claim_monotonic_ns=None,
+                expected_boot_incarnation=None):
         with self._lock:
             self.reserve_calls += 1
             if stage != "route_dispatch":
@@ -401,10 +440,14 @@ class ReservationFakeControllerPort:
                     or controller_incarnation != self._incarnation
                     or deadline_ns <= self._clock_ns() or goal_uuid in self._accepted_uuids):
                 return REJECTED
+            if (expected_boot_incarnation is not None
+                    and expected_boot_incarnation != self._boot_incarnation):
+                return REJECTED
             self._reservations[permit_id] = {"goal_uuid": goal_uuid, "role": role,
                                              "target_digest": target_digest,
                                              "deadline_ns": deadline_ns,
                                              "generation": generation,
+                                             "expected_boot_incarnation": expected_boot_incarnation,
                                              "controller_incarnation": controller_incarnation,
                                              "boot_incarnation": self._boot_incarnation,
                                              "session_id": session_id,
@@ -413,6 +456,16 @@ class ReservationFakeControllerPort:
                                                                     if claim_monotonic_ns is not None
                                                                     else self._clock_ns())}
             return ACCEPTED
+
+    def identity_snapshot(self):
+        """Immutable controller identity read under only the port mutex.
+
+        No I/O and no callback: the generation, the controller incarnation and the
+        boot incarnation are captured together in one critical section.
+        """
+
+        with self._lock:
+            return (self._generation, self._incarnation, self._boot_incarnation)
 
     def boot_incarnation(self):
         with self._lock:
@@ -476,8 +529,15 @@ class ReservationFakeControllerPort:
                 return REJECTED
             if generation != self._generation or generation != reservation["generation"]:
                 return REJECTED
+            if (reservation.get("expected_boot_incarnation") is not None
+                    and reservation["expected_boot_incarnation"] != self._boot_incarnation):
+                # the controller restarted after the reservation: refuse the send
+                return REJECTED
             if (controller_incarnation != self._incarnation
                     or controller_incarnation != reservation["controller_incarnation"]):
+                return REJECTED
+                return REJECTED
+            if reservation.get("boot_incarnation") != self._boot_incarnation:
                 return REJECTED
             if sequence is not None and sequence < 1:
                 return REJECTED
