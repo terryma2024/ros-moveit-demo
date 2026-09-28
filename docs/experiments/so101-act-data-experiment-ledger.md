@@ -6601,3 +6601,11 @@ status: PLANNED_ISOLATED_STACK
 - review 10 的有效范围保留：七个 `b917ae46` 行为 RED 仍全部到达目标；旧证据与更正保留未改。
 - 未完成：P1.2 单一失败闭合（readback 必须显式 Mapping、`close_failed`/fencing 语义、表驱动测试）；P2 锁图二选一并与契约/audit/测试一致、删除过时 `claim_guard` 描述；真实 `step_at` 内 deepcopy 屏障（已有）与 send 入口测试（保留）；legacy claim 测试迁移；随后重生成 change/evidence 清单、让 review 请求包引用**当前整文件哈希**、并把“清单快照提交”与“ledger/请求包提交”显式分离。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式。
+
+## CP-652 — EXP-573 P1.2 确定性 RED：表驱动失败闭合探针（7 failed / 2 passed）
+
+- 提交 `514e16e3`，新增 `test/test_act_exp573_failure_closure.py`：8 条已知 permit 失败路径（claim 拒绝、reserve 拒绝、reserve 异常、send 拒绝、send 异常、readback 异常、readback 返回 `None`、readback 返回非 Mapping）+ 1 条“端口 close 失败”路径，逐行断言 **tx 状态、registry 状态、端口是否关闭、无复活（迟到 receipt 不能复活）、失败原因** 五项属性。
+- **实测 RED：7 failed / 2 passed**（`experiments/exp573-single-receipt/p12-red.log`/JUnit，scratch `exp573-p12-red.*`，新建 scratch + tempfile 探针 PASS + 镜像 `mirror-5` 逐文件 SHA 等于 worktree）。失败项与 review 10 的表一致：**claim 拒绝 / reserve 拒绝 / send 拒绝 / readback 异常 / readback=None / readback 非 Mapping / close 失败**——即这些路径要么终态不一致，要么根本没有闭合（`None` 情形更会以 TypeError 逃逸并留下 tx IDLE、permit IN_FLIGHT、端口未关）。
+- 证据纪律：追加式目录，未删除/覆盖任何证据；42 个既有 dirty entries 未改动。
+- 下一步（先 RED 后修，均在本实验内）：把上述路径统一走 `_fail_closed`，删除绕过它的内部 catch/return 分支；在 `**fields` 之前显式校验 readback 为 `Mapping`；把 `port.close` 失败记录为 `close_failed`/`fencing_required` 并让事务保持不可用（不再当作成功）；随后 **P2** 锁图二选一、legacy claim 测试迁移、以及簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且与清单快照分开提交）。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
