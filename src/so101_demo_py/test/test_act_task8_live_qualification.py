@@ -134,3 +134,141 @@ def test_incomplete_or_foreign_journals_refuse_qualification(tmp_path, skip, mut
     with pytest.raises(ValueError, match=code):
         validate_case_journals(root, _manifest(), identities=identity,
                                manifest_document_sha256="9" * 64)
+
+
+def _full_fixture(tmp_path):
+    """A verified bundle carrying a REAL v2 manifest, plus a complete campaign."""
+
+    import dataclasses
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from test_act_task8_artifact_bundle import _inputs        # stub-based inputs
+
+    from so101_demo.act.pick_place_validation_manifest import (
+        ANCHOR_NAMES, build_pick_place_validation_manifest,
+    )
+    from so101_demo.act.task8_artifact_bundle import (
+        prepare_task8_bundle, verify_prepared_task8_bundle,
+    )
+
+    inputs = _inputs(tmp_path)
+    identities = dict(inputs.identities)
+    anchors = {name: {"cup_start_m": [0.25, 0.0, 0.15], "neck_start_rad": 0.0}
+               for name in ANCHOR_NAMES}
+    manifest = build_pick_place_validation_manifest(
+        anchors, source_sha256=identities["source_provenance_sha256"],
+        runtime_config_sha256=identities["runtime_config_sha256"],
+        collection_config_sha256=identities["act_profile_sha256"],
+        contact_policy_fingerprint=identities["contact_policy_fingerprint"],
+        calibration_report_path="calibration-report.json",
+        calibration_report_sha256="e" * 64)
+    real_manifest = tmp_path / "real-manifest.json"
+    real_manifest.write_text(json.dumps(manifest))
+    receipt = prepare_task8_bundle(dataclasses.replace(inputs, manifest=real_manifest),
+                                   tmp_path / "bundle")
+    verified = verify_prepared_task8_bundle(receipt)
+    bundled = json.loads(_Path(verified.manifest).read_bytes())
+    return receipt, receipt.parent, bundled, dict(verified.identities)
+
+
+def _campaign(tmp_path, manifest, identities):
+    """Fourteen journals plus the summary, written through the committed row shape."""
+
+    case_root = tmp_path / "run"
+    (case_root / "task8-live" / "cases").mkdir(parents=True)
+    digests = []
+    for case in [*manifest["prefix_cases"], *manifest["full_cases"]]:
+        case_id = case["case_id"]
+        prefix = case_id.startswith("prefix-")
+        row = {"case_id": case_id, "mode": "phase_prefix" if prefix else "full",
+               "status": "PASSED",
+               "live_evidence_path": "" if prefix else f"/run/{case_id}-live.json",
+               "live_evidence_sha256": "0" * 64 if prefix else "b" * 64,
+               "child_retirement_receipt_path": f"/run/{case_id}-child.json",
+               "child_retirement_receipt_sha256": "c" * 64,
+               "stack_retirement_receipt_path": f"/run/{case_id}-stack.json",
+               "stack_retirement_receipt_sha256": "d" * 64,
+               "source_provenance_sha256": identities["source_provenance_sha256"],
+               "runtime_config_sha256": identities["runtime_config_sha256"],
+               "contact_policy_fingerprint": identities["contact_policy_fingerprint"],
+               "manifest_document_sha256": manifest["manifest_document_sha256"]}
+        payload = json.dumps(row).encode()
+        (case_root / "task8-live" / "cases" / f"{case_id}.json").write_bytes(payload)
+        digests.append(hashlib.sha256(payload).hexdigest())
+    summary_path = tmp_path / "campaign-result.json"
+    summary_path.write_text(json.dumps({"status": "PASSED", "prefix_count": 9,
+                                        "consecutive_full_count": 5,
+                                        "case_journal_sha256": digests}))
+    return case_root, summary_path
+
+
+def _ready(identities, **overrides):
+    document = {"schema_version": 2, "status": "TASK8_READY", "source_commit": "0" * 40,
+                "config_sha256": "1" * 64,
+                "source_provenance_sha256": identities["source_provenance_sha256"],
+                "measurements": {},
+                "checks": {"fov": "PASS", "collision": "PASS", "search": "PASS",
+                           "synchronization": "PASS", "execution": "PASS",
+                           "release": "UNMEASURED", "retreat": "UNMEASURED"}}
+    document.update(overrides)
+    return document
+
+
+def test_qualified_report_upgrades_a_ready_document_without_touching_it(tmp_path):
+    from so101_demo.act.task8_live_qualification import build_task8_qualified_report
+
+    receipt, _, manifest, identities = _full_fixture(tmp_path)
+    case_root, summary_path = _campaign(tmp_path, manifest, identities)
+    ready_path = tmp_path / "ready.json"
+    ready_path.write_text(json.dumps(_ready(identities)))
+    before = ready_path.read_bytes()
+
+    output = build_task8_qualified_report(ready_path, receipt, summary_path, case_root,
+                                          tmp_path / "qualified.json")
+    document = json.loads(output.read_bytes())
+    assert document["status"] == "QUALIFIED"
+    assert document["checks"]["release"] == document["checks"]["retreat"] == "PASS"
+    assert document["live_campaign"]["journal_sha256"] == json.loads(
+        summary_path.read_bytes())["case_journal_sha256"]
+    assert ready_path.read_bytes() == before
+    assert not (tmp_path / "qualified.json.partial").exists()
+
+
+@pytest.mark.parametrize("mutation,code", [
+    ({"status": "CALIBRATION_REQUIRED"}, "TASK8_QUALIFICATION_READY_INVALID"),
+    ({"checks": {"fov": "PASS", "collision": "PASS", "search": "PASS",
+                 "synchronization": "FAIL", "execution": "PASS",
+                 "release": "UNMEASURED", "retreat": "UNMEASURED"}},
+     "TASK8_QUALIFICATION_CHECKS_INCOMPLETE"),
+    ({"checks": {"fov": "PASS", "collision": "PASS", "search": "PASS",
+                 "synchronization": "PASS", "execution": "PASS",
+                 "release": "PASS", "retreat": "UNMEASURED"}},
+     "TASK8_QUALIFICATION_CHECKS_INCOMPLETE"),
+])
+def test_a_failing_gate_leaves_no_qualified_behind(tmp_path, mutation, code):
+    from so101_demo.act.task8_live_qualification import build_task8_qualified_report
+
+    receipt, _, manifest, identities = _full_fixture(tmp_path)
+    case_root, summary_path = _campaign(tmp_path, manifest, identities)
+    ready_path = tmp_path / "ready.json"
+    ready_path.write_text(json.dumps(_ready(identities, **mutation)))
+    output = tmp_path / "qualified.json"
+    with pytest.raises(ValueError, match=code):
+        build_task8_qualified_report(ready_path, receipt, summary_path, case_root, output)
+    assert not output.exists()
+
+
+def test_an_existing_output_is_never_overwritten(tmp_path):
+    from so101_demo.act.task8_live_qualification import build_task8_qualified_report
+
+    receipt, _, manifest, identities = _full_fixture(tmp_path)
+    case_root, summary_path = _campaign(tmp_path, manifest, identities)
+    ready_path = tmp_path / "ready.json"
+    ready_path.write_text(json.dumps(_ready(identities)))
+    output = tmp_path / "qualified.json"
+    output.write_text("{}")
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_OUTPUT_EXISTS"):
+        build_task8_qualified_report(ready_path, receipt, summary_path, case_root, output)
+    assert output.read_text() == "{}"

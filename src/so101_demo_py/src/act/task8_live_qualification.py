@@ -140,3 +140,72 @@ def validate_case_journals(case_root: Path, manifest: dict, *, identities: dict,
         rows.append(require_case_row_matches_bundle(
             row, identities=identities, manifest_document_sha256=manifest_document_sha256))
     return tuple(rows)
+
+
+_READY_KEYS = frozenset({"schema_version", "status", "source_commit", "config_sha256",
+                         "source_provenance_sha256", "measurements", "checks"})
+_QUALIFICATION_CHECKS = ("fov", "collision", "search", "synchronization", "execution")
+
+
+def build_task8_qualified_report(task8_ready_report: Path, preparation_receipt: Path,
+                                 campaign_result: Path, case_root: Path, output: Path) -> Path:
+    """Upgrade a `TASK8_READY` report to `QUALIFIED` from a complete live campaign.
+
+    The input report is read-only and is never rewritten; the output is a new document written
+    atomically and only if every gate passes. A failure raises and leaves **no** output behind.
+    """
+
+    import json
+
+    from .task8_artifact_bundle import verify_prepared_task8_bundle
+
+    output = Path(output)
+    if output.exists() or output.is_symlink():
+        raise ValueError("TASK8_QUALIFICATION_OUTPUT_EXISTS")
+    ready_path = require_regular_file(Path(task8_ready_report),
+                                      "TASK8_QUALIFICATION_READY_MISSING")
+    try:
+        ready = json.loads(ready_path.read_bytes())
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("TASK8_QUALIFICATION_READY_INVALID") from error
+    if type(ready) is not dict or set(ready) != _READY_KEYS or ready["status"] != "TASK8_READY":
+        raise ValueError("TASK8_QUALIFICATION_READY_INVALID")
+    checks = ready["checks"]
+    if type(checks) is not dict or any(checks.get(name) != "PASS"
+                                       for name in _QUALIFICATION_CHECKS):
+        raise ValueError("TASK8_QUALIFICATION_CHECKS_INCOMPLETE")
+    if checks.get("release") != "UNMEASURED" or checks.get("retreat") != "UNMEASURED":
+        raise ValueError("TASK8_QUALIFICATION_CHECKS_INCOMPLETE")
+
+    bundle = verify_prepared_task8_bundle(Path(preparation_receipt))
+    identities = bundle.identities
+    try:
+        manifest = json.loads(require_regular_file(
+            Path(bundle.manifest), "TASK8_QUALIFICATION_MANIFEST_MISSING").read_bytes())
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("TASK8_QUALIFICATION_MANIFEST_INVALID") from error
+    try:
+        summary = json.loads(require_regular_file(
+            Path(campaign_result), "TASK8_QUALIFICATION_SUMMARY_MISSING").read_bytes())
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("TASK8_QUALIFICATION_SUMMARY_INVALID") from error
+    validate_campaign_summary(summary)
+    if identities.get("source_provenance_sha256") != ready["source_provenance_sha256"]:
+        raise ValueError("TASK8_QUALIFICATION_IDENTITY_MISMATCH")
+    validate_case_journals(case_root, manifest, identities=identities,
+                           manifest_document_sha256=manifest["manifest_document_sha256"])
+
+    document = dict(ready)
+    document["status"] = "QUALIFIED"
+    document["checks"] = dict(checks, release="PASS", retreat="PASS")
+    document["live_campaign"] = {
+        "case_root": str(Path(case_root).resolve()),
+        "campaign_result_sha256": _digest(Path(campaign_result)),
+        "preparation_receipt_sha256": _digest(Path(preparation_receipt)),
+        "journal_sha256": list(summary["case_journal_sha256"]),
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = output.with_name(output.name + ".partial")
+    temporary.write_bytes(json.dumps(document, sort_keys=True, indent=2).encode() + b"\n")
+    os.replace(temporary, output)
+    return output
