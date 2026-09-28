@@ -10589,3 +10589,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
   no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-837 — venv-b rebuild blocked by a mirror hash mismatch; my wrapper had masked the failure
+
+- **What happened:** building the second clean environment from the hashed lock with
+  `uv pip install --require-hashes` failed:
+  `error: Failed to download triton==3.6.0 / cause: Hash mismatch for triton==3.6.0`, expected
+  `sha256:0b3a97e8ed304dfa9bd23bb41ca04cdf6b2e617d5e782a8653d616037a5d537d`. venv-b is therefore **empty**
+  (site-packages has 3 entries and `lerobot` is not importable), so the CUDA smoke has **not** been repeated
+  in the second environment yet.
+- **This is a real finding, not noise:** the mirror served a `triton==3.6.0` artifact whose hash differs from
+  the one uv recorded when the hashed requirement set was compiled, which is precisely the class of problem a
+  lock with source hashes exists to catch. The lock currently pins one hash per package, resolved from the
+  index that served it, and a `--require-hashes` rebuild across **two** indexes cannot be assumed to reproduce
+  the same artifact.
+- **A verification flaw of mine, recorded rather than hidden:** my background wrapper captured `rc` from the
+  last command of a brace group (`wc -l`), so the job reported exit code 0 even though `uv pip install` had
+  failed. The failure was caught only by inspecting the log and the empty venv. Future rebuilds will capture
+  the installer's own exit code.
+- **Next attempt, planned:** compare the `triton` artifact hashes served by the TUNA mirror and the PyTorch
+  cu128 index, then either rebuild with a single authoritative index (no mirror) so the hashes match, or record
+  the mirror's artifact hash alongside. Only after venv-b installs cleanly does the CUDA `load_policy(...)`
+  /`infer(...)` smoke get repeated there, and the LeRobot adapter gets written against the 0.6.1 API already
+  captured (`ACTPolicy(config)`, `select_action(batch)`, `predict_action_chunk(batch)`, `forward(batch)`,
+  `reset()`, `ACTPolicy.from_pretrained(...)`).
+- **Boundaries:** nothing else changed; no runtime or motion, no hardware, no Gazebo, no push, no evidence
+  deleted, no gate lowered, no ROS Python touched; user's 31 modified and 12 untracked paths untouched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
