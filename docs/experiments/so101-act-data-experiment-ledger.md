@@ -9232,3 +9232,26 @@ This resolves the design block **without authorizing runtime or motion**.
   (`bridge`, `teleop_service`, `contracts`, `admission`) and the live Steps 6–7.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-779 — Task 11A consumes the frozen v3 collection config
+
+- **Delivered:** `campaign_config_from(collection_config, *, qualification)` in
+  `act/parallel_collection.py`, with tests that parse the **real**
+  `config/act/parallel_collection_v3.yaml`.
+  - the wave size comes from the config bytes Task 8P1 froze, not a hard-coded 20;
+  - the **posture** is part of the contract: `no_auto_degrade` must be literally `True`
+    (`COLLECTION_NO_AUTO_DEGRADE_REQUIRED`) and `business_retry_count` must be `0`
+    (`COLLECTION_BUSINESS_RETRY_FORBIDDEN`), because a campaign that retried business failures or
+    quietly degraded would defeat the point of running the collection;
+  - missing blocks or a non-positive wave size are `COLLECTION_CONFIG_INVALID`; a non-boolean
+    qualification flag is `COLLECTION_QUALIFICATION_MODE_INVALID`.
+- **Proven by execution, not by reading:** a 45-scene formal W8 manifest driven with the real config
+  partitions `(20, 20, 5)`, collects all 45 scenes, publishes the campaign index and reports
+  `scene_count == 45`.
+- **Verification:** focused tests **11 passed** in `test_act_parallel_collection.py`
+  (`gate6-batch3-py-gate/task11a12.{log,junit.xml}`).
+- **Remaining in 11A:** the minimal `parallel_batch/worker.py` extension (clean, 1156 lines, untouched by
+  the user) so the campaign can be dispatched through the existing worker lifecycle with its lease
+  boundaries intact, then the teleop-side modifications and the live Steps 6–7.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
