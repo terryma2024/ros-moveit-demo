@@ -110,3 +110,67 @@ def require_collection_mode(*, manifest_kind: str, qualification_mode: bool, con
         raise ValueError("FORMAL_QUALIFICATION_CONTRACT_MISSING_OR_REVOKED")
     if contract.get("scenes") != _W8_SCENES:
         raise ValueError("FORMAL_QUALIFICATION_SCENE_COUNT_INVALID")
+
+
+_CONFIG_KEYS = frozenset({"max_wave_size", "qualification"})
+
+
+class FixedActCollectionCampaign:
+    """Runs a frozen manifest as fixed waves, publishing one result per scene.
+
+    The resource claim is held until the last scene reaches a terminal state and is released only then:
+    a failure leaves the claim held on purpose, so an early exit cannot hand the stack to the next run
+    while this campaign's evidence is still unresolved.
+    """
+
+    def __init__(self, manifest: dict, config: dict, context, root, *, collect_port, claim,
+                 store=None) -> None:
+        from pathlib import Path as _Path
+
+        from so101_demo.adapters.act.parallel_collection_results import ActCollectionResultStore
+
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("scenarios"), list):
+            raise ValueError("CAMPAIGN_MANIFEST_INVALID")
+        rows = manifest["scenarios"]
+        if not rows or any(not isinstance(row, dict) or not isinstance(row.get("scene_id"), str)
+                           or not isinstance(row.get("split"), str) for row in rows):
+            raise ValueError("CAMPAIGN_MANIFEST_INVALID")
+        if not isinstance(config, dict) or set(config) != _CONFIG_KEYS:
+            raise ValueError("CAMPAIGN_CONFIG_INVALID")
+        qualification = config["qualification"]
+        require_collection_mode(manifest_kind=manifest.get("kind", "W8"),
+                                qualification_mode=qualification,
+                                contract=manifest.get("qualification_contract"))
+        self.manifest = manifest
+        self.config = config
+        self.context = context
+        self.root = _Path(root)
+        self.store = store if store is not None else ActCollectionResultStore(self.root)
+        self.collect_port = collect_port
+        self.claim = claim
+        self.scene_ids = tuple(row["scene_id"] for row in rows)
+
+    def run(self) -> dict:
+        from pathlib import Path as _Path
+
+        waves = partition_waves(self.scene_ids, max_wave_size=self.config["max_wave_size"])
+        index_path = write_campaign_index(self.root / "campaign-index.json", waves=waves,
+                                         qualification=self.config["qualification"])
+        terminal, collected, results = [], [], {}
+        for wave_index, wave in enumerate(waves):
+            for scene_id in wave:
+                if self.store.has_result(scene_id):
+                    terminal.append(scene_id)              # already sealed: never collected twice
+                    continue
+                record = self.collect_port.collect(scene_id, self.context,
+                                                  {"wave_index": wave_index})
+                if not isinstance(record, dict) or record.get("scene_id") != scene_id:
+                    raise ValueError("CAMPAIGN_RESULT_INVALID")
+                results[scene_id] = self.store.publish(record)
+                collected.append(scene_id)
+        # only now, with every scene terminal, may the claim be handed on
+        self.claim.release({"campaign_index": index_path, "terminal": terminal + collected})
+        return {"campaign_index": index_path, "waves": [list(wave) for wave in waves],
+                "already_terminal": terminal, "collected": collected, "results": results,
+                "scene_count": len(self.scene_ids),
+                "claim_released": True}
