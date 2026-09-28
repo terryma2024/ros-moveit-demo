@@ -6941,3 +6941,19 @@ status: PLANNED_ISOLATED_STACK
   the working approach is the incremental per-call-site migration used for release.
 - **Boundary:** no production root touched; Gate 6 runtime/goals/motion closed; formal accepted
   0/0/0; Task 12 NOT_STARTED; focused tests only; no evidence/mirror/scratch/IPC path deleted.
+
+## CP-685 — Phase 3b lifecycle lock gate closed incrementally (rel/stop/tick/disconnect)
+
+- Slices, each with a genuine RED -> GREEN and its own fresh mirror/scratch:
+  `_acquire_legacy` phasing (`legacygreen.log`, 47), release slice with exact
+  `_release_pending` + dispatch blocking (`slice1.log`, 54), stop slice with exact
+  `_cleanup_pending` + stale-token protection (`slice2.log`, 57), `tick` phasing
+  (`tickred.log` RED -> `tickgreen.log`, 58), `disconnect` + `LocalBrokerConnection.close`
+  phasing (`discred.log` RED -> `discgreen.log`, **60 passed, 0 warnings**).
+- Lock graph updated in `experiments/gate6-batch3-lock-audit/lock-graph-verified.md`: all
+  previously flagged I/O-under-lock sites are closed; the only remaining gap noted there is a
+  dedicated parent-death test.
+- Still owed before `ros_child` wiring: two-stage Task-8 test (recovery acquire -> reset-only
+  dispatch -> stopped/close/release -> ACT bound acquire; recovery must not submit trajectory,
+  approve/submit prefix, or consume the session; second ACT acquire refused with no new
+  arm/send), then root TDD with the 42-entry baseline diff protected. No CLI bound mode.
