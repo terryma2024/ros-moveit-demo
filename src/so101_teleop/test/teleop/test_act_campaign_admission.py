@@ -76,6 +76,27 @@ def _write_policy(tmp_path):
     return fingerprint, proposal_path, receipt_path, receipt
 
 
+def _prepared_receipt(tmp_path):
+    """A real prepared bundle, so a Task 8 payload can name its receipt.
+
+    Admission re-verifies the receipt and the bundle before it acquires anything, so the fixture
+    prepares a genuine bundle through the real producer rather than synthesising a path and digest.
+    """
+
+    import sys
+    from pathlib import Path as _Path
+
+    # <src>/so101_teleop/test/teleop/<this file> -> parents[3] is <src>
+    demo_tests = _Path(__file__).resolve().parents[3] / "so101_demo_py" / "test"
+    if str(demo_tests) not in sys.path:
+        sys.path.insert(0, str(demo_tests))
+    from test_act_task8_artifact_bundle import _inputs
+    from so101_demo.act.task8_artifact_bundle import prepare_task8_bundle
+
+    receipt = prepare_task8_bundle(_inputs(tmp_path), tmp_path / "bundle")
+    return receipt, hashlib.sha256(receipt.read_bytes()).hexdigest()
+
+
 def _calibration(tmp_path, *, status, head_search):
     sample = tmp_path / "calibration-sample.json"
     measured_values = {
@@ -100,6 +121,7 @@ def _calibration(tmp_path, *, status, head_search):
             "measurements": measured_values,
             "camera_measurements": camera_values,
             "source_commit": "a" * 40, "config_sha256": "b" * 64,
+            "source_provenance_sha256": "c" * 64,
         }))
     sample_sha = hashlib.sha256(sample.read_bytes()).hexdigest()
     measurements = {name: {
@@ -112,7 +134,8 @@ def _calibration(tmp_path, *, status, head_search):
     if status == "TASK8_READY":
         checks["release"] = checks["retreat"] = "UNMEASURED"
     report = {"schema_version": 1, "status": status, "source_commit": "a" * 40,
-              "config_sha256": "b" * 64, "measurements": measurements, "checks": checks}
+              "config_sha256": "b" * 64, "source_provenance_sha256": "c" * 64,
+              "measurements": measurements, "checks": checks}
     path = tmp_path / f"calibration-{status}.json"
     path.write_text(json.dumps(report))
     return str(path), hashlib.sha256(path.read_bytes()).hexdigest()
@@ -166,6 +189,7 @@ def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="
     artifacts["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     calibration_path, calibration_sha = _calibration(tmp_path, status=calibration_status,
                                                     head_search=head_search)
+    receipt_path_prepared, receipt_sha_prepared = _prepared_receipt(tmp_path)
     return OperationSpec(
         command_id="start-1", domain=Domain.VALIDATION, kind="task8_phase",
         payload={
@@ -178,6 +202,8 @@ def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="
             "qualification_receipt_path": None,
             "calibration_report_path": calibration_path,
             "calibration_report_sha256": calibration_sha,
+            "preparation_receipt_path": str(receipt_path_prepared),
+            "preparation_receipt_sha256": receipt_sha_prepared,
             "children": [launch("w00", 40, "session-0").__dict__],
         },
         runtime_id="runtime-1", execution_generation=3, deadline_ns=time.monotonic_ns() + 10**12,
