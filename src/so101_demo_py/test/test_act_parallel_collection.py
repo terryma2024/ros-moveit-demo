@@ -1,5 +1,7 @@
 """Task 11A: wave partitioning is ordered, complete and non-duplicating."""
 
+from pathlib import Path
+
 import pytest
 
 from so101_demo.act.parallel_collection import partition_waves
@@ -78,3 +80,55 @@ def test_formal_runs_require_exact_w8_under_a_live_qualification_contract():
     for contract in (None, {"revoked": True, "scenes": 40}, {"revoked": False, "scenes": 8}):
         with pytest.raises(ValueError, match="FORMAL_QUALIFICATION"):
             require_collection_mode(manifest_kind="W8", qualification_mode=False, contract=contract)
+
+
+def _result(scene_id="act-1", **overrides):
+    record = {"scene_id": scene_id, "status": "PASSED", "qc": "PASS", "done": True,
+              "interventions": 0, "coordinator_committed": True, "reset_epoch": 4}
+    record.update(overrides)
+    return record
+
+
+def test_results_are_published_once_and_re_entry_is_idempotent(tmp_path):
+    from so101_demo.adapters.act.parallel_collection_results import ActCollectionResultStore
+
+    store = ActCollectionResultStore(tmp_path)
+    first = store.publish(_result())
+    assert Path(first["path"]).is_file() and len(first["sha256"]) == 64
+    assert not (tmp_path / "results" / "act-1.json.partial").exists()
+    # re-entering a wave publishes the identical document again without changing history
+    again = store.publish(_result())
+    assert again == first
+    # a different document for a scene that already has a result is refused
+    with pytest.raises(ValueError, match="SCENE_TERMINAL_STATE_IMMUTABLE"):
+        store.publish(_result(status="FAILED", qc="FAIL"))
+    assert store.read("act-1")["status"] == "PASSED"
+    with pytest.raises(ValueError, match="RESULT_MISSING"):
+        store.read("act-absent")
+    for bad in ({"scene_id": "act-2"}, _result("act-3", status="MAYBE")):
+        with pytest.raises(ValueError, match="RESULT_INVALID"):
+            store.publish(bad)
+    with pytest.raises(ValueError, match="RESULT_SCENE_ID_INVALID"):
+        store.publish(_result("../escape"))
+    with pytest.raises(ValueError, match="RESULT_ROOT_INVALID"):
+        ActCollectionResultStore(tmp_path / "absent")
+
+
+def test_result_verifier_re_reads_the_bytes_rather_than_trusting_the_digest(tmp_path):
+    from so101_demo.adapters.act.parallel_collection_results import (
+        ActCollectionResultStore, ActCollectionResultVerifier,
+    )
+
+    store = ActCollectionResultStore(tmp_path)
+    entry = store.publish(_result())
+    verifier = ActCollectionResultVerifier(store)
+    assert verifier.verify(entry)["scene_id"] == "act-1"
+    # tampering with the published bytes is detected
+    Path(entry["path"]).write_text('{"scene_id": "act-1", "status": "PASSED"}')
+    with pytest.raises(ValueError, match="RESULT_DIGEST_MISMATCH"):
+        verifier.verify(entry)
+    with pytest.raises(ValueError, match="RESULT_ENTRY_INVALID"):
+        verifier.verify({"path": entry["path"]})
+    Path(entry["path"]).unlink()
+    with pytest.raises(ValueError, match="RESULT_MISSING"):
+        verifier.verify(entry)
