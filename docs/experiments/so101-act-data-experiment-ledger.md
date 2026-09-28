@@ -6542,3 +6542,14 @@ status: PLANNED_ISOLATED_STACK
 - 每次运行均为**新建且此前不存在**的 scratch，先以精确解释器断言 `tempfile.gettempdir() == TMPDIR`（SCRATCH_PROBE PASS），当前树使用逐文件 SHA 等于 worktree 的镜像（`mirror-24`），基线使用与 `git show b917ae46` 逐字节相等的快照（`baseline-red18`）。目录追加式，未删除或覆盖任何证据；42 个既有 dirty entries 未改动。
 - **仍未完成**：P1.5（把事件屏障放进真实 `port.send` 与真实序列化/拷贝调用点，并证明此时 revoke 仍能完成）；contract 122–126 行删除与锁图补全（含 claim 期间获取控制器端口锁、证明无环）；inventory 的 snapshot/ledger 哈希边界说明与“既有/任务自有”脏项分离；撤回“所有异常路径已终止化并关闭控制器”的不实陈述。**尚未请求 review 10**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
+
+## CP-646 — EXP-572 P1.4 按更正方案达标：run_to("receive") 两侧通用，RED 7 failed / GREEN 7 passed
+
+- 提交 `2f81c71a`。按用户更正实现，**未新增任何生产侧 `claim_only` 接缝**：三个用例直接使用 `tx.run_to("receive", stage=..., role=..., goal_uuid=..., target_digest=..., controller_generation=..., controller_incarnation=...)`（该入口在 frozen `b917ae46` 与当前树都有效：它只设置 `self._stop_at`，旧版 `run()` 忽略自身 `stop_at` 参数但不会清除该字段，因此在真实 `port.send` 返回后 `_should_stop("receive")` 生效并返回 IN_FLIGHT），**先断言 IN_FLIGHT**，再从 `port.last_receipt(permit_id=...)` 取**真实消费记录**——不再手写 schema 字段。
+  - malformed：移除 `sequence` 后提交 → 断言拒绝且 permit **不可逆 UNKNOWN**，随后提交完整记录仍被拒且状态保持 UNKNOWN；
+  - boot 化身：仅替换 `controller_boot_incarnation` → 断言拒绝/未接受；
+  - 冻结 receipt：取记录后推进时钟 5 s → 断言 `observed_ns`/`sequence`/`claim_monotonic_ns` **不变**、映射**只读**（赋值抛错），随后该记录**被正常接受**。
+- **实测**（同一文件、同样七个用例名，两侧同名同源）：当前树 **7 passed**（`p14-green.log`/JUnit，scratch `exp572-p14-green.*`，镜像 `mirror-25` 逐文件 SHA 等于 worktree）；frozen `b917ae46` **7 failed**（`p14-red.log`/JUnit，scratch `exp572-p14-red.*`，`baseline-p14-red` 与 `git show b917ae46` 逐字节相等，BASELINE_PROVENANCE PASS）；六模块 **151 passed**（`p14-six.log`/JUnit，scratch `exp572-p14-six.*`）。
+- 两次失败的手写尝试（`p14-attempt-unqualified-behavior-module.py`、`p14-attempt2-unqualified-behavior-module.py`）保留为 NONQUALIFYING；证据目录追加式，无删除或覆盖；42 个既有 dirty entries 未改动。
+- **仍未完成**：P1.5（事件屏障放进真实 `port.send` 与真实序列化/拷贝调用点，并证明此时 revoke 仍能完成、断言确已进入目标节点）；contract 122–126 行删除；锁图补全（含 claim 期间获取的控制器端口锁与无环证明）；inventory 的 snapshot/ledger 哈希边界说明与既有/任务自有脏项分离；撤回“所有异常路径已终止化并关闭控制器”的不实陈述。**尚未请求 review 10**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
