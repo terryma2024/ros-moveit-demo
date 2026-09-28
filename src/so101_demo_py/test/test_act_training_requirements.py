@@ -30,11 +30,29 @@ def _resolved(tmp_path, **overrides):
     return path
 
 
-def test_the_shipped_lock_is_unresolved_and_therefore_refused_by_a_training_run(tmp_path):
-    document = load_training_requirements(LOCK)
-    assert document["status"] == "UNRESOLVED" and document["packages"] == []
-    with pytest.raises(ValueError, match="TRAINING_REQUIREMENTS_UNRESOLVED"):
-        require_resolved_requirements(LOCK)
+def test_the_shipped_lock_is_resolved_and_pins_every_package_by_source_hash():
+    """The shipped lock was UNRESOLVED while no interpreter had resolved it; now that one has, it must
+    present a complete pin set rather than a partial one. A half-resolved lock is still refused, which the
+    synthetic cases below cover."""
+
+    document = require_resolved_requirements(LOCK)
+    assert document["status"] == "RESOLVED" and document["packages"]
+    assert document["resolver"]["python"] and document["resolver"]["index_sha256"]
+    names = [package["name"] for package in document["packages"]]
+    assert len(set(names)) == len(names)
+    for package in document["packages"]:
+        assert len(package["sha256"]) == 64 and package["version"]
+    assert {"torch", "lerobot"} <= set(names)
+
+
+def test_a_lock_that_claims_to_be_unresolved_but_carries_packages_is_refused(tmp_path):
+    path = tmp_path / "requirements.lock"
+    path.write_text(yaml.safe_dump({"schema_version": 1, "kind": "act_training_requirements",
+                                    "status": "UNRESOLVED", "resolver": None,
+                                    "packages": [{"name": "torch", "version": "2.11.0", "sha256": "a" * 64}]},
+                                   sort_keys=False))
+    with pytest.raises(ValueError, match="TRAINING_REQUIREMENTS_INVALID"):
+        load_training_requirements(path)
 
 
 def test_a_resolved_lock_pins_every_package_by_version_and_source_hash(tmp_path):

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from so101_demo.act.training_requirements import require_resolved_requirements
 from so101_demo.cli.act_train import main
 
 SOURCE_LOCK = Path(__file__).resolve().parents[1] / "config/act/requirements.lock"
@@ -55,12 +56,19 @@ def _resolved_lock(tmp_path):
 def test_the_cli_exports_trains_and_records_the_run(tmp_path, capsys, monkeypatch):
     manifest, index, binding, config = _workspace(tmp_path)
     output = tmp_path / "bundle.json"
-    # the shipped lock is deliberately unresolved: a training run cannot start against it
+    # an unresolved lock is what blocks a training run. The shipped lock used to be that blocker; now that a
+    # training interpreter has resolved it, the refusal is exercised with a synthetic unresolved lock and the
+    # shipped one is asserted to pass the gate.
+    unresolved = tmp_path / "requirements-unresolved.lock"
+    unresolved.write_text(yaml.safe_dump({"schema_version": 1, "kind": "act_training_requirements",
+                                          "status": "UNRESOLVED", "resolver": None, "packages": []},
+                                         sort_keys=False))
     with pytest.raises(ValueError, match="TRAINING_REQUIREMENTS_UNRESOLVED"):
         main(_argv(manifest, index, binding, config, output),
              trainer=lambda *_a: {"kind": "act_bundle"}, owner_factory=lambda **_: {},
-             requirements_path=SOURCE_LOCK)
+             requirements_path=unresolved)
     assert not output.exists() and not (tmp_path / "bundle.json.dataset").exists()
+    assert require_resolved_requirements(SOURCE_LOCK)["status"] == "RESOLVED"
     with pytest.raises(ValueError, match="TRAINING_DEVICE_INVALID"):
         main([*_argv(manifest, index, binding, config, output)[:-1], "cpu"],
              trainer=lambda *_a: {"kind": "act_bundle"}, owner_factory=lambda **_: {})
