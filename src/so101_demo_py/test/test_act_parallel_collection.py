@@ -323,3 +323,37 @@ def test_workload_needs_a_campaign_that_can_run():
         workload.run_authorized({"admitted": True, "start_event_id": "s",
                                  "start_event_type": "t", "reset_epoch": 1},
                                 start_event_id="s", start_event_type="t", reset_epoch=1)
+
+
+def test_the_worker_accepts_either_act_workload_only_in_execute_mode(tmp_path):
+    """The worker's workload port is exact-typed: the two ACT workloads, and only in EXECUTE mode."""
+
+    import sys
+    from types import SimpleNamespace
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from test_parallel_batch_worker import Fake
+    from so101_demo.parallel_batch.worker import ParallelWorker, RunMode, WorkerError
+
+    from so101_demo.act.collection import ActCollectionWorkload
+    from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
+
+    workload = ActFixedCollectionWorkload(SimpleNamespace(run=lambda: {}), runtime=None)
+    ports = Fake(RunMode.EXECUTE).ports()
+    ports["workload"] = workload
+    ParallelWorker(ports)                                     # accepted in EXECUTE mode
+    ports["workload"] = ActCollectionWorkload()
+    ParallelWorker(ports)                                     # the single-scenario port still is too
+
+    # outside EXECUTE mode neither may be attached
+    for mode in (RunMode.PLAN_ONLY, RunMode.DRY_RUN):
+        ports = Fake(mode).ports()
+        ports["workload"] = workload
+        with pytest.raises(WorkerError, match="WORKLOAD_PORT_INVALID"):
+            ParallelWorker(ports)
+    # and an arbitrary object is still refused, so the port is not duck-typed
+    ports = Fake(RunMode.EXECUTE).ports()
+    ports["workload"] = SimpleNamespace(run=lambda: {}, kind="act_fixed_collection")
+    with pytest.raises(WorkerError, match="WORKLOAD_PORT_INVALID"):
+        ParallelWorker(ports)

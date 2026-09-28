@@ -235,8 +235,12 @@ class ParallelWorker:
         self._workload = ports.get("workload")
         if self._workload is not None:
             from so101_demo.act.collection import ActCollectionWorkload
+            from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 
-            if type(self._workload) is not ActCollectionWorkload or self._mode is not RunMode.EXECUTE:
+            # exact types only: an ACT workload is either the single-scenario port or the fixed
+            # collection port, and either way it may run only in EXECUTE mode
+            accepted = (ActCollectionWorkload, ActFixedCollectionWorkload)
+            if type(self._workload) not in accepted or self._mode is not RunMode.EXECUTE:
                 raise WorkerError("WORKLOAD_PORT_INVALID")
         self._run_lock = threading.Lock()
         self._execution_lock = threading.RLock()
