@@ -9255,3 +9255,27 @@ This resolves the design block **without authorizing runtime or motion**.
   boundaries intact, then the teleop-side modifications and the live Steps 6–7.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-780 — Task 11A: the workload the existing worker can dispatch to
+
+- **Delivered:** `ActFixedCollectionWorkload` in `act/parallel_collection.py`, with tests.
+  - `kind = "act_fixed_collection"` and `run_authorized(...)`, shaped like the repo's own
+    `ActCollectionWorkload`, so the existing worker can dispatch by kind without a new dispatch path.
+  - **no collection without the right lease:** `admitted is True` plus matching `start_event_id` and
+    `start_event_type` (`ACT_COLLECTION_LEASE_UNAVAILABLE`), and a `reset_epoch` that agrees with the
+    caller's (`ACT_COLLECTION_RESET_EPOCH_MISMATCH`) — covered for unadmitted, wrong start id, wrong
+    start type and `None`.
+  - **the worker cannot widen a wave:** the workload runs *the campaign*; scene membership, wave size and
+    terminal-skipping stay inside it, and an outcome without a `campaign_index` is
+    `ACT_COLLECTION_OUTCOME_INVALID`.
+  - a worker-supplied boundary wraps the run (asserted with an enter/exit log).
+- **A guard of mine checked the wrong collaborator:** it required `runtime.collect`, but the campaign is
+  the executor and the runtime adapter is merely its collect port. The test's `runtime=None` surfaced it;
+  the guard now checks the campaign (`ACT_COLLECTION_CAMPAIGN_UNAVAILABLE`), with a test for that path.
+- **Verification:** focused tests **14 passed** in `test_act_parallel_collection.py`
+  (`gate6-batch3-py-gate/task11a14.{log,junit.xml}`).
+- **Remaining in 11A:** confirm whether the worker's port lookup already reaches this workload by kind
+  (in which case the 1156-line `parallel_batch/worker.py` needs no edit at all), then the teleop-side
+  modifications and the live Steps 6–7.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
