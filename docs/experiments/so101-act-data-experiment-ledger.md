@@ -9132,3 +9132,25 @@ This resolves the design block **without authorizing runtime or motion**.
   composition and `act_collect_parallel`, then the teleop-side modifications and the live Steps 6–7.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-775 — Task 11A: the GPU workload contract has no CPU path
+
+- **Delivered:** `adapters/act/gpu_workload_client.py` with
+  `GpuWorkloadClient(*, device_port, runner).submit(request)`, plus `test_act_gpu_workload_client.py`.
+  - **no fallback:** `allow_cpu_fallback` must be literally `False`
+    (`GPU_CPU_FALLBACK_FORBIDDEN`), and a device port that does not report `cuda: True` refuses as
+    `GPU_UNAVAILABLE_NO_CPU_FALLBACK` with the runner **never called** — no work is attempted on a
+    downgraded device.
+  - **CUDA-only answers:** a response naming `cpu`, `mps` or no device is `GPU_DEVICE_MISMATCH`.
+  - **model-source provenance:** the requested `{name, sha256}` is echoed and compared exactly; a result
+    from a different model is `GPU_MODEL_SOURCE_MISMATCH`, because it is not evidence for this campaign.
+  - **closed shapes:** request/response schemas frozen (`schema_version` 1, two workload kinds,
+    `PASSED`/`FAILED`), payload and result digests required 64-hex (`GPU_WORKLOAD_DIGEST_INVALID`).
+  - device and runner are injected, so no test touches CUDA, a socket or a subprocess.
+- **Verification:** focused tests **3 passed** (`gate6-batch3-py-gate/task11a5.{log,junit.xml}`), first run
+  green; Task 11A focused total now **14 passed**.
+- **Remaining in 11A:** `FixedActCollectionCampaign`, the fixed-collection composition and
+  `act_collect_parallel`, the runtime/results adapter wiring, then the teleop-side modifications
+  (`bridge`, `teleop_service`, `contracts`, `admission`) and the live Steps 6–7.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
