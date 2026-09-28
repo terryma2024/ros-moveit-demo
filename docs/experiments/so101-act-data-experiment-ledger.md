@@ -9464,3 +9464,23 @@ This resolves the design block **without authorizing runtime or motion**.
 - **Remaining in 12A:** the `act_offline_evaluate` CLI and its `setup.py` entry.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 + 12A IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-789 — Task 12A: the read-only evaluation CLI (12A's code is complete)
+
+- **Delivered:** `cli/act_offline_evaluate.py` (+ `setup.py` entry) with `--manifest`, `--bundle`,
+  `--freeze`, `--output`.
+  - prints the metrics summary (episode count, valid targets, per-joint mean MAE, `byte_weighted: false`);
+  - **injected loader:** `main(argv, *, policy_loader=None)`;
+  - **the production path fails closed:** it requires the training interpreter
+    (`OFFLINE_EVALUATION_TRAINING_INTERPRETER_REQUIRED`) and then the LeRobot adapter
+    (`OFFLINE_EVALUATION_LOADER_UNAVAILABLE`) — no import-path model loading and no silent fallback. Its
+    refusal inside the test interpreter is the honest state of this task: the adapter is Task 12's
+    remaining work, and the CLI names it precisely instead of importing whatever is on the path;
+  - **a refusal leaves no artifact:** after a freeze digest mismatch the test asserts the output file does
+    not exist, so a failed evaluation cannot leave a report that looks like a result.
+- **Verification:** focused tests **9 passed** (`gate6-batch3-py-gate/task12a6.{log,junit.xml}`).
+- **Task 12A status:** metrics, `evaluate_offline` and the CLI are all delivered; what remains at plan
+  level is the live Step 4 (short training plus a real load/infer smoke on actual data), which needs the
+  runtime ladder.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
