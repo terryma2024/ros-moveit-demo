@@ -7383,3 +7383,33 @@ it), the `collection_config` definition, and the file `source_sha256` binds.
   sha256 `dc84e3d66173d3d06f68a101d529b3a5de561960db25325909c6f62f34957532`.
 - **Boundaries:** no process, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED; evidence preserved.
+
+## CP-699 — Task 8 core slice completed and committed; boundary audit recorded
+
+Handoff `inputs/task8-artifact-plan-handoff-20260929.md` read; approved commit
+`d898fdaad36c871848b9bc46988ab6e5263edae9` confirmed as HEAD with all prior checkpoints as
+ancestors; reviewed plan SHA256 verified as
+`877cb6baa9bb786d53a7abf0c55f221901a8565f78cf2741a9b1c65bf9c5e63a` (matches the handoff).
+
+- **Boundary audit** (`experiments/gate6-runtime/task8-core/boundary-status.txt`): of the 18 files
+  the reviewed plan's Task 8 Step 5 stages, 16 were already clean/committed and exactly two were
+  dirty — `src/so101_demo_py/src/adapters/act/physics.py` and
+  `src/so101_demo_py/test/test_act_task8.py`.
+- **Review** (`task8-core/core-diff-review.txt`): `physics.py` adds a `_validate_prefix` seam so the
+  Task 8 path checker can be exercised without bypassing `validate_action_prefix`;
+  `test_act_task8.py` tracks `physics_step` per evidence frame and tightens the support semantics
+  (support is not claimed during MICRO_LIFT/TRANSPORT/ALIGN). Both are inside the Task 8 core
+  boundary; nothing unrelated was staged.
+- **Target tests** (fresh mirror + fresh NVMe scratch, exact venv): `test_act_task8.py`,
+  `test_act_task8_manifest.py`, `test_act_supervisor.py`, `test_act_contact_evidence.py` ->
+  **67 passed** rc=0 (`gate6-batch3-py-gate/t8core.log`).
+- **Design facts recorded for 8P1** (from the approved design): `source` is replaced by a closed
+  `task8-live-source-provenance.json` with a code-generated `runtime_roles` registry
+  (`verbatim_install`/`compiled`/`external_runtime`, canonical serialization); the head-search
+  runtime config and `parallel_batch_v3.yaml` must both request CUDA with
+  **`allow_cpu_fallback=false`**, so the earlier authored candidate (which allowed CPU fallback) is
+  **void and must be regenerated**; the collection config is a new frozen
+  `config/act/parallel_collection_v3.yaml` plus `parallel-collection-v3-schema.json`.
+- **Boundaries:** unpaid/unrelated dirty files preserved (held_cup_transfer_*, pick_place_approach_*,
+  contracts.py, pick_place_runner.py, the physical-execution plan doc); no runtime/motion started;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
