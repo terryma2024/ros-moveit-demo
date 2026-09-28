@@ -83,6 +83,18 @@ class RosPhysicsClockAdapter:
             self._notified_epochs.add(epoch)
             self.on_hazard(self.history.hazard)
 
+    def check_health(self, *, now_ns=None):
+        """Poll the bounded health contract and notify at most once per epoch.
+
+        The history can only detect silence when someone asks, so the owning
+        runtime must call this at a period shorter than the configured silence
+        bound and treat False as a closed epoch.
+        """
+        with self._lock:
+            healthy = self.history.check_health(now_ns=now_ns)
+            self._notify()
+            return healthy
+
     def _append_pending(self, chunk, receipt_ns, scope):
         samples = len(chunk.samples)
         if samples > self.sample_capacity:

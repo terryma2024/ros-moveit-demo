@@ -28,11 +28,24 @@ def _simulation_ns(value):
     return round(value * 1_000_000_000)
 
 
+def _optional_duration_ns(value, name):
+    if value is None:
+        return None
+    if (isinstance(value, bool) or not isinstance(value, (int, float))
+            or not math.isfinite(value) or value <= 0):
+        raise ValueError(f"{name} invalid")
+    duration = round(value * 1_000_000_000)
+    if duration < 1:
+        raise ValueError(f"{name} invalid")
+    return duration
+
+
 class PhysicsClockHistory:
     """Validate every source step without granting a goal or collection permit."""
 
     def __init__(self, session_id, *, nq, nv, max_age_s,
-                 max_source_step_gap_ns, clock_ns=time.monotonic_ns):
+                 max_source_step_gap_ns, max_silence_s=None,
+                 first_chunk_timeout_s=None, clock_ns=time.monotonic_ns):
         if not isinstance(session_id, str) or not session_id or not callable(clock_ns):
             raise ValueError("PHYSICS_CLOCK_CONFIG_INVALID")
         self.nq = _integer(nq, "nq", 1)
@@ -45,6 +58,9 @@ class PhysicsClockHistory:
         self.max_age_ns = round(max_age_s * 1_000_000_000)
         if self.max_age_ns < 1:
             raise ValueError("PHYSICS_CLOCK_CONFIG_INVALID")
+        self.max_silence_ns = _optional_duration_ns(max_silence_s, "max_silence_s")
+        self.first_chunk_timeout_ns = _optional_duration_ns(
+            first_chunk_timeout_s, "first_chunk_timeout_s")
         self.session_id = session_id
         self.clock_ns = clock_ns
         self._lock = threading.RLock()
@@ -56,6 +72,8 @@ class PhysicsClockHistory:
         self._last_sim_ns = 0
         self._last_source_begin_ns = 0
         self._last_source_end_ns = 0
+        self._armed_monotonic_ns = 0
+        self._first_chunk_seen = False
 
     def arm(self, reset_epoch, *, source_floor_s):
         epoch = _integer(reset_epoch, "reset_epoch", 1)
@@ -71,6 +89,8 @@ class PhysicsClockHistory:
             self._last_sim_ns = floor_ns
             self._last_source_begin_ns = 0
             self._last_source_end_ns = 0
+            self._armed_monotonic_ns = _integer(self.clock_ns(), "readback_ns", 1)
+            self._first_chunk_seen = False
 
     def latch(self, reason):
         if not isinstance(reason, str) or not reason:
@@ -155,6 +175,7 @@ class PhysicsClockHistory:
                 self._last_sim_ns = sim_ns
                 self._last_source_begin_ns = begin_previous
                 self._last_source_end_ns = end_previous
+                self._first_chunk_seen = True
                 return True
             except (AttributeError, TypeError, ValueError, OverflowError) as error:
                 self.hazard = str(error)
@@ -171,8 +192,33 @@ class PhysicsClockHistory:
                            if 0 <= now_ns - entry["sample"].clock_interval_end_monotonic_ns
                            <= self.max_age_ns)
             if not recent:
+                # A readback that finds no fresh sample closes the epoch; raising
+                # alone would let a later chunk revive a stream that already stalled.
+                self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
                 raise ValueError("PHYSICS_CLOCK_STALE")
             return recent
+
+    def check_health(self, *, now_ns=None):
+        """Latch a bounded silence or first-chunk failure and report health.
+
+        Returns True only while the armed epoch has produced at least one chunk
+        and neither the configured silence bound nor the first-chunk deadline has
+        been exceeded. The verdict is sticky: only a new arm clears it. Without
+        explicit bounds no silence claim is made, so production wiring must
+        supply them.
+        """
+        with self._lock:
+            if self.epoch is None or self.hazard is not None:
+                return False
+            now = _integer(self.clock_ns() if now_ns is None else now_ns, "readback_ns", 1)
+            if not self._first_chunk_seen:
+                if (self.first_chunk_timeout_ns is not None
+                        and now - self._armed_monotonic_ns > self.first_chunk_timeout_ns):
+                    self.hazard = "PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT"
+            elif (self.max_silence_ns is not None
+                    and now - self._last_source_end_ns > self.max_silence_ns):
+                self.hazard = "PHYSICS_CLOCK_SILENT"
+            return self.hazard is None
 
     def step_at(self, physics_step):
         step = _integer(physics_step, "physics_step", 1)
