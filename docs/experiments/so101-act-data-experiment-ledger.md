@@ -9298,3 +9298,25 @@ This resolves the design block **without authorizing runtime or motion**.
   `admission`) and the live Steps 6–7.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-782 — Task 11A: the teleop side is already complete; my composition is the piece to align
+
+- **Finding (all four teleop files clean):** `admission.py` already recognises `act_collection_start` /
+  `act_collection_resume` in `_ACT_START_KINDS` and branches on `spec.kind.startswith("act_collection")`,
+  and `bridge.act_collection(request)` already routes start/resume. So the plan's teleop-side
+  modifications are **already satisfied** — no edit to `bridge.py`, `teleop_service.py`, `contracts.py`
+  or `admission.py` is needed, and none was made.
+- **What is actually misaligned is mine:** the composition emits `kind = "act_fixed_collection"`, which
+  does not match `startswith("act_collection")`, and its 21-key flat spec is not the 22-key
+  `_ACT_PAYLOAD_KEYS` payload admission expects (which has no `policy_path`/`policy_sha256`, and no room
+  for `qualification_contract_path`, `wave_index_path` or `limit`). A collection payload carrying a Task 8
+  preparation receipt is explicitly a schema error.
+- **Where the fixed-collection metadata belongs:** in the evidence root next to the campaign index —
+  the convention already implemented, since `--resume` requires `<root>/campaign-index.json`. No extra
+  payload key is needed, and `service_epoch` / `resource_binding_id` / `proposal_path` / `children` come
+  from the admitted service and context, never from the CLI.
+- **Next edit, recorded in the plan file with the full contract:** emit `{kind: start|resume, payload:
+  <22 keys>}` and assert in a focused test that the emitted key set equals `_ACT_PAYLOAD_KEYS` by
+  importing the constant, so the check cannot drift.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
