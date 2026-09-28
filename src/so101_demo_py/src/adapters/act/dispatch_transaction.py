@@ -38,6 +38,9 @@ class OfflineDispatchTransaction:
         self._selected_max_age_ns = selected_max_age_ns
         self._barriers = {}
         self._stop_at = None
+        self.unusable = False
+        self.close_failed = False
+        self.fencing_required = False
         self.state = "IDLE"
         self.failure = None
         self.receipt = None
@@ -76,6 +79,8 @@ class OfflineDispatchTransaction:
                      controller_incarnation, timeout_ns=None, stop_at=None):
         """Run the transaction; ``stop_at`` halts after that node (test seam)."""
 
+        if self.unusable:
+            raise AuthorityRefused("AUTHORITY_TRANSACTION_UNUSABLE")
         if stop_at is not None and stop_at not in NODES:
             raise ValueError(f"DISPATCH_NODE_UNKNOWN:{stop_at}")
         changed = stop_at is not None
@@ -117,9 +122,7 @@ class OfflineDispatchTransaction:
                                               controller_generation=controller_generation,
                                               token=token)
         except AuthorityRefused as error:
-            self.state, self.failure = "REJECTED", str(error)
-            self.registry.terminate(self.handle, reason=self.failure)
-            return self.state
+            return self._fail_closed(str(error))
         self.node("claim")
         try:
             reserved = self.port.reserve(
@@ -130,14 +133,9 @@ class OfflineDispatchTransaction:
                 session_id=identity[1], broker_incarnation=identity[2],
                 claim_monotonic_ns=claim.commit_monotonic_ns)
         except AuthorityRefused as error:
-            self.state, self.failure = "REJECTED", str(error)
-            self.registry.terminate(self.handle, reason=self.failure)
-            return self.state
+            return self._fail_closed(str(error))
         if reserved != ACCEPTED:
-            self.state = "REJECTED"
-            self.failure = "AUTHORITY_RESERVATION_REFUSED"
-            self.registry.terminate(self.handle, reason=self.failure)
-            return self.state
+            return self._fail_closed("AUTHORITY_RESERVATION_REFUSED")
         self.node("reserve")
         verdict = self.port.send(goal_uuid=goal_uuid, permit_id=self.handle.permit_id, role=role,
                                  target_digest=target_digest, generation=controller_generation,
@@ -148,25 +146,20 @@ class OfflineDispatchTransaction:
             self.state = "IN_FLIGHT"
             return self.state
         if verdict != ACCEPTED:
-            # timeout/unknown are irreversible: close the port *and* the permit
-            self.port.close("DISPATCH_UNKNOWN")
-            self.registry.terminate(self.handle, reason="DISPATCH_UNKNOWN")
-            self.state = UNKNOWN
-            return self.state
+            return self._fail_closed("DISPATCH_UNKNOWN")
         if timeout_ns is not None and self._clock_ns() - claim.commit_monotonic_ns > timeout_ns:
-            self.port.close("DISPATCH_TIMEOUT")
-            self.registry.terminate(self.handle, reason="DISPATCH_TIMEOUT")
-            self.state = UNKNOWN
             self.node("timeout")
-            return self.state
+            return self._fail_closed("DISPATCH_TIMEOUT")
         self.node("timeout")
+        from collections.abc import Mapping
+
         fields = self.port.last_receipt(permit_id=self.handle.permit_id)
+        if not isinstance(fields, Mapping):
+            return self._fail_closed("AUTHORITY_READBACK_INVALID")
         try:
             self.receipt = self.registry.receipt(self.handle, **fields)
         except AuthorityRefused as error:
-            self.state, self.failure = UNKNOWN, str(error)
-            self.registry.terminate(self.handle, reason=self.failure)
-            return self.state
+            return self._fail_closed(str(error))
         self.state = self.receipt
         self.node("receipt")
         return self.state
@@ -181,6 +174,7 @@ class OfflineDispatchTransaction:
         """
 
         self.failure = reason
+        self.unusable = True
         if self.handle is not None:
             try:
                 self.registry.terminate(self.handle, reason=reason)
@@ -188,8 +182,9 @@ class OfflineDispatchTransaction:
                 pass
         try:
             self.port.close(reason)
-        except Exception:  # noqa: BLE001 - the port may already be closed
-            pass
+        except Exception:  # noqa: BLE001 - a failed close is *not* success
+            self.close_failed = True
+            self.fencing_required = True
         self.state = UNKNOWN
         return self.state
 
