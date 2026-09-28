@@ -298,3 +298,53 @@ def test_cli_qualification_mode_only_takes_qualification_scenes(tmp_path):
     with pytest.raises(ValueError, match="COLLECTION_SELECTION_EMPTY"):
         main([*argv[:1], str(formal_manifest), *argv[2:]],
              service_factory=lambda payload: _Service())
+
+
+def test_one_reset_per_attempt_and_a_terminal_state_nothing_overwrites():
+    from so101_demo.act.collection import (
+        AttemptLedger, collect_authorized_scenario, prepare_scenario,
+    )
+
+    ledger = AttemptLedger()
+    reset, joints = _ResetPort(), _JointsPort()
+    prepared = prepare_scenario(_scenario(), reset_port=reset, joints_port=joints, ledger=ledger,
+                                attempt_id="attempt-1")
+    with pytest.raises(ValueError, match="SCENARIO_RESET_ALREADY_PERFORMED"):
+        prepare_scenario(_scenario(), reset_port=reset, joints_port=joints, ledger=ledger,
+                         attempt_id="attempt-1")
+    assert reset.calls == 1                                   # one reset per attempt, never two
+
+    record = collect_authorized_scenario(prepared, _scenario(), phase_port=_PhasePort(),
+                                         recorder=_Recorder(), qc_port=_QCPort("PASS"),
+                                         ledger=ledger)
+    sealed = ledger.terminal("act-abc")
+    assert sealed == record and sealed["status"] == "PASSED"
+    with pytest.raises(ValueError, match="SCENE_TERMINAL_STATE_IMMUTABLE"):
+        collect_authorized_scenario(prepared, _scenario(), phase_port=_PhasePort(),
+                                    recorder=_Recorder(), qc_port=_QCPort("FAIL"), ledger=ledger)
+    assert ledger.terminal("act-abc") == record                # the terminal state did not change
+    with pytest.raises(ValueError, match="SCENE_TERMINAL_STATE_IMMUTABLE"):
+        prepare_scenario(_scenario(), reset_port=reset, joints_port=joints, ledger=ledger,
+                         attempt_id="attempt-2")
+
+
+def test_a_persistence_failure_surfaces_as_infra_and_seals_nothing():
+    from so101_demo.act.collection import (
+        AttemptLedger, collect_authorized_scenario, prepare_scenario, training_eligible,
+    )
+
+    class FailingRecorder:
+        def append(self, row):
+            raise OSError("recorder queue full")
+
+    ledger = AttemptLedger()
+    prepared = prepare_scenario(_scenario(), reset_port=_ResetPort(), joints_port=_JointsPort(),
+                                ledger=ledger)
+    with pytest.raises(OSError, match="recorder queue full"):
+        collect_authorized_scenario(prepared, _scenario(), phase_port=_PhasePort(),
+                                    recorder=FailingRecorder(), qc_port=_QCPort("PASS"),
+                                    ledger=ledger)
+    # a recorder fault must not become a business FAILED, and must not seal a terminal state
+    assert ledger.terminal("act-abc") is None
+    assert not training_eligible({"status": "FAILED", "qc": "PASS", "done": True,
+                                  "interventions": 0, "coordinator_committed": True})

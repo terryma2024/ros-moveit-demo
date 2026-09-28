@@ -46,7 +46,8 @@ COLLECTION_PHASES = ("SEARCH", "LOCK", "STABLE", "RECORD", "TEACHER_INFERENCE", 
                      "RETREAT", "FINAL_CHECK", "QC")
 
 
-def prepare_scenario(scenario: dict, *, reset_port, joints_port) -> dict:
+def prepare_scenario(scenario: dict, *, reset_port, joints_port, ledger=None,
+                     attempt_id=None) -> dict:
     """One reset, a seven-joint readback and a readiness proof, for a frozen scenario.
 
     The caller passes the result to `collect_authorized_scenario`; nothing else may reset.
@@ -54,6 +55,11 @@ def prepare_scenario(scenario: dict, *, reset_port, joints_port) -> dict:
 
     if not isinstance(scenario, dict) or set(scenario) != SCENARIO_KEYS:
         raise ValueError("SCENARIO_INVALID")
+    if ledger is not None:
+        if ledger.terminal(scenario["scene_id"]) is not None:
+            raise ValueError("SCENE_TERMINAL_STATE_IMMUTABLE")
+        # noted BEFORE the port is asked, so a retry after a failed reset is refused too
+        ledger.note_reset(attempt_id if attempt_id is not None else scenario["scene_id"])
     reset = reset_port.reset(scenario)
     if (not isinstance(reset, dict) or type(reset.get("reset_epoch")) is not int
             or reset["reset_epoch"] < 1 or reset.get("ready") is not True
@@ -70,7 +76,7 @@ def prepare_scenario(scenario: dict, *, reset_port, joints_port) -> dict:
 
 
 def collect_authorized_scenario(prepared: dict, scenario: dict, *, phase_port, recorder,
-                                qc_port) -> dict:
+                                qc_port, ledger=None) -> dict:
     """Search through QC for an already-prepared scenario, with no second reset.
 
     A business failure is sealed as an immutable FAILED record; an infrastructure fault (recorder or
@@ -80,6 +86,8 @@ def collect_authorized_scenario(prepared: dict, scenario: dict, *, phase_port, r
     if (not isinstance(prepared, dict) or prepared.get("scene_id") != scenario.get("scene_id")
             or prepared.get("split") != scenario.get("split")):
         raise ValueError("SCENARIO_NOT_PREPARED")
+    if ledger is not None and ledger.terminal(scenario["scene_id"]) is not None:
+        raise ValueError("SCENE_TERMINAL_STATE_IMMUTABLE")
     observed = []
     for phase in COLLECTION_PHASES:
         if phase == "QC":
@@ -95,10 +103,13 @@ def collect_authorized_scenario(prepared: dict, scenario: dict, *, phase_port, r
     verdict = qc_port.verdict(dict(prepared), tuple(observed))
     if verdict not in ("PASS", "FAIL"):
         raise ValueError("QC_VERDICT_INVALID")
-    return {"scene_id": scenario["scene_id"], "split": scenario["split"],
-            "status": "PASSED" if verdict == "PASS" else "FAILED", "qc": verdict,
-            "done": True, "interventions": 0, "coordinator_committed": True,
-            "reset_epoch": prepared["reset_epoch"], "phases": list(observed)}
+    record = {"scene_id": scenario["scene_id"], "split": scenario["split"],
+              "status": "PASSED" if verdict == "PASS" else "FAILED", "qc": verdict,
+              "done": True, "interventions": 0, "coordinator_committed": True,
+              "reset_epoch": prepared["reset_epoch"], "phases": list(observed)}
+    if ledger is not None:
+        ledger.seal(scenario["scene_id"], record)
+    return record
 
 
 COLLECTION_PAYLOAD_KEYS = frozenset({
@@ -181,3 +192,28 @@ def require_collection_selection(manifest: dict, *, qualification_mode: bool) ->
     if not selected:
         raise ValueError("COLLECTION_SELECTION_EMPTY")
     return selected
+
+
+class AttemptLedger:
+    """One reset per attempt, and a terminal scene result nothing may overwrite.
+
+    The ledger is bookkeeping the caller owns across a run: it is what turns "the plan says a scenario
+    resets once" into something a second caller cannot violate.
+    """
+
+    def __init__(self) -> None:
+        self._resets: dict = {}
+        self._terminal: dict = {}
+
+    def note_reset(self, attempt_id: str) -> None:
+        if attempt_id in self._resets:
+            raise ValueError("SCENARIO_RESET_ALREADY_PERFORMED")
+        self._resets[attempt_id] = True
+
+    def seal(self, scene_id: str, record: dict) -> None:
+        if scene_id in self._terminal:
+            raise ValueError("SCENE_TERMINAL_STATE_IMMUTABLE")
+        self._terminal[scene_id] = dict(record)
+
+    def terminal(self, scene_id: str):
+        return self._terminal.get(scene_id)
