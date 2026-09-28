@@ -161,7 +161,8 @@ class AuthorityTransactionRegistry:
 
         raise AuthorityRefused("AUTHORITY_LEGACY_CLAIM_REMOVED")
 
-    def claim_bound(self, handle, *, identity, controller_generation, token):
+    def claim_bound(self, handle, *, identity, controller_generation, token,
+                    controller_snapshot=None):
         """Broker-internal claim bound to the live owner, generation and history receipt.
 
         The admission/history objects are supplied by the broker itself, never by the
@@ -198,11 +199,13 @@ class AuthorityTransactionRegistry:
                     or controller_generation != record.identity[3]):
                 # the generation must agree with the admission identity *and* the record
                 raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
-            if port is not None:
-                # the controller port's *current* armed generation is the authority,
-                # not a caller-provided integer that happens to match
-                current = port.current_generation()
-                if current != record.controller_generation:
+            if controller_snapshot is not None:
+                # P2 design B: the snapshot was taken by the broker before this
+                # boundary, so no controller-port mutex is nested inside it
+                if (type(controller_snapshot) is not dict
+                        or controller_snapshot.get("generation") != record.controller_generation
+                        or not isinstance(controller_snapshot.get("boot_incarnation"), str)
+                        or not controller_snapshot["boot_incarnation"]):
                     raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
             # identities and owner state are validated while the boundary is held,
             # *before* the single final history validation, so nothing can change
@@ -240,8 +243,8 @@ class AuthorityTransactionRegistry:
                 raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED_AT_COMMIT")
             self._states[record.permit_id] = IN_FLIGHT
             self._claim_instant[record.permit_id] = receipt["commit_monotonic_ns"]
-            if port is not None and hasattr(port, "boot_incarnation"):
-                self._claim_boot[record.permit_id] = port.boot_incarnation()
+            if controller_snapshot is not None:
+                self._claim_boot[record.permit_id] = controller_snapshot["boot_incarnation"]
             return ClaimReceipt(permit_id=record.permit_id, identity=record.identity,
                                 stage=record.stage, step=record.step,
                                 history_version=receipt["version"],
