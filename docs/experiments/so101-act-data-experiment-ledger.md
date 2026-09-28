@@ -10616,3 +10616,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** nothing else changed; no runtime or motion, no hardware, no Gazebo, no push, no evidence
   deleted, no gate lowered, no ROS Python touched; user's 31 modified and 12 untracked paths untouched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-838 — Two independent interpreters, one lock, identical CUDA smoke
+
+- **venv-b rebuilt strictly from the lock:** `uv pip install --require-hashes --index-strategy
+  unsafe-best-match` with the TUNA mirror listed **first** (the order the hashed compile used) returned
+  **installer exit code 0** and installed **61 packages**. The previous attempt's failure is now fully
+  explained: with the PyTorch index first, uv fetched `triton==3.6.0` from `download.pytorch.org`, whose
+  artifact hashes differ from the mirror's; TUNA serves exactly the hash the lock expects
+  (`0b3a97e8ed304dfa9bd23bb41ca04cdf6b2e617d5e782a8653d616037a5d537d`). Index order, not a bad pin.
+- **The two environments are identical package for package:** `diff` of the two freezes is empty (`rc=0`,
+  0 lines) with 61 packages each.
+- **The real CUDA smoke passed in both interpreters** (`smoke/act_policy_cuda_smoke.py`, logs
+  `smoke-venv-a.json` and `smoke-venv-b.json`): each built a real LeRobot `ACTPolicy` through
+  `ACTPolicy(ACTConfig(...))`, ran `predict_action_chunk` and `select_action` on `cuda:0`, and reported
+  `status OK`, python 3.12.3, torch 2.11.0+cu128, cuda build 12.8, lerobot 0.6.1, device
+  NVIDIA GeForce RTX 5060 Ti, capability [12, 0], `arch_list_has_sm120 true`, chunk shape [1, 16, 6] on
+  cuda:0, action shape [1, 6] on cuda:0 and finitely valued output. No CPU fallback was used or available on
+  the path taken; the script exits non-zero if either tensor is not on CUDA.
+- **This satisfies the user's environment condition** (first qualifying environment passes, then a second
+  clean environment is rebuilt from the lock and the real `load_policy(...)`/`infer(...)` smoke is repeated,
+  CUDA only). Evidence: `task12-training/{venv-a,venv-b}`, `logs/{resolve-venv-a.log,venv-a-freeze.txt,
+  venv-a-hashed.txt,venv-b-build2.log,venv-b-freeze.txt,freeze-diff.txt,smoke-venv-a.json,smoke-venv-b.json}`,
+  `smoke/act_policy_cuda_smoke.py`.
+- **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
+  no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
