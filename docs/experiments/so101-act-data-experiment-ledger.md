@@ -8677,3 +8677,29 @@ test that a shorter gate run root clears.
   the verified four-step recipe and a short run id.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-757 — Combined 8P3/8P4 gate, demo half: 5442 tests, 29 failures, none this task's
+
+Ran the project gate at HEAD `79f8a12b` with the verified four-step recipe (in-worktree
+`colcon build --symlink-install` with the dependency overlay sourced, in-worktree overlay last and its
+origin verified in `gate88-origin.txt`, `pg11`/`r5` with `--process-id-chars 4`, 8 workers,
+`--expected-source-commit` at HEAD, `--allow-dirty`).
+
+| Metric | Value |
+|---|---|
+| Collection | **5442 tests** (was 5426 before this session's additions) |
+| Result | FAIL — shards 02 and 05 exited 1 (six of eight passed) |
+| Totals | **0 errors**, 29 failures, 0 skipped, elapsed ~121 s |
+
+Failure triage — **two causes, neither this task's**:
+
+| Count | Cause | Attribution |
+|---|---|---|
+| 28 | `AttributeError: type object 'Pairs' has no attribute 'fingerprin'` in `test_act_pick_place_approach_source_binding.py` and `test_act_task8_reset.py` | the user's in-progress typo (`fingerprint` intended); deliberately untouched |
+| 1 | `OSError: AF_UNIX path too long` in `test_controller_reservation_client.py` | environmental — the same module passes 17/17 in isolation with a short scratch (proven earlier in this session) |
+
+No failure is attributable to this task's changes. The teleop half of the combined gate is running
+separately; both halves will be reported together as the 8P3/8P4 boundary evidence.
+
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
