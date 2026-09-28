@@ -6646,3 +6646,11 @@ status: PLANNED_ISOLATED_STACK
 - 失败的迁移前运行已按用户要求保留为 **NONQUALIFYING**：`experiments/exp573-single-receipt/nonqualifying/test_act_exp572_linearization.pre-migration.py`；旧日志/JUnit 未删除或覆盖。
 - P1.2 已在上一轮收绿（表驱动 9 passed + 全探针 29 passed + 六模块 151 passed），本轮未回退。**下一步**：P2 锁图二选一（含删除过时 `claim_guard` 描述）、legacy claim 测试迁移、以及簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且与清单快照分开提交）。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动。
+
+## CP-657 — EXP-573 P2 尝试不合格并回退（如实记录）；恢复后的状态复核为绿
+
+- 本轮尝试 P2 设计 B（在 claim 边界**之前**由 broker 取控制器身份快照、边界内不再触碰端口锁、由 `reserve` 在控制器侧重校验同一代次）。实现后**大面积失败**：探针集 24 failed / 5 passed，六模块 12 failed / 139 passed（含 `NameError` 级别的接线问题——快照读取处的作用域未正确解析到事务持有的端口对象）。按既定纪律**未**在失败状态上继续叠加改动：将两份改动保存为 NONQUALIFYING（`experiments/exp573-single-receipt/nonqualifying/dispatch_transaction.p2-attempt.py`、`authority_transaction.p2-attempt.py`），并用 `git checkout` 回退到上一提交的绿色实现。
+- **回退后复核（新建 scratch + tempfile 探针 PASS + 镜像 `mirror-16`）**：四个探针模块 **29 passed in 0.60s**；六模块 **151 passed in 0.97s**。即 P1.1（单 receipt + 状态一致性检查）与 P1.2（统一失败闭合）的成果完整保留。
+- **P2 仍未完成**，且下一轮的正确做法已明确：先在 `_run_guarded` 中把端口对象解析为局部变量（`port = self.port`）再做快照读取，或把快照读取放进一个独立的小方法 `self._controller_snapshot()`；随后逐步验证（先单模块 `test_act_dispatch_transaction.py`，再四探针，再六模块），并把契约/audit 中“claim 期间会获取控制器端口锁”的描述改为“快照在边界前取得、`reserve` 侧重校验”，删除过时 `claim_guard` 措辞。
+- 其余未完成项不变：legacy claim 测试迁移；真实 `step_at` deepcopy 屏障（已有）与 send 入口测试（保留）；簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且清单快照提交与 ledger/请求包提交显式分离）。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
