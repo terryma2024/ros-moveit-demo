@@ -6333,3 +6333,10 @@ status: PLANNED_ISOLATED_STACK
 - 过程如实记录：本轮中途曾用逐行替换批量补参数，导致多个此前通过的用例失败（12 failed）；已用 `git checkout` 把两个测试文件恢复到 `221b95f0`，只保留一处**作用域明确**的辅助函数修改（`_issue` 传 `controller_incarnation`），再确认状态为 8 failed / 143 passed。这与前几轮同样的教训一致：测试适配必须逐个具名用例进行，不能逐行批量替换。
 - checkpoint SHA256 `7358e74d314cd192cd6ce70427f0b8f50a8f57f787f1b3130a7bdb5eb0dc4ab6`；被测源码哈希已更新。
 - 边界：Gate 5 仍 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-622 — EXP-570：逐用例迁移剩余调用点，失败 8 → 5
+
+- 提交 `112c96a2`。按“逐用例、不批量替换”的教训，逐个处理具名失败：`test_claim_uses_registry_time_and_rejects_a_rolled_back_clock` 与 `test_authority_consume_refuses_without_accepted_evidence` 的 `issue_handle` 调用补上必填 `controller_incarnation`；`test_same_goal_uuid_cannot_be_accepted_twice_with_a_different_permit` 的两处 `send` 补上必填 role/target_digest/generation/controller_incarnation；`test_generation_one_reservation_is_dead_after_rearm_to_two` 现已通过（rearm 失效语义生效）。
+- 集合 **151 个用例、5 failed / 146 passed**（elapsed `1,090,764,584 ns`）。剩余 5 项：`test_timeout_then_late_acceptance_never_revives_the_permit`、`test_duplicate_receipt_after_terminal_state_is_refused`、`test_controller_restart_invalidates_the_receipt_incarnation`（观测到 receipt 校验未按预期拒绝，断言处为 `assert 'ACCEPTED' == 'IN_FLIGHT'`）、`test_revoke_during_the_claim_history_commit_is_refused`（commit 内撤销屏障仍走到 ACCEPTED 路径）、`test_wrong_owner_identity_and_generation_are_refused`。清单固化于 `experiments/exp570-dispatch-transaction/failing-tests.txt`。
+- checkpoint SHA256 `db07e38f032bb0381a71a477050ee559471fd2a263485cb34a9a5e3422e8fc49`；被测源码哈希已刷新。
+- 边界：Gate 5 仍 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
