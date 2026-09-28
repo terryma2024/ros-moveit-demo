@@ -6020,3 +6020,19 @@ status: PLANNED_SOURCE_ONLY
 - EXP-562 checkpoint：`experiments/exp562-clock-linearization/checkpoint.json`，SHA256 `7b75bf0b7972a36c56cfec3dedade5b7d2c11c63ee2f9bd609fba486bef9b30c`（索引 10 个文件，逐文件哈希读回一致）；RED/GREEN 的 scratch、tempfile 证明与 JUnit 同时在 `scratch/exp562-*` 保留。
 - 仍未完成的评审要求（按规定的 Gate 5 顺序）：(a) EXP-563——冻结并测试 broker 侧按完整 ticket/generation/epoch 身份的**原子准入与不可逆撤销**契约，每个 hazard 携带该身份，proof 登记/返回、permit 消耗、逐路由提交与最终接受都重新 fence，部分提交取消并确认停止，明确锁顺序使阻塞的 checker 不能阻塞撤销，缓存 readiness 绝不等于 authority，同时把“回调期间调用方消息独占”写成显式契约或改为边界快照；(b) EXP-564——在代表性负载下用实现的真实谓词限定 owner 路径，记录源结束、回调入口、接受完成、实际看门狗检查、撤销与确认停止，给出“到期→撤销→确认停止”的上界，并确认或收紧 0.40 s 首块期限（收尾暂停的 hazard 只证明关机闭合，不证明在运动中停机的尾延迟）。
 - 边界与状态：没有接入生产 authority，没有目标、许可、采集或 Gate 6 工作；正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`；保留全部更早实验与证据，未归档、未删除任何证据。完成 (a)(b) 并留下证据后，按评审要求**再次停在 Gate 5** 等待第二次本地独立评审，不自评通过 Gate 6。
+
+## EXP-563 — 冻结 broker 身份的原子准入与不可逆撤销契约（离线，无生产 authority）
+
+status: PLANNED_SOURCE_ONLY
+
+- Prior EXP-562 / CP-587 与本地 Gate 5 BLOCK 评审的 P1“缺少可冻结、可测试的原子所有权契约”与 P2“拷贝隔离依赖未声明输入所有权”；source HEAD `0b78ceaf`（起始）；注册证据根、overlay `i`、exact test Python；无域、无 stack、无目标、无生产接线。
+- Observation: 生产入口目前只有一个每 5 ms 消费 reason-only 队列的 hazard dispatcher，既不是时钟看门狗契约，也没有 reset 作用域、身份绑定或 latest-stop 保证；同时历史的逐样本校验与保留都作用于调用方借出的消息对象，回调期间被并发修改可以在校验与拷贝之间改变被接受的内容。
+- One variable: 新增离线契约模块 `physics_clock_admission.py`（身份 `(ticket, generation, reset_epoch)` 作用域、粘滞不可逆撤销、携带身份的 hazard、逐阶段 re-fence、非阻塞锁序、部分提交取消并确认停止、到期→撤销→停止区间、独立且更紧的选中状态新鲜度），并把历史的逐样本路径改为“先拷贝再校验/保留”的自有快照。
+
+## CP-588 — 准入/撤销契约与自有快照已冻结并通过焦点门禁；EXP-564 待做
+
+- EXP-563 是 `VALID_SOURCE_ONLY_OFFLINE_ADMISSION_CONTRACT`。冻结内容：**身份作用域**——只有严格更新的 `(ticket, generation, reset_epoch)` 才能清除撤销，同代或更旧的重 arm 一律拒绝；**不可逆撤销**——同一身份的首个 hazard 生效，后续 hazard 不能替换它；**携带身份**——`note_hazard` 记录捕获时刻的身份，`revoked_record` 返回该身份；**逐阶段 re-fence**——`sample`/`proof`/`permit`/`submit`/`final_acceptance` 每个阶段都重新核对身份与撤销状态；**非阻塞锁序**——`run_checked_stage` 只在 O(1) 的入口与提交 fence 持有锁，昂贵 checker 在锁外运行，因此阻塞的 checker 不会拖延撤销；**部分提交**——取消已接受路由、以 `PHYSICS_CLOCK_PARTIAL_SUBMIT` 撤销，并在记录确认停止之前拒绝该身份的任何后续阶段；**到期到停止**——撤销记录单独保存 `expiry_to_stop_ns`；**选中状态新鲜度**——独立于摄入新鲜度且更紧，选中样本过期只拒绝、不撤销；**自有快照**——历史对每个样本先 `deepcopy` 再校验并保留该副本，回调期间对借出消息的修改既不能改变被接受的内容也不能改变被保留的内容。
+- 焦点证据：admission 模块缺失时的预期 RED（`ModuleNotFoundError`）；实现后 admission 7/7 通过；加入“回调期间修改借出消息不得改变校验或保留结果”的所有权用例后，四个时钟测试模块合计 **65 passed**。每个 pytest 运行使用此前不存在的注册 NVMe scratch，并由 exact Python 证明 `tempfile.gettempdir()` 落在其 `tmp` 内。
+- Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp563-clock-admission/checkpoint.json`，SHA256 `045e6fa6c3846540228934fd8c5bb3bcf5d00eea1674bf8dbf7796f609137af5`；索引 8 个文件、逐文件哈希读回一致；RED/GREEN 日志、JUnit、tempfile 证明与 scratch 同时保留。
+- 边界：本模块是**离线契约**，没有被任何生产入口构造，没有接入 `PickPlaceRosEvidence` 或 SEARCH，没有目标、许可、采集或 Gate 6 工作；正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
+- 仍待完成（Gate 5 顺序第 3 项，EXP-564）：在代表性负载下用实现的真实谓词限定 owner 路径，串起“源结束 → 回调入口 → 接受完成 → 实际看门狗检查 → 撤销 → 确认停止”，给出并单独声明“到期→撤销→确认停止”的上界，同时确认或收紧 0.40 s 首块期限；已完成后再停在 Gate 5 等待第二次本地独立评审。
