@@ -187,6 +187,19 @@ class PhysicsClockHistory:
                         _simulation_ns(samples[0].simulation_time_s) or
                         _simulation_ns(chunk.last_simulation_time_s) != sim_ns):
                     raise ValueError("PHYSICS_CHUNK_TIME_ENVELOPE_INVALID")
+                # Acceptance linearization point: validation and copying above can
+                # take milliseconds, so the clock is resampled and both the health
+                # deadlines and every accepted sample's freshness are revalidated
+                # before any history state is committed.
+                confirm_ns = _integer(self.clock_ns(), "readback_ns", 1)
+                if confirm_ns < receipt_ns:
+                    raise ValueError("PHYSICS_RECEIPT_FUTURE")
+                self._expire_deadlines(confirm_ns)
+                if self.hazard is not None:
+                    raise ValueError(self.hazard)
+                if any(not 0 <= confirm_ns - entry["sample"].clock_interval_end_monotonic_ns
+                       <= self.max_age_ns for entry in accepted):
+                    raise ValueError("PHYSICS_SOURCE_CLOCK_INVALID")
                 self._history.extend(accepted)
                 self._last_sequence = chunk.chunk_sequence
                 self._last_step = step
@@ -215,6 +228,16 @@ class PhysicsClockHistory:
             if not recent:
                 # A readback that finds no fresh sample closes the epoch; raising
                 # alone would let a later chunk revive a stream that already stalled.
+                self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
+                raise ValueError("PHYSICS_CLOCK_STALE")
+            # Readback linearization point: copying the window can cross a
+            # deadline, so freshness and health are revalidated before returning.
+            confirm_ns = _integer(self.clock_ns(), "readback_ns", 1)
+            self._expire_deadlines(confirm_ns)
+            if self.hazard is not None:
+                raise ValueError(self.hazard)
+            if any(not 0 <= confirm_ns - entry["sample"].clock_interval_end_monotonic_ns
+                   <= self.max_age_ns for entry in recent):
                 self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
                 raise ValueError("PHYSICS_CLOCK_STALE")
             return recent
@@ -271,14 +294,27 @@ class PhysicsClockHistory:
             if self.hazard is not None:
                 raise ValueError(self.hazard)
             any_fresh = False
+            selected = None
             for entry in reversed(self._history):
                 fresh = 0 <= now_ns - entry["sample"].clock_interval_end_monotonic_ns <= self.max_age_ns
                 any_fresh = any_fresh or fresh
                 if fresh and entry["sample"].physics_step == step:
-                    return {"sample": copy.deepcopy(entry["sample"]),
-                            "received_monotonic_ns": entry["received_monotonic_ns"],
-                            "command_authority": False}
-            if not any_fresh:
+                    selected = {"sample": copy.deepcopy(entry["sample"]),
+                                "received_monotonic_ns": entry["received_monotonic_ns"],
+                                "command_authority": False}
+                    break
+            if selected is None:
+                if not any_fresh:
+                    self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
+                    raise ValueError("PHYSICS_CLOCK_STALE")
+                raise ValueError("PHYSICS_CLOCK_STEP_UNAVAILABLE")
+            # The copy above can cross a deadline; revalidate before returning.
+            confirm_ns = _integer(self.clock_ns(), "readback_ns", 1)
+            self._expire_deadlines(confirm_ns)
+            if self.hazard is not None:
+                raise ValueError(self.hazard)
+            if not (0 <= confirm_ns - selected["sample"].clock_interval_end_monotonic_ns
+                    <= self.max_age_ns):
                 self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
                 raise ValueError("PHYSICS_CLOCK_STALE")
-            raise ValueError("PHYSICS_CLOCK_STEP_UNAVAILABLE")
+            return selected
