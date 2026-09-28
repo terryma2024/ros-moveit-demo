@@ -45,7 +45,8 @@ class PhysicsClockHistory:
 
     def __init__(self, session_id, *, nq, nv, max_age_s,
                  max_source_step_gap_ns, max_silence_s=None,
-                 first_chunk_timeout_s=None, clock_ns=time.monotonic_ns):
+                 first_chunk_timeout_s=None, incarnation=None,
+                 clock_ns=time.monotonic_ns):
         if not isinstance(session_id, str) or not session_id or not callable(clock_ns):
             raise ValueError("PHYSICS_CLOCK_CONFIG_INVALID")
         self.nq = _integer(nq, "nq", 1)
@@ -62,6 +63,8 @@ class PhysicsClockHistory:
         self.first_chunk_timeout_ns = _optional_duration_ns(
             first_chunk_timeout_s, "first_chunk_timeout_s")
         self.session_id = session_id
+        self.incarnation = incarnation if incarnation is not None else session_id
+        self.version = 0
         self.clock_ns = clock_ns
         self._lock = threading.RLock()
         self._history = deque(maxlen=512)
@@ -91,12 +94,25 @@ class PhysicsClockHistory:
             self._last_source_end_ns = 0
             self._armed_monotonic_ns = _integer(self.clock_ns(), "readback_ns", 1)
             self._first_chunk_seen = False
+            self.version += 1
 
     def latch(self, reason):
         if not isinstance(reason, str) or not reason:
             raise ValueError("PHYSICS_CLOCK_HAZARD_INVALID")
         with self._lock:
-            self.hazard = self.hazard or reason
+            if self.hazard is None:
+                self.hazard = reason
+                self.version += 1
+
+    def snapshot(self):
+        """Versioned view of the current history state for commit revalidation."""
+
+        with self._lock:
+            return {"version": self.version, "session_id": self.session_id,
+                    "incarnation": self.incarnation, "epoch": self.epoch,
+                    "hazard": self.hazard,
+                    "evidence_ready": (self.epoch is not None and self.hazard is None
+                                       and self._first_chunk_seen)}
 
     def _expire_deadlines(self, now_ns):
         """Latch an expired first-chunk or silence deadline. Caller holds the lock."""
@@ -211,6 +227,7 @@ class PhysicsClockHistory:
                 self._last_source_begin_ns = begin_previous
                 self._last_source_end_ns = end_previous
                 self._first_chunk_seen = True
+                self.version += 1
                 return True
             except (AttributeError, TypeError, ValueError, OverflowError) as error:
                 self.hazard = str(error)
@@ -232,7 +249,9 @@ class PhysicsClockHistory:
             if not recent:
                 # A readback that finds no fresh sample closes the epoch; raising
                 # alone would let a later chunk revive a stream that already stalled.
-                self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
+                if self.hazard is None:
+                    self.hazard = "PHYSICS_CLOCK_STALE"
+                    self.version += 1
                 raise ValueError("PHYSICS_CLOCK_STALE")
             # Readback linearization point: copying the window can cross a
             # deadline, so freshness and health are revalidated before returning.
@@ -242,7 +261,9 @@ class PhysicsClockHistory:
                 raise ValueError(self.hazard)
             if any(not 0 <= confirm_ns - entry["sample"].clock_interval_end_monotonic_ns
                    <= self.max_age_ns for entry in recent):
-                self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
+                if self.hazard is None:
+                    self.hazard = "PHYSICS_CLOCK_STALE"
+                    self.version += 1
                 raise ValueError("PHYSICS_CLOCK_STALE")
             return recent
 
@@ -319,6 +340,8 @@ class PhysicsClockHistory:
                 raise ValueError(self.hazard)
             if not (0 <= confirm_ns - selected["sample"].clock_interval_end_monotonic_ns
                     <= self.max_age_ns):
-                self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
+                if self.hazard is None:
+                    self.hazard = "PHYSICS_CLOCK_STALE"
+                    self.version += 1
                 raise ValueError("PHYSICS_CLOCK_STALE")
             return selected

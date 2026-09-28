@@ -38,13 +38,16 @@ def test_identity_is_required_and_strictly_newer_before_rearming():
     _, admission = _admission(now)
     with pytest.raises(AdmissionRefused):
         admission.fence(ticket="ticket-1", generation=7, reset_epoch=1, stage="proof")
-    _identity(admission)
+    identity = _identity(admission)
     with pytest.raises(AdmissionRefused):
         admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
     with pytest.raises(AdmissionRefused):
         admission.arm(ticket="ticket-1", generation=6, reset_epoch=1)
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_TAKEOVER_BLOCKED"):
+        admission.arm(ticket="ticket-1", generation=8, reset_epoch=1)
+    admission.retire(identity=identity, stop_evidence={"authoritative": True, "stopped": True})
     assert admission.arm(ticket="ticket-1", generation=8, reset_epoch=1) == (
-        "ticket-1", 8, 1)
+        "ticket-1", "clock-session", "clock-session", 8, 1)
 
 
 def test_revocation_is_irreversible_and_carries_the_identity():
@@ -137,7 +140,7 @@ def test_partial_submit_cancels_and_requires_a_confirmed_stop():
     with pytest.raises(AdmissionRefused):
         admission.fence(ticket="ticket-1", generation=7, reset_epoch=1, stage="submit")
     with pytest.raises(AdmissionRefused):
-        admission.confirm_stop(identity=("ticket-1", 8, 1), stopped=True)
+        admission.confirm_stop(identity=("ticket-1", "clock-session", "clock-session", 8, 1), stopped=True)
     admission.confirm_stop(identity=identity, stopped=True)
     assert admission.stop_confirmed is True
     assert admission.revoked_record["confirmed_stop_monotonic_ns"] is not None
@@ -183,6 +186,7 @@ def test_delayed_hazard_from_an_old_identity_does_not_revoke_the_new_one():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission = _admission(now)
     old = admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    admission.retire(identity=old, stop_evidence={"authoritative": True, "stopped": True})
     new = admission.arm(ticket="ticket-1", generation=8, reset_epoch=1)
     record = admission.note_hazard("PHYSICS_CLOCK_SILENT", origin_identity=old)
     assert record["applied"] is False
@@ -274,10 +278,13 @@ def test_sample_revoked_before_the_age_check_is_refused():
 def test_identity_successor_semantics_are_explicit(ticket, generation, epoch, accepted):
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission = _admission(now)
-    admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    current = admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
     if accepted:
+        admission.retire(identity=current,
+                         stop_evidence={"authoritative": True, "stopped": True})
         assert admission.arm(ticket=ticket, generation=generation, reset_epoch=epoch) == (
-            ticket, generation, epoch)
+            "clock-session" if False else (ticket, "clock-session", "clock-session",
+                                           generation, epoch))
     else:
         with pytest.raises(AdmissionRefused):
             admission.arm(ticket=ticket, generation=generation, reset_epoch=epoch)
@@ -394,19 +401,32 @@ def test_takeover_is_refused_while_the_old_target_is_not_confirmed_stopped():
     release.set()
     worker.join(5.0)
     assert outcome.get("error") is None
-    assert admission.revoked_record["identity"] == ("ticket-1", 7, 9)
+    assert admission.revoked_record["identity"] == ("ticket-1", "clock-session", "clock-session", 7, 9)
     assert admission.stop_confirmed is False
-    admission.confirm_stop(identity=("ticket-1", 7, 9), stopped=True)
-    assert admission.arm(ticket="ticket-1", generation=8, reset_epoch=9) == ("ticket-1", 8, 9)
+    admission.confirm_stop(identity=("ticket-1", "clock-session", "clock-session", 7, 9), stopped=True)
+    assert admission.arm(ticket="ticket-1", generation=8, reset_epoch=9) == (
+        "ticket-1", "clock-session", "clock-session", 8, 9)
 
 
 def test_same_session_epoch_rollback_is_rejected():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission = _admission(now)
-    admission.arm(ticket="ticket-1", generation=7, reset_epoch=9)
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_IDENTITY_NOT_NEWER"):
+        admission.arm(ticket="ticket-1", generation=7, reset_epoch=9)
+        admission.retire(identity=admission.identity,
+                         stop_evidence={"authoritative": True, "stopped": True})
         admission.arm(ticket="ticket-1", generation=8, reset_epoch=1)
-    assert admission.arm(ticket="ticket-9", generation=8, reset_epoch=1) == ("ticket-9", 8, 1)
+
+
+def test_broker_ticket_rotation_within_one_incarnation_keeps_the_epoch():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    current = admission.arm(ticket="ticket-1", generation=7, reset_epoch=9)
+    admission.retire(identity=current, stop_evidence={"authoritative": True, "stopped": True})
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_IDENTITY_NOT_NEWER"):
+        admission.arm(ticket="ticket-9", generation=8, reset_epoch=1)
+    assert admission.arm(ticket="ticket-9", generation=8, reset_epoch=9) == (
+        "ticket-9", "clock-session", "clock-session", 8, 9)
 
 
 def test_admission_requires_accepted_history_evidence():
@@ -437,7 +457,7 @@ def test_admission_refuses_a_foreign_or_unknown_sample_identity():
     admitted = admission.admit_sample(sample=_sample(1), ticket="clock-session", generation=1,
                                       reset_epoch=1)
     assert admitted["command_authority"] is False
-    assert admitted["identity"] == ("clock-session", 1, 1)
+    assert admitted["identity"] == ("clock-session", "clock-session", "clock-session", 1, 1)
     assert admitted["sample"].physics_step == 1
 
 
@@ -499,3 +519,185 @@ def test_checked_stage_must_be_declared_side_effect_free():
                                        stage="proof", side_effect_free=True,
                                        checker=lambda: "x") == "x"
 
+
+
+def test_active_owner_cannot_be_replaced_without_authoritative_retirement():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    identity = admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_TAKEOVER_BLOCKED"):
+        admission.arm(ticket="ticket-1", generation=8, reset_epoch=1)
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_INVALID"):
+        admission.retire(identity=identity, stop_evidence={"stopped": True})
+    record = admission.retire(identity=identity,
+                              stop_evidence={"authoritative": True, "stopped": True,
+                                             "source": "controller-status"})
+    assert record["identity"] == identity
+    assert admission.arm(ticket="ticket-1", generation=8, reset_epoch=1) == identity[:2] + (
+        "clock-session", 8, 1)
+
+
+def test_ticket_session_and_history_incarnation_are_separate():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    first = admission.arm(ticket="ticket-1", generation=7, reset_epoch=9)
+    admission.retire(identity=first, stop_evidence={"authoritative": True, "stopped": True})
+    # same history incarnation may not change simulation session or roll the epoch back
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_IDENTITY_NOT_NEWER"):
+        admission.arm(ticket="ticket-1", generation=8, reset_epoch=9, session="other-session")
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_IDENTITY_NOT_NEWER"):
+        admission.arm(ticket="ticket-1", generation=8, reset_epoch=1)
+    # an explicit new history incarnation is the only path that may reset the epoch
+    assert admission.arm(ticket="ticket-2", generation=1, reset_epoch=1,
+                         incarnation="incarnation-2") == (
+        "ticket-2", "clock-session", "incarnation-2", 1, 1)
+
+
+def test_authority_consume_actively_validates_history_at_its_own_point():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _ready(now)
+    consumed = []
+    # no watchdog poll happens here: the consume itself must detect the expiry
+    now[0] = history._last_source_end_ns + 301_000_000
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_HISTORY_UNHEALTHY"):
+        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                stage="submit", consume=lambda: consumed.append("submit"))
+    assert consumed == []
+    assert history.hazard == "PHYSICS_CLOCK_SILENT"
+
+
+def test_authority_consume_refuses_without_accepted_evidence():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _admission(now)
+    admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
+    assert history.evidence_ready is False
+    consumed = []
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_HISTORY_NOT_READY"):
+        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                stage="submit", consume=lambda: consumed.append("submit"))
+    assert consumed == []
+
+
+def test_controller_generation_is_checked_inside_the_consume_section():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _ready(now)
+    consumed = []
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED"):
+        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                stage="submit", consume=lambda: consumed.append("submit"),
+                                generation_check=lambda: False)
+    assert consumed == []
+    assert admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                   stage="submit", consume=lambda: consumed.append("submit"),
+                                   generation_check=lambda: True) is True
+    assert consumed == ["submit"]
+
+
+def test_admit_sample_rejects_a_history_version_change_at_commit():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _ready(now)
+    sample = _sample(1)
+    original = history.snapshot
+
+    def bumping_snapshot():
+        snap = original()
+        if not state["bumped"]:
+            state["bumped"] = True
+            history.accept_chunk(_chunk(1, _sample(2)))   # version changes under us
+        return snap
+
+    state = {"bumped": False}
+    history.snapshot = bumping_snapshot
+    with pytest.raises(AdmissionRefused):
+        admission.admit_sample(sample=sample, ticket="clock-session", generation=1, reset_epoch=1)
+
+
+def test_selected_age_crossing_during_read_is_rejected():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _ready(now, selected_max_age_s=.05)
+    sample = _sample(1)
+    last_end_ns = history._last_source_end_ns
+    original_step_at = history.step_at
+    reached = {"read": False}
+
+    def slow_step_at(step):
+        entry = original_step_at(step)
+        reached["read"] = True
+        now[0] = last_end_ns + 80_000_000      # the isolated read took 60 ms
+        return entry
+
+    history.step_at = slow_step_at
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_SELECTED_STALE"):
+        admission.admit_sample(sample=sample, ticket="clock-session", generation=1, reset_epoch=1)
+    assert reached["read"] is True
+
+
+def test_consume_is_atomic_against_revocation_with_a_real_barrier():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _ready(now)
+    identity = admission.identity
+    entered = threading.Event()
+    release = threading.Event()
+    outcome = {}
+
+    def consume():
+        entered.set()
+        release.wait(5.0)
+
+    def run_consume():
+        try:
+            outcome["result"] = admission.consume_stage(
+                ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
+                consume=consume)
+        except AdmissionRefused as error:
+            outcome["refused"] = str(error)
+
+    worker = threading.Thread(target=run_consume)
+    worker.start()
+    assert entered.wait(5.0)                   # inside the critical section
+    revoker = threading.Thread(target=lambda: admission.revoke_current("PHYSICS_CLOCK_SILENT"))
+    revoker.start()
+    revoker.join(0.2)
+    assert revoker.is_alive() is True          # revocation cannot interleave the consume
+    release.set()
+    worker.join(5.0)
+    revoker.join(5.0)
+    assert outcome.get("result") is True
+    assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_SILENT"
+    with pytest.raises(AdmissionRefused):
+        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                stage="permit", consume=lambda: None)
+
+
+def test_takeover_waits_for_an_in_flight_consume_and_then_refuses():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _ready(now)
+    entered = threading.Event()
+    release = threading.Event()
+    outcome = {}
+
+    def consume():
+        entered.set()
+        release.wait(5.0)
+
+    worker = threading.Thread(target=lambda: admission.consume_stage(
+        ticket="clock-session", generation=1, reset_epoch=1, stage="submit", consume=consume))
+    worker.start()
+    assert entered.wait(5.0)
+    taker = threading.Thread(target=lambda: outcome.setdefault(
+        "takeover", _try_arm(admission)))
+    taker.start()
+    taker.join(0.2)
+    assert taker.is_alive() is True
+    release.set()
+    worker.join(5.0)
+    taker.join(5.0)
+    assert isinstance(outcome.get("takeover"), AdmissionRefused)
+
+
+def _try_arm(admission):
+    try:
+        admission.arm(ticket="clock-session", generation=2, reset_epoch=1)
+        return "armed"
+    except AdmissionRefused as error:
+        return error
