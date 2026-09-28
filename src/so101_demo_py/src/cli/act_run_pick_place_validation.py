@@ -143,9 +143,28 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run admitted ACT pick-place validation live cases")
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--journal", type=Path, required=True)
+    parser.add_argument("--artifact-bundle", type=Path,
+                        help="prepared Task 8 receipt; verified before any resource is acquired")
     args = parser.parse_args(argv)
     spec = load_spec_file(args.spec)
     _validate_local_paths(spec, args.journal)
+    if args.artifact_bundle is not None:
+        # fail closed BEFORE composing services: a bundle that does not verify, or that disagrees
+        # with the spec's declared receipt, must stop the run with nothing acquired
+        import hashlib
+
+        from so101_demo.act.task8_artifact_bundle import verify_task8_startup_receipt
+
+        receipt = Path(args.artifact_bundle)
+        if not receipt.is_file():
+            raise ValueError("TASK8_PREPARATION_REQUIRED")
+        verify_task8_startup_receipt({
+            "preparation_receipt_path": str(receipt),
+            "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest(),
+        })
+        declared = spec.payload.get("preparation_receipt_path")
+        if declared is not None and Path(declared).resolve() != receipt.resolve():
+            raise ValueError("TASK8_BUNDLE_SPEC_MISMATCH")
     PickPlaceValidationCampaign.require_full_restart_lifecycle()
 
     from so101_teleop.unified.bridge import ActCampaignChildOwner, ActCampaignLifecycle
