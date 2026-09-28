@@ -9677,3 +9677,23 @@ This resolves the design block **without authorizing runtime or motion**.
   bundle.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-798 — Task 14 begins: the retry gate
+
+- **Delivered:** `act/session.py` with `retry_allowed(attempts, cup_state, budget_available)`, plus
+  `test_act_session.py` carrying the plan's Step-1 assertions verbatim.
+  - **a held or unknown cup is never re-driven:** `HOLDING` and `UNKNOWN` return `False` — a held cup could
+    be crushed or dropped and an unknown state might be either, so the answer is evidence first, never a
+    blind re-approach;
+  - **one attempt:** only `EMPTY` with an unspent retry and an available budget; a spent retry (1 or 2) is
+    `False`, since the plan's baseline does not retry a failed placement on hope;
+  - closed inputs: `RETRY_ATTEMPTS_INVALID` (`-1`, `True`, `1.0`, `"0"`), `RETRY_CUP_STATE_INVALID`, and
+    `RETRY_BUDGET_INVALID` for a non-boolean budget.
+- **My own test error, caught by the run:** `attempts=2` is a valid count meaning the retry is spent, not a
+  malformed input; it is now asserted as `False` and `"0"` added as a genuine malformed case.
+- **Verification:** focused tests **2 passed** (`gate6-batch3-py-gate/task14b.{log,junit.xml}`).
+- **Remaining in Task 14:** `ActSession.command`/`.tick` over injected ports with command ownership
+  enforced, `runtime/act_composition.py`, `cli/act_session.py` (submitting only an `OperationSpec` to the
+  unified service) and the launch-file modification.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
