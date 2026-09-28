@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import copy
 import math
+import contextlib
 import threading
 import time
 
@@ -422,6 +423,23 @@ class PhysicsClockAdmission:
                     "received_monotonic_ns": entry["received_monotonic_ns"],
                     "identity": identity, "history_version": receipt["version"],
                     "command_authority": False, "stage": "sample"}
+
+    @contextlib.contextmanager
+    def claim_context(self):
+        """Hold the admission *and* history locks across the whole claim boundary.
+
+        Order is admission -> history; the history RLock stays held until the
+        caller finishes its transition, so nothing (another thread or a reentrant
+        mutation) can latch a hazard, reset the epoch or age the selection out
+        between the final history validation and READY -> IN_FLIGHT.
+        """
+
+        with self._lock:
+            history = self._history
+            if history is None:
+                raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_REQUIRED")
+            with history._lock:
+                yield history
 
     def claim_guard(self):
         """Hold the admission lock across the whole broker claim boundary.
