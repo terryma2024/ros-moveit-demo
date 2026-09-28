@@ -7764,3 +7764,20 @@ brief: CP-709; hook points: `experiments/gate6-runtime/task8-core/t8p3-remaining
   freeze, Task 8L, W1, W2, the 40-scene exact-W8 qualification, formal W8 and Task 12.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-715 — Task 8P3 sub-slice C: the canonical fourteen-case list
+
+- **Delivered:** `require_campaign_cases(manifest, *, prefix_count=9, full_count=5)` in
+  `act/task8_live_evidence.py` — the ordered case list comes from the frozen manifest, never from a
+  caller: exactly nine prefixes then five fulls, strict `[a-z]+-[0-9]{2}` ids, no duplicates, and the
+  prefix/full block order enforced (`TASK8_CAMPAIGN_CASE_{COUNT,ID,DUPLICATE,ORDER}_INVALID`). This
+  makes "one production call, no dropped, repeated or reordered case" checkable.
+- **Verification:** recorder suite **23 passed** (`gate6-batch3-py-gate/t8p3cases.{log,junit.xml}`),
+  covering the exact expected sequence and four broken manifests (empty list, nine copies of one id,
+  a full id inside the prefix block, wrong id form).
+- **Sub-slice C rules now in code:** the single legal journal path (CP-713), the complete journal row
+  (CP-714) and this case list. What remains for C is the CLI that drives the one production call and
+  writes rows through these rules, plus the `CLOSE..FINAL_CHECK` capture-path extraction in
+  `pick_place_readback.py`.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
