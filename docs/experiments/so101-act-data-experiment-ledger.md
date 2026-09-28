@@ -10408,3 +10408,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **No production code changed, no gate run, no runtime or motion, no hardware, no evidence deleted, no push, no
   gate lowered;** user's 43 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED. **Stopping for orchestrator review as instructed.**
+
+## CP-831 — Evidence lifecycle: the focused-test scratch is a retained deletion candidate
+
+- **Scratch root:** `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/pg12/tmp/beh.1xhP`
+  (path length 77 bytes), created for the focused runs that closed the wrist-mount and calibration questions.
+- **Readback performed before classification (read-only):** the directory exists; 1 top-level entry (`tmp`);
+  **101 files, 87 directories, 111,051 bytes**; filesystem `/dev/nvme0n1p2` mounted at `/`, i.e. the `/data` NVMe
+  the repository's scratch rule requires rather than a tmpfs.
+- **Environment verification, through the exact test interpreter:** with `TMPDIR`, `TMP` and `TEMP` pointed at
+  `<scratch>/tmp`, `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python` reported
+  `tempfile.gettempdir()` = `<scratch>/tmp/hp... tmp` resolving **inside** the scratch (True). This is the same
+  interpreter that ran the focused tests, so the evidence is attached to the interpreter that produced it.
+- **Linked focused logs** (both under `experiments/gate6-batch3-py-gate/`):
+  - `beh-wrist-mount.log` (241 bytes) — `test/test_act_wrist_camera_mount.py`, last line `1 passed in 0.30s`; this
+    is the numeric anchor for rows 1 and 2 (the URDF optical-frame rpy and the MJCF camera values).
+  - `beh-calibration.log` (99 bytes) — `test/test_act_calibration.py`, last line `14 passed in 0.09s`; this is the
+    anchor for the calibration-schema enum evolution (row 3) and the `TASK8_READY` vocabulary.
+- **Classification: deletion candidate, retained.** The scratch is superseded for its purpose now that both
+  focused runs are recorded and their results are quoted in the reconciliation report, so it belongs in the
+  deletion-candidate category at task completion. It is **not deleted**, and will not be deleted without explicit
+  user authorization, per the repository rule that evidence is never removed without it. Nothing was rerun to
+  produce this checkpoint and no production code was changed.
+- **Boundaries:** no runtime or motion, no hardware, no push, no gate lowered, no full gate, no evidence deleted;
+  user's 43 modified and 12 untracked paths untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
