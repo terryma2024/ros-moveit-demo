@@ -101,11 +101,17 @@ class OfflineDispatchTransaction:
                  "history_version": self.history.snapshot()["version"],
                  "incarnation": self.history.incarnation, "reset_epoch": epoch,
                  "physics_step": 1}
-        self.handle = self.registry.issue_handle(
+        try:
+            self.handle = self.registry.issue_handle(
             identity=identity, stage=stage, step=1, history_version=token["history_version"],
             incarnation=token["incarnation"], epoch=epoch, role=role,
-            controller_generation=controller_generation, goal_uuid=goal_uuid,
-            target_digest=target_digest, controller_incarnation=controller_incarnation)
+                controller_generation=controller_generation, goal_uuid=goal_uuid,
+                target_digest=target_digest, controller_incarnation=controller_incarnation)
+        except AuthorityRefused as error:
+            # no permit exists yet: this is a pre-issue refusal, so there is
+            # nothing to terminalize and no controller generation to close
+            self.state, self.failure = "REJECTED", str(error)
+            return self.state
         try:
             claim = self.registry.claim_bound(self.handle, identity=identity,
                                               controller_generation=controller_generation,
