@@ -166,7 +166,7 @@ class AuthorityTransactionRegistry:
         admission, history, port = self._domain()
         if not hasattr(admission, "claim_guard"):
             raise AuthorityRefused("AUTHORITY_ADMISSION_DOMAIN_REQUIRED")
-        with self._lock, admission.claim_guard():
+        with self._lock, admission.claim_context():
             record = self._records.get(handle.permit_id)
             if record is None:
                 raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
@@ -195,6 +195,19 @@ class AuthorityTransactionRegistry:
                     token=token, step=record.step, max_age_ns=self._selected_max_age_ns)
             except Exception as error:  # noqa: BLE001
                 raise AuthorityRefused(f"AUTHORITY_COMMIT_REFUSED:{error}") from error
+            try:
+                final = admission.history_commit_receipt(
+                    token=token, step=record.step, max_age_ns=self._selected_max_age_ns)
+            except AuthorityRefused as error:
+                raise AuthorityRefused(
+                    f"AUTHORITY_HISTORY_CHANGED_IN_BOUNDARY:{error}") from error
+            except ValueError as error:
+                raise AuthorityRefused(
+                    f"AUTHORITY_HISTORY_CHANGED_IN_BOUNDARY:{error}") from error
+            if (final["version"] != receipt["version"]
+                    or final["incarnation"] != receipt["incarnation"]
+                    or final["epoch"] != receipt["epoch"]):
+                raise AuthorityRefused("AUTHORITY_HISTORY_CHANGED_IN_BOUNDARY")
             if not admission.owner_is_active():
                 self._states[record.permit_id] = REVOKED
                 raise AuthorityRefused("AUTHORITY_REVOKED_DURING_COMMIT")
