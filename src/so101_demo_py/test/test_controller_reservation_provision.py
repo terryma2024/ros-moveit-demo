@@ -169,8 +169,13 @@ def test_capability_is_absent_from_writer_argv_environment_and_output(tmp_path):
 
 
 def _provision_scope(tmp_path):
-    task_root = Path(os.environ["TMPDIR"]).parents[2]
-    root = task_root / f"p{uuid.uuid4().hex[:8]}"
+    # AF_UNIX payloads cap at 107 bytes, and the registered /data scratch the official gate
+    # uses is deeper than that once <role>.sock is appended. Reservation roots therefore
+    # follow the repository's short-IPC strategy (the same approach as
+    # SO101_IPC_SOCKET_BASE in production), while TMPDIR/TMP/TEMP stay on the registered
+    # /data scratch for the fsync-heavy artifacts.
+    task_root = Path("/tmp")
+    root = task_root / f"so101-prov-{uuid.uuid4().hex[:8]}"
     root.mkdir(mode=0o700)
     directory = controller_reservation_directory(root, "session-17")
     environment = {

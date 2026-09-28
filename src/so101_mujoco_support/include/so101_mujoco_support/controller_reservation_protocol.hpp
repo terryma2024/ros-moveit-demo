@@ -28,6 +28,15 @@ enum class ReservationReplyStatus : uint8_t {ACK = 0, REJECT = 1};
 // explicit and separate from the goal bytes: a legacy reserve can never treat a
 // bound frame as a bare goal. The request type itself lives next to the admission
 // primitive to avoid an include cycle.
+bool is_bound_reservation_frame(const std::vector<uint8_t> & frame);
+
+// Parse outside the gate lock, then reserve inside it: the socket path never holds
+// the gate mutex across CDR deserialization.
+BoundReserveStatus handle_bound_reservation_frame(
+  ControllerGoalAdmission & gate, const std::vector<uint8_t> & frame,
+  ControllerReservationRole expected_role,
+  const ControllerReservationCapability & expected_capability);
+
 BoundControllerReservationRequest parse_bound_controller_reservation_frame(
   const std::vector<uint8_t> & frame,
   const ControllerReservationCapability & expected_capability,

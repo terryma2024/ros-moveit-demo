@@ -47,10 +47,30 @@ def _client():
 
 
 def test_entry_point_accepts_no_raw_authority_values():
+    """Corrected contract: the caller injects nothing, including no resolver.
+
+    The Batch-2 resolver parameter was ruled NONQUALIFYING (a caller-substitutable
+    identity source with no production caller), so the frozen corrections removed it;
+    identity now comes only from the broker-installed authority.
+    """
+
     parameters = inspect.signature(ControllerReservationClient.reserve_bound).parameters
-    for forbidden in ("identity", "receipt", "snapshot", "claim_monotonic_ns", "deadline_ns"):
+    for forbidden in ("identity", "receipt", "snapshot", "claim_monotonic_ns", "deadline_ns",
+                      "resolver", "authority", "binding"):
         assert forbidden not in parameters, forbidden
-    assert "handle" in parameters and "resolver" in parameters
+    assert "handle" in parameters and "goal_uuid" in parameters and "goal" in parameters
+
+
+def test_caller_supplied_resolver_is_refused_before_the_wire():
+    """A caller cannot substitute the identity source (raises before any frame)."""
+
+    client = _client()
+    sent = []
+    client._request = lambda *a, **k: sent.append((a, k))
+    with pytest.raises(TypeError):
+        client.reserve_bound((1,), "arm", FollowJointTrajectory.Goal(), GOAL_UUID,
+                             handle=_Handle("p-1"), resolver=_Registry(_binding()))
+    assert sent == [], "no frame may be sent when the caller supplies a resolver"
 
 
 def test_fabricated_handle_and_foreign_registry_fail_before_wire():
@@ -94,24 +114,19 @@ def test_wrong_goal_role_and_late_binding_fail_before_wire():
 
 
 def test_resolved_binding_is_carried_byte_for_byte_on_the_wire():
+    """Superseded: the wire guarantee now originates where the binding does.
+
+    The byte-for-byte guarantee is covered by
+    test_gate6_identity_transport.py::test_reserve_bound_sends_the_production_frame_and_accepts_the_ack
+    (real ControllerReservationClient + real BrokerAuthorityComposition, asserting the exact
+    SOGB frame and a single length prefix). Under the corrected contract a caller cannot
+    attach a binding at all, which is what this case now asserts.
+    """
+
     client = _client()
-    captured = {}
-
-    def capture(kind, operation, generation, goal_uuid, payload):
-        captured.update(kind=kind, operation=operation, generation=generation,
-                        goal_uuid=goal_uuid, payload=payload)
-        return True
-
-    client._request = capture
-    binding = _binding()
-    assert client.reserve_bound((1,), "arm", FollowJointTrajectory.Goal(), GOAL_UUID,
-                                handle=_Handle("p-1"), resolver=_Registry(binding),
-                                now_ns=50) is True
-    payload = captured["payload"]
-    size = int.from_bytes(payload[:4], "big")
-    on_wire = json.loads(payload[4:4 + size].decode("utf-8"))
-    assert on_wire == binding, "the on-wire binding differs from the registry's record"
-    assert len(payload) > 4 + size
+    with pytest.raises(TypeError):
+        client.reserve_bound((1,), "arm", FollowJointTrajectory.Goal(), GOAL_UUID,
+                             handle=_Handle("p-1"), resolver=_Registry(_binding()), now_ns=50)
 
 
 def test_owner_health_revocation_prevents_the_production_call():
@@ -120,6 +135,7 @@ def test_owner_health_revocation_prevents_the_production_call():
     sent = []
     client._request = lambda *a, **k: sent.append((a, k))
     with pytest.raises(Exception):
+        # no authority is installed on this client, so the reservation must refuse
         client.reserve_bound((1,), "arm", FollowJointTrajectory.Goal(), GOAL_UUID,
-                             handle=_Handle("p-1"), resolver=_Registry(_binding(), state="REVOKED"))
-    assert sent == []
+                             handle=_Handle("p-1"))
+    assert sent == [], "no frame may be sent without an installed authority"

@@ -185,8 +185,8 @@ TEST(ControllerReservationSocket, AcknowledgesOnlyStoredCrossProcessReservation)
   const auto path = socket_path("valid.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-  ASSERT_TRUE(gate.arm(5));
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(1000));
   client.start("valid");
@@ -194,7 +194,42 @@ TEST(ControllerReservationSocket, AcknowledgesOnlyStoredCrossProcessReservation)
   EXPECT_EQ(client.result(), "ACK");
   ControllerGoalAdmission::GoalUUID uuid{};
   uuid.fill(0x11);
-  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
+  EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
+}
+
+TEST(ControllerReservationSocket, BoundModeServiceRejectsALegacyRawReservation)
+{
+  // A bound-identity service must never ACK the legacy SOGR reservation opcode:
+  // the request is refused fail-closed and nothing becomes admissible.
+  const auto path = socket_path("bound-legacy.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  auto gate = std::make_shared<ControllerGoalAdmission>(
+    [] {return 1000000000LL;}, 2000000000, 1048576, 2048,
+    so101_mujoco_support::ServiceControllerIdentity{
+      so101_mujoco_support::ControllerReservationRole::ARM, "inc-1", "boot-1"});
+  ASSERT_TRUE(gate->has_service_identity());
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path, gate, key, client.peer(),
+    std::chrono::milliseconds(1000));
+  client.start("valid");
+  EXPECT_FALSE(server.serve_one());                  // no ACK
+  EXPECT_EQ(client.result(), "REJECT");
+  EXPECT_EQ(gate->generation(), 0u);                 // the gate closed fail-closed
+  ControllerGoalAdmission::GoalUUID uuid{};
+  uuid.fill(0x11);
+  EXPECT_NE(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
+}
+
+TEST(ControllerReservationSocket, NullGateIsRefusedAtConstruction)
+{
+  const auto path = socket_path("null-gate.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  EXPECT_THROW(
+    ControllerReservationSocket(path, nullptr, key, client.peer(),
+      std::chrono::milliseconds(1000)),
+    std::invalid_argument);
 }
 
 TEST(ControllerReservationSocket, ArmRequestWithoutLocalStopProofCannotOpenGeneration)
@@ -202,7 +237,7 @@ TEST(ControllerReservationSocket, ArmRequestWithoutLocalStopProofCannotOpenGener
   const auto path = socket_path("arm-no-proof.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(1000));
   client.start("arm_generation");
@@ -210,7 +245,7 @@ TEST(ControllerReservationSocket, ArmRequestWithoutLocalStopProofCannotOpenGener
   EXPECT_EQ(client.result(), "REJECT");
   ControllerGoalAdmission::GoalUUID uuid{};
   uuid.fill(0x11);
-  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, ArmAndCloseRequireFreshProofOnlyForOpening)
@@ -218,7 +253,7 @@ TEST(ControllerReservationSocket, ArmAndCloseRequireFreshProofOnlyForOpening)
   const auto path = socket_path("arm-stopped.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
   bool stopped = false;
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(1000), [&stopped] {return stopped;});
@@ -235,7 +270,7 @@ TEST(ControllerReservationSocket, ArmAndCloseRequireFreshProofOnlyForOpening)
   EXPECT_EQ(client.result(), "ACK");
   ControllerGoalAdmission::GoalUUID uuid{};
   uuid.fill(0x11);
-  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, ReservationRechecksLocalStopAfterArm)
@@ -243,7 +278,7 @@ TEST(ControllerReservationSocket, ReservationRechecksLocalStopAfterArm)
   const auto path = socket_path("reserve-stopped.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
   bool stopped = true;
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(1000), [&stopped] {return stopped;});
@@ -256,7 +291,7 @@ TEST(ControllerReservationSocket, ReservationRechecksLocalStopAfterArm)
   EXPECT_EQ(client.result(), "REJECT");
   ControllerGoalAdmission::GoalUUID uuid{};
   uuid.fill(0x11);
-  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, StopProofLostDuringArmCannotProduceAck)
@@ -264,7 +299,7 @@ TEST(ControllerReservationSocket, StopProofLostDuringArmCannotProduceAck)
   const auto path = socket_path("arm-proof-lost.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
   int proof_reads = 0;
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(1000), [&proof_reads] {return ++proof_reads == 1;});
@@ -274,7 +309,7 @@ TEST(ControllerReservationSocket, StopProofLostDuringArmCannotProduceAck)
   EXPECT_EQ(proof_reads, 2);
   ControllerGoalAdmission::GoalUUID uuid{};
   uuid.fill(0x11);
-  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, SequentialGoalsUseOneAuthenticatedOwnerGeneration)
@@ -282,8 +317,8 @@ TEST(ControllerReservationSocket, SequentialGoalsUseOneAuthenticatedOwnerGenerat
   const auto path = socket_path("sequential.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-  ASSERT_TRUE(gate.arm(5));
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(1000));
   client.start("valid");
@@ -291,7 +326,7 @@ TEST(ControllerReservationSocket, SequentialGoalsUseOneAuthenticatedOwnerGenerat
   ASSERT_EQ(client.result(), "ACK");
   ControllerGoalAdmission::GoalUUID first_uuid{};
   first_uuid.fill(0x11);
-  ASSERT_EQ(gate.admit(first_uuid, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
+  ASSERT_EQ(gate->admit(first_uuid, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
 
   client.start("valid_second");
   ASSERT_TRUE(server.serve_one());
@@ -300,7 +335,7 @@ TEST(ControllerReservationSocket, SequentialGoalsUseOneAuthenticatedOwnerGenerat
   second_uuid.fill(0x22);
   auto second_goal = goal();
   second_goal.trajectory.points[0].positions[0] = 0.25;
-  EXPECT_EQ(gate.admit(second_uuid, second_goal, 5), ControllerGoalAdmission::Result::ALLOW);
+  EXPECT_EQ(gate->admit(second_uuid, second_goal, 5), ControllerGoalAdmission::Result::ALLOW);
 }
 
 TEST(ControllerReservationSocket, PythonBrokerOwnsBothRoleArmsBeforePreparedGoalSend)
@@ -311,8 +346,8 @@ TEST(ControllerReservationSocket, PythonBrokerOwnsBothRoleArmsBeforePreparedGoal
   auto gripper_key = capability();
   gripper_key.fill(0x5a);
   ClientProcess client(arm_path, arm_key, gripper_path, gripper_key);
-  ControllerGoalAdmission arm_gate([] {return 1000000000LL;}, 2000000000);
-  ControllerGoalAdmission gripper_gate([] {return 1000000000LL;}, 2000000000);
+  auto arm_gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  auto gripper_gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
   ControllerReservationService arm_service(arm_path, arm_gate, arm_key, client.peer(),
     std::chrono::milliseconds(50), [] {return true;});
   ControllerReservationService gripper_service(
@@ -325,12 +360,12 @@ TEST(ControllerReservationSocket, PythonBrokerOwnsBothRoleArmsBeforePreparedGoal
   arm_uuid.fill(0x11);
   ControllerGoalAdmission::GoalUUID gripper_uuid{};
   gripper_uuid.fill(0x22);
-  EXPECT_EQ(arm_gate.admit(arm_uuid, goal(), 1), ControllerGoalAdmission::Result::ALLOW);
-  EXPECT_EQ(gripper_gate.admit(gripper_uuid, goal(), 1), ControllerGoalAdmission::Result::ALLOW);
+  EXPECT_EQ(arm_gate->admit(arm_uuid, goal(), 1), ControllerGoalAdmission::Result::ALLOW);
+  EXPECT_EQ(gripper_gate->admit(gripper_uuid, goal(), 1), ControllerGoalAdmission::Result::ALLOW);
   client.start("broker_release");
   ASSERT_EQ(client.result(), "ACK");
-  EXPECT_EQ(arm_gate.admit(arm_uuid, goal(), 1), ControllerGoalAdmission::Result::DENY_CLOSED);
-  EXPECT_EQ(gripper_gate.admit(gripper_uuid, goal(), 1),
+  EXPECT_EQ(arm_gate->admit(arm_uuid, goal(), 1), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gripper_gate->admit(gripper_uuid, goal(), 1),
     ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
@@ -339,8 +374,8 @@ TEST(ControllerReservationSocket, IdleListenerDoesNotRevokeAnArmedOwnerLease)
   const auto path = socket_path("idle-lease.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-  ASSERT_TRUE(gate.arm(5));
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(500));
   EXPECT_FALSE(server.serve_one());
@@ -349,7 +384,7 @@ TEST(ControllerReservationSocket, IdleListenerDoesNotRevokeAnArmedOwnerLease)
   ASSERT_EQ(client.result(), "ACK");
   ControllerGoalAdmission::GoalUUID id{};
   id.fill(0x11);
-  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
+  EXPECT_EQ(gate->admit(id, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
 }
 
 TEST(ControllerReservationSocket, DeadRegisteredPeerRevokesOwnerLeaseOnIdle)
@@ -357,8 +392,8 @@ TEST(ControllerReservationSocket, DeadRegisteredPeerRevokesOwnerLeaseOnIdle)
   const auto path = socket_path("dead-peer.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-  ASSERT_TRUE(gate.arm(5));
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(50));
 
@@ -368,7 +403,7 @@ TEST(ControllerReservationSocket, DeadRegisteredPeerRevokesOwnerLeaseOnIdle)
   EXPECT_FALSE(server.serve_one());
   ControllerGoalAdmission::GoalUUID id{};
   id.fill(0x11);
-  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gate->admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, UnreapedRegisteredPeerRevokesOwnerLeaseOnIdle)
@@ -376,8 +411,8 @@ TEST(ControllerReservationSocket, UnreapedRegisteredPeerRevokesOwnerLeaseOnIdle)
   const auto path = socket_path("zombie-peer.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-  ASSERT_TRUE(gate.arm(5));
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(50));
 
@@ -388,7 +423,7 @@ TEST(ControllerReservationSocket, UnreapedRegisteredPeerRevokesOwnerLeaseOnIdle)
   EXPECT_FALSE(server.serve_one());
   ControllerGoalAdmission::GoalUUID id{};
   id.fill(0x11);
-  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gate->admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, ServiceShutdownClosesGateAndRemovesOwnedSocket)
@@ -396,10 +431,10 @@ TEST(ControllerReservationSocket, ServiceShutdownClosesGateAndRemovesOwnedSocket
   const auto path = socket_path("service-lifetime.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
   auto service = std::make_unique<ControllerReservationService>(
     path, gate, key, client.peer(), std::chrono::milliseconds(500));
-  ASSERT_TRUE(gate.arm(5));
+  ASSERT_TRUE(gate->arm(5));
   client.start("valid");
   ASSERT_EQ(client.result(), "ACK");
   ASSERT_TRUE(std::filesystem::exists(path));
@@ -408,7 +443,7 @@ TEST(ControllerReservationSocket, ServiceShutdownClosesGateAndRemovesOwnedSocket
   EXPECT_FALSE(std::filesystem::exists(path));
   ControllerGoalAdmission::GoalUUID id{};
   id.fill(0x11);
-  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gate->admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, RejectsWrongPeerBeforeReadingFrame)
@@ -417,8 +452,8 @@ TEST(ControllerReservationSocket, RejectsWrongPeerBeforeReadingFrame)
   for (const auto & field : {"uid", "pid", "start_ticks"}) {
     const auto path = socket_path(std::string("wrong-") + field + ".sock");
     ClientProcess client(path, key);
-    ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-    ASSERT_TRUE(gate.arm(5));
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(5));
     auto wrong_peer = client.peer();
     if (std::string(field) == "uid") {++wrong_peer.uid;}
     if (std::string(field) == "pid") {++wrong_peer.pid;}
@@ -430,7 +465,7 @@ TEST(ControllerReservationSocket, RejectsWrongPeerBeforeReadingFrame)
     EXPECT_EQ(client.result(), "EOF") << field;
     ControllerGoalAdmission::GoalUUID uuid{};
     uuid.fill(0x11);
-    EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED) << field;
+    EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED) << field;
   }
 }
 
@@ -442,8 +477,8 @@ TEST(ControllerReservationSocket, RejectsBadFrameAndClosesGeneration)
   {
     const auto path = socket_path(std::string(mode) + ".sock");
     ClientProcess client(path, key);
-    ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-    ASSERT_TRUE(gate.arm(5));
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(5));
     ControllerReservationSocket server(path, gate, key, client.peer(),
       std::chrono::milliseconds(100));
     client.start(mode);
@@ -451,7 +486,7 @@ TEST(ControllerReservationSocket, RejectsBadFrameAndClosesGeneration)
     EXPECT_NE(client.result(), "ACK") << mode;
     ControllerGoalAdmission::GoalUUID uuid{};
     uuid.fill(0x11);
-    EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED) << mode;
+    EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED) << mode;
   }
 }
 
@@ -460,8 +495,8 @@ TEST(ControllerReservationSocket, DuplicateReservationClosesGeneration)
   const auto path = socket_path("duplicate.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-  ASSERT_TRUE(gate.arm(5));
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(1000));
   client.start("valid");
@@ -472,14 +507,14 @@ TEST(ControllerReservationSocket, DuplicateReservationClosesGeneration)
   EXPECT_NE(client.result(), "ACK");
   ControllerGoalAdmission::GoalUUID uuid{};
   uuid.fill(0x11);
-  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, RefusesExistingPath)
 {
   const auto path = socket_path("existing.sock");
   ASSERT_TRUE(std::filesystem::create_directory(path));
-  ControllerGoalAdmission gate;
+  auto gate = std::make_shared<ControllerGoalAdmission>();
   const auto key = capability();
   ControllerReservationSocket::ExpectedPeer peer{getuid(), getpid(), 1};
   EXPECT_THROW(
@@ -507,7 +542,7 @@ TEST(ControllerReservationSocket, RefusesSymlinkInSocketPath)
   ASSERT_EQ(chmod(nested.c_str(), 0700), 0);
   const auto alias = parent / "alias";
   std::filesystem::create_directory_symlink(real, alias);
-  ControllerGoalAdmission gate;
+  auto gate = std::make_shared<ControllerGoalAdmission>();
   const auto key = capability();
   ControllerReservationSocket::ExpectedPeer peer{getuid(), getpid(), 1};
   EXPECT_THROW(
@@ -521,8 +556,8 @@ TEST(ControllerReservationSocket, AuthenticatedCloseRevokesAnAcknowledgedReserva
   const auto path = socket_path("close.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-  ASSERT_TRUE(gate.arm(5));
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(1000));
   client.start("valid");
@@ -533,7 +568,7 @@ TEST(ControllerReservationSocket, AuthenticatedCloseRevokesAnAcknowledgedReserva
   EXPECT_EQ(client.result(), "ACK");
   ControllerGoalAdmission::GoalUUID uuid{};
   uuid.fill(0x11);
-  EXPECT_EQ(gate.admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
 }
 
 TEST(ControllerReservationSocket, StaleCloseCannotRevokeANewerGeneration)
@@ -541,17 +576,17 @@ TEST(ControllerReservationSocket, StaleCloseCannotRevokeANewerGeneration)
   const auto path = socket_path("stale-close.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-  ASSERT_TRUE(gate.arm(6));
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(6));
   ControllerGoalAdmission::GoalUUID uuid{};
   uuid.fill(0x11);
-  ASSERT_TRUE(gate.reserve(uuid, goal(), 6));
+  ASSERT_TRUE(gate->reserve(uuid, goal(), 6));
   ControllerReservationSocket server(path, gate, key, client.peer(),
     std::chrono::milliseconds(100));
   client.start("close_stale");
   EXPECT_FALSE(server.serve_one());
   EXPECT_EQ(client.result(), "REJECT");
-  EXPECT_EQ(gate.admit(uuid, goal(), 6), ControllerGoalAdmission::Result::ALLOW);
+  EXPECT_EQ(gate->admit(uuid, goal(), 6), ControllerGoalAdmission::Result::ALLOW);
 }
 
 TEST(ControllerReservationSocket, AuthenticatedIngressSnapshotDoesNotMutateArmedGeneration)
@@ -559,8 +594,8 @@ TEST(ControllerReservationSocket, AuthenticatedIngressSnapshotDoesNotMutateArmed
   const auto path = socket_path("ingress-query.sock");
   const auto key = capability();
   ClientProcess client(path, key);
-  ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-  ASSERT_TRUE(gate.arm(5));
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
   ControllerIngressWitness witness;
   for (int index = 0; index != 7; ++index) {
     auto ingress = witness.enter();
@@ -573,8 +608,8 @@ TEST(ControllerReservationSocket, AuthenticatedIngressSnapshotDoesNotMutateArmed
   EXPECT_EQ(client.result().rfind("SNAPSHOT 5 1 7 ", 0), 0u);
   ControllerGoalAdmission::GoalUUID id{};
   id.fill(0x11);
-  ASSERT_TRUE(gate.reserve(id, goal(), 5));
-  EXPECT_EQ(gate.admit(id, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
+  ASSERT_TRUE(gate->reserve(id, goal(), 5));
+  EXPECT_EQ(gate->admit(id, goal(), 5), ControllerGoalAdmission::Result::ALLOW);
 }
 
 TEST(ControllerReservationSocket, WrongRoleAndStaleGenerationCannotReadIngress)
@@ -583,8 +618,8 @@ TEST(ControllerReservationSocket, WrongRoleAndStaleGenerationCannotReadIngress)
   for (const auto mode : {"ingress_wrong_role", "ingress_stale_generation"}) {
     const auto path = socket_path(std::string(mode) + ".sock");
     ClientProcess client(path, key);
-    ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-    ASSERT_TRUE(gate.arm(5));
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(5));
     ControllerReservationSocket server(path, gate, key, client.peer(),
       std::chrono::milliseconds(1000), [] {return true;},
       ControllerReservationRole::ARM, [] {
@@ -602,8 +637,8 @@ TEST(ControllerReservationSocket, InFlightCallbackOrMissingStopCannotProduceIngr
   for (const auto mode : {"missing-stop", "in-flight"}) {
     const auto path = socket_path(std::string(mode) + ".sock");
     ClientProcess client(path, key);
-    ControllerGoalAdmission gate([] {return 1000000000LL;}, 2000000000);
-    ASSERT_TRUE(gate.arm(5));
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(5));
     ControllerIngressWitness witness;
     ControllerReservationSocket server(path, gate, key, client.peer(),
       std::chrono::milliseconds(1000),
@@ -621,6 +656,6 @@ TEST(ControllerReservationSocket, InFlightCallbackOrMissingStopCannotProduceIngr
     }
     ControllerGoalAdmission::GoalUUID id{};
     id.fill(0x11);
-    EXPECT_TRUE(gate.reserve(id, goal(), 5));
+    EXPECT_TRUE(gate->reserve(id, goal(), 5));
   }
 }

@@ -32,7 +32,7 @@ public:
   };
 
   ControllerReservationSocket(
-    std::filesystem::path path, ControllerGoalAdmission & gate,
+    std::filesystem::path path, std::shared_ptr<ControllerGoalAdmission> gate,
     ControllerReservationCapability capability, ExpectedPeer expected_peer,
     std::chrono::milliseconds deadline, StopProof stop_proof = {},
     ControllerReservationRole role = ControllerReservationRole::ARM,
@@ -49,7 +49,7 @@ private:
   bool peer_matches(int connection) const;
 
   std::filesystem::path path_;
-  ControllerGoalAdmission & gate_;
+  std::shared_ptr<ControllerGoalAdmission> gate_;
   ControllerReservationCapability capability_;
   ExpectedPeer expected_peer_;
   std::chrono::milliseconds deadline_;
@@ -65,7 +65,7 @@ class ControllerReservationService final
 {
 public:
   ControllerReservationService(
-    std::filesystem::path path, ControllerGoalAdmission & gate,
+    std::filesystem::path path, std::shared_ptr<ControllerGoalAdmission> gate,
     ControllerReservationCapability capability,
     ControllerReservationSocket::ExpectedPeer expected_peer,
     std::chrono::milliseconds deadline,
@@ -78,7 +78,7 @@ public:
   ControllerReservationService & operator=(const ControllerReservationService &) = delete;
 
 private:
-  ControllerGoalAdmission & gate_;
+  std::shared_ptr<ControllerGoalAdmission> gate_;
   ControllerReservationSocket socket_;
   std::atomic<bool> stop_{false};
   std::thread worker_;

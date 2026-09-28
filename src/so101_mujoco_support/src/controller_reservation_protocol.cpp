@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <random>
 #include <stdexcept>
 
 #include "rclcpp/serialization.hpp"
@@ -321,4 +322,136 @@ BoundControllerReservationRequest parse_bound_controller_reservation_frame(
   return request;
 }
 
+}  // namespace so101_mujoco_support
+
+namespace so101_mujoco_support
+{
+namespace
+{
+constexpr uint8_t identity_magic[4] = {'S', 'O', 'I', 'D'};
+constexpr uint8_t bound_magic[4] = {'S', 'O', 'G', 'B'};
+
+uint8_t role_number(ControllerReservationRole role) {return static_cast<uint8_t>(role);}
+
+std::string hex_token(size_t bytes)
+{
+  // OS-backed entropy; if the source cannot be read the caller must fail closed.
+  std::random_device source("/dev/urandom");
+  static const char * digits = "0123456789abcdef";
+  std::string out;
+  out.reserve(bytes * 2);
+  for (size_t index = 0; index < bytes; ++index) {
+    const uint32_t value = source();
+    out.push_back(digits[(value >> 4) & 0xf]);
+    out.push_back(digits[value & 0xf]);
+  }
+  if (out.size() != bytes * 2) {throw std::runtime_error("SERVICE_IDENTITY_ENTROPY_FAILED");}
+  return out;
+}
+}  // namespace
+
+ServiceControllerIdentity generate_service_identity(
+  ControllerReservationRole role, const std::array<uint8_t, 32> & capability)
+{
+  if (capability.size() != 32 || std::all_of(capability.begin(), capability.end(),
+    [](uint8_t value) {return value == 0;}))
+  {
+    throw std::invalid_argument("SERVICE_IDENTITY_CAPABILITY_INVALID");
+  }
+  ServiceControllerIdentity identity{};
+  identity.role = role;
+  identity.incarnation = "inc-" + hex_token(16);
+  identity.boot = "boot-" + hex_token(16);
+  if (identity.incarnation.size() > kMaxIncarnationBytes ||
+    identity.boot.size() > kMaxIncarnationBytes)
+  {
+    throw std::runtime_error("SERVICE_IDENTITY_TOO_LONG");
+  }
+  return identity;
+}
+
+std::vector<uint8_t> encode_identity_reply(
+  ControllerReservationRole role, uint64_t generation, const std::string & incarnation,
+  const std::string & boot)
+{
+  const auto bounded = [](const std::string & value) {
+      if (value.empty() || value.size() > kMaxIncarnationBytes) {
+        throw std::invalid_argument("SERVICE_IDENTITY_STRING_INVALID");
+      }
+      for (const char character : value) {
+        const auto code = static_cast<unsigned char>(character);
+        if (code < 0x20 || code > 0x7e) {
+          throw std::invalid_argument("SERVICE_IDENTITY_STRING_INVALID");
+        }
+      }
+      return value;
+    };
+  std::vector<uint8_t> body{identity_magic[0], identity_magic[1], identity_magic[2],
+    identity_magic[3], kIdentityProtocolVersion,
+    kIdentityQueryOperation, role_number(role)};
+  for (int shift = 56; shift >= 0; shift -= 8) {
+    body.push_back(static_cast<uint8_t>((generation >> shift) & 0xff));
+  }
+  for (const std::string & value : {bounded(incarnation), bounded(boot)}) {
+    body.push_back(static_cast<uint8_t>(value.size()));
+    body.insert(body.end(), value.begin(), value.end());
+  }
+  if (body.size() > kMaxIdentityReplyBytes) {
+    throw std::invalid_argument("SERVICE_IDENTITY_REPLY_TOO_LARGE");
+  }
+  // Body only: the transport frames it with its own 4-byte length prefix, exactly as
+  // the Python client reads it back.
+  return body;
+}
+
+bool parse_identity_reply(
+  const std::vector<uint8_t> & reply,
+  ControllerReservationRole expected_role, ServiceControllerIdentity * out)
+{
+  if (out == nullptr || reply.size() < 15 || std::memcmp(reply.data(), identity_magic, 4) != 0 ||
+    reply[4] != kIdentityProtocolVersion || reply[5] != kIdentityQueryOperation ||
+    reply[6] != role_number(expected_role))
+  {
+    return false;
+  }
+  size_t offset = 15;
+  std::string values[2];
+  for (int index = 0; index < 2; ++index) {
+    if (offset + 1 > reply.size()) {return false;}
+    const size_t length = reply[offset++];
+    if (length == 0 || length > kMaxIncarnationBytes || offset + length > reply.size()) {
+      return false;
+    }
+    values[index].assign(reply.begin() + static_cast<long>(offset),
+                         reply.begin() + static_cast<long>(offset + length));
+    offset += length;
+    for (const char character : values[index]) {
+      const auto code = static_cast<unsigned char>(character);
+      if (code < 0x20 || code > 0x7e) {return false;}
+    }
+  }
+  if (offset != reply.size()) {return false;}
+  out->role = expected_role;
+  out->incarnation = values[0];
+  out->boot = values[1];
+  return true;
+}
+
+bool is_bound_reservation_frame(const std::vector<uint8_t> & frame)
+{
+  return frame.size() >= prefix_size + bound_prefix_size &&
+         std::memcmp(frame.data() + prefix_size, bound_magic, 4) == 0 &&
+         frame[prefix_size + 4] == kBoundProtocolVersion;
+}
+
+BoundReserveStatus handle_bound_reservation_frame(
+  ControllerGoalAdmission & gate, const std::vector<uint8_t> & frame,
+  ControllerReservationRole expected_role,
+  const ControllerReservationCapability & expected_capability)
+{
+  // the real socket capability is used; there is no fixed fill in production
+  BoundControllerReservationRequest request =
+    parse_bound_controller_reservation_frame(frame, expected_capability, expected_role);
+  return gate.reserve_bound(request);
+}
 }  // namespace so101_mujoco_support

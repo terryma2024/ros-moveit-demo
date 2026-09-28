@@ -33,16 +33,28 @@ using Admission = so101_mujoco_support::ControllerGoalAdmission;
 class InspectableController : public so101_mujoco_support::BrokerOwnedTrajectoryController
 {
 public:
+  // Explicit legacy-only unit mode: no gate exists until a test asks for one, so
+  // the "before provision" state stays fail-closed exactly as in production.
+  std::shared_ptr<Admission> legacy_gate()
+  {
+    auto gate = active_gate_copy();
+    if (!gate) {
+      gate = std::make_shared<Admission>();
+      install_active_gate_for_testing(gate);
+    }
+    return gate;
+  }
   bool topic_subscriber_exists() const {return static_cast<bool>(joint_command_subscriber_);}
   bool action_server_exists() const {return static_cast<bool>(action_server_);}
   bool reserve_goal(const Admission::GoalUUID & id, const Action::Goal & goal, uint64_t generation)
   {
-    return goal_admission_.arm(generation) && goal_admission_.reserve(id, goal, generation);
+    const auto gate = legacy_gate();
+    return gate->arm(generation) && gate->reserve(id, goal, generation);
   }
   Admission::Result probe_goal(
     const Admission::GoalUUID & id, const Action::Goal & goal, uint64_t generation)
   {
-    return goal_admission_.admit(id, goal, generation);
+    return legacy_gate()->admit(id, goal, generation);
   }
   std::optional<so101_mujoco_support::ControllerStopWitness::Proof> stopped_state(
     int64_t now_monotonic_ns)

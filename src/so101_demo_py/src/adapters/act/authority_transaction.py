@@ -266,7 +266,15 @@ class AuthorityTransactionRegistry:
         port = self._port
         if port is None or not hasattr(port, "identity_snapshot"):
             raise AuthorityRefused("AUTHORITY_PORT_REQUIRED")
-        snapshot = port.identity_snapshot()
+        with self._lock:                      # resolve the role, then release
+            record = self._records.get(handle.permit_id)
+            if record is None:
+                raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
+            if self._states[record.permit_id] != READY:
+                raise AuthorityRefused(
+                    f"AUTHORITY_PERMIT_NOT_READY:{self._states[record.permit_id]}")
+            role = record.role
+        snapshot = port.identity_snapshot(role)   # port mutex only, no registry lock
         if (type(snapshot) is not tuple or len(snapshot) != 3
                 or type(snapshot[0]) is not int
                 or type(snapshot[1]) is not str or not snapshot[1]
@@ -279,6 +287,9 @@ class AuthorityTransactionRegistry:
             if self._states[record.permit_id] != READY:
                 raise AuthorityRefused(
                     f"AUTHORITY_PERMIT_NOT_READY:{self._states[record.permit_id]}")
+            if record.role != role:
+                # the record changed while the port snapshot was being read
+                raise AuthorityRefused("AUTHORITY_PERMIT_ROLE_CHANGED")
             if (snapshot[0] != record.controller_generation
                     or snapshot[1] != record.controller_incarnation
                     or snapshot[0] != record.identity[3]):
@@ -503,15 +514,23 @@ class ReservationFakeControllerPort:
                                                                     else self._clock_ns())}
             return ACCEPTED
 
-    def identity_snapshot(self):
-        """Immutable controller identity read under only the port mutex.
+    def identity_snapshot(self, role="arm"):
+        """Immutable per-role controller identity read under only the port mutex.
 
         No I/O and no callback: the generation, the controller incarnation and the
-        boot incarnation are captured together in one critical section.
+        boot incarnation of the requested role are captured together in one critical
+        section. An unknown role refuses instead of borrowing another role's values.
         """
 
         with self._lock:
-            return (self._generation, self._incarnation, self._boot_incarnation)
+            per_role = getattr(self, "_role_identities", None)
+            if per_role is None:
+                per_role = {"arm": (self._generation, self._incarnation, self._boot_incarnation)}
+                self._role_identities = per_role
+            values = per_role.get(role)
+            if values is None:
+                raise AuthorityRefused(f"AUTHORITY_ROLE_IDENTITY_UNKNOWN:{role}")
+            return values
 
     def boot_incarnation(self):
         with self._lock:

@@ -66,6 +66,9 @@ class CommandBroker:
         self._lock=threading.RLock();self._participants={};self._goal_tickets={}
         self._stopping_generation=None;self.audit=[];self._fault_reason=None
         self._armed_generation=None
+        self._acquire_pending=None
+        self._release_pending=None        # exact (ticket, generation) release in flight
+        self._cleanup_pending=None        # exact (generation, armed, reason) cleanup in flight
         self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None;self._writes=[]
 
     def issue_prefix_source(self,*,ticket,prefix,source,source_kind,
@@ -178,10 +181,77 @@ class CommandBroker:
         identifier(reason)
         if cancelled_event is not None and not isinstance(cancelled_event, threading.Event):
             raise TypeError('CANCEL_EVENT_INVALID')
+        cleanup=None
         with self._lock:
             if cancelled_event is not None:cancelled_event.set()
             self.ownership.revoke(reason)
+            if self.ownership.state=='STOPPING':
+                generation=self.ownership.generation
+                if generation!=self._stopping_generation:
+                    # locked logical terminalization only: record the exact generation
+                    # and clear dispatch state, but perform no controller/ROS I/O
+                    self._stopping_generation=generation
+                    self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None
+                    if self._prefix_sources is not None:self._prefix_sources.revoke()
+                    cleanup=(generation,self._armed_generation,
+                             self.ownership.reason or 'REVOKED')
+                    self._cleanup_pending=cleanup        # exact token for finalization
+            # the in-lock call sees the generation already terminalized, so it only
+            # refreshes/confirms the stop state and never repeats the I/O
             self._stop_if_revoked()
+        if cleanup is not None:
+            try:
+                self._cleanup_unlocked_io(cleanup, propagate=True)   # caller sees the stop error
+            except Exception:
+                with self._lock:
+                    if self._cleanup_pending==cleanup:
+                        self._cleanup_pending=None
+                raise                                    # no probe after a failed stop
+            with self._lock:
+                if self._cleanup_pending==cleanup:
+                    self._cleanup_pending=None          # only this exact token finalizes
+                self._stop_if_revoked()
+
+    def _cleanup_unlocked_io(self,cleanup,*,propagate=False):
+        """Unlocked terminalization I/O: controller close, prefix invalidate, ROS stop.
+
+        ``propagate=True`` (the explicit stop_attempt entry point) surfaces a driver
+        stop failure to the caller so a hazard dispatcher sees it. Background and
+        connection-lifecycle paths (tick, disconnect) record and fence instead, so a
+        failing stop can never raise out of a server loop as an unhandled exception.
+        """
+
+        generation,armed,reason_text=cleanup
+        if armed is not None:
+            try:self._close_controller_generation(armed)
+            except RuntimeError:pass
+        try:
+            if self.prefix_executor is not None:
+                self.prefix_executor.invalidate(reason_text)
+        except Exception as error:
+            with self._lock:
+                if self._fault_reason is None:self._fault_reason='PAIR_CANCEL_LOST'
+                self.audit.append(dict(operation='invalidate_error',error=repr(error)))
+        try:
+            self.driver.stop_all(reason_text)
+        except Exception as error:
+            with self._lock:
+                if self._fault_reason is None:self._fault_reason='CONTROL_STOP_LOST'
+                self.audit.append(dict(operation='stop_all_error',error=repr(error)))
+            if propagate:
+                raise                # explicit stop_attempt: the caller must see this
+
+    def _driver_stopped(self):
+        """Driver stopped proof, fail-closed.
+
+        Production drivers always expose ``stopped()``. A driver that does not (a narrow
+        test double, or an incompletely constructed driver) cannot prove the stopped
+        state, so the broker treats it as NOT stopped rather than raising AttributeError
+        from deep inside a reporting or authorization path.
+        """
+
+        probe=getattr(self.driver,'stopped',None)
+        return bool(probe()) if callable(probe) else False
 
     def _stop_if_revoked(self):
         if self.ownership.state=='STOPPING':
@@ -200,15 +270,38 @@ class CommandBroker:
                     self.audit.append(dict(operation='invalidate_error',error=repr(error)))
                 finally:self.driver.stop_all(self.ownership.reason or 'REVOKED')
             if hasattr(self.driver,'refresh_stop'):self.driver.refresh_stop()
-            if not any(not future.done() for future in self._writes) and self.driver.stopped():self.ownership.confirm_stopped(True)
+            # probe only when the driver exposes the state: the phased cleanup runs the
+            # stop first, so a double without stopped() must not surface an AttributeError
+            probe=getattr(self.driver,'stopped',None)
+            if (callable(probe) and not any(not future.done() for future in self._writes)
+                    and probe()):
+                self.ownership.confirm_stopped(True)
 
     def tick(self):
+        cleanup=None
         with self._lock:
             hazard=getattr(self.driver,'hazard_reason',None)
             if hazard and self._fault_reason is None:
                 self._fault_reason=hazard;self.ownership.revoke(hazard)
             elif self._fault_reason and self.ownership.state=='RUNNING':self.ownership.revoke(self._fault_reason)
+            if self.ownership.state=='STOPPING':
+                generation=self.ownership.generation
+                if generation!=self._stopping_generation:
+                    # locked logical terminalization only: no controller/ROS I/O here
+                    self._stopping_generation=generation
+                    self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None
+                    if self._prefix_sources is not None:self._prefix_sources.revoke()
+                    cleanup=(generation,self._armed_generation,
+                             self.ownership.reason or 'REVOKED')
+                    self._cleanup_pending=cleanup
+            # with the generation terminalized this only refreshes/confirms stop state
             self._stop_if_revoked()
+        if cleanup is not None:
+            self._cleanup_unlocked_io(cleanup, propagate=True)          # socket + ROS calls, lock free
+            with self._lock:
+                if self._cleanup_pending==cleanup:self._cleanup_pending=None
+                self._stop_if_revoked()
+        with self._lock:
             if self.ownership.state=='IDLE' and hasattr(self.driver,'refresh_idle'):self.driver.refresh_idle()
             elif self._post_reset_ticket is not None:
                 try:self.ownership.require_ticket(self._post_reset_ticket)
@@ -218,10 +311,26 @@ class CommandBroker:
                     elif not self.driver.refresh_post_reset():self._post_reset_ticket=None
 
     def disconnect(self,connection_id):
+        cleanup=None
         with self._lock:
             ticket=self._participants.pop(connection_id,None)
             if ticket is not None and ticket[0]==self.ownership.generation:
-                self.ownership.revoke('CLIENT_DISCONNECTED');self._stop_if_revoked()
+                self.ownership.revoke('CLIENT_DISCONNECTED')
+                generation=self.ownership.generation
+                if generation!=self._stopping_generation:
+                    # locked logical terminalization only: no controller/ROS I/O here
+                    self._stopping_generation=generation
+                    self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None
+                    if self._prefix_sources is not None:self._prefix_sources.revoke()
+                    cleanup=(generation,self._armed_generation,
+                             self.ownership.reason or 'REVOKED')
+                    self._cleanup_pending=cleanup
+                self._stop_if_revoked()
+        if cleanup is not None:
+            self._cleanup_unlocked_io(cleanup)          # socket + ROS calls, lock free
+            with self._lock:
+                if self._cleanup_pending==cleanup:self._cleanup_pending=None
+                self._stop_if_revoked()
 
     def _prepare_reset(self,scope,connection_id):
         with self._lock,self.ownership.authorized(*scope) as ticket:
@@ -240,7 +349,7 @@ class CommandBroker:
                         # through the owning driver. No reset or motion is sent.
                         refresh=getattr(self.driver,'refresh_idle',None)
                         if refresh is not None:refresh()
-                        if self.driver.stopped():
+                        if self._driver_stopped():
                             if hasattr(self.driver,'prepare_reset'):self.driver.prepare_reset()
                             return
                         if refresh is None or time.monotonic()>=deadline:
@@ -251,6 +360,212 @@ class CommandBroker:
                 if self._reset_ticket==ticket and ticket[0]==self.ownership.generation:
                     self.ownership.revoke('RESET_PREPARATION_FAILED');self._stop_if_revoked()
             raise
+
+
+
+
+    def _release_phased(self,scope,connection_id,response):
+        """Release in three phases with an exact pending token.
+
+        The controller generation is closed with no lock held; ownership is released
+        only after that close is authoritatively confirmed. A close failure latches a
+        fault and leaves control unavailable rather than silently freeing the lease.
+        """
+
+        generation=None
+        with self._lock:
+            self.tick()
+            if self._fault_reason:raise PermissionError(self._fault_reason)
+            if self._release_pending is not None:
+                raise PermissionError('CONTROLLER_RELEASE_PENDING')
+            with self.ownership.authorized(*scope) as ticket:
+                if self._reset_ticket is not None:raise PermissionError('RESET_IN_PROGRESS')
+                if not self._driver_stopped():raise PermissionError('CONTROL_NOT_STOPPED')
+                if self._armed_generation==ticket[0]:
+                    generation=self._armed_generation
+                self._release_pending=(ticket,generation)
+        close_error=None
+        if generation is not None:
+            try:
+                self._close_controller_generation(generation)   # unlocked socket exchange
+            except Exception as error:
+                close_error=error
+        with self._lock:
+            pending=self._release_pending
+            if pending is None or pending[0]!=ticket:
+                raise PermissionError('CONTROLLER_RELEASE_STALE')
+            self._release_pending=None
+            if close_error is not None:
+                # close unconfirmed: latch fault/fencing, keep the lease unavailable
+                if self._fault_reason is None:
+                    self._fault_reason='CONTROLLER_RESERVATION_CLOSE_UNCONFIRMED'
+                self.ownership.revoke('CONTROLLER_RESERVATION_CLOSE_UNCONFIRMED')
+                self._stop_if_revoked()
+                raise PermissionError('CONTROLLER_RESERVATION_CLOSE_UNCONFIRMED')
+            self.ownership.require_ticket(ticket)
+            if not self._driver_stopped():raise PermissionError('CONTROL_NOT_STOPPED')
+            self.ownership.release(scope[0],True)
+            if self._prefix_sources is not None:self._prefix_sources.revoke()
+            self._post_reset_ticket=None
+            if generation is not None and self._armed_generation==generation:
+                self._armed_generation=None                 # the generation is closed
+            self._participants.pop(connection_id,None)      # no participant survives
+            response['accepted']=True
+
+
+    def _acquire_restricted(self,scope,connection_id,response):
+        """Logical-only acquire for non-ACT owners when a bound session is installed.
+
+        Grants the ownership ticket needed for reset/recovery dispatch without touching
+        the controller, the composition or the one-shot session.
+        """
+
+        with self._lock:
+            self.tick()
+            if self._fault_reason:raise PermissionError(self._fault_reason)
+            if self._release_pending is not None:raise PermissionError('CONTROLLER_RELEASE_PENDING')
+            if self._cleanup_pending is not None:raise PermissionError('CONTROLLER_CLEANUP_PENDING')
+            if self._acquire_pending is not None:
+                raise PermissionError('CONTROLLER_RESERVATION_ACQUIRE_PENDING')
+            if self.ownership.state!='IDLE':raise PermissionError('CONTROL_BUSY')
+            if not self._driver_stopped():
+                self.ownership.revoke('CONTROL_NOT_STOPPED');self._stop_if_revoked()
+                raise PermissionError('CONTROL_NOT_STOPPED')
+            token=self.ownership.acquire(*scope[1:])
+            ticket=self.ownership.ticket(token,*scope[1:])
+            response['lease_token']=token
+            response['accepted']=True
+            self._participants[connection_id]=ticket
+            return ticket
+
+    def _acquire_legacy(self,scope,connection_id,response):
+        """Legacy controller acquire in three phases (mirrors _acquire_bound).
+
+        Phase 1 (locked): validate, exact ticket, mark the pending attempt.
+        Phase 2 (unlocked): the controller arm socket exchange.
+        Phase 3 (locked): revalidate the exact ticket and commit, or clean up.
+        """
+
+        with self._lock:
+            self.tick()
+            if self._fault_reason:raise PermissionError(self._fault_reason)
+            if self._release_pending is not None:
+                raise PermissionError('CONTROLLER_RELEASE_PENDING')
+            if self._acquire_pending is not None:
+                raise PermissionError('CONTROLLER_RESERVATION_ACQUIRE_PENDING')
+            if self.ownership.state!='IDLE':raise PermissionError('CONTROL_BUSY')
+            if not self._driver_stopped():
+                self.ownership.revoke('CONTROL_NOT_STOPPED');self._stop_if_revoked()
+                raise PermissionError('CONTROL_NOT_STOPPED')
+            token=self.ownership.acquire(*scope[1:])
+            ticket=self.ownership.ticket(token,*scope[1:])
+            self._acquire_pending=ticket
+        failure=None
+        try:
+            if not self._driver_stopped():raise PermissionError('CONTROL_NOT_STOPPED')
+            if self.reservation_port.arm_generation(ticket) is not True:
+                raise PermissionError('CONTROLLER_RESERVATION_ARM_REJECTED')
+        except Exception as error:
+            failure=error
+        committed=False
+        with self._lock:
+            if self._acquire_pending==ticket:
+                self._acquire_pending=None
+            if failure is None:
+                try:
+                    self.tick()
+                    if self.ownership.reason is not None or self.ownership.state!='RUNNING':
+                        failure=PermissionError('CONTROLLER_RESERVATION_CONCURRENT_REVOKE')
+                    elif not self._driver_stopped():
+                        failure=PermissionError('CONTROL_NOT_STOPPED')
+                    else:
+                        with self.ownership.authorized(*ticket[1:]):
+                            self.ownership.require_ticket(ticket)
+                            self._armed_generation=ticket[0]
+                            response['lease_token']=token
+                            response['accepted']=True
+                            self._participants[connection_id]=ticket
+                            committed=True
+                except Exception as error:
+                    failure=error
+            if failure is not None and self.ownership.reason is None:
+                self.ownership.revoke('CONTROLLER_RESERVATION_ARM_FAILED')
+            if failure is not None:
+                self._stop_if_revoked()
+        if failure is not None:
+            if not committed:
+                close_error=None
+                try:self._close_controller_generation(ticket[0])
+                except RuntimeError as error:close_error=error
+                if close_error is not None:raise close_error
+            raise failure
+
+    def _acquire_bound(self,scope,connection_id,response):
+        """Bound acquire in three phases.
+
+        Phase 1 (locked): validate, take the exact ticket, mark _acquire_pending.
+        Phase 2 (unlocked): session.arm -> session.confirm, i.e. all socket I/O.
+        Phase 3 (locked): revalidate the ticket/ownership/stopped state and only then
+        commit _armed_generation, the participant and the lease response.
+        """
+
+        with self._lock:
+            self.tick()
+            if self._fault_reason:raise PermissionError(self._fault_reason)
+            if self._acquire_pending is not None:
+                raise PermissionError('BOUND_AUTHORITY_ACQUIRE_PENDING')
+            if self.ownership.state!='IDLE':raise PermissionError('CONTROL_BUSY')
+            if not self._driver_stopped():
+                self.ownership.revoke('CONTROL_NOT_STOPPED');self._stop_if_revoked()
+                raise PermissionError('CONTROL_NOT_STOPPED')
+            token=self.ownership.acquire(*scope[1:])
+            ticket=self.ownership.ticket(token,*scope[1:])
+            self._acquire_pending=ticket            # the exact provisional ticket
+        armed=False
+        failure=None
+        try:
+            # phase 2 holds no broker lock and no ownership lock, so a concurrent
+            # stop_attempt/revoke proceeds; phase 3 revalidates atomically
+            if not self._driver_stopped():raise PermissionError('CONTROL_NOT_STOPPED')
+            self._bound_authority_session.arm(ticket)
+            armed=True
+            self.ownership.require_ticket(ticket)     # exact ticket, not just state
+            self._bound_authority_session.confirm(self.ownership)
+        except Exception as error:                      # phase 2 failure: no commit
+            failure=error
+        committed=False
+        with self._lock:
+            if self._acquire_pending==ticket:
+                self._acquire_pending=None           # only this exact attempt's marker
+            if failure is None:
+                try:
+                    self.tick()
+                    if self.ownership.reason is not None or self.ownership.state!='RUNNING':
+                        failure=PermissionError('BOUND_AUTHORITY_CONCURRENT_REVOKE')
+                    elif not self._driver_stopped():
+                        failure=PermissionError('CONTROL_NOT_STOPPED')
+                    else:
+                        # no I/O here: the ownership guard keeps an interleaved
+                        # Ownership.revoke out between revalidation and commit
+                        with self.ownership.authorized(*ticket[1:]):
+                            self.ownership.require_ticket(ticket)
+                            self._armed_generation=ticket[0]
+                            response['lease_token']=token
+                            response['accepted']=True
+                            self._participants[connection_id]=ticket
+                            committed=True
+                except Exception as error:
+                    failure=error
+            if failure is not None and self.ownership.reason is None:
+                self.ownership.revoke('BOUND_AUTHORITY_ACQUIRE_FAILED')  # first reason wins
+            if failure is not None:
+                self._stop_if_revoked()                 # only ever under the broker lock
+        if failure is not None:
+            if armed and not committed:
+                # the controller side may already be armed: fence it so no live
+                # generation survives a failed commit
+                self._bound_authority_session.abort('BOUND_AUTHORITY_COMMIT_FAILED')
+            raise failure
 
     def handle(self,request,connection_id):
         response=dict(request_id=request.get('request_id','') if isinstance(request,dict) else '',
@@ -266,9 +581,33 @@ class CommandBroker:
             if (self.simulation_session_id is not None and operation!='status'
                     and request['session_id']!=self.simulation_session_id):raise PermissionError('SESSION_MISMATCH')
             scope=tuple(request[key] for key in ('lease_token','owner','session_id','attempt_id'))
+            if self._release_pending is not None and operation not in ('status','release','revoke'):
+                raise PermissionError('CONTROLLER_RELEASE_PENDING')
+            if self._cleanup_pending is not None and operation not in ('status','revoke'):
+                raise PermissionError('CONTROLLER_CLEANUP_PENDING')
             if operation=='prepare_reset':
                 self._prepare_reset(scope,connection_id)
                 response['accepted']=True
+                return response
+            if operation=='acquire' and self._bound_authority_session is not None:
+                if request['owner']=='act':
+                    # A-prime: only the exact ACT execution acquire may consume the
+                    # one-shot bound session
+                    self._acquire_bound(scope,connection_id,response)
+                else:
+                    # recovery/teacher/teleop get a restricted logical-only acquire:
+                    # no controller arm, no composition access, no session consumption.
+                    # This is an explicit owner-scoped route, not a generic fallback.
+                    self._acquire_restricted(scope,connection_id,response)
+                return response
+            if operation=='acquire' and self.reservation_port is not None:
+                # legacy controller arm: same phasing, no broker lock across the socket
+                self._acquire_legacy(scope,connection_id,response)
+                return response
+            if operation=='release':
+                # phased release: logical invalidation, unlocked controller close,
+                # locked exact-token finalization
+                self._release_phased(scope,connection_id,response)
                 return response
             if operation in ('reset_world','pause','switch_controllers','finish_reset'):
                 with self._lock:
@@ -336,36 +675,17 @@ class CommandBroker:
                 if operation=='acquire':
                     if self._fault_reason:raise PermissionError(self._fault_reason)
                     if self.ownership.state!='IDLE':raise PermissionError('CONTROL_BUSY')
-                    if not self.driver.stopped():
+                    if not self._driver_stopped():
                         self.ownership.revoke('CONTROL_NOT_STOPPED');self._stop_if_revoked()
                         raise PermissionError('CONTROL_NOT_STOPPED')
                     token=self.ownership.acquire(*scope[1:])
                     ticket=self.ownership.ticket(token,*scope[1:])
-                    if self.reservation_port is not None:
-                        try:
-                            with self.ownership.authorized(*ticket[1:]):
-                                if not self.driver.stopped():
-                                    raise PermissionError('CONTROL_NOT_STOPPED')
-                                if self.reservation_port.arm_generation(ticket) is not True:
-                                    raise PermissionError('CONTROLLER_RESERVATION_ARM_REJECTED')
-                                self.ownership.require_ticket(ticket)
-                                if not self.driver.stopped():
-                                    raise PermissionError('CONTROL_NOT_STOPPED')
-                                self._armed_generation=ticket[0]
-                        except Exception:
-                            close_error=None
-                            try:self._close_controller_generation(ticket[0])
-                            except RuntimeError as error:close_error=error
-                            self.ownership.revoke('CONTROLLER_RESERVATION_ARM_FAILED')
-                            self._stop_if_revoked()
-                            if close_error is not None:raise close_error
-                            raise
                     response['lease_token']=token
                     self._participants[connection_id]=ticket
                 elif operation=='status':
                     self._stop_if_revoked();response['state']=self.ownership.state
                     response['generation']=self.ownership.generation
-                    response['stop_confirmed']=self.driver.stopped() and not any(not future.done() for future in self._writes)
+                    response['stop_confirmed']=self._driver_stopped() and not any(not future.done() for future in self._writes)
                     response['reset_in_progress']=self._reset_ticket is not None
                     response['hazard_reason']=self._fault_reason
                     if hasattr(self.driver,'ready'):
@@ -481,7 +801,11 @@ class UnixBrokerServer:
                 try:os.kill(self.parent_pid,0)
                 except ProcessLookupError:
                     self.broker.ownership.revoke('PARENT_DIED');self.broker.tick();self._stop.set();break
-            self.broker.tick()
+            try:
+                self.broker.tick()
+            except Exception as error:
+                # a failing driver stop is fenced and recorded; the loop keeps serving
+                self.broker.audit.append(dict(operation='tick_error',error=repr(error)))
             try:peer,_=self._listener.accept()
             except socket.timeout:continue
             except OSError:break

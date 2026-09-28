@@ -403,6 +403,9 @@ def test_ros_source_wrapper_passes_step_cursor_to_physical_readback():
     source = object.__new__(Task8RosEvidence)
     source.session_id = "session-1"
     source.reset_epoch = 2
+    # object.__new__ bypasses __init__, so the authority latch must be set explicitly
+    # (same practice as test_act_batch1_owner_poll.py)
+    source._authority_revoked = False
     source.readback = SimpleNamespace(capture=lambda *args, **kwargs: (
         calls.append((args, kwargs)) or {"accepted": True}
     ))

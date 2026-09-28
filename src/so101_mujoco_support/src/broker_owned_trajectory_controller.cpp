@@ -114,17 +114,7 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configu
         const rclcpp_action::GoalUUID & uuid,
         std::shared_ptr<const FollowJTrajAction::Goal> goal)
       {
-        auto ingress = ingress_witness_.enter();
-        arm_stop_witness_.invalidate_nonblocking();
-        gripper_stop_witness_.invalidate_nonblocking();
-        neck_stop_witness_.invalidate_nonblocking();
-        if (!goal || goal_admission_.admit_current(uuid, *goal) !=
-        ControllerGoalAdmission::Result::ALLOW)
-        {
-          return rclcpp_action::GoalResponse::REJECT;
-        }
-        return joint_trajectory_controller::JointTrajectoryController::goal_received_callback(
-          uuid, goal);
+        return decide_goal_admission(uuid, goal);   // real callback decision
       },
       [this](
         std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle)
@@ -137,16 +127,47 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configu
         std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle)
       {
         auto ingress = ingress_witness_.enter();
+        (void)ingress;
         joint_trajectory_controller::JointTrajectoryController::goal_accepted_callback(goal_handle);
       });
     configure_reservation_scope();
-  } catch (const std::exception & error) {
-    RCLCPP_ERROR(get_node()->get_logger(), "Action admission setup failed: %s", error.what());
-    close_reservation_service();
+  } catch (const std::exception & failure) {
+    RCLCPP_ERROR(get_node()->get_logger(), "Admission-wrapped action server refused: %s",
+      failure.what());
     action_server_.reset();
     return controller_interface::CallbackReturn::ERROR;
   }
   return controller_interface::CallbackReturn::SUCCESS;
+}
+
+rclcpp_action::GoalResponse BrokerOwnedTrajectoryController::decide_goal_admission(
+  const rclcpp_action::GoalUUID & uuid,
+  const std::shared_ptr<const control_msgs::action::FollowJointTrajectory::Goal> & goal)
+{
+  auto ingress = ingress_witness_.enter();
+  arm_stop_witness_.invalidate_nonblocking();
+  gripper_stop_witness_.invalidate_nonblocking();
+  neck_stop_witness_.invalidate_nonblocking();
+  (void)ingress;
+  const auto gate = active_gate_copy();      // brief copy; the mutex is released here
+  if (!goal || !gate) {
+    // no active gate (before provision or after detach) fails closed
+    return rclcpp_action::GoalResponse::REJECT;
+  }
+  if (gate->has_service_identity()) {
+    // bound mode: consume the exact bound reservation once, no legacy fallback
+    if (gate->admit_bound_action(uuid, *goal, gate->generation()) !=
+      BoundReserveStatus::ACCEPTED)
+    {
+      return rclcpp_action::GoalResponse::REJECT;
+    }
+  } else if (gate->admit_current(uuid, *goal) !=
+    ControllerGoalAdmission::Result::ALLOW)
+  {
+    return rclcpp_action::GoalResponse::REJECT;   // legacy-only test gates
+  }
+  return joint_trajectory_controller::JointTrajectoryController::goal_received_callback(
+    uuid, goal);
 }
 
 controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_activate(
@@ -252,7 +273,7 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
   std::lock_guard<std::mutex> lock(reservation_mutex_);
   if (!reservation_timer_ || reservation_service_) {return;}
   if (std::chrono::steady_clock::now() >= reservation_deadline_) {
-    goal_admission_.close();
+    if (active_goal_admission_) {active_goal_admission_->close();}
     reservation_timer_->cancel();
     RCLCPP_ERROR(get_node()->get_logger(), "Controller reservation provision timed out");
     return;
@@ -268,16 +289,24 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
     if (error) {throw std::runtime_error("CONTROLLER_RESERVATION_PROVISION_UNREADABLE");}
     const auto provision = read_controller_reservation_provision(
       reservation_provision_path_, reservation_role_, reservation_session_);
+    // one service incarnation: identity from OS entropy, gate created with it
+    const auto identity = generate_service_identity(reservation_role_, provision.capability);
+    auto gate = std::make_shared<ControllerGoalAdmission>(
+      []() {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now().time_since_epoch()).count();
+      }, 250000000, 1048576, 2048, identity);
     reservation_service_ = std::make_unique<ControllerReservationService>(
-      reservation_socket_path_, goal_admission_, provision.capability, provision.peer,
+      reservation_socket_path_, gate, provision.capability, provision.peer,
       std::chrono::milliseconds(50), [this]() {
         const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::steady_clock::now().time_since_epoch()).count();
         return controller_stop_proof(now).has_value();
       }, reservation_role_, [this]() {return controller_ingress_snapshot();});
+    active_goal_admission_ = std::move(gate);      // publish under the same lock
     reservation_timer_->cancel();
   } catch (const std::exception & failure) {
-    goal_admission_.close();
+    if (active_goal_admission_) {active_goal_admission_->close();}
     reservation_timer_->cancel();
     RCLCPP_ERROR(get_node()->get_logger(), "Controller reservation service refused: %s",
       failure.what());
@@ -290,13 +319,11 @@ void BrokerOwnedTrajectoryController::close_reservation_service()
   arm_stop_witness_.reset();
   gripper_stop_witness_.reset();
   neck_stop_witness_.reset();
-  std::lock_guard<std::mutex> lock(reservation_mutex_);
-  if (reservation_timer_) {
-    reservation_timer_->cancel();
-    reservation_timer_.reset();
-  }
-  reservation_service_.reset();
-  goal_admission_.close();
+  std::unique_ptr<ControllerReservationService> service;
+  std::shared_ptr<ControllerGoalAdmission> gate;
+  detach_reservation_lifecycle(&service, &gate);   // atomic detach, mutex released
+  if (gate) {gate->close();}                       // close outside the lock
+  service.reset();                                 // destroy outside the lock
 }
 
 }  // namespace so101_mujoco_support

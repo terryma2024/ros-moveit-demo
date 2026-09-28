@@ -1,5 +1,6 @@
 """The broker's private controller registration client speaks the fixed wire format."""
 
+import hashlib
 import os
 from pathlib import Path
 import socket
@@ -303,7 +304,14 @@ def test_stale_ack_or_timeout_never_reports_a_reservation(reply):
 
 
 def test_client_rejects_symlinked_ancestor_before_connecting():
-    parent = socket_path().parent
+    # This case nests three levels below the socket base, so under the official gate it
+    # uses the repository's short-IPC base (the same SO101_IPC_SOCKET_BASE strategy the
+    # production launcher uses); locally it falls back to the scratch-derived base.
+    short_base = os.environ.get("SO101_IPC_SOCKET_BASE")
+    if short_base:
+        parent = Path(tempfile.mkdtemp(prefix="res-", dir=short_base))
+    else:
+        parent = socket_path().parent
     real = parent / "real"
     nested = real / "nested"
     nested.mkdir(mode=0o700, parents=True)
