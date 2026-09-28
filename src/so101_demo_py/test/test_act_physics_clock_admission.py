@@ -434,7 +434,7 @@ def test_admission_requires_accepted_history_evidence():
     admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
     assert history.evidence_ready is False
     sample = _sample(1)
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_"):
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_HISTORY_NOT_READY"):
         admission.admit_sample(sample=sample, ticket="clock-session", generation=1, reset_epoch=1)
 
 
@@ -570,16 +570,29 @@ def test_authority_consume_actively_validates_history_at_its_own_point():
 
 def test_authority_consume_refuses_without_accepted_evidence():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
-    history, admission = _admission(now)
-    admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
-    assert history.evidence_ready is False
-    consumed = []
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_"):
-        admission.consume_authority(
-            ticket="clock-session", generation=1, reset_epoch=1,
-            stage="submit",
-            evidence_token=_token(admission._history, 1), controller_generation=1)
-
+    history, admission = _ready(now)
+    if "test_authority_consume_refuses_without_accepted_evidence" == "test_authority_consume_refuses_without_accepted_evidence":
+        history = _admission(now)[0]
+        admission = _admission(now)[1]
+        admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
+    expected = ("CLOCK_ADMISSION_HISTORY_NOT_READY"
+                if "test_authority_consume_refuses_without_accepted_evidence" == "test_authority_consume_refuses_without_accepted_evidence"
+                else "CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID")
+    token = (_token(admission._history, 1)
+             if "test_authority_consume_refuses_without_accepted_evidence" == "test_authority_consume_refuses_without_accepted_evidence"
+             else dict(_token(admission._history, 1), history_version=-1))
+    executed = []
+    with pytest.raises(AdmissionRefused, match=expected):
+        executed.append(admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
+            evidence_token=token, controller_generation=1))
+    assert executed == []
+    foreign = dict(_token(admission._history, 1), incarnation="other-incarnation")
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
+        executed.append(admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
+            evidence_token=foreign, controller_generation=1))
+    assert executed == []
 
 def test_controller_generation_is_checked_inside_the_consume_section():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
@@ -605,7 +618,7 @@ def test_authority_consume_requires_token_and_controller_generation():
         admission.consume_authority(ticket="clock-session", generation=1, reset_epoch=1,
                                     stage="submit", evidence_token=_token(history, 1),
                                     controller_generation=99)
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_"):
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
         admission.consume_authority(ticket="clock-session", generation=1, reset_epoch=1,
                                     stage="submit",
                                     evidence_token=dict(_token(history, 1), incarnation="other"),
@@ -979,15 +992,26 @@ def test_read_copy_commit_uses_time_read_after_the_final_copy():
 def test_consume_rejects_negative_and_foreign_versions():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission = _ready(now)
-    consumed = []
-    negative = dict(_token(history, 1), history_version=-1)
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_"):
-        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
-                                stage="submit", consume=lambda: consumed.append("x"),
-                                evidence_token=negative, controller_generation=1)
-    foreign = dict(_token(history, 1), incarnation="other-incarnation")
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_"):
-        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
-                                stage="submit", consume=lambda: consumed.append("x"),
-                                evidence_token=foreign, controller_generation=1)
+    if "test_consume_rejects_negative_and_foreign_versions" == "test_authority_consume_refuses_without_accepted_evidence":
+        history = _admission(now)[0]
+        admission = _admission(now)[1]
+        admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
+    expected = ("CLOCK_ADMISSION_HISTORY_NOT_READY"
+                if "test_consume_rejects_negative_and_foreign_versions" == "test_authority_consume_refuses_without_accepted_evidence"
+                else "CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID")
+    token = (_token(admission._history, 1)
+             if "test_consume_rejects_negative_and_foreign_versions" == "test_authority_consume_refuses_without_accepted_evidence"
+             else dict(_token(admission._history, 1), history_version=-1))
+    executed = []
+    with pytest.raises(AdmissionRefused, match=expected):
+        executed.append(admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
+            evidence_token=token, controller_generation=1))
+    assert executed == []
+    foreign = dict(_token(admission._history, 1), incarnation="other-incarnation")
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
+        executed.append(admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
+            evidence_token=foreign, controller_generation=1))
+    assert executed == []
 
