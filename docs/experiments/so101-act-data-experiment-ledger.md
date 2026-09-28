@@ -8225,3 +8225,19 @@ partial credit is claimed.
   thing to revisit.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-736 — Admission suite green: 31 passed (fixture aligned with the v2 requirements)
+
+- **Two fixture fixes, both on the fixture side because the requirements are the plan's intent:**
+  1. the QUALIFIED calibration report now carries the `live_campaign` block the 8P4 producer emits
+     (case root, campaign-result and preparation-receipt digests, fourteen journal digests) — the
+     traceability requirement satisfied honestly rather than by relaxing `require_qualified`;
+  2. the manifest-mutation test recomputes `manifest_document_sha256` (the v2 document digest) rather
+     than the v1 `manifest_sha256`, which had left a stale digest and masked the intended
+     `TASK8_MANIFEST_BINDING_MISMATCH` as `TASK8_MANIFEST_INVALID`.
+- **Result: `test_act_campaign_admission.py` -> 31 passed, 0 failed**, from 3 passing at the start of
+  this sequence (28 failures), with every intermediate step committed and each of my own mistakes
+  (a mis-placed edit that broke syntax, a wrong `parents[…]` depth, a strip inserted after the spec was
+  built) caught, reverted and recorded.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
