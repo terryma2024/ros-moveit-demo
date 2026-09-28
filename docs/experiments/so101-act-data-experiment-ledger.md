@@ -9046,3 +9046,22 @@ This resolves the design block **without authorizing runtime or motion**.
   `parallel_collection_recovery.py`, `adapters/act/gpu_workload_client.py`.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-771 — Task 11A opens: wave partitioning
+
+- **Delivered:** `act/parallel_collection.py` with `partition_waves(scene_ids, *, max_wave_size=20)`,
+  carrying the plan's Step-1 boundary test verbatim plus the properties a wave boundary needs to be a
+  safe recovery unit: order preserved and complete (flattened waves equal the input), no empty trailing
+  wave at an exact multiple, duplicates refused (`WAVE_SCENE_DUPLICATE`), and bad inputs refused
+  (`WAVE_MANIFEST_EMPTY`, `WAVE_MANIFEST_INVALID`, `WAVE_SIZE_INVALID` for `0`, negatives, `"20"`, `2.0`
+  and `True`).
+- **Scope recorded honestly:** Task 11A is the largest remaining task — 19 new files and 16
+  modifications including the teleop admission surface — with `FixedActCollectionCampaign`,
+  `ActFixedWaveRecovery`, the result store/verifier, atomic `qualification-contract.json` and
+  `campaign-index.json`, and `act_collect_parallel`. Its Steps 6–7 are **live** qualification gates
+  requiring a fresh `QUALIFIED` from Task 8L at the same final HEAD (code order 11A Step 5 → 8L, runtime
+  order 8L → Step 6 → Step 7), so 11A proceeds one verified increment at a time, as Task 11 did.
+- **Verification:** focused tests **2 passed** (`gate6-batch3-py-gate/task11a.{log,junit.xml}`), first run
+  green.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
