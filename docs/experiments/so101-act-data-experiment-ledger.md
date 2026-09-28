@@ -10432,3 +10432,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   produce this checkpoint and no production code was changed.
 - **Boundaries:** no runtime or motion, no hardware, no push, no gate lowered, no full gate, no evidence deleted;
   user's 43 modified and 12 untracked paths untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-832 — Correction: the lifecycle record is CP-831, and the dirty-path decomposition is 31 + 12
+
+- **The requested lifecycle record already exists and is complete, so it is not duplicated.** CP-831 (commit
+  `fcf31834`) records the focused-test scratch `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/pg12/tmp/beh.1xhP`
+  as a **retained deletion candidate after readback** (101 files, 87 directories, 111,051 bytes on the `/data`
+  NVMe, path length 77 bytes), links it to the two focused logs (`beh-wrist-mount.log`, 241 bytes, `1 passed in
+  0.30s`; `beh-calibration.log`, 99 bytes, `14 passed in 0.09s`), states that `TMPDIR`, `TMP` and `TEMP` were
+  verified through the exact test interpreter (`…/20260924-fbc25063-resume/test-venv/bin/python` resolving
+  `tempfile.gettempdir()` inside the scratch), and states explicitly that the scratch is **not deleted** and will
+  not be without user authorization. Ledger lines 10412-10430.
+- **Count correction, verified with git rather than repeated:** `git status --short` in this worktree lists
+  **43 dirty entries, decomposed as 31 ` M` (modified, unstaged) and 12 `??` (untracked)**. The phrasing "43
+  modified plus 12 untracked" that this ledger has used, and that the orchestration instructions repeat, does not
+  match that decomposition; the invariant actually checked all along is the **byte-identical 43-entry dirty
+  listing**, which held across the aborted merge, the push and every commit in this stretch. The numbers are
+  corrected here so the ledger does not carry a wrong split.
+- **Guard and state at this checkpoint:** staged files = 1 (this ledger only), `git diff --cached --check` clean,
+  then staged returns to 0 and the dirty listing is byte-identical before and after the commit. The scratch and
+  every other artifact remain present.
+- **Boundaries:** no test rerun, no production code change, no full gate, no runtime or motion, no hardware, no
+  push, no deletion; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED. The goal remains in the
+  **user-decision blocked state** (revision 27), awaiting the training-interpreter versus runtime-ladder
+  authorization and the preflight adapter's two mappings.
