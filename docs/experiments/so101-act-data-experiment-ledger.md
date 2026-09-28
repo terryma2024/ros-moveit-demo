@@ -6187,3 +6187,13 @@ status: PLANNED_ISOLATED_STACK
 - Durable checkpoint: `experiments/exp568-authority-transaction/checkpoint.json`，SHA256 `62ce21c4a1391be31e86357d9ad4916614cd7f25d5165163fa5869b13d80db33`（含阶段 A 审计、阶段 B RED manifest/JUnit、最终 GREEN manifest/JUnit、名称集合验证、设计审查与第五次复核哈希）。
 - **未验证项（不得当作已通过）**：具体 C++ 控制器接收事务、共享控制器 mutex 与 ROS goal 接受集成**未实现、未验证**，仍是 Gate 6 前置，需要各自的 focused/build/ordinary full/installed/provenance 门禁与实机 fail-closed 验收；ordinary full suite 本轮按边界未运行。
 - 边界：Gate 5 仍 OPEN，停在 Gate 5 请求第六次本机 Astra/High 复核，不自批；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 全部保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-604 — 更正 CP-603 的“同集”说法：以 128/128 严格同集的 amended RED 为有效基线
+
+- **撤回**：CP-603 把阶段 B 的 127-case RED 与最终 128-case GREEN 称为“same set”。即使其中新增的 1 个用例被显式列出，两个集合仍不严格相同，不满足冻结要求。该说法作废；旧证据（`phaseB-manifest.txt`、`phaseB-red-junit.xml`、`final-*` 与旧 checkpoint `62ce21c4…`）**全部保留、未改写、未删除**。
+- **amended RED 基线（新，durable）**：`experiments/exp568-amended-red-baseline/`，用 `git archive 9f1cd77c`（只读）展开**修复前**源码，不切换、不改写工作树；再把当前最终版 5 个测试文件覆盖进该 snapshot，使其收集与最终 GREEN 完全相同的 128 个 testcase。
+- **import provenance（fail closed 通过）**：`import-provenance.json` 记录 `so101_demo.adapters.act.physics_clock_admission` 与 `physics_clock_history` 均解析到 snapshot 内；`authority_transaction` 在修复前提交中**按预期不存在**；`so101_mujoco_support` 仍来自已验证 install overlay `i`；并且**没有任何被测模块解析到修复后的源码或 build 树**（该项为硬性 fail-closed 检查）。
+- **严格同集核验**：`amended-manifest.txt` 128 = `amended-red-junit.xml` 128，且与 `final-manifest.txt`/`final-green-junit.xml` 的 128 个名称**集合完全相同**（missing/extra 均为空）。amended RED 结果 **20 failed / 108 passed**，elapsed `1,092,126,694 ns`。
+- **失败分类（全部命中目标边界，无环境/import 配置失败）**：14 个为“修复前 snapshot 中 phase D 模块不存在”（阶段 D 边界）；5 个为“目标契约行为在修复前实现中不成立”；1 个为 version 转换断言（`assert 2 > 2`，阶段 C2 边界）。分类明细见 `amended-name-set-verification.json`。
+- 新 checkpoint：`experiments/exp568-amended-red-baseline/checkpoint.json`，SHA256 `1b5ed59405d0c5910dd23cb2e2e8d606215a81f2318820168c6f4d564514b002`（记录 pre-fix commit、覆盖说明、import provenance、128/128 严格同集核验、失败分类与对 CP-603 的更正）；旧 checkpoint 保留。
+- 边界：Gate 5 仍 OPEN，现停在 Gate 5 请求第六次本机独立 Astra/High 复核，不自批；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 全部保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
