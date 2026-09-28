@@ -6771,3 +6771,12 @@ status: PLANNED_ISOLATED_STACK
 - **合格性证据（四个套件 rc 均为 0，全新 scratch + 原始证据文件，且断言镜像文件与当前 worktree 逐文件哈希相等）**：`r14-terminal` **10 passed**、`r14-corrected` **12 passed**、`r14-probes` **51 passed、零警告**、`r14-six` **151 passed、零警告**；每个套件的 `<name>-raw.txt` 记录 argv、解释器绝对路径、cwd、PYTHONPATH、原始 `tempfile.gettempdir()` 输出、导入 `__file__` 溯源、起止时间、elapsed、rc、失败/警告扫描、源文件与镜像比对结果。未运行 full/build/installed。
 - **契约**：权威模型新增第 6/7 条（终态 receipt 权威且保留原因；单一终止器无覆盖、不覆写），历史文字仍明确标注 NON-AUTHORITATIVE HISTORICAL。契约 SHA256 `eafaf7eeb542bf5621e1e5fffcdfe1ed28819a41362b97721e4de7c9c9829680`。
 - **冻结**：源码修复提交 `067bf6d8f007e1f3d968590bb407b2088a937a67`；清单快照 `inventory-snapshot-review14-final.json`（review-13 快照已标注 SUPERSEDED）；本 ledger 与 `handoff/2026-09-28-review14-request-exp573.md` 为更晚的文档提交。**请求第十四次独立复核**，不自批；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0，Task 12 NOT_STARTED）；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-671 — review 14 补充：terminate 契约的诚实 pre-fix RED（不改变已冻结源码/清单）
+
+- 按用户要求补齐上轮披露的 RED 缺口：用 **已提交的 pre-fix 修订 `dec477a6e4df3745ea264c386aa56f13518a19e0`** 的 `git archive` 基线（全新目录，未改动实时工作树）配 **当前** `test_act_exp573_terminate_contract.py` 与所需未改动辅助测试文件，在**唯一且此前不存在**的 scratch（`TEMPDIR/TMP/TEMP` 已导出、以精确解释器断言 `tempfile.gettempdir()`）中运行。
+- **溯源证明**：基线中每个 `src/so101_demo_py/src/**/*.py` 都与 `git show dec477a6:<path>` **逐字节相等**（原文记录中 `equal=False` 计数为 **0**）；目标测试文件与当前 GREEN 文件逐字节相等（SHA256 `5629b4817f43468ba232336c03956cbc978272f9cb2426ff36764234b67c319e`）。
+- **RED 结果（诚实且命中目标行为）**：`5 failed / 2 passed`，**0 error、0 warning**；失败项正是目标行为——无 terminal 覆盖（`test_terminate_exposes_no_terminal_override`）、已终态 receipt 的权威原因保留（`[...terminal_state_and_reason[UNKNOWN|REJECTED]]`）、以及端到端闭合中的 registry 原因断言（`[UNKNOWN|REJECTED]`）；两项通过是 pre/post 行为一致的用例（IN_FLIGHT 终止为 UNKNOWN、ACCEPTED 正向对照）。无任何用例因测试接缝、缺失无关 API、导入或收集错误而失败，故判定为**合格 RED**，非 NONQUALIFYING。
+- 原始证据（追加式）：`experiments/exp573-single-receipt/red-terminate-raw.txt`（argv、解释器、cwd、PYTHONPATH、原始 tempfile、导入溯源、基线提交、逐文件等价证明、起止时间、elapsed、rc、失败/错误/警告扫描、源哈希）、`red-terminate.log`、`red-terminate-junit.xml`；GREEN 对照为 `r14-terminal`（10 passed）。
+- **未改动**：review-14 请求包与已冻结的 `inventory-snapshot-review14-final.json` 均未修改；本轮只新增补充文件 `handoff/2026-09-28-review14-supplement-exp573.md` 与本 ledger 指针（源码/清单冻结提交之后）。HEAD `521933f1`，`git status --short | wc -l` = 42（仅既有 dirty entries）。
+- 边界：Gate 5 OPEN，**等待第十四次独立复核**，不自批；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0，Task 12 NOT_STARTED）；证据追加式，无删除或覆盖。
