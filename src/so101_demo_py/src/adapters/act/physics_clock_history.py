@@ -114,6 +114,47 @@ class PhysicsClockHistory:
                     "evidence_ready": (self.epoch is not None and self.hazard is None
                                        and self._first_chunk_seen)}
 
+    def commit_receipt(self, *, expected_version, expected_incarnation, expected_epoch, step,
+                       max_age_ns):
+        """O(1) final commit primitive: one history lock, fresh time, full validation.
+
+        This is the single linearization point for admission and authority claims.
+        It reads its own monotonic time, latches any expired deadline/hazard inside
+        the same lock, and validates the expected version/incarnation/epoch, the
+        readiness of the epoch, the selected step and its selected-state age. It
+        returns an immutable scalar receipt; no large copy happens under the lock.
+        """
+
+        if (type(expected_version) is not int or expected_version < 0
+                or type(expected_epoch) is not int or expected_epoch < 1
+                or not isinstance(expected_incarnation, str) or not expected_incarnation
+                or type(step) is not int or step < 1
+                or type(max_age_ns) is not int or max_age_ns < 1):
+            raise ValueError("PHYSICS_COMMIT_ARGUMENT_INVALID")
+        with self._lock:
+            now_ns = _integer(self.clock_ns(), "readback_ns", 1)
+            self._expire_deadlines(now_ns)
+            if self.hazard is not None:
+                raise ValueError(self.hazard)
+            if self.epoch is None or not self._first_chunk_seen:
+                raise ValueError("PHYSICS_CLOCK_UNAVAILABLE")
+            if self.version != expected_version:
+                raise ValueError("PHYSICS_COMMIT_VERSION_CHANGED")
+            if self.incarnation != expected_incarnation or self.epoch != expected_epoch:
+                raise ValueError("PHYSICS_COMMIT_INCARNATION_CHANGED")
+            for entry in reversed(self._history):
+                sample = entry["sample"]
+                if sample.physics_step == step:
+                    age_ns = now_ns - sample.clock_interval_end_monotonic_ns
+                    if age_ns < 0 or age_ns > max_age_ns:
+                        raise ValueError("PHYSICS_COMMIT_SELECTED_STALE")
+                    return {"version": self.version, "incarnation": self.incarnation,
+                            "epoch": self.epoch, "step": step, "age_ns": age_ns,
+                            "commit_monotonic_ns": now_ns,
+                            "source_end_monotonic_ns":
+                                sample.clock_interval_end_monotonic_ns}
+            raise ValueError("PHYSICS_COMMIT_STEP_UNAVAILABLE")
+
     def snapshot(self):
         """Versioned view of the current history state for commit revalidation."""
 
@@ -360,4 +401,6 @@ class PhysicsClockHistory:
                     self.hazard = "PHYSICS_CLOCK_STALE"
                     self.version += 1
                 raise ValueError("PHYSICS_CLOCK_STALE")
+            # (the STALE branch above and the no-fresh-sample branch below each
+            # advance the version exactly once per real hazard transition)
             return selected

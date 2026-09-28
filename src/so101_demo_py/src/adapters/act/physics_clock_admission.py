@@ -152,6 +152,11 @@ class PhysicsClockAdmission:
                 validate_stop_evidence(self.retire_record["identity"],
                                        self.retire_record["stop_evidence"],
                                        now_ns=self._clock_ns())
+            if self._revoked is not None and self._stop_confirmed:
+                # A confirmed stop releases takeover only while its preserved,
+                # isolated evidence is still valid under the shared validator.
+                validate_stop_evidence(self._identity, self._revoked.get("stop_evidence"),
+                                       now_ns=self._clock_ns())
             if self._identity is not None and not self._retired and not (
                     self._revoked is not None and self._stop_confirmed):
                 # An active owner (or one whose stop is unconfirmed) may not be
@@ -287,6 +292,7 @@ class PhysicsClockAdmission:
             validate_stop_evidence(self._identity, evidence, now_ns=self._clock_ns())
             confirmed_ns = self._clock_ns()
             self._stop_confirmed = True
+            self._revoked["stop_evidence"] = copy.deepcopy(dict(evidence))
             self._revoked["confirmed_stop_monotonic_ns"] = confirmed_ns
             self._revoked["stop_evidence_monotonic_ns"] = evidence["monotonic_ns"]
             self._revoked["stop_record_monotonic_ns"] = self._clock_ns()
@@ -387,15 +393,15 @@ class PhysicsClockAdmission:
         with self._lock:
             now_ns = self._clock_ns()
             self._fence_locked(identity, "sample", now_ns)
-            current = history.commit_state()
-            if current != snapshot:
-                raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_VERSION_CHANGED")
-            if not history.evidence_ready:
-                raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_NOT_READY")
-            age_ns = now_ns - entry["sample"].clock_interval_end_monotonic_ns
-            if not 0 <= age_ns <= self._selected_max_age_ns:
-                raise AdmissionRefused("CLOCK_ADMISSION_SELECTED_STALE")
-            return {"sample": entry["sample"],
+            try:
+                receipt = history.commit_receipt(
+                    expected_version=snapshot["version"],
+                    expected_incarnation=snapshot["incarnation"],
+                    expected_epoch=snapshot["epoch"], step=sample.physics_step,
+                    max_age_ns=self._selected_max_age_ns)
+            except ValueError as error:
+                raise AdmissionRefused(f"CLOCK_ADMISSION_COMMIT_REFUSED:{error}") from error
+            return {"sample": entry["sample"], "commit_receipt": receipt,
                     "received_monotonic_ns": entry["received_monotonic_ns"],
                     "identity": identity, "history_version": current["version"],
                     "command_authority": False, "stage": "sample"}
@@ -411,6 +417,7 @@ class PhysicsClockAdmission:
         the same critical section before the consume callable.
         """
 
+        raise AdmissionRefused("CLOCK_ADMISSION_LEGACY_CONSUME_REMOVED")
         if stage not in STAGES or stage == "sample":
             raise ValueError("CLOCK_ADMISSION_STAGE_INVALID")
         if not callable(consume):
