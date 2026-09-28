@@ -200,3 +200,36 @@ def campaign_config_from(collection_config: dict, *, qualification: bool) -> dic
     if recovery_block.get("business_retry_count") != 0:
         raise ValueError("COLLECTION_BUSINESS_RETRY_FORBIDDEN")
     return {"max_wave_size": max_wave_size, "qualification": qualification}
+
+
+class ActFixedCollectionWorkload:
+    """The port the existing parallel worker dispatches to for a fixed ACT collection wave.
+
+    It follows the same shape as `ActCollectionWorkload`: the worker sees a `kind` and a
+    `run_authorized` call, and every decision about *what* to collect stays inside the campaign, so the
+    worker cannot widen a wave or re-collect a sealed scene.
+    """
+
+    kind = "act_fixed_collection"
+
+    def __init__(self, campaign, *, runtime, boundary=None) -> None:
+        self.campaign = campaign
+        self.runtime = runtime
+        self.boundary = boundary
+
+    def run_authorized(self, lease, *, start_event_id, start_event_type, reset_epoch) -> dict:
+        if (not isinstance(lease, dict) or lease.get("admitted") is not True
+                or lease.get("start_event_id") != start_event_id
+                or lease.get("start_event_type") != start_event_type):
+            # the same refusal the runtime adapter makes: no lease, no collection
+            raise ValueError("ACT_COLLECTION_LEASE_UNAVAILABLE")
+        if lease.get("reset_epoch") != reset_epoch:
+            raise ValueError("ACT_COLLECTION_RESET_EPOCH_MISMATCH")
+        # the campaign is the executor here: the runtime adapter is its collect port, not this caller's
+        if not callable(getattr(self.campaign, "run", None)):
+            raise ValueError("ACT_COLLECTION_CAMPAIGN_UNAVAILABLE")
+        run = lambda: self.campaign.run()
+        outcome = self.boundary(run) if self.boundary is not None else run()
+        if not isinstance(outcome, dict) or "campaign_index" not in outcome:
+            raise ValueError("ACT_COLLECTION_OUTCOME_INVALID")
+        return outcome
