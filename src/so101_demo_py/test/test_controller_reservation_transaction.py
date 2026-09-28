@@ -1,5 +1,7 @@
 """The broker must own a goal ticket before controller reservation and send."""
 
+import threading
+
 import pytest
 
 from so101_demo.act.ownership import Ownership
@@ -66,6 +68,9 @@ class ReservationPort:
 
     def close_generation(self, generation):
         self.closes.append(generation)
+        if getattr(self, "block_close", False):
+            self.close_entered.set()
+            self.close_release.wait(5.0)
         if self.fail_close:
             raise RuntimeError("CONTROLLER_RESERVATION_CLOSE_UNCONFIRMED")
 
@@ -223,3 +228,100 @@ def test_moveit_teacher_goal_stops_before_goal_preparation_without_proxy():
     assert port.closes == [ticket[0]]
     assert driver.discards == []
     assert broker.ownership.state != "RUNNING"
+
+
+def _status_request(request_id="r2"):
+    return dict(protocol_version=1, request_id=request_id, owner="act", session_id="session",
+                attempt_id="attempt", lease_token="", operation="status")
+
+
+def test_direct_dispatch_does_not_hold_the_broker_lock_across_the_close():
+    """A reservation failure on the direct dispatch entry must clean up unlocked."""
+
+    broker, driver, port, ticket = prepared_broker()
+    port.fail_reserve = True
+    port.block_close = True
+    port.close_entered = threading.Event()
+    port.close_release = threading.Event()
+    outcome = {}
+
+    def run_dispatch():
+        try:
+            broker.dispatch(ticket, "arm", {"trajectory": "fixed"})
+        except Exception as failure:                      # noqa: BLE001
+            outcome["error"] = failure
+
+    dispatch_thread = threading.Thread(target=run_dispatch, daemon=True)
+    dispatch_thread.start()
+    assert port.close_entered.wait(5.0), "the dispatch cleanup never reached the close"
+
+    progressed = threading.Event()
+
+    def run_status():
+        broker.handle(_status_request(), "connection-2")
+        progressed.set()
+
+    status_thread = threading.Thread(target=run_status, daemon=True)
+    status_thread.start()
+    observed = progressed.wait(1.0)
+    port.close_release.set()
+    dispatch_thread.join(10.0)
+    status_thread.join(5.0)
+    assert observed, ("a concurrent operation could not progress while the direct dispatch "
+                      "held the broker lock across the controller close")
+
+
+def _recovery_broker():
+    """A broker whose lease belongs to a non-ACT owner, so submit is permitted."""
+
+    driver = PreparedDriver()
+    port = ReservationPort(driver)
+    ownership = Ownership()
+    broker = CommandBroker(driver, ownership=ownership, reservation_port=port)
+    driver.broker = broker
+    if not hasattr(driver, "validate"):
+        driver.validate = lambda kind, goal: {"trajectory": "fixed"}
+    request = dict(protocol_version=1, request_id="r1", owner="recovery", session_id="session",
+                   attempt_id="attempt", lease_token="", operation="acquire")
+    response = broker.handle(request, "connection")
+    assert response["accepted"], response
+    return broker, driver, port, response["lease_token"]
+
+
+def test_handle_nested_submit_does_not_hold_the_broker_lock_across_the_close():
+    """The handle submit path uses _dispatch_locked; handle's finalization drains unlocked."""
+
+    broker, driver, port, token = _recovery_broker()
+    port.fail_reserve = True
+    port.block_close = True
+    port.close_entered = threading.Event()
+    port.close_release = threading.Event()
+    submit = dict(protocol_version=1, request_id="r2", owner="recovery", session_id="session",
+                  attempt_id="attempt", lease_token=token, operation="submit",
+                  action_kind="arm", goal={"trajectory": "fixed"})
+    outcome = {}
+
+    def run_submit():
+        try:
+            broker.handle(submit, "connection")
+        except Exception as failure:                      # noqa: BLE001
+            outcome["error"] = failure
+
+    submit_thread = threading.Thread(target=run_submit, daemon=True)
+    submit_thread.start()
+    assert port.close_entered.wait(5.0), "the nested submit cleanup never reached the close"
+
+    progressed = threading.Event()
+
+    def run_status():
+        broker.handle(_status_request("r3"), "connection-2")
+        progressed.set()
+
+    status_thread = threading.Thread(target=run_status, daemon=True)
+    status_thread.start()
+    observed = progressed.wait(1.0)
+    port.close_release.set()
+    submit_thread.join(10.0)
+    status_thread.join(5.0)
+    assert observed, ("a concurrent operation could not progress while the handle-nested "
+                      "dispatch held the broker lock across the controller close")

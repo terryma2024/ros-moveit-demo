@@ -92,6 +92,20 @@ class CommandBroker:
         return receipt
 
     def dispatch(self,ticket,kind,goal,*,trusted_search_neck=False):
+        """Public boundary for direct callers: locks inside, drains afterwards.
+
+        Callers that already hold the broker lock (the handle dispatch path) must use
+        ``_dispatch_locked`` directly and rely on their own boundary finalization.
+        """
+
+        try:
+            return self._dispatch_locked(ticket,kind,goal,
+                                         trusted_search_neck=trusted_search_neck)
+        finally:
+            # no broker lock is held here: run any reserved-failure cleanup unlocked
+            self._drain_cleanup_once(self._pending_token_snapshot())
+
+    def _dispatch_locked(self,ticket,kind,goal,*,trusted_search_neck=False):
         with self._lock,self.ownership.authorized(*ticket[1:]):
             self.ownership.require_ticket(ticket)
             self._post_reset_ticket=None
@@ -729,7 +743,7 @@ class CommandBroker:
                             if self._reset_ticket is not None:raise PermissionError('RESET_IN_PROGRESS')
                             if request['owner']=='act':raise PermissionError('ACT_PREFIX_REQUIRED')
                             goal=self.driver.validate(request['action_kind'],request['goal'])
-                            response['goal_id']=self.dispatch(ticket,request['action_kind'],goal)
+                            response['goal_id']=self._dispatch_locked(ticket,request['action_kind'],goal)   # handle's finalization drains
                         elif operation in ('cancel','goal_status'):
                             gid=identifier(request['goal_id'])
                             if self._goal_tickets.get(gid)!=ticket:raise PermissionError('GOAL_SCOPE_INVALID')
