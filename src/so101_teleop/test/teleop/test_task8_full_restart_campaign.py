@@ -19,12 +19,15 @@ def _h(value):
     return hashlib.sha256(value).hexdigest()
 
 
-def _setup(tmp_path, *, duplicate_at=None, fail_at=None, existing_at=None):
+def _setup(tmp_path, *, duplicate_at=None, fail_at=None, existing_at=None,
+           runtime_drift_at=None):
     anchors = {name: {"cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.0}
                for name in ("default", "left", "forward")}
     manifest = build_task8_live_manifest(
         anchors, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
-        collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64)
+        collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
+        calibration_report_path="calibration-report.json",
+        calibration_report_sha256="e" * 64)
     manifest_path = tmp_path / "manifest.json"
     write_new_manifest(manifest_path, manifest)
     journal_root = tmp_path / "task8-live" / "cases"

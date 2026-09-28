@@ -112,11 +112,21 @@ async def run_full_restart_campaign(
             raise ValueError("TASK8_CASE_OWNER_REUSED")
         child = _resource_identity(spec, manifest_path, journal_root, case_id,
                                    journal_path, seen)
+        if service_runtime_id is None:
+            service_runtime_id = spec.runtime_id
+        elif spec.runtime_id != service_runtime_id:
+            raise ValueError("PICK_PLACE_CASE_RUNTIME_DRIFT")
         owners.append(owner)
+        prepared.append((case, spec, owner, child, journal_path))
+    journals = {}
+    for case, spec, owner, child, journal_path in prepared:
+        case_id = case["case_id"]
         row = await execute_case(spec, case_id, owner, journal_path)
         journals[case_id] = _require_retired_row(row, case, child, journal_path)
     summary = {
-        "status": "PASSED", "manifest_sha256": manifest["manifest_sha256"],
+        # the summary keeps its own field name; its value is the manifest DOCUMENT digest, which
+        # the v2 manifest names manifest_document_sha256 (the file digest is separate, below)
+        "status": "PASSED", "manifest_sha256": manifest["manifest_document_sha256"],
         "manifest_file_sha256": hashlib.sha256(_regular_bytes(manifest_path)).hexdigest(),
         "prefix_count": len(manifest["prefix_cases"]),
         "consecutive_full_count": len(manifest["full_cases"]),
