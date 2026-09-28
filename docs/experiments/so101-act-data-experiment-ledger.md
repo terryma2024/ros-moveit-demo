@@ -7879,3 +7879,27 @@ evidence root; none reused another run's directory.
   `experiments/gate6-runtime/task8-core/t8p3-remaining-plan.md`.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-721 — Task 8P4: all fourteen case journals re-checked against the bundle
+
+- **Delivered:** `validate_case_journals(case_root, manifest, *, identities,
+  manifest_document_sha256)` in `act/task8_live_qualification.py`: every journal must be a regular
+  file under `<case-root>/task8-live/cases/` (no symlink, no escape) with a case id matching its own
+  filename; each row is re-checked with the committed `require_case_journal_row` (closed 13-key
+  shape, both retirement receipts, prefix forbidden a live-evidence artifact, full required one) and
+  `require_case_row_matches_bundle` (all four identity digests equal to the bundle's).
+- **Reuse over re-implementation:** 8P4 consumes the sub-slice C rules and the CP-718 identity
+  binding rather than duplicating them, so the two paths cannot drift.
+- **Test defect found and fixed (mine, in the fixture):** the "final full case missing" parameter was
+  written as `full-14` although the manifest's fulls are `full-01…full-05`, so nothing was skipped
+  and the test asserted a refusal that never came. Corrected to `full-05` — the assertion was kept,
+  the fixture fixed. This is the second fixture (not code) defect this session; the same rule applied.
+- **Gate correction:** the earlier whole-surface runs (95/146/153 passed) were serial targeted runs,
+  not the module-level xdist gate. This slice was therefore re-run under `-n 8` (`min(8, 32)`):
+  **33 passed** with the exact venv Python 3.12.3 and a `TMPDIR` probe inside a fresh `/data`
+  scratch (`gate6-batch3-py-gate/t8p4c.{log,junit.xml}`). The full-suite xdist gate for the combined
+  8P3/8P4 boundary remains pending, as the handoff schedules it.
+- **Remaining in 8P4:** the aggregator entry point `build_task8_qualified_report(...)`, its CLI, the
+  `QUALIFIED` schema/`calibration.py` updates and the real-composition integration test.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
