@@ -314,10 +314,12 @@ class CommandBroker:
                 # performs the controller close, pair cancel and driver stop unlocked
                 self._cleanup_pending=(generation,self._armed_generation,
                                        self.ownership.reason or 'REVOKED')
-            # probe only when the driver exposes the state: the phased cleanup runs the
-            # stop first, so a double without stopped() must not surface an AttributeError
+            # Confirmation is only legitimate when no physical stop is outstanding: with a
+            # pending or in-flight token the drainer's finalize confirms after the unlocked
+            # stop I/O, so confirming here would claim a stop that has not been requested yet.
             probe=getattr(self.driver,'stopped',None)
-            if (callable(probe) and not any(not future.done() for future in self._writes)
+            if (self._cleanup_pending is None and self._cleanup_inflight is None
+                    and callable(probe) and not any(not future.done() for future in self._writes)
                     and probe()):
                 self.ownership.confirm_stopped(True)
 
