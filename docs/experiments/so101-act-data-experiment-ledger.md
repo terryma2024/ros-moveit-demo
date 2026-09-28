@@ -10090,3 +10090,25 @@ the runtime ladder for authorisation.
   `adapters/act/lerobot.py` (Task 12, needs a training interpreter), plus the runtime ladder.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-818 — Task 8P3: the preparation entry point is a compatibility alias, not a second implementation
+
+- **Read before writing:** the tree already shows the shape the plan demands. `act_prepare_task8_live.py` and
+  `act_task8_live.py` are **eight-line shims** that re-export the canonical module through
+  `sys.modules[__name__] = importlib.import_module(...)`, and `act_prepare_pick_place_validation.py` (62 lines)
+  is the canonical preparation implementation registered in `setup.py`.
+- **Delivered:** `cli/act_prepare_task8_live_artifacts.py` in exactly that shape, its `setup.py` entry, and
+  `test_act_task8_live_artifacts_alias.py`.
+  - the test asserts each shim stays **under ten lines** with the shim statement intact, so one cannot quietly
+    grow logic;
+  - it asserts that **importing an alias yields the canonical module object itself** (`module is target`), so
+    an alias cannot drift away from `act_prepare_pick_place_validation`;
+  - it asserts the four console entries exist in `setup.py`.
+- **Why that is the right reading:** the plan states the two `act_*task8_live.py` files "只保留兼容转发，不承载第二套逻辑",
+  and the existing pair implements precisely that; adding a third canonical implementation would have
+  contradicted the plan and duplicated live preparation logic.
+- **Verification:** focused tests **3 passed** (`gate6-batch3-py-gate/task8p3alias.{log,junit.xml}`).
+- **Remaining plan artifacts:** `adapters/act/lerobot.py` (Task 12, needs a training interpreter) and the
+  runtime ladder (Task 8L onward), both outside the no-runtime boundary this session has held.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
