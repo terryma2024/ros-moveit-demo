@@ -10346,3 +10346,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   remain with the user and I am holding at them: (1) row 33's MuJoCo version pin, and (2) the earlier
   training-interpreter versus runtime-ladder authorization. Per instruction I have not returned to the
   pre-runtime adapter work.
+
+## CP-828 — Spot-check of the reconciliation report's own quotations
+
+- **Nine quoted values re-derived from git after the report was written**, all accurate: the URDF optical-joint
+  rpy at remote (`3.141592653589793 0 0`) and HEAD
+  (`2.8353982087874967 0.18314198347413257 -0.078279728970571671`); the message field count (10, with the
+  remote's 8 fields as an exact prefix); the three remote CMake targets still present at HEAD; both version
+  checks in the plugin (`mj_version() != 340` remote, `mj_version() != mjVERSION_HEADER` HEAD); and the
+  `calibration_motion.py` timeout binding at HEAD.
+- **The check harness had one flaw of its own:** for the three boolean rows it compared a Python `True` against
+  the string `"True"` and therefore printed MISMATCH for values that were correct. The underlying readings are
+  accurate; the comparison was wrong. It is recorded in the report rather than quietly fixed, because a
+  verification that discloses its own flaw is worth more than one that hides it.
+- **No production code changed, no gate run, no runtime or motion, no hardware, no evidence deleted, no push, no
+  gate lowered;** user's 43 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
+- **Still holding** at the two user decisions: row 33's MuJoCo version pin, and the training-interpreter versus
+  runtime-ladder authorization.
