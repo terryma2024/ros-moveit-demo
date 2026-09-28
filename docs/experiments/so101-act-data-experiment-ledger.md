@@ -10456,3 +10456,45 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   push, no deletion; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED. The goal remains in the
   **user-decision blocked state** (revision 27), awaiting the training-interpreter versus runtime-ladder
   authorization and the preflight adapter's two mappings.
+
+## CP-833 — Preflight adapter GREEN under the two approved decisions
+
+- **Source change:** new `src/adapters/act/candidate_reachability.py` plus
+  `test/test_act_candidate_reachability.py`, committed as `4e9c787c`. TDD order was RED first:
+  `experiments/gate6-batch3-py-gate/beh-preflight-red.log` shows **4 xfailed** (strict) against the absent
+  module, then `beh-preflight-green.log` shows **9 passed**; the neighbouring focused modules
+  (`test_act_candidate_source`, `test_act_sampling`, `test_act_sample_cli`, `test_core_import_boundaries`)
+  plus the new file were run together as `beh-preflight-integration.log`: **22 passed, rc=0**.
+- **Decision 1 applied - reuse only, no invention:** phase targets are selected from the task policy's own
+  motion states via `PHASE_STATES` (`pregrasp` -> `State.MOVE_ABOVE_OBJECT`, `grasp` -> `DESCEND`,
+  `lift` -> `LIFT`, `place` -> `DESCEND_TO_PLACE`, `retreat` -> `RETREAT`, imported from
+  `so101_demo.core.domain`), so no pose, threshold, state name or default is authored in the adapter. The
+  table-clearance threshold is the carry policy's `minimum_table_clearance_m` passed in by the caller and
+  compared against supplied geometry; unknown geometry returns
+  `SCENE_GEOMETRY_UNAVAILABLE` with `ok=False`, never a pass. Visibility comes only from the frozen
+  visible-approach profile and requires `eligible_for_collection is True`, otherwise
+  `VISIBILITY_PROFILE_NOT_ELIGIBLE`.
+- **Decision 2 applied - independent evidence, not one receipt reused:** `probe_candidate` issues **two
+  `planner.plan(...)` calls per phase** (10 for five phases), and each carries its own typed receipt with an
+  explicit `gate_kind`, its own `receipt_sha256`, and identical bindings
+  (`candidate_identity`, `start_sha256`, `target_sha256`, `cup_sha256`, `provenance_sha256`). Tests assert
+  the call count, that the IK and plan binding sets are equal, that all ten receipt hashes differ, that
+  `require_gate_kind` raises `GATE_KIND_MISMATCH` in both directions, and that a refused IK call leaves the
+  pair's plan verdict untouched (`grasp_ik False` with `grasp_plan True`).
+- **Both documents validate against the CP-765 contracts:** `build_reachability_document` produces
+  `{schema_version, kind: act_candidate_reachability, gates}` with all 14 `REACHABILITY_GATES` per candidate
+  identity and only `{ok, evidence_sha256}` per gate, accepted by `ReachabilityReportPort.verify` (14
+  verdicts, unknown candidate refused with `CANDIDATE_NOT_IN_REACHABILITY_REPORT`);
+  `build_candidate_source_document` produces the closed candidate-source document accepted by
+  `load_candidate_source`, including the 8/40 qualification counts and the overlap rule.
+- **Interface gap reported rather than faked:** the adapter can only *assemble* documents from receipts; a
+  real preflight still needs a MoveIt-backed `ReachabilityPlannerPort`, which belongs to the runtime ladder
+  (Task 8L), not to this offline boundary. No receipt shape was invented for that port.
+- **Wording correction as instructed:** the accurate dirty-path accounting is **31 modified + 12 untracked =
+  43 total**, replacing the older "43 modified + 12 untracked" phrasing used earlier in this ledger.
+- **Scratch discipline:** each fsync-capable run used a fresh NVMe directory under the registered evidence
+  root and verified `tempfile.gettempdir()` through the exact interpreter
+  (`pg14tmp.eIdL` for RED, `pg15.m0Zq` for GREEN, `pg16.ci8L` for the integration run); all three are
+  deletion candidates after readback and none was deleted.
+- **Boundaries:** no runtime or motion, no hardware, no gate lowered, no push, no evidence deleted; user's
+  31 modified and 12 untracked paths untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
