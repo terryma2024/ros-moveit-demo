@@ -6726,3 +6726,11 @@ status: PLANNED_ISOLATED_STACK
 - 已固化的 RED：`test_revoke_completes_while_the_real_step_at_copy_is_blocked`（屏障注入真实 `physics_clock_history.copy.deepcopy`，从 `step_at` 的真实拷贝内部发出事件；worker 结果被捕获并断言 `AdmissionRefused`，`finally` 恢复原函数，无未处理线程异常警告）。改名后的 `test_revoke_completes_while_the_real_pre_boundary_copy_is_blocked` 已被该用例取代；send 入口并发用例保留有效。
 - 步骤 1 快照权威 RED/GREEN 已完成（见 CP-664）：GREEN 6 passed（当前树）、RED 6 failed（`3cb1f065`，同名同源、未破坏无关接缝）。
 - 边界：Gate 5 OPEN/BLOCKED，**不请求 review 11**，不自批；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-666 — EXP-573 冻结与 review 11 请求（含 CP-665 更正）
+
+- **更正 CP-665（重要）**：先前“revoke 被 history 锁阻塞”的结论**错误**。真实原因是我把 `history_module.copy.deepcopy` 换成了阻塞函数，而 `physics_clock_history` 与 `physics_clock_admission` 导入的是**同一个 stdlib `copy` 模块对象**，因此该赋值**全局**生效，连 `_revoke_locked` 内部的 `copy.deepcopy(self._revoked)` 也被拦截并等待 `release`——那是测试插桩造成的假阳性，**不是**生产锁图缺陷；`_revoke_locked` 并不触碰 history。已按此只修插桩、**未改动任何生产锁**：改为把 history 模块的 `copy` **绑定**替换为本地代理对象（`deepcopy` 委托给保存的真实实现，且仅当对象类型为 `PhysicsStepEvidence` 时阻塞），`try/finally` 恢复，移除了无用的 payload 变量，并以独立探针线程断言**屏障确实在 history 锁被持有期间执行**。
+- **实测（镜像 `mirror-36/37`，逐文件 SHA 等于 worktree；每次新建 scratch + tempfile 探针 PASS）**：EXP-572 模块 **11 passed、零警告**（`deepcopy2.log`/JUnit）；四类探针（行为 7 + EXP-572 11 + single-receipt 2 + failure-closure 9 + snapshot-authority 6 = **35 passed、零警告**，`final-probes.log`，rc=0，elapsed 0.88 s）；六模块 **151 passed、零警告**（`final-six.log`，rc=0，elapsed 1.29 s）。命令/解释器/scratch/耗时/退出码/JUnit 路径已写入 `run-metadata.txt`。
+- **快照权威 RED/GREEN**：GREEN 6 passed（当前树）；RED 6 failed（已提交的修复前 `3cb1f065`，同名同源）。send 入口并发用例保留有效。
+- **Gate-5 材料冻结**：契约与锁图按实现逐条更正——`identity_snapshot` 仅端口锁；`capture_controller_identity` 在 registry 锁**前**采样、在 registry 锁**内**校验并绑定；claim 为 `registry -> admission -> history` 且只消费内部快照；`reserve`/`send` 仅端口锁并重校验 generation/controller-incarnation/expected boot；**任何公开 API 都不接受调用方快照**（传入即 TypeError）；移除 claim_guard、双 receipt、端口在 claim 内、旧 legacy 快照等过时表述。已重生成 `inventory-snapshot.json`（change）与 `final-evidence-inventory.json`（evidence），并**单独提交清单快照**（`b094001c`），随后本 ledger 与 `handoff/2026-09-28-review11-request-exp573.md`（引用上述整文件 SHA-256）作为**后续提交**，两者边界明确。
+- 边界：Gate 5 OPEN，**请求第十一次独立复核**，不自批；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0，Task 12 NOT_STARTED）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，失败证据保留，无删除或覆盖。
