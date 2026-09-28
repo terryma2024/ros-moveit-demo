@@ -110,7 +110,10 @@ def test_wrong_owner_identity_and_generation_are_refused():
                              token={"identity": admission.identity, "owner_identity": admission.identity,
                                     "stage": "route_dispatch", "history_version": 0,
                                     "incarnation": "inc-other", "reset_epoch": 1})
-    assert _run(tx, controller_generation=999) == "REJECTED"
+    # a caller generation that does not match the admission identity cannot even
+    # produce a permit for this transaction
+    with pytest.raises((at.AuthorityRefused, Exception), match="AUTHORITY_|"):
+        _run(tx, controller_generation=999)
 
 
 def test_permit_deadline_crossing_during_the_claim_commit_is_refused():
