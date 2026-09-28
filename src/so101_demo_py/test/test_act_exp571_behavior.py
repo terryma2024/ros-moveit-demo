@@ -120,36 +120,48 @@ def test_timeout_terminalizes_both_transaction_and_registry():
 def test_malformed_receipt_terminalizes_and_cannot_be_corrected():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission, registry, port, tx = _transaction(now)
-    handle, fields = _post_receive(registry, admission, history, port, now)
-    missing = {key: value for key, value in fields.items() if key != "sequence"}
+    assert tx.run_to("receive", stage="route_dispatch", role="arm", goal_uuid="g-1",
+                     target_digest="d-1", controller_generation=1,
+                     controller_incarnation="i") == "IN_FLIGHT"
+    fields = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    incomplete = {key: value for key, value in fields.items() if key != "sequence"}
     with pytest.raises(Exception):
-        registry.receipt(handle, **missing)
-    assert registry.state_of(handle) == "UNKNOWN", "a missing field left the permit live"
+        registry.receipt(tx.handle, **incomplete)
+    assert registry.state_of(tx.handle) == "UNKNOWN", "a missing field left the permit live"
     with pytest.raises(Exception):
-        registry.receipt(handle, **fields)
-    assert registry.state_of(handle) == "UNKNOWN"
+        registry.receipt(tx.handle, **fields)
+    assert registry.state_of(tx.handle) == "UNKNOWN"
 
 
 def test_wrong_controller_boot_incarnation_is_refused():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission, registry, port, tx = _transaction(now)
-    handle, fields = _post_receive(registry, admission, history, port, now)
+    assert tx.run_to("receive", stage="route_dispatch", role="arm", goal_uuid="g-1",
+                     target_digest="d-1", controller_generation=1,
+                     controller_incarnation="i") == "IN_FLIGHT"
+    fields = dict(port.last_receipt(permit_id=tx.handle.permit_id))
     wrong = dict(fields, controller_boot_incarnation="someone-else")
     with pytest.raises(Exception):
-        registry.receipt(handle, **wrong)
-    assert registry.state_of(handle) != "ACCEPTED"
+        registry.receipt(tx.handle, **wrong)
+    assert registry.state_of(tx.handle) != "ACCEPTED"
 
 
 def test_last_receipt_is_a_frozen_read_only_receive_record():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission, registry, port, tx = _transaction(now)
-    handle, before = _post_receive(registry, admission, history, port, now)
-    now[0] += 5_000_000_000
-    after = port.last_receipt(permit_id=handle.permit_id)
-    assert after["observed_ns"] == before["observed_ns"], "the receive observation was regenerated"
-    assert after["sequence"] == before["sequence"]
+    assert tx.run_to("receive", stage="route_dispatch", role="arm", goal_uuid="g-1",
+                     target_digest="d-1", controller_generation=1,
+                     controller_incarnation="i") == "IN_FLIGHT"
+    fields = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    observed, sequence = fields["observed_ns"], fields["sequence"]
+    now[0] += 5_000_000_000            # time passes; the frozen record must not change
+    again = port.last_receipt(permit_id=tx.handle.permit_id)
+    assert again["observed_ns"] == observed, "the receive observation was regenerated"
+    assert again["sequence"] == sequence
+    assert again["claim_monotonic_ns"] == fields["claim_monotonic_ns"]
     with pytest.raises(Exception):
-        after["verdict"] = "REJECTED"
+        again["verdict"] = "REJECTED"
+    assert registry.receipt(tx.handle, **fields) == "ACCEPTED"
 
 
 def _compat(callable_obj, *args, **kwargs):
