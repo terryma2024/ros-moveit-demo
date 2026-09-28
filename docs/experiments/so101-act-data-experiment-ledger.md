@@ -6706,3 +6706,14 @@ status: PLANNED_ISOLATED_STACK
 - **实测（新建 scratch + tempfile 探针 PASS + 逐文件 SHA 等于 worktree 的镜像 `mirror-27..33`）**：六模块 **151 passed**（`step3d-six.log`/JUnit）；四探针 **29 passed**（`step3d-probes.log`/JUnit）。
 - 未完成（下一轮）：步骤 4 的五项快照权威行为用例（无捕获即拒绝、`claim_bound` 拒绝任何 snapshot kwarg、伪造值无法安装因捕获无值参数、rearm/boot 在捕获与 reserve 之间变化须拒绝且零发送、正常流程成功）——先在**未修复的旧提交**上取同名同源的 RED，再在修复树上取 GREEN；步骤 5 的零警告复核与全部任务自有改动提交；随后真实 deepcopy 屏障验证与最终簿记。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-664 — EXP-573：快照权威 RED/GREEN 达标；真实 deepcopy 屏障暴露“拷贝在 admission 锁内”的实现缺陷（RED 已固化）
+
+- **步骤 1 完成（快照权威）**：新增 `test/test_act_exp573_snapshot_authority.py` 六项行为用例——无捕获即拒绝、`claim_bound` 签名**不含任何 snapshot 参数**（`inspect.signature` 直接断言）、伪造值无法经任何公开 API 安装（`capture_controller_identity`/`claim_bound` 传 snapshot 均 TypeError）、捕获后 rearm 拒绝且零发送、捕获后 boot/restart 变化拒绝且零发送、正常捕获流程成功（正向对照）。
+  - **GREEN**：当前树 **6 passed**（`auth-green.log`/JUnit，scratch `exp573-auth-green.*`，镜像 `mirror-34`）。
+  - **RED（诚实来源）**：同一文件、同名用例在**已提交的修复前提交 `3cb1f065`** 上 **6 failed**（`auth-red.log`/JUnit，scratch `exp573-auth-red.*`，`baseline-auth-red` 由 `git archive 3cb1f065` 生成）——未破坏任何无关接缝来制造 RED。
+- **步骤 2 进展（真实 deepcopy 屏障）**：把屏障改为注入 `physics_clock_history.copy.deepcopy`，使事件从 `PhysicsClockHistory.step_at` **真实执行的深拷贝内部**发出（而非包装入口），并捕获 worker 结果、断言 `AdmissionRefused`、`finally` 中恢复原函数（消除未处理线程异常警告）。
+  - **实测结果是一个真实缺陷**：在真实 `step_at` 拷贝被阻塞期间，`admission.revoke_current(...)` **耗时 5.000 s**（断言 <0.1 s 失败，`deepcopy.log`/JUnit，scratch `exp573-deepcopy.*`）——即**大拷贝当前发生在 admission 锁内**，与“大拷贝必须在锁外”的契约不符。该 RED 已固化保留，**未**放宽断言。
+  - 下一轮修复方向（明确）：在 `admit_sample` 中把 `history.step_at(...)`（其内部深拷贝）移到 `with self._lock` **之外**执行，只在锁内做版本/化身/时间的统一提交校验；随后重跑该用例（应 <0.1 s）与 `test_io_blocked_while_revoke_proceeds_without_the_broker_lock`（保留有效）。
+- 未完成：上述拷贝移出锁的实现；四探针 + 六模块零警告全量复核（含命令/解释器/scratch/耗时/退出码/JUnit/provenance/整文件哈希记录）；最终 Gate-5 材料冻结（contract/lock graph 与实现逐条一致、清除 claim_guard/双 receipt/端口在 claim 内/警告/legacy 措辞）、重生成 change/evidence 清单、清单快照单独提交、review-11 请求包引用当前整文件 SHA-256。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
