@@ -66,21 +66,77 @@ def _validate_local_paths(spec, journal_path: Path) -> None:
         raise ValueError("TASK8_LOCAL_PATH_INVALID")
 
 
+#: The static admission proof: only the installed production composition satisfies it.
+trusted_full_restart_composition = PickPlaceValidationCampaign.trusted_full_restart_composition
+
+
+def _readiness_executable(install_prefix: Path) -> Path:
+    """Resolve the motion-stack readiness entry in either installed layout."""
+
+    from so101_demo.cli.diagnose_macos_station import READINESS_RELATIVE_PATH
+
+    candidates = (install_prefix / READINESS_RELATIVE_PATH,
+                  install_prefix / "so101_demo_py" / READINESS_RELATIVE_PATH)
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise ValueError("TASK8_READINESS_EXECUTABLE_MISSING")
+
+
+def _case_owner_factory(lifecycle, spec):
+    """Compose the trusted per-case full-restart owner for the admitted campaign."""
+
+    import shutil
+
+    from so101_teleop.unified.act_stack_probes import RosGraphClearProbe, make_pick_place_act_stack
+    from so101_teleop.unified.bridge import ActCampaignChildOwner
+    from so101_teleop.unified.pick_place_case_owner import PickPlaceCaseOwner
+
+    base_launch = lifecycle.child_owner.base_launch
+    installed = lifecycle.child_owner
+
+    def make_case(case, case_journal_path):
+        holder: dict = {}
+
+        def stack_factory(context, child):
+            # resolved per case, so the fail-closed checks happen at owner start
+            ros2 = shutil.which("ros2")
+            if ros2 is None or not os.access(ros2, os.X_OK):
+                raise ValueError("TASK8_ROS2_EXECUTABLE_UNAVAILABLE")
+            readiness = _readiness_executable(Path(base_launch.install_prefix))
+            environment = dict(base_launch.environment)
+            stack = make_pick_place_act_stack(
+                context, child, ros2_executable=Path(ros2),
+                readiness_executable=readiness, base_environment=environment,
+            )
+            holder["launch"] = stack.launch
+            return stack
+
+        async def final_clear_probe(domain_id):
+            launch = holder.get("launch")
+            if launch is None or launch.ros_domain_id != domain_id:
+                return False
+            return RosGraphClearProbe(launch)()
+
+        owner = PickPlaceCaseOwner(
+            lifecycle.workload_service,
+            ActCampaignChildOwner(base_launch, installed.arbiter, installed.safety),
+            stack_factory=stack_factory, final_clear_probe=final_clear_probe,
+        )
+        return spec, owner
+
+    return make_case
+
+
 async def run_admitted_campaign(spec, lifecycle, journal_path: Path) -> dict:
-    """Start one admitted child, run exact cases, then settle its owned resources."""
+    """Run every frozen case through the production full-restart composition."""
     _validate_local_paths(spec, journal_path)
-    PickPlaceValidationCampaign.require_full_restart_lifecycle()
-    context, ports = await lifecycle.start(spec)
-    try:
-        if (context.workload_kind != "task8_full" or context.worker_count != 1
-                or context.evidence_root != spec.payload["evidence_root"]
-                or len(ports) != 1):
-            raise ValueError("TASK8_ADMITTED_CONTEXT_INVALID")
-        return await PickPlaceValidationCampaign(
-            Path(spec.payload["manifest_path"]), context, ports[0], Path(journal_path),
-        ).run(deadline_ns=spec.deadline_ns)
-    finally:
-        await lifecycle.finish(context)
+    composition = trusted_full_restart_composition()
+    if composition is None:
+        raise ValueError("FULL_RESTART_PROOF_UNAVAILABLE")
+    make_case = _case_owner_factory(lifecycle, spec)
+    return await composition(Path(spec.payload["manifest_path"]),
+                             Path(journal_path).parent, make_case)
 
 
 def main(argv: list[str] | None = None) -> int:

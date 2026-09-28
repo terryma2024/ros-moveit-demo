@@ -36,9 +36,31 @@ class PickPlaceValidationCampaign:
         self.clock_ns = clock_ns
 
     @staticmethod
-    def require_full_restart_lifecycle() -> None:
-        """Admit no case until an owner can prove a fresh complete stack."""
-        raise PickPlaceValidationError("FULL_RESTART_PROOF_UNAVAILABLE")
+    def trusted_full_restart_composition():
+        """The production full-restart composition, imported by name.
+
+        This is a static, non-caller-controlled proof: the admission gate can only be
+        satisfied by the installed production composition itself. No argument, flag or
+        object supplied by a caller can claim the proof.
+        """
+
+        try:
+            from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
+            from so101_teleop.unified.pick_place_full_restart_campaign import (
+                run_full_restart_campaign,
+            )
+        except ImportError:
+            return None
+        if (not inspect.iscoroutinefunction(run_full_restart_campaign)
+                or not inspect.iscoroutinefunction(run_pick_place_case)):
+            return None
+        return run_full_restart_campaign
+
+    @classmethod
+    def require_full_restart_lifecycle(cls) -> None:
+        """Admit no case until the production full-restart composition is importable."""
+        if cls.trusted_full_restart_composition() is None:
+            raise PickPlaceValidationError("FULL_RESTART_PROOF_UNAVAILABLE")
 
     def _manifest(self) -> dict:
         path = self.manifest_path
