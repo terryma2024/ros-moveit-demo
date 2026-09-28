@@ -8728,3 +8728,25 @@ real-composition integration requirements are therefore satisfied and evidenced.
   per-process JUnit, `gate88-teleop{,-build}.log`.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-759 — Task 9 verified already implemented (no new code needed)
+
+Before writing anything for Task 9 I checked the tree, and all four of its files exist, are **clean**
+(committed, no user hunks) and pass:
+
+| Plan requirement | Found |
+|---|---|
+| `act/recorder.py` with `require_grid(times, dt=0.1)` | `recorder.py:43` |
+| `EpisodeRecorder(root, …)` + `.append` / `.finish` | `recorder.py:77` (with `session_id`, `attempt_id`, `reset_epoch`, `provenance`, `dt_s`, `max_source_age_s`) |
+| `act/expert.py` with `MoveItExpertActionTap.label(at_s)` | `expert.py:10` / `:32` |
+| `adapters/act/ros_expert.py` | present (12 lines) |
+| `test/test_act_recorder.py` | **11 passed** (`gate6-batch3-py-gate/task9.{log,junit.xml}`) |
+
+The plan's Step 1 boundary also holds when exercised directly: `require_grid([1., 1.1, 1.2])` passes and
+`require_grid([1., 1.2])` raises, i.e. a missing tick invalidates the episode.
+
+Writing new code here would have duplicated working, tested behaviour — so Task 9 is recorded as
+**satisfied with evidence** rather than re-implemented.
+
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
