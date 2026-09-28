@@ -6272,3 +6272,11 @@ status: PLANNED_ISOLATED_STACK
 - (5) 放宽的 regex：5 处 `match="CLOCK_ADMISSION_"` 全部归零，恢复为具体稳定错误码（`HISTORY_NOT_READY`/`HISTORY_UNHEALTHY:<hazard>`/`EVIDENCE_TOKEN_INVALID`/`CONTROLLER_GENERATION_CHANGED`）；集合由 135 变为 **138**，并按要求**先补同集 RED 再 GREEN**。
 - 严格同集核验：GREEN **138 passed**（manifest 138 = JUnit 138，名称集合相等，elapsed `1,009,100,859 ns`）；修复前 snapshot 上以**同一 138-name 集合**运行 amended RED **37 failed / 101 passed**（elapsed `859,043,014 ns`），`strict_same_set: true`，missing/extra 为空。checkpoint 刷新为 `experiments/exp569-authority-protocol/checkpoint.json` SHA256 `040fce72595296804fc18ac03fbf08b62fdf10d4acb23a8a451a8e51302b114a`。
 - 状态：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
+
+## CP-614 — EXP-569：permit 全生命周期端到端用例 + 锁序审计 A-1/A-2 关闭
+
+- 提交 `cc504d15`。新增三个**端到端**用例，把 reservation → send → receipt 串成**同一个 permit 的状态机**（registry 私有 record 驱动 fake 的 reserve/send，receipt 字段由 fake 实际使用的值产生并由 registry 全字段校验）：`test_timeout_then_late_acceptance_never_revives_the_permit`（超时进入 UNKNOWN，迟到 ACCEPTED 被拒且状态保持 UNKNOWN、此后 claim 被拒）、`test_duplicate_receipt_after_terminal_state_is_refused`（终态后重复 receipt 被拒，accepted_commands 仍为 1）、`test_controller_restart_invalidates_the_receipt_incarnation`（重启后新 incarnation 的 receipt 被拒、旧 permit 无法再发送）。
+- 集合由 138 变为 **141**，按要求**先补同集 RED 再 GREEN**：修复前 snapshot 上以同一 141-name 集合运行 amended RED **40 failed / 101 passed**（elapsed `909,370,677 ns`）；GREEN **141 passed**（manifest 141 = JUnit 141，名称集合相等，elapsed `1,008,859,142 ns`），`strict_same_set: true`。
+- 锁序审计（第六次复核 P2：审计不得过度声称且需覆盖新组件）已更新：`experiments/exp568-authority-transaction/lock-order-audit.json` 中 **A-1 与 A-2 标为 CLOSED** 并附各自 closure 证据；新增 `extended_scope` 覆盖 authority registry、fake controller port、ROS hazard 回调与控制事件链（均不持冻结锁做 I/O 或大拷贝）；**生产 broker 仍在 broker/ownership 锁内做阻塞 reserve/send**，该重构明确记录为 Gate 6 事项、不声称关闭。
+- checkpoint 刷新为 `experiments/exp569-authority-protocol/checkpoint.json` SHA256 `ac3454466360d378ab4a0ccd48a6934c184a9f14800acfdfcb2d53c35fae777a`。
+- 边界：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
