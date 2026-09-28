@@ -9608,3 +9608,25 @@ This resolves the design block **without authorizing runtime or motion**.
   needs a training interpreter, which the no-runtime boundary excludes.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-795 — Task 13 begins: the runner-facing policy contract
+
+- **Delivered:** `act/policy.py` with `target_times` and `ActPolicyRunner`, plus `test_act_policy.py`.
+  - the plan's Step-1 assertion passes **verbatim** (`target_times(5., 3) == approx((5.1, 5.2, 5.3))`):
+    the chunk stays anchored to the observation's own time origin on the 10 Hz grid, with non-finite times
+    (`OBSERVATION_TIME_INVALID`) and bad counts (`CHUNK_COUNT_INVALID`, `True` included) refused;
+  - **exactly the frozen prefix:** `predict` truncates the chunk to the bundle's `execution_prefix`,
+    asserted as two actions for prefix 2 — never the whole chunk;
+  - **no stale state:** `predict` before `reset` is `POLICY_NOT_RESET`, because a chunk from a stale model
+    state is not evidence for the attempt;
+  - closed observation (`{sim_time_s, head, wrist, state}`, 8-dimensional state) and six finite non-bool
+    joints per applied action (`POLICY_ACTION_INVALID`) — a short chunk is refused, never padded;
+  - **no ROS:** a test reads the installed module's source and asserts it contains no `rclpy`/`ros` import,
+    making the plan's "no ROS API" requirement checkable rather than aspirational.
+- **Verification:** focused tests **5 passed** (`gate6-batch3-py-gate/task13.{log,junit.xml}`), first run
+  green.
+- **Remaining in Task 13:** `config/act/runtime.yaml`, `adapters/act/inference_process.py` (the isolation
+  boundary: queued request/response with explicit timeouts, refusal of stale or out-of-order replies) and
+  `cli/act_inference_worker.py`.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
