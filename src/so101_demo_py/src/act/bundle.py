@@ -65,9 +65,14 @@ def resolve_committed_episodes(*, manifest: dict, campaign_index) -> tuple:
             raise ValueError("EPISODE_RECEIPT_INVALID")
         if entry.get("journal_sha256") != entry.get("verifier_sha256"):
             raise ValueError("EPISODE_RECEIPT_CONFLICT")
+        # carry the content locator through: a resolved episode that forgets where its content lives
+        # forces the exporter to guess, and guessing is what this module exists to prevent
         resolved.append({"scene_id": episode["scene_id"],
+                         "split": episode.get("split"),
                          "journal_sha256": entry["journal_sha256"],
-                         "verifier_sha256": entry["verifier_sha256"]})
+                         "verifier_sha256": entry["verifier_sha256"],
+                         **{key: entry[key] for key in ("content_path", "content_sha256")
+                            if isinstance(entry.get(key), str)}})
     return tuple(resolved)
 
 
