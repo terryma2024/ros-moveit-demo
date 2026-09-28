@@ -342,11 +342,13 @@ def _end_to_end():
     state, as required by review 7.
     """
 
-    from test_act_dispatch_transaction import _transaction, _run
+    from test_act_dispatch_transaction import _run_to_receive, _transaction
 
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission, registry, port, tx = _transaction(now)
-    assert _run(tx) == "ACCEPTED"
+    # stop after the receive node: the permit stays IN_FLIGHT so the caller can
+    # drive timeout / duplicate / restart receipt semantics on that same permit
+    assert _run_to_receive(tx) == "IN_FLIGHT"
     fields = port.last_receipt(permit_id=tx.handle.permit_id)
     assert fields["goal_uuid"] == "g-1" and fields["role"] == "arm"
     assert fields["target_digest"] == "d-1"
