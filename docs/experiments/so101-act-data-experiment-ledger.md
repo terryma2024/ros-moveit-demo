@@ -7362,3 +7362,24 @@ it), the `collection_config` definition, and the file `source_sha256` binds.
 
 - **Boundaries:** no process, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED; evidence preserved.
+
+## CP-698 — Measurement workflow located; the calibration report aggregator is the missing piece
+
+- **Located:** `experiments/exp115-multi-scene-search/launch.zsh` records the exact head-search
+  measurement recipe (`ros2 launch so101_demo_py so101_mujoco_act.launch.py` with
+  `act_calibration_mode:=true`, `ROS_DOMAIN_ID=188`, `GZ_PARTITION`, `MUJOCO_GL=egl`, broker socket,
+  stop-velocity and max-age overrides; exit status 0) and the per-anchor evidence it produced
+  (`reset-control-context.json`, `reset-result.json`, `search/{result.json,tick.jsonl,*.png}`).
+  `act_calibration_mode` is the broker's calibration-only gate
+  (`cli/act_command_broker.py`: `calibration_only=options.calibration_mode`).
+- **Still missing (code-level):** the aggregation step that turns those measurements into the
+  schema-valid `TASK8_READY` calibration report plus its `head_search_qualification` sample.
+  `act_preflight` only consumes such a report and passes through `status == "TASK8_READY"`;
+  `act/calibration.py` holds validators only; no CLI analyzes head-search calibration;
+  `head_search_qualification`/`observed_lock_frames` have no writer. Implementing it is a new
+  production feature, not artifact authoring.
+- **Evidence:** `experiments/gate6-runtime/{exp115-producer.txt,exp115-launch.txt,calibration-mode.txt,
+  search-measurements.txt,measurement-workflow.md,premotion-checks.txt}`; authored runtime_config
+  sha256 `dc84e3d66173d3d06f68a101d529b3a5de561960db25325909c6f62f34957532`.
+- **Boundaries:** no process, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED; evidence preserved.
