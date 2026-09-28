@@ -256,49 +256,60 @@ def test_revoke_completes_while_the_real_controller_send_is_blocked():
     assert outcome["state"] in ("ACCEPTED", "REJECTED", "UNKNOWN"), outcome
 
 
-def test_revoke_completes_while_the_real_pre_boundary_copy_is_blocked():
-    """The isolated history copy runs outside the claim boundary as well."""
+def test_revoke_completes_while_the_real_step_at_copy_is_blocked():
+    """The barrier fires inside the real deepcopy that step_at performs.
+
+    ``step_at`` copies the selected entry while holding the history lock; the
+    admission lock is *not* held there, so revocation must still complete.
+    """
+
+    from so101_demo.adapters.act import physics_clock_history as history_module
 
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission, registry, port, tx = _transaction(now)
     entered = threading.Event()
     release = threading.Event()
-    original_step_at = history.step_at
+    real_deepcopy = history_module.copy.deepcopy
     payload = {"samples": [{"step": index, "values": [index * 1.0] * 64} for index in range(2048)]}
+    seen = {"calls": 0}
 
-    def blocking_copy(step):
+    def blocking_deepcopy(obj, *args, **kwargs):
+        seen["calls"] += 1
         entered.set()
         release.wait(5.0)
-        entry = original_step_at(step)
-        # a real copy and serialization at the pre-boundary call site
-        import copy as _copy
-        import json as _json
-        _json.dumps(payload).encode("utf-8")
-        _copy.deepcopy(payload)
-        return entry
+        return real_deepcopy(obj, *args, **kwargs)
 
-    history.step_at = blocking_copy
+    history_module.copy.deepcopy = blocking_deepcopy
     outcome = {}
 
     def worker_body():
-        sample = __import__("test_act_physics_clock_admission", fromlist=["_sample"])._sample(1)
         try:
             outcome["result"] = admission.admit_sample(
-                sample=sample, ticket="clock-session", generation=1, reset_epoch=1)
-        except Exception as error:  # noqa: BLE001 - asserted below, never unhandled
+                sample=__import__("test_act_physics_clock_admission",
+                                  fromlist=["_sample"])._sample(1),
+                ticket="clock-session", generation=1, reset_epoch=1)
+        except Exception as error:  # noqa: BLE001 - asserted below
             outcome["error"] = error
 
     worker = threading.Thread(target=worker_body)
-    worker.start()
-    assert entered.wait(5.0), "the pre-boundary copy was never entered"
-    began = time.monotonic()
-    admission.revoke_current("CLIENT_REVOKED")
-    elapsed = time.monotonic() - began
-    assert elapsed < 0.1, f"revocation blocked behind the copy: {elapsed:.3f}s"
-    release.set()
-    worker.join(10.0)
-    assert not worker.is_alive(), "the admission worker must terminate"
-    assert admission.revoked_record is not None
-    # the revoked owner must be refused once the copy is released
-    assert "error" in outcome, outcome
-    assert isinstance(outcome["error"], AdmissionRefused), outcome
+    try:
+        worker.start()
+        assert entered.wait(5.0), "the real deepcopy inside step_at was never entered"
+        assert seen["calls"] >= 1
+        began = time.monotonic()
+        admission.revoke_current("CLIENT_REVOKED")
+        elapsed = time.monotonic() - began
+        assert elapsed < 0.1, (
+            f"revocation blocked behind the real step_at copy: {elapsed:.3f}s")
+        release.set()
+        worker.join(10.0)
+        assert not worker.is_alive(), "the admission worker must terminate"
+        assert admission.revoked_record is not None
+        assert "error" in outcome, outcome
+        assert isinstance(outcome["error"], AdmissionRefused), outcome
+    finally:
+        release.set()
+        history_module.copy.deepcopy = real_deepcopy
+        worker.join(5.0)
+
+
