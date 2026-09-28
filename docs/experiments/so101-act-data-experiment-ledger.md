@@ -8166,3 +8166,21 @@ partial credit is claimed.
   `TASK8_CASE_RESULT_INVALID`, 2 `CALIBRATION_SOURCE_PROVENANCE_MISSING`, 1 path-length assertion.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-733 — Exclusivity derives from the closed key sets (teleop evidence corrected the design)
+
+- **Change:** removed `_COLLECTION_ONLY_KEYS` and its check from `admission.py`. The teleop admission
+  tests showed that `qualification_mode` and `qualification_receipt_path` are carried by **both**
+  Task 8 and collection payloads, so my extra exclusivity list was stricter than the real contract.
+  Exclusivity now follows from the closed sets themselves: a Task 8 payload's expected set adds the
+  receipt pair, and a collection payload's expected set is the base keys — so a receipt field in a
+  collection payload is already `CAMPAIGN_START_SCHEMA`.
+- **Evidence:** after the correction the admission suite's failures are the fixture gap
+  (`CAMPAIGN_START_SCHEMA`, 26) plus error-code regex mismatches (20) and the provenance/environment
+  classes — **no `TASK8_PAYLOAD_SHAPE_CONFLICT`**, which the previous version would have produced on
+  legitimate payloads.
+- **Remaining (recorded in the plan file, 587 lines):** make the admission fixture build a real
+  bundle-backed Task 8 payload (26), reconcile the 20 regex mismatches, fix the 2 provenance fixtures,
+  attribute the 3 `TASK8_CASE_RESULT_INVALID`, and the 1 environment path-length assertion.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
