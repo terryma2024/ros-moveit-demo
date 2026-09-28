@@ -648,3 +648,39 @@ def test_driver_observe_capture_composes_from_a_readback_capture(tmp_path):
                                support_distance_max_m=0.005)
     assert driver.window.grid_count == len(LiveEvidenceWindow.REQUIRED_PHASES)
     assert set(driver.seal()) == {"path", "sha256", "schema_version"}
+
+
+def _published_row(**overrides):
+    row = {"case_id": "full-01", "mode": "full", "status": "PASSED",
+           "live_evidence_path": "/run/full-01/live.json", "live_evidence_sha256": "b" * 64,
+           "child_retirement_receipt_path": "/run/full-01-child.json",
+           "child_receipt_sha256": "c" * 64,
+           "stack_retirement_receipt_path": "/run/full-01-stack.json",
+           "stack_receipt_sha256": "d" * 64,
+           "anchor": "default", "stop_after": None, "campaign_id": "campaign-1",
+           "session_id": "session-1", "manifest_sha256": "9" * 64, "completed_phases": [],
+           "stopped_confirmed": True, "full_restart_retired": True,
+           "eligible_for_formal_collection": False}
+    row.update(overrides)
+    return row
+
+
+def test_published_case_row_translates_into_the_journal_row_shape():
+    from so101_demo.act.task8_live_evidence import case_row_to_journal_row
+
+    identities = {"source_provenance_sha256": "e" * 64, "runtime_config_sha256": "f" * 64,
+                  "contact_policy_fingerprint": "a" * 64}
+    journal = case_row_to_journal_row(_published_row(), identities=identities,
+                                      manifest_document_sha256="9" * 64)
+    assert journal["child_retirement_receipt_sha256"] == "c" * 64
+    assert journal["stack_retirement_receipt_sha256"] == "d" * 64
+    assert journal["source_provenance_sha256"] == "e" * 64
+    # the producer's extra fields do not leak into the closed journal shape
+    assert "anchor" not in journal and "campaign_id" not in journal
+    # a prefix row must not claim a live-evidence artifact, and the rule is re-applied here
+    with pytest.raises(ValueError, match="TASK8_PREFIX_EVIDENCE_FORBIDDEN"):
+        case_row_to_journal_row(_published_row(case_id="prefix-01", mode="phase_prefix"),
+                                identities=identities, manifest_document_sha256="9" * 64)
+    with pytest.raises(ValueError, match="TASK8_CASE_ROW_INVALID"):
+        case_row_to_journal_row({"case_id": "full-01"}, identities=identities,
+                                manifest_document_sha256="9" * 64)

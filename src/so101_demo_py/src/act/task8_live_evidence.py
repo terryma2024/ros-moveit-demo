@@ -587,3 +587,42 @@ class CaseEvidenceDriver:
                                                  raw_records=raw_records)
         self.observe(fields, phase=phase, frame=frame, contact=contact,
                      measurements=measurements, event=event)
+
+
+_CASE_ROW_REQUIRED = frozenset({
+    "case_id", "mode", "status", "live_evidence_path", "live_evidence_sha256",
+    "child_retirement_receipt_path", "child_receipt_sha256",
+    "stack_retirement_receipt_path", "stack_receipt_sha256",
+})
+
+
+def case_row_to_journal_row(row: dict, *, identities: dict,
+                            manifest_document_sha256: str) -> dict:
+    """Translate a published case row into the 8P4 journal row, preserving its rules.
+
+    The producer names receipts ``child_receipt_sha256`` / ``stack_receipt_sha256``; the journal names
+    them ``*_retirement_receipt_sha256``. The bundle supplies the identity digests, which the producer
+    does not carry. The result is validated by the same rule the aggregator applies, so a row that is
+    publishable but not journal-shaped is refused here rather than downstream.
+    """
+
+    if type(row) is not dict or not _CASE_ROW_REQUIRED <= set(row):
+        raise ValueError("TASK8_CASE_ROW_INVALID")
+    if type(identities) is not dict or any(
+            key not in identities for key in ("source_provenance_sha256", "runtime_config_sha256",
+                                              "contact_policy_fingerprint")):
+        raise ValueError("TASK8_CASE_ROW_INVALID")
+    journal = {
+        "case_id": row["case_id"], "mode": row["mode"], "status": row["status"],
+        "live_evidence_path": row["live_evidence_path"],
+        "live_evidence_sha256": row["live_evidence_sha256"],
+        "child_retirement_receipt_path": row["child_retirement_receipt_path"],
+        "child_retirement_receipt_sha256": row["child_receipt_sha256"],
+        "stack_retirement_receipt_path": row["stack_retirement_receipt_path"],
+        "stack_retirement_receipt_sha256": row["stack_receipt_sha256"],
+        "source_provenance_sha256": identities["source_provenance_sha256"],
+        "runtime_config_sha256": identities["runtime_config_sha256"],
+        "contact_policy_fingerprint": identities["contact_policy_fingerprint"],
+        "manifest_document_sha256": manifest_document_sha256,
+    }
+    return require_case_journal_row(journal, mode=row["mode"])
