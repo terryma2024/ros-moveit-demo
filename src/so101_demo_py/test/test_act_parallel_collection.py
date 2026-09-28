@@ -132,3 +132,72 @@ def test_result_verifier_re_reads_the_bytes_rather_than_trusting_the_digest(tmp_
     Path(entry["path"]).unlink()
     with pytest.raises(ValueError, match="RESULT_MISSING"):
         verifier.verify(entry)
+
+
+class _Claim:
+    def __init__(self):
+        self.releases = []
+
+    def release(self, document):
+        self.releases.append(document)
+
+
+class _CollectPort:
+    def __init__(self, *, fail_at=None):
+        self.calls = []
+        self._fail_at = fail_at
+
+    def collect(self, scene_id, context, wave):
+        self.calls.append((scene_id, wave["wave_index"]))
+        if scene_id == self._fail_at:
+            raise RuntimeError("SEARCH_AMBIGUOUS")
+        return {"scene_id": scene_id, "status": "PASSED", "qc": "PASS", "done": True,
+                "interventions": 0, "coordinator_committed": True, "reset_epoch": 1}
+
+
+def _campaign_fixture(tmp_path, *, scene_count=5, max_wave_size=2, terminal=(), fail_at=None):
+    import json as _json
+
+    from so101_demo.act.parallel_collection import FixedActCollectionCampaign
+
+    rows = [{"scene_id": f"act-{index}", "split": "train"} for index in range(scene_count)]
+    manifest = {"kind": "W8", "scenarios": rows,
+                "qualification_contract": {"revoked": False, "scenes": 40}}
+    store = __import__("so101_demo.adapters.act.parallel_collection_results",
+                       fromlist=["ActCollectionResultStore"]).ActCollectionResultStore(tmp_path)
+    for scene_id in terminal:
+        store.publish({"scene_id": scene_id, "status": "PASSED", "qc": "PASS", "done": True,
+                       "interventions": 0, "coordinator_committed": True, "reset_epoch": 1})
+    config = {"max_wave_size": max_wave_size, "qualification": False}
+    port, claim = _CollectPort(fail_at=fail_at), _Claim()
+    campaign = FixedActCollectionCampaign(manifest, config, context=None, root=tmp_path,
+                                          collect_port=port, claim=claim, store=store)
+    return campaign, port, claim, store, _json
+
+
+def test_campaign_runs_fixed_waves_and_holds_the_claim_until_the_last_scene(tmp_path):
+    campaign, port, claim, store, _json = _campaign_fixture(tmp_path)
+    outcome = campaign.run()
+    assert outcome["waves"] == [["act-0", "act-1"], ["act-2", "act-3"], ["act-4"]]
+    assert [call[0] for call in port.calls] == ["act-0", "act-1", "act-2", "act-3", "act-4"]
+    assert outcome["collected"] == ["act-0", "act-1", "act-2", "act-3", "act-4"]
+    assert len(claim.releases) == 1 and len(claim.releases[0]["terminal"]) == 5
+    assert _json.loads(open(outcome["campaign_index"]).read())["scene_count"] == 5
+    for scene_id in campaign.scene_ids:
+        assert store.read(scene_id)["status"] == "PASSED"
+
+
+def test_campaign_skips_terminal_scenes_and_keeps_the_claim_on_failure(tmp_path):
+    campaign, port, claim, _store, _json = _campaign_fixture(tmp_path, terminal=("act-1",))
+    outcome = campaign.run()
+    assert outcome["already_terminal"] == ["act-1"]
+    assert "act-1" not in [call[0] for call in port.calls]      # never collected twice
+    assert len(claim.releases) == 1
+
+    (tmp_path / "failing").mkdir(exist_ok=True)      # the store refuses a root that does not exist
+    failing, port, claim, _store, _json = _campaign_fixture(tmp_path / "failing", fail_at="act-2")
+    with pytest.raises(RuntimeError, match="SEARCH_AMBIGUOUS"):
+        failing.run()
+    # an unresolved campaign must not hand the stack on: no release, and the earlier scenes stay sealed
+    assert claim.releases == []
+    assert port.calls[-1][0] == "act-2"
