@@ -10837,3 +10837,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed (the stack still refuses without explicit calibration, CP-843), no
   hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no ROS Python touched; user's 31 modified
   and 12 untracked paths untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-846 — The provenance contract is exactly ten roles; three compiled plugins still missing
+
+- **Enumerated the contract instead of guessing again:** `runtime_role_specs()` returns **10** roles, and the
+  full list is now recorded in `runtime-task8l-gen2/provenance/runtime-role-registry.md` with each role's
+  install-relative path and whether the copy overlay currently satisfies it:
+  - four `verbatim_install` Python roles (`command_broker`, `task8_runner`, `teleop_child`, `teleop_case_owner`)
+    plus `controller_config` (`share/so101_demo_py/config/mujoco/ros2_controllers.yaml`);
+  - three `compiled` roles, all under `so101_mujoco_support/lib/`:
+    `libso101_simulation_evidence_plugin.so`, `libso101_broker_owned_trajectory_controller.so` and
+    `libmujoco_ros2_control.so`;
+  - two `external_runtime` roles (`ros_runtime`, `model_weights`) with no overlay path, resolved from the
+    runtime environment.
+- **A non-symlink Python install was necessary but not sufficient.** Building `so101_demo_py` and
+  `so101_teleop` into `runtime-task8l-gen2/install-copy` (build rc=0, 35.9 s, real copies) fixed the symlink
+  problem, and provenance still refused with the same `SOURCE_PROVENANCE_INSTALL_MISSING` - because the copy
+  overlay has no **`so101_mujoco_support`** build at all, so all three compiled plugin roles are absent, and
+  `libmujoco_ros2_control.so` comes from the vendored dependency package rather than from this worktree's C++
+  package.
+- **That is the next concrete step:** build `so101_mujoco_support` into the same copy prefix (and resolve the
+  vendored plugin's location for the third compiled role), re-check all ten roles, then run
+  `act_build_task8_source_provenance --install-overlay <copy prefix>` for real.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
