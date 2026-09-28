@@ -92,6 +92,7 @@ def maybe_provision_pick_place_port(driver):
 
     require_pick_place_validation_manifest(manifest)
     report = driver._act_artifacts.read_hashed_json("calibration_report")
+    policy_paths = dict(driver._act_artifacts.paths)
     worker_id = os.environ["SO101_ACT_WORKER_ID"]
     generation = int(os.environ["SO101_ACT_GENERATION"])
 
@@ -264,12 +265,34 @@ class RclpyActionDriver:
                 ticket_guard=ownership.require_ticket,
                 max_observation_age_s=max_age, max_prefix_age_s=max_age,
             )
-            self._act_command_broker = CommandBroker(
-                broker, ownership=ownership, simulation_session_id=session_id,
-                reservation_port=reservation_port,
-                prefix_source_authority=source_authority,
-                prefix_source_port=self._act_visible_source,
-            )
+            # A-prime scope: only the admitted Task-8 profile installs the one-shot bound
+            # authority. Every other profile keeps the legacy broker byte-identically.
+            _manifest = self._act_artifacts.read_hashed_json("manifest")
+            if _manifest.get("kind") == "ACT_TASK8_LIVE":
+                from so101_demo.adapters.act.broker_authority_wiring import (
+                    build_bound_act_broker, physics_clock_domain,
+                )
+                _history, _admission, _registry = physics_clock_domain(
+                    session_id=session_id, nq=self._act_model.nq, nv=self._act_model.nv,
+                    settings=dict(settings),
+                )
+                _bound = build_bound_act_broker(
+                    reservation_port=reservation_port, session_id=session_id,
+                    roles=("arm", "gripper", "neck"), history=_history,
+                    admission=_admission, registry=_registry, driver=broker,
+                    ownership=ownership, simulation_session_id=session_id,
+                    prefix_source_authority=source_authority,
+                    prefix_source_port=self._act_visible_source,
+                )
+                self._act_command_broker = _bound["broker"]
+                self._act_bound_session = _bound["session"]
+            else:
+                self._act_command_broker = CommandBroker(
+                    broker, ownership=ownership, simulation_session_id=session_id,
+                    reservation_port=reservation_port,
+                    prefix_source_authority=source_authority,
+                    prefix_source_port=self._act_visible_source,
+                )
             self._act_reset_connection = LocalBrokerConnection(self._act_command_broker)
             self._act_sources = PickPlaceRosEvidence(
                 self._node, broker, model=self._act_model,

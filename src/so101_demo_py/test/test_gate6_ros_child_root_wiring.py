@@ -209,3 +209,50 @@ def test_physics_clock_domain_fails_closed_on_bad_inputs():
                    {"max_wall_age_s": 0.25, "max_sim_gap_s": 0}):
         with pytest.raises(ValueError, match="SETTINGS_INVALID"):
             physics_clock_domain(session_id="s", nq=6, nv=6, settings=broken)
+
+
+def _root_source():
+    """Locate the root module in either the source tree or a test mirror layout."""
+
+    from pathlib import Path
+
+    here = Path(__file__).resolve()
+    candidates = []
+    for base in here.parents:
+        candidates.append(base / "so101_teleop" / "so101_teleop" / "unified" / "ros_child.py")
+        candidates.append(base / "src" / "so101_teleop" / "so101_teleop" / "unified" / "ros_child.py")
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.read_text(), candidate.parent
+    raise AssertionError(f"ros_child.py not found from {here}")
+
+
+def test_root_bound_wiring_is_gated_on_the_task8_profile():
+    """A-prime scope: only the admitted Task-8 profile installs the bound session.
+
+    The root needs rclpy to execute, so this guards the gate structurally: the bound
+    branch must sit behind the hash-bound Task-8 manifest check and must be gated, never
+    unconditional; the legacy broker construction must remain the else-branch.
+    """
+
+    source, root = _root_source()
+    assert root.joinpath("ros_child.py").exists(), "the root module moved"
+    gate = '_manifest.get("kind") == "ACT_TASK8_LIVE"'
+    assert gate in source, "the Task-8 profile gate is missing from the root wiring"
+    # the bound construction sits after the gate and the legacy construction is the else
+    gate_at = source.index(gate)
+    bound_at = source.index("build_bound_act_broker(", gate_at)
+    legacy_at = source.index("self._act_command_broker = CommandBroker(", gate_at)
+    assert gate_at < bound_at < legacy_at, (
+        "the bound wiring must be gated before the legacy fallback, in that order")
+    # no unconditional bound install: the call must be inside the gated branch
+    assert source.count("build_bound_act_broker(") == 1, "bound wiring must appear once"
+    assert "self._act_bound_session = _bound[\"session\"]" in source, (
+        "the root must keep the one-shot session it installed")
+
+
+def test_root_uses_one_client_shared_by_session_and_broker():
+    source, _ = _root_source()
+    # the factory is called with the same reservation_port object created above it
+    assert "reservation_port=reservation_port" in source, (
+        "the bound wiring must pass the root's own client instance")
