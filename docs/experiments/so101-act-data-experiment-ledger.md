@@ -10364,3 +10364,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `collection_*` NOT_PROVISIONED.
 - **Still holding** at the two user decisions: row 33's MuJoCo version pin, and the training-interpreter versus
   runtime-ladder authorization.
+
+## CP-829 — Row 33 resolved on evidence: the remote's MuJoCo pin was stale, not a lost invariant
+
+- **The last unresolved row is closed without changing code**, by establishing what the check protects and what
+  the environment actually provides:
+  - the installed MuJoCo reports **3.12.0** (`mjVERSION_HEADER = 3012000`), so the remote's
+    `mj_version() != 340` (MuJoCo 3.4.0) would **refuse to configure** here, while HEAD's
+    `mj_version() != mjVERSION_HEADER` accepts a matching header/runtime pair and still refuses a mismatched one;
+  - **nothing else pins a MuJoCo version**: `CMakeLists.txt` has only
+    `find_package(mujoco_ros2_control_plugins REQUIRED)` and `find_package(mujoco_vendor REQUIRED)` with no
+    version, and the dependency locks pin the `mujoco_ros2_control` fork and message hashes rather than MuJoCo;
+  - `mj_version()` / `mjVERSION_HEADER` appears nowhere else in the tree.
+- **Verdict changed from unresolved to superseded (stale constant)**, with the residual coverage observation kept
+  visible rather than hidden: no test pins either form, because exercising it honestly would need a MuJoCo whose
+  version differs from the headers. If a deployment ever requires the exact 3.4.0 pin, that is a deployment
+  decision rather than a regression here.
+- **Final reconciliation tally across the 50 `e2ec28c3` paths: 43 equivalent, 7 superseded, 0 missing,
+  0 unresolved, 0 intentional rejections inside this commit** (the rejections belong to `fda21d53`'s obsolete
+  fork pin, `c26c358b`'s patch equivalence and `cdd79d15`'s older documents, as the user classified). Coverage
+  remains exhaustive: 34 blob-identical plus 50 audited = the commit's 84 paths.
+- **No production code changed, no gate run, no runtime or motion, no hardware, no evidence deleted, no push, no
+  gate lowered;** user's 43 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
