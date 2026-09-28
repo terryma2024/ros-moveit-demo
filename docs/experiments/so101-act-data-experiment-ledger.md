@@ -8946,3 +8946,29 @@ This resolves the design block **without authorizing runtime or motion**.
   terminal state).
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-767 — Task 11: one proved reset, then collection with no reset port at all
+
+- **Delivered:** `prepare_scenario(scenario, *, reset_port, joints_port)` and
+  `collect_authorized_scenario(prepared, scenario, *, phase_port, recorder, qc_port)` in
+  `act/collection.py`, with tests.
+  - preparation: closed scenario shape; **exactly one** reset requiring `reset_epoch >= 1`,
+    `ready is True` and a non-empty proof (`SCENARIO_RESET_UNPROVED`); a **seven-joint** finite readback
+    (`SEVEN_JOINT_READBACK_INVALID`);
+  - collection: the plan's order `SEARCH → LOCK → STABLE → RECORD → TEACHER_INFERENCE → EXPERT →
+    RELEASE → RETREAT → FINAL_CHECK`, each phase's evidence naming its own phase, then the QC verdict as
+    a record shaped for `training_eligible`;
+  - **no second reset by construction:** the collection half is given no reset port, so a mid-scenario
+    reset cannot happen rather than being caught;
+  - **infra ≠ business:** an infra fault raises `COLLECTION_INFRA_FAULT` and is never sealed as a
+    business outcome; a QC `FAIL` seals an immutable `FAILED` record that `training_eligible` rejects.
+- **One bug caught, in my own test double:** `proof or {...}` turned a deliberately empty proof into a
+  valid one, so the unproved-reset case never reached its guard (a DID-NOT-RAISE that would have left the
+  guard untested). Fixed in the double with the reason recorded, not by weakening the guard.
+- **Verification:** focused tests **5 passed** (`gate6-batch3-py-gate/task11d.{log,junit.xml}`).
+- **Remaining in Task 11:** the W1 debug CLI `act_collect` (+ `setup.py` entry) constructing only the
+  closed `OperationSpec` and calling the unified service, with admission refusal asserted to produce zero
+  reset/actions/children; the `--qualification` gate keeping qualification results out of the training
+  manifest; the Rollout-set exclusion; then Task 11A's parallel collection and recovery modules.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
