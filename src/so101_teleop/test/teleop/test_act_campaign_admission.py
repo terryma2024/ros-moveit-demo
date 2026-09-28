@@ -589,6 +589,8 @@ def test_formal_w8_without_exact_qualification_has_no_resources(tmp_path):
             launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
             for index in range(8)
         ])
+        # a collection payload must not carry the Task 8 receipt pair
+        payload = {k: v for k, v in payload.items() if k not in ("preparation_receipt_path", "preparation_receipt_sha256")}
         formal = replace(base, kind="act_collection_start", payload=payload)
         with pytest.raises(ValueError, match="W8_QUALIFICATION_REQUIRED"):
             service.start(formal)
@@ -615,6 +617,8 @@ def test_formal_w8_rejects_a_self_declared_passed_json_without_independent_verif
     payload = dict(base.payload, worker_count=8, qualification_receipt_path=str(fake_path),
                    children=[launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
                              for index in range(8)])
+    # a collection payload must not carry the Task 8 receipt pair
+    payload = {k: v for k, v in payload.items() if k not in ("preparation_receipt_path", "preparation_receipt_sha256")}
     formal = replace(base, kind="act_collection_start", payload=payload)
     store = IntentStore.open(tmp_path / "state")
     try:
