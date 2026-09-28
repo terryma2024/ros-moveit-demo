@@ -10134,3 +10134,24 @@ the runtime ladder for authorisation.
   pass while the package gate would skip or fail the same code.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-820 — The registered modules run in the gate, and the remaining failures are the path-length family
+
+Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`, `bash-1991`):
+
+- **tests rose 1394 -> 1409**, and the three modules now appear in the package's own results:
+  `test_act_gateway.xunit.xml` (3 cases), `test_act_routes.xunit.xml` (4), `test_unified_act_collection.xunit.xml`
+  (5). **All twelve pass with 0 failures** — the proof that the gate executes them, rather than only that
+  they are registered.
+- failures rose 6 -> 9, and every one is in the socket-path family, not in ACT code:
+  `test_act_ros_child` (1), `test_act_stack_probes` (1), `test_act_worker_port` (1),
+  `test_controller_reservation_paths` (2), each counted on both the pytest and ctest tracks. Their names all
+  concern the registered short root or the Linux socket limit, and this run's scratch root
+  (`.../pg12/tmp`) is longer than the short `mktemp` roots the earlier teleop runs used, which is why the
+  count moved from 2 to 9 while the cause stayed the same.
+- **Attribution: nothing in this run is attributable to the ACT work.** My modules pass inside the gate; the
+  failures are the environmental AF_UNIX path-length family the repo already documents, and they appear or
+  disappear with the length of the scratch root rather than with any code change.
+
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
