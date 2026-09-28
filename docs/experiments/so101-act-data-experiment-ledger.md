@@ -10862,3 +10862,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-847 — Nine of ten roles now resolve; provenance moved on to demanding build receipts
+
+- **The C++ build into the copy prefix worked** (`colcon build --packages-select so101_mujoco_support`,
+  rc=0, 25.8 s, `logs/install-copy-cpp-build.log`) and the copy overlay now holds
+  `libso101_simulation_evidence_plugin.so` and `libso101_broker_owned_trajectory_controller.so`.
+- **Role status after that build:** **nine of the ten roles resolve as regular files** - the four Python roles,
+  `controller_config`, and both worktree C++ plugins. The one exception is
+  `mujoco_ros2_control_plugin`, which the registry expects at
+  `so101_mujoco_support/lib/libmujoco_ros2_control.so`; the vendored library exists at
+  `$R/i/mujoco_ros2_control/lib/libmujoco_ros2_control.so` instead, i.e. in the dependency overlay under the
+  vendored package's own directory rather than under this worktree's package. I did **not** copy it into place:
+  hand-assembling an install layout is exactly what a provenance check is meant to catch, and inventing the
+  layout would defeat it.
+- **The refusal code changed, which is progress:** the run now fails with
+  **`SOURCE_PROVENANCE_RECEIPT_MISSING`** instead of `SOURCE_PROVENANCE_INSTALL_MISSING`. The `compiled` roles
+  require a receipt document whose closed field set is
+  `("sources", "headers", "cmake_arguments", "compiler", "linker", "dependency_sha256", "output_sha256")`, so
+  each compiled artefact must be accompanied by a record of how it was built - compiler, linker, arguments,
+  dependency and output digests - rather than merely existing on disk.
+- **Next step:** find what writes those receipts (they are produced by the build pipeline, not by hand),
+  generate them for the two worktree plugins and the vendored one, resolve the vendored plugin's expected
+  location honestly (most likely by building it in the same merged prefix rather than copying a file), then run
+  provenance again.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
