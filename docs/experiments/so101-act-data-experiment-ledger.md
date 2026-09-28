@@ -7537,3 +7537,21 @@ ancestors; reviewed plan SHA256 verified as
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED; the untracked in-progress user test remains
   untracked.
+
+## CP-705 — Task 8P3 remaining integration planned as ordered sub-slices
+
+- **Recorded:** `experiments/gate6-runtime/task8-core/t8p3-remaining-plan.md` decomposes the
+  remaining 8P3 work into three sub-slices with explicit files and acceptance criteria —
+  **A** runner/port live-evidence wiring (prefix result must carry no artifact, full must carry the
+  sealed one; seal only after `FINAL_CHECK`; 10 Hz causal grid from `CLOSE`; per-case recorder),
+  **B** admission and payload split (closed Task 8 vs collection payload groups; receipt verified in
+  `UnifiedWorkloadService.start(spec)` before any resource acquisition; `ActArtifactBinding` from
+  the verified bundle; byte-for-byte policy copies), and **C** the canonical live CLI and journals
+  (one production call for nine prefix + five full cases; journals only under
+  `<run-root>/task8-live/cases/`; live evidence plus both retirement receipts in every journal).
+- **Why planned rather than started blind:** this block threads new artifacts through ten production
+  modules at once, and round 141 showed how costly a half-applied change is (16-failure intermediate
+  state). Each sub-slice is RED-first with its own focused suites.
+- **Gate:** after A-C the handoff's combined 8P3/8P4 xdist gate, then Task 8P4.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
