@@ -16,50 +16,68 @@ from test_act_physics_clock_history import SOURCE_BASE_NS, STEP_NS
 def test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations():
     """Real threads race a revoke against the claim boundary; only two outcomes are legal.
 
-    A barrier is installed *inside* the boundary (the history commit runs under the
-    admission lock). If a revoke can still complete there, the claim was not atomic
-    and must not accept; if it cannot, the claim owns the boundary and later
-    revocation must not retroactively create a second acceptance.
+    The probe wraps the real ``admission.owner_is_active``: it takes the original
+    True observation, signals, then waits briefly for a real revoker thread before
+    returning that saved observation. On the pre-fix revision no outer claim guard
+    is held, so the revoke completes in that window and an acceptance afterwards is
+    unsafe and must fail this test. On the fixed revision the admission claim guard
+    is held across the owner read and READY -> IN_FLIGHT, so the revoke cannot
+    complete during the wait: the claim wins with exactly one acceptance, and the
+    later revocation cannot manufacture a second one.
     """
 
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission, registry, port, tx = _transaction(now)
     entered = threading.Event()
-    release = threading.Event()
-    original_clock = registry._clock_ns
-    state = {"inside": False}
+    revoked = threading.Event()
+    observed = {}
+    barrier_timeout = 0.3
+    original_owner_is_active = admission.owner_is_active
 
-    def boundary_clock():
-        # called for the final permit-deadline check, i.e. after the owner
-        # re-check and immediately before READY -> IN_FLIGHT
-        if not state["inside"]:
-            state["inside"] = True
-            entered.set()
-            release.wait(5.0)
-        return original_clock()
+    def owner_is_active_probe():
+        result = original_owner_is_active()
+        observed["owner_active"] = result
+        entered.set()
+        revoked.wait(barrier_timeout)          # bounded wait for the real revoker
+        return result                          # saved observation, not a re-read
 
-    registry._clock_ns = boundary_clock
+    admission.owner_is_active = owner_is_active_probe
     outcome = {}
-    worker = threading.Thread(target=lambda: outcome.setdefault("state", _run(tx)))
+
+    def worker_body():
+        try:
+            outcome["state"] = _run(tx)
+        except Exception as error:              # noqa: BLE001 - recorded for the assertion
+            outcome["error"] = repr(error)
+
+    def revoker_body():
+        admission.revoke_current("CLIENT_REVOKED")
+        revoked.set()
+
+    worker = threading.Thread(target=worker_body)
+    revoker = threading.Thread(target=revoker_body)
     worker.start()
-    assert entered.wait(5.0), "the claim never entered the atomic boundary"
-    revoker = threading.Thread(target=lambda: admission.revoke_current("CLIENT_REVOKED"))
+    assert entered.wait(5.0), "the claim never observed the owner as active"
+    assert observed["owner_active"] is True
     revoker.start()
-    revoker.join(0.3)
-    revoke_completed_inside = not revoker.is_alive()
-    release.set()
     worker.join(10.0)
+    revoke_completed_inside = revoked.is_set()
     revoker.join(10.0)
+    assert not worker.is_alive() and not revoker.is_alive(), "threads must terminate"
+    assert "error" not in outcome, outcome
+    assert outcome["state"] in ("ACCEPTED", "REJECTED", "UNKNOWN"), outcome
     if revoke_completed_inside:
-        # the revoke won the race inside the boundary: the claim must not accept
-        assert outcome["state"] in ("REJECTED", "UNKNOWN"), outcome
-        assert port.send_calls == 0 and port.accepted_commands == 0
+        # the revoke won the race inside the boundary: no send may happen at all
+        assert outcome["state"] in ("REJECTED", "UNKNOWN"), (
+            f"revoke completed inside the claim boundary yet the transaction returned "
+            f"{outcome['state']} with accepted_commands={port.accepted_commands}")
+        assert port.send_calls == 0 and port.accepted_commands == 0, port.send_calls
     else:
         # the claim owns the boundary: exactly one acceptance, and the later
-        # revocation cannot manufacture another one
+        # revocation cannot retroactively create another one
         assert outcome["state"] == "ACCEPTED", outcome
         assert port.accepted_commands == 1
-        assert admission.revoked_record is not None
+    assert admission.revoked_record is not None
 
 
 def test_legacy_claim_api_is_permanently_closed():
