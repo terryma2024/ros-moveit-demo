@@ -10889,3 +10889,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-848 — The build-receipt contract is exact, and nothing in the repository produces receipts
+
+- **Read the receipt convention from the source instead of inventing one:** for each `compiled` role the receipt
+  must sit **beside the artefact** as `<installed_path>.build-receipt.json`, carry exactly
+  `sources, headers, cmake_arguments, compiler, linker, dependency_sha256, output_sha256`, keep the first five
+  truthy, hold a non-empty `dependency_sha256` map of path -> 64-hex, and satisfy
+  **`output_sha256 == the installed artefact's sha256`**. The verifier re-hashes both files, so any later edit
+  surfaces as `SOURCE_PROVENANCE_INSTALL_DIRTY` or `SOURCE_PROVENANCE_RECEIPT_DIRTY`.
+- **No producer exists in the tree.** Searching `output_sha256` across `src/` and `test/` returns
+  `source_provenance.py` itself and unrelated `parallel_batch` hits, so the receipts must be written by the build
+  step for this generation: a wrapper that records compiler, linker, CMake arguments, the source and header sets,
+  dependency digests and the artefact digest, and emits one receipt per compiled role.
+- **Contract written for reuse:** `runtime-task8l-gen2/provenance/build-receipt-contract.md`.
+- **Next boundary (source change, TDD, gated):** add the receipt writer as repository tooling rather than an
+  evidence-dir script, because a receipt that only exists inside one generation's directory cannot be reproduced
+  by anyone else. That means a RED test first (a receipt missing a field, a wrong `output_sha256`, or an empty
+  dependency map must be refused; a correct one must satisfy `source_provenance`'s verifier), then the minimal
+  implementation, focused GREEN, and only afterwards the real receipts for the three compiled roles - at which
+  point the layout question for the vendored plugin is settled by building it into the prefix rather than copying
+  a file into a place no build produced.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
