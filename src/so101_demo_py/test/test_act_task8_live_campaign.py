@@ -47,6 +47,8 @@ def prepared(tmp_path):
     document = build_pick_place_validation_manifest(
         ANCHORS, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
+        calibration_report_path="calibration-report.json",
+        calibration_report_sha256="e" * 64,
     )
     path = tmp_path / "manifest.json"
     write_new_manifest(path, document)
@@ -68,10 +70,15 @@ def test_closed_manifest_previews_exact_nine_prefix_and_five_full_cases(tmp_path
     assert worker.requests == []
 
 
-def test_full_restart_cannot_be_claimed_from_one_reused_child(tmp_path):
+def test_full_restart_cannot_be_claimed_without_the_production_composition(
+        tmp_path, monkeypatch):
+    """The static proof is the installed composition; remove it and nothing is admitted."""
+
     manifest_path, context = prepared(tmp_path)
     worker = Worker(context)
     journal = tmp_path / "case-results.jsonl"
+    monkeypatch.setattr(PickPlaceValidationCampaign, "trusted_full_restart_composition",
+                        staticmethod(lambda: None))
     with pytest.raises(PickPlaceValidationError, match="FULL_RESTART_PROOF_UNAVAILABLE"):
         asyncio.run(PickPlaceValidationCampaign(manifest_path, context, worker, journal).run(
             deadline_ns=time.monotonic_ns() + 60_000_000_000))

@@ -34,6 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runtime-config", required=True, type=Path)
     parser.add_argument("--collection-config", required=True, type=Path)
     parser.add_argument("--policy-fingerprint", required=True)
+    parser.add_argument("--calibration-report", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     _digest_regular_file(args.anchors)
@@ -49,9 +50,11 @@ def main(argv: list[str] | None = None) -> int:
         runtime_config_sha256=_digest_regular_file(args.runtime_config),
         collection_config_sha256=_digest_regular_file(args.collection_config),
         contact_policy_fingerprint=args.policy_fingerprint,
+        calibration_report_path=args.calibration_report.name,
+        calibration_report_sha256=_digest_regular_file(args.calibration_report),
     )
     write_new_manifest(args.output, document)
-    print(document["manifest_sha256"])
+    print(document["manifest_document_sha256"])
     return 0
 
 

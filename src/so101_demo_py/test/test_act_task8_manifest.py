@@ -22,9 +22,12 @@ ANCHORS = {
 
 
 def manifest():
+    # v2 also freezes the calibration report the live run will be bound to
     return build_pick_place_validation_manifest(
         ANCHORS, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
+        calibration_report_path="calibration-report.json",
+        calibration_report_sha256="e" * 64,
     )
 
 
@@ -81,15 +84,22 @@ def test_prepare_cli_freezes_file_hashes_and_refuses_overwrite(tmp_path):
         path = tmp_path / f"{name}.json"
         path.write_text(json.dumps({"name": name}))
         paths.append(path)
+    calibration = tmp_path / "calibration-report.json"
+    calibration.write_text(json.dumps({"status": "TASK8_READY"}))
     output = tmp_path / "manifest.json"
     argv = ["--anchors", str(anchors_path), "--source", str(paths[0]),
             "--runtime-config", str(paths[1]), "--collection-config", str(paths[2]),
-            "--policy-fingerprint", "d" * 64, "--output", str(output)]
+            "--policy-fingerprint", "d" * 64, "--calibration-report", str(calibration),
+            "--output", str(output)]
     assert main(argv) == 0
     document = require_pick_place_validation_manifest(json.loads(output.read_text()))
     assert document["source_sha256"] == hashlib.sha256(paths[0].read_bytes()).hexdigest()
     assert document["runtime_config_sha256"] == hashlib.sha256(paths[1].read_bytes()).hexdigest()
     assert document["collection_config_sha256"] == hashlib.sha256(paths[2].read_bytes()).hexdigest()
+    assert document["calibration_report_path"] == calibration.name
+    assert document["calibration_report_sha256"] == \
+        hashlib.sha256(calibration.read_bytes()).hexdigest()
+    assert document["schema_version"] == 2 and document["manifest_document_sha256"]
     before = output.read_bytes()
     with pytest.raises(FileExistsError):
         main(argv)

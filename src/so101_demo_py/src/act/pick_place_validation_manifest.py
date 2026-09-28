@@ -21,8 +21,10 @@ _HASH_KEYS = (
 )
 _KEYS = frozenset({
     "schema_version", "kind", "backend", "anchors", "anchors_sha256",
-    *_HASH_KEYS, "prefix_cases", "full_cases", "manifest_sha256",
+    *_HASH_KEYS, "calibration_report_path", "calibration_report_sha256",
+    "prefix_cases", "full_cases", "manifest_document_sha256",
 })
+SCHEMA_VERSION = 2
 
 
 def _canonical(value: object) -> bytes:
@@ -78,6 +80,7 @@ def _full_cases() -> list[dict]:
 def build_pick_place_validation_manifest(
     anchors: dict, *, source_sha256: str, runtime_config_sha256: str,
     collection_config_sha256: str, contact_policy_fingerprint: str,
+    calibration_report_path: str, calibration_report_sha256: str,
 ) -> dict:
     _require_anchors(anchors)
     hashes = {name: _require_hash(value) for name, value in (
@@ -88,22 +91,31 @@ def build_pick_place_validation_manifest(
     )}
     # Copy through canonical bytes so later caller mutations cannot alter this manifest.
     frozen_anchors = json.loads(_canonical(anchors))
+    if type(calibration_report_path) is not str or not calibration_report_path:
+        raise ValueError("TASK8_MANIFEST_CALIBRATION_PATH_INVALID")
     document = {
-        "schema_version": 1, "kind": "ACT_TASK8_LIVE", "backend": "mujoco",
+        "schema_version": SCHEMA_VERSION, "kind": "ACT_TASK8_LIVE", "backend": "mujoco",
         "anchors": frozen_anchors, "anchors_sha256": _sha(frozen_anchors),
-        **hashes, "prefix_cases": _prefix_cases(), "full_cases": _full_cases(),
+        **hashes, "calibration_report_path": calibration_report_path,
+        "calibration_report_sha256": _require_hash(calibration_report_sha256),
+        "prefix_cases": _prefix_cases(), "full_cases": _full_cases(),
     }
-    document["manifest_sha256"] = _sha(document)
+    # the document digest is internal; the receipt records the file digest separately
+    document["manifest_document_sha256"] = _sha(document)
     return require_pick_place_validation_manifest(document)
 
 
 def require_pick_place_validation_manifest(value: object, *, expected_anchors_sha256: str | None = None) -> dict:
     if not isinstance(value, dict) or set(value) != _KEYS:
         raise ValueError("TASK8_MANIFEST_SCHEMA")
-    if value["schema_version"] != 1 or value["kind"] != "ACT_TASK8_LIVE" or value["backend"] != "mujoco":
+    if (value["schema_version"] != SCHEMA_VERSION or value["kind"] != "ACT_TASK8_LIVE"
+            or value["backend"] != "mujoco"):
         raise ValueError("TASK8_MANIFEST_ROLE_INVALID")
     _require_anchors(value["anchors"])
-    for key in (*_HASH_KEYS, "anchors_sha256", "manifest_sha256"):
+    if type(value["calibration_report_path"]) is not str or not value["calibration_report_path"]:
+        raise ValueError("TASK8_MANIFEST_CALIBRATION_PATH_INVALID")
+    for key in (*_HASH_KEYS, "anchors_sha256", "calibration_report_sha256",
+                "manifest_document_sha256"):
         _require_hash(value[key])
     if (value["anchors_sha256"] != _sha(value["anchors"])
             or expected_anchors_sha256 is not None
@@ -111,8 +123,8 @@ def require_pick_place_validation_manifest(value: object, *, expected_anchors_sh
         raise ValueError("TASK8_ANCHORS_HASH_MISMATCH")
     if value["prefix_cases"] != _prefix_cases() or value["full_cases"] != _full_cases():
         raise ValueError("TASK8_CASES_INVALID")
-    if value["manifest_sha256"] != _sha({key: item for key, item in value.items()
-                                         if key != "manifest_sha256"}):
+    if value["manifest_document_sha256"] != _sha({key: item for key, item in value.items()
+                                                  if key != "manifest_document_sha256"}):
         raise ValueError("TASK8_MANIFEST_HASH_MISMATCH")
     return value
 
