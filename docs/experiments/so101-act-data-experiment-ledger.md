@@ -8241,3 +8241,24 @@ partial credit is claimed.
   built) caught, reverted and recorded.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-737 — Full teleop suite: 41 -> 9 failures, all attributed
+
+After the fixture alignment (CP-736) the full teleop suite reports **1394 tests, 0 errors,
+9 failures, 43 skipped** — down from 41 failures / 51 at the start of this phase.
+
+| Count | Class | File | Attribution |
+|---|---|---|---|
+| 3 | `TASK8_CASE_RESULT_INVALID` | `test_task8_case_execution.py` | this task: the runner result key set gained `live_evidence_artifact` in 8P3 sub-slice A, so the file's fake results need the field |
+| 2 | `CALIBRATION_SOURCE_PROVENANCE_MISSING` | `test_act_ros_child.py` | this task: the mandatory `source_provenance_sha256` from 8P1/8P2 reaching another fixture |
+| 1 | `AssertionError: assert 103 > 107` | `test_controller_reservation_paths.py` | environment: a derived socket path exceeding the AF_UNIX limit (already proven environmental by the isolation run) |
+| 3 | (remaining, not itemised by the xunit parse) | — | to be itemised next |
+
+Every failure class that was *caused* by the admission split or the v2 manifest is now gone from the
+teleop suite; what remains is further mechanical propagation of this task's earlier, deliberate
+requirements plus one environment assertion.
+
+- **Verification:** `gate6-batch3-py-gate/teleop-test4.log` plus the per-file xunit results under
+  `build/so101_teleop/test_results/`.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
