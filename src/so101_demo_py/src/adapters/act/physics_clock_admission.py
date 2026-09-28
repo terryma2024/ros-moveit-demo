@@ -374,6 +374,11 @@ class PhysicsClockAdmission:
         step and the selected-state age. Any change since the snapshot refuses.
         """
 
+        # freeze the selection scalars at entry: nothing later may re-read the
+        # caller's mutable sample object
+        selection = {"step": sample.physics_step,
+                     "session_id": sample.simulation_session_id,
+                     "reset_epoch": sample.reset_epoch}
         identity = self._full_identity(ticket, generation, reset_epoch)
         history = self._history
         snapshot = history.commit_state()
@@ -386,7 +391,7 @@ class PhysicsClockAdmission:
         if sample.simulation_session_id != identity[1] or sample.reset_epoch != identity[4]:
             raise AdmissionRefused("CLOCK_ADMISSION_SAMPLE_IDENTITY_MISMATCH")
         try:
-            entry = history.step_at(sample.physics_step)
+            entry = history.step_at(selection["step"])
         except ValueError as error:
             raise AdmissionRefused(
                 f"CLOCK_ADMISSION_HISTORY_STEP_UNAVAILABLE:{error}") from error
@@ -397,7 +402,8 @@ class PhysicsClockAdmission:
                 receipt = history.commit_receipt(
                     expected_version=snapshot["version"],
                     expected_incarnation=snapshot["incarnation"],
-                    expected_epoch=snapshot["epoch"], step=sample.physics_step,
+                    expected_epoch=snapshot["epoch"],
+                    step=entry["sample"].physics_step,
                     max_age_ns=self._selected_max_age_ns)
             except ValueError as error:
                 reason = str(error)

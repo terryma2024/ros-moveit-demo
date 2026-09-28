@@ -60,11 +60,14 @@ def _issue(registry, **overrides):
 
 
 def _reserve(port, *, permit_id="p-1", goal_uuid="g-1", role="arm", target_digest="d-1",
-             deadline_ns=2_000_000_000):
+             deadline_ns=2_000_000_000, session_id="clock-session", broker_incarnation="i",
+             claim_monotonic_ns=1_000_000_000):
     return port.reserve(permit_id=permit_id, goal_uuid=goal_uuid, role=role,
                         target_digest=target_digest, generation=1,
                         controller_incarnation="i", deadline_ns=deadline_ns,
-                        stage="route_dispatch")
+                        stage="route_dispatch", session_id=session_id,
+                        broker_incarnation=broker_incarnation,
+                        claim_monotonic_ns=claim_monotonic_ns)
 
 
 def test_hazard_before_claim_produces_zero_reserve_and_zero_send():
@@ -152,7 +155,8 @@ def test_controller_close_before_acceptance_yields_zero_accepted_commands():
     port = _fake()
     port.close_before_accept()
     _reserve(port)
-    assert port.send(goal_uuid="g-1", permit_id="p-1") == "REJECTED"
+    assert port.send(goal_uuid="g-1", permit_id="p-1", role="arm", target_digest="d-1",
+                     generation=1, controller_incarnation="i") == "REJECTED"
     assert port.accepted_commands == 0
 
 
@@ -160,7 +164,8 @@ def test_controller_acceptance_before_close_yields_one_command_then_cancel():
     port = _fake()
     port.accept_before_close(cancel_pending=True)
     assert _reserve(port) == "ACCEPTED"
-    assert port.send(goal_uuid="g-1", permit_id="p-1") == "ACCEPTED"
+    assert port.send(goal_uuid="g-1", permit_id="p-1", role="arm", target_digest="d-1",
+                     generation=1, controller_incarnation="i") == "ACCEPTED"
     assert port.accepted_commands == 1
     assert port.cancel_stop_pending is True
 
@@ -174,7 +179,8 @@ def test_wrong_field_is_rejected(field, value):
     port = _fake()
     _reserve(port)
     call = {"goal_uuid": "g-1", "permit_id": "p-1", "controller_incarnation": "i",
-            "sequence": 1, "deadline_ns": 2_000_000_000}
+            "sequence": 1, "deadline_ns": 2_000_000_000, "role": "arm",
+            "target_digest": "d-1", "generation": 1}
     call[field] = value
     assert port.send(**call) == "REJECTED"
     assert port.accepted_commands == 0
@@ -183,8 +189,10 @@ def test_wrong_field_is_rejected(field, value):
 def test_replay_duplicate_late_and_restart_are_fail_closed():
     port = _fake()
     _reserve(port)
-    assert port.send(goal_uuid="g-1", permit_id="p-1") == "ACCEPTED"
-    assert port.send(goal_uuid="g-1", permit_id="p-1") == "REJECTED"
+    assert port.send(goal_uuid="g-1", permit_id="p-1", role="arm", target_digest="d-1",
+                     generation=1, controller_incarnation="i") == "ACCEPTED"
+    assert port.send(goal_uuid="g-1", permit_id="p-1", role="arm", target_digest="d-1",
+                     generation=1, controller_incarnation="i") == "REJECTED"
     assert port.late_receipt_after_timeout() == "UNKNOWN"
     assert port.restart_controller() == "REJECTED"
 
@@ -237,7 +245,8 @@ def test_receipt_validation_rejects_invalid_fields():
 def test_no_acceptance_without_a_reservation():
     module = _module()
     port = _fake()
-    assert port.send(goal_uuid="g-1", permit_id="p-1") == "REJECTED"
+    assert port.send(goal_uuid="g-1", permit_id="p-1", role="arm", target_digest="d-1",
+                     generation=1, controller_incarnation="i") == "REJECTED"
     assert port.accepted_commands == 0
 
 
@@ -247,7 +256,8 @@ def test_same_goal_uuid_cannot_be_accepted_twice_with_a_different_permit():
     port.reserve(permit_id="p-1", goal_uuid="g-1", role="arm", target_digest="d-1",
                  generation=1, controller_incarnation="i", deadline_ns=2_000_000_000,
                  stage="route_dispatch")
-    assert port.send(goal_uuid="g-1", permit_id="p-1") == "ACCEPTED"
+    assert port.send(goal_uuid="g-1", permit_id="p-1", role="arm", target_digest="d-1",
+                     generation=1, controller_incarnation="i") == "ACCEPTED"
     port.reserve(permit_id="p-2", goal_uuid="g-1", role="arm", target_digest="d-1",
                  generation=1, controller_incarnation="i", deadline_ns=2_000_000_000,
                  stage="route_dispatch")
