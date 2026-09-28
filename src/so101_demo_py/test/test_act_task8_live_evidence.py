@@ -1,0 +1,117 @@
+"""Task 8P3: live evidence is a closed 10 Hz causal record, sealed only when complete.
+
+Canonical sample shape (pinned here):
+  case_id/session_id/attempt_id/reset_epoch/release_epoch/physics_step/sim_time_s/phase
+  source_stamps_s and source_received_monotonic_s over world/scene/contact/head/wrist/arm/neck
+  raw_records: {source: {"relative_path", "sha256"}} inside the same artifact
+  holding_state/wrist_frame_valid/wrist_target_visible/contact_observation_valid
+  bilateral_contact/no_fingertip_contact/cup_supported/released/placement_stable
+  cup_support_distance_m/end_effector_position_m/cup_position_m/cup_orientation_xyzw
+Every gap that is not "valid frame and target genuinely not visible" is evidence loss, never a
+bounded occlusion: the recorder refuses it instead of degrading.
+"""
+
+import hashlib
+import json
+from pathlib import Path
+
+import pytest
+
+SOURCES = ("world", "scene", "contact", "head", "wrist", "arm", "neck")
+
+
+def _sha(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def sample(root: Path, *, step=0, phase="CLOSE", **overrides):
+    raw = {}
+    for source in SOURCES:
+        payload = f"{source}:{step}".encode()
+        path = root / "raw" / f"{source}-{step}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        raw[source] = {"relative_path": path.relative_to(root).as_posix(),
+                       "sha256": _sha(payload)}
+    document = {
+        "case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
+        "reset_epoch": 4, "release_epoch": 0, "physics_step": step,
+        "sim_time_s": step * 0.1, "phase": phase,
+        "source_stamps_s": {source: step * 0.1 for source in SOURCES},
+        "source_received_monotonic_s": {source: 100.0 + step * 0.1 for source in SOURCES},
+        "raw_records": raw,
+        "holding_state": "HOLDING", "wrist_frame_valid": True, "wrist_target_visible": True,
+        "contact_observation_valid": True, "bilateral_contact": True,
+        "no_fingertip_contact": False, "cup_supported": True, "released": False,
+        "placement_stable": True, "cup_support_distance_m": 0.001,
+        "end_effector_position_m": [0.0, 0.0, 0.1], "cup_position_m": [0.0, 0.0, 0.1],
+        "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+    }
+    document.update(overrides)
+    return document
+
+
+@pytest.fixture
+def recorder(tmp_path):
+    from so101_demo.act.task8_live_evidence import Task8LiveEvidenceRecorder
+
+    root = tmp_path / "case-root"
+    root.mkdir()
+    return Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=root,
+                                     session_id="session-1", attempt_id="attempt-1"), root
+
+
+def test_sealed_artifact_is_closed_and_lists_every_sample(recorder):
+    rec, root = recorder
+    for step in range(3):
+        rec.append(sample(root, step=step))
+    artifact = rec.seal({"case_id": "full-01", "session_id": "session-1",
+                         "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 0})
+    path = Path(artifact["path"])
+    assert path.is_file() and artifact["sha256"] == _sha(path.read_bytes())
+    assert artifact["schema_version"] == 1
+    index = json.loads(path.read_text())
+    assert index["sample_count"] == 3
+    assert [entry["physics_step"] for entry in index["samples"]] == [0, 1, 2]
+    for entry in index["samples"]:
+        assert _sha((root / entry["relative_path"]).read_bytes()) == entry["sha256"]
+    with pytest.raises(ValueError):
+        rec.seal({"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
+                  "reset_epoch": 4, "release_epoch": 0})           # sealed once, never again
+
+
+@pytest.mark.parametrize("mutation", [
+    "missing_phase", "non_finite", "missing_stamp", "raw_hash_wrong", "raw_missing",
+    "identity_mismatch", "contact_observation_invalid", "wrist_frame_invalid",
+])
+def test_incomplete_or_incoherent_evidence_is_refused(recorder, mutation):
+    rec, root = recorder
+    document = sample(root)
+    if mutation == "missing_phase":
+        document.pop("phase")
+    elif mutation == "non_finite":
+        document["cup_support_distance_m"] = float("nan")
+    elif mutation == "missing_stamp":
+        document["source_stamps_s"].pop("wrist")
+    elif mutation == "raw_hash_wrong":
+        document["raw_records"]["wrist"]["sha256"] = "0" * 64
+    elif mutation == "raw_missing":
+        (root / document["raw_records"]["world"]["relative_path"]).unlink()
+    elif mutation == "identity_mismatch":
+        document["session_id"] = "other-session"
+    elif mutation == "contact_observation_invalid":
+        document["contact_observation_valid"] = False
+    else:
+        document["wrist_frame_valid"] = False
+    with pytest.raises(ValueError):
+        rec.append(document)
+
+
+def test_occlusion_is_only_timed_for_a_valid_frame_with_hidden_target(recorder):
+    rec, root = recorder
+    honest = sample(root, step=0, wrist_frame_valid=True, wrist_target_visible=False)
+    rec.append(honest)                       # a genuine, bounded visual occlusion is accepted
+    artifact = rec.seal({"case_id": "full-01", "session_id": "session-1",
+                         "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 0})
+    index = json.loads(Path(artifact["path"]).read_text())
+    assert index["samples"][0]["wrist_target_visible"] is False

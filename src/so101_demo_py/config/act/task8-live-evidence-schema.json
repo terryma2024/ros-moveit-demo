@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SO-101 Task 8 live evidence artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "identity",
+    "sample_count",
+    "samples"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "task8_live_evidence"
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "session_id",
+        "attempt_id",
+        "reset_epoch",
+        "release_epoch"
+      ],
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attempt_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reset_epoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "release_epoch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "sample_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "samples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "relative_path",
+          "sha256",
+          "physics_step",
+          "phase",
+          "sim_time_s",
+          "wrist_target_visible",
+          "release_epoch",
+          "reset_epoch"
+        ],
+        "properties": {
+          "relative_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "physics_step": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "phase": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sim_time_s": {
+            "type": "number"
+          },
+          "wrist_target_visible": {
+            "type": "boolean"
+          },
+          "release_epoch": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reset_epoch": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  }
+}
