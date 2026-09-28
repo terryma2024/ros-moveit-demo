@@ -5985,3 +5985,20 @@ status: PLANNED_SOURCE_ONLY_AND_ISOLATED_STACK
 - Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp560-copy-cost/checkpoint.json`，SHA256 `272c61eb78f78b0cb6bcdf7ae19b65a38d0b0122f2d3aa292be5efd0e85484d7`；读回核对 75 个索引文件、603,568 字节，索引集合与实际集合相等且逐文件哈希一致。保留 EXP-560 与全部更早实验；未归档任何批次。`__pycache__` 与 scratch 树仅为删除候选，未删除任何证据。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
 - 边界：本实验仍**没有**把适配器接入生产路径，也没有授权任何目标、许可或样本；`max_age_s` 仍是摄入边界，选中状态的新鲜度须由 owner 用更紧的独立边界约束。
 - Next discriminator: 评审第 5 项——把冻结边界、成本实测与集成设计提交独立 GPT-6 Astra/High 复核；通过后才进入第 6 项，把 `RosPhysicsClockAdapter` 接入 `PickPlaceRosEvidence` 与 SEARCH，并由 owner 以远低于 `max_silence_s` 的周期轮询 `check_health()`、在任何 false 结果上撤销下游 readiness 与 authority，证明没有过期或未就绪样本能越过准入边界。
+
+## EXP-561 — 按独立评审修正边界来源并在接受/读取路径强制到期
+
+status: PLANNED_SOURCE_ONLY
+
+- Prior EXP-560 / CP-585 与独立 GPT-6 Astra/High 复核（请求 `handoff/2026-09-28-clock-bounds-review-request.md`，答复 `handoff/2026-09-28-clock-bounds-review-reply.md`，完整交互 `handoff/2026-09-28-clock-bounds-review.log`，只读、未改文件、未启动 stack）；source HEAD `02eb1d0d`；注册证据根、overlay `i`、exact test Python `test-venv/bin/python`；无域、无 stack、无目标。
+- Observation: 评审确认四个数值本身是可接受的实验候选，但指出（1）`ceil_50ms(2 × 194,483,664)` 是 0.40 s 而不是 0.45 s，且 194.5 ms 与 170–183 ms 的块间隔**跨越 reset**，其正确种群是“运行窗口内”的 111.3/118.5/123.0 ms（EXP-559）与 110.3/107.9/108.4 ms（EXP-560）；（2）151.8 ms 是“入口年龄最大值 + 整回调整体成本最大值”的**跨块保守包络**，不是一次观测到的校验时刻最大值；（3）存在真实旁路：`accept_chunk` 不检查已到期的首块期限，迟到的块可以在没有任何轮询的情况下把 `_first_chunk_seen` 置位并使 readiness 变真；（4）`check_health()` 的 docstring 错称成功需要已接受块。
+- One variable: 只修正“健康期限在哪里被强制”和边界来源标注——把期限判定抽成 `_expire_deadlines(now_ns)`，在接受块之前、在 `recent_with_receipts`/`step_at` 读取之前都先判定并 latch；`MAX_SILENCE_S` 按正确种群改为 0.30 s 并在模块文档中改写推导；`OBSERVED_*` 常量按窗口/重置跨界拆分；docstring 改为“True 仅表示已 armed 且尚无期限到期，绝不代表有证据”。
+
+## CP-586 — 旁路已关闭，边界来源已按窗口重新标注
+
+- EXP-561 是 `VALID_SOURCE_ONLY_NO_MOTION`。离线窗口/代次作用域复算（`/tmp/window_scoped.py`，输出写入两个实验目录的 `window-scoped-analysis.json`）给出精确种群：窗口内块间隔 max 111.34/118.50/123.00 ms（EXP-559）与 110.29/107.91/108.38 ms（EXP-560）；窗口内入口年龄 max 115.35/123.71/127.83 ms 与 112.41/112.91/112.53 ms；窗口内回调成本 max 24.05/26.89/23.95 ms 与 20.10/20.77/19.64 ms；`arm → 首块` 115.4–128.05 ms；跨界（reset）间隔 170.3–382.1 ms 明确归入首块种群而不是静默种群。
+- 期望 RED：两个“无轮询也必须关闭”的用例按设计失败（迟到的首块在期限 +1 ns 后被接受；静默到期后读取与迟到块未关闭代次），另外两个用例（armed 无证据不可服务、选中样本过期即关闭）本已通过并被保留为回归。实现后焦点 GREEN 53/53 通过（含 bounds 模块断言：`MAX_AGE_S ≥ 2×校验包络`、`MAX_SILENCE_S ≥ 2×窗口内间隔` 且 `< 2×跨界间隔`、`FIRST_CHUNK_TIMEOUT_S ≥ 3×arm→首块`、三个值都在 50 ms 网格上）。
+- 冻结值（`physics_clock_bounds.py`）：`SOURCE_STEP_GAP_NS = 6 ms`（启发式拒绝阈值，不用于静默/年龄/首块）、`MAX_AGE_S = 0.35`（2×154.72 ms 包络）、`MAX_SILENCE_S = 0.30`（2×123.00 ms + 余量；轮询滑移只影响检测延迟）、`FIRST_CHUNK_TIMEOUT_S = 0.40`（3×128.05 ms）。`check_health()` 现在只是“已 armed 且未到期”，准入必须另有 `evidence_ready` 与 owner 的粘滞撤销。
+- 仍未完成（评审“接线前必须完成/生产授权前必须完成”项）：broker 侧按 ticket/generation/epoch 的**粘滞 authority 撤销**（不是缓存一个 readiness 布尔）；生产 owner 在代表性负载下的 arm-start → resume 请求 → 应答 → 首个回调 → 接受证据 全链路资格（含 discovery、executor/lock 等待与冷启动），据此确认或修改 0.40 s 的 owner 余量；选中状态新鲜度与“到期 → 撤销 → 确认停止”的独立预算；以及评审列出的对抗性用例（选中帧已过期但历史更新、proof/permit/部分提交期间 hazard 撤销并确认停止、并发修改与返回拷贝的隔离）。
+- 证据：RED/GREEN 的 scratch、tempfile 证明、JUnit 与日志分别位于 `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/exp561-deadline-enforce-red.PX5MbSol` 与 `…/exp561-enforce-green.hJ757qaJ`；本轮为源码级强制修正，按既定约定不单独建 checkpoint 目录，最终状态由提交与上述 scratch 共同固定。保留全部更早实验；未归档、未删除任何证据。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
+- Next discriminator: 实现评审要求的 broker 粘滞撤销与准入契约（ticket/generation/epoch 作用域），补上对抗性用例，然后在代表性负载下测量真实 owner 路径并据此确认或收紧 0.40 s 首块期限；之后才把 `RosPhysicsClockAdapter` 接入 `PickPlaceRosEvidence` 与 SEARCH。
