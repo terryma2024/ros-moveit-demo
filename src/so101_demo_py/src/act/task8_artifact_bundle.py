@@ -253,3 +253,19 @@ def require_task8_payload(payload: dict, *, collection_only_keys=()) -> dict:
     if set(collection_only_keys) & set(payload):
         raise ValueError("TASK8_PAYLOAD_SHAPE_CONFLICT")
     return dict(payload)
+
+
+def verify_task8_startup_receipt(payload: dict, *, collection_only_keys=()) -> PreparedTask8Bundle:
+    """Verify the payload's receipt and bundle before any resource is acquired.
+
+    The payload's digest must match the receipt's raw bytes, and the receipt must verify as a
+    committed bundle; only then is the returned bundle safe to build an `ActArtifactBinding` from.
+    """
+
+    payload = require_task8_payload(payload, collection_only_keys=collection_only_keys)
+    receipt = Path(payload["preparation_receipt_path"])
+    if not receipt.is_file():
+        raise ValueError("TASK8_PREPARATION_REQUIRED")
+    if _digest(receipt) != payload["preparation_receipt_sha256"]:
+        raise ValueError("TASK8_PREPARATION_RECEIPT_MISMATCH")
+    return verify_prepared_task8_bundle(receipt)
