@@ -10673,3 +10673,37 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
   no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-840 — Integration gate at the frozen HEAD: my modules clean, 28 pre-existing failures carry over
+
+- **Run:** repo's own xdist runner from the repository root,
+  `python -m tools.so101_pytest_gate --workers 8 --process-id-chars 4 --evidence-root <root> --run-id beh-r411
+  --python <test-venv>/bin/python --repo-root <worktree> --expected-source-commit 03642ca2… --allow-dirty
+  --timeout-s 900`, with a fresh NVMe scratch `scratch-r411.*` whose `TMPDIR`/`TMP`/`TEMP` were verified
+  through the exact test interpreter before pytest started.
+- **Verdict: the runner failed closed (`SO101_PYTEST_GATE_ERROR … shard-02: exit=1; shard-03: exit=1`), and the
+  failures are not mine.** 5580 test cases ran; **28 failed, all 28 in the user's own dirty files**:
+  `test_act_task8_reset` (8) and `test_act_pick_place_approach_source_binding` (20), every one
+  `AttributeError: type object 'Pairs' has no attribute 'fingerprin'` - the known `fingerprint` typo in the
+  user's uncommitted work, which I have preserved and must not "fix" on their behalf.
+- **My controlled work is clean in the same run:** `test_act_candidate_reachability` 9 cases / 0 failures,
+  `test_act_training_lock_resolver` 5 / 0, `test_act_lerobot_adapter` 4 / 0 (one of the four is the torch path
+  that skips in this interpreter by design and was proven in venv-b instead), `test_act_training_requirements`
+  4 / 0. No failure anywhere references the preflight adapter, the resolver, the lock or the LeRobot adapter.
+- **One difference from earlier gate runs, recorded rather than smoothed over:** the previous run showed 29
+  failures (those 28 plus one `OSError: AF_UNIX path too long` in the reservation-client family). This run shows
+  28, so the socket-path failure did not reproduce under this scratch path - consistent with its known
+  length dependence, and not a sign that anything was fixed.
+- **First attempt of the round failed on my working directory, not on code:** invoking the runner from
+  `src/so101_demo_py` produced `ModuleNotFoundError: No module named 'tools'`; the runner lives at
+  `tools/so101_pytest_gate.py` and needs the repository root as cwd. That log is kept as
+  `scratch-r410.gate.log` and the relaunch used a fresh run id so the failed attempt stays distinguishable.
+- **Runtime run subroot opened, nothing moved or deleted:** `runtime-task8l-gen2/` inside the registered
+  evidence root, with `provenance/ measurement/ report/ bundle/ live/ w1/ w2/ w8/ logs/`, a README fixing the
+  contract (single admission-time resource binding, CUDA only, earlier bundle/live/`QUALIFIED` invalid) and a
+  provenance note reserving ROS_DOMAIN_ID / GZ_PARTITION for the first runtime step.
+- **Scratch bookkeeping:** `scratch-r410.*`, `scratch-r411.*` and `pg14tmp.eIdL`…`pg25.EdaS` are fresh
+  directories under the registered root, all **deletion candidates after readback**, none deleted.
+- **Boundaries:** no runtime or motion started, no hardware, no Gazebo, no push, no evidence deleted, no gate
+  lowered, no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
