@@ -584,7 +584,8 @@ def test_authority_consume_refuses_without_accepted_evidence():
     handle = registry.issue_handle(identity=admission.identity, stage="route_dispatch", step=1,
                                    history_version=history.snapshot()["version"],
                                    incarnation=history.incarnation, epoch=1, role="arm",
-                                   controller_generation=1, goal_uuid="g-1", target_digest="d-1")
+                                   controller_generation=1, goal_uuid="g-1", target_digest="d-1",
+                                   controller_incarnation="i")
     executed = []
     version_before = history.snapshot()["version"]
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_HISTORY_NOT_READY"):

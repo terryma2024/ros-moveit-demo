@@ -218,7 +218,8 @@ def test_claim_uses_registry_time_and_rejects_a_rolled_back_clock():
                                                    permit_ttl_ns=1_000_000)
     handle = registry.issue_handle(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
                                    history_version=1, incarnation="i", epoch=1, role="arm",
-                                   controller_generation=1, goal_uuid="g-1", target_digest="d-1")
+                                   controller_generation=1, goal_uuid="g-1", target_digest="d-1",
+                                   controller_incarnation="i")
     now[0] += 5_000_000                       # real clock advanced past the deadline
     with pytest.raises(Exception):
         registry.claim(handle, now_ns=1)      # caller time must not be accepted
@@ -262,7 +263,8 @@ def test_same_goal_uuid_cannot_be_accepted_twice_with_a_different_permit():
     port.reserve(permit_id="p-2", goal_uuid="g-1", role="arm", target_digest="d-1",
                  generation=1, controller_incarnation="i", deadline_ns=2_000_000_000,
                  stage="route_dispatch")
-    assert port.send(goal_uuid="g-1", permit_id="p-2") == "REJECTED"
+    assert port.send(goal_uuid="g-1", permit_id="p-2", role="arm", target_digest="d-1",
+                     generation=1, controller_incarnation="i") == "REJECTED"
     assert port.accepted_commands == 1
 
 
@@ -381,8 +383,7 @@ def test_controller_restart_invalidates_the_receipt_incarnation():
     registry, port, handle, permit, fields = _end_to_end()
     assert port.restart_controller(controller_incarnation="restarted") == "REJECTED"
     restarted = port.last_receipt(permit_id=permit.permit_id)
-    restarted.update(goal_uuid=permit.goal_uuid, role=permit.role,
-                     target_digest=permit.target_digest)
+    restarted.update(controller_incarnation="restarted")
     assert restarted["controller_incarnation"] == "restarted"
     with pytest.raises(Exception):
         registry.receipt(handle, **restarted)
