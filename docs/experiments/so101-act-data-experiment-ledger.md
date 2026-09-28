@@ -9320,3 +9320,33 @@ This resolves the design block **without authorizing runtime or motion**.
   importing the constant, so the check cannot drift.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-783 — Task 11A: the spec now carries exactly what admission enforces
+
+- **Delivered:** `build_fixed_collection_spec` returns `{"kind": "act_collection_start" |
+  "act_collection_resume", "payload": <22 keys>}`.
+  - the kind is one `_ACT_START_KINDS` contains and `bridge.act_collection` routes, with `resume`
+    choosing between them;
+  - the payload key set is asserted **equal to `_ACT_PAYLOAD_KEYS` imported from admission**
+    (`FIXED_COLLECTION_PAYLOAD_SCHEMA_DRIFT` otherwise) — and the focused test imports the same constant,
+    so neither the guard nor the test can drift from the contract admission actually applies;
+  - dropped per that contract: `policy_path`/`policy_sha256` (the activation receipt covers the policy)
+    and any room for `qualification_contract_path`, `wave_index_path` or `limit`;
+  - the fixed-collection metadata that has no key lives in the evidence root beside the campaign index,
+    the convention `--resume` already requires;
+  - `service_epoch`, `resource_binding_id`, `proposal_path`, `children` and the source fields come from
+    the admitted context through an injected `context_factory` (production path composes the service and
+    fails closed with `ACT_COLLECTION_CONTEXT_UNAVAILABLE`) — the CLI still invents nothing;
+  - the qualification/formal split is unchanged: qualification creates its contract atomically before
+    spawn, formal requires a present, unrevoked, 40-scene contract and passes its path as
+    `qualification_receipt_path`.
+- **Verification:** `test_act_parallel_collection_integration.py` **4 passed**; the six-module Task 11A
+  focused run recorded alongside (`gate6-batch3-py-gate/task11a19.{log,junit.xml}`), with the NVMe
+  scratch verified before the run.
+- **Process:** every guard this round captured its exit status into a variable before testing it — the
+  slip recorded in CP-781 is not repeated.
+- **Remaining:** Task 11A's code work is complete apart from the live Steps 6–7, which need a fresh
+  `QUALIFIED` from Task 8L on the same final HEAD and are out of scope while the no-runtime instruction
+  stands.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
