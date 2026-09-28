@@ -1,0 +1,26 @@
+schema_version: 1
+kind: act_parallel_collection
+parallel_runtime:
+  path: config/mujoco/parallel_batch_v3.yaml
+  sha256: 991b5c1b4fbd0cc1f0a97bd20a5b5a4e02028634f3f4ef288ad87554b383ab70
+  device: cuda
+  allow_cpu_fallback: false
+qualification:
+  functional_worker_counts: [1, 2]
+  load_worker_count: 8
+  formal_worker_count: 8
+  max_wave_size: 20
+  no_auto_degrade: true
+recovery:
+  business_retry_count: 0
+  max_infra_attempts_per_scenario: 2
+  resume_requires_identical_business_hashes: true
+recorder:
+  sample_rate_hz: 10
+  queue_capacity_samples: 16
+  queue_high_watermark_samples: 12
+  queue_recovery_watermark_samples: 8
+  queue_high_watermark_hold_s: 0.2
+  lossless: true
+telemetry:
+  period_s: 1.0

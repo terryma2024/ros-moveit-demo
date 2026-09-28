@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SO-101 ACT parallel collection config v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "parallel_runtime",
+    "qualification",
+    "recovery",
+    "recorder",
+    "telemetry"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "act_parallel_collection"
+    },
+    "parallel_runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "device",
+        "allow_cpu_fallback"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^config/"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "device": {
+          "const": "cuda"
+        },
+        "allow_cpu_fallback": {
+          "const": false
+        }
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "functional_worker_counts",
+        "load_worker_count",
+        "formal_worker_count",
+        "max_wave_size",
+        "no_auto_degrade"
+      ],
+      "properties": {
+        "functional_worker_counts": {
+          "const": [
+            1,
+            2
+          ]
+        },
+        "load_worker_count": {
+          "const": 8
+        },
+        "formal_worker_count": {
+          "const": 8
+        },
+        "max_wave_size": {
+          "const": 20
+        },
+        "no_auto_degrade": {
+          "const": true
+        }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "business_retry_count",
+        "max_infra_attempts_per_scenario",
+        "resume_requires_identical_business_hashes"
+      ],
+      "properties": {
+        "business_retry_count": {
+          "const": 0
+        },
+        "max_infra_attempts_per_scenario": {
+          "const": 2
+        },
+        "resume_requires_identical_business_hashes": {
+          "const": true
+        }
+      }
+    },
+    "recorder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sample_rate_hz",
+        "queue_capacity_samples",
+        "queue_high_watermark_samples",
+        "queue_recovery_watermark_samples",
+        "queue_high_watermark_hold_s",
+        "lossless"
+      ],
+      "properties": {
+        "sample_rate_hz": {
+          "const": 10
+        },
+        "queue_capacity_samples": {
+          "const": 16
+        },
+        "queue_high_watermark_samples": {
+          "const": 12
+        },
+        "queue_recovery_watermark_samples": {
+          "const": 8
+        },
+        "queue_high_watermark_hold_s": {
+          "const": 0.2
+        },
+        "lossless": {
+          "const": true
+        }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "period_s"
+      ],
+      "properties": {
+        "period_s": {
+          "const": 1.0
+        }
+      }
+    }
+  }
+}

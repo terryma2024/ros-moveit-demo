@@ -7413,3 +7413,29 @@ ancestors; reviewed plan SHA256 verified as
 - **Boundaries:** unpaid/unrelated dirty files preserved (held_cup_transfer_*, pick_place_approach_*,
   contracts.py, pick_place_runner.py, the physical-execution plan doc); no runtime/motion started;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-700 — Task 8P1 implemented, verified and committed
+
+- **RED -> GREEN**: two collection failures (`ModuleNotFoundError` for
+  `so101_demo.act.source_provenance` / `so101_demo.act.collection_config`) recorded per file, then
+  **19 passed** (`gate6-batch3-py-gate/t8p1RED-summary.txt`, `t8p1GREEN5.{log,junit.xml}`).
+- **Step 4 probe** (`experiments/gate6-runtime/task8-core/t8p1-tamper-probe.txt`, all PASS):
+  byte-identical double generation (sha `a6cecb3d71ec70eb`), and three isolated one-byte tampers —
+  controlled installed file -> `SOURCE_PROVENANCE_INSTALL_DIRTY`; compiled **receipt input** ->
+  `SOURCE_PROVENANCE_RECEIPT_INPUT_DIRTY`; public runtime YAML ->
+  `COLLECTION_PARALLEL_RUNTIME_HASH_INVALID` — with **no manifest created** in any case.
+- **Contract strengthening found by the tests:** compiled receipts now declare real input paths in
+  `dependency_sha256` and those inputs are **re-hashed against the source root** on every verify, so
+  a tampered input cannot pass; two fixture defects (receipt written before its inputs; a shared
+  source file rewritten per role) were fixed in the test, not hidden in the implementation.
+- **Delivered files (plan Step 5 list only):** `act/source_provenance.py`, `act/collection_config.py`,
+  `cli/act_build_task8_source_provenance.py`, `config/act/task8-source-provenance-schema.json`,
+  `config/act/parallel-collection-v3-schema.json`, `config/act/parallel_collection_v3.yaml`,
+  `setup.py`, and the two focused test modules. `git diff --cached --check` clean, no unrelated file
+  staged.
+- **Design conformance:** the head-search/parallel runtime semantics are CUDA-only with
+  `allow_cpu_fallback: false` and no environment override (checked against the checked-in
+  `parallel_batch_v3.yaml`); the collection config carries the frozen §4.3 values with
+  `parallel_runtime.sha256 = 991b5c1b4fbd0cc1f0a97bd20a5b5a4e02028634f3f4ef288ad87554b383ab70`.
+- **Boundaries:** no runtime, controller goal or motion started; unrelated dirty files preserved;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.

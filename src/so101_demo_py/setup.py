@@ -101,6 +101,8 @@ setup(
             "act_prepare_pick_place_validation = so101_demo.cli.act_prepare_pick_place_validation:main",
             "act_run_pick_place_validation = so101_demo.cli.act_run_pick_place_validation:main",
             "act_prepare_task8_live = so101_demo.cli.act_prepare_task8_live:main",
+            "act_build_task8_source_provenance = "
+            "so101_demo.cli.act_build_task8_source_provenance:main",
             "act_task8_live = so101_demo.cli.act_task8_live:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service
