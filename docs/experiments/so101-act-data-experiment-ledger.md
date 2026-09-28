@@ -9903,3 +9903,21 @@ This resolves the design block **without authorizing runtime or motion**.
   a half-verified change there is worse than an accurate handover note.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-809 — Task 15: the exact router pattern for the ACT endpoints
+
+- **Recorded from `unified/app.py`** (1137 lines, clean): routes are **factory functions** returning an
+  `APIRouter`, with handlers defined as closures inside (`health_router`, `instance_router`, and others), one
+  top-level factory registering them in a fixed order, and shared dependencies `require_authority(domain)` /
+  `require_channel(domain)` plus an `unavailable(...)` helper for closed responses.
+- **The increment is therefore mechanical and offline-testable:** write `act_router(services)` with
+  `POST /act/command` and `GET /act/status` delegating to the Task 15 gateway (already implemented and
+  tested), register it beside the other routers, and test it by building the router with a stub services
+  object and asserting both the declared paths and the handler behaviour; then `bun run generate:api` and the
+  panel wiring.
+- **Auth requirement noted:** the ACT routes must declare the same authority/channel dependencies as the
+  others, so this does not add an ungated command path to a live server.
+- **No code changed this round**, deliberately: with the pattern now fully specified, the next edit is
+  mechanical, whereas guessing at a live server's gating would not be.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
