@@ -10531,3 +10531,33 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered;
   user's 31 modified and 12 untracked paths untouched (setup.py was clean before my one-line addition and is
   committed with it); formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-835 — Training interpreter resolved and CUDA-proven; two artifact hashes still unpinned
+
+- **Independent interpreter:** `task12-training/venv-a` (CPython 3.12.3) under the registered evidence root,
+  never ROS Python. Resolution log `task12-training/logs/resolve-venv-a.log`, freeze
+  `logs/venv-a-freeze.txt` (61 packages), hashed compile `logs/venv-a-hashed.txt` (720 artifact hashes).
+- **Resolved versions:** `lerobot==0.6.1`, `torch==2.11.0+cu128`, `torchvision==0.26.0+cu128`,
+  `triton==3.6.0`, plus the `nvidia-*-cu12` runtime wheels.
+- **LeRobot/Python compatibility settled by the index, not by assumption:** LeRobot 0.6.1 declares
+  `Requires-Python >=3.12` on the TUNA mirror (0.4.x declared `>=3.10`), so the plan's Python 3.12.3 is in
+  range and the user's stop condition does not trigger.
+- **CUDA-only proof on the real GPU:** `nvidia-smi` reports the RTX 5060 Ti at compute capability **12.0**
+  (Blackwell), which is why the cu128 wheel line was chosen; in the venv `torch.cuda.is_available()` is True,
+  the device reports capability `(12, 0)`, `torch.cuda.get_arch_list()` contains **`sm_120`**, and a 512x512
+  GPU matmul returned in 0.096 s. No CPU fallback path was used or requested.
+- **LeRobot API captured for the adapter:** `ACTPolicy.from_pretrained(pretrained_name_or_path, *, config=None,
+  ...)` exists, and `ACTConfig` exposes `n_obs_steps`, `input_features`, `output_features`, `device`,
+  `use_amp`, `chunk_size`. The adapter will be written against these names as they exist in 0.6.1 rather than
+  from memory.
+- **Exact remaining gap before the lock can be declared RESOLVED:** 59 of 61 packages now carry a hash that was
+  verified twice (matched to the platform wheel the index serves, and cross-checked against uv's own compile
+  hash set). **`torch` and `torchvision` are not yet pinned**, because the CUDA index listing did not yield a
+  compatible-artifact match for `torch-2.11.0+cu128` / `torchvision-0.26.0+cu128` in my parser (the first JSON
+  read succeeded, a later one returned non-JSON, and the HTML hrefs are URL-encoded). The lock therefore stays
+  **UNRESOLVED** and `require_resolved_requirements` still fails closed, which is the correct behaviour while
+  two pins are missing. Next attempt: read the single hash uv itself accepted for those two versions from the
+  compile set, or fetch the wheel and hash it locally.
+- **Boundaries:** no runtime or motion, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
+  no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
