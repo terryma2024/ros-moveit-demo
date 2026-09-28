@@ -6325,3 +6325,11 @@ status: PLANNED_ISOLATED_STACK
 - 诚实状态：集合仍为 **151 个用例、7 failed / 144 passed**。7 个失败用例：`test_same_goal_uuid_cannot_be_accepted_twice_with_a_different_permit`、`test_timeout_then_late_acceptance_never_revives_the_permit`、`test_duplicate_receipt_after_terminal_state_is_refused`、`test_controller_restart_invalidates_the_receipt_incarnation`、`test_generation_one_reservation_is_dead_after_rearm_to_two`、`test_receipt_observed_at_zero_after_thirty_one_seconds_is_refused`、`test_real_copy_and_io_inside_the_dispatch_nodes_with_revoke_progressing`。清单固化于 `experiments/exp570-dispatch-transaction/failing-tests.txt`；checkpoint SHA256 `1a677dc3ce47a65b083dc7e24b499dc8258f31453341de05058f3fcb64889e7b`。**未声明任何关闭**。
 - 说明：本轮内多次迭代未能把这 7 项收绿，且我已接近本轮可用的上下文预算；继续盲改有引入新缺陷的风险（此前已发生过一次需要回退的批量改动）。因此在此停下并如实记录，下一轮应从这 7 个具名用例出发做一次专注修复。
 - 边界：Gate 5 仍 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-621 — EXP-570：控制器化身与历史化身分离 + commit 后 owner 复检（RED 8 failed）
+
+- 提交 `012a72d9`。两处实现修复：(1) permit record 现在**分别冻结**控制器化身与历史化身——receipt 校验把 `controller_incarnation` 对 record 的**控制器身份**比较、把 `broker_incarnation` 对**历史化身**比较（此前两者混用，导致合法 receipt 被判 INVALID、dispatch 事务落到 UNKNOWN）；(2) `claim_bound` 在 history commit **之后**、`READY -> IN_FLIGHT` 之前再次确认 owner 仍然有效（未 revoke/retire/未确认停止），因此**在 commit 期间发生的撤销**会拒绝本次 claim（新增 `PhysicsClockAdmission.owner_is_active()` 作为 broker 内部检查）。
+- 诚实状态：集合 **151 个用例、8 failed / 143 passed**。清单固化于 `experiments/exp570-dispatch-transaction/failing-tests.txt`（7 项为上一轮的具名失败 + `test_claim_uses_registry_time_and_rejects_a_rolled_back_clock`；另有 `test_authority_consume_refuses_without_accepted_evidence` 需要随新签名适配）。
+- 过程如实记录：本轮中途曾用逐行替换批量补参数，导致多个此前通过的用例失败（12 failed）；已用 `git checkout` 把两个测试文件恢复到 `221b95f0`，只保留一处**作用域明确**的辅助函数修改（`_issue` 传 `controller_incarnation`），再确认状态为 8 failed / 143 passed。这与前几轮同样的教训一致：测试适配必须逐个具名用例进行，不能逐行批量替换。
+- checkpoint SHA256 `7358e74d314cd192cd6ce70427f0b8f50a8f57f787f1b3130a7bdb5eb0dc4ab6`；被测源码哈希已更新。
+- 边界：Gate 5 仍 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
