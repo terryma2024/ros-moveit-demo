@@ -57,6 +57,22 @@ enum class BoundReserveStatus : uint8_t
   DENY_CLOSED,
 };
 
+// Service-owned identity generation and its frozen bounded binary reply.
+constexpr uint8_t kIdentityProtocolVersion = 1;
+constexpr uint8_t kIdentityQueryOperation = 1;
+constexpr size_t kMaxIdentityReplyBytes = 160;
+
+ServiceControllerIdentity generate_service_identity(
+  ControllerReservationRole role, const std::array<uint8_t, 32> & capability);
+
+std::vector<uint8_t> encode_identity_reply(
+  ControllerReservationRole role, uint64_t generation, const std::string & incarnation,
+  const std::string & boot);
+
+bool parse_identity_reply(
+  const std::vector<uint8_t> & reply,
+  ControllerReservationRole expected_role, ServiceControllerIdentity * out);
+
 struct BoundControllerReservationRequest
 {
   uint64_t generation{0};
