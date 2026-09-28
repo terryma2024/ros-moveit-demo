@@ -6687,3 +6687,12 @@ status: PLANNED_ISOLATED_STACK
 - 下一轮的正确做法（已明确、不再靠试错）：先在**只改源码**的前提下完成 1–4 步（`identity_snapshot` → `capture_controller_identity` → `claim_bound` 只消费内部快照 → `reserve` 校验 expected boot），每步后仅跑 `test_act_dispatch_transaction.py`；确认 8/8 后再补 5 的快照权威用例，最后跑六模块与四探针。注意现有若干测试直接调用 `port.reserve(...)`，需同步其签名或让 `expected_boot_incarnation` 保持可选默认 None。
 - 未完成：上述 P2 权威修补；copy/legacy 迁移复核；簿记（contract/audit/ledger 最终更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且清单快照提交与 ledger/请求包提交显式分离）。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-662 — EXP-573：工作树已恢复干净（dirty=42、六模块 151、探针 29）；P2 权威漏洞仍开放并已有定位
+
+- 上一轮的 `git checkout` 因**路径列表中混入未跟踪文件**而整体失败（`error: pathspec ... did not match`），导致两个源文件实际**未**回退、工作树一度为 45 项脏；本轮已分开处理：先 `git checkout -- <两个源文件>`（`checkout_rc=0`），再把未跟踪的新测试移到 NONQUALIFYING 证据目录（`mv` 而非删除，内容保留）。
+- **恢复后复核**：`git status --short | wc -l` = **42**（仅既有 dirty entries，任务自有脏项为 0）；六模块 **151 passed**（`restore2-six.log`/JUnit，scratch `exp573-restore2.*`）；四探针 **29 passed**（`restore2-probes.log`/JUnit）。镜像 `mirror-26` 逐文件 SHA 等于 worktree。
+- **P2 权威漏洞（调用方可替换的 `controller_snapshot` 参数）仍然开放**——当前已提交的设计 B 仍允许省略该参数（跳过代次/boot 校验）或传入伪造 dict。用户要求的 broker 自有捕获方案（`port.identity_snapshot()` → `registry.capture_controller_identity(handle)` → `claim_bound` 仅消费内部快照 → `reserve` 校验 `expected_boot_incarnation`）已实现并保存在 `experiments/exp573-single-receipt/nonqualifying/{authority_transaction,dispatch_transaction}.broker-capture-partial.py` 与 `test_act_exp573_snapshot_authority.partial.py`，但当时六模块 18 failed / 133 passed、新用例 1 failed，未收敛。
+- **失败定位（供下一轮直接执行）**：失败集合中的 `test_controller_acceptance_before_close_yields_one_command_then_cancel`、`test_wrong_field_is_rejected[...]` 等用例**直接**调用 `registry.claim_bound(...)`，在新契约下必须先经过 broker 捕获；因此修复的主战场在**测试侧**——在所有直接调用 `claim_bound` 的辅助函数中先插入 `registry.capture_controller_identity(handle)`（并让 `port.reserve` 的 `expected_boot_incarnation` 保持可选默认 `None`，以兼容测试直接调用）。下一轮按此顺序执行：只改源码 → 跑 `test_act_dispatch_transaction.py`（须 8/8）→ 补测试侧捕获 → 跑六模块 → 再写 `test_act_exp573_snapshot_authority.py` 的五项 RED/GREEN 用例。
+- 未完成：上述 P2 权威修补；copy/legacy 迁移复核；簿记（contract/audit/ledger 最终更正、重生成 change/evidence 清单、review 请求包引用**当前整文件哈希**且“清单快照提交”与“ledger/请求包提交”**显式分离**）。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；证据追加式，无删除或覆盖。
