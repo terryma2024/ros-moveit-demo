@@ -7835,3 +7835,23 @@ brief: CP-709; hook points: `experiments/gate6-runtime/task8-core/t8p3-remaining
   (CP-717) and this identity binding. The CLI and the readback capture-path extraction remain.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-719 — Third whole-surface verification at 6af9648e (twelve suites, 153 passed)
+
+Fresh mirror + fresh NVMe scratch with the `tempfile.gettempdir()` probe, twelve Task 8 suites
+collected **together**:
+
+    HEAD 6af9648e -> rc=0, 153 passed   (gate6-batch3-py-gate/verifyHEAD3.{log,junit.xml,result})
+
+The count rose from 146 (at `d360a14e`) to 153, matching the seven tests added by CP-713…CP-718
+(journal path, complete journal row, frozen case list, journal plan, payload helper, row identity
+binding), with no regression across the bundle, recorder, manifest, contract, aggregator, live-CLI,
+live-campaign, core, search-port, readback, calibration and head-search suites.
+
+Verification history for this series: **95** passed @ `bc02b2dd`, **146** @ `d360a14e`, **153** @
+`6af9648e`. All three runs used a fresh mirror and a fresh scratch under the registered durable
+evidence root; none reused another run's directory.
+
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED; 43 dirty entries and 12 untracked user files
+  preserved; nothing deleted.
