@@ -9208,3 +9208,27 @@ This resolves the design block **without authorizing runtime or motion**.
   teleop-side modifications and the live Steps 6–7.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-778 — Task 11A: the runtime adapter is the only place ports meet the campaign
+
+- **Delivered:** `adapters/act/parallel_collection_runtime.py` with `ActFixedCollectionRuntime`, plus
+  `test_act_parallel_collection_runtime.py`.
+  - **no work without an admitted lease:** `lease()` must report `admitted is True` and an integer
+    `reset_epoch`, else `ACT_COLLECTION_LEASE_UNAVAILABLE` — with the test asserting **zero resets and no
+    phase calls**, not merely an exception.
+  - one reset, in preparation only (Task 11's `prepare_scenario` with the shared `AttemptLedger`); the
+    collection half uses `collect_authorized_scenario`, which structurally has no reset port.
+  - a scene the context does not describe is `ACT_COLLECTION_SCENARIO_UNAVAILABLE`, again with zero
+    resets; an infrastructure fault raises `COLLECTION_INFRA_FAULT` and seals **nothing**.
+  - a supplied boundary wrapper runs the work inside it, matching the existing `ActCollectionWorkload`
+    lease pattern in the repo.
+- **One more wrong test assumption of mine:** the scenario-mismatch path was exercised with an
+  *unadmitted* lease, so the lease guard fired first; corrected so the admitted case asserts the intended
+  guard.
+- **Verification:** focused tests **23 passed** across the five Task 11A modules
+  (`gate6-batch3-py-gate/task11a11.{log,junit.xml}`).
+- **Remaining in 11A:** the `parallel_batch/worker.py` minimal touch and the
+  `config/act/parallel_collection_v3.yaml` consumption check, then the teleop-side modifications
+  (`bridge`, `teleop_service`, `contracts`, `admission`) and the live Steps 6–7.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
