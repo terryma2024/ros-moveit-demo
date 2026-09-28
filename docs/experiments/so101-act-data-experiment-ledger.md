@@ -8124,3 +8124,25 @@ partial credit is claimed.
   (`gate6-batch3-py-gate/startup.{log,junit.xml}`): happy path, digest mismatch, absent receipt.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-731 — Task 8P3 sub-slice B: admission splits the payload by lifecycle
+
+- **Delivered in `src/so101_teleop/so101_teleop/unified/admission.py`** (clean file, no user hunks):
+  `_TASK8_PAYLOAD_KEYS` = the base keys plus `preparation_receipt_path` /
+  `preparation_receipt_sha256`; `_COLLECTION_ONLY_KEYS` = `qualification_mode` /
+  `qualification_receipt_path`; and a kind-directed shape check that keeps the documented
+  `CALIBRATION_REQUIRED` when only the calibration pair is missing, raises `CAMPAIGN_START_SCHEMA`
+  otherwise, and for `task8_phase`/`task8_full` calls `verify_task8_startup_receipt` (CP-730) — so the
+  receipt and bundle are verified before any mutation or GPU acquisition.
+- **My bug, caught by verification:** the first version inserted the derived groups *before*
+  `_ACT_PAYLOAD_KEYS`, producing 6 `NameError: name '_ACT_PAYLOAD_KEYS' is not defined` and 7
+  collection failures. `py_compile` passed on the broken version. Fixed by moving the groups after
+  the definition and verified by inspecting the module's assignment order, not by compilation.
+- **Verification:** teleop suite -> **1394 tests, 0 errors**, with **no failure related to the
+  split** (no `CAMPAIGN_START_SCHEMA`, no `TASK8_PAYLOAD_*`). The 51 failures break down as 43
+  builder-arity `TypeError`s (the v2 propagation ripple, now in the teleop test fixtures), 2
+  `CALIBRATION_SOURCE_PROVENANCE_MISSING` (the 8P2 requirement ripple) and 1 path-length assertion.
+- **Next:** propagate the two keyword arguments and the provenance field in the teleop test files
+  (hunk-staged, as for the demo files), then 8P3's tail and 8P4's integration test.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
