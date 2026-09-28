@@ -201,7 +201,6 @@ class PhysicsClockAdmission:
                 "stop_evidence_monotonic_ns": None,
                 "stop_record_monotonic_ns": None,
                 "revoke_to_stop_record_ns": None,
-                "expiry_to_stop_ns": None,  # deprecated alias of revoke_to_stop_record_ns
             }
         self._stop_confirmed = False
         record = copy.deepcopy(self._revoked)
@@ -255,7 +254,7 @@ class PhysicsClockAdmission:
         with self._lock:
             return copy.deepcopy(self._stale_hazards)
 
-    def confirm_stop(self, *, identity, stopped):
+    def confirm_stop(self, *, identity, stopped, evidence):
         """Record a confirmed physical stop for the revoked identity."""
 
         with self._lock:
@@ -265,14 +264,21 @@ class PhysicsClockAdmission:
                 raise AdmissionRefused("CLOCK_ADMISSION_STOP_NOT_CONFIRMED")
             if self._revoked is None:
                 raise AdmissionRefused("CLOCK_ADMISSION_NOT_REVOKED")
+            if (not isinstance(evidence, dict)
+                    or evidence.get("authoritative") is not True
+                    or evidence.get("stopped") is not True
+                    or type(evidence.get("identity")) is not tuple
+                    or evidence["identity"] != self._identity
+                    or type(evidence.get("monotonic_ns")) is not int):
+                raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_INVALID")
             confirmed_ns = self._clock_ns()
             self._stop_confirmed = True
             self._revoked["confirmed_stop_monotonic_ns"] = confirmed_ns
-            self._revoked["stop_evidence_monotonic_ns"] = confirmed_ns
+            self._revoked["stop_evidence_monotonic_ns"] = evidence["monotonic_ns"]
             self._revoked["stop_record_monotonic_ns"] = self._clock_ns()
             self._revoked["revoke_to_stop_record_ns"] = (
                 self._revoked["stop_record_monotonic_ns"] - self._revoked["monotonic_ns"])
-            self._revoked["expiry_to_stop_ns"] = self._revoked["revoke_to_stop_record_ns"]
+            self._revoked.pop("expiry_to_stop_ns", None)
             return copy.deepcopy(self._revoked)
 
     # ----------------------------------------------------------------- fencing
@@ -350,7 +356,7 @@ class PhysicsClockAdmission:
 
         identity = self._full_identity(ticket, generation, reset_epoch)
         history = self._history
-        snapshot = history.snapshot()
+        snapshot = history.commit_state()
         if not snapshot["evidence_ready"]:
             raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_NOT_READY")
         if snapshot["session_id"] != identity[1] or snapshot["incarnation"] != identity[2]:
@@ -367,7 +373,7 @@ class PhysicsClockAdmission:
         with self._lock:
             now_ns = self._clock_ns()
             self._fence_locked(identity, "sample", now_ns)
-            current = history.snapshot()
+            current = history.commit_state()
             if current != snapshot:
                 raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_VERSION_CHANGED")
             if not history.evidence_ready:
@@ -375,7 +381,7 @@ class PhysicsClockAdmission:
             age_ns = now_ns - entry["sample"].clock_interval_end_monotonic_ns
             if not 0 <= age_ns <= self._selected_max_age_ns:
                 raise AdmissionRefused("CLOCK_ADMISSION_SELECTED_STALE")
-            return {"sample": copy.deepcopy(entry["sample"]),
+            return {"sample": entry["sample"],
                     "received_monotonic_ns": entry["received_monotonic_ns"],
                     "identity": identity, "history_version": current["version"],
                     "command_authority": False, "stage": "sample"}
