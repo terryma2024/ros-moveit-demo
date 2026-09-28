@@ -9945,3 +9945,23 @@ This resolves the design block **without authorizing runtime or motion**.
   and the `task-app.tsx` wiring; component tests run as `NODE_ENV=test bun run test -- <file>`.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-811 — Task 15: the schema target is `unified_openapi.json`, not `openapi.json`
+
+- **Correction found by checking which document the web app imports:** `web/src/api/instance-client.ts` and
+  `qualification-view.ts` import `@/api/unified-schema`, which `bun run generate:api:unified` produces from
+  `so101_teleop/unified_openapi.json`. The plan's `openapi.json` is the legacy "SO-101 Teleop" document
+  (29 paths) and generates a different file, so regenerating it would have updated a document the panel does
+  not read.
+- **Regenerated offline, no server needed:** `create_unified_app(schema_services()).openapi()` yields the
+  document, and the comparison was exact before writing: 45 paths to 49, with the additions being the two
+  ACT routes plus **two pre-existing stale paths** (`/expert-validation/campaigns/candidate-first-pass`,
+  `/expert-validation/candidate-contexts`) that the app already served. Nothing was removed.
+- **Diff sizes, stated plainly:** `unified_openapi.json` +1214/-76 (the deletions are format normalisation,
+  since the file is now written sorted and indented consistently rather than hand-maintained), and
+  `unified-schema.d.ts` **+498 purely additive**, with 62 mentions of `act`.
+- **Verification:** the generator ran clean (`openapi-typescript 7.6.1`, rc=0) and its log is recorded.
+- **Remaining in Task 15:** wire `ActPanel` into `task-app.tsx`, then run the component tests as
+  `NODE_ENV=test bun run test -- <file>`.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
