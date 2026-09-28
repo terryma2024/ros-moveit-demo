@@ -8423,3 +8423,26 @@ test that a shorter gate run root clears.
   then the 8P4 real-composition integration test.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-745 — CLOSE..FINAL_CHECK window: frozen grid, separate edge events, one-shot seal
+
+- **Delivered:** `LiveEvidenceWindow` in `act/task8_live_evidence.py`.
+  - opens at `CLOSE` — a grid sample for any other phase first raises `WINDOW_NOT_OPEN`;
+  - enforces the frozen 10 Hz causal cadence **incrementally**, raising `GRID_GAP` or
+    `GRID_REGRESSION` at the offending sample (same codes as `validate_evidence_grid`);
+  - `add_event` records edge samples under a separate counter (`event_count`), so an event can never
+    substitute for a grid point;
+  - `seal()` raises `WINDOW_INCOMPLETE` until every required phase has been seen, then returns the
+    recorder's closed `{path, sha256, schema_version}` and marks the window sealed, after which
+    further samples raise `WINDOW_SEALED`;
+  - the constructor fails closed when its recorder lacks `append`/`seal` or when the period or
+    tolerance is not finite and positive.
+- **Verification:** recorder suite **29 passed** (`gate6-batch3-py-gate/window2.{log,junit.xml}`). The
+  one failure on the way was my own test sealing with an identity different from its samples'; the
+  recorder correctly answered `IDENTITY_MISMATCH` and I fixed the test rather than the recorder.
+- **Remaining for this boundary:** drive the window from the port (open at `CLOSE`, feed grid samples
+  built from `capture_evidence_fields`, add phase/release-epoch/contact edge events, seal after
+  `FINAL_CHECK` into the case's private staging directory), then the canonical live CLI and the 8P4
+  real-composition integration test.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
