@@ -104,12 +104,15 @@ def test_wrong_owner_identity_and_generation_are_refused():
                                    incarnation="inc-other", epoch=1, role="arm",
                                    controller_generation=999, goal_uuid="g-1", target_digest="d-1",
                                    controller_incarnation="inc-other")
-    # the broker-owned capture succeeds with the current controller identity; the
-    # refusal must come from the caller/owner identity comparison in the claim
-    registry.capture_controller_identity(handle)
+    # the permit was issued for a controller generation that no longer matches the
+    # port, so the broker-owned capture refuses it (no caller value is involved)
+    with pytest.raises(at.AuthorityRefused,
+                       match="AUTHORITY_CONTROLLER_GENERATION_CHANGED"
+                             "|AUTHORITY_(OWNER|TOKEN)_IDENTITY_MISMATCH"):
+        registry.capture_controller_identity(handle)
     with pytest.raises(at.AuthorityRefused,
                        match="AUTHORITY_(OWNER|TOKEN)_IDENTITY_MISMATCH"
-              "|AUTHORITY_CONTROLLER_GENERATION_CHANGED"):
+                             "|AUTHORITY_CONTROLLER_GENERATION_CHANGED"):
         registry.claim_bound(handle, identity=admission.identity,
                              controller_generation=999,
                              token={"identity": admission.identity, "owner_identity": admission.identity,
