@@ -8703,3 +8703,28 @@ separately; both halves will be reported together as the 8P3/8P4 boundary eviden
 
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-758 — Combined 8P3/8P4 gate complete: 6836 tests, 0 errors, and nothing attributable to this task
+
+Both halves of the handoff's designated integration boundary, at HEAD `79f8a12b`:
+
+| Half | Instrument | Result |
+|---|---|---|
+| demo (`so101_demo_py`) | `tools.so101_pytest_gate --workers 8 --process-id-chars 4`, `pg11`/`r5` | **5442 tests, 0 errors, 29 failures**, ~121 s; six of eight shards passed |
+| teleop (`so101_teleop`) | `colcon test` in the in-worktree overlay, then `colcon test-result` | **1394 tests, 0 errors, 2 failures**, 43 skipped |
+
+Failure triage across both halves — **three causes, none this task's**:
+
+| Count | Cause | Attribution |
+|---|---|---|
+| 28 | `AttributeError: type object 'Pairs' has no attribute 'fingerprin'` | the user's in-progress typo (`fingerprint` intended) |
+| 1 | `OSError: AF_UNIX path too long` (`test_controller_reservation_client.py`) | environmental; that module passes 17/17 in isolation with a short scratch |
+| 2 | `test_controller_reservation_paths` (pytest + CTest tracks — one module) | environmental, same AF_UNIX 107-byte limit; already proven by isolation |
+
+**Totals: 6836 tests, 0 errors, 0 failures attributable to this task.** Sub-slice A/B/C wiring and 8P4's
+real-composition integration requirements are therefore satisfied and evidenced.
+
+- **Evidence:** `gate6-batch3-py-gate/gate88{,-build,-origin}.txt|log`, `pg11/scratch/r5/summary.json` +
+  per-process JUnit, `gate88-teleop{,-build}.log`.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
