@@ -225,3 +225,20 @@ def test_task8_payload_names_its_receipt_and_never_mixes_shapes(tmp_path):
     with pytest.raises(ValueError, match="TASK8_PAYLOAD_SHAPE_CONFLICT"):
         require_task8_payload(dict(payload, collection_profile="formal"),
                               collection_only_keys=("collection_profile", "collection_output_root"))
+
+
+def test_startup_receipt_must_match_its_payload_digest(tmp_path):
+    from so101_demo.act.task8_artifact_bundle import (
+        prepare_task8_bundle, verify_task8_startup_receipt,
+    )
+
+    receipt = prepare_task8_bundle(_inputs(tmp_path), tmp_path / "bundle-startup")
+    payload = {"preparation_receipt_path": str(receipt),
+               "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest()}
+    bundle = verify_task8_startup_receipt(payload)
+    assert Path(bundle.receipt) == receipt
+    with pytest.raises(ValueError, match="TASK8_PREPARATION_RECEIPT_MISMATCH"):
+        verify_task8_startup_receipt(dict(payload, preparation_receipt_sha256="0" * 64))
+    with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
+        verify_task8_startup_receipt(dict(payload,
+                                          preparation_receipt_path=str(tmp_path / "absent.json")))
