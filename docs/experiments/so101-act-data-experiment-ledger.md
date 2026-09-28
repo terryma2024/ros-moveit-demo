@@ -9863,3 +9863,25 @@ This resolves the design block **without authorizing runtime or motion**.
   local changes and hunk-staged before any edit rather than rewritten.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-807 — Task 15: the ActPanel, and an environment condition in the web test rig
+
+- **Delivered:** `web/src/components/teleop/act-panel.tsx` and `act-panel.test.tsx` (following the conventions
+  of the seven existing panels: `Card` + `Table`, `data-testid` on values, a sibling test with
+  `// @vitest-environment jsdom`).
+  - with no session the panel says so rather than inventing one;
+  - it shows the phase and its position in the plan's ten phases, the remaining wall budget (`unknown` when
+    negative rather than a fabricated number), both cameras as streaming or unavailable, the last accepted
+    command, and the outcome (`in progress` until there is one);
+  - a phase outside the planned sequence is labelled "not a planned phase" instead of being folded into the
+    list.
+- **Environment finding, checked against an existing test rather than assumed:** `bun run test -- <file>` in
+  this shell resolves React's **production** build, so every `render(...)` fails with `act(...) is not
+  supported in production builds of React`. The **pre-existing** `environment-panel.test.tsx` fails the same
+  way (3 failed), so the condition is environmental and not caused by this change. With `NODE_ENV=test` the
+  new panel test passes **4 passed**. I did **not** modify the shared Vite or Vitest configuration to paper
+  over it.
+- **Remaining in Task 15:** the ACT command/status endpoints in `api.py`/`server.py`, the OpenAPI entries, the
+  regenerated TypeScript schema, and the `task-app.tsx` wiring.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
