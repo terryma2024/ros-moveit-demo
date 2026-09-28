@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: a7c79e595922c4eaefbc8b6208dc324939d976f0 (latest code commit; evidence/ledger-only commits up to CP-591 follow it)
+current_commit: 178d4b2ab9713852fac68533003c0f751151937f (latest code commit; evidence/ledger-only commits up to CP-593 follow it)
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -60,7 +60,7 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-591
+latest_checkpoint: CP-593
 next_experiment: second local independent Astra/High Gate 5 review (bounds + offline admission contract + owner-path qualification); Gate 6 stays closed
 ---
 
@@ -6016,7 +6016,7 @@ status: PLANNED_SOURCE_ONLY
 - EXP-562 是 `VALID_SOURCE_ONLY_LINEARIZED_DEADLINES`。新增 4 个“期限在执行期间被跨越”的 RED 用例（首块期限在入口恰好到期但校验期间越界；接受时样本在拷贝期间变旧；`step_at` 与 `recent_with_receipts` 在拷贝期间变旧），实现前 4 failed / 27 passed，实现后焦点 GREEN **57 passed**；随后把 bounds 常量改为评审独立解码的精确整数并再次 GREEN 34 passed。
 - 评审独立复核的测量与我的窗口作用域复算一致，并已作为持久证据索引：EXP-556 正代次源起点间隔 max `2,536,550 / 2,534,770 / 2,530,660 ns`；EXP-559 窗口内块间隔 `111.336691 / 118.498471 / 122.997815 ms`；EXP-560 窗口内 `110.291747 / 107.913940 / 108.380232 ms`；EXP-559 精确年龄包络 `127,833,869 + 26,894,568 = 154,728,437 ns`；`arm_end → 首块完成` `128.046778 ms`（自 arm_begin 为 `128.110036 ms`）；回调 p50 优化前 `15.38–15.53 ms`、后 `7.81–8.06 ms`；单步读回 p50 前 `14.4–15.6 ms`、后 `0.195–0.203 ms`；看门狗最大间隔前 `56.701484 ms`、后 `46.518291 ms`；六个测量窗口 hazard 全为 0。`physics_clock_bounds.py` 的 `OBSERVED_*` 已改用这些精确整数（不再四舍五入到 154,720,000）。
 - 分析脚本与精确统计已落地并索引：`analysis/window_scoped.py`（原仅存在于 `/tmp`，现复制入注册证据根，含 stdout/stderr 与 SHA256）与 `analysis/exact-statistics.json`，后者明确标注四个冻结值仍是 `EXPERIMENTAL_CANDIDATES_NOT_PRODUCTION_GUARANTEES`。
-- 已更新账本头部（不重写历史条目）：`current_commit: a7c79e595922c4eaefbc8b6208dc324939d976f0 (latest code commit; evidence/ledger-only commits up to CP-591 follow it)`，`latest_checkpoint: CP-587`，`next_experiment: EXP-563 (broker atomic admission/revocation contract, offline)`。
+- 已更新账本头部（不重写历史条目）：`current_commit: 178d4b2ab9713852fac68533003c0f751151937f (latest code commit; evidence/ledger-only commits up to CP-593 follow it)`，`latest_checkpoint: CP-587`，`next_experiment: EXP-563 (broker atomic admission/revocation contract, offline)`。
 - EXP-562 checkpoint：`experiments/exp562-clock-linearization/checkpoint.json`，SHA256 `7b75bf0b7972a36c56cfec3dedade5b7d2c11c63ee2f9bd609fba486bef9b30c`（索引 10 个文件，逐文件哈希读回一致）；RED/GREEN 的 scratch、tempfile 证明与 JUnit 同时在 `scratch/exp562-*` 保留。
 - 仍未完成的评审要求（按规定的 Gate 5 顺序）：(a) EXP-563——冻结并测试 broker 侧按完整 ticket/generation/epoch 身份的**原子准入与不可逆撤销**契约，每个 hazard 携带该身份，proof 登记/返回、permit 消耗、逐路由提交与最终接受都重新 fence，部分提交取消并确认停止，明确锁顺序使阻塞的 checker 不能阻塞撤销，缓存 readiness 绝不等于 authority，同时把“回调期间调用方消息独占”写成显式契约或改为边界快照；(b) EXP-564——在代表性负载下用实现的真实谓词限定 owner 路径，记录源结束、回调入口、接受完成、实际看门狗检查、撤销与确认停止，给出“到期→撤销→确认停止”的上界，并确认或收紧 0.40 s 首块期限（收尾暂停的 hazard 只证明关机闭合，不证明在运动中停机的尾延迟）。
 - 边界与状态：没有接入生产 authority，没有目标、许可、采集或 Gate 6 工作；正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`；保留全部更早实验与证据，未归档、未删除任何证据。完成 (a)(b) 并留下证据后，按评审要求**再次停在 Gate 5** 等待第二次本地独立评审，不自评通过 Gate 6。
@@ -6091,3 +6091,12 @@ status: PLANNED_ISOLATED_STACK
 - Durable checkpoint（已修正而非另立终态）：`experiments/exp564-owner-path/checkpoint.json`，SHA256 `8e47e8d664c417d7bb6dc02998cb52d504d58f18c9790910ff65126f72c372e6`；索引 81 个文件（含 `owner-reanalysis.json` 与 `provenance-manifest.json`），逐文件哈希读回一致；状态改为 `VALID_SOURCE_ONLY_OWNER_PATH_QUALIFIED_WITH_CORRECTED_ACCOUNTING`，并显式删除了被撤回的“到期→停止”汇总字段。
 - 仍待完成（复核要求顺序第 1、2、4、5 项）：(a) 为 cancel 阻塞期间接管/旧取消返回、无证据、历史 hazard、外来会话、epoch 回滚与调用方修改样本添加确定性 RED；(b) 修正 admission 契约——在准入线性化点绑定可信历史/会话/epoch/步号/健康与独立年龄、返回隔离且携带身份的无 authority 证据、每个后续阶段重新 fence、明确锁序且不在持锁期间做大拷贝、把 `run_checked_stage` 限制为无副作用计算并为 proof/permit/逐路由提交/最终接受各自的原子消费 fence 加撤销竞态、在旧目标获得权威停止/退役前拒绝接管、同会话 epoch 回滚必须拒绝（仅允许显式新会话/新历史化身契约）；(c) 冻结具体的 Gate 6 owner 接线契约（标称 20 ms 轮询、实测调度上界、来源身份 hazard、控制器代次 fence、部分接受取消、独立新鲜停止证据与超时行为）；(d) 在任何 Gate 6 接线前再次请求本地独立复核。
 - 边界：Gate 6、authority、目标、运动、正式采集与 Task 12 全部保持关闭；正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`。
+
+## CP-593 — 第二次复核的第 1、2、4 项已完成：身份绑定的取消/接管、准入绑定可信历史、逐阶段原子消费与 Gate 6 接线契约冻结
+
+- 第二次本地复核（SHA256 `4e3a09b1…`，收据已读回）要求顺序第 1、2、4 项；source HEAD `343b8b29`；无域、无 stack、无目标；契约仍全部离线。
+- **第 1 项（确定性 RED）**：新增 8 个用例并全部按设计失败（8 failed / 24 passed）——cancel 阻塞期间的接管被拒且旧取消完成后只绑定原身份、同会话 epoch 回滚被拒、无已接受证据不得准入、外来会话/未知步号样本被拒、返回证据与调用方变异隔离、历史 hazard 关闭所有 fenced 阶段、`consume_stage` 的撤销竞态、以及 `run_checked_stage` 必须声明无副作用。
+- **第 2 项（契约修正）**：`arm()` 在旧身份未获确认停止前一律 `CLOCK_ADMISSION_TAKEOVER_BLOCKED`；同 ticket 后继不得回退 reset epoch（(7,9)→(8,1) 被拒，(7,9)→(8,9) 允许；换 ticket 视为显式新会话化身）；`record_partial_submit` 先在锁内关闭原身份再调用外部 `cancel`，完成结果绑定原身份，迟到完成只记入 `stale_hazards` 而绝不作用于新身份；`admit_sample` 在同一临界区内绑定 `evidence_ready`、历史会话/epoch、历史真实持有的步号与独立选中年龄，并返回隔离的、携带身份且 `command_authority=False` 的证据（不再引用调用方样本）；`_fence_locked` 在任何阶段发现历史已 latch hazard 即拒绝；新增 `consume_stage` 原子消费 fence（permit/逐路由提交/最终接受），并把 `run_checked_stage` 限定为必须声明 `side_effect_free=True` 的无副作用计算；锁序固定为“admission 锁先于 history 锁，且不跨大拷贝持锁”。焦点 GREEN **90 passed**。
+- **第 4 项（Gate 6 接线契约冻结）**：`handoff/2026-09-28-gate6-owner-wiring-contract.md` 冻结了标称 20 ms 轮询与实测调度上界（EXP-564 poll max 43.9 ms，要求 nominal + slack < `MAX_SILENCE_S`）、超时行为（粘滞 hazard → 撤销 → 独立停止证据，之后不得再准入）、来源身份的 hazard 路径（回调 hazard 走 `note_hazard(origin_identity=...)`，owner 当前身份事件走 `revoke_current`）、各阶段 fence（sample/proof/permit/route-submit/final-acceptance）、部分接受取消与接管规则，以及**独立于时钟流**的确认停止证据；并明确所有这些数值仍只是 harness 限定的候选，运动中的停机预算仍需另行授权的运动实验。
+- Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp565-admission-hardening/checkpoint.json`，SHA256 `b2bf62aff9a45b5bbfe9f40718f8c6a0ee1dd01c5761178264a8db21358b5f3e`；含 RED/GREEN 日志、JUnit、tempfile 证明与 `source-commit.txt`，逐文件哈希读回一致。
+- Next discriminator（复核要求顺序第 5 项）：把本轮的契约修正、Gate 6 接线契约与 CP-592 的账目更正一并提交**下一次本地独立 Astra/High 复核**；在复核通过前 Gate 6、authority、目标、运动、正式采集与 Task 12 全部保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`），不自评通过。
