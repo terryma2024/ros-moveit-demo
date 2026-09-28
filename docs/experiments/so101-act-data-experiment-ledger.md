@@ -7593,3 +7593,23 @@ ancestors; reviewed plan SHA256 verified as
   the plan's RED matrix for recorder failures and the positive occlusion assertion.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-708 — Task 8P3 sub-slice A: canonical live-evidence sample builder
+
+- **Delivered:** `build_live_evidence_sample(...)` in `act/task8_live_evidence.py` — a pure
+  constructor for the canonical 24-key sample from explicit readback inputs, with **closed key
+  sets** for the identity, frame, contact and measurements blocks so a missing field
+  (for example `wrist_target_visible`) is refused rather than silently defaulted.
+- **Why:** the port and readback adapters otherwise each assemble the canonical shape by hand and
+  drift; this is the single mapping layer they will both call, and it takes no locks and performs
+  no I/O.
+- **Verification:** `test_act_task8_live_evidence.py` -> **16 passed**
+  (`gate6-batch3-py-gate/t8p3builder.{log,junit.xml}`); the two new tests assert (a) a built sample
+  is accepted verbatim by the recorder, proving builder and validator cannot diverge, and (b) an
+  incomplete readback input raises `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID`.
+- **Remaining sub-slice A:** the readback adapter emits these fields for `CLOSE..FINAL_CHECK` on the
+  frozen grid (that file carries 191 lines of pre-existing user work and must be hunk-staged), and
+  the search port gains the optional `evidence_recorder` that forwards complete samples and refuses
+  partial ones, with `seal_live_evidence` forwarding to `recorder.seal(identity)`.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
