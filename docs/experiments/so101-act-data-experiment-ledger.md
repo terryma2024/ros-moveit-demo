@@ -9531,3 +9531,27 @@ This resolves the design block **without authorizing runtime or motion**.
   interpreter exists, which the session's no-runtime boundary excludes.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-792 — Task 12: the dependency lock, honestly unresolved
+
+- **Delivered:** `config/act/requirements.lock` and `act/training_requirements.py` with
+  `load_training_requirements` / `require_resolved_requirements`, plus tests.
+  - the shipped lock is deliberately **`UNRESOLVED`**, with a header comment stating why: the versions can
+    only be pinned by resolving the selected LeRobot / PyTorch release inside a separate training
+    interpreter, and inventing numbers would defeat the point of a lock;
+  - **it cannot be half-resolved:** an `UNRESOLVED` lock may carry no resolver and no packages, so it is
+    never ambiguous which content is authoritative;
+  - a `RESOLVED` lock requires resolver provenance (python, `resolved_at`, index digest), a **non-empty**
+    package list, and each package pinned by name, version and a 64-hex source hash
+    (`TRAINING_REQUIREMENTS_UNPINNED` — a version without its hash is not a pin), with duplicates refused
+    and extra keys refused;
+  - **`require_resolved_requirements` is the gate:** an unresolved lock refuses a training run
+    (`TRAINING_REQUIREMENTS_UNRESOLVED`), so nothing can train against an unpinned environment.
+- **My slip, fixed in the helper:** an override key without a dot (`status`) was treated as a nested path
+  and raised `TypeError` instead of exercising the guard.
+- **Verification:** focused tests **3 passed** (`gate6-batch3-py-gate/task12f2.{log,junit.xml}`).
+- **Remaining in Task 12:** `train_act` and the `act_train` CLI behind injected collaborators, and the
+  LeRobot adapter — whose real dependency resolution waits for a training interpreter, which the session's
+  no-runtime boundary excludes.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
