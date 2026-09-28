@@ -238,9 +238,12 @@ class ReservationFakeControllerPort:
         self.cancel_stop_pending = False
 
     def reserve(self, *, permit_id, goal_uuid, role, target_digest, generation,
-                controller_incarnation, deadline_ns):
+                controller_incarnation, deadline_ns, stage):
         with self._lock:
             self.reserve_calls += 1
+            if stage != "route_dispatch":
+                # only route dispatch may use the controller reservation/receive protocol
+                return REJECTED
             if (self._restarted or generation != self._generation
                     or controller_incarnation != self._incarnation
                     or deadline_ns <= self._clock_ns() or goal_uuid in self._accepted_uuids):
