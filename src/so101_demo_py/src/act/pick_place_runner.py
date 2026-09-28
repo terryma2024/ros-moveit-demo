@@ -170,31 +170,55 @@ class PickPlaceRunner:
                 raise PickPlaceError("FULL_RESTART_NOT_PROVED")
             reset_epoch = beginning["reset_epoch"]
             release_epoch = beginning["release_epoch"]
+            latest_step = 0
             completed: list[str] = []
             for phase in self.PHASES:
                 if request["deadline_ns"] <= self.clock_ns():
                     raise PickPlaceError("TASK8_DEADLINE_EXPIRED")
                 if phase == "RELEASE":
-                    self._release_preflight(request, reset_epoch, release_epoch)
+                    latest_step = self._set_down(
+                        request, reset_epoch, release_epoch, latest_step,
+                    )
+                    latest_step = self._release_preflight(
+                        request, reset_epoch, release_epoch, latest_step,
+                    )
                 if phase == "RADIAL_RETREAT":
                     for direction, distance in (("radial", 0.01), ("vertical", 0.06)):
                         evidence = self.port.run_retreat_segment(direction, distance, request)
-                        self._verify_phase(phase, evidence, request, reset_epoch, release_epoch)
+                        latest_step = self._verify_phase(
+                            phase, evidence, request, reset_epoch, release_epoch, latest_step,
+                        )
                 else:
                     evidence = self.port.run_phase(phase, request)
                     if phase == "RELEASE":
                         release_epoch += 1
-                    self._verify_phase(phase, evidence, request, reset_epoch, release_epoch)
+                    latest_step = self._verify_phase(
+                        phase, evidence, request, reset_epoch, release_epoch, latest_step,
+                    )
                 if request["deadline_ns"] <= self.clock_ns():
                     raise PickPlaceError("TASK8_DEADLINE_EXPIRED")
                 completed.append(phase)
                 if request["mode"] == "phase_prefix" and phase == request["stop_after"]:
                     self._stop("PHASE_PREFIX_COMPLETE", request)
+                    # a prefix is never an episode: it must carry no live evidence artifact
                     return {"status": "PASSED", "completed_phases": completed,
-                            "stopped_confirmed": True, "formal_episode_eligible": False}
+                            "stopped_confirmed": True, "formal_episode_eligible": False,
+                            "live_evidence_artifact": None}
+            # only a full case that reached FINAL_CHECK may seal its live evidence
+            sealer = getattr(self.port, "seal_live_evidence", None)
+            if not callable(sealer):
+                raise PickPlaceError("LIVE_EVIDENCE_SEAL_UNAVAILABLE")
+            artifact = sealer(request)
+            if (type(artifact) is not dict
+                    or set(artifact) != {"path", "sha256", "schema_version"}
+                    or not isinstance(artifact["path"], str) or not artifact["path"]
+                    or not isinstance(artifact["sha256"], str) or len(artifact["sha256"]) != 64
+                    or type(artifact["schema_version"]) is not int):
+                raise PickPlaceError("LIVE_EVIDENCE_ARTIFACT_INVALID")
             self._stop("FULL_COMPLETE", request)
             return {"status": "PASSED", "completed_phases": completed,
-                    "stopped_confirmed": True, "formal_episode_eligible": True}
+                    "stopped_confirmed": True, "formal_episode_eligible": True,
+                    "live_evidence_artifact": artifact}
         except BaseException:
             if started:
                 self._stop("TASK8_ABORT", request)

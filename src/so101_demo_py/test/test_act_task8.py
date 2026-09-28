@@ -27,6 +27,8 @@ class FakePort:
         self.attached = True
         self.release_epoch = 0
         self.physics_step = 0
+        self.sealed = 0
+        self.root = __import__("pathlib").Path(".")
 
     def begin(self, req):
         self.calls.append(("begin", req["lifecycle"]))
@@ -96,6 +98,10 @@ class FakePort:
     def run_retreat_segment(self, direction, distance_m, req):
         self.calls.append(("retreat", direction, distance_m))
         return self.evidence("RADIAL_RETREAT", req)
+
+    def seal_live_evidence(self, req):
+        self.sealed += 1
+        return {"path": str(self.root / "live.json"), "sha256": "c" * 64, "schema_version": 1}
 
     def safe_stop(self, reason, req):
         self.calls.append(("safe_stop", reason))
