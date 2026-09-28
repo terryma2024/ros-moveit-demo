@@ -5908,3 +5908,22 @@ status: PLANNED_ISOLATED_STACK
 - Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp556-source-gap-bound/checkpoint.json`，SHA256 `6325ec83996be9164a8600f4c06d26c1c96602d1fe0c943341237d1952bca1b3`；读回核对 171 个索引文件、225,693,888 字节，索引集合与实际集合相等且逐文件哈希与字节数一致。保留 EXP-556 与全部更早实验；未归档任何批次。`__pycache__` 与 `/tmp` 冒烟副本仅为删除候选，未删除任何证据。
 - 评审列出的“接线生产前必须完成”项仍未完成，因此生产 `PickPlaceRosEvidence` 继续关闭：真实适配器在代表性负载下的回调接收→校验/读回尾延迟、独立的新鲜度与停顿预算、有界且粘滞的静默检测（含首块之前）、读回过期必须 latch hazard（当前只抛 `PHYSICS_CLOCK_STALE`）、以及对抗性边界检查。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
 - Next discriminator: 以被动方式实例化 `RosPhysicsClockAdapter`（仍不接入生产路径）测量真实“回调接收→历史校验/读回”尾延迟，同时为读回过期加粘滞 hazard、为静默加有界看门狗与首块前界限，各自 RED→GREEN 后跑一次 `so101_demo_py` 全量 xdist8 与 installed 门禁；只有这些通过且候选上界经独立复核，才另立“接入生产 SEARCH 证明链”的实验。
+
+## EXP-557 — 让读回过期与静默在有界范围内 fail closed
+
+status: PLANNED_SOURCE_ONLY
+
+- Prior EXP-556 / CP-581 与独立评审的“接线生产前必须完成”项；source HEAD `e0960642`；注册证据根、overlay `i`、exact test Python `test-venv/bin/python`、`ROS_DOMAIN_ID/GZ_PARTITION=NOT_ASSIGNED`。保留既有 dirty/untracked 工作。无 stack、目标、硬件操作或正式 episode。
+- Observation: `PhysicsClockHistory.recent_with_receipts` 在读回找不到新鲜样本时只抛 `PHYSICS_CLOCK_STALE`，不 latch hazard，“任何失败都关闭该代次”对读回过期并不成立；历史与适配器也没有静默看门狗，源完全停止发布时在下一个样本到达前没有任何界限，首个块之前也没有界限。
+- One variable: 给历史增加显式 `max_silence_s` 与 `first_chunk_timeout_s` 边界和 `check_health()`，在 armed 代次内分别 latch `PHYSICS_CLOCK_SILENT` 与 `PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT`；读回过期改为 latch `PHYSICS_CLOCK_STALE`；适配器增加 `check_health()` 委派并保证每个代次最多通知一次。未配置边界的历史不做任何静默声明，因此生产接线必须显式提供边界并在短于 `max_silence_s` 的周期内轮询，否则本条不成立。
+- 先写 RED 再实现，然后按用户要求的节奏只在此积分边界跑一次全量门禁：`so101_demo_py` 普通测试源 xdist8 与 installed `colcon test`。
+
+## CP-582 — 读回过期与静默现在都粘滞关闭，两个门禁通过
+
+- EXP-557 是 `VALID_SOURCE_AND_INSTALLED_NO_MOTION`。代码提交 `ce4e861b`：`PhysicsClockHistory.recent_with_receipts` 在找不到新鲜样本时 latch `PHYSICS_CLOCK_STALE` 后仍然抛出，后续块无法复活该代次；新增 `check_health(now_ns=None)`，在 armed 代次内按显式 `max_silence_s`/`first_chunk_timeout_s` 分别 latch `PHYSICS_CLOCK_SILENT` 与 `PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT`，armed 时记录 arm 时钟与“是否见过首个块”，成功接受块后置位；未配置边界时不做静默声明。`RosPhysicsClockAdapter.check_health()` 委派历史并沿用每代次一次的通知语义。选定状态的过期（`max_age_s`，须覆盖约 98 ms 批处理窗）与停顿/静默（更紧的 `max_silence_s`）现在是两个独立输入。
+- 预期 RED：新增 5 个边界用例（读回过期必须关闭而非只抛、首块超时、块后静默、无边界历史不声明、适配器健康委派与单次通知）全部按设计失败——缺 `check_health`、缺关键字、无过期 latch；同一命令下 34 个既有用例仍通过（39 收集、5 失败、0 错误）。GREEN 后 39/39 通过。RED 与 GREEN 各自的 scratch、tempfile 证明、JUnit 与耗时全部保留。
+- 全量门禁：`so101_demo_py` 普通源测试 `-n 8`（32 逻辑 CPU）通过 **4,909 passed / 162 skipped**，JUnit 5,071 tests、0 错误 0 失败、44.96 s。首次尝试以 `ModuleNotFoundError: No module named 'tools'` 在收集阶段失败：`tools` 是仓库根的 namespace package，源门禁必须把 worktree 根放进 `PYTHONPATH`；这是调用环境缺失，不是代码回归，失败尝试与诊断全部保留。existing-overlay `colcon build --symlink-install --packages-select so101_demo_py --build-base <root>/b --install-base <root>/i` 通过（1.5 s）。installed `colcon test --pytest-args test -n 8` 通过，46.5 s；`colcon test-result --verbose` 退出 0：**6,613 tests、0 errors、0 failures、205 skipped**。首次 installed 尝试因 PYTHONPATH 缺少只读 full-UT venv 的 site-packages，让 `/usr/bin/python3` 解析到系统 pydantic 而报 `field_validator` ImportError；补上该路径后同一门禁通过，两次尝试的日志均保留。
+- Source/build 两个被改文件逐字节相同（`physics_clock_history.py` `1bbec8cba8a065cc35e1c34b5e92500c5b032b60c2966cc989b8a94b5b9ec877`、`ros_physics_clock.py` `8b62cfd90784eda35197f5e1828d2199f371f7387f9045d5770a58df571a0742`）；任务 venv 通过 `easy-install.pth`/egg-link 解析到注册的 `b/so101_demo_py`，本轮构建后与源码一致。每个 pytest/colcon 运行都使用此前不存在的注册 NVMe scratch，并用 exact Python 证明 `tempfile.gettempdir()` 落在其 `tmp` 内。
+- Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp557-clock-health/checkpoint.json`，SHA256 `dab3b6379338aeb2d024c396d850de02f8a3edbf8293cb862cfe8358f64bd447`；读回核对 36 个索引文件、858,946 字节，索引集合与实际集合相等且逐文件哈希与字节数一致。保留 EXP-557 与全部更早实验；未归档任何批次。`__pycache__` 与六个 scratch 树仅为删除候选，未删除任何证据。既有 dirty/untracked 工作仍未暂存。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
+- 仍未完成：`max_silence_s`/`first_chunk_timeout_s` 的具体值尚无实测依据；适配器尚未接入生产路径，也没有任何组件保证按周期轮询 `check_health()`。这两点属于“接入生产 SEARCH 证明链”实验的准入条件，本实验不作声明。
+- Next discriminator: 在真实适配器实例上被动测量“回调接收→历史校验/读回”的尾延迟（不接入生产路径），据此与 EXP-556 的包络一起提出 `max_age_s`、`max_silence_s`、`first_chunk_timeout_s` 的候选值，并让 owner 以可审计的周期轮询 `check_health()`。
