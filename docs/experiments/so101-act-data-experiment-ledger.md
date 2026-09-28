@@ -8184,3 +8184,23 @@ partial credit is claimed.
   attribute the 3 `TASK8_CASE_RESULT_INVALID`, and the 1 environment path-length assertion.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-734 — Teleop admission fixture: real bundle and mandatory provenance
+
+- **Delivered in `src/so101_teleop/test/teleop/test_act_campaign_admission.py`** (clean file):
+  `_prepared_receipt(tmp_path)` prepares a genuine bundle with `prepare_task8_bundle` using the demo
+  suite's artifact fixture (`_inputs`, imported through `sys.path` — the same cross-module pattern
+  other teleop tests already use, with `parents[3]` as the correct `<src>` depth), and the payload's
+  Task 8 fields now carry that receipt's path and raw digest. The calibration report **and** the
+  head-search sample gained `source_provenance_sha256`, mandatory since 8P1/8P2.
+- **Effect:** admission suite **3 passed -> 28 passed**, failures 28 -> 3. Two of my own mistakes were
+  caught on the way: an anchor that aborted the first edit *before* writing (verified unchanged by
+  diff), and a `parents[2]` path that produced `ModuleNotFoundError` until corrected to `parents[3]`.
+- **Residual (3), enumerated honestly:** `test_formal_w8_rejects_a_self_declared_passed_json_without_
+  independent_verifier` expects `W8_QUALIFICATION_VERIFIER_UNAVAILABLE` but the gate now answers
+  `CALIBRATION_REQUIRED` — a genuine expectation question created by the `require_gate` reordering in
+  `aa0e57e7`, to be read on its merits rather than adjusted to fit; and two collection-path
+  `CAMPAIGN_START_SCHEMA` cases consistent with the closed key sets (to be confirmed as intended, not
+  incidental).
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
