@@ -313,3 +313,59 @@ def test_blocking_io_while_revoke_proceeds_with_real_threads():
     with pytest.raises(Exception):
         registry.claim(handle)
 
+
+
+# --- end-to-end lifecycle: reservation -> send -> receipt, one permit state machine ---
+
+
+def _end_to_end(*, clock_ns=lambda: 1_000_000_000):
+    module = _module()
+    registry = _registry()
+    port = module.ReservationFakeControllerPort(clock_ns=clock_ns)
+    handle = _issue(registry)
+    registry.claim(handle)
+    permit = registry._records[handle.permit_id]
+    assert port.reserve(permit_id=permit.permit_id, goal_uuid=permit.goal_uuid, role=permit.role,
+                        target_digest=permit.target_digest,
+                        generation=permit.controller_generation,
+                        controller_incarnation=permit.incarnation,
+                        deadline_ns=permit.deadline_ns) == "ACCEPTED"
+    assert port.send(goal_uuid=permit.goal_uuid, permit_id=permit.permit_id) == "ACCEPTED"
+    fields = port.last_receipt(permit_id=permit.permit_id)
+    fields.update(goal_uuid=permit.goal_uuid, role=permit.role,
+                  target_digest=permit.target_digest,
+                  controller_incarnation=permit.incarnation)
+    return registry, port, handle, permit, fields
+
+
+def test_timeout_then_late_acceptance_never_revives_the_permit():
+    registry, port, handle, permit, fields = _end_to_end()
+    assert registry.receipt(handle, **dict(fields, verdict="UNKNOWN")) == "UNKNOWN"
+    assert registry.state_of(handle) == "UNKNOWN"
+    with pytest.raises(Exception):
+        registry.receipt(handle, **dict(fields, verdict="ACCEPTED", sequence=2))
+    assert registry.state_of(handle) == "UNKNOWN"
+    with pytest.raises(Exception):
+        registry.claim(handle)
+
+
+def test_duplicate_receipt_after_terminal_state_is_refused():
+    registry, port, handle, permit, fields = _end_to_end()
+    assert registry.receipt(handle, **fields) == "ACCEPTED"
+    with pytest.raises(Exception):
+        registry.receipt(handle, **dict(fields, sequence=2))
+    assert registry.state_of(handle) == "ACCEPTED"
+    assert port.accepted_commands == 1
+
+
+def test_controller_restart_invalidates_the_receipt_incarnation():
+    registry, port, handle, permit, fields = _end_to_end()
+    assert port.restart_controller(controller_incarnation="restarted") == "REJECTED"
+    restarted = port.last_receipt(permit_id=permit.permit_id)
+    restarted.update(goal_uuid=permit.goal_uuid, role=permit.role,
+                     target_digest=permit.target_digest)
+    assert restarted["controller_incarnation"] == "restarted"
+    with pytest.raises(Exception):
+        registry.receipt(handle, **restarted)
+    assert registry.state_of(handle) == "IN_FLIGHT"
+    assert port.send(goal_uuid=permit.goal_uuid, permit_id=permit.permit_id) == "REJECTED"

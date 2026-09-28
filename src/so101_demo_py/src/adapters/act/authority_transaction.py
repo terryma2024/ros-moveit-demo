@@ -314,6 +314,16 @@ class ReservationFakeControllerPort:
                 self.cancel_stop_pending = True
             return ACCEPTED
 
+    def last_receipt(self, *, permit_id, verdict=ACCEPTED, sequence=1):
+        """Receipt fields describing the reservation this port actually consumed."""
+
+        with self._lock:
+            return {"protocol_version": 1, "permit_id": permit_id, "goal_uuid": None,
+                    "role": None, "generation": self._generation,
+                    "target_digest": None, "controller_incarnation": self._incarnation,
+                    "verdict": verdict, "sequence": sequence,
+                    "observed_ns": self._clock_ns(), "clock_domain": "monotonic"}
+
     def late_receipt_after_timeout(self):
         with self._lock:
             return UNKNOWN
