@@ -6421,3 +6421,11 @@ status: PLANNED_ISOLATED_STACK
 - 过程如实记录：我曾尝试让 `revoke_current` 获取 admission 锁以串行化（regex 快速改动），结果六模块瞬间变成 23 failed；已用 `git checkout` 回退该文件，复核六模块恢复 **151 passed**。教训与之前一致：这类锁语义改动必须逐点、可验证地进行，不能靠批量替换。
 - 每个 pytest 均使用**各自新建**的 scratch 且带 tempfile 探针；证据目录 `experiments/exp571-recovery/` 为追加式，未删除或覆盖任何既有文件；旧结果仍按先前的 `NONQUALIFYING.md` 标注保留。
 - **结论：包尚未达到可请求第九次复核的条件**（七项行为中有一项在修复后仍然失败，且该项正是 review 8 的核心并发要求）。Gate 5 保持 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未跑 ordinary full suite；42 个既有 dirty entries 未被改动（本轮仅新增/修改本轮范围内文件）；无证据被删除。
+
+## CP-633 — EXP-571：观测点修正后 RED 7/7 = GREEN 7/7（同一命名集合），六模块 151 passed
+
+- 用户指出 GREEN 的失败是**观测点错误**而非锁的证据：`revoke_completed_inside` 只在 `worker.join()` **之后**采样，此时修复后代码的 revoker 已合法地在 claim 边界之后完成。现按指示改为在 `owner_is_active_probe` **内部**记录 `observed["revoke_completed_before_owner_return"] = revoked.wait(barrier_timeout)`，返回保存的旧观察；断言分支改用该字段，`revoked.is_set()` 仅用于证明 revoker 最终完成；两线程 join 与终止断言、`admission.revoked_record` 存在性断言均保留。
+- **RED（frozen `b917ae46`，`experiments/exp571-recovery/baseline-red11`，模块与 `git show` 逐字节相等）**：行为模块 **7 failed**（`beh-red11.log`，scratch `exp571-red11.*`）——其中 revoke 探针在基线为 `completed_during_probe=True` 之后仍被 ACCEPTED（不安全）而失败。
+- **GREEN（当前源码字节等价 mirror `current-source-mirror-6`）**：同一行为模块 **7 passed**（`beh-green10.log`，scratch `exp571-green10.*`）——修复后 `completed_during_probe=False`，claim 恰好接受一次，revoke 在 claim 边界之后完成。**六模块 151 passed**（`six-green4.log` + manifest，scratch `exp571-six-green4.*`）。每次运行均为新建 scratch 且带 tempfile 探针；模块 provenance 依前次 SHA 相等证明方法。
+- 同集关系：RED 与 GREEN 运行的是**同一命名集合**（`test_act_exp571_behavior.py` 的 7 个用例），两侧均记录 manifest/JUnit/exit code/elapsed/scratch 与 provenance 文件，全部位于追加式目录 `experiments/exp571-recovery/`（未删除、未覆盖任何证据；旧的非合格结果仍由 `NONQUALIFYING.md` 标注）。
+- 结论：EXP-571 的七项 review-8 行为均已具备“基线失败、修复后通过”的确定性证据。Gate 5 保持 OPEN，**现请求第九次本机独立 Astra/High 复核**（不自批）。Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未跑 ordinary full suite；42 个既有 dirty entries 未被改动；无证据被删除。
