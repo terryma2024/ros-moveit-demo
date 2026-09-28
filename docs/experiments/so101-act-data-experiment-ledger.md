@@ -8281,3 +8281,16 @@ requirements plus one environment assertion.
   gate reads it without changing a document another assertion pins.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-739 — ros-child fixture aligned: teleop provenance failures closed
+
+- **Fixed:** the local `qualified_report(tmp_path)` helper in `test_act_ros_child.py` (user-dirty;
+  staged hunk-wise per `gate6-batch3-commit/hunk-filter-round250.txt`) now returns a report carrying
+  `source_provenance_sha256` (mandatory since 8P1/8P2) and the `live_campaign` block a QUALIFIED
+  report must have (8P4). `test_act_ros_child.py`: **22 passed, rc=0**.
+- **Why the earlier attempt failed:** I had added the field to the *binding* test's document at line 74
+  instead of to this helper — it cleared nothing and broke a verbatim equality assertion, and was
+  reverted exactly. The diagnosis in the plan file (print the helper's keys, read the validator) is
+  what located the right place.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
