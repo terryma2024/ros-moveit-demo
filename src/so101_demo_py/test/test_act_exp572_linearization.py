@@ -7,6 +7,7 @@ OfflineDispatchTransaction and must fail while the window is open.
 """
 
 import threading
+import time
 
 from test_act_dispatch_transaction import _auth_helpers, _run, _transaction
 from test_act_physics_clock_history import SOURCE_BASE_NS, STEP_NS
@@ -199,3 +200,88 @@ def test_pre_issue_refusal_is_a_transaction_result_without_side_effects():
     assert tx.handle is None
     assert port.reserve_calls == 0 and port.send_calls == 0
     assert port._close_first is False and port.cancel_stop_pending is False
+
+
+# --- P1.5: barriers inside the real I/O and copy call sites ---
+
+
+def test_revoke_completes_while_the_real_controller_send_is_blocked():
+    """The controller send happens outside every registry/admission/history lock."""
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
+    entered = threading.Event()
+    release = threading.Event()
+    original_send = port.send
+
+    def blocking_send(**kwargs):
+        entered.set()
+        release.wait(5.0)
+        return original_send(**kwargs)
+
+    port.send = blocking_send
+    outcome = {}
+
+    def worker():
+        try:
+            outcome["state"] = _run(tx)
+        except Exception as error:  # noqa: BLE001
+            outcome["error"] = repr(error)
+
+    worker = threading.Thread(target=worker)
+    worker.start()
+    assert entered.wait(5.0), "the real port.send was never entered"
+    began = time.monotonic()
+    admission.revoke_current("CLIENT_REVOKED")
+    elapsed = time.monotonic() - began
+    revoke_completed_while_blocked = elapsed < 0.1
+    release.set()
+    worker.join(10.0)
+    assert not worker.is_alive(), "the transaction thread must terminate"
+    assert revoke_completed_while_blocked, (
+        f"revocation could not complete while the controller send was blocked: {elapsed:.3f}s")
+    assert admission.revoked_record is not None
+    assert "error" not in outcome, outcome
+    assert outcome["state"] in ("ACCEPTED", "REJECTED", "UNKNOWN"), outcome
+
+
+def test_revoke_completes_while_the_real_pre_boundary_copy_is_blocked():
+    """The isolated history copy runs outside the claim boundary as well."""
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
+    entered = threading.Event()
+    release = threading.Event()
+    original_step_at = history.step_at
+    payload = {"samples": [{"step": index, "values": [index * 1.0] * 64} for index in range(2048)]}
+
+    def blocking_copy(step):
+        entered.set()
+        release.wait(5.0)
+        entry = original_step_at(step)
+        # a real copy and serialization at the pre-boundary call site
+        import copy as _copy
+        import json as _json
+        _json.dumps(payload).encode("utf-8")
+        _copy.deepcopy(payload)
+        return entry
+
+    history.step_at = blocking_copy
+    outcome = {}
+
+    def worker():
+        outcome["result"] = admission.admit_sample(
+            sample=__import__("test_act_physics_clock_admission", fromlist=["_sample"])._sample(1),
+            ticket="clock-session", generation=1, reset_epoch=1)
+
+    worker = threading.Thread(target=worker)
+    worker.start()
+    assert entered.wait(5.0), "the pre-boundary copy was never entered"
+    began = time.monotonic()
+    admission.revoke_current("CLIENT_REVOKED")
+    elapsed = time.monotonic() - began
+    assert elapsed < 0.1, f"revocation blocked behind the copy: {elapsed:.3f}s"
+    release.set()
+    worker.join(10.0)
+    assert not worker.is_alive()
+    assert admission.revoked_record is not None
