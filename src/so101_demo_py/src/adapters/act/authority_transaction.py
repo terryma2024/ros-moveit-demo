@@ -204,36 +204,26 @@ class AuthorityTransactionRegistry:
                 current = port.current_generation()
                 if current != record.controller_generation:
                     raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
-            now_ns = self._clock_ns()
-            if now_ns > record.deadline_ns:
-                self._states[record.permit_id] = EXPIRED
-                raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED")
+            # identities and owner state are validated while the boundary is held,
+            # *before* the single final history validation, so nothing can change
+            # between them and no clock is read after that validation
+            if not admission.owner_is_active():
+                self._states[record.permit_id] = REVOKED
+                raise AuthorityRefused("AUTHORITY_REVOKED")
             try:
                 receipt = admission.history_commit_receipt(
                     token=token, step=record.step, max_age_ns=self._selected_max_age_ns)
-            except Exception as error:  # noqa: BLE001
-                raise AuthorityRefused(f"AUTHORITY_COMMIT_REFUSED:{error}") from error
-            try:
-                final = admission.history_commit_receipt(
-                    token=token, step=record.step, max_age_ns=self._selected_max_age_ns)
             except AuthorityRefused as error:
-                raise AuthorityRefused(
-                    f"AUTHORITY_HISTORY_CHANGED_IN_BOUNDARY:{error}") from error
+                raise AuthorityRefused(f"AUTHORITY_COMMIT_REFUSED:{error}") from error
             except ValueError as error:
-                raise AuthorityRefused(
-                    f"AUTHORITY_HISTORY_CHANGED_IN_BOUNDARY:{error}") from error
-            if (final["version"] != receipt["version"]
-                    or final["incarnation"] != receipt["incarnation"]
-                    or final["epoch"] != receipt["epoch"]):
-                raise AuthorityRefused("AUTHORITY_HISTORY_CHANGED_IN_BOUNDARY")
-            if not admission.owner_is_active():
-                self._states[record.permit_id] = REVOKED
-                raise AuthorityRefused("AUTHORITY_REVOKED_DURING_COMMIT")
+                raise AuthorityRefused(f"AUTHORITY_COMMIT_REFUSED:{error}") from error
             if receipt["version"] != record.history_version \
                     or receipt["incarnation"] != record.incarnation \
                     or receipt["epoch"] != record.epoch:
                 raise AuthorityRefused("AUTHORITY_COMMIT_IDENTITY_CHANGED")
-            if self._clock_ns() > record.deadline_ns:
+            # one timestamp: the permit deadline is compared against the same
+            # history-owned instant that validated readiness/hazard/age
+            if receipt["commit_monotonic_ns"] > record.deadline_ns:
                 self._states[record.permit_id] = EXPIRED
                 raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED_AT_COMMIT")
             self._states[record.permit_id] = IN_FLIGHT
