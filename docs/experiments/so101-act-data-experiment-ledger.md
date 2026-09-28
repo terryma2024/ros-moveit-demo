@@ -6589,3 +6589,15 @@ status: PLANNED_ISOLATED_STACK
 - **如实记录的连带影响**：全探针集 **18 passed / 2 failed**（`probes.log`），六模块 **150 passed / 1 failed**（`six.log`）。三个失败用例都是在“最终校验**之后**”移动时钟并期望拒绝——这正是 review 10 明令**禁止**再加检查的窗口（线性化点已在最终提交时刻确定），因此它们需要按新语义**重定界**（把时间推进移到最终提交**之前**，由该次提交的单一时刻捕获），而不是放宽断言：`test_selected_age_crossing_after_the_commit_still_refuses`（EXP-572）、`test_owner_generation_one_with_rearmed_controller_and_caller_999_refuses`（EXP-572，待确认具体原因）、`test_permit_deadline_crossing_during_the_claim_commit_is_refused`（六模块）。
 - 未完成（continue EXP-573）：上述三个用例的重定界；P1.2 单一失败闭合（含 readback Mapping 校验、`close_failed`/fencing 语义与表驱动测试）；P2 锁图二选一并与契约/audit/测试一致、删除过时 `claim_guard` 描述；P2 真实 `step_at` 内 deepcopy 屏障；legacy claim 测试迁移；随后按用户要求重生成 change/evidence 清单、让 review 请求包引用**当前整文件哈希**（而非内嵌的旧值）、并把“清单快照提交”与“ledger/请求包提交”显式分离。
 - 边界：Gate 5 OPEN/BLOCKED，**不请求 review 11**，不自批；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-651 — EXP-573：三处用例按“单时刻”语义重定界，探针 20 passed 且**零警告**，六模块 151 passed
+
+- 提交 `d1c28ca9`。按 review 10 的线性化语义重定界（**加强**而非放宽）：
+  - `test_hazard_latched_after_the_commit_still_refuses` → 改为**在唯一一次最终校验之前** latch hazard，使该次 history 自有时间戳必须观测到并拒绝；
+  - `test_selected_age_crossing_after_the_commit_still_refuses` → 改为**在最终校验之前**把选中年龄推到 250 ms（界 50 ms）；
+  - `test_permit_deadline_crossing_during_the_claim_commit_is_refused` → 改为在最终校验**之前**越过 1 ms permit deadline，并断言拒绝且零 reserve/零接受；
+  - `test_revoke_completes_while_the_real_pre_boundary_copy_is_blocked` 的 worker 改为**捕获并断言** `AdmissionRefused`（revoke 后释放拷贝必被拒），不再让线程异常逃逸。
+- **实测**：探针集（EXP-571 行为 7 + EXP-572 11 + EXP-573 2）**20 passed，零警告**（`probes3.log`/JUnit，scratch `exp573-green3.*`）；六模块 **151 passed**（`six2.log`/JUnit，scratch `exp573-six2.*`）；P1.1 的 RED/GREEN 仍为同集同名的 `red1.log`（2 failed）→ `green1.log`（2 passed）。每次运行均为新建 scratch + 精确 tempfile 探针 + 逐文件 SHA 等于 worktree 的镜像（`mirror-1..4`）。
+- review 10 的有效范围保留：七个 `b917ae46` 行为 RED 仍全部到达目标；旧证据与更正保留未改。
+- 未完成：P1.2 单一失败闭合（readback 必须显式 Mapping、`close_failed`/fencing 语义、表驱动测试）；P2 锁图二选一并与契约/audit/测试一致、删除过时 `claim_guard` 描述；真实 `step_at` 内 deepcopy 屏障（已有）与 send 入口测试（保留）；legacy claim 测试迁移；随后重生成 change/evidence 清单、让 review 请求包引用**当前整文件哈希**、并把“清单快照提交”与“ledger/请求包提交”显式分离。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式。
