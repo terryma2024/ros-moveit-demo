@@ -36,36 +36,45 @@ MAX_IDENTITY_INT = 2 ** 63 - 1
 _MISSING = object()
 
 
-def _validated_identity(ticket, generation, reset_epoch):
+def _validated_identity(ticket, session, incarnation, generation, reset_epoch):
     """Validate one identity; invalid values are refused, never coerced."""
 
-    if not isinstance(ticket, str) or not ticket:
+    if ticket is None or (isinstance(ticket, str) and not ticket):
         raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_INVALID")
+    for value in (session, incarnation):
+        if not isinstance(value, str) or not value:
+            raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_INVALID")
     if type(generation) is not int or not 0 <= generation <= MAX_IDENTITY_INT:
         raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_INVALID")
     if type(reset_epoch) is not int or not 1 <= reset_epoch <= MAX_IDENTITY_INT:
         raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_INVALID")
-    return (ticket, generation, reset_epoch)
+    return (str(ticket), session, incarnation, generation, reset_epoch)
 
 
 def identity_is_successor(candidate, current):
-    """Authoritative successor relation; never incidental tuple ordering.
+    """Authoritative successor relation over three separate incarnations.
 
-    Same ticket: ``(generation, reset_epoch)`` must increase lexicographically on
-    integers only. Ticket rotation: the generation must strictly increase, so a
-    rotated ticket can never rewind or repeat the current generation.
+    Identity fields are ``(broker_ticket, simulation_session, history_incarnation,
+    generation, reset_epoch)``. Within one history incarnation the simulation
+    session may not change, the reset epoch may never roll back, and the
+    generation/epoch pair must advance; a ticket rotation must strictly increase
+    the generation. A different history incarnation is the explicit new-incarnation
+    path and is the only route that may legitimately reset the epoch.
     """
 
     if current is None:
         return True
+    if candidate[2] != current[2]:
+        return candidate[3] >= 1 and candidate[4] >= 1
+    if candidate[1] != current[1]:
+        return False
+    if candidate[4] < current[4]:
+        # Epoch rollback inside one history incarnation is never allowed, whether
+        # or not the broker ticket rotated; it needs a new incarnation.
+        return False
     if candidate[0] == current[0]:
-        # Same session incarnation: the reset epoch may never roll back, and the
-        # pair must still advance. Moving from (generation 7, epoch 9) to
-        # (8, 1) requires an explicit new session/history incarnation instead.
-        if candidate[2] < current[2]:
-            return False
-        return (candidate[1], candidate[2]) > (current[1], current[2])
-    return candidate[1] > current[1]
+        return (candidate[3], candidate[4]) > (current[3], current[4])
+    return candidate[3] > current[3]
 
 
 class AdmissionRefused(ValueError):
@@ -92,24 +101,56 @@ class PhysicsClockAdmission:
         self._stop_confirmed = False
         self._stages = []
         self._stale_hazards = []
+        self._retired = False
+        self.retire_record = None
         self.checked_stages = 0
 
     # ---------------------------------------------------------------- identity
 
-    def arm(self, *, ticket, generation, reset_epoch):
-        identity = _validated_identity(ticket, generation, reset_epoch)
+    def _full_identity(self, ticket, generation, reset_epoch, session=None, incarnation=None):
+        history = self._history
+        session = session if session is not None else getattr(history, "session_id", None)
+        incarnation = (incarnation if incarnation is not None
+                       else getattr(history, "incarnation", session))
+        return _validated_identity(ticket, session, incarnation, generation, reset_epoch)
+
+    def arm(self, *, ticket, generation, reset_epoch, session=None, incarnation=None):
+        identity = self._full_identity(ticket, generation, reset_epoch, session, incarnation)
         with self._lock:
-            if self._revoked is not None and not self._stop_confirmed:
-                # The previous target has not been authoritatively stopped or
-                # retired, so no new generation may take over this gate.
+            if self._identity is not None and not self._retired and not (
+                    self._revoked is not None and self._stop_confirmed):
+                # An active owner (or one whose stop is unconfirmed) may not be
+                # replaced; authoritative stop/retirement is required first.
                 raise AdmissionRefused("CLOCK_ADMISSION_TAKEOVER_BLOCKED")
             if not identity_is_successor(identity, self._identity):
                 raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_NOT_NEWER")
             self._identity = identity
             self._revoked = None
             self._stop_confirmed = False
+            self._retired = False
+            self.retire_record = None
             self._stages = []
             return identity
+
+    def retire(self, *, identity, stop_evidence):
+        """Authoritatively retire the current owner so a new identity may arm.
+
+        ``stop_evidence`` must be an authoritative stopped report (a mapping with
+        ``authoritative`` and ``stopped`` both true) produced independently of the
+        physics clock stream.
+        """
+
+        if not isinstance(stop_evidence, dict) or stop_evidence.get("authoritative") is not True \
+                or stop_evidence.get("stopped") is not True:
+            raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_INVALID")
+        candidate = _validated_identity(*identity) if len(identity) == 5 else None
+        with self._lock:
+            if candidate is None or candidate != self._identity:
+                raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_CHANGED")
+            self._retired = True
+            self.retire_record = {"identity": candidate, "monotonic_ns": self._clock_ns(),
+                                  "stop_evidence": copy.deepcopy(stop_evidence)}
+            return copy.deepcopy(self.retire_record)
 
     @property
     def identity(self):
@@ -141,9 +182,13 @@ class PhysicsClockAdmission:
                 "reason": reason,
                 "identity": self._identity,
                 "monotonic_ns": now_ns,
+                "revoke_monotonic_ns": now_ns,
                 "expiry": reason in EXPIRY_REASONS,
                 "confirmed_stop_monotonic_ns": None,
-                "expiry_to_stop_ns": None,
+                "stop_evidence_monotonic_ns": None,
+                "stop_record_monotonic_ns": None,
+                "revoke_to_stop_record_ns": None,
+                "expiry_to_stop_ns": None,  # deprecated alias of revoke_to_stop_record_ns
             }
         self._stop_confirmed = False
         record = copy.deepcopy(self._revoked)
@@ -210,9 +255,11 @@ class PhysicsClockAdmission:
             confirmed_ns = self._clock_ns()
             self._stop_confirmed = True
             self._revoked["confirmed_stop_monotonic_ns"] = confirmed_ns
-            if self._revoked["expiry"]:
-                self._revoked["expiry_to_stop_ns"] = (
-                    confirmed_ns - self._revoked["monotonic_ns"])
+            self._revoked["stop_evidence_monotonic_ns"] = confirmed_ns
+            self._revoked["stop_record_monotonic_ns"] = self._clock_ns()
+            self._revoked["revoke_to_stop_record_ns"] = (
+                self._revoked["stop_record_monotonic_ns"] - self._revoked["monotonic_ns"])
+            self._revoked["expiry_to_stop_ns"] = self._revoked["revoke_to_stop_record_ns"]
             return copy.deepcopy(self._revoked)
 
     # ----------------------------------------------------------------- fencing
@@ -240,7 +287,7 @@ class PhysicsClockAdmission:
 
         if stage not in STAGES:
             raise ValueError("CLOCK_ADMISSION_STAGE_INVALID")
-        identity = _validated_identity(ticket, generation, reset_epoch)
+        identity = self._full_identity(ticket, generation, reset_epoch)
         with self._lock:
             now_ns = self._clock_ns()
             return self._fence_locked(identity, stage, now_ns)
@@ -260,7 +307,7 @@ class PhysicsClockAdmission:
             raise ValueError("CLOCK_ADMISSION_SIDE_EFFECT_FREE_REQUIRED")
         if not callable(checker):
             raise ValueError("CLOCK_ADMISSION_CHECKER_INVALID")
-        identity = _validated_identity(ticket, generation, reset_epoch)
+        identity = self._full_identity(ticket, generation, reset_epoch)
         self.fence(ticket=ticket, generation=generation, reset_epoch=reset_epoch,
                    stage=stage)
         result = checker()
@@ -278,55 +325,82 @@ class PhysicsClockAdmission:
     # ------------------------------------------------------------- admissions
 
     def admit_sample(self, *, sample, ticket, generation, reset_epoch):
-        """Admit one selected sample, bound atomically to the trusted history.
+        """Admit one selected sample with commit-time versioned revalidation.
 
-        Lock order: the admission lock is always taken before the history lock and
-        is never held across a large copy. The sample is not trusted: its session,
-        epoch and step are re-derived from the history, which must itself be
-        evidence-ready and hazard-free at this linearization point.
+        The isolated history entry is obtained *outside* the admission lock, then
+        the commit point resamples time and revalidates the history version,
+        incarnation, session, epoch, health/readiness, the sample identity, the
+        step and the selected-state age. Any change since the snapshot refuses.
         """
 
-        identity = _validated_identity(ticket, generation, reset_epoch)
+        identity = self._full_identity(ticket, generation, reset_epoch)
+        history = self._history
+        snapshot = history.snapshot()
+        if not snapshot["evidence_ready"]:
+            raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_NOT_READY")
+        if snapshot["session_id"] != identity[1] or snapshot["incarnation"] != identity[2]:
+            raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_IDENTITY_MISMATCH")
+        if snapshot["epoch"] != identity[4]:
+            raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_IDENTITY_MISMATCH")
+        if sample.simulation_session_id != identity[1] or sample.reset_epoch != identity[4]:
+            raise AdmissionRefused("CLOCK_ADMISSION_SAMPLE_IDENTITY_MISMATCH")
+        try:
+            entry = history.step_at(sample.physics_step)
+        except ValueError as error:
+            raise AdmissionRefused(
+                f"CLOCK_ADMISSION_HISTORY_STEP_UNAVAILABLE:{error}") from error
         with self._lock:
             now_ns = self._clock_ns()
             self._fence_locked(identity, "sample", now_ns)
-            history = self._history
-            if history is None or not history.evidence_ready:
+            current = history.snapshot()
+            if current != snapshot:
+                raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_VERSION_CHANGED")
+            if not history.evidence_ready:
                 raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_NOT_READY")
-            if history.session_id != identity[0] or history.epoch != identity[2]:
-                raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_IDENTITY_MISMATCH")
-            if (sample.simulation_session_id != identity[0]
-                    or sample.reset_epoch != identity[2]):
-                raise AdmissionRefused("CLOCK_ADMISSION_SAMPLE_IDENTITY_MISMATCH")
-            try:
-                entry = history.step_at(sample.physics_step)
-            except ValueError as error:
-                raise AdmissionRefused(
-                    f"CLOCK_ADMISSION_HISTORY_STEP_UNAVAILABLE:{error}") from error
             age_ns = now_ns - entry["sample"].clock_interval_end_monotonic_ns
             if not 0 <= age_ns <= self._selected_max_age_ns:
                 raise AdmissionRefused("CLOCK_ADMISSION_SELECTED_STALE")
             return {"sample": copy.deepcopy(entry["sample"]),
                     "received_monotonic_ns": entry["received_monotonic_ns"],
-                    "identity": identity, "command_authority": False, "stage": "sample"}
+                    "identity": identity, "history_version": current["version"],
+                    "command_authority": False, "stage": "sample"}
 
-    def consume_stage(self, *, ticket, generation, reset_epoch, stage, consume):
-        """Atomic consume fence for a real authority stage (permit, submit, ...).
+    def consume_stage(self, *, ticket, generation, reset_epoch, stage, consume,
+                      generation_check=None, controller_generation=None):
+        """Atomic consume fence with live history and controller generation checks.
 
-        The short consume callable runs inside the same critical section as the
-        identity/revocation fence, so a revocation can never interleave between
-        the check and the consumption. Callables must be short and non-blocking;
-        expensive side-effect-free computation belongs in `run_checked_stage`.
+        Every authority stage validates the *current* history at its own
+        consumption linearization point: readiness, active health (expiry is
+        latched here, not by another thread's poll), hazard, incarnation, session
+        and epoch. A controller generation check may be supplied and runs inside
+        the same critical section before the consume callable.
         """
 
         if stage not in STAGES or stage == "sample":
             raise ValueError("CLOCK_ADMISSION_STAGE_INVALID")
         if not callable(consume):
             raise ValueError("CLOCK_ADMISSION_CONSUME_INVALID")
-        identity = _validated_identity(ticket, generation, reset_epoch)
+        if generation_check is not None and not callable(generation_check):
+            raise ValueError("CLOCK_ADMISSION_GENERATION_CHECK_INVALID")
+        identity = self._full_identity(ticket, generation, reset_epoch)
+        history = self._history
         with self._lock:
             now_ns = self._clock_ns()
             self._fence_locked(identity, stage, now_ns)
+            if not history.check_health():
+                raise AdmissionRefused(
+                    f"CLOCK_ADMISSION_HISTORY_UNHEALTHY:{history.hazard}")
+            snapshot = history.snapshot()
+            if snapshot["hazard"] is not None:
+                raise AdmissionRefused(
+                    f"CLOCK_ADMISSION_HISTORY_HAZARD:{snapshot['hazard']}")
+            if not snapshot["evidence_ready"]:
+                raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_NOT_READY")
+            if (snapshot["session_id"] != identity[1] or snapshot["incarnation"] != identity[2]
+                    or snapshot["epoch"] != identity[4]):
+                raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_IDENTITY_MISMATCH")
+            if generation_check is not None and not generation_check():
+                raise AdmissionRefused("CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED")
             consume()
             return True
 
@@ -339,7 +413,7 @@ class PhysicsClockAdmission:
         and a late cancellation result can never revoke a newer identity.
         """
 
-        identity = _validated_identity(ticket, generation, reset_epoch)
+        identity = self._full_identity(ticket, generation, reset_epoch)
         if not callable(cancel):
             raise ValueError("CLOCK_ADMISSION_CANCEL_INVALID")
         with self._lock:
