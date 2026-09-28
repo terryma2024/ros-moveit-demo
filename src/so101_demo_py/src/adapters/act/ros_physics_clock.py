@@ -102,6 +102,9 @@ class RosPhysicsClockAdapter:
             return healthy
 
     def _append_pending(self, chunk, receipt_ns, scope):
+        # Retained chunks are the only ones that need their own copy: a chunk
+        # consumed immediately is deep-copied sample-by-sample by the history.
+        chunk = copy.deepcopy(chunk)
         samples = len(chunk.samples)
         if samples > self.sample_capacity:
             self._lost_epochs.add(scope)
@@ -136,13 +139,12 @@ class RosPhysicsClockAdapter:
             try:
                 if type(receipt_ns) is not int or receipt_ns < 1:
                     raise ValueError("PHYSICS_CHUNK_RECEIPT_INVALID")
-                chunk = copy.deepcopy(message)
-                scope = self._scope(chunk)
+                scope = self._scope(message)
                 if not self._armed:
                     if scope != (self.history.session_id, 0):
-                        self._append_pending(chunk, receipt_ns, scope)
+                        self._append_pending(message, receipt_ns, scope)
                 else:
-                    self._consume(chunk, receipt_ns, scope)
+                    self._consume(message, receipt_ns, scope)
             except (AttributeError, TypeError, ValueError, OverflowError):
                 if self._armed:
                     self.history.latch("PHYSICS_CHUNK_CALLBACK_INVALID")

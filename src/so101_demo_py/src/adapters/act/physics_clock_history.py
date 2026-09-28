@@ -240,8 +240,28 @@ class PhysicsClockHistory:
             return self.hazard is None
 
     def step_at(self, physics_step):
+        """Return one isolated copy of a fresh retained step, not the whole window.
+
+        Freshness, hazard latching and error semantics match
+        `recent_with_receipts`; only the selected entry is deep-copied so a
+        targeted read stays cheap on the executor.
+        """
         step = _integer(physics_step, "physics_step", 1)
-        for entry in reversed(self.recent_with_receipts()):
-            if entry["sample"].physics_step == step:
-                return entry
-        raise ValueError("PHYSICS_CLOCK_STEP_UNAVAILABLE")
+        with self._lock:
+            if self.hazard is not None:
+                raise ValueError(self.hazard)
+            if not self._history:
+                raise ValueError("PHYSICS_CLOCK_UNAVAILABLE")
+            now_ns = _integer(self.clock_ns(), "readback_ns", 1)
+            any_fresh = False
+            for entry in reversed(self._history):
+                fresh = 0 <= now_ns - entry["sample"].clock_interval_end_monotonic_ns <= self.max_age_ns
+                any_fresh = any_fresh or fresh
+                if fresh and entry["sample"].physics_step == step:
+                    return {"sample": copy.deepcopy(entry["sample"]),
+                            "received_monotonic_ns": entry["received_monotonic_ns"],
+                            "command_authority": False}
+            if not any_fresh:
+                self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
+                raise ValueError("PHYSICS_CLOCK_STALE")
+            raise ValueError("PHYSICS_CLOCK_STEP_UNAVAILABLE")
