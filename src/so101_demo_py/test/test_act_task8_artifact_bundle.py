@@ -209,3 +209,19 @@ def test_bundle_payload_carries_the_verified_receipt_and_its_raw_digest(tmp_path
     (broken / "preparation-receipt.json").write_text("{}")
     with pytest.raises(ValueError):
         task8_bundle_payload(broken / "preparation-receipt.json")
+
+
+def test_task8_payload_names_its_receipt_and_never_mixes_shapes(tmp_path):
+    from so101_demo.act.task8_artifact_bundle import require_task8_payload
+
+    payload = {"preparation_receipt_path": "/run/bundle/preparation-receipt.json",
+               "preparation_receipt_sha256": "a" * 64}
+    assert require_task8_payload(payload) == payload
+    for broken in ({}, {"preparation_receipt_path": "/x"}, dict(payload, preparation_receipt_sha256="nope"),
+                   dict(payload, preparation_receipt_path="relative/path")):
+        with pytest.raises(ValueError, match="TASK8_PAYLOAD_INVALID"):
+            require_task8_payload(broken)
+    # a collection-only field in a Task 8 payload is refused, whichever side supplies the key list
+    with pytest.raises(ValueError, match="TASK8_PAYLOAD_SHAPE_CONFLICT"):
+        require_task8_payload(dict(payload, collection_profile="formal"),
+                              collection_only_keys=("collection_profile", "collection_output_root"))
