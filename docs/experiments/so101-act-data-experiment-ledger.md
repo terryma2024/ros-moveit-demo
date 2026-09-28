@@ -6449,3 +6449,13 @@ status: PLANNED_ISOLATED_STACK
   5. **真实并发覆盖**：现有 copy/send 测试的屏障放在 copy/send **之后**；需把事件屏障放进真实 `port.send` 与真实序列化/拷贝调用点，证明外部工作阻塞时 revoke 仍能完成（因为 registry/admission/history 锁未被持有），并断言确实进入目标节点；替换或重做那些“未到达命名边界也能通过”的 legacy 用例。
 - **簿记更正**：删除契约 122–126 行残留的 controller-reply/consume-callable；补全锁图（claim 期间还会获取控制器端口锁）并证明无环；说明 inventory 的 snapshot/ledger 哈希边界；把“既有 42 项脏条目”与“任务自有条目”分开；撤回“所有失败路径都同步 tx/registry 并关闭控制器”的不实陈述。
 - 本轮先做收据与工作顺序记录（append-only 目录 `experiments/exp572-linearization/`，未删除/覆盖任何证据）。Gate 5 仍为 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未跑 ordinary full suite；42 个既有 dirty entries 未改动；无证据删除。下一步按 P1.1 → P1.5 顺序，每项先落确定性 RED 再修，最后更新 contract/audit/inventory 并请求下一次复核。
+
+## CP-636 — EXP-572 P1.1 确定性 RED 已建立（历史终结窗口仍在边界之外）
+
+- 提交 `6ead9701`，新增 `test/test_act_exp572_linearization.py`（review 9 的 P1.1 复现）：两个探针都在**真实** `OfflineDispatchTransaction` 上运行，并精确命中“`history.commit_receipt` 已返回、`READY -> IN_FLIGHT` 尚未发生”的窗口——
+  1. `test_hazard_latched_after_the_commit_still_refuses`：包装 `admission.history_commit_receipt`，在原提交返回后立刻在 history 锁内 latch `PHYSICS_CLOCK_SILENT`（并推进 version），随后断言事务**必须拒绝**且 `accepted_commands == 0`；
+  2. `test_selected_age_crossing_after_the_commit_still_refuses`：同一窗口内把选中年龄推过 50 ms 上界（`now = last_end + 250 ms`），同样要求拒绝且零接受。
+- **结果：2 failed**（`experiments/exp572-linearization/red1.log`，JUnit `red1-junit.xml`）——即在当前实现下，窗口内 latch 的 hazard 与越界的选中年龄都被忽略，事务照样接受。这正是 review 9 复现的行为，现已成为仓库内可重复的确定性 RED。
+- **证据纪律**：本轮使用**新的字节完备源码镜像** `experiments/exp572-linearization/mirror-1`，运行前逐文件断言四个模块 `under_mirror=True` 且 **SHA-256 等于 worktree 文件**（`red1-provenance.txt`：**MIRROR_PROVENANCE PASS**）；pytest 使用**全新且此前不存在**的 scratch `scratch/exp572-red1.YZ7Xo4aW`，并以精确解释器打印 `tempfile.gettempdir()` 断言等于 `TMPDIR`；目录为追加式，未删除或覆盖任何既有证据；42 个既有 dirty entries 未改动。
+- 下一步（同一 EXP-572 轮次内继续）：实现“registry -> admission -> history”的真正线性化——broker 自有的 claim context 先取 admission 再取 history，直到 registry 完成 `READY -> IN_FLIGHT` 才释放（`commit_receipt` 重入 history RLock），使上述两个探针转绿；随后依次处理 P1.2（完整身份/代次绑定与不可变标量冻结）、P1.3（统一不可逆失败闭合：字段集错误、send 异常/超时、claim 时刻精确相等）、P1.4（用两侧都有效的 `run_to("receive", …)` 重做最后三个 RED）、P1.5（把屏障放进真实 send/serialization 调用点），并更正 contract 122–126 行、补全锁图（含控制器端口锁）、说明 inventory 哈希边界、分离既有与任务自有脏项、撤回不实的“所有失败路径已终止化”陈述。
+- 边界：Gate 5 仍为 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁继续延后；未跑 ordinary full suite；无证据删除。
