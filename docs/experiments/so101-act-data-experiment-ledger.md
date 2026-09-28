@@ -9086,3 +9086,26 @@ This resolves the design block **without authorizing runtime or motion**.
 - **Verification:** focused tests **5 passed** (`gate6-batch3-py-gate/task11a2.{log,junit.xml}`).
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-773 — Task 11A: append-once results, verified against their bytes
+
+- **Delivered:** `adapters/act/parallel_collection_results.py` with `ActCollectionResultStore` and
+  `ActCollectionResultVerifier`, plus tests.
+  - one atomically written JSON document per scene (`fsync` + `replace`, no `.partial` residue);
+  - **idempotent re-entry:** the identical document publishes to the same `{path, sha256}`, so a wave
+    re-entered after a crash finishes without rewriting history;
+  - **terminal state:** a *different* document for a scene that already has a result raises
+    `SCENE_TERMINAL_STATE_IMMUTABLE` — CP-770's rule carried into the parallel path;
+  - **input refusals:** `RESULT_ROOT_INVALID` (non-absolute, non-directory, symlinked root),
+    `RESULT_SCENE_ID_INVALID` (path separator or `..`), `RESULT_INVALID` (missing keys or a status other
+    than PASSED/FAILED);
+  - **verification by bytes:** `verify` re-reads the file rather than trusting the digest, so tampering
+    is `RESULT_DIGEST_MISMATCH`, a deleted file `RESULT_MISSING`, a malformed entry
+    `RESULT_ENTRY_INVALID`.
+- **Verification:** focused tests **7 passed** (`gate6-batch3-py-gate/task11a3.{log,junit.xml}`), first run
+  green.
+- **Remaining in 11A:** `ActFixedWaveRecovery.resume` (evidence before reset; never reset directly from a
+  held or unknown state), `gpu_workload_client.py`, the runtime adapter, `FixedActCollectionCampaign`,
+  the composition and `act_collect_parallel`, then the teleop-side modifications and the live Steps 6–7.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
