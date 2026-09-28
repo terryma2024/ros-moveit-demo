@@ -272,3 +272,42 @@ def test_live_cli_refuses_a_bad_bundle_before_composing_services(tmp_path, monke
                        "--journal", str(tmp_path / "journal.json"),
                        "--artifact-bundle", str(missing)])
     assert composed == []                       # zero side effects: no services were built
+
+
+def test_live_cli_plans_all_fourteen_journals_or_nothing(tmp_path, monkeypatch):
+    """A conflicting journal anywhere in the run root stops the run before composition."""
+
+    import dataclasses
+    import json as _json
+
+    from so101_demo.cli import act_run_pick_place_validation as live_cli
+    from so101_demo.act.pick_place_validation_manifest import (
+        ANCHOR_NAMES, build_pick_place_validation_manifest,
+    )
+    from so101_demo.act.task8_artifact_bundle import prepare_task8_bundle
+
+    inputs = _inputs(tmp_path)
+    identities = dict(inputs.identities)
+    anchors = {name: {"cup_start_m": [0.25, 0.0, 0.15], "neck_start_rad": 0.0}
+               for name in ANCHOR_NAMES}
+    # the bundle needs a REAL v2 manifest for the journal plan: the stub has no case lists
+    manifest_path = tmp_path / "real-manifest.json"
+    manifest_path.write_text(_json.dumps(build_pick_place_validation_manifest(
+        anchors, source_sha256=identities["source_provenance_sha256"],
+        runtime_config_sha256=identities["runtime_config_sha256"],
+        collection_config_sha256=identities["act_profile_sha256"],
+        contact_policy_fingerprint=identities["contact_policy_fingerprint"],
+        calibration_report_path="calibration-report.json", calibration_report_sha256="e" * 64)))
+    receipt = prepare_task8_bundle(dataclasses.replace(inputs, manifest=manifest_path),
+                                   tmp_path / "bundle-cli-plan")
+    run_root = tmp_path / "run"
+    (run_root / "task8-live" / "cases").mkdir(parents=True)
+    (run_root / "task8-live" / "cases" / "full-01.json").write_text("{}")   # a taken case
+    monkeypatch.setattr(live_cli, "load_spec_file",
+                        lambda path: type("S", (), {"payload": {}})())
+    monkeypatch.setattr(live_cli, "_validate_local_paths", lambda spec, journal: None)
+    with pytest.raises(ValueError, match="TASK8_JOURNAL_EXISTS"):
+        live_cli.main(["--spec", str(tmp_path / "spec.json"),
+                       "--journal", str(tmp_path / "journal.json"),
+                       "--artifact-bundle", str(receipt),
+                       "--journal-run-root", str(run_root)])
