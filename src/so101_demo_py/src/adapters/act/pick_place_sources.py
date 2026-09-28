@@ -26,7 +26,7 @@ class PickPlaceRosEvidence:
         contact_pairs: PhaseContactAllowlist, session_id: str,
         max_wall_age_s: float, max_source_skew_s: float, max_sim_gap_s: float,
         joint_tolerance_rad: float, cup_pose_tolerance_m: float,
-        cup_orientation_tolerance: float,
+        cup_orientation_tolerance: float, physics_clock=None,
     ) -> None:
         if (not isinstance(model, mujoco.MjModel)
                 or not isinstance(contact_pairs, PhaseContactAllowlist)
@@ -36,6 +36,15 @@ class PickPlaceRosEvidence:
         self.session_id = session_id
         self.contact_pairs = contact_pairs
         self._hazards: queue.SimpleQueue[str] = queue.SimpleQueue()
+        # Batch 1: the accepted physics evidence source is owned here, so the
+        # adapter is not a parallel unwired object
+        self.physics_clock = physics_clock
+        if physics_clock is not None:
+            existing = getattr(physics_clock, "on_hazard", None)
+            physics_clock.on_hazard = self._enqueue_hazard
+            self._previous_on_hazard = existing
+        self._hazards_latched: list[str] = []
+        self._authority_revoked = False
         self.reset_epoch: int | None = None
         self.phase: str | None = None
 
@@ -75,6 +84,40 @@ class PickPlaceRosEvidence:
     def _enqueue_hazard(self, reason: str) -> None:
         self._hazards.put_nowait(reason)
 
+    def poll_owner_health(self, *, now_ns=None, admission=None) -> str | None:
+        """Bounded owner poll: latch adapter/history health loss and revoke once.
+
+        A detected hazard is latched exactly once, the current admission identity is
+        revoked exactly once, and every later sample/permit/goal use is refused.
+        """
+
+        adapter = self.physics_clock
+        if adapter is None:
+            return None
+        reason = None
+        check = getattr(adapter, "check_health", None)
+        if callable(check):
+            try:
+                reason = check(now_ns=now_ns) if now_ns is not None else check()
+            except Exception as error:  # noqa: BLE001 - a failed probe is a hazard
+                reason = f"PHYSICS_CLOCK_HEALTH_PROBE_FAILED:{error}"
+        if not reason:
+            return None
+        if reason not in self._hazards_latched:
+            self._hazards_latched.append(reason)
+            self._enqueue_hazard(reason)
+        if not self._authority_revoked:
+            self._authority_revoked = True
+            if admission is not None and hasattr(admission, "revoke_current"):
+                try:
+                    admission.revoke_current(reason)
+                except Exception:  # noqa: BLE001 - revocation is already fail-closed
+                    pass
+        return reason
+
+    def authority_revoked(self) -> bool:
+        return self._authority_revoked
+
     def take_hazard(self) -> str | None:
         try:
             return self._hazards.get_nowait()
@@ -107,11 +150,44 @@ class PickPlaceRosEvidence:
         self.phase = phase
 
     def capture(self, attempt_id: str, *, after_step: int | None = None) -> dict:
+        if self._authority_revoked:
+            raise ValueError("TASK8_SOURCE_AUTHORITY_REVOKED")
         if self.reset_epoch is None:
             raise ValueError("TASK8_RESET_UNAVAILABLE")
         return self.readback.capture(
             self.session_id, attempt_id, self.reset_epoch, after_step=after_step,
         )
+
+    def capture_held_cup_handoff(
+        self, attempt_id: str, *, after_step: int,
+        lift_goal_ids: tuple[str, str], commanded_positions,
+        command_broker, paired_goal_id: str,
+        expected_prefix_sha256: str, expected_sequence: int,
+    ) -> dict:
+        """Join the current child-owned LIFT pair to the active physical epoch."""
+        epoch = self.reset_epoch
+        pair = getattr(command_broker, "prefix_executor", None)
+        if (self.phase != "MICRO_LIFT" or epoch is None
+                or getattr(command_broker, "driver", None) is not self.readback.broker
+                or pair is None or getattr(pair, "broker", None) is not command_broker
+                or not callable(getattr(pair, "current_handoff_state", None))):
+            raise ValueError("PICK_PLACE_HANDOFF_SCOPE_INVALID")
+        result = self.readback.capture_held_cup_handoff(
+            self.session_id, attempt_id, epoch, after_step=after_step,
+            lift_goal_ids=lift_goal_ids, commanded_positions=commanded_positions,
+            paired_execution=pair, paired_goal_id=paired_goal_id,
+            expected_prefix_sha256=expected_prefix_sha256,
+            expected_sequence=expected_sequence,
+        )
+        if (self.phase != "MICRO_LIFT" or self.reset_epoch != epoch
+                or command_broker.prefix_executor is not pair
+                or not isinstance(result, dict)
+                or result.get("session_id") != self.session_id
+                or result.get("attempt_id") != attempt_id
+                or result.get("reset_epoch") != epoch
+                or result.get("command_authority") is not False):
+            raise ValueError("PICK_PLACE_HANDOFF_SCOPE_INVALID")
+        return result
 
 
 class PickPlaceHazardDispatcher:
