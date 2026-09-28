@@ -6976,3 +6976,45 @@ status: PLANNED_ISOLATED_STACK
   cannot be scoped there without threading an explicit profile flag (option 1) or changing
   that path's behaviour (option 2). Details in
   `experiments/gate6-batch3-root-tdd/ros-child-wiring-gap.md`; no root patch applied.
+
+## CP-687 — Phase 3b commits, whole-tree gate PASS, and the open lock-graph slice
+
+- **Whole-tree gate (intermediate, official runner):** `tools/so101_pytest_gate.py`,
+  `--workers 8`, fresh `/data` scratch, short `SO101_IPC_SOCKET_BASE`, process-id width 4 →
+  `"result": "PASS"`, collection 5 335/5 335 (`collection_sha256 c760dab4…`), shards 01-08
+  rc=0 with 0 failures/errors, serial lane 286 tests/2 skipped/0 failures, cleanup
+  `all_children_reaped`. Warnings: **4**, all `fork()`-in-multithreaded-process from
+  `test_detector_factory.py::test_concurrent_model_provenance_writers_preserve_the_first_document`
+  (file untouched by this task) — recorded as audited platform warnings, not zero.
+  Evidence `experiments/gate6-batch3-py-gate/gate-run4*`, shard logs under `.../pg3/scratch/r3/`.
+- **C++ package gate:** `experiments/gate6-batch3-package-gate8` — build rc=0 (0 errors,
+  0 warnings), `colcon test` rc=0, `colcon test-result` rc=0, **131 tests / 0 failures**, all
+  six gate6 C++ suites collected (two had been unregistered and were fixed).
+- **Task commits (baseline excluded):** `e25fc295` new task-owned files; `1c396d91` task hunks
+  in 20 files, with per-hunk marker filtering for the seven files that predate this task
+  (21 hunks kept / 6 baseline hunks excluded) and `baseline_files_staged=0` verified.
+  Evidence `experiments/gate6-batch3-commit/{provenance-check,stage-check,stage2-check,stage3-check,commit1.result}`.
+- **Gate-failure fixes this span:** driver stop errors surface from `stop_attempt`/`tick`
+  while `UnixBrokerServer._serve` fences them; fail-closed `_driver_stopped()`; the
+  `object.__new__` fixture latch; the stale Batch-2 `resolver=` cases migrated to the
+  installed-authority contract; bound-authority wiring tests rewritten to install → arm →
+  confirm; provision and socket fixtures moved to the repository's short-IPC strategy with
+  TMPDIR/TMP/TEMP still on the registered scratch (107-byte production guard untouched).
+- **Lock-graph slice (open):** audit found 19 locked call sites of `_stop_if_revoked()` whose
+  body still runs a controller close, a pair cancel and `driver.stop_all`. Cluster 1 is done:
+  a single-flight `_drain_cleanup_once()` claims the exact token under the lock, performs the
+  I/O unlocked, and finalizes only if the token generation is current and ownership is
+  `STOPPING` (never `confirm_stopped` against IDLE); 98 focused tests green with one standing
+  RED, `test_handle_driven_revoke_does_not_hold_the_broker_lock_across_the_close`
+  (`redhandle.log`, `singleflight.log`). The cluster-6 experiment (enqueue-only + drain at the
+  public `handle` exit) measured 9 failed → **2 failed/97 passed** (`enqueue.log`,
+  `exitdrain.log`) and was reverted to the single-flight state via the byte copy; the two
+  residuals are diagnosed in `experiments/gate6-batch3-lock-audit/cleanup-path-audit.txt`:
+  (a) the `status` exit's token is not observed by the drainer, (b) the drainer's refresh/
+  confirm must be gated off the reset path.
+- **Not started:** A-prime `ros_child` root wiring (ordering: after the lock graph is clean);
+  the single final official gate after all production/root wiring; CLI bound mode deliberately
+  out of scope.
+- **Boundaries:** formal accepted Train/Validation/Offline Test **0/0/0**, Task 12
+  `NOT_STARTED`, Gate 6 runtime/goals/motion closed; every mirror, scratch, shard log, patch
+  and byte-copy rollback retained — nothing deleted or overwritten.
