@@ -192,3 +192,80 @@ def test_sample_builder_refuses_incomplete_readback_inputs(recorder):
                           "end_effector_position_m": [0.0, 0.0, 0.1],
                           "cup_position_m": [0.0, 0.0, 0.1],
                           "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
+
+
+class _NeckSweepChecker:
+    def check(self, *args, **kwargs):
+        return True
+
+
+class _Boundary:
+    """The minimal boundary the search port validates at construction."""
+
+    def __init__(self):
+        self.neck_sweep_checker = _NeckSweepChecker()
+
+    def begin(self, *args, **kwargs):
+        return {}
+
+    def search(self, *args, **kwargs):
+        return {}
+
+    def safe_stop(self, *args, **kwargs):
+        return True
+
+
+class _RecordingRecorder:
+    def __init__(self):
+        self.appended = []
+        self.sealed = []
+
+    def append(self, sample):
+        if set(sample) != set(_CANONICAL_KEYS):
+            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        self.appended.append(sample)
+
+    def seal(self, identity):
+        self.sealed.append(identity)
+        return {"path": "/tmp/live.json", "sha256": "a" * 64, "schema_version": 1}
+
+
+_CANONICAL_KEYS = (
+    "case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
+    "sim_time_s", "phase", "source_stamps_s", "source_received_monotonic_s", "raw_records",
+    "holding_state", "wrist_frame_valid", "wrist_target_visible", "contact_observation_valid",
+    "bilateral_contact", "no_fingertip_contact", "cup_supported", "released",
+    "placement_stable", "cup_support_distance_m", "end_effector_position_m", "cup_position_m",
+    "cup_orientation_xyzw",
+)
+
+
+def test_search_port_without_a_recorder_keeps_its_previous_behaviour():
+    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPhasePort
+
+    port = PickPlaceSearchPhasePort(_Boundary())
+    port.record_evidence(None)                       # no recorder attached: a no-op
+    with pytest.raises(ValueError, match="LIVE_EVIDENCE_SEAL_UNAVAILABLE"):
+        port.seal_live_evidence({"scenario_id": "full-01", "session_id": "s",
+                                 "attempt_id": "a", "reset_epoch": 1, "release_epoch": 0})
+
+
+def test_search_port_forwards_only_complete_samples_and_never_swallows_a_refusal(recorder):
+    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPhasePort
+
+    rec, root = recorder
+    double = _RecordingRecorder()
+    port = PickPlaceSearchPhasePort(_Boundary(), evidence_recorder=double)
+    # a partial sample must be refused loudly, never recorded as if it were complete
+    with pytest.raises(ValueError, match="TASK8_SEARCH_PORT_EVIDENCE_INVALID"):
+        port.record_evidence({"phase": "SEARCH"})
+    assert double.appended == []
+    sample_document = sample(root)
+    port.record_evidence(sample_document)
+    assert double.appended == [sample_document]
+    artifact = port.seal_live_evidence({"scenario_id": "full-01", "session_id": "session-1",
+                                        "attempt_id": "attempt-1", "reset_epoch": 4,
+                                        "release_epoch": 0})
+    assert artifact["sha256"] == "a" * 64
+    assert double.sealed == [{"case_id": "full-01", "session_id": "session-1",
+                              "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 0}]
