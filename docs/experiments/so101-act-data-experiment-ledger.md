@@ -9788,3 +9788,25 @@ This resolves the design block **without authorizing runtime or motion**.
   has touched, and each of which needs the web toolchain (Bun) and the live service to be exercised.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-803 — Task 16 begins: the run summary
+
+- **Delivered:** `act/evaluation.py` with `summarize(results)`, plus `test_act_evaluation.py` carrying the
+  plan's Step-1 assertion verbatim.
+  - **`end_to_end` counts every attempted run** (the plan's `0.5` holds), so a search failure stays in the
+    denominator and the rate cannot improve as the search gets worse;
+  - **`locked_success`** answers the narrower question and is **`None`, not `1.0`, when no run ever locked** —
+    a perfect score over an empty denominator would flatter the route;
+  - interventions reported as a total and as the number of runs they touched; elapsed wall time as min,
+    median and maximum; **`budget_violations`** counted against the plan's 120 s per-episode budget;
+  - empty results (`EVALUATION_EMPTY`) and malformed rows (`RUN_RESULT_INVALID`: wrong keys, non-boolean
+    flags, negative interventions, non-finite or boolean elapsed) are refused rather than summarised.
+- **A heredoc slip, caught at collection:** a doubled backslash produced a syntax error, so **no test ran**
+  and the module was never imported in a broken state; fixed by replacing the line continuation with
+  parentheses after an `ast.parse` check — the same discipline that prevented a broken write in CP-790.
+- **Verification:** focused tests **4 passed** (`gate6-batch3-py-gate/task16b.{log,junit.xml}`).
+- **Remaining in Task 16:** `cli/act_evaluate.py` (with its `setup.py` entry) writing a once-only JSON report
+  and a Markdown rendering with a per-scene evidence index, and `docs/guides/so101-act-head-wrist-rgb.md`,
+  which is human-facing prose and will use the project's humanizer skill under `docs/guides/`.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
