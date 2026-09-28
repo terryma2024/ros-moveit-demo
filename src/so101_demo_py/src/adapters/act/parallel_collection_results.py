@@ -66,6 +66,15 @@ class ActCollectionResultStore:
             raise ValueError("RESULT_INVALID") from error
 
 
+    def has_result(self, scene_id: str) -> bool:
+        """True when this scene already has a sealed result, so it must not be collected again."""
+
+        try:
+            self.read(scene_id)
+        except ValueError:
+            return False
+        return True
+
 class ActCollectionResultVerifier:
     """Confirms a published result still matches the bytes it claims."""
 
@@ -83,3 +92,12 @@ class ActCollectionResultVerifier:
         if actual != entry["sha256"]:
             raise ValueError("RESULT_DIGEST_MISMATCH")
         return json.loads(path.read_bytes())
+
+    def has_result(self, scene_id: str) -> bool:
+        """True when this scene already has a sealed result, so it must not be collected again."""
+
+        try:
+            self.read(scene_id)
+        except ValueError:
+            return False
+        return True
