@@ -6280,3 +6280,10 @@ status: PLANNED_ISOLATED_STACK
 - 锁序审计（第六次复核 P2：审计不得过度声称且需覆盖新组件）已更新：`experiments/exp568-authority-transaction/lock-order-audit.json` 中 **A-1 与 A-2 标为 CLOSED** 并附各自 closure 证据；新增 `extended_scope` 覆盖 authority registry、fake controller port、ROS hazard 回调与控制事件链（均不持冻结锁做 I/O 或大拷贝）；**生产 broker 仍在 broker/ownership 锁内做阻塞 reserve/send**，该重构明确记录为 Gate 6 事项、不声称关闭。
 - checkpoint 刷新为 `experiments/exp569-authority-protocol/checkpoint.json` SHA256 `ac3454466360d378ab4a0ccd48a6934c184a9f14800acfdfcb2d53c35fae777a`。
 - 边界：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
+
+## CP-615 — EXP-569：控制器协议限定为 route dispatch，集合 141→143 同集 RED/GREEN
+
+- 提交 `4dd70ebe`。按设计审查“proof/permit/final_acceptance 不是控制器 goal 发送”的要求，把该语义**落到实现**：`ReservationFakeControllerPort.reserve(...)` 现在必须显式携带 `stage`，且**只有 `route_dispatch` 能通过**，其他 stage 一律拒绝；新增两个用例——`test_only_route_dispatch_uses_the_controller_reservation_protocol`（proof/permit/final_acceptance/sample 全部拒绝、route_dispatch 接受）与 `test_local_stage_claims_never_reserve_or_send`（三个本地 stage 可以 claim 成功进入 IN_FLIGHT，但 controller 端 reserve/send/accepted 计数全为 0）。
+- 集合 141→**143**，按要求**先同集 RED 再 GREEN**：修复前 snapshot 上同一 143-name 集合 amended RED **42 failed / 101 passed**（elapsed `944,880,444 ns`）；GREEN **143 passed**（manifest 143 = JUnit 143，名称集合相等，elapsed `1,008,020,662 ns`），`strict_same_set: true`、missing/extra 为空。
+- checkpoint 刷新为 `experiments/exp569-authority-protocol/checkpoint.json` SHA256 `c49d3e168ff82191c85dbe7b327ac4cedb7fadb31ca033fac8dcbd292d6f74ed`；复核请求包 `handoff/2026-09-28-review7-request-exp569.md` 已更新为当前 143-case 数字与新 checkpoint 哈希。
+- 边界：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
