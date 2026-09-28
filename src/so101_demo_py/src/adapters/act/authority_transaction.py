@@ -341,6 +341,11 @@ class AuthorityTransactionRegistry:
         with self._lock:
             return self._terminal_reasons.get(handle.permit_id)
 
+    def receipt_field_names(self):
+        """The frozen receipt field set (single source of truth for validation)."""
+
+        return RECEIPT_FIELDS
+
     def receipt(self, handle, **fields):
         """Strict receipt validation; a receipt never grants authority."""
 
