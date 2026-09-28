@@ -6818,3 +6818,14 @@ status: PLANNED_ISOLATED_STACK
 - **RED/GREEN（同名同源）**：新测试 `test_act_batch2_identity_binding.py`（4 用例：入口参数契约；缺失/调用方自造身份被拒；不匹配/缺失/迟到绑定在发送前失败关闭且**零线上流量**；成功路径逐字段断言绑定与线上帧）。**RED 4 failed**（`batch2-red.log`，失败原因是集成边界**尚不携带**批准数据——参数不存在，而非缺失测试助手）；**GREEN 4 passed**、rc=0、零警告（`batch2-green2.log`/JUnit）。每次全新 scratch（`exp573-batch2-red.*`、`exp573-batch2-green2.*`）+ tempfile 探针 PASS + 镜像 `mirror-50/51`；仅运行本批次直接相关测试。
 - **诚实范围**：本批次完成“预留帧绑定 + 失败关闭 + 零发送”。**尚未**完成：(a) SEARCH 消费由所拥有 `RosPhysicsClockAdapter` 接受的证据（消费者位于 dirty 的 `pick_place_sources.py`，需先按已证归位技术处理再提交）；(b) 真实 C++ 预留/接收临界区、generation/boot/UUID fencing、超时/关闭/取消（Batch 3）；(c) 证据→dispatch 的完整链路接线。
 - 不变量：Gate 5 DONE（范围仅源码/设计与离线契约）；**无生产权威、无运行时目标、无运动、无正式 episode**；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 关闭；证据追加式，无删除或覆盖。
+
+## CP-676 — Batch 2 判定 NONQUALIFYING 并以**前向提交**更正：仅接受不透明 handle + broker 自有解析器
+
+- **NONQUALIFYING 记录（保留、未删除）**：`fe98e9f3`（`reserve_bound(..., identity=..., receipt=...)`）及其 `batch2-red.log`/`batch2-green2.log` 判定为 **Gate 6 集成 NONQUALIFYING**，原因（成立）：(1) 该公开 API 仍在**接受调用方提供的** identity 与 receipt——调用方可以**同时伪造**一份彼此一致的元组与映射并通过全部检查，直接违反已批准的“任何地方都不存在调用方快照”；(2) `rg` 显示**没有生产调用者**，只有新测试在调用，因此并非真实垂直集成边界；(3) Mapping 可变且校验基本只查存在性，不校验**来源**（封存 registry 与 IN_FLIGHT 记录）。
+- **更正设计（前向提交 `1b1a9ae1ab11bcc2bcd06cc1309abf986eba5376`，无 reset/rebase/amend）**：
+  - `AuthorityTransactionRegistry.reservation_binding(handle)`：**只**接受不透明 `PermitHandle`；在 registry 锁内要求记录存在且状态为 **IN_FLIGHT**，从**真实 record + 已存单一最终 claim 时刻 + broker 自有控制器快照**构造绑定，并以 **`MappingProxyType`（只读）**返回 11 个冻结字段；伪造/未认领/已终态/缺少快照或 claim 时刻一律 `AuthorityRefused`。
+  - `ControllerReservationClient.reserve_bound(ticket, kind, goal, goal_uuid, *, handle, resolver, now_ns=None)`：**不再接受** identity、snapshot、claim 时刻、deadline 或 receipt 映射（测试直接断言这些形参不存在）；仅经 broker 自有 `resolver.reservation_binding(handle)` 解析，随后校验 goal_uuid/role、字段类型与迟到，全部通过后才构造长度前缀规范 JSON 绑定并置于线上帧，仍走唯一 `_request`。
+  - **真实生产调用者**：`command_broker.py` 的 dispatch 预留路径现优先走 `reserve_bound(...)`——当 broker 持有封存 `reservation_resolver` 且该 ticket 已绑定不透明 handle 时（`self._permit_handles[ticket]`），否则回退旧的 `reserve(...)`；即 `rg reserve_bound` 现显示**生产调用**而非仅测试。
+- **聚焦 RED/GREEN**：测试重写为伪造 handle、跨 registry/伪造 handle、READY/UNKNOWN/REJECTED 状态、错误 goal/role、迟到绑定、owner 健康撤销（REVOKED）等**全部在触线前失败并零发送**，以及阳性对照（解析出的绑定**逐字节**出现在线上帧中）。**8 passed**、rc=0、零警告（`batch2-fix2.log`/JUnit，scratch `exp573-batch2-fix2.*`，tempfile 探针 PASS，镜像 `mirror-52`）。修正过程中我自己的测试有一处把“无覆盖”的**合法**绑定混入失败用例（`{} `），导致 1 项假失败；已修正为真正的不匹配用例后全绿——该失败证据保留。
+- **诚实范围**：SEARCH/源侧仍未改为“只交接与其被接受证据关联的不透明 handle/token”（消费者在既有 dirty 的 `pick_place_sources.py`，需先按已证归位技术处理）；Batch 3（真实 C++ 预留/接收临界区、generation/boot/UUID fencing、超时/关闭/取消）尚未开始。
+- 不变量：Gate 5 DONE（范围仅源码/设计与离线契约）；**无生产权威、无运行时目标、无运动、无正式 episode**；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 关闭；证据追加式。
