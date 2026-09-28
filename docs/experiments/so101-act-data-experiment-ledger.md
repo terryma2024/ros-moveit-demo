@@ -9372,3 +9372,26 @@ This resolves the design block **without authorizing runtime or motion**.
   `config/act/training.yaml`, `config/act/requirements.lock` and the `act_train` CLI.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 now IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-785 — Task 12: training ownership
+
+- **Delivered:** `act/training_owner.py` with `TrainingRunOwner.acquire(run_root=, dataset_sha256=,
+  config_sha256=, gpu_lease=)`, plus `test_act_training_owner.py`.
+  - **busy GPU:** a non-`IDLE` arbiter is `TRAINING_ARBITER_BUSY` (checked before any claim is written) and
+    any existing `collection`, `broker` or `training` lease on the device is `TRAINING_GPU_BUSY`, with the
+    test asserting no receipt was written.
+  - **no inherited leases:** the owner receipt is **re-read on every acquire**; a recycled PID
+    (`TRAINING_OWNER_IDENTITY_DRIFT`), an expired heartbeat (`TRAINING_HEARTBEAT_EXPIRED`), and dataset or
+    config mismatches are all refused.
+  - **binding shape:** a non-CUDA device, empty `binding_id` or missing `leases` is
+    `TRAINING_GPU_LEASE_INVALID`; a malformed stored receipt is `TRAINING_OWNER_RECEIPT_INVALID`.
+  - **evidence preserved on failure:** after four failed attempts the original receipt still reads
+    `owner_pid == 4242`.
+  - the receipt is written atomically (`fsync` + `replace`, no `.partial` residue) and asserted equal to
+    the returned document, so file and return value cannot diverge.
+- **Verification:** focused tests **4 passed** (`gate6-batch3-py-gate/task12b.{log,junit.xml}`), first run
+  green; build and test statuses captured before being tested.
+- **Remaining in Task 12:** `export_dataset`, `train_act`, `load_bundle`, `load_policy`,
+  `config/act/training.yaml`, `config/act/requirements.lock` and the `act_train` CLI.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
