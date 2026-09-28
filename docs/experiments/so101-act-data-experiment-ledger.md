@@ -6881,3 +6881,33 @@ status: PLANNED_ISOLATED_STACK
 - **受影响内容**：\`mirror-81\` 是**当次运行生成的临时测试镜像**（由 \`src/so101_demo_py/src\` 打包解出的副本 + 测试文件复制 + fixture 路径改写），**不是**源码、不是正式数据、也不是任何一次结论的唯一证据来源；所有结论仍由同一轮的日志/JUnit（\`p3b-full3.log\`/JUnit 等）与仍在的 \`mirror-80/82\` 支撑。
 - **即时纠正**：本次起所有重跑一律使用**新** \`mirror-N\`（且以 \`mktemp -d\` 分配，若目标路径已存在则**失败并另分配**）与**新** scratch；不再删除或覆盖任何证据/镜像/scratch 路径。\`/tmp\` 下的保留 IPC 目录（\`/tmp/so101-debug-act-b3-p3b1-*\`）同样**不清理**，全部保留为删除候选。
 - **对结论的影响**：无。此前报告的 Python 139 passed 与 C++ 32 passed 均由 \`mirror-82\` + 新 scratch \`exp573-p3b-full4.*\` 产生，未使用被覆盖的 \`mirror-81\`。
+
+## CP-683 — Phase 3b production lifecycle ordering correction (in progress)
+
+- **Source commit / overlay**: worktree `codex/so101-act-data-0917a`; C++ package gate6 built from
+  the worktree with `LD_LIBRARY_PATH=<gate6>/build/so101_mujoco_support` (build DSO
+  `0635521b…` proven by `ldd`; the stale install DSO `07c29b41…` was the SIGSEGV source).
+- **Correction applied (production)**: `install_bound_authority()` no longer queries identities at
+  startup; it constructs, seals and installs the composition only. A new
+  `confirm_role_identities()` runs **after** `arm_generation(ticket)`, queries every live role,
+  requires `generation == ticket[0]`, and registers generation/domain/ticket with the same
+  composition. Any partial/failed/drifting role calls `close_generation` and revokes ownership and
+  returns no lease.
+- **Contract narrowed**: `RosControllerPort` now exposes only `identity_snapshot(role)` (ACK-cache
+  read, no I/O) and a real `close_current_generation(generation)`; the fabricated
+  `reserve`/`send` are gone. `BrokerAuthorityComposition` validates exactly those two members, so
+  there is no second dispatch path. The single dispatch path remains
+  `CommandBroker.claim_prepared_goal -> ControllerReservationClient.reserve_bound -> driver.send_prepared`.
+- **Lock scope fixed**: `arm_generation` snapshots the role list under the client lock and performs
+  every socket exchange outside it; a failure closes the generation outside the lock.
+- **Verification so far**: gate6 package build rc=0/0 warnings, `colcon test` rc=0,
+  `124 tests, 0 errors, 0 failures` (metadata appended in
+  `experiments/gate6-batch3-package-gate6/metadata-appended.md`). Focused Python order/port sets:
+  **7 passed, 2 failed** (`order3.log`) — both failures are framing defects in the **test double**
+  (`REPLY_INCOMPLETE` on the fake close/query path), not in production code. Not yet green.
+- **Still open**: real-order test suite must reach GREEN; `ros_child` composition-root wiring (task-only
+  normalization required, it is one of the 42 pre-existing dirty entries); lock-order audit;
+  source/build/install provenance; Phase 3b commit with the 42-entry baseline strictly excluded;
+  separate ledger commit.
+- **Runtime boundary unchanged**: Gate 6 runtime/goals/motion closed; formal accepted 0/0/0;
+  Task 12 NOT_STARTED. No evidence, mirror, scratch or IPC path deleted or overwritten.
