@@ -8652,3 +8652,28 @@ test that a shorter gate run root clears.
   plan file, round 280). Then the combined **8P3/8P4 xdist gate**.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-756 — 8P3 sub-slices A and C complete: the case journal is published by the real runner
+
+- **Delivered:** `test_run_pick_place_case_publishes_a_journal_from_the_real_runner`. It drives
+  `run_pick_place_case(spec, "full-01", Owner(), journal)` with an owner/worker double whose
+  `run_pick_place(request)` calls the **real `Task8Runner`** over the evidence-port factory, so the
+  published journal's result comes from the runner and its live artifact from the recorder; the row is
+  then mapped by the CP-753 adapter and accepted by `require_case_row_matches_bundle`, with the
+  artifact's bytes re-hashed against the row's digest. The journal is produced by the real path — no
+  hand-written result, artifact index or journal.
+- **Five of my own mistakes, each caught by a guard and fixed in the test:** the teleop test-dir path
+  depth; reusing the **bundle's rebased** manifest instead of a fresh v2 document
+  (`TASK8_MANIFEST_HASH_MISMATCH`); the campaign reading `context` back off the worker; the context
+  needing the four binding digests (`TASK8_MANIFEST_BINDING_INVALID`); and the runner's **closed**
+  request schema — exactly seven keys plus `FULL_RESTART`, while the campaign also carries
+  `contact_policy_fingerprint` (`TASK8_REQUEST_SCHEMA`).
+- **Boundary status:** sub-slice A (evidence window, driver, readback fields, port seal) and sub-slice C
+  (canonical CLI with bundle verification, journal planning, run-root pinning; case journal published by
+  the real runner) are **complete**. Sub-slice B was completed earlier (payload split, startup receipt
+  verification, `ActArtifactBinding` path).
+- **Verification:** qualification suite **19 passed** (`gate6-batch3-py-gate/teleopleg6.{log,junit.xml}`).
+- **Next:** the combined **8P3/8P4 xdist gate** — the handoff's designated integration boundary — using
+  the verified four-step recipe and a short run id.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
