@@ -8490,3 +8490,23 @@ test that a shorter gate run root clears.
   through the real runner, adapter, `run_pick_place_case()` and trusted campaign.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-748 — Live CLI: bundle verified before any resource is acquired
+
+- **Delivered:** `act_run_pick_place_validation` gains `--artifact-bundle`. Before composing services it
+  requires the receipt to exist (`TASK8_PREPARATION_REQUIRED`), verifies it through
+  `verify_task8_startup_receipt` (CP-730: payload shape, digest over the receipt's raw bytes, then the
+  whole committed bundle), and refuses a spec that declares a different receipt
+  (`TASK8_BUNDLE_SPEC_MISMATCH`). The file is **clean** (no user hunks), so no hunk staging was needed.
+- **Verification:** bundle suite **11 passed** (`gate6-batch3-py-gate/clibundle.{log,junit.xml}`). The
+  test asserts the **ordering property**, not just the code: the composition entry point is
+  monkeypatched to raise if it is ever called, and an invalid bundle never reaches it — zero services
+  built, nothing acquired.
+- **Process fix applied:** this commit gated on **both** the explicit file list and a clean
+  `git diff --cached --check`, the lesson recorded after CP-747 slipped past with an EOF blank line.
+- **Remaining:** the CLI's run-root journal model (fourteen case journals planned through
+  `plan_campaign_journals`, all-or-nothing before the single production call) and the 8P4
+  real-composition integration test through the real runner, adapter, `run_pick_place_case()` and
+  trusted campaign.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
