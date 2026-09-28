@@ -272,3 +272,23 @@ def test_an_existing_output_is_never_overwritten(tmp_path):
     with pytest.raises(ValueError, match="TASK8_QUALIFICATION_OUTPUT_EXISTS"):
         build_task8_qualified_report(ready_path, receipt, summary_path, case_root, output)
     assert output.read_text() == "{}"
+
+
+def test_qualified_cli_runs_the_producer_end_to_end(tmp_path, capsys):
+    from so101_demo.cli import act_build_task8_qualified_report as cli
+
+    receipt, _, manifest, identities = _full_fixture(tmp_path)
+    case_root, summary_path = _campaign(tmp_path, manifest, identities)
+    ready_path = tmp_path / "ready.json"
+    ready_path.write_text(json.dumps(_ready(identities)))
+    output = tmp_path / "qualified.json"
+    assert cli.main(["--task8-ready", str(ready_path), "--preparation-receipt", str(receipt),
+                     "--campaign-result", str(summary_path), "--case-root", str(case_root),
+                     "--output", str(output)]) == 0
+    assert json.loads(output.read_bytes())["status"] == "QUALIFIED"
+    assert str(output) in capsys.readouterr().out
+    # a second run refuses to overwrite the published report
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_OUTPUT_EXISTS"):
+        cli.main(["--task8-ready", str(ready_path), "--preparation-receipt", str(receipt),
+                  "--campaign-result", str(summary_path), "--case-root", str(case_root),
+                  "--output", str(output)])

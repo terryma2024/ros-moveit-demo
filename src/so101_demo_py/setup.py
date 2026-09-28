@@ -109,6 +109,8 @@ setup(
             "so101_demo.cli.act_build_task8_calibration_report:main",
             "act_validate_task8_artifacts = "
             "so101_demo.cli.act_validate_task8_artifacts:main",
+            "act_build_task8_qualified_report = "
+            "so101_demo.cli.act_build_task8_qualified_report:main",
             "act_task8_live = so101_demo.cli.act_task8_live:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service
