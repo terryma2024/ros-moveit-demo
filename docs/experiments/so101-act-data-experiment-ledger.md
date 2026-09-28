@@ -9025,3 +9025,24 @@ This resolves the design block **without authorizing runtime or motion**.
   recovery modules against closed fixtures.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-770 — Task 11 failure matrix complete
+
+- **Delivered:** `AttemptLedger` in `act/collection.py`, wired into `prepare_scenario` and
+  `collect_authorized_scenario`, with tests.
+  - **one reset per attempt:** the reset is noted **before** the port is asked, so a retry after a
+    *failed* reset is refused as well as a genuine second attempt
+    (`SCENARIO_RESET_ALREADY_PERFORMED`); the reset port's call count is asserted at 1.
+  - **terminal states are immutable:** a sealed record cannot be overwritten by a later collection or a
+    later preparation of the same `scene_id` (`SCENE_TERMINAL_STATE_IMMUTABLE`), and the test asserts the
+    sealed record is **unchanged** afterwards rather than only that an exception was raised.
+  - **persistence faults are infra:** a recorder raising `OSError` propagates with **no** terminal state
+    sealed, so a full recorder queue can never be recorded as a business `FAILED`; `training_eligible` on
+    such a record is false.
+- **Verification:** focused tests **12 passed** (`gate6-batch3-py-gate/task11k.{log,junit.xml}`), first
+  run green.
+- **Task 11 status:** all four plan items delivered (gate, preparation + collection, payload + selection,
+  W1 CLI) plus the failure matrix. Task 11A next: `parallel_collection.py`,
+  `parallel_collection_recovery.py`, `adapters/act/gpu_workload_client.py`.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
