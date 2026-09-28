@@ -6249,3 +6249,9 @@ status: PLANNED_ISOLATED_STACK
 - 用户指出并本地确认：先前为“适配返回形状”所做的迁移中，我把 5 处具体断言（\`CLOCK_ADMISSION_HISTORY_NOT_READY\`、\`CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID\`）**泛化**为 \`match="CLOCK_ADMISSION_"\`，并删除了用于验证**无副作用**的 \`consumed == []\` 断言。二者都削弱了测试价值，属错误迁移。
 - 现已在提交 \`$(git -C $W rev-parse --short HEAD)\` 中修复（追加更正，不改写历史）：泛化断言数归零，恢复为**具体且稳定**的错误码——\`CLOCK_ADMISSION_HISTORY_NOT_READY\`（结构性未就绪：无 epoch 或无首块）、\`CLOCK_ADMISSION_HISTORY_UNHEALTHY:<hazard>\`（由 commit receipt 在临界区内 latch 的过期/静默/陈旧）、\`CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID\`（负版本或外来 incarnation/epoch）、\`CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED\`（控制器代次不符）；实现里把“结构性就绪”与“健康状态”分开，使陈旧/静默不会被误报为 not-ready。恢复 4 处零副作用断言（\`assert executed == []\` / \`assert consumed == []\`，即在拒绝路径上把调用结果 append 进列表并断言其仍为空），返回 receipt 只调整返回形状，行为断言未被删除。
 - 重新核验：五个 clock 模块 **135 passed**（manifest 135 = JUnit 135，名称集合相等，elapsed \`977,372,444 ns\`）；同一 135-name 集合在修复前 snapshot 上的 amended RED 已用**修正后的测试**重跑并重新核验严格同集（\`same-set-verification.json\`）。
+
+## CP-611 — EXP-569：第六次复核点名的两处弱并发用例已换成真实线程/屏障探针
+
+- 提交 `4571360d`（仅测试文件，测试名不变，集合仍为 135）：`test_large_copy_interleavings_hold_no_local_lock` 不再是 `lambda: None` 的空探针，而是在**真实控制器 I/O 执行期间**用非阻塞尝试证明 registry 锁未被持有（若被持有则断言失败）；`test_io_blocked_while_revoke_proceeds_without_the_broker_lock` 现在有**真实的阻塞发送线程**（Event 屏障），断言 revoke 在 I/O 阻塞期间仍能在 <100 ms 内完成、发送线程最终退出、且其后 `claim` 被拒绝。
+- 重新核验：五个 clock 模块 **135 passed**（manifest 135 = JUnit 135，名称集合相等，elapsed `979,170,575 ns`）；修复前 snapshot 上的 amended RED 用**同一 135-name 集合与修正后的测试**重跑，`same-set-verification.json` 再次确认严格同集（missing/extra 为空）。
+- 边界：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
