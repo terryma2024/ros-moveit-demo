@@ -6223,3 +6223,9 @@ status: PLANNED_ISOLATED_STACK
 - 提交 `21f67975`：authority 测试文件迁移到新固定入口（`issue_handle`、`claim` 不接受调用方时间、全字段 receipt、`ReservationFakeControllerPort` 的 reserve/send 语义，含真实线程阻塞 I/O 用例），registry 增加私有 history 绑定；跨模块复用 admission 测试的基线与辅助构造器（`SOURCE_BASE_NS`/`_ready`/`_sample`/`_chunk`/`_stop_evidence`/`PhysicsClockHistory`）而非复制常量。
 - 当前同一 137-case 集合：**19 failed / 116 passed**（elapsed `10,889,312,345 ns`）；`phaseIII-summary.json` 精确分类：authority 文件仅剩 1 个 STALE version 用例；其余为 (a) 旧 `consume_stage` 回调入口的用例需要在**新固定语义入口**上重建（旧入口已永久 fail-closed），(b) `admit_sample` 迁移到 history 自有 `commit_receipt` 线性化点后，若干既有用例仍按旧的宽松语义断言，需要按新契约适配（不弱化断言）。
 - **未声明任何关闭**，未更新为 GREEN；Gate 5 仍 OPEN。边界不变：Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；未做 C++/Gate 6 runtime；未运行 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-609 — EXP-569：新固定语义 consume 入口落地，焦点失败由 19 降到 6（RED）
+
+- 提交 `a4a47479`：`PhysicsClockAdmission.consume_authority(...)` 成为**唯一** authority consume 入口——无回调、不接受调用方时间，强制 evidence token（step/version/incarnation/epoch）与 `controller_generation`，线性化点由 `history.commit_receipt` 在 admission 临界区内给出，返回不可变 receipt（`command_authority`/`stage_executed`）；旧 `consume_stage` 保持永久 fail-closed。同时修复我上一轮引入的实现回归（`admit_sample` 仍引用已删除的 `commit_state` 变量），并把 commit 拒绝原因映射为稳定公开原因（SELECTED_STALE / HISTORY_VERSION_CHANGED / IDENTITY_NOT_NEWER / HAZARD / COMMIT_REFUSED），使既有断言继续针对语义而非内部字符串。
+- 测试迁移：consume 用例从回调 API 迁到新入口；焦点文件失败数由 19 → **6**（`phaseIIIb-summary.json` 列出剩余 6 项）：2 个“真实屏障”用例需要用**阻塞的 history.commit_receipt**（而非已删除的回调）重建屏障；其余为 generation/token 拒绝期望需要按新入口重新基准化。
+- **未声明关闭**，Gate 5 仍 OPEN。边界不变：Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；未做 C++/Gate 6 runtime；未运行 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
