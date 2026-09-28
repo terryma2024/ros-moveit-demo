@@ -420,3 +420,52 @@ def test_journal_row_must_belong_to_the_bundle_that_produced_it():
     with pytest.raises(ValueError, match="TASK8_JOURNAL_IDENTITY_MISMATCH"):
         require_case_row_matches_bundle(row, identities={"source_provenance_sha256": "e" * 64},
                                         manifest_document_sha256="9" * 64)
+
+
+class _Contact:
+    def __init__(self, body1="left_finger", body2="cup"):
+        self.body1, self.body2 = body1, body2
+
+
+class _ObjectState:
+    def __init__(self, position=(0.0, 0.0, 0.1), orientation=(0.0, 0.0, 0.0, 1.0)):
+        self.position_world, self.orientation_xyzw = position, orientation
+
+
+class _Evidence:
+    """The readback's per-step physics evidence (SimulationEvidence-shaped)."""
+
+    def __init__(self, *, left=(), right=(), other=(), minimum_signed_distance_m=0.0,
+                 position=(0.0, 0.0, 0.1), orientation=(0.0, 0.0, 0.0, 1.0)):
+        self.left_fingertip_contacts = tuple(left)
+        self.right_fingertip_contacts = tuple(right)
+        self.other_object_contacts = tuple(other)
+        self.minimum_signed_distance_m = minimum_signed_distance_m
+        self.object_state = _ObjectState(position, orientation)
+
+
+def test_frame_aggregates_follow_the_contact_evidence_not_a_label():
+    from so101_demo.act.task8_live_evidence import derive_frame_aggregates
+
+    held = derive_frame_aggregates(_Evidence(left=[_Contact()], right=[_Contact()],
+                                            minimum_signed_distance_m=0.02),
+                                   support_distance_max_m=0.005)
+    assert held["bilateral_contact"] is True
+    assert held["no_fingertip_contact"] is False
+    assert held["cup_supported"] is False          # airborne on both pads: not resting on support
+    assert held["holding_state"] == "HOLDING"
+    assert held["cup_support_distance_m"] == 0.02
+    assert held["cup_position_m"] == [0.0, 0.0, 0.1]
+
+    resting = derive_frame_aggregates(_Evidence(other=[_Contact(body2="table")],
+                                                minimum_signed_distance_m=0.001),
+                                      support_distance_max_m=0.005)
+    assert resting["bilateral_contact"] is False
+    assert resting["no_fingertip_contact"] is True
+    assert resting["cup_supported"] is True        # in contact with the support
+    assert resting["holding_state"] == "EMPTY"
+
+    single = derive_frame_aggregates(_Evidence(left=[_Contact()], minimum_signed_distance_m=0.02),
+                                     support_distance_max_m=0.005)
+    assert single["bilateral_contact"] is False    # one pad is not a grasp
+    assert single["holding_state"] == "APPROACHING"

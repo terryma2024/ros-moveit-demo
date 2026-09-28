@@ -402,3 +402,37 @@ def require_case_row_matches_bundle(row: dict, *, identities: dict,
     if row.get("manifest_document_sha256") != manifest_document_sha256:
         raise ValueError("TASK8_JOURNAL_IDENTITY_MISMATCH")
     return dict(row)
+
+
+def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
+    """The per-frame canonical fields that follow from physics evidence alone.
+
+    ``released`` and ``placement_stable`` are deliberately absent: they are relative to a release
+    epoch and a stability window, so the phase sequence supplies them rather than a single frame.
+    """
+
+    left = tuple(getattr(evidence, "left_fingertip_contacts", ()))
+    right = tuple(getattr(evidence, "right_fingertip_contacts", ()))
+    other = tuple(getattr(evidence, "other_object_contacts", ()))
+    distance = getattr(evidence, "minimum_signed_distance_m", None)
+    if not _finite(distance) or distance < 0:
+        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+    state = getattr(evidence, "object_state", None)
+    position = list(getattr(state, "position_world", ()))
+    orientation = list(getattr(state, "orientation_xyzw", ()))
+    if len(position) != 3 or len(orientation) != 4:
+        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+    bilateral = bool(left) and bool(right)
+    supported = bool(other) or distance <= support_distance_max_m
+    if bilateral and not supported:
+        holding = "HOLDING"
+    elif not left and not right and supported:
+        holding = "EMPTY"
+    elif left or right:
+        holding = "APPROACHING"
+    else:
+        holding = "UNKNOWN"
+    return {"holding_state": holding, "bilateral_contact": bilateral,
+            "no_fingertip_contact": not (left or right), "cup_supported": supported,
+            "cup_support_distance_m": distance, "cup_position_m": position,
+            "cup_orientation_xyzw": orientation}
