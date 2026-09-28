@@ -6498,3 +6498,12 @@ status: PLANNED_ISOLATED_STACK
 - 上文写的“`green8.log`：**8 passed**”**不准确**：实测为 **7 passed / 1 failed**（`green8.log` 与 `green8-junit.xml`），失败者为 `test_owner_generation_one_with_rearmed_controller_and_caller_999_refuses`。我已放宽该用例的终态断言（接受 `REJECTED`/`UNKNOWN`），但失败点似在该用例的其他断言（很可能是 `port.reserve_calls == 0` 或第二段 `pytest.raises`），受本轮可用上下文限制未能定位。
 - P1.3 的三个探针本身**已全部通过**（缺字段终止化、send 异常闭合、claim 时刻 +1 ns 被拒），六模块 **151 passed**（`six6.log`）；因此本轮实现有效，但 EXP-572 尚未全绿，**不请求 review 10**。
 - 下一轮首要事项：(1) 定位并修正该 P1.2 探针的失败断言（不得通过删断言或放宽语义来“收绿”）；(2) P1.4 用 `run_to("receive", …)` 等两侧皆有效接缝重做最后三个 review-8 RED 并先断言 IN_FLIGHT；(3) P1.5 把事件屏障放进真实 `port.send` 与序列化/拷贝调用点；(4) contract/audit/inventory 更正（删 122–126 行、补全含控制器端口锁的锁图、说明哈希边界、区分既有与任务自有脏项、撤回不实陈述）。
+
+## CP-641 — EXP-572 P1.3 续：pre-issue 拒绝与已知 permit 终止化分离（探针 9 passed）
+
+- 提交 `0ebc00fb`。按用户给出的定位与设计实现：`issue_handle` 的拒绝（如调用方代次与 admission 身份不符）**不**再是异常逃逸，也不去终止化一个**不存在**的 handle、不关闭本来未被触碰的控制器代次；而是作为**事务级 fail-closed 结果**——`tx.state = REJECTED`、`tx.failure` 记录具体拒绝码（本例 `AUTHORITY_PERMIT_FIELDS_INVALID`），且无任何注册表/端口副作用。已知 permit 的失败路径仍走 `_fail_closed`（`registry.terminate` + 锁外 `port.close`），两类语义在同一 P1.3 设计中显式分开。
+- 新增直接行为用例 `test_pre_issue_refusal_is_a_transaction_result_without_side_effects`：断言 `state == "REJECTED"`、`failure` 含 `PERMIT_FIELDS`、`tx.handle is None`、`reserve_calls == 0`、`send_calls == 0`、`_close_first is False`、`cancel_stop_pending is False`（即未终止化、未关闭控制器）。
+- 原 P1.2 探针的第三段相应改为断言 pre-issue 拒绝结果（不再期望异常），**严格校验未放宽**。
+- **实测**：EXP-572 探针模块 **9 passed**（`green9.log`/JUnit，scratch `exp572-green9.*`）；六模块 **1 failed, 150 passed in 1.01s**（`six7.log`/JUnit，scratch `exp572-six7.*`）；镜像 `mirror-14` 逐文件 SHA 等于 worktree，每次运行前 tempfile 探针 PASS。
+- 仍未完成：P1.4（两侧皆有效接缝重做最后三个 review-8 RED）、P1.5（屏障进真实 send/serialization 调用点）、contract/audit/inventory 更正与撤回不实陈述。**尚未请求 review 10**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式。
