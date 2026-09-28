@@ -8106,3 +8106,21 @@ partial credit is claimed.
   the verified bundle, and the byte-for-byte policy copies.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-730 — Task 8P3 sub-slice B: receipt verified before resource acquisition
+
+- **Delivered:** `verify_task8_startup_receipt(payload, *, collection_only_keys=())` in
+  `act/task8_artifact_bundle.py` — payload shape first (absolute receipt path, 64-hex digest, no
+  collection-only key), then the receipt must exist, then the payload digest must equal the receipt's
+  **raw bytes** (`TASK8_PREPARATION_RECEIPT_MISMATCH`), then the bundle is verified and the
+  `PreparedTask8Bundle` returned as the only object from which an `ActArtifactBinding` may be built.
+- **Sequence property:** the helper performs no lease acquisition and starts nothing, so admission
+  can call it *before* acquiring mutation/GPU resources — the plan's ordering requirement.
+- **Sub-slice B logic now complete on this side:** payload producer (CP-717), payload shape and
+  exclusivity (CP-729), and startup verification (CP-730). What remains is admission's own split:
+  closed groups for `task8_phase`/`task8_full` versus collection at the surface recorded in the plan
+  file (lines 238-442 of `admission.py`, which is clean and needs no hunk-level staging).
+- **Verification:** bundle suite **10 passed** against the rebuilt in-worktree overlay
+  (`gate6-batch3-py-gate/startup.{log,junit.xml}`): happy path, digest mismatch, absent receipt.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
