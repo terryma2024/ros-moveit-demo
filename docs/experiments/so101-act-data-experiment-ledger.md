@@ -10239,3 +10239,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   front of the user with the segment fields quoted rather than inferred from their names.
 - **No code changed and no gate run** this round; nothing crossed the runtime or interpreter boundary, no
   evidence was deleted, no push, no gate lowered; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-824 — The 14-gate mapping needs three decisions; a rename is not available
+
+- **Read the exact shapes** (`application/task_reachability.py` lines 22-116): `ReachabilityPlannerPort.plan(
+  state, target, start, cup_pose_world, timeout_s) -> SegmentPlanReceipt`, where a receipt carries
+  `accepted`, `terminal_state`, `moveit_error_code`, `failure_code`, `collision_pairs` and
+  `planning_receipts`; `ReachabilityReport(point_id, status REACHABLE|UNREACHABLE|UNKNOWN, segments,
+  first_failure_code, scene_revision)`; and six failure codes that mean *unknown* rather than unreachable.
+- **A rename is not available, and the audit table in the plan file shows why per gate.** One `plan()` call
+  answers one segment and fuses IK with planning into a single `accepted` flag and one `moveit_error_code`,
+  so the ten IK/plan gates cannot be read off a report; `collision_free` maps directly to `collision_pairs`;
+  `table_clear` needs scene geometry that the report does not carry; and `head_visible`/`wrist_visible` need
+  the camera path, which the report does not touch at all.
+- **Three decisions belong to the user, not to me:** (1) which five pose targets represent
+  pregrasp/grasp/lift/place/retreat; (2) how to separate each phase's IK gate from its plan gate when
+  `accepted` fuses them and no IK receipt field exists; (3) where table-clearance and the two visibility
+  evidences come from, since no code in the tree produces them for an ACT candidate.
+- **Why I stopped here rather than writing the adapter:** the mechanical part is ready, but inventing those
+  three answers would place the sampling gate on guesses, which is precisely what this task's rules forbid. The
+  plan file now carries the field-level evidence for the review.
+- **No code changed, no gate run, no runtime, no interpreter, no evidence deleted, no push, no gate lowered;**
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
