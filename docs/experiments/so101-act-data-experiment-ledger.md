@@ -7214,3 +7214,42 @@ Monitoring review found two verification defects in CP-691. Both are confirmed a
    are not covered by the 5 340-node gate.
 - **Boundaries:** no process, controller goal or motion started; no calibration authored or run;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED; evidence preserved.
+
+## CP-694 — Teleop suite closed: two CP-691 defects corrected, three production defects fixed
+
+- **CP-691 verification corrections (monitoring review).** (1) The recorded RED was invalid —
+  `ownerRED.log` failed in all four tests at `ModuleNotFoundError: No module named 'cli'`, so it
+  never reached the intended boundary. A real RED was produced non-destructively by reverting only
+  the two wiring modules inside a task-owned mirror: `realRED.log` now fails **at the intended
+  boundary** (`FULL_RESTART_PROOF_UNAVAILABLE` from the pre-wiring gate, absent static-proof API),
+  no import errors. (2) The owner test that implied retirement-receipt verification did not verify
+  it; its docstring now states what it proves, and receipt verification moved to the production
+  owner suite `test_task8_case_owner.py::test_case_retirement_precedes_admission_release`, which
+  now asserts `_child_retired`, `_stack_retired`, `_final_clear`, `context is None` and both
+  cleanup receipts on disk with `group_clear: True`.
+- **Three production defects found and fixed**, all diagnosed from teleop failures rather than
+  guessed: (a) the `_start_ros_broker` failure handler read fields directly and **masked** the
+  triggering exception with `AttributeError` — now defensive `getattr` reads, so cleanup can never
+  hide its cause; (b) this task's Task-8 branch read `read_hashed_json("manifest")`
+  **unconditionally**, regressing any child whose binding lacks a manifest (the pre-Task-8 shape) —
+  the read is now profile-tolerant: no manifest means "cannot be the admitted Task-8 profile", so
+  the child keeps the legacy broker and **no fallback grants authority**; (c) `confirm_stopped` was
+  called **inside** the locked terminalization, so a stop could be confirmed while its physical
+  `stop_all` was still only enqueued (observed `("operator","IDLE")` instead of
+  `("operator","STOPPING")`) — confirmation now requires `_cleanup_pending is None and
+  _cleanup_inflight is None`, deferring to the drainer's finalize after the unlocked stop I/O.
+  Removing the confirm outright was measured and rejected: it broke three demo tests that rely on
+  confirmation when nothing is outstanding.
+- **Verification:** teleop `test_act_ros_child.xunit.xml` **22 tests / 0 failures** (was 2 failures;
+  `maskfix-test.log`, `manifdef-test.log`, `earlyconfirm-test.log`, `pendingfix-teleop.log`); demo
+  focused set **111 passed** (`pendingfix.log`); wider Phase-3b regression **147 passed**
+  (`wide2.log`); overlay rebuilt (`overlay-refresh3.log`).
+- **Commits (task hunks only, baseline hunks excluded, `baseline_pollution=0`):** `dae161c3`
+  (non-masking cleanup + profile-tolerant manifest read), `dd2937b5` (stop-confirmation ordering).
+- **Invalid runs, recorded and not counted:** the single-package and full mirror A/B attempts
+  (`teleopAB-*`, `teleopAB2-*`) — the latter showed `test_act_ros_child.xunit.xml` as a collection
+  failure, so its "0 failures" proved nothing; both are kept as environmental evidence.
+- **Boundaries:** no process, controller goal or motion started; no calibration authored or run;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED; the runtime artifact
+  blocker (no head-search `runtime_config`, no admissible `calibration_report`) is unchanged and
+  still awaits the user decision.
