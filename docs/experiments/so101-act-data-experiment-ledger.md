@@ -6911,3 +6911,33 @@ status: PLANNED_ISOLATED_STACK
   separate ledger commit.
 - **Runtime boundary unchanged**: Gate 6 runtime/goals/motion closed; formal accepted 0/0/0;
   Task 12 NOT_STARTED. No evidence, mirror, scratch or IPC path deleted or overwritten.
+
+## CP-684 — Phase 3b lifecycle lock removal, incremental (release GREEN, stop still RED)
+
+- **Astra/High verdict persisted** (`experiments/gate6-batch3-lock-audit/astra-verdict-a-prime.md`):
+  BLOCK on all-acquires one-shot wiring; **A-prime only** — the standalone CLI stays a
+  long-lived legacy/calibration server and gets no bound session; `ros_child` Task-8 installs
+  one immutable session consumed **only by the exact `owner == act` execution acquire after the
+  controlled reset/recovery transaction**; recovery is restricted to reset services and must
+  never be an `owner != act` fallback; no fallback on missing/failed/consumed/fenced; a second
+  ACT acquire is permanently refused; A-prime proves **Task-8 FULL_RESTART only**, not W2/W8 or
+  50/10/10, with `collection_*` NOT_PROVISIONED and redesign B deferred. The earlier two-root
+  assumption and my earlier false coverage claim are superseded here, without rewriting history.
+- **Verified increments (all with genuine RED -> GREEN and fresh mirror/scratch per run):**
+  bound `_acquire_bound` phasing (no broker/ownership lock across arm/confirm, exact pending
+  ticket, atomic exact-ticket commit, public idempotent `BoundAuthoritySession.abort`);
+  legacy `_acquire_legacy` phasing (closes the audit finding at `command_broker.py:434`);
+  client `snapshot_generation` phasing (closes the client-lock violation; 73 passed / 0 warnings);
+  release phasing `_release_phased` (logical invalidation + exact `_release_pending` token,
+  unlocked controller close, locked finalization; close failure latches fault/fencing and keeps
+  the lease unavailable; a pending release blocks a new acquire).
+- **Evidence now:** broker suites **50 passed, 1 failed, 0 warnings** (`releasephase.log`) — the
+  release-close-blocked and second-acquire-during-pending REDs are GREEN, and all previously
+  green broker tests still pass.
+- **Still RED (next increment):** `test_stop_attempt_progresses_while_driver_stop_all_is_blocked`
+  — `_stop_if_revoked` still reaches `_close_controller_generation` + `driver.stop_all` under
+  `self._lock`. A single all-at-once migration was attempted and **failed** (6 failed / 45 passed,
+  `cleanupgreen.log`) and was fully reverted to the verified state (`revert.log`, 47 passed);
+  the working approach is the incremental per-call-site migration used for release.
+- **Boundary:** no production root touched; Gate 6 runtime/goals/motion closed; formal accepted
+  0/0/0; Task 12 NOT_STARTED; focused tests only; no evidence/mirror/scratch/IPC path deleted.
