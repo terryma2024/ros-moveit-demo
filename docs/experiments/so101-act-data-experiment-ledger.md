@@ -9767,3 +9767,24 @@ This resolves the design block **without authorizing runtime or motion**.
   `cli/act_session.py`; the live path is what remains and it needs the runtime ladder.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-802 — Task 15 begins: the teleop ACT gateway
+
+- **Delivered:** `src/so101_teleop/so101_teleop/act_gateway.py` with `ActGateway.command`/`.status`, plus
+  `test/teleop/test_act_gateway.py` carrying the plan's Step-1 assertion verbatim.
+  - **an allow-list, not a pass-through:** `start`, `resume`, `stop`, `status`, `tick` only — any other name
+    (a shell command, `""`, `"START"`, a non-string) is `ACT_COMMAND_NOT_ALLOWED` **before anything else is
+    consulted**, and the test asserts nothing else reached the service;
+  - `start`/`resume` without a payload are `ACT_COMMAND_PAYLOAD_REQUIRED` rather than interpreted; a
+    non-mapping payload is `ACT_COMMAND_PAYLOAD_INVALID`;
+  - no service, or a service that cannot command, is `ACT_GATEWAY_SERVICE_UNAVAILABLE`; a malformed answer
+    is `ACT_GATEWAY_OUTCOME_INVALID`, on both the command and the status path.
+- **My test assumption was wrong:** a bare `object()` has no `command` attribute, so it is *no service*
+  (`ACT_GATEWAY_SERVICE_UNAVAILABLE`), not a malformed outcome; the outcome cases now use a service that
+  genuinely answers with a non-mapping.
+- **Verification:** focused tests **3 passed** (`gate6-batch3-py-gate/task15b.{log,junit.xml}`).
+- **Remaining in Task 15:** the HTTP command/status wiring (`api.py`, `server.py`, `openapi.json`), the
+  generated `schema.d.ts`, and the React `act-panel.tsx` with `task-app.tsx` — none of which this session
+  has touched, and each of which needs the web toolchain (Bun) and the live service to be exercised.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
