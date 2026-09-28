@@ -6787,3 +6787,13 @@ status: PLANNED_ISOLATED_STACK
 - **批准的准确范围（不得扩大）**：仅 **Gate 5 源码/设计与离线契约**，作为 Gate 6 接线的技术基础。**不**授权 Gate 6 runtime、控制器权威、目标下发、运动或正式采集。报告确认：无遗留 P0/P1/P2；单向终止器（无覆盖、已终态不重写）；合法 UNKNOWN/REJECTED receipt 保留终态与不可变原因并完成关闭/不可用/二次不发送/不复活；整数键、额外 handle 键、None readback、send 超时均以 UNKNOWN 闭合；close 失败记录 \`close_failed/fencing_required\` 且仍禁止复用；契约与实现一致、历史文字非权威、审计以 \`exp573_lock_graph\` 为现行；并独立复核了三项并发边界（reserve 处同 permit 的代次/重启变化零发送并终态关闭；真实 \`step_at\` 深拷贝阻塞期间撤销可完成；真实 send 入口阻塞期间撤销可完成）。
 - **Gate 5 状态：DONE**（本 ledger 记录为准）。**不变量不变**：正式 accepted Train/Validation/Offline Test = **0/0/0**；Task 12 = **NOT_STARTED**；Gate 6 runtime 仍然关闭，直到预运行时门禁通过并获得下一次明确授权。
 - 下一步进入 Gate 6 源码集成（无生产权威、不起运行时目标/运动）：以已批准契约与现行实现计划为准，映射真实代码路径，按小批次 TDD 推进；\`RosPhysicsClockAdapter\` 接入 \`PickPlaceRosEvidence\` 与 SEARCH；owner 轮询须surface/latch 危险并 fail-closed 撤销当前身份；把 broker 自有控制器身份与单一最终 history receipt 语义带到真实集成边界；实现真实 C++ 预留/接收临界区与 generation/boot/UUID fencing、超时、关闭与取消语义，但**保持生产权威禁用**；campaign/资源绑定校验不得越过启动入口边界；仅 MuJoCo。每次 pytest 使用注册证据根下唯一且此前不存在的 scratch 并保留原始证据；证据追加式。
+
+## CP-673 — Gate 6 Batch 1（聚焦 RED/GREEN）：证据边界持有适配器 + owner 健康轮询/危险闩锁/单次撤销
+
+- 提交 `b2c8e845f87c25ea99465ce6dc2c9617c73a821e`。改动最小垂直路径（源码 + 聚焦测试）：
+  - `PickPlaceRosEvidence` 现**持有** `RosPhysicsClockAdapter`（新增可选构造参数 `physics_clock=`），并把适配器的 `on_hazard` 回调接到**同一个**危险闩锁队列——不再是并行/未接线对象；保留原有语义，新增字段全部为增量。
+  - 新增 `poll_owner_health(*, now_ns=None, admission=None)`：有界轮询适配器 `check_health()`；健康丢失（含探测本身抛异常 = `PHYSICS_CLOCK_HEALTH_PROBE_FAILED:<err>`）时**精确闩锁一次**（`_hazards_latched` 去重 + 入队）并**只撤销一次**当前 admission 身份（`revoke_current(reason)`），随后 `capture(...)` 抛 `TASK8_SOURCE_AUTHORITY_REVOKED`，即后续 sample/permit/goal 使用被拒绝；新增只读 `authority_revoked()`。
+  - 单次撤销通过显式幂等标志实现；重复轮询返回同一危险但**不**重复闩锁、**不**重复撤销（测试直接断言这两点）。
+- **聚焦 RED/GREEN 证据**：新建 `test/test_act_batch1_owner_poll.py`（4 用例：健康无动作；健康丢失恰好闩锁一次+撤销一次；撤销后 `capture` 被拒；适配器回调进入同一闩锁）→ `batch1.log`/JUnit **4 passed**，rc=0，零警告；scratch `exp573-batch1.*`（唯一且此前不存在）+ tempfile 探针 PASS；当前树镜像 `mirror-48`。仅运行本批次直接相关测试，**未**运行全量套件。
+- **诚实范围说明**：本批次完成“边界持有适配器 + owner 轮询/闩锁/撤销/拒用”；**尚未**完成把 `evidence_ready()`/`accept_message()` 的**已接受物理证据**接入 SEARCH 的 selected-source 消费路径（该消费者在 `pick_place_sources.py:151` 起的工作类中），以及真实 C++ 预留/接收临界区（Batch 3）。未启动运行时、未授予控制器权威、未下发目标、未运动、未计入任何正式 episode。
+- 不变量：Gate 5 **DONE**（复核 14 APPROVE，范围仅源码/设计与离线契约）；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 仍关闭；42 个既有 dirty entries 未改动；证据追加式。
