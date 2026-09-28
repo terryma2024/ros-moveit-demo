@@ -8592,3 +8592,22 @@ test that a shorter gate run root clears.
   module and is the next step.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-753 — Row-shape adapter: producer row -> 8P4 journal row
+
+- **Delivered:** `case_row_to_journal_row(row, *, identities, manifest_document_sha256)` in
+  `act/task8_live_evidence.py`. It renames the producer's receipt hashes to the journal's
+  `*_retirement_receipt_sha256`, supplies `source_provenance_sha256` / `runtime_config_sha256` /
+  `contact_policy_fingerprint` from the **verified bundle**, takes `manifest_document_sha256`
+  explicitly so the manifest's document and file digests are never conflated, drops the producer's
+  extra fields (the journal shape is closed), and finishes by calling `require_case_journal_row` — so
+  the prefix/full artifact rules and the status/digest rules are re-applied at the boundary rather than
+  assumed.
+- **Verification:** recorder suite **32 passed** (`gate6-batch3-py-gate/adapter.{log,junit.xml}`): the
+  translation, the absence of leaked fields, `TASK8_PREFIX_EVIDENCE_FORBIDDEN` for a prefix row
+  claiming a live artifact, and `TASK8_CASE_ROW_INVALID` for an incomplete row.
+- **Remaining:** the closing integration test — an owner/worker harness that drives the **real**
+  `Task8Runner` through `run_pick_place_case()`, maps the published row with this adapter, and lets
+  `validate_case_journals` read the journal back; then the combined **8P3/8P4 xdist gate**.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
