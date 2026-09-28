@@ -9986,3 +9986,24 @@ This resolves the design block **without authorizing runtime or motion**.
   training → evaluation), both outside the no-runtime boundary this session has held.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-813 — Correction: five plan-created files are still absent, two of them offline-testable
+
+I claimed at CP-812 that only the LeRobot adapter remained. Checking the plan's `Create:` lines against the
+tree instead of trusting the impression gives a different answer: **59 present, 5 absent**.
+
+| Task | Absent artifact | Can it be done offline? |
+|---|---|---|
+| 11A | `test/test_act_parallel_collection_subprocess.py` | **yes** — a test module for the parallel collection boundary |
+| 11A | `test/teleop/test_unified_act_collection.py` | **yes** — the teleop-side unified ACT collection test, runnable against the gateway, the routes and service doubles |
+| 8P3 | `cli/act_prepare_task8_live_artifacts.py` | partly — its validation and receipt handling can be written and tested; producing live artifacts needs the runtime preflight |
+| 8P3 | `config/act/task8-preparation-receipt-schema.json` | **yes** — a schema document |
+| 12 | `adapters/act/lerobot.py` | no — needs a training interpreter with LeRobot and PyTorch |
+
+**So the next work is not blocked, and my earlier statement was wrong.** Order for the following rounds: the
+teleop unified ACT collection test, then the parallel collection subprocess test, then the Task 8P3
+preparation receipt schema and the preparation CLI's offline-testable parts, leaving the LeRobot adapter and
+the runtime ladder for authorisation.
+
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
