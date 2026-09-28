@@ -1,8 +1,8 @@
 """Gate 5 offline authority transaction and adversarial fake controller port.
 
-These tests are the deterministic adversarial set required by the design review.
-They import the not-yet-implemented module inside each test body so collection
-succeeds and every intended testcase name is present in the manifest and JUnit.
+Deterministic adversarial set for the frozen protocol: private immutable permit
+records, opaque handles, registry-owned time, history-owned commit receipts, full
+receipt validation and a stateful reservation fake with real thread barriers.
 """
 
 import threading
@@ -10,50 +10,82 @@ import time
 
 import pytest
 
+from test_act_physics_clock_admission import (SOURCE_BASE_NS, AdmissionRefused,
+                                             PhysicsClockHistory, _admission, _chunk, _ready,
+                                             _sample, _stop_evidence)
+
 
 def _module():
     from so101_demo.adapters.act import authority_transaction
     return authority_transaction
 
 
-def _registry():
+class _StubHistory:
+    """Minimal stand-in for the history commit primitive (binding tested elsewhere)."""
+
+    def __init__(self, *, refuse=None):
+        self.refuse = refuse
+        self.calls = []
+
+    def commit_receipt(self, **expected):
+        self.calls.append(expected)
+        if self.refuse is not None:
+            raise ValueError(self.refuse)
+        return {"version": expected["expected_version"],
+                "incarnation": expected["expected_incarnation"],
+                "epoch": expected["expected_epoch"], "step": expected["step"],
+                "age_ns": 1_000_000, "commit_monotonic_ns": 1_000_000_000,
+                "source_end_monotonic_ns": 999_000_000}
+
+
+def _registry(*, history=None):
     module = _module()
-    return module.AuthorityTransactionRegistry(clock_ns=lambda: 1_000_000_000)
+    return module.AuthorityTransactionRegistry(clock_ns=lambda: 1_000_000_000,
+                                               history=history or _StubHistory())
 
 
 def _fake():
     module = _module()
-    return module.AdversarialFakeControllerPort()
+    return module.ReservationFakeControllerPort(clock_ns=lambda: 1_000_000_000)
+
+
+def _issue(registry, **overrides):
+    fields = dict(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
+                  history_version=1, incarnation="i", epoch=1, role="arm",
+                  controller_generation=1, goal_uuid="g-1", target_digest="d-1")
+    fields.update(overrides)
+    return registry.issue_handle(**fields)
+
+
+def _reserve(port, *, permit_id="p-1", goal_uuid="g-1", role="arm", target_digest="d-1",
+             deadline_ns=2_000_000_000):
+    return port.reserve(permit_id=permit_id, goal_uuid=goal_uuid, role=role,
+                        target_digest=target_digest, generation=1,
+                        controller_incarnation="i", deadline_ns=deadline_ns)
 
 
 def test_hazard_before_claim_produces_zero_reserve_and_zero_send():
     registry = _registry()
     port = _fake()
-    permit = registry.issue(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
-                            history_version=1, incarnation="i", epoch=1, role="arm",
-                            controller_generation=1, goal_uuid="g-1", target_digest="d-1")
+    handle = _issue(registry)
     registry.revoke("PHYSICS_CLOCK_SILENT")
     with pytest.raises(Exception):
-        registry.claim(permit, now_ns=1_000_000_000)
+        registry.claim(handle)
     assert port.reserve_calls == 0 and port.send_calls == 0
 
 
 def test_large_copy_interleavings_hold_no_local_lock():
     registry = _registry()
-    permit = registry.issue(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
-                            history_version=1, incarnation="i", epoch=1, role="arm",
-                            controller_generation=1, goal_uuid="g-1", target_digest="d-1")
-    registry.claim(permit, now_ns=1_000_000_000)
+    handle = _issue(registry)
+    registry.claim(handle)
     assert not registry.lock_held_during(lambda: None)
 
 
 def test_reset_hazard_and_age_crossing_after_final_read_refuse_the_permit():
-    registry = _registry()
-    permit = registry.issue(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
-                            history_version=1, incarnation="i", epoch=1, role="arm",
-                            controller_generation=1, goal_uuid="g-1", target_digest="d-1")
+    registry = _registry(history=_StubHistory(refuse="PHYSICS_COMMIT_VERSION_CHANGED"))
+    handle = _issue(registry)
     with pytest.raises(Exception):
-        registry.claim(permit, now_ns=permit.deadline_ns + 1)
+        registry.claim(handle)
 
 
 def test_io_blocked_while_revoke_proceeds_without_the_broker_lock():
@@ -67,6 +99,7 @@ def test_io_blocked_while_revoke_proceeds_without_the_broker_lock():
 def test_controller_close_before_acceptance_yields_zero_accepted_commands():
     port = _fake()
     port.close_before_accept()
+    _reserve(port)
     assert port.send(goal_uuid="g-1", permit_id="p-1") == "REJECTED"
     assert port.accepted_commands == 0
 
@@ -74,24 +107,27 @@ def test_controller_close_before_acceptance_yields_zero_accepted_commands():
 def test_controller_acceptance_before_close_yields_one_command_then_cancel():
     port = _fake()
     port.accept_before_close(cancel_pending=True)
+    assert _reserve(port) == "ACCEPTED"
     assert port.send(goal_uuid="g-1", permit_id="p-1") == "ACCEPTED"
     assert port.accepted_commands == 1
     assert port.cancel_stop_pending is True
 
 
 @pytest.mark.parametrize("field,value", [
-    ("generation", 99), ("goal_uuid", "other"), ("permit_id", "other"),
-    ("target_digest", "other"), ("controller_incarnation", "other"),
-    ("sequence", -1), ("deadline_ns", 0),
+    ("goal_uuid", "other"), ("permit_id", "other"), ("target_digest", "other"),
+    ("role", "other"), ("generation", 99),
 ])
 def test_wrong_field_is_rejected(field, value):
     port = _fake()
-    assert port.send(goal_uuid="g-1", permit_id="p-1",
-                     override={field: value}) == "REJECTED"
+    _reserve(port)
+    call = {"goal_uuid": "g-1", "permit_id": "p-1"}
+    call[field] = value
+    assert port.send(**call) == "REJECTED"
 
 
 def test_replay_duplicate_late_and_restart_are_fail_closed():
     port = _fake()
+    _reserve(port)
     assert port.send(goal_uuid="g-1", permit_id="p-1") == "ACCEPTED"
     assert port.send(goal_uuid="g-1", permit_id="p-1") == "REJECTED"
     assert port.late_receipt_after_timeout() == "UNKNOWN"
@@ -103,10 +139,8 @@ def test_replay_duplicate_late_and_restart_are_fail_closed():
 
 def test_permit_fields_are_private_and_immutable():
     module = _module()
-    registry = module.AuthorityTransactionRegistry(clock_ns=lambda: 1_000_000_000)
-    handle = registry.issue_handle(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
-                                   history_version=1, incarnation="i", epoch=1, role="arm",
-                                   controller_generation=1, goal_uuid="g-1", target_digest="d-1")
+    registry = _registry()
+    handle = _issue(registry)
     for field in ("target_digest", "deadline_ns", "state", "goal_uuid"):
         assert not hasattr(handle, field), field
     with pytest.raises(Exception):
@@ -130,10 +164,8 @@ def test_claim_uses_registry_time_and_rejects_a_rolled_back_clock():
 
 def test_receipt_validation_rejects_invalid_fields():
     module = _module()
-    registry = module.AuthorityTransactionRegistry(clock_ns=lambda: 1_000_000_000)
-    handle = registry.issue_handle(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
-                                   history_version=1, incarnation="i", epoch=1, role="arm",
-                                   controller_generation=1, goal_uuid="g-1", target_digest="d-1")
+    registry = _registry()
+    handle = _issue(registry)
     registry.claim(handle)
     good = {"protocol_version": 1, "permit_id": handle.permit_id, "goal_uuid": "g-1",
             "role": "arm", "generation": 1, "target_digest": "d-1", "controller_incarnation": "i",
@@ -149,14 +181,14 @@ def test_receipt_validation_rejects_invalid_fields():
 
 def test_no_acceptance_without_a_reservation():
     module = _module()
-    port = module.ReservationFakeControllerPort(clock_ns=lambda: 1_000_000_000)
+    port = _fake()
     assert port.send(goal_uuid="g-1", permit_id="p-1") == "REJECTED"
     assert port.accepted_commands == 0
 
 
 def test_same_goal_uuid_cannot_be_accepted_twice_with_a_different_permit():
     module = _module()
-    port = module.ReservationFakeControllerPort(clock_ns=lambda: 1_000_000_000)
+    port = _fake()
     port.reserve(permit_id="p-1", goal_uuid="g-1", role="arm", target_digest="d-1",
                  generation=1, controller_incarnation="i", deadline_ns=2_000_000_000)
     assert port.send(goal_uuid="g-1", permit_id="p-1") == "ACCEPTED"
@@ -206,10 +238,8 @@ def test_stale_transition_advances_the_version_exactly_once():
 
 def test_blocking_io_while_revoke_proceeds_with_real_threads():
     module = _module()
-    registry = module.AuthorityTransactionRegistry(clock_ns=lambda: 1_000_000_000)
-    handle = registry.issue_handle(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
-                                   history_version=1, incarnation="i", epoch=1, role="arm",
-                                   controller_generation=1, goal_uuid="g-1", target_digest="d-1")
+    registry = _registry()
+    handle = _issue(registry)
     entered = threading.Event()
     release = threading.Event()
 

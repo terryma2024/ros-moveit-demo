@@ -80,13 +80,14 @@ class AuthorityTransactionRegistry:
     """Private registry; callers never see a mutable record."""
 
     def __init__(self, *, clock_ns=time.monotonic_ns, permit_ttl_ns=30_000_000_000,
-                 admission=None, selected_max_age_ns=None):
+                 admission=None, selected_max_age_ns=None, history=None):
         if type(permit_ttl_ns) is not int or permit_ttl_ns < 1:
             raise AuthorityRefused("AUTHORITY_TTL_INVALID")
         self._clock_ns = clock_ns
         self._ttl_ns = permit_ttl_ns
         self._admission = admission
         self._selected_max_age_ns = selected_max_age_ns
+        self._history = history
         self._lock = threading.RLock()
         self._records = {}
         self._states = {}
@@ -150,8 +151,9 @@ class AuthorityTransactionRegistry:
             if now_ns > record.deadline_ns:
                 self._states[record.permit_id] = EXPIRED
                 raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED")
-            history = history if history is not None else getattr(admission or self._admission,
-                                                                  "_history", None)
+            history = (history if history is not None else self._history
+                       if self._history is not None
+                       else getattr(admission or self._admission, "_history", None))
             if history is None:
                 raise AuthorityRefused("AUTHORITY_HISTORY_REQUIRED")
             try:
