@@ -60,7 +60,7 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-593
+latest_checkpoint: CP-598
 next_experiment: second local independent Astra/High Gate 5 review (bounds + offline admission contract + owner-path qualification); Gate 6 stays closed
 ---
 
@@ -6139,3 +6139,11 @@ status: PLANNED_ISOLATED_STACK
 - 最终焦点门禁：四个 clock 模块在**全新且先验证 `tempfile.gettempdir()` 的注册 NVMe scratch** 中 **100 passed**，耗时 `950,245,203 ns`；scratch 路径、tempfile 证明、RED/GREEN 日志、JUnit 与 elapsed 全部保留在 `experiments/exp567-review4-fixes/` 与对应 scratch 树（scratch 仅为删除候选，未删除任何证据）。
 - Durable checkpoint: `experiments/exp567-review4-fixes/checkpoint.json`，SHA256 `c76d0c30d0a44a4e5a64ede5d253cda4c7fabc8d79358c03a652a962ad8bbdb1`；含每个 finding 的 closure 用例、小步提交哈希、Gate 6 契约哈希与门禁统计。
 - 状态：Gate 5 **仍为 OPEN**，本轮不声称 Gate 5/Gate 6 通过；未启动 authority、goals、motion、正式采集或 Task 12（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 full unit suite（按边界仅跑 focused clock 模块）。现停在 Gate 5 等待本机第五次独立 Astra/High 复核。
+
+## CP-598 — 第五次复核 BLOCK：撤回 CP-597 的关闭声明（8 个用例从未存在），并记录接收侧原子性的接口级 blocker
+
+- 第五次本机独立 Astra/High 复核（`handoff/2026-09-28-local-astra-gate5-review5.md`，SHA256 `d3b24c668bc4c90f7cdd2201c984f77cc71a816ecc196c309ce7c5280fb3286a`，决定 **BLOCK**，复核 HEAD `22f424bb`）指出 CP-597 的 closure 映射不成立。本地复核确认：映射中的 9 个用例只有 `test_admit_sample_rejects_a_history_version_change_at_commit` 同时存在于当前测试源码与最终 JUnit；其余 8 个（`test_retired_identity_is_permanently_closed`、`test_takeover_requires_still_valid_identity_bound_stop_evidence`、`test_confirm_stop_requires_authoritative_identity_bound_evidence`、`test_selected_age_crossing_after_the_final_snapshot_is_rejected`、`test_authority_consume_requires_token_and_controller_generation`、`test_history_version_changes_on_every_readiness_or_hazard_transition`、`test_checked_stage_revocation_after_checker_completion_refuses`、`test_admit_sample_does_not_copy_under_the_broker_lock`）在源码中计数为 0、在最终 JUnit 中计数为 0。
+- **撤回（不改写既往证据）**：`CP-597` 中“第四次复核发现已逐项关闭”的结论**不成立**，其 closure 映射作废；`experiments/exp567-review4-fixes/checkpoint.json` 中的 `closure_evidence` 只能在追加更正下阅读。此前批次的 RED 日志与 100-pass JUnit 分属不同测试集合，因此不存在 RED→GREEN 的闭合。旧的 RED/GREEN 日志、JUnit 与 checkpoint 全部保留、未改写、未删除。
+- 事实澄清：这些用例是在“第四次复核实现尝试后被 `git checkout` 回滚”的那一批里，回滚时随之消失；随后步骤 1 只做了既有用例的机械适配，没有重新引入它们，因此最终 100-pass 集合从未包含它们。
+- **接口级 blocker（按复核要求不得伪造原子性）**：复核要求“控制器接收侧原子 generation fence”。当前 API 只能接受调用方传入的整数 `controller_generation` 与一个可选 `generation_check` 回调，二者都无法证明“接收发生在同一临界路径内”；用可选回调或调用方整数冒充原子性正是复核禁止的做法。因此该项需要**接口级改动方案**（例如：由控制器客户端在接收路径内返回带 generation 的签名回执，并由 broker 在同一提交协议中校验；或把接收与提交合并为控制器侧的一次原子操作），在此之前不实现、不声明该项通过。
+- 状态：Gate 5 **仍为 OPEN**；未启动 authority、goals、motion、正式采集或 Task 12（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 full unit suite。后续必须在**同一份 `pytest --collect-only` manifest 与同一测试集合**下先得到 RED、再得到 GREEN，并保留两份 manifest、JUnit、日志、elapsed 与哈希，然后请求第六次复核。
