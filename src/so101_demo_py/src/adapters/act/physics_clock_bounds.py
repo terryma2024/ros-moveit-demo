@@ -15,14 +15,14 @@ Derivation (window-scoped observed maxima, margin rule `ceil_50ms(multiple x max
   a stalled loop and is explicitly NOT reused as a silence, age or first-chunk
   bound (handoff 2026-09-28, item 2).
 - silence: population is the maximum chunk inter-arrival **inside a running
-  measurement window**, 123,000,000 ns (EXP-559 run-3; EXP-560 maxima are
+  measurement window**, 122,997,815 ns (EXP-559 run-3; EXP-560 maxima are
   108-110 ms). 2x = 246,000,000 ns -> 250 ms, frozen at 0.30 s for second-order
   scheduling effects. Note the 194.5 ms figure seen earlier crosses the reset and
   therefore belongs to the first-chunk population, not to silence. Watchdog poll
   slip (max 56.7 ms) extends *detection* latency and is not absorbed by this bound.
 - age: population is the window-scoped validation-time envelope - the largest
-  in-window age at callback entry (127,830,000 ns) plus the largest in-window
-  callback cost (26,890,000 ns) = 154,720,000 ns, a conservative cross-chunk
+  in-window age at callback entry (127,833,869 ns) plus the largest in-window
+  callback cost (26,894,568 ns) = 154,728,437 ns, a conservative cross-chunk
   envelope rather than one observed sample. 2x = 309,440,000 ns -> 0.35 s.
   EXP-560 after the copy removal measures an envelope of 133.7 ms.
 - first chunk: maximum `arm()` to first positive-epoch chunk 128,046,778 ns
@@ -49,13 +49,20 @@ FIRST_CHUNK_TIMEOUT_S = 0.40
 # either the measurement record or the margin rule is visible in one place.
 OBSERVED_SOURCE_GAP_NS = 2_536_550
 OBSERVED_SOURCE_GAP_CONTEXT_NS = 2_898_716
-OBSERVED_AGE_AT_CALLBACK_ENTRY_NS = 127_830_000
-OBSERVED_CALLBACK_COST_NS = 26_890_000
-OBSERVED_AGE_AT_VALIDATION_ENVELOPE_NS = 154_720_000
-OBSERVED_IN_WINDOW_CHUNK_GAP_NS = 123_000_000
+# Exact integers, as independently decoded in the 2026-09-28 local Gate 5 review.
+OBSERVED_AGE_AT_CALLBACK_ENTRY_NS = 127_833_869
+OBSERVED_CALLBACK_COST_NS = 26_894_568
+OBSERVED_AGE_AT_VALIDATION_ENVELOPE_NS = 154_728_437
+OBSERVED_IN_WINDOW_CHUNK_GAP_NS = 122_997_815
 OBSERVED_RESET_CROSSING_GAP_NS = 194_483_664
 OBSERVED_FIRST_CHUNK_NS = 128_046_778
+OBSERVED_FIRST_CHUNK_FROM_ARM_BEGIN_NS = 128_110_036
 OBSERVED_WATCHDOG_POLL_MAX_NS = 56_701_484
+OBSERVED_WATCHDOG_POLL_MAX_AFTER_COPY_FIX_NS = 46_518_291
+OBSERVED_CALLBACK_COST_P50_BEFORE_COPY_FIX_NS = 15_530_000
+OBSERVED_CALLBACK_COST_P50_AFTER_COPY_FIX_NS = 7_810_000
+OBSERVED_STEP_AT_P50_BEFORE_COPY_FIX_NS = 14_400_000
+OBSERVED_STEP_AT_P50_AFTER_COPY_FIX_NS = 195_000
 
 PROVENANCE = {
     "source_step_gap": "EXP-556 / CP-581, three isolated no-goal sessions",
