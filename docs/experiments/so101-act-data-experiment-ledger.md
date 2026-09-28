@@ -9395,3 +9395,25 @@ This resolves the design block **without authorizing runtime or motion**.
   `config/act/training.yaml`, `config/act/requirements.lock` and the `act_train` CLI.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-786 — Task 12: bundle and policy loading
+
+- **Delivered:** `load_bundle`, `require_policy_interface` and `load_policy` in `act/bundle.py`, with
+  tests.
+  - the bundle document is **closed** (`schema_version` 1, `kind` `act_bundle`, exact key set);
+  - the policy must live **inside** the bundle directory (no absolute path, no `..`) and its **bytes must
+    hash to the recorded digest** — a swapped `policy.bin` is `BUNDLE_POLICY_DIGEST_MISMATCH`, a missing
+    one `BUNDLE_POLICY_MISSING`;
+  - **normalisation provenance:** `normalization.split` must be `"train"`, so statistics drawn from
+    validation or test cannot silently invalidate every later evaluation;
+  - **interface:** `infer` and `reset` must be callable (`POLICY_INTERFACE_INVALID`) — the contract
+    Task 13's runner will rely on — and `load_policy` loads through an **injected** loader
+    (`POLICY_LOADER_REQUIRED` when absent), never an import path.
+- **The same trap as CP-767, twice in one session:** my helper wrote `normalization or {...}`, silently
+  repairing a deliberately empty normalisation so the case never reached its guard (`DID NOT RAISE`). Fixed
+  in the helper with the reason recorded in a comment, not by weakening the guard.
+- **Verification:** focused tests **8 passed** (`gate6-batch3-py-gate/task12d.{log,junit.xml}`).
+- **Remaining in Task 12:** `export_dataset` (dataset layout and its sha256 receipt, LeRobot call behind an
+  injected exporter), `train_act`, `config/act/training.yaml`, `config/act/requirements.lock`, `act_train`.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
