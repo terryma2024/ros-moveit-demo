@@ -5967,3 +5967,21 @@ status: PLANNED_ISOLATED_STACK
 - Provenance: source HEAD `ff5cb73e`（测量时）与 `19c25590`（冻结模块提交）；overlay `i`；三轮 `session-events.json`/`session-done.json`/驱动 `result.json`/`session.json`/launch argv/readiness/图检查/所有者身份全部保留；无效首轮 `attempt1-first-chunk-marker-bug` 一并保留。
 - Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp559-inproc-timing/checkpoint.json`，SHA256 `ae556e0efdd22b13a26fe3cc3f37c65d107193898d19eea6adf692f6b100587f`；读回核对 151 个索引文件、1,160,929 字节，索引集合与实际集合相等且逐文件哈希一致。保留 EXP-559 与全部更早实验；未归档任何批次。`__pycache__` 与 scratch 树仅为删除候选，未删除任何证据。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
 - Next discriminator: 评审第 4 项——在保持不可变、顺序、粘滞 hazard 与可审计证据的前提下消除适配器与历史中可避免的深拷贝/整窗拷贝，先用焦点 RED→GREEN，再用同一 `inproc_session.py` harness 复测真实适配器成本；之后才是评审第 5 项（独立 GPT-6 Astra/High 复核冻结边界与集成设计）与第 6 项（接入 `PickPlaceRosEvidence` 与 SEARCH）。
+
+## EXP-560 — 去除可避免的拷贝并在冻结边界下复测
+
+status: PLANNED_SOURCE_ONLY_AND_ISOLATED_STACK
+
+- Prior EXP-559 / CP-584 与评审 handoff 第 4 项；source HEAD `4e27fd6e`；注册证据根、overlay `i`；空域 154–156。无目标、无运动、无 broker、`command_authority=False`。
+- Observation: 适配器对每个块先整体 `deepcopy`、历史再逐样本 `deepcopy`，`step_at` 每次读回还要深拷贝整个新鲜窗口；EXP-559 实测回调整体成本 p50 15.3–15.5 ms、读回 p50 14.4–15.6 ms，其中大部分是可避免的重复拷贝。
+- One variable: 只改拷贝策略，不改任何时序、顺序、粘滞 hazard 或证据可见性语义——(1) `step_at` 改为在锁内定位后只深拷贝选中的那一条（保持 hazard、空窗、新鲜度过滤、`PHYSICS_CLOCK_STALE` 粘滞与 `STEP_UNAVAILABLE` 语义）；(2) 适配器不再在回调入口整体拷贝，只在把块放入待处理队列（唯一需要跨回调保留的路径）时拷贝，立即消费的路径由历史的逐样本拷贝负责隔离。
+
+## CP-585 — 冻结边界在真实会话中连续 45 s 无 hazard，成本显著下降
+
+- EXP-560 是 `VALID_SOURCE_ONLY_FROZEN_BOUNDS_VALIDATED_LIVE`。焦点 RED 为“`step_at` 不得深拷贝整个新鲜窗口”（用计数包装 `copy.deepcopy` 断言 ≤2 次），GREEN 后 49/49 通过；既有的“回调后再修改块，已保留证据不变”用例继续通过，新增“嵌套 contact 证据在待处理路径中同样被隔离”的守卫。
+- 三次同进程会话（域 154/155/156，每轮约 53 s）使用**冻结边界本身**（`physics_clock_bounds.history_config()`：`max_age_s=0.35`、`max_silence_s=0.45`、`first_chunk_timeout_s=0.40`、`SOURCE_STEP_GAP_NS=6 ms`）：七项 readiness 通过、栈与 harness 退出码 0、最终图空、每次 arm 到 epoch 1 并完成 225 次读回。**测量窗口内 hazard 数为 0**；三次的 hazard 都出现在收尾 pause 请求之后 376.1 / 445.6 / 447.5 ms（`PHYSICS_CLOCK_STALE` 与 `PHYSICS_CLOCK_SILENT`，取决于读回与看门狗谁先到期），即预期的 fail-closed 收尾行为，而不是运行中的误报。窗口内最大块间隔 170.3–182.7 ms，低于 `max_silence_s` 的 2× 余量。
+- 成本对比（p50，三次会话）：回调整体 15.33/15.36/15.48 ms → **7.80/8.05/7.80 ms**；读回 15.58/14.37/14.60 ms → **0.203/0.203/0.195 ms**（约 75×）；回调整体 max 24.05/26.89/23.95 → 20.10/20.77/19.64 ms；看门狗轮询 max 53.2/51.2/56.7 → 41.6/46.5/44.7 ms；回调入口首样本年龄 p50 保持 104.2–104.4 ms、窗口内 max ≤ 112.9 ms（仍被 151.8 ms 的冻结依据支配）。
+- Provenance: 测量时 source HEAD `4e27fd6e`（拷贝优化提交），branch、overlay `i`、运行时与 EXP-559 相同；三轮 `session-events.json`、驱动 `result.json`、readiness、图检查、所有者身份与 scratch 全部保留；分析复用 EXP-559 的 `analyze_inproc.py`（同一脚本、同一指标定义）。会话 id 沿用 `act-data-exp559-15x`（复制 campaign 脚本时未改前缀），已在证据中如实记录，不影响判定。
+- Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp560-copy-cost/checkpoint.json`，SHA256 `272c61eb78f78b0cb6bcdf7ae19b65a38d0b0122f2d3aa292be5efd0e85484d7`；读回核对 75 个索引文件、603,568 字节，索引集合与实际集合相等且逐文件哈希一致。保留 EXP-560 与全部更早实验；未归档任何批次。`__pycache__` 与 scratch 树仅为删除候选，未删除任何证据。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
+- 边界：本实验仍**没有**把适配器接入生产路径，也没有授权任何目标、许可或样本；`max_age_s` 仍是摄入边界，选中状态的新鲜度须由 owner 用更紧的独立边界约束。
+- Next discriminator: 评审第 5 项——把冻结边界、成本实测与集成设计提交独立 GPT-6 Astra/High 复核；通过后才进入第 6 项，把 `RosPhysicsClockAdapter` 接入 `PickPlaceRosEvidence` 与 SEARCH，并由 owner 以远低于 `max_silence_s` 的周期轮询 `check_health()`、在任何 false 结果上撤销下游 readiness 与 authority，证明没有过期或未就绪样本能越过准入边界。
