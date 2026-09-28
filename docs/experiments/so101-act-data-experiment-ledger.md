@@ -5927,3 +5927,23 @@ status: PLANNED_SOURCE_ONLY
 - Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp557-clock-health/checkpoint.json`，SHA256 `dab3b6379338aeb2d024c396d850de02f8a3edbf8293cb862cfe8358f64bd447`；读回核对 36 个索引文件、858,946 字节，索引集合与实际集合相等且逐文件哈希与字节数一致。保留 EXP-557 与全部更早实验；未归档任何批次。`__pycache__` 与六个 scratch 树仅为删除候选，未删除任何证据。既有 dirty/untracked 工作仍未暂存。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
 - 仍未完成：`max_silence_s`/`first_chunk_timeout_s` 的具体值尚无实测依据；适配器尚未接入生产路径，也没有任何组件保证按周期轮询 `check_health()`。这两点属于“接入生产 SEARCH 证明链”实验的准入条件，本实验不作声明。
 - Next discriminator: 在真实适配器实例上被动测量“回调接收→历史校验/读回”的尾延迟（不接入生产路径），据此与 EXP-556 的包络一起提出 `max_age_s`、`max_silence_s`、`first_chunk_timeout_s` 的候选值，并让 owner 以可审计的周期轮询 `check_health()`。
+
+## EXP-558 — 真实适配器在无目标会话中的被动成本测量
+
+status: PLANNED_ISOLATED_STACK
+
+- Prior EXP-557 / CP-582 与独立评审的“接线生产前必须完成”项；source HEAD `01f42cc2`；注册证据根、overlay `i`、运行时 `/opt/ros/jazzy/bin/ros2` 与 `/usr/bin/python3`；空域 144/145/146/147（其中 144 为握手失败尝试）。保留既有 dirty/untracked 工作。无目标、无运动、无 broker、`command_authority=False`。
+- Observation: 评审要求测量“回调接收→历史校验/读回”的真实成本与带边界的静默处理，而 EXP-556 的原始记录器不实例化适配器，无法给出这些成本；`max_age_s`、`max_silence_s`、`first_chunk_timeout_s` 的具体值也仍无实测依据。
+- One variable: 复用 EXP-556 的隔离生命周期，把记录器替换成被动探针 `adapter_probe.py`：探针用真实 `PhysicsClockHistory` 与 `RosPhysicsClockAdapter`，用 `TimingNode` 包住适配器回调以计时，从首个原始块读出 `nq/nv` 后构造两者，在权威 paused epoch-1 step-0 快照上 `arm`，以 20 ms 定时器轮询 `check_health()` 并每 10 次做一次 `step_at` 读回。只改变 `first_chunk_timeout_s`（0.30 → 2.00 → 10.00 s），其余边界不变。
+
+## CP-583 — 适配器成本已实测；进程外服务调用使首块期限不可用
+
+- EXP-558 是 `VALID_SOURCE_ONLY_ADAPTER_COST_WITH_HARNESS_TIMING_CAVEAT`。三次尝试都在同一隔离事务中完成并干净退役（栈、探针与图检查退出码 0、最终图空），也都没有发送任何目标。
+- 采纳的成本（attempt 3，epoch-1 首个块被接受、234 次读回成功）：适配器回调整体工作（深拷贝 + 信封/作用域校验 + `PhysicsClockHistory.accept_chunk` 逐样本校验）p50 `15.18 ms`、p95 `18.30 ms`、p99 `23.03 ms`、max `31.36 ms`（每块 50 个样本、约 10 块/秒）；`step_at` 读回（`recent_with_receipts` 深拷贝新鲜窗口后线性查找）p50 `15.74 ms`、p99 `17.88 ms`、max `18.33 ms`；`check_health()` 轮询 p50 `2.4 µs`、max `19.2 µs`；`arm()` 事务 `86 µs`。回调入口处首个样本的年龄 p50 `104.31 ms`、p99 `111.42 ms`、max `112.43 ms`（与 EXP-556 记录器的 `99.7 ms` 相比多出约 4 ms 派发/执行器开销）。这些是 `max_age_s` 的下界构成，但仍需加上历史接收时刻与读回时刻的差值。
+- 静默看门狗按设计工作并保持粘滞：attempt 3 在收尾 `SetPause(true)` 之后 latch `PHYSICS_CLOCK_SILENT`，此后所有读回一律以同一原因失败（fail closed），最终 hazard 未被清除。
+- 首块期限不能由本轮确定：attempt 1（0.30 s）与 attempt 2（2.00 s）都在首个 epoch-1 块到达前 latch `PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT`。原因是驱动为每次 ROS 服务调用新起一个进程（`service_once.py`），实测 `arm → 首块` 间隔为 `1,763.6 ms`（attempt 3）与 `3,696.0 ms`（attempt 2）；同一开销也解释收尾 `pause` 请求到实际静默约 1.5 s 的延迟。生产必须用同进程 resume 路径复测该间隔后才能冻结 `first_chunk_timeout_s`；本轮的数值只说明“进程外服务调用不能作为期限依据”。
+- 同时暴露一个可优化点（未改写）：适配器先 `copy.deepcopy(message)`，历史再对每个样本 `copy.deepcopy(sample)`，且每次 `step_at` 都重新深拷贝新鲜窗口；生产接线前应评估一次拷贝与窗口复用以降低执行器占用。
+- Provenance: source HEAD `01f42cc2`，branch `codex/so101-act-data-0917a`，overlay `i`，会话 `act-data-exp558-147`（attempt 3）、域 145/146/147；三次尝试的 `probe-result.json`、`probe-analysis.json`、驱动 `result.json`（含七项 readiness、重置地板与收尾 paused 快照）、`session.json`、scratch、tempfile 证明与所有者身份全部保留；attempt 1 的 `RECORDER_NOT_READY` 握手失败也保留为无效尝试。
+- Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp558-adapter-latency/checkpoint.json`，SHA256 `135da39a35604ef1cc030d1540aacb5864e103a911ad00f4f7a9d93b8a626ee4`；读回核对 152 个索引文件、469,926 字节，索引集合与实际集合相等且逐文件哈希一致。保留 EXP-558 与全部更早实验；未归档任何批次。`__pycache__` 仅为删除候选，未删除任何证据。既有 dirty/untracked 工作仍未暂存。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
+- 仍未完成：生产接线尚未发生；`first_chunk_timeout_s` 需要同进程 resume 路径的复测；适配器没有自带定时器，轮询周期仍由 owner 保证。本实验不授予任何目标或采集权限。
+- Next discriminator: 用同进程（同一 broker/节点内）的 resume 路径复测 `arm → 首块` 与 `pause → 静默` 间隔，把 `max_age_s`、`max_silence_s`、`first_chunk_timeout_s` 三个值冻结成有依据的候选；随后才是把 `RosPhysicsClockAdapter` 接入 `PickPlaceRosEvidence` 与 SEARCH 证明链的那次实验（该次必须有全量 source/installed 门禁与独立复核）。
