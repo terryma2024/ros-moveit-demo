@@ -7655,3 +7655,23 @@ exact-W8 qualification, formal W8 and Task 12. Full detail:
 
 **Boundaries:** no runtime/motion started; formal accepted 0/0/0; Task 12 NOT_STARTED;
 `collection_*` NOT_PROVISIONED; 43 dirty entries and 12 untracked user files preserved.
+
+## CP-710 — Task 8P3 sub-slice A: search-port recorder ownership and seal forwarding
+
+- **Delivered:** `PickPlaceSearchPhasePort.__init__(..., evidence_recorder=None)` (callable-checked,
+  no-op when omitted), `record_evidence(sample)` forwarding only a complete 24-key canonical sample
+  and raising `TASK8_SEARCH_PORT_EVIDENCE_INVALID` for a partial sample or a recorder refusal, and
+  `seal_live_evidence(request)` forwarding the case identity to `recorder.seal()` and returning the
+  closed artifact — or `LIVE_EVIDENCE_SEAL_UNAVAILABLE` when no recorder is attached, which is
+  exactly the error the runner raises (commit `9d1fb451`), so the runner<->port seal contract is now
+  closed on both sides.
+- **Why the partial-sample refusal matters:** a SEARCH observation alone cannot fill the canonical
+  shape, so a partial record must invalidate the case rather than look complete.
+- **Verification:** 50 passed across the recorder, search-port, core and bundle suites
+  (`gate6-batch3-py-gate/t8p3port{2}.{log,junit.xml}`). One test failure on the way was mine (I had
+  asserted a silent no-op where the implementation correctly raises) and was fixed by expecting the
+  refusal, not by weakening the check.
+- **Remaining sub-slice A:** the readback adapter emits the canonical fields for `CLOSE..FINAL_CHECK`
+  on the frozen grid — that file carries 191 lines of pre-existing user work and must be hunk-staged.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
