@@ -90,8 +90,7 @@ class OfflineDispatchTransaction:
             controller_generation=controller_generation, goal_uuid=goal_uuid,
             target_digest=target_digest, controller_incarnation=controller_incarnation)
         try:
-            claim = self.registry.claim_bound(self.handle, admission=self.admission,
-                                              identity=identity,
+            claim = self.registry.claim_bound(self.handle, identity=identity,
                                               controller_generation=controller_generation,
                                               token=token)
         except AuthorityRefused as error:
