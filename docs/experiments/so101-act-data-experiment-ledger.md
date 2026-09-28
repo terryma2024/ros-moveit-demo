@@ -9279,3 +9279,22 @@ This resolves the design block **without authorizing runtime or motion**.
   modifications and the live Steps 6–7.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-781 — Task 11A: the worker dispatches the fixed-collection workload
+
+- **Finding, by reading rather than assuming:** `ParallelWorker` takes its workload as an **optional
+  port** (`ports.get("workload")`) and calls `run_authorized(...)` on it, so dispatch is composition. The
+  only thing that would have refused the fixed-collection workload was the **exact-type check** at
+  worker.py:239.
+- **Minimal edit:** the guard now accepts exactly `ActCollectionWorkload` and
+  `ActFixedCollectionWorkload` and still requires `EXECUTE` mode. Deliberately kept: **exact types only**
+  (no duck typing) and no ACT workload outside `EXECUTE`. The import stays lazy inside `__init__`.
+  `worker.py` was clean before the change, so nothing of the user's work was touched.
+- **Test:** attaches each workload in `EXECUTE` mode, refuses both in `PLAN_ONLY` and `DRY_RUN`, and
+  refuses an arbitrary object carrying the right `kind` string — proving the port is not duck-typed.
+- **Verification:** `test_act_parallel_collection.py` **15 passed**; **141 passed** across the worker
+  suite and both ACT suites with no regression (`gate6-batch3-py-gate/task11a17.{log,junit.xml}`).
+- **Remaining in 11A:** the teleop-side modifications (`bridge`, `teleop_service`, `contracts`,
+  `admission`) and the live Steps 6–7.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
