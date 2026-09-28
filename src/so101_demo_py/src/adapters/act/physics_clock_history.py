@@ -230,6 +230,8 @@ class PhysicsClockHistory:
                 self.version += 1
                 return True
             except (AttributeError, TypeError, ValueError, OverflowError) as error:
+                if self.hazard is None:
+                    self.version += 1
                 self.hazard = str(error)
                 raise ValueError("PHYSICS_CLOCK_HISTORY_INVALID") from error
 

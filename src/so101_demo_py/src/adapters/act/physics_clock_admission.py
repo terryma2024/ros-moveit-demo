@@ -117,6 +117,10 @@ class PhysicsClockAdmission:
     def arm(self, *, ticket, generation, reset_epoch, session=None, incarnation=None):
         identity = self._full_identity(ticket, generation, reset_epoch, session, incarnation)
         with self._lock:
+            if self._retired and self.retire_record is not None:
+                valid_until = self.retire_record["stop_evidence"].get("valid_until_monotonic_ns")
+                if valid_until is not None and self._clock_ns() > valid_until:
+                    raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_EXPIRED")
             if self._identity is not None and not self._retired and not (
                     self._revoked is not None and self._stop_confirmed):
                 # An active owner (or one whose stop is unconfirmed) may not be
@@ -140,9 +144,18 @@ class PhysicsClockAdmission:
         physics clock stream.
         """
 
-        if not isinstance(stop_evidence, dict) or stop_evidence.get("authoritative") is not True \
-                or stop_evidence.get("stopped") is not True:
+        if (not isinstance(stop_evidence, dict)
+                or stop_evidence.get("authoritative") is not True
+                or stop_evidence.get("stopped") is not True
+                or type(stop_evidence.get("identity")) is not tuple
+                or stop_evidence["identity"] != tuple(identity)
+                or type(stop_evidence.get("monotonic_ns")) is not int
+                or (stop_evidence.get("valid_until_monotonic_ns") is not None
+                    and type(stop_evidence["valid_until_monotonic_ns"]) is not int)):
             raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_INVALID")
+        if (stop_evidence.get("valid_until_monotonic_ns") is not None
+                and self._clock_ns() > stop_evidence["valid_until_monotonic_ns"]):
+            raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_EXPIRED")
         candidate = _validated_identity(*identity) if len(identity) == 5 else None
         with self._lock:
             if candidate is None or candidate != self._identity:
@@ -271,6 +284,8 @@ class PhysicsClockAdmission:
             raise AdmissionRefused("CLOCK_ADMISSION_UNARMED")
         if identity != self._identity:
             raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_CHANGED")
+        if self._retired and identity == self._identity:
+            raise AdmissionRefused("CLOCK_ADMISSION_RETIRED")
         if self._revoked is not None:
             raise AdmissionRefused(f"CLOCK_ADMISSION_REVOKED:{self._revoked['reason']}")
         if self._history is not None and self._history.hazard is not None:
