@@ -38,7 +38,9 @@ def test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations()
         result = original_owner_is_active()
         observed["owner_active"] = result
         entered.set()
-        revoked.wait(barrier_timeout)          # bounded wait for the real revoker
+        # the discriminating observation: did the revoke complete *inside* the
+        # window between the owner read and the caller's return?
+        observed["revoke_completed_before_owner_return"] = revoked.wait(barrier_timeout)
         return result                          # saved observation, not a re-read
 
     admission.owner_is_active = owner_is_active_probe
@@ -61,7 +63,8 @@ def test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations()
     assert observed["owner_active"] is True
     revoker.start()
     worker.join(10.0)
-    revoke_completed_inside = revoked.is_set()
+    revoke_completed_inside = observed["revoke_completed_before_owner_return"]
+    assert revoked.is_set(), "the revoker must eventually complete"
     revoker.join(10.0)
     assert not worker.is_alive() and not revoker.is_alive(), "threads must terminate"
     assert "error" not in outcome, outcome
