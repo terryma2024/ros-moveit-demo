@@ -11,10 +11,11 @@ NOW_NS = 10_000_000_000
 
 def test_frozen_bounds_dominate_their_measured_maxima():
     assert bounds.SOURCE_STEP_GAP_NS >= bounds.OBSERVED_SOURCE_GAP_CONTEXT_NS * 2
-    assert bounds.MAX_AGE_S * 1e9 >= bounds.OBSERVED_AGE_AT_VALIDATION_NS * 2
-    assert bounds.MAX_SILENCE_S * 1e9 >= bounds.OBSERVED_CHUNK_INTER_ARRIVAL_NS * 2
-    assert bounds.MAX_SILENCE_S * 1e9 >= (bounds.OBSERVED_CHUNK_INTER_ARRIVAL_NS
-                                          + bounds.OBSERVED_WATCHDOG_POLL_MAX_NS)
+    assert bounds.MAX_AGE_S * 1e9 >= bounds.OBSERVED_AGE_AT_VALIDATION_ENVELOPE_NS * 2
+    assert bounds.OBSERVED_AGE_AT_VALIDATION_ENVELOPE_NS == (
+        bounds.OBSERVED_AGE_AT_CALLBACK_ENTRY_NS + bounds.OBSERVED_CALLBACK_COST_NS)
+    assert bounds.MAX_SILENCE_S * 1e9 >= bounds.OBSERVED_IN_WINDOW_CHUNK_GAP_NS * 2
+    assert bounds.MAX_SILENCE_S * 1e9 < bounds.OBSERVED_RESET_CROSSING_GAP_NS * 2
     assert bounds.FIRST_CHUNK_TIMEOUT_S * 1e9 >= bounds.OBSERVED_FIRST_CHUNK_NS * 3
     for value in (bounds.MAX_AGE_S, bounds.MAX_SILENCE_S, bounds.FIRST_CHUNK_TIMEOUT_S):
         assert round(value * 1000) % 50 == 0, value

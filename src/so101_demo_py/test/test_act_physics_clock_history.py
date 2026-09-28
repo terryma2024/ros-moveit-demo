@@ -269,3 +269,67 @@ def test_step_at_copies_only_the_selected_sample(monkeypatch):
     frames = history.recent_with_receipts()
     assert len(frames) == 20
     assert calls["count"] == 20
+
+
+def test_expired_first_chunk_deadline_blocks_a_late_chunk_without_any_poll():
+    """A delayed watchdog must not let a chunk revive an expired deadline."""
+
+    timeout_ns = 100_000_000
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = _bounded_history(now, first_chunk_timeout_s=timeout_ns / 1e9)
+    history.arm(1, source_floor_s=0.0)
+    armed_ns = now[0]
+    now[0] = armed_ns + timeout_ns
+    assert history.accept_chunk(_chunk(0, _sample(1))) is True          # exactly at the deadline
+    history = _bounded_history(now, first_chunk_timeout_s=timeout_ns / 1e9)
+    history.arm(1, source_floor_s=0.0)
+    armed_ns = now[0]
+    now[0] = armed_ns + timeout_ns + 1
+    with pytest.raises(ValueError):
+        history.accept_chunk(_chunk(0, _sample(1)))
+    assert history.hazard == "PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT"
+    assert history.evidence_ready is False
+
+
+def test_expired_silence_deadline_blocks_reads_and_late_chunks_without_any_poll():
+    silence_ns = 50_000_000
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = _bounded_history(now, max_silence_s=silence_ns / 1e9)
+    history.arm(1, source_floor_s=0.0)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    last_end_ns = history._last_source_end_ns
+    now[0] = last_end_ns + silence_ns
+    assert history.recent_with_receipts()[0]["sample"].physics_step == 1   # exactly at the deadline
+    now[0] = last_end_ns + silence_ns + 1
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_SILENT"):
+        history.step_at(1)
+    assert history.hazard == "PHYSICS_CLOCK_SILENT"
+    with pytest.raises(ValueError):
+        history.accept_chunk(_chunk(1, _sample(2)))
+    assert history.hazard == "PHYSICS_CLOCK_SILENT"
+    assert history.evidence_ready is False
+
+
+def test_armed_epoch_without_evidence_cannot_serve_any_sample():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = _bounded_history(now)
+    history.arm(1, source_floor_s=0.0)
+    assert history.check_health() is True
+    assert history.evidence_ready is False
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_UNAVAILABLE"):
+        history.step_at(1)
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_UNAVAILABLE"):
+        history.recent_with_receipts()
+
+
+def test_selected_sample_expiring_before_use_closes_the_epoch():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = _history(now)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    assert history.evidence_ready is True
+    assert history.step_at(1)["sample"].physics_step == 1
+    now[0] += 300_000_000
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_STALE"):
+        history.step_at(1)
+    assert history.hazard == "PHYSICS_CLOCK_STALE"
+    assert history.evidence_ready is False

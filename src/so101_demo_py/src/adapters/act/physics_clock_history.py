@@ -98,12 +98,30 @@ class PhysicsClockHistory:
         with self._lock:
             self.hazard = self.hazard or reason
 
+    def _expire_deadlines(self, now_ns):
+        """Latch an expired first-chunk or silence deadline. Caller holds the lock."""
+
+        if self.epoch is None or self.hazard is not None:
+            return
+        if not self._first_chunk_seen:
+            if (self.first_chunk_timeout_ns is not None
+                    and now_ns - self._armed_monotonic_ns > self.first_chunk_timeout_ns):
+                self.hazard = "PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT"
+        elif (self.max_silence_ns is not None
+                and now_ns - self._last_source_end_ns > self.max_silence_ns):
+            self.hazard = "PHYSICS_CLOCK_SILENT"
+
     def accept_chunk(self, chunk, *, received_monotonic_ns=None):
         with self._lock:
             if self.epoch is None or self.hazard is not None:
                 raise ValueError(self.hazard or "PHYSICS_CLOCK_UNARMED")
+            now_ns = _integer(self.clock_ns(), "readback_ns", 1)
+            # An expired deadline must close the epoch before acceptance updates
+            # history, even if the owner never polled check_health().
+            self._expire_deadlines(now_ns)
+            if self.hazard is not None:
+                raise ValueError(self.hazard)
             try:
-                now_ns = _integer(self.clock_ns(), "readback_ns", 1)
                 receipt_ns = (now_ns if received_monotonic_ns is None else
                               _integer(received_monotonic_ns, "receipt_ns", 1))
                 if receipt_ns > now_ns:
@@ -188,6 +206,9 @@ class PhysicsClockHistory:
             if not self._history:
                 raise ValueError("PHYSICS_CLOCK_UNAVAILABLE")
             now_ns = _integer(self.clock_ns(), "readback_ns", 1)
+            self._expire_deadlines(now_ns)
+            if self.hazard is not None:
+                raise ValueError(self.hazard)
             recent = tuple(copy.deepcopy(entry) for entry in self._history
                            if 0 <= now_ns - entry["sample"].clock_interval_end_monotonic_ns
                            <= self.max_age_ns)
@@ -218,25 +239,18 @@ class PhysicsClockHistory:
                        <= self.max_age_ns for entry in self._history)
 
     def check_health(self, *, now_ns=None):
-        """Latch a bounded silence or first-chunk failure and report health.
+        """Latch an expired health deadline and report whether the epoch is still open.
 
-        Returns True only while the armed epoch has produced at least one chunk
-        and neither the configured silence bound nor the first-chunk deadline has
-        been exceeded. The verdict is sticky: only a new arm clears it. Without
-        explicit bounds no silence claim is made, so production wiring must
-        supply them.
+        True means only "armed and no deadline has expired yet". It is explicitly
+        **not** evidence: before the first accepted chunk it says nothing about
+        availability, and callers must require `evidence_ready` before using any
+        sample, permit or goal.
         """
         with self._lock:
             if self.epoch is None or self.hazard is not None:
                 return False
             now = _integer(self.clock_ns() if now_ns is None else now_ns, "readback_ns", 1)
-            if not self._first_chunk_seen:
-                if (self.first_chunk_timeout_ns is not None
-                        and now - self._armed_monotonic_ns > self.first_chunk_timeout_ns):
-                    self.hazard = "PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT"
-            elif (self.max_silence_ns is not None
-                    and now - self._last_source_end_ns > self.max_silence_ns):
-                self.hazard = "PHYSICS_CLOCK_SILENT"
+            self._expire_deadlines(now)
             return self.hazard is None
 
     def step_at(self, physics_step):
@@ -253,6 +267,9 @@ class PhysicsClockHistory:
             if not self._history:
                 raise ValueError("PHYSICS_CLOCK_UNAVAILABLE")
             now_ns = _integer(self.clock_ns(), "readback_ns", 1)
+            self._expire_deadlines(now_ns)
+            if self.hazard is not None:
+                raise ValueError(self.hazard)
             any_fresh = False
             for entry in reversed(self._history):
                 fresh = 0 <= now_ns - entry["sample"].clock_interval_end_monotonic_ns <= self.max_age_ns
