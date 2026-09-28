@@ -569,30 +569,33 @@ def test_authority_consume_actively_validates_history_at_its_own_point():
 
 
 def test_authority_consume_refuses_without_accepted_evidence():
+    """Structure exists but no accepted chunk: refuse and leave authority untouched."""
+
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
-    history, admission = _ready(now)
-    if "test_authority_consume_refuses_without_accepted_evidence" == "test_authority_consume_refuses_without_accepted_evidence":
-        history = _admission(now)[0]
-        admission = _admission(now)[1]
-        admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
-    expected = ("CLOCK_ADMISSION_HISTORY_NOT_READY"
-                if "test_authority_consume_refuses_without_accepted_evidence" == "test_authority_consume_refuses_without_accepted_evidence"
-                else "CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID")
-    token = (_token(admission._history, 1)
-             if "test_authority_consume_refuses_without_accepted_evidence" == "test_authority_consume_refuses_without_accepted_evidence"
-             else dict(_token(admission._history, 1), history_version=-1))
+    history, admission = _admission(now)
+    admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
+    assert history.evidence_ready is False
+
+    from so101_demo.adapters.act import authority_transaction
+
+    registry = authority_transaction.AuthorityTransactionRegistry(
+        clock_ns=lambda: now[0], history=history)
+    port = authority_transaction.ReservationFakeControllerPort(clock_ns=lambda: now[0])
+    handle = registry.issue_handle(identity=admission.identity, stage="route_dispatch", step=1,
+                                   history_version=history.snapshot()["version"],
+                                   incarnation=history.incarnation, epoch=1, role="arm",
+                                   controller_generation=1, goal_uuid="g-1", target_digest="d-1")
     executed = []
-    with pytest.raises(AdmissionRefused, match=expected):
+    version_before = history.snapshot()["version"]
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_HISTORY_NOT_READY"):
         executed.append(admission.consume_authority(
             ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
-            evidence_token=token, controller_generation=1))
-    assert executed == []
-    foreign = dict(_token(admission._history, 1), incarnation="other-incarnation")
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
-        executed.append(admission.consume_authority(
-            ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
-            evidence_token=foreign, controller_generation=1))
-    assert executed == []
+            evidence_token=_token(history, 1), controller_generation=1))
+    assert executed == []                                    # no stage commit, no receipt
+    assert history.snapshot()["version"] == version_before    # history untouched
+    assert registry.state_of(handle) == "READY"               # no permit claim
+    assert port.reserve_calls == 0 and port.send_calls == 0   # no reservation, no send
+
 
 def test_controller_generation_is_checked_inside_the_consume_section():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
@@ -990,28 +993,32 @@ def test_read_copy_commit_uses_time_read_after_the_final_copy():
 
 
 def test_consume_rejects_negative_and_foreign_versions():
+    """Negative versions and foreign incarnations are refused without any side effect."""
+
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission = _ready(now)
-    if "test_consume_rejects_negative_and_foreign_versions" == "test_authority_consume_refuses_without_accepted_evidence":
-        history = _admission(now)[0]
-        admission = _admission(now)[1]
-        admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
-    expected = ("CLOCK_ADMISSION_HISTORY_NOT_READY"
-                if "test_consume_rejects_negative_and_foreign_versions" == "test_authority_consume_refuses_without_accepted_evidence"
-                else "CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID")
-    token = (_token(admission._history, 1)
-             if "test_consume_rejects_negative_and_foreign_versions" == "test_authority_consume_refuses_without_accepted_evidence"
-             else dict(_token(admission._history, 1), history_version=-1))
+    version_before = history.snapshot()["version"]
     executed = []
-    with pytest.raises(AdmissionRefused, match=expected):
-        executed.append(admission.consume_authority(
-            ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
-            evidence_token=token, controller_generation=1))
-    assert executed == []
-    foreign = dict(_token(admission._history, 1), incarnation="other-incarnation")
+
+    negative = dict(_token(history, 1), history_version=-1)
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
         executed.append(admission.consume_authority(
             ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
-            evidence_token=foreign, controller_generation=1))
-    assert executed == []
+            evidence_token=negative, controller_generation=1))
+
+    foreign_incarnation = dict(_token(history, 1), incarnation="other-incarnation")
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
+        executed.append(admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
+            evidence_token=foreign_incarnation, controller_generation=1))
+
+    foreign_epoch = dict(_token(history, 1), reset_epoch=99)
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
+        executed.append(admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1, stage="submit",
+            evidence_token=foreign_epoch, controller_generation=1))
+
+    assert executed == []                                     # no stage commit, no receipt
+    assert history.snapshot()["version"] == version_before     # history untouched
+
 

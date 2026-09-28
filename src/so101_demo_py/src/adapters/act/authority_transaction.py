@@ -281,7 +281,7 @@ class ReservationFakeControllerPort:
         return REJECTED
 
     def send(self, *, goal_uuid, permit_id, role="arm", target_digest="d-1", generation=None,
-             observed_ns=None):
+             observed_ns=None, controller_incarnation=None, sequence=None, deadline_ns=None):
         with self._lock:
             self.send_calls += 1
             if self._restarted or self._io_blocked or self._close_first:
@@ -294,6 +294,13 @@ class ReservationFakeControllerPort:
             if role != reservation["role"] or target_digest != reservation["target_digest"]:
                 return REJECTED
             if generation is not None and generation != self._generation:
+                return REJECTED
+            if (controller_incarnation is not None
+                    and controller_incarnation != self._incarnation):
+                return REJECTED
+            if sequence is not None and sequence < 1:
+                return REJECTED
+            if deadline_ns is not None and deadline_ns != reservation["deadline_ns"]:
                 return REJECTED
             if self._clock_ns() > reservation["deadline_ns"]:
                 del self._reservations[permit_id]
