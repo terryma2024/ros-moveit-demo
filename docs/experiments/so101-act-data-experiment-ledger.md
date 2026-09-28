@@ -7724,3 +7724,22 @@ brief: CP-709; hook points: `experiments/gate6-runtime/task8-core/t8p3-remaining
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED; 43 dirty entries and 12 untracked user files
   preserved; nothing deleted.
+
+## CP-713 — Task 8P3 sub-slice C: the single legal case journal path
+
+- **Delivered:** `resolve_case_journal_path(run_root, case_id)` in `act/task8_live_evidence.py`:
+  absolute, `..`-free, non-symlink run root; case id restricted to `[a-z]+-[0-9]{2}`; journals
+  strictly under `<run-root>/task8-live/cases/` with a non-symlink directory; an existing case
+  journal raises `TASK8_JOURNAL_EXISTS` and an existing `campaign-result.json` raises
+  `TASK8_CAMPAIGN_JOURNAL_EXISTS`. This encodes three of sub-slice C's guardrails in code rather
+  than in prose: no splicing old cases into a continuation, and no hiding a first failure.
+- **Verification:** recorder suite **20 passed**
+  (`gate6-batch3-py-gate/t8p3journal.{log,junit.xml}`), including the rejection cases
+  (`../escape`, `prefix-1`, `PREFIX-01`, empty, non-string) and both existence guards.
+- **Remaining:** the `CLOSE..FINAL_CHECK` capture-path extraction inside `pick_place_readback.py`
+  (hunk-staged against 191 lines of pre-existing user work), the rest of sub-slice C (one
+  production call, journals carrying live evidence and both retirement receipts), sub-slice B, the
+  combined 8P3/8P4 xdist gate, 8P4, Tasks 9/10/11/11A-5, the final HEAD freeze, Task 8L, W1, W2,
+  the 40-scene exact-W8 qualification, formal W8 and Task 12.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
