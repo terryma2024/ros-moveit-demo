@@ -782,17 +782,32 @@ def test_confirm_stop_requires_authoritative_identity_bound_evidence():
 
 
 def test_selected_age_crossing_after_the_final_snapshot_is_rejected():
+    """The age decision must use a time read at the commit point, not a cached one."""
+
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission = _ready(now, selected_max_age_s=.05)
     last_end_ns = history._last_source_end_ns
-    calls = {"n": 0}
-    base = admission._clock_ns
+    reached = {"copied": False}
+    original = history.step_at
 
-    def crossing_clock():
-        calls["n"] += 1
-        return last_end_ns + (20_000_000 if calls["n"] == 1 else 80_000_000)
+    def slow_copy(step):
+        entry = original(step)
+        reached["copied"] = True
+        now[0] = last_end_ns + 80_000_000          # the isolated copy consumed 60 ms
+        return entry
 
-    admission._clock_ns = crossing_clock
+    history.step_at = slow_copy
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_SELECTED_STALE"):
+        admission.admit_sample(sample=_sample(1), ticket="clock-session", generation=1,
+                               reset_epoch=1)
+    assert reached["copied"] is True
+
+
+def test_admission_age_is_never_taken_from_a_cached_pre_copy_time():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _ready(now, selected_max_age_s=.05)
+    last_end_ns = history._last_source_end_ns
+    now[0] = last_end_ns + 80_000_000              # stale before the call even starts
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_SELECTED_STALE"):
         admission.admit_sample(sample=_sample(1), ticket="clock-session", generation=1,
                                reset_epoch=1)
