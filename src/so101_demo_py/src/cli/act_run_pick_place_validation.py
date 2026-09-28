@@ -128,15 +128,18 @@ def _case_owner_factory(lifecycle, spec):
     return make_case
 
 
-async def run_admitted_campaign(spec, lifecycle, journal_path: Path) -> dict:
+async def run_admitted_campaign(spec, lifecycle, journal_path: Path, *,
+                                journal_parent: Path | None = None) -> dict:
     """Run every frozen case through the production full-restart composition."""
     _validate_local_paths(spec, journal_path)
     composition = trusted_full_restart_composition()
     if composition is None:
         raise ValueError("FULL_RESTART_PROOF_UNAVAILABLE")
     make_case = _case_owner_factory(lifecycle, spec)
-    return await composition(Path(spec.payload["manifest_path"]),
-                             Path(journal_path).parent, make_case)
+    # an explicit parent lets the caller pin the run root the journal plan was built from, while the
+    # default keeps the historical behaviour of using the requested journal's directory
+    parent = Path(journal_parent) if journal_parent is not None else Path(journal_path).parent
+    return await composition(Path(spec.payload["manifest_path"]), parent, make_case)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -193,7 +196,11 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("TASK8_SERVICE_ROOT_MISMATCH")
     owner = ActCampaignChildOwner(services.bridge.launch, services.arbiter, services.safety)
     lifecycle = ActCampaignLifecycle(services.act_workload, owner)
-    result = asyncio.run(run_admitted_campaign(spec, lifecycle, args.journal))
+    run_root = None
+    if args.journal_run_root is not None:
+        run_root = Path(args.journal_run_root) / "task8-live" / "cases"
+    result = asyncio.run(run_admitted_campaign(spec, lifecycle, args.journal,
+                                               journal_parent=run_root))
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0
 
