@@ -160,3 +160,35 @@ def test_too_few_episodes_or_a_cross_split_chunk_refuses_evaluation(tmp_path):
     with pytest.raises(ValueError, match="CROSS_SPLIT_CHUNK_FORBIDDEN"):
         evaluate_offline(manifest, bundle, freeze, tmp_path / "cross" / "r.json",
                          policy_loader=lambda _bundle: _FixedPolicy())
+
+
+def test_cli_evaluates_through_an_injected_loader_and_leaves_no_output_on_refusal(tmp_path, capsys):
+    from so101_demo.cli.act_offline_evaluate import main
+
+    manifest, bundle, freeze = _frozen(tmp_path)
+    output = tmp_path / "report.json"
+    argv = ["--manifest", str(manifest), "--bundle", str(bundle), "--freeze", str(freeze),
+            "--output", str(output)]
+    assert main(argv, policy_loader=lambda _bundle: _FixedPolicy()) == 0
+    printed = json.loads(capsys.readouterr().out)
+    assert printed["episode_count"] == 10 and printed["byte_weighted"] is False
+    assert output.is_file()
+
+    # a refusal must not leave an output file behind
+    refused = tmp_path / "refused.json"
+    frozen_digest = json.loads(Path(freeze).read_text())
+    frozen_digest["calibration_sha256"] = "d" * 64
+    Path(freeze).write_text(json.dumps(frozen_digest))
+    with pytest.raises(ValueError, match="FREEZE_DIGEST_MISMATCH"):
+        main(["--manifest", str(manifest), "--bundle", str(bundle), "--freeze", str(freeze),
+              "--output", str(refused)], policy_loader=lambda _bundle: _FixedPolicy())
+    assert not refused.exists()
+
+
+def test_the_production_loader_fails_closed_rather_than_reaching_for_a_model(tmp_path):
+    from so101_demo.cli.act_offline_evaluate import _policy_loader
+
+    # no torch in the test interpreter, so the production path must refuse precisely rather than guess
+    with pytest.raises(ValueError,
+                       match="OFFLINE_EVALUATION_(TRAINING_INTERPRETER_REQUIRED|LOADER_UNAVAILABLE)"):
+        _policy_loader({})
