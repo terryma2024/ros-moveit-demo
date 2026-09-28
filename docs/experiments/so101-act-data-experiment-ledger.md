@@ -6841,3 +6841,8 @@ status: PLANNED_ISOLATED_STACK
   - 结论：当前架构**缺少**一个 broker 组合层的所有者，无法在不伪造依赖的前提下完成“SEARCH admitted 证据 → registry 签发/捕获/认领 → 关联不透明 handle → \`_dispatch_reserved\`”这条链。
 - **所需的最小集成对象/API（请人类确认归属后再实现）**：一个在 broker 组合处（\`ros_child.py:270\` / \`act_command_broker.py:141\`）**构造并持有**的 broker 级对象，例如 \`BrokerAuthorityComposition\`，其职责为：(a) 构造/持有 \`RosPhysicsClockAdapter\` → \`PhysicsClockHistory\` → \`PhysicsClockAdmission\` → 控制器端口 → \`AuthorityTransactionRegistry\`，并在构造后**一次** \`bind(...).seal()\`；(b) 暴露 \`adopt_admitted_evidence(evidence)\`（由 SEARCH 侧把**已被接受**的证据交给它）→ 内部 issue/capture/claim → \`associate_handle(ticket, handle)\`，该操作**只接受**精确 \`PermitHandle\`，在 broker 自有 registry 内解析、要求 IN_FLIGHT 且与同一活动 ticket/session/generation/role/goal 绑定后才存储，**不接受**任何原始绑定字段；(c) 以私有依赖形式一次性注入 \`ControllerReservationClient\`（类型/身份校验为真实封存的 \`AuthorityTransactionRegistry\`，**不是** duck-typing），封存后不可重绑；(d) Gate-6 绑定模式**显式且失败关闭**——缺解析器或 handle 时拒绝并撤销/关闭，**无旧路径回退**；旧 \`reserve(...)\` 若需保留，必须是启动时选择的**独立模式**。
 - 不变量：Gate 5 DONE（范围仅源码/设计与离线契约）；**无生产权威、无运行时目标、无运动、无正式 episode**；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 关闭；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-678 — CP-677 的两处更正（如实）
+
+- CP-677 中“stale docstring 已在本提交修正”的表述**不准确**：该次替换未匹配成功，\`authority_transaction.py\` 中的过时描述当时仍在。真正的修正落在本次提交（按行替换，\`no registry-clock read follows it and there is no second history validation\`，\`grep\` 已验证）。历史条目不改写，在此更正。
+- 其余内容（Batch 2 第二次判定的 NONQUALIFYING 记录，以及**缺失的 broker 组合层 owner 边界**与最小所需 API 提议）不变，等待人类决定归属后再实现。
