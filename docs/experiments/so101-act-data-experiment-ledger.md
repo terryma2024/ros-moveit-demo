@@ -7492,3 +7492,26 @@ ancestors; reviewed plan SHA256 verified as
   live evidence plus both retirement receipts. Then the combined 8P3/8P4 xdist gate and Task 8P4.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED; unrelated dirty files preserved.
+
+## CP-703 — Task 8P3: live manifest v2 with calibration binding
+
+- **Change:** the Task 8 live manifest moved to `schema_version: 2` and now freezes the calibration
+  report it will be bound to (`calibration_report_path` rebased + `calibration_report_sha256`) and
+  carries `manifest_document_sha256` as its internal digest; the validator recomputes that digest,
+  and v1 documents are refused. `act_prepare_pick_place_validation` gained `--calibration-report`
+  and prints the v2 digest.
+- **Three real defects found while propagating (all fixed):** the validator still recomputed the v1
+  digest, so any v2 document raised `KeyError` instead of a verdict; the prepare CLI printed the
+  old digest name; and two live-test builder call sites went through the legacy alias
+  `task8_manifest.build_task8_live_manifest`, which a canonical-name search had missed.
+- **Rename boundary confirmed, not assumed:** the campaign payload/context key `manifest_sha256`
+  (the manifest FILE digest used by admission, case execution and the startup proof) and the
+  unrelated approach/route manifest digests are unchanged; only the Task 8 live manifest's internal
+  document digest was renamed.
+- **Verification:** five focused suites -> **32 passed**
+  (`gate6-batch3-py-gate/t8p3v2{f,junit.xml}`, after the 16-failure intermediate state recorded in
+  `t8p3v2{,b,c,d,e}.log`). The untracked in-progress user test
+  `test_act_pick_place_approach_source_binding.py` received the two now-required builder keyword
+  arguments (mechanically, no behaviour change) and remains **untracked and uncommitted**.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
