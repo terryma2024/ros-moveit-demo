@@ -9509,3 +9509,25 @@ This resolves the design block **without authorizing runtime or motion**.
   padding mask), the LeRobot adapter, `train_act` and the `act_train` CLI.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-791 — Task 12: the frozen training configuration
+
+- **Delivered:** `config/act/training.yaml` and `act/training_config.py` with `load_training_config`, plus
+  `test_act_training_config.py`.
+  - the plan's pinned smoke contract: `chunk_size: 10`, `execution_prefix: 1`,
+    `temporal_ensembling: false`, `tail_padding_mask: true`, cameras `[head, wrist]`, state 8 → action 6,
+    normalisation split `train`, and the frozen `seed` / `preprocessing_sha256`.
+  - **drift is a refusal, not an edit:** `TRAINING_CHUNK_SIZE_DRIFT`, `TRAINING_EXECUTION_PREFIX_DRIFT`,
+    `TRAINING_TEMPORAL_ENSEMBLING_FORBIDDEN`, `TRAINING_PADDING_MASK_REQUIRED` (a tail padded to complete a
+    chunk must be masked, never completed with another episode's frames), `TRAINING_CAMERAS_INVALID`,
+    `TRAINING_DIMENSIONS_INVALID`, `TRAINING_NORMALIZATION_NOT_TRAIN_ONLY`, and extra or missing keys
+    refused rather than ignored. The tests read the **real** config and mutate it per case.
+- **A YAML subtlety worth recording:** `preprocessing_sha256` written unquoted as 64 zeros is parsed as an
+  **integer**, so the loader correctly refused a `str` field arriving as `int`. It is now quoted, with a
+  comment naming the trap — a real hash of only digits would hit exactly this.
+- **Verification:** focused tests **3 passed** (`gate6-batch3-py-gate/task12e2.{log,junit.xml}`).
+- **Remaining in Task 12:** `config/act/requirements.lock` and its loader, the LeRobot adapter,
+  `train_act`, and the `act_train` CLI. The real dependency versions cannot be resolved until a training
+  interpreter exists, which the session's no-runtime boundary excludes.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
