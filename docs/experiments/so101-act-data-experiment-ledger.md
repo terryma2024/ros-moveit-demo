@@ -6292,5 +6292,5 @@ status: PLANNED_ISOLATED_STACK
 
 - 对注册证据根下**全部实验 checkpoint** 做逐文件哈希复核（共 3,600+ 个被索引文件）：除一处外全部一致；唯一漂移是 `exp568-authority-transaction/lock-order-audit.json`——本轮按第六次复核 P2 要求**有意**扩充了审计（A-1/A-2 closure 证据与 extended_scope），而其 checkpoint 写在该扩充之前。修复方式为**追加**：checkpoint 增加 `additive_updates` 记录（旧哈希/新哈希/原因）并重新索引，新 SHA256 `b9430ea3ea556b721b4898bc2595992de53ac8d9a5ea23f3468dee3636cb5989`；不改写、不删除任何既有证据。
 - 同时复核 amended RED 快照的**实现同一性**：`exp569-amended-red` 中的 `physics_clock_admission.py` 与 `physics_clock_history.py` 与 `git show 9f1cd77c` 对应文件**逐字节一致**，确认 RED 基线确实运行的是修复前实现。
-- 巡检结果与同一性结论固化为 `experiments/exp569-authority-protocol/evidence-integrity-sweep.json`。
+- 说明：少数早期实验（如 exp523）的 checkpoint 使用带标签的嵌套 schema，本轮用 schema-aware 遍历复核（无漂移），未将其误报为漂移。巡检结果与同一性结论固化为 `experiments/exp569-authority-protocol/evidence-integrity-sweep.json`。
 - 状态：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
