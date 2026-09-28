@@ -6780,3 +6780,10 @@ status: PLANNED_ISOLATED_STACK
 - 原始证据（追加式）：`experiments/exp573-single-receipt/red-terminate-raw.txt`（argv、解释器、cwd、PYTHONPATH、原始 tempfile、导入溯源、基线提交、逐文件等价证明、起止时间、elapsed、rc、失败/错误/警告扫描、源哈希）、`red-terminate.log`、`red-terminate-junit.xml`；GREEN 对照为 `r14-terminal`（10 passed）。
 - **未改动**：review-14 请求包与已冻结的 `inventory-snapshot-review14-final.json` 均未修改；本轮只新增补充文件 `handoff/2026-09-28-review14-supplement-exp573.md` 与本 ledger 指针（源码/清单冻结提交之后）。HEAD `521933f1`，`git status --short | wc -l` = 42（仅既有 dirty entries）。
 - 边界：Gate 5 OPEN，**等待第十四次独立复核**，不自批；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0，Task 12 NOT_STARTED）；证据追加式，无删除或覆盖。
+
+## CP-672 — Gate 5 独立复核 14 **APPROVE**（范围严格限定）：Gate 5 **DONE**
+
+- 复核报告 \`handoff/2026-09-28-local-astra-gate5-review14.md\`，SHA256 \`801da9716d18aebbb76440f0cba1f14c5eb383eba414da449477ebd47df64c12\`（已校验），审查 HEAD \`79672099\`、源码冻结 \`067bf6d8\`；结论 **APPROVE**，不可变收据 \`handoff/2026-09-28-local-astra-gate5-review14.receipt\`。
+- **批准的准确范围（不得扩大）**：仅 **Gate 5 源码/设计与离线契约**，作为 Gate 6 接线的技术基础。**不**授权 Gate 6 runtime、控制器权威、目标下发、运动或正式采集。报告确认：无遗留 P0/P1/P2；单向终止器（无覆盖、已终态不重写）；合法 UNKNOWN/REJECTED receipt 保留终态与不可变原因并完成关闭/不可用/二次不发送/不复活；整数键、额外 handle 键、None readback、send 超时均以 UNKNOWN 闭合；close 失败记录 \`close_failed/fencing_required\` 且仍禁止复用；契约与实现一致、历史文字非权威、审计以 \`exp573_lock_graph\` 为现行；并独立复核了三项并发边界（reserve 处同 permit 的代次/重启变化零发送并终态关闭；真实 \`step_at\` 深拷贝阻塞期间撤销可完成；真实 send 入口阻塞期间撤销可完成）。
+- **Gate 5 状态：DONE**（本 ledger 记录为准）。**不变量不变**：正式 accepted Train/Validation/Offline Test = **0/0/0**；Task 12 = **NOT_STARTED**；Gate 6 runtime 仍然关闭，直到预运行时门禁通过并获得下一次明确授权。
+- 下一步进入 Gate 6 源码集成（无生产权威、不起运行时目标/运动）：以已批准契约与现行实现计划为准，映射真实代码路径，按小批次 TDD 推进；\`RosPhysicsClockAdapter\` 接入 \`PickPlaceRosEvidence\` 与 SEARCH；owner 轮询须surface/latch 危险并 fail-closed 撤销当前身份；把 broker 自有控制器身份与单一最终 history receipt 语义带到真实集成边界；实现真实 C++ 预留/接收临界区与 generation/boot/UUID fencing、超时、关闭与取消语义，但**保持生产权威禁用**；campaign/资源绑定校验不得越过启动入口边界；仅 MuJoCo。每次 pytest 使用注册证据根下唯一且此前不存在的 scratch 并保留原始证据；证据追加式。
