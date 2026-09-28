@@ -536,3 +536,52 @@ def test_evidence_port_factory_seals_through_its_driver(tmp_path):
     sealed = _Path(artifact["path"])
     assert sealed.is_file()
     assert _hashlib.sha256(sealed.read_bytes()).hexdigest() == artifact["sha256"]
+
+
+def test_chain_reaches_a_validated_journal_row_from_real_evidence(tmp_path):
+    """Real runner -> sealed artifact -> journal row -> the aggregator's own validation."""
+
+    import hashlib as _hashlib
+    import json as _json
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from test_act_task8 import request as runner_request
+
+    from so101_demo.act.task8 import Task8Runner
+    from so101_demo.act.task8_live_evidence import (
+        CaseEvidenceDriver, case_row_to_journal_row, require_case_row_matches_bundle,
+    )
+
+    receipt, _, manifest, identities = _full_fixture(tmp_path)
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    driver = CaseEvidenceDriver(case_id="full-01", staging_root=staging, session_id="session-1",
+                                attempt_id="full-01", reset_epoch=4)
+    result = Task8Runner(_evidence_port(driver)).run(runner_request(mode="full", stop_after=None))
+    artifact = result["live_evidence_artifact"]
+    assert _Path(artifact["path"]).is_file()
+
+    # the two retirement receipts a real case would have produced
+    receipts = {}
+    for name in ("stack", "child"):
+        path = tmp_path / f"{name}-cleanup-receipt.json"
+        path.write_text(_json.dumps({"group_clear": True}))
+        receipts[name] = path
+
+    published = {
+        "case_id": "full-01", "mode": "full", "status": result["status"],
+        "live_evidence_path": artifact["path"], "live_evidence_sha256": artifact["sha256"],
+        "child_retirement_receipt_path": str(receipts["child"]),
+        "child_receipt_sha256": _hashlib.sha256(receipts["child"].read_bytes()).hexdigest(),
+        "stack_retirement_receipt_path": str(receipts["stack"]),
+        "stack_receipt_sha256": _hashlib.sha256(receipts["stack"].read_bytes()).hexdigest(),
+    }
+    row = case_row_to_journal_row(published, identities=identities,
+                                  manifest_document_sha256=manifest["manifest_document_sha256"])
+    # the aggregator's identity binding accepts the row, and the artifact's bytes still match
+    require_case_row_matches_bundle(row, identities=identities,
+                                    manifest_document_sha256=manifest["manifest_document_sha256"])
+    assert _hashlib.sha256(_Path(row["live_evidence_path"]).read_bytes()).hexdigest() == \
+        row["live_evidence_sha256"]
