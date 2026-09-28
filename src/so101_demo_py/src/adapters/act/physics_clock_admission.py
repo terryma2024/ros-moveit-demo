@@ -32,6 +32,7 @@ EXPIRY_REASONS = frozenset({
     "PHYSICS_CLOCK_STALE",
 })
 STAGES = frozenset({"sample", "proof", "permit", "submit", "final_acceptance"})
+STOP_EVIDENCE_MAX_AGE_NS = 5_000_000_000
 MAX_IDENTITY_INT = 2 ** 63 - 1
 _MISSING = object()
 
@@ -81,6 +82,36 @@ class AdmissionRefused(ValueError):
     """The broker refused a stage because the clock identity is unusable."""
 
 
+def validate_stop_evidence(identity, evidence, *, now_ns):
+    """Shared authoritative stop-evidence validation for both stop paths.
+
+    Requires an authoritative, identity-bound, stopped report whose observation
+    time is neither stale nor in the future and whose lifetime is explicitly
+    finite and unexpired.
+    """
+
+    if (not isinstance(evidence, dict)
+            or evidence.get("authoritative") is not True
+            or evidence.get("stopped") is not True
+            or type(evidence.get("identity")) is not tuple
+            or evidence["identity"] != tuple(identity)
+            or type(evidence.get("monotonic_ns")) is not int
+            or evidence["monotonic_ns"] <= 0
+            or type(evidence.get("valid_until_monotonic_ns")) is not int):
+        raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_INVALID")
+    observed_ns = evidence["monotonic_ns"]
+    expires_ns = evidence["valid_until_monotonic_ns"]
+    if expires_ns <= observed_ns:
+        raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_INVALID")
+    if observed_ns > now_ns:
+        raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_FUTURE")
+    if now_ns > expires_ns:
+        raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_EXPIRED")
+    if now_ns - observed_ns > STOP_EVIDENCE_MAX_AGE_NS:
+        raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_STALE")
+    return evidence
+
+
 class PhysicsClockAdmission:
     """Broker-owned admission gate; every critical section is O(1)."""
 
@@ -118,9 +149,9 @@ class PhysicsClockAdmission:
         identity = self._full_identity(ticket, generation, reset_epoch, session, incarnation)
         with self._lock:
             if self._retired and self.retire_record is not None:
-                valid_until = self.retire_record["stop_evidence"].get("valid_until_monotonic_ns")
-                if valid_until is not None and self._clock_ns() > valid_until:
-                    raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_EXPIRED")
+                validate_stop_evidence(self.retire_record["identity"],
+                                       self.retire_record["stop_evidence"],
+                                       now_ns=self._clock_ns())
             if self._identity is not None and not self._retired and not (
                     self._revoked is not None and self._stop_confirmed):
                 # An active owner (or one whose stop is unconfirmed) may not be
@@ -144,18 +175,7 @@ class PhysicsClockAdmission:
         physics clock stream.
         """
 
-        if (not isinstance(stop_evidence, dict)
-                or stop_evidence.get("authoritative") is not True
-                or stop_evidence.get("stopped") is not True
-                or type(stop_evidence.get("identity")) is not tuple
-                or stop_evidence["identity"] != tuple(identity)
-                or type(stop_evidence.get("monotonic_ns")) is not int
-                or (stop_evidence.get("valid_until_monotonic_ns") is not None
-                    and type(stop_evidence["valid_until_monotonic_ns"]) is not int)):
-            raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_INVALID")
-        if (stop_evidence.get("valid_until_monotonic_ns") is not None
-                and self._clock_ns() > stop_evidence["valid_until_monotonic_ns"]):
-            raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_EXPIRED")
+        validate_stop_evidence(tuple(identity), stop_evidence, now_ns=self._clock_ns())
         candidate = _validated_identity(*identity) if len(identity) == 5 else None
         with self._lock:
             if candidate is None or candidate != self._identity:
@@ -264,13 +284,7 @@ class PhysicsClockAdmission:
                 raise AdmissionRefused("CLOCK_ADMISSION_STOP_NOT_CONFIRMED")
             if self._revoked is None:
                 raise AdmissionRefused("CLOCK_ADMISSION_NOT_REVOKED")
-            if (not isinstance(evidence, dict)
-                    or evidence.get("authoritative") is not True
-                    or evidence.get("stopped") is not True
-                    or type(evidence.get("identity")) is not tuple
-                    or evidence["identity"] != self._identity
-                    or type(evidence.get("monotonic_ns")) is not int):
-                raise AdmissionRefused("CLOCK_ADMISSION_STOP_EVIDENCE_INVALID")
+            validate_stop_evidence(self._identity, evidence, now_ns=self._clock_ns())
             confirmed_ns = self._clock_ns()
             self._stop_confirmed = True
             self._revoked["confirmed_stop_monotonic_ns"] = confirmed_ns
