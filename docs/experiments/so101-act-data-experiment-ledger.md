@@ -10730,3 +10730,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** still no runtime or motion started in this round, no hardware, no Gazebo, no push, no evidence
   deleted, no gate lowered, no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal
   accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-842 — Launch surface enumerated read-only; the evidence-root override is mandatory
+
+- **Read-only enumeration, no node started:** `ros2 launch so101_demo_py so101_mujoco_act.launch.py
+  --show-args` (rc=120, which is that flag's normal exit after printing) returned the argument surface, saved
+  as `runtime-task8l-gen2/logs/launch-show-args.txt`. The launch file is the 5-line wrapper
+  `build_task_station_launch_description(act_profile=True)`, and `act_profile` is fixed to `true` for it.
+- **A trap found before it could bite:** the launch's `task_evidence_root` defaults to
+  **`/tmp/so101-task-station-<session_id>`**. A launch that omits the override would silently write this
+  generation's evidence outside the registered root, which the repository rule forbids. The measurement step
+  must therefore pass `task_evidence_root:=<subroot>/live` explicitly along with an explicit `session_id`.
+- **Other arguments recorded:** `headless` (default false), `sensor_rendering` (true),
+  `include_teleop` (false, kept false - teleop is not part of Task 8L), `teleop_port`. Runbook written to
+  `runtime-task8l-gen2/provenance/launch-runbook.md` with the order of operations and the stop conditions
+  (CPU/GPU/RAM/disk, RTF, recorder queue, 10 Hz continuity, throughput, QC, socket path: stop and preserve,
+  never adjust a threshold or fall back to CPU).
+- **Process table verified clean:** the one process my scan matched was `gvfsd-trash --spawner` (pid 5478,
+  running for 1 day 13 hours), a pre-existing desktop service and not mine; no `ros2 launch`, `move_group`,
+  MuJoCo or `spawner` process is running. So the measurement step still starts from an empty table.
+- **Boundaries:** still no runtime or motion started, no hardware, no Gazebo, no push, no evidence deleted, no
+  gate lowered, no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted
+  0/0/0; `collection_*` NOT_PROVISIONED.
