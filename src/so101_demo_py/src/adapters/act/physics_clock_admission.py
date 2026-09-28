@@ -417,6 +417,26 @@ class PhysicsClockAdmission:
                     "identity": identity, "history_version": receipt["version"],
                     "command_authority": False, "stage": "sample"}
 
+    def history_commit_receipt(self, *, token, step, max_age_ns=None):
+        """Broker-internal commit used by the authority claim (never called by callers)."""
+
+        history = self._history
+        if history is None:
+            raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_REQUIRED")
+        with self._lock:
+            self._fence_locked(tuple(token["identity"]), token.get("stage", "route_dispatch"),
+                               self._clock_ns())
+            if token.get("owner_identity") is not None \
+                    and tuple(token["owner_identity"]) != self._identity:
+                raise AdmissionRefused("CLOCK_ADMISSION_OWNER_IDENTITY_MISMATCH")
+            try:
+                return history.commit_receipt(
+                    expected_version=token["history_version"],
+                    expected_incarnation=token["incarnation"], expected_epoch=token["reset_epoch"],
+                    step=step, max_age_ns=max_age_ns or self._selected_max_age_ns)
+            except ValueError as error:
+                raise AdmissionRefused(f"CLOCK_ADMISSION_COMMIT_REFUSED:{error}") from error
+
     def consume_authority(self, *, ticket, generation, reset_epoch, stage, evidence_token,
                           controller_generation):
         """Fixed-semantic authority consume: no callback, no caller time.
