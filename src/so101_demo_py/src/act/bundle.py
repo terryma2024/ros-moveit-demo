@@ -77,7 +77,10 @@ def resolve_committed_episodes(*, manifest: dict, campaign_index) -> tuple:
 
 
 BUNDLE_KEYS = frozenset({"schema_version", "kind", "model_source", "dataset_sha256", "config_sha256",
-                         "policy_path", "policy_sha256", "normalization"})
+                         "policy_path", "policy_sha256", "normalization", "action"})
+# the runner applies the frozen prefix and de-normalises with the frozen statistics, so a bundle that did
+# not carry them would leave both to be guessed at run time
+_ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 
 
 def _bundle_digest(value, code: str) -> str:
@@ -117,6 +120,13 @@ def load_bundle(path) -> dict:
     normalization = document["normalization"]
     if not isinstance(normalization, dict) or normalization.get("split") != "train":
         raise ValueError("BUNDLE_NORMALIZATION_NOT_TRAIN_ONLY")
+    action = document["action"]
+    if not isinstance(action, dict) or set(action) != _ACTION_KEYS:
+        raise ValueError("BUNDLE_INVALID")
+    if type(action["execution_prefix"]) is not int or action["execution_prefix"] < 1:
+        raise ValueError("BUNDLE_INVALID")
+    if action["temporal_ensembling"] is not False or type(action["chunk_size"]) is not int:
+        raise ValueError("BUNDLE_INVALID")
     policy_name = document["policy_path"]
     if (not isinstance(policy_name, str) or not policy_name or policy_name.startswith("/")
             or ".." in Path(policy_name).parts):
