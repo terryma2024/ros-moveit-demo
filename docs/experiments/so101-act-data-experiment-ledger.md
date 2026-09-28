@@ -9921,3 +9921,27 @@ This resolves the design block **without authorizing runtime or motion**.
   mechanical, whereas guessing at a live server's gating would not be.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-810 — Task 15: the ACT routes, and two traps worth remembering
+
+- **Delivered:** `act_router(services)` in `so101_teleop/unified/app.py` (registered beside its siblings and
+  exported) with `GET /act/status` and `POST /act/command`, plus `test/teleop/test_act_routes.py`.
+  - it follows the file's own factory pattern (an `APIRouter` with handlers as closures);
+  - both routes delegate to the allow-listed `ActGateway`, so a refused command answers **503 and the service
+    is never reached** (asserted: `service.calls == []`);
+  - **gated like its siblings:** `dependencies=[Depends(require_authority("teleop"))]`, the same gate the
+    teleop mutations use, because the command route moves the arm;
+  - a body without a string `name` is a 422 `HTTPException`, and with no service both routes answer 503
+    rather than inventing a session.
+- **Trap one, caught by reading the run output:** `@pytest.mark.asyncio` tests were **silently skipped**
+  (pytest-asyncio is not configured), so "4 passed, 3 skipped" would have looked like success while every
+  handler assertion went unrun. They now drive the coroutines with `asyncio.run(...)`: **7 passed, 0 skipped**.
+- **Trap two, my own omission:** the first version of the routes carried **no authority gate**, contradicting
+  the requirement CP-809 had itself recorded. Noticed while reading the sibling routers, and fixed before
+  committing.
+- **Verification:** `test/teleop/test_act_routes.py` + `test/teleop/test_act_gateway.py` **7 passed**
+  (`gate6-batch3-py-gate/task15d.{log,junit.xml}`).
+- **Remaining in Task 15:** `bun run generate:api` to regenerate the TypeScript schema against the new routes,
+  and the `task-app.tsx` wiring; component tests run as `NODE_ENV=test bun run test -- <file>`.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
