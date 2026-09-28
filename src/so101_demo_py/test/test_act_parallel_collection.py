@@ -201,3 +201,54 @@ def test_campaign_skips_terminal_scenes_and_keeps_the_claim_on_failure(tmp_path)
     # an unresolved campaign must not hand the stack on: no release, and the earlier scenes stay sealed
     assert claim.releases == []
     assert port.calls[-1][0] == "act-2"
+
+
+def test_campaign_config_consumes_the_real_v3_collection_config(tmp_path):
+    import yaml
+
+    from so101_demo.act.parallel_collection import campaign_config_from
+
+    package = Path(__file__).resolve().parents[1]
+    document = yaml.safe_load((package / "config/act/parallel_collection_v3.yaml").read_text())
+    config = campaign_config_from(document, qualification=False)
+    assert config == {"max_wave_size": document["qualification"]["max_wave_size"],
+                      "qualification": False}
+    assert campaign_config_from(document, qualification=True)["qualification"] is True
+
+    # the posture is part of the contract: no auto-degrade and no business retry
+    degraded = {**document, "qualification": {**document["qualification"], "no_auto_degrade": False}}
+    with pytest.raises(ValueError, match="COLLECTION_NO_AUTO_DEGRADE_REQUIRED"):
+        campaign_config_from(degraded, qualification=False)
+    retrying = {**document, "recovery": {**document["recovery"], "business_retry_count": 1}}
+    with pytest.raises(ValueError, match="COLLECTION_BUSINESS_RETRY_FORBIDDEN"):
+        campaign_config_from(retrying, qualification=False)
+    with pytest.raises(ValueError, match="COLLECTION_CONFIG_INVALID"):
+        campaign_config_from({"qualification": document["qualification"]}, qualification=False)
+    with pytest.raises(ValueError, match="COLLECTION_QUALIFICATION_MODE_INVALID"):
+        campaign_config_from(document, qualification="yes")
+
+
+def test_the_real_wave_size_partitions_a_full_formal_manifest(tmp_path):
+    import json as _json
+    import yaml
+
+    from so101_demo.act.parallel_collection import (
+        FixedActCollectionCampaign, campaign_config_from, partition_waves,
+    )
+
+    package = Path(__file__).resolve().parents[1]
+    document = yaml.safe_load((package / "config/act/parallel_collection_v3.yaml").read_text())
+    config = campaign_config_from(document, qualification=False)
+    scene_ids = tuple(f"act-{index:03d}" for index in range(45))
+    assert tuple(map(len, partition_waves(scene_ids, max_wave_size=config["max_wave_size"]))) == (
+        20, 20, 5)
+
+    rows = [{"scene_id": scene_id, "split": "train"} for scene_id in scene_ids]
+    manifest = {"kind": "W8", "scenarios": rows,
+                "qualification_contract": {"revoked": False, "scenes": 40}}
+    campaign = FixedActCollectionCampaign(manifest, config, context=None, root=tmp_path,
+                                          collect_port=_CollectPort(), claim=_Claim())
+    outcome = campaign.run()
+    assert tuple(map(len, outcome["waves"])) == (20, 20, 5)
+    assert outcome["scene_count"] == 45 and len(outcome["collected"]) == 45
+    assert _json.loads(open(outcome["campaign_index"]).read())["scene_count"] == 45

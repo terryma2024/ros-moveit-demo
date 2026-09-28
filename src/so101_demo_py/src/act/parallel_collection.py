@@ -174,3 +174,29 @@ class FixedActCollectionCampaign:
                 "already_terminal": terminal, "collected": collected, "results": results,
                 "scene_count": len(self.scene_ids),
                 "claim_released": True}
+
+
+def campaign_config_from(collection_config: dict, *, qualification: bool) -> dict:
+    """Derive the campaign config from the loaded v3 collection config.
+
+    The wave size and the qualification flag come from the config that Task 8P1 froze; the posture is
+    checked here too, because a campaign that retried business failures or quietly degraded would defeat
+    the point of running the collection in the first place.
+    """
+
+    if type(qualification) is not bool:
+        raise ValueError("COLLECTION_QUALIFICATION_MODE_INVALID")
+    if not isinstance(collection_config, dict):
+        raise ValueError("COLLECTION_CONFIG_INVALID")
+    qualification_block = collection_config.get("qualification")
+    recovery_block = collection_config.get("recovery")
+    if not isinstance(qualification_block, dict) or not isinstance(recovery_block, dict):
+        raise ValueError("COLLECTION_CONFIG_INVALID")
+    max_wave_size = qualification_block.get("max_wave_size")
+    if type(max_wave_size) is not int or max_wave_size < 1:
+        raise ValueError("COLLECTION_CONFIG_INVALID")
+    if qualification_block.get("no_auto_degrade") is not True:
+        raise ValueError("COLLECTION_NO_AUTO_DEGRADE_REQUIRED")
+    if recovery_block.get("business_retry_count") != 0:
+        raise ValueError("COLLECTION_BUSINESS_RETRY_FORBIDDEN")
+    return {"max_wave_size": max_wave_size, "qualification": qualification}
