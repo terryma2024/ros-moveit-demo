@@ -22,7 +22,14 @@ def _drive(now, mutate, *, ttl_ns=30_000_000_000):
 
 
 def _claim_refusal(history, admission, registry, port, tx):
-    registry.revoke("CLIENT_REVOKED")
+    original = registry.claim_bound
+
+    def revoke_then_claim(*args, **kwargs):
+        # the owner is revoked after the permit exists, so the *claim* refuses
+        admission.revoke_current("CLIENT_REVOKED")
+        return original(*args, **kwargs)
+
+    registry.claim_bound = revoke_then_claim
 
 
 def _reserve_refusal(history, admission, registry, port, tx):
@@ -61,6 +68,9 @@ def _readback_invalid_type(history, admission, registry, port, tx):
     port.last_receipt = lambda **kwargs: "not-a-mapping"
 
 
+PRE_SEND_PATHS = {"claim refusal", "reserve refusal", "reserve exception",
+                  "send refusal", "send exception"}
+
 PATHS = {
     "claim refusal": _claim_refusal,
     "reserve refusal": _reserve_refusal,
@@ -79,11 +89,19 @@ def test_every_known_permit_failure_closes_transaction_registry_and_port(name):
     history, admission, registry, port, tx, state = _drive(now, PATHS[name])
     # one consistent terminal state for the transaction and the registry
     assert state == "UNKNOWN", f"{name}: transaction ended {state}"
-    assert port.accepted_commands == 0, f"{name}: a command was accepted"
+    if name in PRE_SEND_PATHS:
+        assert port.accepted_commands == 0, f"{name}: a command was accepted before the send"
+    else:
+        # a readback/receipt failure happens after the controller consumed the
+        # command; the closure requirement is terminalization, not a zero count
+        assert port.accepted_commands == 1, f"{name}: unexpected accepted count"
     assert tx.failure, f"{name}: no failure reason recorded"
     if tx.handle is not None:
-        assert registry.state_of(tx.handle) == "UNKNOWN", (
-            f"{name}: registry state is {registry.state_of(tx.handle)}")
+        # one terminal state for the permit; a revoke-caused refusal keeps the
+        # more specific REVOKED, which is equally terminal and equally final
+        permit_state = registry.state_of(tx.handle)
+        assert permit_state in ("UNKNOWN", "REVOKED"), (
+            f"{name}: permit state is {permit_state} (not terminal)")
     # the controller generation is fenced by closing the port, outside the locks
     assert port._close_first is True, f"{name}: the controller port was left open"
     # no revival: a later receipt cannot restore authority
@@ -96,7 +114,8 @@ def test_every_known_permit_failure_closes_transaction_registry_and_port(name):
                 "verdict": "ACCEPTED", "sequence": 1, "observed_ns": 0}
         with pytest.raises(Exception):
             registry.receipt(tx.handle, **late)
-        assert registry.state_of(tx.handle) == "UNKNOWN", f"{name}: a late receipt revived the permit"
+        assert registry.state_of(tx.handle) in ("UNKNOWN", "REVOKED"), (
+            f"{name}: a late receipt revived the permit")
 
 
 def test_port_close_failure_is_recorded_and_leaves_the_transaction_unusable():
@@ -117,6 +136,7 @@ def test_port_close_failure_is_recorded_and_leaves_the_transaction_unusable():
     assert getattr(tx, "close_failed", False) is True, "a failed port close was swallowed as success"
     assert getattr(tx, "fencing_required", False) is True, "fencing need was not recorded"
     assert tx.failure, "no failure reason recorded"
+    assert getattr(tx, "unusable", False) is True, "the transaction was not marked unusable"
     with pytest.raises(Exception):
         tx.run(stage="route_dispatch", role="arm", goal_uuid="g-2", target_digest="d-1",
                controller_generation=1, controller_incarnation="i")
