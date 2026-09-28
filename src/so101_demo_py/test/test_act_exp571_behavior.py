@@ -9,7 +9,8 @@ import threading
 
 import pytest
 
-from test_act_dispatch_transaction import _run, _transaction
+from test_act_dispatch_transaction import (_auth_helpers, _run, _transaction)
+from test_act_physics_clock_history import SOURCE_BASE_NS, STEP_NS
 
 
 def test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations():
@@ -25,14 +26,19 @@ def test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations()
     _, admission, registry, port, tx = _transaction(now)
     entered = threading.Event()
     release = threading.Event()
-    original = admission.history_commit_receipt
+    original_clock = registry._clock_ns
+    state = {"inside": False}
 
-    def boundary_probe(*args, **kwargs):
-        entered.set()
-        release.wait(5.0)
-        return original(*args, **kwargs)
+    def boundary_clock():
+        # called for the final permit-deadline check, i.e. after the owner
+        # re-check and immediately before READY -> IN_FLIGHT
+        if not state["inside"]:
+            state["inside"] = True
+            entered.set()
+            release.wait(5.0)
+        return original_clock()
 
-    admission.history_commit_receipt = boundary_probe
+    registry._clock_ns = boundary_clock
     outcome = {}
     worker = threading.Thread(target=lambda: outcome.setdefault("state", _run(tx)))
     worker.start()
@@ -45,7 +51,7 @@ def test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations()
     worker.join(10.0)
     revoker.join(10.0)
     if revoke_completed_inside:
-        # the revoke won the race inside the boundary: no send may happen at all
+        # the revoke won the race inside the boundary: the claim must not accept
         assert outcome["state"] in ("REJECTED", "UNKNOWN"), outcome
         assert port.send_calls == 0 and port.accepted_commands == 0
     else:
@@ -72,6 +78,9 @@ def test_port_generation_is_the_authority_not_the_caller_integer():
     port.arm_generation(999, controller_incarnation="i")   # controller moved on
     state = _run(tx, controller_generation=1)              # caller still believes gen 1
     assert state == "REJECTED", state
+    # the *claim* must refuse: no reservation may even be attempted, so the
+    # refusal cannot be an accident of the fake's own generation check
+    assert port.reserve_calls == 0, port.reserve_calls
     assert port.send_calls == 0 and port.accepted_commands == 0
 
 
