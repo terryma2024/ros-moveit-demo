@@ -1,0 +1,114 @@
+{
+  "anchors": [
+    "default",
+    "left",
+    "forward"
+  ],
+  "camera_measurements": {
+    "head_intrinsics_px": {
+      "unit": "px"
+    },
+    "head_rpy_rad": {
+      "unit": "rad"
+    },
+    "head_translation_m": {
+      "unit": "m"
+    },
+    "yaw_zero_bearing_rad": {
+      "unit": "rad"
+    }
+  },
+  "kind": "task8_calibration_measurement_contract_template",
+  "measurements": {
+    "center_deadband_px": {
+      "unit": "px"
+    },
+    "coarse_step_rad": {
+      "unit": "rad"
+    },
+    "horizontal_fov_rad": {
+      "unit": "rad"
+    },
+    "lock_valid_neck_rad": {
+      "unit": "rad"
+    },
+    "max_age_s": {
+      "unit": "s"
+    },
+    "max_fine_corrections": {
+      "unit": "count"
+    },
+    "max_fine_total_rad": {
+      "unit": "rad"
+    },
+    "max_skew_s": {
+      "unit": "s"
+    },
+    "min_area_px2": {
+      "unit": "px2"
+    },
+    "min_bbox_aspect": {
+      "unit": "ratio"
+    },
+    "min_confidence": {
+      "unit": "ratio"
+    },
+    "search_timeout_s": {
+      "unit": "s"
+    },
+    "stop_latency_s": {
+      "unit": "s"
+    },
+    "stop_velocity_rad_s": {
+      "unit": "rad/s"
+    },
+    "submit_lead_s": {
+      "unit": "s"
+    },
+    "tracking_iou": {
+      "unit": "ratio"
+    },
+    "vertical_bounds_px": {
+      "unit": "px"
+    }
+  },
+  "schema_version": 1,
+  "thresholds": {
+    "cleanup": {
+      "require_group_clear": true
+    },
+    "collision": {
+      "full_request_budget_ms": 25,
+      "full_request_count": 4,
+      "require_contact_ok": true
+    },
+    "execution": {
+      "require_acceleration_ok": true,
+      "require_reference_matches_permit": true,
+      "require_stop_ok": true,
+      "require_velocity_ok": true
+    },
+    "fov": {
+      "require_target_in_view": true,
+      "sample_period_s": 0.002
+    },
+    "search": {
+      "min_consecutive_lock_frames": 3,
+      "require_all_anchors": true,
+      "same_target_id": true
+    },
+    "synchronization": {
+      "max_age_s": 0.5,
+      "max_skew_s": 0.1,
+      "missing_samples": 0,
+      "p95_budget_ratio": 1.0,
+      "time_regressions": 0
+    }
+  },
+  "verdicts": [
+    "PASS",
+    "FAIL",
+    "UNMEASURED",
+    "INVALID"
+  ]
+}

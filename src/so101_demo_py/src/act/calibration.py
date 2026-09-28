@@ -6,8 +6,9 @@ from pathlib import Path
 import re
 import subprocess
 
-from .contracts import fields, finite, integer, sha256, vector
+from .contracts import ContractError, fields, finite, integer, sha256, vector
 
+_SHA = re.compile(r"[0-9a-f]{64}\Z")
 REQUIRED_CHECKS = frozenset(("fov", "collision", "search", "synchronization", "execution", "release", "retreat"))
 REQUIRED_MEASUREMENTS = {
     "head_translation_m": ("m", 3), "head_rpy_rad": ("rad", 3),
@@ -105,7 +106,14 @@ def _validate_measurements(measurements, *, complete):
 
 def validate_partial(report):
     """Validate retained measurements while preserving the collection refusal."""
-    fields(report, ("schema_version", "status", "source_commit", "config_sha256", "measurements", "checks"))
+    # a partial report may or may not name its provenance: the field is optional here and
+    # becomes mandatory only for TASK8_READY/QUALIFIED reports
+    allowed = {"schema_version", "status", "source_commit", "config_sha256",
+               "source_provenance_sha256", "measurements", "checks"}
+    if not isinstance(report, dict) or not set(report) <= allowed or not {
+            "schema_version", "status", "source_commit", "config_sha256",
+            "measurements", "checks"} <= set(report):
+        raise ContractError("FIELDS_INVALID")
     if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
             or report["status"] != "CALIBRATION_REQUIRED"
             or not isinstance(report["source_commit"], str)
@@ -123,9 +131,19 @@ def validate_partial(report):
             raise ValueError("CALIBRATION_CHECK_EVIDENCE_MISSING")
     return report
 
+def require_source_provenance(report: dict) -> str:
+    """A ready/qualified calibration must name the source provenance it was measured against."""
+
+    digest = report.get("source_provenance_sha256") if isinstance(report, dict) else None
+    if type(digest) is not str or _SHA.fullmatch(digest) is None:
+        raise ValueError("CALIBRATION_SOURCE_PROVENANCE_MISSING")
+    return digest
+
 
 def require_qualified(report):
-    fields(report, ("schema_version", "status", "source_commit", "config_sha256", "measurements", "checks"))
+    require_source_provenance(report)
+    fields(report, ("schema_version", "status", "source_commit", "config_sha256",
+                    "source_provenance_sha256", "measurements", "checks"))
     if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
             or report["status"] != "QUALIFIED"
             or not isinstance(report["source_commit"], str)
@@ -146,7 +164,8 @@ def require_gate(report: dict, gate: str) -> None:
     if gate not in ("pick_place_validation", "task8_live"):
         raise ValueError("CALIBRATION_GATE_INVALID")
     fields(report, ("schema_version", "status", "source_commit", "config_sha256",
-                    "measurements", "checks"))
+                    "source_provenance_sha256", "measurements", "checks"))
+    require_source_provenance(report)
     if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
             or report["status"] != "TASK8_READY"
             or not isinstance(report["source_commit"], str)

@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SO-101 Task 8 bound calibration measurement contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "identities",
+    "source_hashes",
+    "anchors",
+    "measurements",
+    "camera_measurements",
+    "thresholds",
+    "verdicts",
+    "contract_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "task8_calibration_measurement_contract"
+    },
+    "identities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_provenance_sha256",
+        "runtime_config_sha256",
+        "anchors_sha256",
+        "contact_policy_fingerprint",
+        "act_profile_sha256"
+      ],
+      "properties": {
+        "source_provenance_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "runtime_config_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "anchors_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "contact_policy_fingerprint": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "act_profile_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "source_hashes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    },
+    "anchors": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "enum": [
+          "default",
+          "left",
+          "forward"
+        ]
+      }
+    },
+    "measurements": {
+      "type": "object",
+      "minProperties": 17
+    },
+    "camera_measurements": {
+      "type": "object",
+      "minProperties": 4
+    },
+    "thresholds": {
+      "type": "object",
+      "minProperties": 6
+    },
+    "verdicts": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "string"
+      }
+    },
+    "contract_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

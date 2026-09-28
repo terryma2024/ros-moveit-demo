@@ -98,6 +98,7 @@ def report(tmp_path):
         values[key]=dict(value=value,unit=unit,sample_path=str(sample),
                          sample_sha256=hashlib.sha256(sample.read_bytes()).hexdigest())
     return dict(schema_version=1,status="QUALIFIED",source_commit="a"*40,config_sha256="b"*64,
+                source_provenance_sha256="a1"*32,
                 measurements=values, checks={key:"PASS" for key in
                 ("fov","collision","search","synchronization","execution","release","retreat")})
 
