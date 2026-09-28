@@ -7576,3 +7576,20 @@ ancestors; reviewed plan SHA256 verified as
   regressions, tampered artifact, missing cleanup receipt) and the positive occlusion assertion.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-707 — Task 8P3 sub-slice A: frozen 10 Hz causal grid validation
+
+- **Delivered:** `validate_evidence_grid(samples, *, period_s, tolerance_s)` in
+  `act/task8_live_evidence.py`, with distinct failures for an empty sequence, a missing grid point
+  (`GRID_GAP`), and a duplicate or time regression (`GRID_REGRESSION`); a gap is evidence loss and
+  must make a case INVALID rather than be smoothed into an occlusion window. Recorder suite:
+  **14 passed** (`gate6-batch3-py-gate/t8p3grid.{log,junit.xml}`).
+- **Why in the recorder module:** the port and readback adapters (`pick_place_readback.py` carries
+  191 lines of pre-existing user work; `pick_place_search_port.py` is clean) will call this pure
+  validator, so the grid rule is enforced in one reviewed place instead of being re-implemented
+  inside a dirty file.
+- **Remaining sub-slice A:** the readback adapter's `seal_live_evidence` plus its `CLOSE`-anchored
+  window and event samples, and the per-case recorder ownership in the (clean) search port, then
+  the plan's RED matrix for recorder failures and the positive occlusion assertion.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
