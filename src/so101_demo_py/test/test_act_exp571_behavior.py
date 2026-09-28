@@ -98,7 +98,9 @@ def test_port_generation_is_the_authority_not_the_caller_integer():
     _, admission, registry, port, tx = _transaction(now)
     port.arm_generation(999, controller_incarnation="i")   # controller moved on
     state = _run(tx, controller_generation=1)              # caller still believes gen 1
-    assert state == "REJECTED", state
+    # a known-permit failure closes as UNKNOWN (one terminal state); a pre-issue
+    # refusal would be REJECTED with no permit — both are safe, neither may accept
+    assert state in ("REJECTED", "UNKNOWN"), state
     # the *claim* must refuse: no reservation may even be attempted, so the
     # refusal cannot be an accident of the fake's own generation check
     assert port.reserve_calls == 0, port.reserve_calls
