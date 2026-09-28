@@ -7515,3 +7515,25 @@ ancestors; reviewed plan SHA256 verified as
   arguments (mechanically, no behaviour change) and remains **untracked and uncommitted**.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-704 — Task 8P3: read-only artifact validation entry point
+
+- **Delivered:** `cli/act_validate_task8_artifacts.py` (resolves a committed preparation receipt,
+  verifies its file digest, calls the pure startup validator, prints the bundle root; fails closed
+  with `TASK8_PREPARATION_REQUIRED` for an absent receipt — it previously raised
+  `FileNotFoundError` because the digest was computed before the existence check), the `setup.py`
+  entry, and two new tests: the validate CLI path, and a guard asserting the two legacy live entry
+  points (`act_prepare_task8_live.py`, `act_task8_live.py`) are thin `sys.modules` forwarders with
+  **no** `def main`, so a second implementation cannot reappear.
+- **Verification:** five focused suites -> **34 passed**
+  (`gate6-batch3-py-gate/t8p3cli{,2,3}.log`), including the bundle, recorder, manifest, live-CLI and
+  live-campaign suites.
+- **Remaining 8P3:** port/runner wiring (`seal_live_evidence` gated on a full case's `FINAL_CHECK`,
+  `live_evidence_artifact` with prefix `None`, per-case recorder in the search port, readback window
+  from `CLOSE`); admission wiring (`ActArtifactBinding` from the verified bundle, receipt
+  verification confined to `UnifiedWorkloadService.start(spec)`, the Task 8 / collection payload
+  split, journals carrying live evidence plus both retirement receipts); the canonical live CLI
+  executing all fourteen cases in one production call. Then the combined 8P3/8P4 xdist gate.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED; the untracked in-progress user test remains
+  untracked.
