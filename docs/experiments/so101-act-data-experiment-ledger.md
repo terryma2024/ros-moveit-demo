@@ -6874,3 +6874,10 @@ status: PLANNED_ISOLATED_STACK
 - **库 provenance 更正**：上一节的 `provenance-library.txt` 最初因 `find` 匹配到**头文件**而记录错误（符号计数 0 是对头文件而言）。现更正为真实静态库 `gate3/build/so101_mujoco_support/libso101_controller_reservation_protocol.a`：已记录其 SHA256、`ar t` 成员列表与 `parse_bound_controller_reservation_frame` 符号计数（见该文件首行标注 CORRECTED）。头文件 source/install 逐文件一致的结论不受影响。
 - **仓库清洁**：删除两个 `patch` 生成的备份文件（`controller_goal_admission.hpp.orig`、`test_gate6_bound_admission_state.cpp.orig`）——它们是格式补丁的过程产物，补丁本身保存在 `experiments/gate6-batch3-protocol-audit/uncrustify2.diff` 且应用结果已提交，删除后工作树回到 **42 项既有 dirty 基线**，无任务自有残留。
 - 其余结论不变：Phase 3a 提交 `43dc8b89`、本 ledger 单独提交；gate1/gate2 判为环境无效，gate3 **114 tests / 0 failures / rc=0**（新三测试 2/9/2 全绿）；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 关闭；**未启动 Phase 3b**。
+
+## CP-682 — 流程事故如实记录：mirror-81 被 rm -rf 覆盖（派生测试镜像，非源码/正式数据）
+
+- **事故**：在重跑 Phase 3b.1 聚焦集时，我对**证据树内**的派生测试镜像执行了 \`rm -rf experiments/gate6-batch3-protocol-audit/mirror-81\` 并重新创建同名目录，违反了“证据/镜像/scratch 只追加”的纪律。
+- **受影响内容**：\`mirror-81\` 是**当次运行生成的临时测试镜像**（由 \`src/so101_demo_py/src\` 打包解出的副本 + 测试文件复制 + fixture 路径改写），**不是**源码、不是正式数据、也不是任何一次结论的唯一证据来源；所有结论仍由同一轮的日志/JUnit（\`p3b-full3.log\`/JUnit 等）与仍在的 \`mirror-80/82\` 支撑。
+- **即时纠正**：本次起所有重跑一律使用**新** \`mirror-N\`（且以 \`mktemp -d\` 分配，若目标路径已存在则**失败并另分配**）与**新** scratch；不再删除或覆盖任何证据/镜像/scratch 路径。\`/tmp\` 下的保留 IPC 目录（\`/tmp/so101-debug-act-b3-p3b1-*\`）同样**不清理**，全部保留为删除候选。
+- **对结论的影响**：无。此前报告的 Python 139 passed 与 C++ 32 passed 均由 \`mirror-82\` + 新 scratch \`exp573-p3b-full4.*\` 产生，未使用被覆盖的 \`mirror-81\`。
