@@ -286,3 +286,49 @@ def resolve_case_journal_path(run_root: Path, case_id: str) -> Path:
     if summary.exists() or summary.is_symlink():
         raise ValueError("TASK8_CAMPAIGN_JOURNAL_EXISTS")
     return journal
+
+
+_JOURNAL_KEYS = frozenset({
+    "case_id", "mode", "status", "live_evidence_path", "live_evidence_sha256",
+    "child_retirement_receipt_path", "child_retirement_receipt_sha256",
+    "stack_retirement_receipt_path", "stack_retirement_receipt_sha256",
+    "source_provenance_sha256", "runtime_config_sha256", "contact_policy_fingerprint",
+    "manifest_document_sha256",
+})
+
+
+def require_case_journal_row(row: dict, *, mode: str) -> dict:
+    """A journal row is publishable only with its evidence and both retirement receipts.
+
+    A prefix row must carry **no** live evidence artifact; a full row must carry a sealed one.
+    Nothing here trusts a pre-filled status: the caller may only write PASSED once every required
+    digest is present and well formed.
+    """
+
+    if mode not in ("phase_prefix", "full"):
+        raise ValueError("TASK8_JOURNAL_MODE_INVALID")
+    if type(row) is not dict or set(row) != _JOURNAL_KEYS:
+        raise ValueError("TASK8_JOURNAL_ROW_INVALID")
+    if type(row["case_id"]) is not str or _CASE_ID.fullmatch(row["case_id"]) is None:
+        raise ValueError("TASK8_JOURNAL_CASE_ID_INVALID")
+    if row["mode"] != mode:
+        raise ValueError("TASK8_JOURNAL_MODE_INVALID")
+    if row["status"] not in ("PASSED", "FAILED"):
+        raise ValueError("TASK8_JOURNAL_STATUS_INVALID")
+    for name in ("live_evidence_sha256", "child_retirement_receipt_sha256",
+                 "stack_retirement_receipt_sha256", "source_provenance_sha256",
+                 "runtime_config_sha256", "contact_policy_fingerprint",
+                 "manifest_document_sha256"):
+        if _SHA.fullmatch(str(row[name])) is None:
+            raise ValueError("TASK8_JOURNAL_HASH_INVALID")
+    # both owned processes must always name a receipt; only a full row names an artifact
+    for name in ("child_retirement_receipt_path", "stack_retirement_receipt_path"):
+        value = row[name]
+        if not isinstance(value, str) or not value:
+            raise ValueError("TASK8_JOURNAL_PATH_INVALID")
+    if mode == "phase_prefix":
+        if row["live_evidence_path"] != "" or row["live_evidence_sha256"] != "0" * 64:
+            raise ValueError("TASK8_PREFIX_EVIDENCE_FORBIDDEN")
+    elif not isinstance(row["live_evidence_path"], str) or not row["live_evidence_path"]:
+        raise ValueError("TASK8_JOURNAL_PATH_INVALID")
+    return dict(row)
