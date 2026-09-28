@@ -8340,3 +8340,43 @@ module is the known socket-path environment case that passes in isolation.
 
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-742 — Session handover at the 256-round limit (objective NOT complete)
+
+**State:** HEAD `d671d835`; branch `codex/so101-act-data-0917a`; nothing staged; 43 modified and 12
+untracked files belong to the user's in-progress work and are byte-for-byte untouched; zero stray
+processes; no runtime, controller goal or motion started at any point. Demo focused surface
+**149 passed**; every teleop pytest xunit file at **0 failures**; the only counted teleop failure is
+one module (`test_controller_reservation_paths`) failing on the AF_UNIX 107-byte path-length limit,
+proven environmental by a 17-pass isolation run.
+
+**Committed this session:** Task 8 core; 8P1 source provenance and the CUDA-only ACT collection
+config; 8P2 measurement contract, self-sealed batches, deterministic aggregator, both CLIs and the
+mandatory provenance field; 8P3 through sub-slice A plus all six sub-slice C rules, the journal plan
+and the payload helper; 8P4's validators, fourteen-journal checker, `QUALIFIED` producer, CLI and the
+schema/validator traceability requirement; the admission payload split and the startup receipt
+verification. 39 code slices, 42 ledger checkpoints, every code commit hunk-staged with
+`baseline_pollution=0`.
+
+**Module gate:** made reproducible (four-step recipe in the plan file). It found four regressions of
+mine — 52 v2-arity `TypeError`s, 4 provenance failures, a production `KeyError` from the v2 rename,
+and a key-group ordering `NameError` — each fixed and re-verified.
+
+**Remaining (unchanged by this session's end):** 8P3's tail (readback `CLOSE..FINAL_CHECK` extraction
+inside `pick_place_readback.py`, which carries 191 lines of user work; canonical live CLI); 8P4's
+real-composition integration test through the real runner, adapter, `run_pick_place_case()` and
+trusted campaign with seal/dir-fsync readback; the combined 8P3/8P4 xdist gate with a short run id;
+Tasks 9, 10, 11, 11A Step 5; the single final HEAD freeze into `$ACT_EVIDENCE/i`; Task 8L; W1; W2; the
+independent 40-scene exact-W8 qualification; formal W8 collection; Task 12.
+
+**Resume material:** `experiments/gate6-runtime/task8-core/t8p3-remaining-plan.md` (758 lines — hook
+points, acceptance criteria, the verified gate recipe, both failure-triage tables, the corrected
+fixture estimate), `task8-artifact-index.md`, `final-state-round{213,255}.txt`, CP-709's resume brief,
+the proposed-then-applied admission patch record, and CP-726…741.
+
+**User-owned items:** the `Pairs.fingerprin` typo (`fingerprint` intended) and the AF_UNIX path-length
+test that a shorter gate run root clears.
+
+- **Boundaries:** formal accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED;
+  `collection_*` NOT_PROVISIONED; MuJoCo-only with CUDA-only semantics and no CPU fallback; nothing
+  deleted or overwritten.
