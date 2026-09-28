@@ -168,7 +168,8 @@ class AuthorityTransactionRegistry:
         The admission/history objects are supplied by the broker itself, never by the
         caller. Identity, revocation/retirement state and the controller generation are
         validated before the history commit, and the permit deadline is re-checked with
-        the registry clock *after* the commit but still before READY -> IN_FLIGHT.
+        the single history-owned instant returned by that commit: there is no
+        registry-clock read after the commit and no second history validation.
         """
 
         if not isinstance(handle, PermitHandle):
