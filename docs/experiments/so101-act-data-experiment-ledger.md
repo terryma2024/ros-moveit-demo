@@ -6654,3 +6654,10 @@ status: PLANNED_ISOLATED_STACK
 - **P2 仍未完成**，且下一轮的正确做法已明确：先在 `_run_guarded` 中把端口对象解析为局部变量（`port = self.port`）再做快照读取，或把快照读取放进一个独立的小方法 `self._controller_snapshot()`；随后逐步验证（先单模块 `test_act_dispatch_transaction.py`，再四探针，再六模块），并把契约/audit 中“claim 期间会获取控制器端口锁”的描述改为“快照在边界前取得、`reserve` 侧重校验”，删除过时 `claim_guard` 措辞。
 - 其余未完成项不变：legacy claim 测试迁移；真实 `step_at` deepcopy 屏障（已有）与 send 入口测试（保留）；簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且清单快照提交与 ledger/请求包提交显式分离）。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-658 — EXP-573 P2 设计 B 通过：控制器身份快照在边界之前取得（dispatch 8 / 探针 29 / 六模块 151）
+
+- 提交 `ff99ced5`。上一轮失败的 P2 尝试**定位并修正**：快照读取改为事务自身的专用方法 `OfflineDispatchTransaction._controller_snapshot()`（内部使用 `self.port`，消除作用域问题），在 `claim_bound` **之前**取得控制器当前代次与 boot 化身，并作为**数据**传入边界；`claim_bound` 不再在 registry/admission/history 锁内触碰端口锁（改为校验快照的 generation/boot 化身类型与值，并据此持久化 `_claim_boot`）；控制器侧由 `reserve`（及 `send`）继续按冻结身份重校验。**逐步验证**：先 `test_act_dispatch_transaction.py` **8 passed**，再四探针 **29 passed**，再六模块 **151 passed**（`p2b-dispatch.log`、`p2b-probes.log`、`p2b-six.log` + JUnit，各自新建 scratch；镜像 `mirror-17` 逐文件 SHA 等于 worktree）。
+- **文档同步**：Gate 6 契约改为“快照在边界前取得、`reserve` 侧重校验”，并明确端口锁**不**参与 claim 锁序；锁序审计新增 `exp573_lock_graph`（design B、快照来源、重校验位置、已删除的边界内端口查询与过时 `claim_guard` 措辞、claim 顺序仍为 registry → admission → history、无环结论不变）。两者哈希已记入本节。
+- 未完成：legacy claim 测试迁移（重命名仅证明旧 API 的用例、把声称 hazard/reset/age/deadline 的用例迁到 `claim_bound`/`OfflineDispatchTransaction`）；真实 `step_at` deepcopy 屏障（已有）与 send 入口测试（保留）；簿记（contract/audit/ledger 最终更正、重生成 change/evidence 清单、review 请求包引用**当前整文件哈希**且清单快照提交与 ledger/请求包提交显式分离）。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
