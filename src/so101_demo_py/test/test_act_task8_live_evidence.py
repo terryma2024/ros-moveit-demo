@@ -512,3 +512,48 @@ def test_capture_evidence_fields_compose_a_canonical_sample(recorder):
     with pytest.raises(Exception):
         adapter.capture_evidence_fields({"world": evidence}, support_distance_max_m=0.005,
                                         raw_records={})
+
+
+def _window_sample(recorder_root, time_s, phase, step):
+    document = sample(recorder_root, step=step)
+    document["sim_time_s"] = time_s
+    document["phase"] = phase
+    return document
+
+
+def test_window_opens_at_close_and_enforces_the_frozen_grid(recorder):
+    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+
+    rec, root = recorder
+    reference = sample(root, step=0)
+    identity = {key: reference[key] for key in
+                ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch")}
+    window = LiveEvidenceWindow(rec, identity=identity)
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN"):
+        window.add_grid(_window_sample(root, 0.0, "MICRO_LIFT", 0))
+    window.add_grid(_window_sample(root, 0.0, "CLOSE", 0))
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_GRID_GAP"):
+        window.add_grid(_window_sample(root, 0.3, "MICRO_LIFT", 1))
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_GRID_REGRESSION"):
+        window.add_grid(_window_sample(root, 0.0, "MICRO_LIFT", 1))
+    window.add_grid(_window_sample(root, 0.1, "MICRO_LIFT", 1))
+    window.add_event(_window_sample(root, 0.15, "CONTACT_EDGE", 1))
+    assert window.grid_count == 2 and window.event_count == 1
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_INCOMPLETE"):
+        window.seal()                       # the run has not reached FINAL_CHECK yet
+
+
+def test_window_seals_only_after_final_check_and_then_refuses_more_samples(recorder):
+    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+
+    rec, root = recorder
+    reference = sample(root, step=0)
+    identity = {key: reference[key] for key in
+                ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch")}
+    window = LiveEvidenceWindow(rec, identity=identity)
+    for index, phase in enumerate(LiveEvidenceWindow.REQUIRED_PHASES):
+        window.add_grid(_window_sample(root, index * 0.1, phase, index))
+    artifact = window.seal()
+    assert set(artifact) == {"path", "sha256", "schema_version"}
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_SEALED"):
+        window.add_grid(_window_sample(root, 0.7, "FINAL_CHECK", 7))
