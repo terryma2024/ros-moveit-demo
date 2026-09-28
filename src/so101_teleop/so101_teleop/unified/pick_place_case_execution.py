@@ -22,6 +22,7 @@ _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _CASE = re.compile(r"(?:prefix|full)-[0-9]{2}\Z")
 _RESULT_KEYS = frozenset({
     "status", "completed_phases", "stopped_confirmed", "formal_episode_eligible",
+    "live_evidence_artifact",
 })
 
 
