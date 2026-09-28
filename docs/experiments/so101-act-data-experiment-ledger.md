@@ -8294,3 +8294,28 @@ requirements plus one environment assertion.
   what located the right place.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-740 — Full teleop suite: 41 -> 2 failures, and neither is this task's logic
+
+After the fixture work in CP-736…739 the full teleop suite reports:
+
+    1394 tests, 0 errors, 2 failures, 43 skipped
+
+Down from **41 failures** at the start of this phase (and from 51 before the kwargs propagation).
+The per-file xunit scan identifies one of the two:
+
+| Failure | Detail | Attribution |
+|---|---|---|
+| `test_nested_campaign_uses_registered_short_root_for_socket_path` | `AssertionError: assert 103 > 107` | environment: the derived socket path is 103 bytes here, so the test's own length expectation does not hold — the same AF_UNIX length sensitivity already proven environmental by the isolation run |
+| (one further failure, not present in the xunit scan) | — | to itemise; the xunit files show only the above |
+
+**What this means:** every failure class traced to this task's changes — the v2 manifest arithmetic,
+the mandatory provenance field, the runner result contract, the admission payload split and its
+fixtures — is now **cleared from both the demo and the teleop suites**. The demo-side admission file
+is 31/31, the ros-child file 22/22, and the teleop suite has 2 remaining, one of which is the known
+environment assertion.
+
+- **Evidence:** `gate6-batch3-py-gate/teleop-test{4,5}.log` and the per-file xunit results under
+  `build/so101_teleop/test_results/`.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
