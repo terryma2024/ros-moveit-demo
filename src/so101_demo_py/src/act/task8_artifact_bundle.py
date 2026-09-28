@@ -212,3 +212,18 @@ def validate_task8_startup_artifacts(payload) -> PreparedTask8Bundle:
     if _digest(receipt_path) != digest:
         raise ValueError("TASK8_PREPARATION_RECEIPT_INVALID")
     return verify_prepared_task8_bundle(receipt_path)
+
+
+def task8_bundle_payload(receipt_path: Path) -> dict:
+    """The two production payload fields a Task 8 run carries for its committed bundle.
+
+    The receipt is verified first, so a payload can never point at an uncommitted or tampered
+    bundle; the digest is taken over the receipt's raw bytes, which is what admission re-checks.
+    """
+
+    receipt_path = Path(receipt_path)
+    if not receipt_path.is_absolute() or ".." in receipt_path.parts:
+        raise ValueError("TASK8_PREPARATION_REQUIRED")
+    verify_prepared_task8_bundle(receipt_path)
+    return {"preparation_receipt_path": str(receipt_path),
+            "preparation_receipt_sha256": _digest(receipt_path)}

@@ -189,3 +189,23 @@ def test_legacy_live_entry_points_are_thin_forwarders():
         assert "sys.modules[__name__] = importlib.import_module(" in source
         assert f"so101_demo.cli.{target}" in source
         assert "def main" not in source
+
+
+def test_bundle_payload_carries_the_verified_receipt_and_its_raw_digest(tmp_path):
+    from so101_demo.act.task8_artifact_bundle import (
+        prepare_task8_bundle, task8_bundle_payload,
+    )
+
+    receipt = prepare_task8_bundle(_inputs(tmp_path), tmp_path / "bundle-payload")
+    payload = task8_bundle_payload(receipt)
+    assert set(payload) == {"preparation_receipt_path", "preparation_receipt_sha256"}
+    assert payload["preparation_receipt_path"] == str(receipt)
+    assert payload["preparation_receipt_sha256"] == hashlib.sha256(receipt.read_bytes()).hexdigest()
+    # an uncommitted or tampered bundle can never produce a payload
+    with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
+        task8_bundle_payload(tmp_path / "bundle-payload" / "missing.json")
+    broken = tmp_path / "bundle-broken"
+    broken.mkdir()
+    (broken / "preparation-receipt.json").write_text("{}")
+    with pytest.raises(ValueError):
+        task8_bundle_payload(broken / "preparation-receipt.json")
