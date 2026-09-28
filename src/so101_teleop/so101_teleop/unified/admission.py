@@ -245,11 +245,10 @@ _ACT_PAYLOAD_KEYS = frozenset({
     "calibration_report_path", "calibration_report_sha256",
 })
 
-# the Task 8 group names its preparation receipt; collection keys must never appear in it
+# a Task 8 payload additionally names its preparation receipt; a collection payload must not
+# (its expected set is _ACT_PAYLOAD_KEYS, so any receipt field there is a schema error)
 _TASK8_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
     "preparation_receipt_path", "preparation_receipt_sha256"})
-_COLLECTION_ONLY_KEYS = frozenset({
-    "qualification_mode", "qualification_receipt_path"})
 
 
 def _real_owner(pid: int, started_ticks: int) -> bool:
@@ -355,8 +354,7 @@ class UnifiedWorkloadService:
             # the receipt is verified before any mutation/GPU acquisition, and the verified bundle is
             # the only object an ActArtifactBinding may be built from
             from so101_demo.act.task8_artifact_bundle import verify_task8_startup_receipt
-            verify_task8_startup_receipt(
-                payload, collection_only_keys=_COLLECTION_ONLY_KEYS)
+            verify_task8_startup_receipt(payload)
         if payload["backend"] != "mujoco":
             raise ValueError("MUJOCO_ONLY")
         if payload["service_epoch"] != self.service_epoch or payload["resource_binding_id"] != self.resource_binding_id:
