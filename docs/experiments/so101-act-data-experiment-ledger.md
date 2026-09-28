@@ -6635,3 +6635,14 @@ status: PLANNED_ISOLATED_STACK
 - **实测**：P1.2 表驱动 `test_act_exp573_failure_closure.py` **9 passed**（`p12-green5.log`/JUnit）；四个探针模块（EXP-571 行为 7 + EXP-572 11 + EXP-573 single-receipt 2 + EXP-573 failure-closure 9）合计 **29 passed**（`probes6.log`/JUnit）；六模块 **151 passed**（`six4.log`/JUnit）。全部使用新建 scratch + 精确 tempfile 探针 + 逐文件 SHA 等于 worktree 的镜像（`mirror-5..13`）。
 - 未完成：P2 锁图二选一（含删除过时 `claim_guard` 描述）；legacy claim 测试迁移（重命名仅证明旧 API 的用例、把声称 hazard/reset/age/deadline 的用例迁到 `claim_bound`/`OfflineDispatchTransaction`）；真实 `step_at` deepcopy 屏障（已有）与 send 入口测试（保留）；簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用**当前整文件哈希**且清单快照提交与 ledger/请求包提交**显式分离**）。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-656 — EXP-573 P1.1 测试迁移（按指导）：单 receipt 设计不变，三处用例按新语义重写
+
+- 提交 `bbeb34df`。**保留单 receipt 实现，未恢复第二次时钟/历史校验**：
+  1. `test_selected_age_crossing_after_the_commit_still_refuses`（依赖已退役的双 receipt 设计）→ 替换为 `test_selected_age_crossing_at_the_final_commit_refuses`：在**唯一一次最终提交内部**把共享（history）时钟推进到选中年龄 250 ms（界 50 ms），断言拒绝且零接受；并明确注释：**线性化点之后**的时钟变化不回溯使已完成转移失效，该覆盖由 EXP-573 的 owner-window 探针承担。
+  2. `test_hazard_latched_after_the_commit_still_refuses` 保留其意义但改为**状态一致性检查**：包装调用返回有效 receipt **之后**、转移之前，在已持有的 history 锁下仅比较 receipt 绑定的 version/incarnation/epoch 与当前 hazard 状态、**不读时钟**，一旦发现重入 mutation 即拒绝（实现新增 `AUTHORITY_HISTORY_MUTATED_IN_BOUNDARY`，只做状态比较，不做第二次时间校验）。
+  3. `test_permit_deadline_crossing_during_the_claim_commit_is_refused` → 改为在**唯一一次最终提交期间**推进**权威的共享/history 时钟**（TTL 1 ms，推进 5 ms，远低于选中年龄上界），断言最终 receipt 的 `commit_monotonic_ns` 超过冻结的 permit deadline 并因此拒绝；**未** monkeypatch `registry._clock_ns`。
+- **实测（新建 scratch `exp573-p11-migrated.*`、tempfile 探针 PASS、镜像 `mirror-14`）**：迁移后相关集合（四个探针模块 + dispatch 模块）**37 passed**（`p11-migrated.log`/JUnit）；六模块 **151 passed in 0.97s**（`six5.log`/JUnit，scratch `exp573-six5.*`）；七个 `b917ae46` 行为 RED **7 failed in 0.27s**（`red-b917.log`/JUnit，scratch `exp573-red-b917.*`，基线 `baseline-p11-red` 与 `git show b917ae46` 逐字节相等）——review 10 的有效范围保留。
+- 失败的迁移前运行已按用户要求保留为 **NONQUALIFYING**：`experiments/exp573-single-receipt/nonqualifying/test_act_exp572_linearization.pre-migration.py`；旧日志/JUnit 未删除或覆盖。
+- P1.2 已在上一轮收绿（表驱动 9 passed + 全探针 29 passed + 六模块 151 passed），本轮未回退。**下一步**：P2 锁图二选一（含删除过时 `claim_guard` 描述）、legacy claim 测试迁移、以及簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且与清单快照分开提交）。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动。
