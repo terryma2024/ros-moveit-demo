@@ -331,25 +331,29 @@ def test_blocking_io_while_revoke_proceeds_with_real_threads():
 # --- end-to-end lifecycle: reservation -> send -> receipt, one permit state machine ---
 
 
-def _end_to_end(*, clock_ns=lambda: 1_000_000_000):
-    module = _module()
-    registry = _registry()
-    port = module.ReservationFakeControllerPort(clock_ns=clock_ns)
-    handle = _issue(registry)
-    registry.claim(handle)
-    permit = registry._records[handle.permit_id]
-    assert port.reserve(permit_id=permit.permit_id, goal_uuid=permit.goal_uuid, role=permit.role,
-                        target_digest=permit.target_digest,
-                        generation=permit.controller_generation,
-                        controller_incarnation=permit.incarnation,
-                        deadline_ns=permit.deadline_ns,
-                        stage=permit.stage) == "ACCEPTED"
-    assert port.send(goal_uuid=permit.goal_uuid, permit_id=permit.permit_id) == "ACCEPTED"
-    fields = port.last_receipt(permit_id=permit.permit_id)
-    fields.update(goal_uuid=permit.goal_uuid, role=permit.role,
-                  target_digest=permit.target_digest,
-                  controller_incarnation=permit.incarnation)
-    return registry, port, handle, permit, fields
+def _end_to_end():
+    """Run the real offline dispatch transaction and return the consumed record.
+
+    The receipt fields come from the controller port's actual consumed
+    reservation (``last_receipt``); nothing is assembled from private registry
+    state, as required by review 7.
+    """
+
+    from test_act_dispatch_transaction import _transaction, _run
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
+    assert _run(tx) == "ACCEPTED"
+    fields = port.last_receipt(permit_id=tx.handle.permit_id)
+    assert fields["goal_uuid"] == "g-1" and fields["role"] == "arm"
+    assert fields["target_digest"] == "d-1"
+    import types
+
+    permit = types.SimpleNamespace(permit_id=fields["permit_id"], goal_uuid=fields["goal_uuid"],
+                                   role=fields["role"], target_digest=fields["target_digest"],
+                                   incarnation=fields["controller_incarnation"],
+                                   controller_generation=fields["generation"])
+    return registry, port, tx.handle, permit, fields
 
 
 def test_timeout_then_late_acceptance_never_revives_the_permit():
