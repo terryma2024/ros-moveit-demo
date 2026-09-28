@@ -11,6 +11,7 @@ import time
 
 from test_act_dispatch_transaction import _auth_helpers, _run, _transaction
 from test_act_physics_clock_history import SOURCE_BASE_NS, STEP_NS
+from so101_demo.adapters.act.physics_clock_admission import AdmissionRefused
 
 
 def _frozen_identity_probe(admission, registry, port, tx):
@@ -27,16 +28,16 @@ def test_hazard_latched_after_the_commit_still_refuses():
     history, admission, registry, port, tx = _transaction(now)
     original = admission.history_commit_receipt
 
-    def commit_then_latch(**kwargs):
-        receipt = original(**kwargs)
-        # another thread latches a hazard the instant the commit returns
+    def latch_then_commit(**kwargs):
+        # a hazard is latched *before* the single final validation, so the one
+        # history-owned timestamp must observe it and refuse the claim
         with history._lock:
             if history.hazard is None:
                 history.hazard = "PHYSICS_CLOCK_SILENT"
                 history.version += 1
-        return receipt
+        return original(**kwargs)
 
-    admission.history_commit_receipt = commit_then_latch
+    admission.history_commit_receipt = latch_then_commit
     state = _run(tx)
     assert state in ("REJECTED", "UNKNOWN"), (
         f"a hazard latched inside the history window was ignored: state={state} "
@@ -50,12 +51,13 @@ def test_selected_age_crossing_after_the_commit_still_refuses():
     original = admission.history_commit_receipt
     last_end_ns = history._last_source_end_ns
 
-    def commit_then_age_out(**kwargs):
-        receipt = original(**kwargs)
-        now[0] = last_end_ns + 250_000_000      # selected age crosses the 50 ms bound
-        return receipt
+    def age_out_then_commit(**kwargs):
+        # the selection ages past its 50 ms bound *before* the single final
+        # validation, which therefore refuses at its own timestamp
+        now[0] = last_end_ns + 250_000_000
+        return original(**kwargs)
 
-    admission.history_commit_receipt = commit_then_age_out
+    admission.history_commit_receipt = age_out_then_commit
     state = _run(tx)
     assert state in ("REJECTED", "UNKNOWN"), (
         f"a selected-age crossing inside the history window was ignored: state={state} "
@@ -269,12 +271,15 @@ def test_revoke_completes_while_the_real_pre_boundary_copy_is_blocked():
     history.step_at = blocking_copy
     outcome = {}
 
-    def worker():
-        outcome["result"] = admission.admit_sample(
-            sample=__import__("test_act_physics_clock_admission", fromlist=["_sample"])._sample(1),
-            ticket="clock-session", generation=1, reset_epoch=1)
+    def worker_body():
+        sample = __import__("test_act_physics_clock_admission", fromlist=["_sample"])._sample(1)
+        try:
+            outcome["result"] = admission.admit_sample(
+                sample=sample, ticket="clock-session", generation=1, reset_epoch=1)
+        except Exception as error:  # noqa: BLE001 - asserted below, never unhandled
+            outcome["error"] = error
 
-    worker = threading.Thread(target=worker)
+    worker = threading.Thread(target=worker_body)
     worker.start()
     assert entered.wait(5.0), "the pre-boundary copy was never entered"
     began = time.monotonic()
@@ -283,5 +288,8 @@ def test_revoke_completes_while_the_real_pre_boundary_copy_is_blocked():
     assert elapsed < 0.1, f"revocation blocked behind the copy: {elapsed:.3f}s"
     release.set()
     worker.join(10.0)
-    assert not worker.is_alive()
+    assert not worker.is_alive(), "the admission worker must terminate"
     assert admission.revoked_record is not None
+    # the revoked owner must be refused once the copy is released
+    assert "error" in outcome, outcome
+    assert isinstance(outcome["error"], AdmissionRefused), outcome

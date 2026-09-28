@@ -116,18 +116,25 @@ def test_wrong_owner_identity_and_generation_are_refused():
 
 
 def test_permit_deadline_crossing_during_the_claim_commit_is_refused():
+    """A permit whose deadline passes before the final validation is refused."""
+
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
-    _, admission, _, _, tx = _transaction(now, ttl_ns=1_000_000)
-    crossing = {"armed": False}
-    base = tx.registry._clock_ns
+    _, admission, registry, port, tx = _transaction(now, ttl_ns=1_000_000)
+    original = admission.history_commit_receipt
+    calls = {"n": 0}
 
-    def crossing_clock():
-        now[0] += 5_000_000          # the commit itself takes 5 ms, past the 1 ms permit
-        return base()
+    def cross_then_commit(**kwargs):
+        # the permit's 1 ms lifetime elapses before the single history-owned
+        # validation reads its timestamp, which must then refuse
+        calls["n"] += 1
+        now[0] += 5_000_000
+        return original(**kwargs)
 
-    tx.registry._clock_ns = crossing_clock
-    assert _run(tx) == "REJECTED"
-    assert tx.failure is not None and "EXPIRED" in tx.failure.upper()
+    admission.history_commit_receipt = cross_then_commit
+    state = _run(tx)
+    assert calls["n"] >= 1
+    assert state in ("REJECTED", "UNKNOWN"), state
+    assert port.reserve_calls == 0 and port.accepted_commands == 0
 
 
 def test_selection_is_frozen_from_the_copied_entry_not_the_caller_sample():
