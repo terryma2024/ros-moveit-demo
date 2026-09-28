@@ -9065,3 +9065,24 @@ This resolves the design block **without authorizing runtime or motion**.
   green.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-772 — Task 11A: contract creation, campaign index and the collection-mode gate
+
+- **Delivered:** `create_qualification_contract`, `write_campaign_index` and `require_collection_mode` in
+  `act/parallel_collection.py`, with tests.
+  - **contract:** atomic (`fsync` + `replace`, no `.partial` left), kinds `W1`/`W2`/`W8` only, and an
+    **existing** path is `QUALIFICATION_CONTRACT_EXISTS` — never an overwrite — because a second campaign
+    must not inherit or silently replace another run's qualification evidence; a non-writable parent
+    fails as `QUALIFICATION_CONTRACT_NOT_PERSISTABLE` **before** any spawn rather than mid-run.
+  - **index:** atomic publication of the wave partition with `wave_index` per wave and the scene count;
+    refuses an existing target and an empty-wave partition.
+  - **mode gate:** qualification runs accept `W1`/`W2`/`W8`; a formal run must be exact `W8` under a
+    contract that is present, **not revoked** and exactly **40 scenes**
+    (`FORMAL_MANIFEST_NOT_EXACT_W8`, `FORMAL_QUALIFICATION_CONTRACT_MISSING_OR_REVOKED`,
+    `FORMAL_QUALIFICATION_SCENE_COUNT_INVALID`).
+- **Why these three first:** they are the plan's admission rules for 11A expressed as pure,
+  offline-testable gates, so the rules exist and are proven before any of it touches the teleop admission
+  surface where the user's in-flight work lives.
+- **Verification:** focused tests **5 passed** (`gate6-batch3-py-gate/task11a2.{log,junit.xml}`).
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
