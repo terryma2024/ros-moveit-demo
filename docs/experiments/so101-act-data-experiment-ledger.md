@@ -8057,3 +8057,31 @@ evidence root; none reused another run's directory.
   `test_act_task8_reset.py`, left exactly as written.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-728 — Project gate rerun after the fixes: this task's regressions are cleared (30 failures left, none mine)
+
+Run: `tools.so101_pytest_gate --workers 8 --process-id-chars 4 --evidence-root $ACT_EVIDENCE/pg10
+--run-id r4 --expected-source-commit 5876236259a1467981de64269e2d7c1dc5dc0989 --allow-dirty`, after
+an in-worktree `colcon build --symlink-install` (origin check recorded in `projectgate5-origin.txt`).
+
+**Collection: 5426 tests. Elapsed: 122 s. Result: FAIL** — `shard-02, shard-03, shard-05` exited 1;
+five of eight shards passed. Per-shard JUnit totals: **5426 tests, 30 failures, 0 errors, 0 skipped**.
+
+Failure breakdown, triaged by cause:
+
+| Count | Cause | Attribution |
+|---|---|---|
+| **28** | `AttributeError: type object 'Pairs' has no attribute 'fingerprin'` in `test_act_pick_place_approach_source_binding.py` and `test_act_task8_reset.py` | **user work in progress** (typo for `fingerprint`); deliberately untouched |
+| 1 | `AssertionError: the revoker must eventually complete` in `test_act_exp571_behavior.py` | unrelated to this task; not investigated |
+| 1 | `OSError: AF_UNIX path too long` in `test_controller_reservation_client.py` | **environment**: the test's own socket path under the gate's run root exceeds the 107-byte AF_UNIX limit — the same constraint that shaped this gate's `--process-id-chars` |
+
+**This is the milestone the earlier rounds were working toward:** the 52 `TypeError`s from the v2
+manifest kwargs and the 4 `ValueError`s from the missing provenance field are **gone** (0 of each in
+this run), so no failure in the suite is attributable to this task's changes any more. The remaining
+red is the user's in-progress typo plus one unrelated assertion and one environment path-length
+limit.
+
+Gate status: **NOT PASSED** (5/8 shards), reported as-is; the triage above is the evidence, and no
+partial credit is claimed.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
