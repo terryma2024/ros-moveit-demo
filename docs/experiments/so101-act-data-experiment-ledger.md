@@ -10780,3 +10780,33 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the gate working, not a defect to route around.
 - **Boundaries:** no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no ROS Python touched;
   user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-844 — Task 8L input chain: contract found, identities document is the next required input
+
+- **CLI surfaces read (no runtime started):**
+  - `act_build_task8_source_provenance --source-root … --install-overlay … --output …` (both first arguments
+    required);
+  - `act_measure_task8_calibration --contract … --identities … [--batch-root … --driver module:callable
+    --ledger …]`;
+  - `act_build_task8_calibration_report --contract … [--identities … --batch-root … --output-root …]`.
+- **The frozen contract exists and is a template with units, not a set of loose numbers:**
+  `config/act/task8-calibration-measurement-contract-v1.json`, `kind: task8_calibration_measurement_contract_template`,
+  with `anchors` (`default`, `left`, `forward`), `camera_measurements` (`head_intrinsics_px`, `head_rpy_rad`,
+  `head_translation_m`, each carrying its unit), `measurements` (`center_deadband_px`, `coarse_step_rad`,
+  `horizontal_fov_rad`, …), `thresholds` (including `cleanup.require_group_clear` and a
+  `collision.full_request_budget_ms: 25`) and `verdicts`. Nothing about it has to be invented.
+- **Provenance did not build yet, and the refusal is precise:**
+  `act_build_task8_source_provenance --source-root <worktree> --install-overlay <worktree>/install` failed with
+  `SOURCE_PROVENANCE_INSTALL_MISSING` from `act/source_provenance.py:90`. So `--install-overlay` does not mean
+  "the worktree install prefix" - it names a path whose specific contents that module validates, and I have not
+  yet read which. Guessing further would be exactly the pattern this task's rules forbid, so it stopped there.
+- **The identities document is the gate to measurement:** `act_measure_task8_calibration` requires
+  `--identities`, a JSON document whose `source_provenance_sha256` (and siblings) are passed to
+  `load_measurement_contract(..., expected_hashes=identities)`. That is the artefact that binds provenance,
+  calibration and config together, and finding its producer is the next step.
+- **State of the ladder:** provenance -> measurement -> report -> bundle -> live has not advanced past its first
+  step; the stack still refuses to compose without explicit calibration
+  (`EXPLICIT_CALIBRATION_PARAMETERS_REQUIRED`, CP-843), and no measurement has been taken.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
