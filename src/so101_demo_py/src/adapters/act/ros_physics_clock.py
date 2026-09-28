@@ -51,7 +51,7 @@ class RosPhysicsClockAdapter:
                 or not isinstance(chunk.simulation_session_id, str)
                 or not chunk.simulation_session_id
                 or type(chunk.reset_epoch) is not int
-                or chunk.reset_epoch < 1 or not chunk.samples
+                or chunk.reset_epoch < 0 or not chunk.samples
                 or type(chunk.chunk_sequence) is not int
                 or chunk.chunk_sequence < 0
                 or any(not isinstance(sample, PhysicsStepEvidence)
@@ -121,7 +121,8 @@ class RosPhysicsClockAdapter:
                 chunk = copy.deepcopy(message)
                 scope = self._scope(chunk)
                 if not self._armed:
-                    self._append_pending(chunk, receipt_ns, scope)
+                    if scope != (self.history.session_id, 0):
+                        self._append_pending(chunk, receipt_ns, scope)
                 else:
                     self._consume(chunk, receipt_ns, scope)
             except (AttributeError, TypeError, ValueError, OverflowError):
