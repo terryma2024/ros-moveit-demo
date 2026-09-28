@@ -9417,3 +9417,26 @@ This resolves the design block **without authorizing runtime or motion**.
   injected exporter), `train_act`, `config/act/training.yaml`, `config/act/requirements.lock`, `act_train`.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-787 — Task 12A begins: masked joint metrics
+
+- **Delivered:** `act/offline_evaluation.py` with `masked_joint_mae` (the plan's contract, verbatim) and
+  `masked_joint_rmse`, plus `test_act_offline_evaluation.py`.
+  - **padding never counts:** the plan's Step-1 assertion passes exactly — `[True, False]` over a
+    100-unit padded frame yields `[1., 2., 3., 4., 5., 6.]`.
+  - **no silent denominator reduction:** a mask keeping nothing is `NO_VALID_TARGETS`, and a malformed row
+    is **refused** rather than skipped, so a corrupt episode cannot improve a score by shrinking the
+    divisor. Six finite non-bool joints per row (`PREDICTED_INVALID` / `TARGET_INVALID`), boolean masks and
+    equal lengths (`MASK_SHAPE_INVALID`) are all enforced.
+  - `masked_joint_rmse` uses the identical mask and refusals; the tests check the two agree on a single
+    frame and that the mask alone sets the denominator.
+- **My test bug:** one entry in the refusal loop was actually **valid** (the same shape as the happy path),
+  so it correctly did not raise and the loop failed as `DID NOT RAISE`. Each case now carries a genuine
+  fault and the expected code is computed from the fault class — scaffolding fixed, guards untouched.
+- **Verification:** focused tests **4 passed** (`gate6-batch3-py-gate/task12a2.{log,junit.xml}`).
+- **Remaining in 12A:** `evaluate_offline` — the freeze check (six exact fields plus a `freeze-paths.json`,
+  every file present and hashing as recorded, at least 10 successful Offline Test episodes, no cross-split
+  chunking, no updated train statistics), per-episode and per-horizon metrics, episode-equal weighting,
+  and the read-only guarantee (no backprop, no statistic updates, no checkpoint selection).
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; 12A IN PROGRESS; `collection_*` NOT_PROVISIONED.
