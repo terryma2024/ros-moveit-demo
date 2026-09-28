@@ -6617,3 +6617,14 @@ status: PLANNED_ISOLATED_STACK
 - 证据纪律：新建 scratch + tempfile 探针 PASS + 镜像 `mirror-6` 逐文件 SHA 等于 worktree；追加式目录，未删除/覆盖；42 个既有 dirty entries 未改动。
 - 下一步：定位这 5 行的具体断言并收绿（不得放宽断言）；然后 P2 锁图二选一（含删除过时 `claim_guard` 描述）、legacy claim 测试迁移、真实 `step_at` deepcopy 屏障与 send 入口测试保留、以及簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且与清单快照分开提交）。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
+
+## CP-654 — EXP-573 P1.2 进展：表驱动闭合 8 passed / 1 failed（末行 `unusable` 守卫定位中）
+
+- 提交 `62472a40`。修正了表格中**由我的用例构造错误**导致的三处：
+  1. `claim refusal` 行原来在 run **之前**调用 `registry.revoke(...)`，实际触发的是 **pre-issue** 拒绝（REJECTED）；现改为在 claim 路径**内部**先撤销 owner 再调用原 `claim_bound`，从而真正测试“已知 permit 的 claim 拒绝”；
+  2. readback/超时等**发生在 send 之后**的行，控制器确实已消费一条命令，原先笼统断言 `accepted_commands == 0` 不成立；现按 **PRE_SEND_PATHS** 区分：send 之前失败的路径要求 0，send 之后失败的路径要求恰为 1，且两者都必须**终止化且不可复活**；
+  3. 终态断言改为“**终态**”语义（`UNKNOWN` 或由撤销引起的更具体的 `REVOKED`），这是 review 10 “normally UNKNOWN” 所允许的更精确终态，同时保留“迟到 receipt 不得复活”的断言。
+- **实测**：`test_act_exp573_failure_closure.py` **8 passed / 1 failed**（`p12-green4.log`/JUnit，scratch `exp573-p12-green4.*`，新建 scratch + tempfile 探针）。唯一失败为 `test_port_close_failure_is_recorded_and_leaves_the_transaction_unusable`：其前置断言（`state == UNKNOWN`、`close_failed`、`fencing_required`、`failure`）**全部通过**，但第二次 `tx.run(...)` 未按预期抛 `AUTHORITY_TRANSACTION_UNUSABLE`（第 140 行 DID NOT RAISE），说明 `unusable` 守卫的插入点未真正拦住重入——下一轮直接定位该守卫位置（`dispatch_transaction.py` 约 83 行）并修正。
+- 证据纪律：追加式目录；每轮新建 scratch + 探针；镜像 `mirror-7/8/9` 逐文件 SHA 等于 worktree；42 个既有 dirty entries 未改动。
+- 下一步：修正 `unusable` 守卫使该行收绿（不得放宽断言）；随后 P2 锁图二选一（删除过时 `claim_guard` 描述）、legacy claim 测试迁移、以及簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且与清单快照分开提交）。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
