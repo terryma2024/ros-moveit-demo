@@ -31,7 +31,7 @@ def endpoint_bytes(path):
 class CommandBroker:
     def __init__(self,driver,*,ownership,simulation_session_id=None,prefix_executor=None,
                  prefix_source_authority=None,prefix_source_port=None,control_events=None,
-                 reservation_port=None):
+                 reservation_port=None,authority=None):
         if (prefix_source_authority is None) != (prefix_source_port is None):
             raise ValueError('PREFIX_SOURCE_CONFIG_INVALID')
         if prefix_source_authority is not None and (
@@ -39,6 +39,13 @@ class CommandBroker:
                 or not callable(prefix_source_port)):
             raise ValueError('PREFIX_SOURCE_CONFIG_INVALID')
         self.driver,self.ownership=driver,ownership
+        if authority is not None:
+            from so101_demo.adapters.act.broker_authority_composition import (
+                BrokerAuthorityComposition,
+            )
+            if type(authority) is not BrokerAuthorityComposition:
+                raise TypeError('BROKER_AUTHORITY_INVALID')
+        self.authority=authority
         if reservation_port is not None and (
                 not all(callable(getattr(reservation_port, name, None))
                         for name in ('arm_generation', 'reserve', 'close_generation'))
@@ -126,11 +133,17 @@ class CommandBroker:
             # and the ticket already carries an opaque permit handle, reserve
             # through the broker-owned binding. No caller-supplied identity,
             # snapshot, instant, deadline or receipt value exists on this path.
-            handle = getattr(self, "_permit_handles", {}).get(ticket)
-            resolver = getattr(self, "reservation_resolver", None)
-            if handle is not None and resolver is not None:
-                reserved = self.reservation_port.reserve_bound(
-                    ticket, kind, goal, goal_uuid, handle=handle, resolver=resolver)
+            if self.authority is not None:
+                # Task 8 bound mode: derive the permit for *this* prepared goal.
+                # There is no pre-existing handle lookup and no legacy fallback.
+                try:
+                    handle = self.authority.claim_prepared_goal(
+                        ticket=ticket, role=kind, goal_uuid=goal_uuid, goal=goal)
+                    reserved = self.reservation_port.reserve_bound(
+                        ticket, kind, goal, goal_uuid, handle=handle)
+                except Exception as error:
+                    self.authority.revoke('BROKER_BOUND_CLAIM_FAILED')
+                    raise PermissionError('CONTROLLER_RESERVATION_BOUND_FAILED') from error
             else:
                 reserved = self.reservation_port.reserve(ticket, kind, goal, goal_uuid)
             if reserved is not True:
