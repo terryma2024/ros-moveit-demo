@@ -389,8 +389,15 @@ def test_controller_restart_invalidates_the_receipt_incarnation():
     assert restarted["controller_incarnation"] == "restarted"
     with pytest.raises(Exception):
         registry.receipt(handle, **restarted)
-    assert registry.state_of(handle) == "IN_FLIGHT"
-    assert port.send(goal_uuid=permit.goal_uuid, permit_id=permit.permit_id) == "REJECTED"
+    # an invalid receipt is irreversible: the permit is closed as UNKNOWN and can
+    # never be revived by a later corrected receipt
+    assert registry.state_of(handle) == "UNKNOWN"
+    with pytest.raises(Exception):
+        registry.receipt(handle, **fields)
+    assert port.send(goal_uuid=permit.goal_uuid, permit_id=permit.permit_id,
+                     role=permit.role, target_digest=permit.target_digest,
+                     generation=permit.controller_generation,
+                     controller_incarnation=permit.incarnation) == "REJECTED"
 
 
 # --- stage semantics: only route dispatch may touch the controller ---

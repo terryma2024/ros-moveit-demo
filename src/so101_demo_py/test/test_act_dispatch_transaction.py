@@ -61,9 +61,11 @@ def test_revoke_cannot_interleave_the_claim_history_commit():
     release = threading.Event()
 
     def blocking_commit(*args, **kwargs):
-        entered.set()
-        release.wait(5.0)
-        return original(*args, **kwargs)
+        # hold the admission lock across the wait, exactly as the real commit does
+        with admission._lock:
+            entered.set()
+            release.wait(5.0)
+            return original(*args, **kwargs)
 
     admission.history_commit_receipt = blocking_commit
     outcome = {}
