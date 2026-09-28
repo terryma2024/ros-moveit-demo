@@ -121,7 +121,8 @@ class OfflineDispatchTransaction:
         try:
             claim = self.registry.claim_bound(self.handle, identity=identity,
                                               controller_generation=controller_generation,
-                                              token=token)
+                                              token=token,
+                                              controller_snapshot=self._controller_snapshot())
         except AuthorityRefused as error:
             return self._fail_closed(str(error))
         self.node("claim")
@@ -166,6 +167,18 @@ class OfflineDispatchTransaction:
         return self.state
 
     OPERATIONAL_ERRORS = (TimeoutError, OSError, ValueError, AuthorityRefused)
+
+    def _controller_snapshot(self):
+        """Broker-owned controller identity, read *before* the claim boundary.
+
+        Taking it here keeps the controller-port mutex out of the claim boundary;
+        ``reserve`` revalidates the same generation on the controller side.
+        """
+
+        port = self.port
+        generation = port.current_generation() if hasattr(port, "current_generation") else None
+        boot = port.boot_incarnation() if hasattr(port, "boot_incarnation") else "unknown"
+        return {"generation": generation, "boot_incarnation": boot}
 
     def _fail_closed(self, reason):
         """One irreversible closure: transaction, permit and controller port together.
