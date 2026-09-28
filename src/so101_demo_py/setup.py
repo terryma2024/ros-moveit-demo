@@ -118,6 +118,7 @@ setup(
             "act_train = so101_demo.cli.act_train:main",
             "act_inference_worker = so101_demo.cli.act_inference_worker:main",
             "act_session = so101_demo.cli.act_session:main",
+            "act_evaluate = so101_demo.cli.act_evaluate:main",
             "act_task8_live = so101_demo.cli.act_task8_live:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service
