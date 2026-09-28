@@ -449,6 +449,14 @@ class PhysicsClockAdmission:
                     or evidence_token["reset_epoch"] != identity[4]
                     or evidence_token["history_version"] < 0):
                 raise AdmissionRefused("CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID")
+            # structural readiness is distinct from health: a merely stale or
+            # silent stream must be latched and reported by the commit receipt
+            # itself, not short-circuited as "not ready".
+            if history.epoch is None or not history._first_chunk_seen:
+                raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_NOT_READY")
+            if history.hazard is not None:
+                raise AdmissionRefused(
+                    f"CLOCK_ADMISSION_HISTORY_UNHEALTHY:{history.hazard}")
             try:
                 receipt = history.commit_receipt(
                     expected_version=evidence_token["history_version"],
