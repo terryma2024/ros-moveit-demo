@@ -6507,3 +6507,11 @@ status: PLANNED_ISOLATED_STACK
 - **实测**：EXP-572 探针模块 **9 passed**（`green9.log`/JUnit，scratch `exp572-green9.*`）；六模块 **1 failed, 150 passed in 1.01s**（`six7.log`/JUnit，scratch `exp572-six7.*`）；镜像 `mirror-14` 逐文件 SHA 等于 worktree，每次运行前 tempfile 探针 PASS。
 - 仍未完成：P1.4（两侧皆有效接缝重做最后三个 review-8 RED）、P1.5（屏障进真实 send/serialization 调用点）、contract/audit/inventory 更正与撤回不实陈述。**尚未请求 review 10**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式。
+
+## CP-642 — EXP-572：P1.4 尝试未达标，已回退并如实记录（当前探针 12 passed / 六模块 151 passed）
+
+- 本轮按 review 9 的 P1.4 要求尝试把最后三个 review-8 用例改为**两侧皆有效**的接缝：在测试模块内加入 `_compat(...)`（按 `inspect.signature` 过滤参数）与 `_in_flight_permit(...)`，不再依赖 `stop_at`/`run_to`，并让 malformed 用例覆盖“缺字段 → 修正 receipt”。**结果不合格**：在 frozen `b917ae46` 上确实 **7 failed**（BASELINE_PROVENANCE PASS），但在当前树上这 3 个用例也 **3 failed / 4 passed** ——原因是我手写的完整 receipt 字段（`deadline_ns`/`claim_monotonic_ns`/`observed_ns` 为 `None`）不满足冻结 schema，导致断言分支与预期不符；而在“claim 之后、receipt 之前”取得 IN_FLIGHT permit 又不经过 send，无法用 `last_receipt` 取得真实字段。该尝试已保存为 `experiments/exp572-linearization/p14-attempt-unqualified-behavior-module.py`（NONQUALIFYING），并**已 `git checkout` 回退**到复核过的版本。
+- **回退后的实测**（新建 scratch `exp572-final-check.*`、tempfile 探针 PASS、镜像 `mirror-17` 逐文件 SHA 等于 worktree）：六模块 **151 passed**（`final-six.log`/JUnit）；`test_act_exp571_behavior.py` + `test_act_exp572_linearization.py` **12 passed**（`final-probes.log`/JUnit）。
+- **P1.4 仍未完成**，且已有明确下一步：需要一个**两侧都存在**的“claim 后、send 前”状态入口。最干净的方案是把该入口做成**生产侧**的显式测试接缝（例如 `OfflineDispatchTransaction.claim_only(...)`，在当前与后续版本都存在），随后三个用例用它取 IN_FLIGHT，再用 `port.accepted_fields()`（fake 侧返回真实消费字段）构造 receipt；不得手写 schema 字段，也不得放宽断言。
+- 其余未完成项不变：P1.5（屏障进真实 send/serialization 调用点）、contract 122–126 行删除与锁图补全（含控制器端口锁）、inventory 哈希边界与脏项归属说明、撤回不实陈述。**尚未请求 review 10**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
