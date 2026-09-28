@@ -7781,3 +7781,23 @@ brief: CP-709; hook points: `experiments/gate6-runtime/task8-core/t8p3-remaining
   `pick_place_readback.py`.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-716 — Task 8P3 sub-slice C: complete journal plan before the run starts
+
+- **Delivered:** `plan_campaign_journals(bundle_root, manifest)` in `act/task8_live_evidence.py`,
+  composing CP-715's frozen case list with CP-713's single legal path: an absolute non-symlink
+  bundle root is required, all fourteen journals resolve under `<bundle-root>/task8-live/cases/`,
+  and a single pre-existing journal refuses the whole plan (`TASK8_JOURNAL_EXISTS`).
+- **Property it buys:** the canonical run either has a complete, conflict-free journal plan for all
+  fourteen cases or it fails before starting — the plan's "correct result or no action" requirement
+  expressed as a pre-flight.
+- **Verification:** recorder suite **24 passed** (`gate6-batch3-py-gate/t8p3plan.{log,junit.xml}`),
+  asserting the exact order, fourteen distinct unused paths, the conflicting-journal refusal and the
+  invalid-bundle-root refusal.
+- **Remaining:** the sub-slice C CLI (one production call over this plan, rows written through the
+  complete-row rule) and the `CLOSE..FINAL_CHECK` capture-path extraction in
+  `pick_place_readback.py` (hunk-staged against 191 lines of pre-existing user work); then sub-slice
+  B, the combined 8P3/8P4 xdist gate, 8P4, Tasks 9/10/11/11A-5, the final HEAD freeze, Task 8L, W1,
+  W2, the 40-scene exact-W8 qualification, formal W8 and Task 12.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
