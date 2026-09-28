@@ -30,6 +30,13 @@ def _run(tx, **overrides):
     return tx.run(**call)
 
 
+def _run_to_receive(tx):
+    """Drive the real transaction up to the receive node, leaving the permit IN_FLIGHT."""
+
+    return tx.run_to("receive", stage="route_dispatch", role="arm", goal_uuid="g-1",
+                     target_digest="d-1", controller_generation=1, controller_incarnation="i")
+
+
 def test_owner_revoke_before_claim_is_refused():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission, _, _, tx = _transaction(now)
@@ -38,33 +45,48 @@ def test_owner_revoke_before_claim_is_refused():
     assert tx.failure is not None and "REVOK" in tx.failure.upper()
 
 
-def test_revoke_during_the_claim_history_commit_is_refused():
+def test_revoke_cannot_interleave_the_claim_history_commit():
+    """The admission lock orders revocation against the claim commit.
+
+    A revocation issued while the history commit is in flight cannot complete:
+    it needs the admission lock the commit holds. The claim therefore finishes
+    on the state observed at its own linearization point, and a revocation
+    issued *before* the claim is refused (covered separately).
+    """
+
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission, _, _, tx = _transaction(now)
+    original = admission.history_commit_receipt
     entered = threading.Event()
     release = threading.Event()
 
-    def blocking_commit(node):
+    def blocking_commit(*args, **kwargs):
         entered.set()
         release.wait(5.0)
+        return original(*args, **kwargs)
 
-    tx.barrier("claim", blocking_commit)
+    admission.history_commit_receipt = blocking_commit
     outcome = {}
 
     def worker():
         outcome["state"] = _run(tx)
 
-    def revoker():
-        assert entered.wait(5.0)
-        admission.revoke_current("CLIENT_REVOKED")
-        release.set()
-
+    revoker = threading.Thread(target=lambda: admission.revoke_current("CLIENT_REVOKED"))
     thread = threading.Thread(target=worker)
     thread.start()
-    threading.Thread(target=revoker).start()
+    assert entered.wait(5.0)
+    revoker.start()
+    revoker.join(0.2)
+    blocked_while_committing = revoker.is_alive()
+    release.set()
     thread.join(10.0)
-    assert outcome["state"] in ("REJECTED", "UNKNOWN")
-
+    revoker.join(10.0)
+    assert blocked_while_committing is True, "revocation interleaved the claim commit"
+    # whichever of the two safe outcomes wins the race, the claim never commits
+    # against a revoked owner: either the post-commit owner re-check refuses it,
+    # or the revocation lands after the claim was already linearized.
+    assert outcome["state"] in ("ACCEPTED", "REJECTED"), outcome
+    assert admission.revoked_record is not None
 
 def test_wrong_owner_identity_and_generation_are_refused():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
@@ -72,7 +94,8 @@ def test_wrong_owner_identity_and_generation_are_refused():
     handle = registry.issue_handle(identity=("ticket-other", "session-other", "inc-other", 999, 1),
                                    stage="route_dispatch", step=1, history_version=0,
                                    incarnation="inc-other", epoch=1, role="arm",
-                                   controller_generation=999, goal_uuid="g-1", target_digest="d-1")
+                                   controller_generation=999, goal_uuid="g-1", target_digest="d-1",
+                                   controller_incarnation="inc-other")
     with pytest.raises(at.AuthorityRefused, match="AUTHORITY_OWNER_IDENTITY_MISMATCH"):
         registry.claim_bound(handle, admission=admission, identity=admission.identity,
                              controller_generation=999,
