@@ -6829,3 +6829,15 @@ status: PLANNED_ISOLATED_STACK
 - **聚焦 RED/GREEN**：测试重写为伪造 handle、跨 registry/伪造 handle、READY/UNKNOWN/REJECTED 状态、错误 goal/role、迟到绑定、owner 健康撤销（REVOKED）等**全部在触线前失败并零发送**，以及阳性对照（解析出的绑定**逐字节**出现在线上帧中）。**8 passed**、rc=0、零警告（`batch2-fix2.log`/JUnit，scratch `exp573-batch2-fix2.*`，tempfile 探针 PASS，镜像 `mirror-52`）。修正过程中我自己的测试有一处把“无覆盖”的**合法**绑定混入失败用例（`{} `），导致 1 项假失败；已修正为真正的不匹配用例后全绿——该失败证据保留。
 - **诚实范围**：SEARCH/源侧仍未改为“只交接与其被接受证据关联的不透明 handle/token”（消费者在既有 dirty 的 `pick_place_sources.py`，需先按已证归位技术处理）；Batch 3（真实 C++ 预留/接收临界区、generation/boot/UUID fencing、超时/关闭/取消）尚未开始。
 - 不变量：Gate 5 DONE（范围仅源码/设计与离线契约）；**无生产权威、无运行时目标、无运动、无正式 episode**；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 关闭；证据追加式。
+
+## CP-677 — Batch 2 第二次更正判定 NONQUALIFYING；**缺失的 owner 边界**（停止并报告，不模拟）
+
+- **NONQUALIFYING（保留证据，未删除）**：\`1b1a9ae1\` 及其 \`batch2-fix2.log\`（8 passed）判定为 Gate 6 集成 **NONQUALIFYING**，原因成立：(1) \`reserve_bound(..., resolver=...)\` 仍接受**调用方提供的依赖**——测试里的 \`_Registry\` 就是伪造解析器，能把任意可变 dict 送上线路，把 Mapping 移到调用方解析器之后**并未**建立来源性；(2) \`CommandBroker\` 用动态 \`getattr(self, "reservation_resolver", None)\` 与 \`_permit_handles\`，二者既未在 \`__init__\` 初始化/封存，也无生产来源填充；(3) 任一缺失即**静默回退**到旧 \`reserve(...)\`，绕过绑定协议。
+- **已完成的独立小修**：\`claim_bound\` 文档字符串中“提交后仍读 registry 时钟”的过时描述已改为“使用该次提交返回的**单一 history 自有瞬间**；提交后不再读 registry 时钟、无第二次 history 校验”（本提交）。
+- **缺失的 owner 边界（按指示停止报告，不使用动态属性模拟）**——调用图事实（\`rg\` 于 \`src/\`，排除测试）：
+  - \`CommandBroker\` 的**生产**构造点仅两处：\`src/so101_teleop/so101_teleop/unified/ros_child.py:270\` 与 \`src/so101_demo_py/src/cli/act_command_broker.py:141\`；两处的实参都只有 driver/ownership/lease 一类，**没有** registry、admission、history 或控制器端口。
+  - 生产环境中**唯一**创建封存 \`AuthorityTransactionRegistry\` 的地方是 \`dispatch_transaction.py:35\`：\`registry.bind(admission=admission, history=history, port=port).seal()\`，即封存域由 \`OfflineDispatchTransaction\` **私有**持有，且它不被 \`CommandBroker\` 引用。
+  - 生产环境中**没有**任何代码构造 \`PhysicsClockAdmission\`（\`admit_sample\`/\`history_commit_receipt\` 的命中只有其定义与 registry 内部调用），因此也不存在把 admitted 证据、被认领 permit 与活动 ticket 关联起来的合法所有者。
+  - 结论：当前架构**缺少**一个 broker 组合层的所有者，无法在不伪造依赖的前提下完成“SEARCH admitted 证据 → registry 签发/捕获/认领 → 关联不透明 handle → \`_dispatch_reserved\`”这条链。
+- **所需的最小集成对象/API（请人类确认归属后再实现）**：一个在 broker 组合处（\`ros_child.py:270\` / \`act_command_broker.py:141\`）**构造并持有**的 broker 级对象，例如 \`BrokerAuthorityComposition\`，其职责为：(a) 构造/持有 \`RosPhysicsClockAdapter\` → \`PhysicsClockHistory\` → \`PhysicsClockAdmission\` → 控制器端口 → \`AuthorityTransactionRegistry\`，并在构造后**一次** \`bind(...).seal()\`；(b) 暴露 \`adopt_admitted_evidence(evidence)\`（由 SEARCH 侧把**已被接受**的证据交给它）→ 内部 issue/capture/claim → \`associate_handle(ticket, handle)\`，该操作**只接受**精确 \`PermitHandle\`，在 broker 自有 registry 内解析、要求 IN_FLIGHT 且与同一活动 ticket/session/generation/role/goal 绑定后才存储，**不接受**任何原始绑定字段；(c) 以私有依赖形式一次性注入 \`ControllerReservationClient\`（类型/身份校验为真实封存的 \`AuthorityTransactionRegistry\`，**不是** duck-typing），封存后不可重绑；(d) Gate-6 绑定模式**显式且失败关闭**——缺解析器或 handle 时拒绝并撤销/关闭，**无旧路径回退**；旧 \`reserve(...)\` 若需保留，必须是启动时选择的**独立模式**。
+- 不变量：Gate 5 DONE（范围仅源码/设计与离线契约）；**无生产权威、无运行时目标、无运动、无正式 episode**；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 关闭；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
