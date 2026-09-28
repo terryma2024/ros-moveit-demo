@@ -8510,3 +8510,22 @@ test that a shorter gate run root clears.
   trusted campaign.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-749 — Live CLI: all-or-nothing journal planning from the verified bundle
+
+- **Delivered:** `--journal-run-root` on `act_run_pick_place_validation`. With `--artifact-bundle` it
+  loads the manifest from the **verified** bundle, plans the fourteen case journals through
+  `plan_campaign_journals` (CP-716) under `<run-root>/task8-live/cases/`, and refuses the run before
+  composition when any journal is taken (`TASK8_JOURNAL_EXISTS`) or the plan is not fourteen
+  (`TASK8_CAMPAIGN_JOURNAL_PLAN_INCOMPLETE`).
+- **Verification:** bundle + recorder suites **43 passed** (`gate6-batch3-py-gate/cliplan3.{log,junit.xml}`);
+  the test asserts a taken `full-01.json` stops the run with nothing composed.
+- **Two fixture mistakes of mine, caught by guards and fixed in the test:** a missing local import, and
+  the shared `_inputs` fixture's **stub manifest** (no case lists), which correctly raised
+  `TASK8_CAMPAIGN_MANIFEST_INVALID` — the fixture was rebuilt with a real v2 manifest rather than the
+  planner being relaxed.
+- **Honest scope:** the run still uses `--journal` for a single campaign; iterating the fourteen planned
+  journals in **one production call** (sub-slice C's requirement) remains outstanding, together with the
+  8P4 real-composition integration test.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
