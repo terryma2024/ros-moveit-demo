@@ -436,7 +436,10 @@ class _Evidence:
     """The readback's per-step physics evidence (SimulationEvidence-shaped)."""
 
     def __init__(self, *, left=(), right=(), other=(), minimum_signed_distance_m=0.0,
-                 position=(0.0, 0.0, 0.1), orientation=(0.0, 0.0, 0.0, 1.0)):
+                 position=(0.0, 0.0, 0.1), orientation=(0.0, 0.0, 0.0, 1.0),
+                 simulation_step=0, simulation_time_s=0.0):
+        self.simulation_step = simulation_step
+        self.simulation_time_s = simulation_time_s
         self.left_fingertip_contacts = tuple(left)
         self.right_fingertip_contacts = tuple(right)
         self.other_object_contacts = tuple(other)
@@ -469,3 +472,43 @@ def test_frame_aggregates_follow_the_contact_evidence_not_a_label():
                                      support_distance_max_m=0.005)
     assert single["bilateral_contact"] is False    # one pad is not a grasp
     assert single["holding_state"] == "APPROACHING"
+
+
+def test_capture_evidence_fields_compose_a_canonical_sample(recorder):
+    """The readback's per-frame fields plus the phase bits make a recorder-accepted sample."""
+
+    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+    from so101_demo.adapters.act.pick_place_readback import PickPlacePhysicalReadback
+
+    rec, root = recorder
+    canonical = sample(root, step=0)
+    evidence = _Evidence(left=[_Contact()], right=[_Contact()], minimum_signed_distance_m=0.02)
+    captured = {"world": evidence, "scene": {}, "contact": {},
+                "observation": {}, "reference": {},
+                "source_stamps_s": canonical["source_stamps_s"],
+                "source_received_wall_s": canonical["source_received_monotonic_s"]}
+    adapter = object.__new__(PickPlacePhysicalReadback)
+    fields = adapter.capture_evidence_fields(captured, support_distance_max_m=0.005,
+                                             raw_records=canonical["raw_records"])
+    assert type(fields["physics_step"]) is int and fields["sim_time_s"] >= 0
+    built = build_live_evidence_sample(
+        identity={"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
+                  "reset_epoch": 4, "release_epoch": 0},
+        phase="TRANSPORT", physics_step=fields["physics_step"], sim_time_s=fields["sim_time_s"],
+        source_stamps_s=fields["source_stamps_s"],
+        source_received_monotonic_s=fields["source_received_monotonic_s"],
+        raw_records=fields["raw_records"], holding_state=fields["holding_state"],
+        frame={"wrist_frame_valid": True, "wrist_target_visible": True},
+        contact={"observation_valid": True, "bilateral_contact": fields["bilateral_contact"],
+                 "no_fingertip_contact": fields["no_fingertip_contact"],
+                 "cup_supported": fields["cup_supported"], "released": False,
+                 "placement_stable": False},
+        measurements={"cup_support_distance_m": fields["cup_support_distance_m"],
+                      "end_effector_position_m": [0.0, 0.0, 0.1],
+                      "cup_position_m": fields["cup_position_m"],
+                      "cup_orientation_xyzw": fields["cup_orientation_xyzw"]})
+    assert set(built) == set(canonical)
+    rec.append(built)                      # the recorder accepts the composed sample
+    with pytest.raises(Exception):
+        adapter.capture_evidence_fields({"world": evidence}, support_distance_max_m=0.005,
+                                        raw_records={})
