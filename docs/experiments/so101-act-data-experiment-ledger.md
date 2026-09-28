@@ -7018,3 +7018,31 @@ status: PLANNED_ISOLATED_STACK
 - **Boundaries:** formal accepted Train/Validation/Offline Test **0/0/0**, Task 12
   `NOT_STARTED`, Gate 6 runtime/goals/motion closed; every mirror, scratch, shard log, patch
   and byte-copy rollback retained — nothing deleted or overwritten.
+
+## CP-688 — Lock slice closed, A-prime root wiring in, whole-tree gate PASS (5 340 nodes)
+
+- **Lock slice (committed `dba97441` + this cluster's additive commit):** `_stop_if_revoked()`
+  is locked logical terminalization only (no close/invalidate/`stop_all`/refresh/socket);
+  `_drain_cleanup_once()` is the single-flight executor (locked exact-token claim refusing
+  during prepared/applied resets and when another drainer owns the token; unlocked
+  `refresh_stop` → controller close → prefix invalidate → `driver.stop_all`; locked
+  generation-scoped finalization that never confirms against IDLE); boundary drains at the
+  public exits (`handle`, `tick`, `stop_attempt`, `disconnect`, and now the public `dispatch`
+  wrapper). Policy preserved: `stop_attempt` surfaces stop failures, `tick` propagates to its
+  caller with the server loop fencing, `disconnect` fences.
+- **A-prime root wiring:** `ros_child._start_ros_broker` installs the one-shot bound session
+  **only** for the hash-bound `ACT_TASK8_LIVE` profile; the domain comes from
+  `physics_clock_domain(...)` over the calibrated settings and the root's own
+  `ControllerReservationClient` is shared by the session, its `RosControllerPort` and the
+  broker. No CLI bound mode, no generic owner fallback. Runtime remains closed.
+- **Focused regression:** 140 passed (`extended.log`) including the 14-test transaction suite
+  and the root profile-gate tests; both dispatch routes have blocked-close concurrency proofs.
+- **Whole-tree official gate (fresh scratch, xdist=8, evidence root `pg5/r5`):** `result PASS`,
+  gate rc=0, collection **5 340/5 340** (`collection_sha256 efca22c2…`), shards 01-08 rc=0 with
+  0 failures/errors, serial lane 286 tests/2 skipped/0 failures, cleanup clean, warnings 4
+  (the audited `test_detector_factory` fork() platform warnings).
+- **Baseline safety:** this cluster staged 8 task hunks and excluded 5 baseline hunks
+  (`baseline_pollution=0`), preserving the pre-existing dirty batch, including `ros_child.py`'s
+  3-insertion user hunk. Evidence `experiments/gate6-batch3-commit/{stage5-check,hunk-filter-round88}.txt`.
+- **Unchanged:** formal accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED;
+  Gate 6 runtime/goals/motion closed; `collection_*` NOT_PROVISIONED.
