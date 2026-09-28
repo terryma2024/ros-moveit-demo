@@ -26,8 +26,9 @@ READY, IN_FLIGHT, ACCEPTED, REJECTED, UNKNOWN, REVOKED, EXPIRED = (
 TERMINAL = frozenset({ACCEPTED, REJECTED, UNKNOWN, REVOKED, EXPIRED})
 FIXED_STAGES = ("sample", "proof", "permit", "route_dispatch", "final_acceptance")
 RECEIPT_FIELDS = ("protocol_version", "permit_id", "goal_uuid", "role", "generation",
-                  "target_digest", "controller_incarnation", "verdict", "sequence",
-                  "observed_ns", "clock_domain")
+                  "target_digest", "controller_incarnation", "controller_boot_incarnation",
+                  "broker_incarnation", "session_id", "deadline_ns", "clock_domain",
+                  "claim_monotonic_ns", "verdict", "sequence", "observed_ns")
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ class ClaimReceipt:
     epoch: int
     commit_monotonic_ns: int
     selected_age_ns: int
+    deadline_ns: int
 
 
 class AuthorityTransactionRegistry:
@@ -171,7 +173,59 @@ class AuthorityTransactionRegistry:
                                 history_version=receipt["version"],
                                 incarnation=receipt["incarnation"], epoch=receipt["epoch"],
                                 commit_monotonic_ns=receipt["commit_monotonic_ns"],
-                                selected_age_ns=receipt["age_ns"])
+                                selected_age_ns=receipt["age_ns"], deadline_ns=record.deadline_ns)
+
+    def claim_bound(self, handle, *, admission, identity, controller_generation, token):
+        """Broker-internal claim bound to the live owner, generation and history receipt.
+
+        The admission/history objects are supplied by the broker itself, never by the
+        caller. Identity, revocation/retirement state and the controller generation are
+        validated before the history commit, and the permit deadline is re-checked with
+        the registry clock *after* the commit but still before READY -> IN_FLIGHT.
+        """
+
+        if not isinstance(handle, PermitHandle):
+            raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
+        if not hasattr(admission, "fence") or not hasattr(admission, "history_commit_receipt"):
+            raise AuthorityRefused("AUTHORITY_ADMISSION_DOMAIN_REQUIRED")
+        with self._lock:
+            record = self._records.get(handle.permit_id)
+            if record is None:
+                raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
+            if self._revoked is not None:
+                self._states[record.permit_id] = REVOKED
+                raise AuthorityRefused("AUTHORITY_REVOKED")
+            if self._states[record.permit_id] != READY:
+                raise AuthorityRefused(
+                    f"AUTHORITY_PERMIT_NOT_READY:{self._states[record.permit_id]}")
+            if tuple(identity) != record.identity:
+                raise AuthorityRefused("AUTHORITY_OWNER_IDENTITY_MISMATCH")
+            if controller_generation != record.controller_generation:
+                raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
+            now_ns = self._clock_ns()
+            if now_ns > record.deadline_ns:
+                self._states[record.permit_id] = EXPIRED
+                raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED")
+            try:
+                receipt = admission.history_commit_receipt(
+                    token=token, step=record.step, max_age_ns=self._selected_max_age_ns)
+            except Exception as error:  # noqa: BLE001
+                raise AuthorityRefused(f"AUTHORITY_COMMIT_REFUSED:{error}") from error
+            if receipt["version"] != record.history_version \
+                    or receipt["incarnation"] != record.incarnation \
+                    or receipt["epoch"] != record.epoch:
+                raise AuthorityRefused("AUTHORITY_COMMIT_IDENTITY_CHANGED")
+            if self._clock_ns() > record.deadline_ns:
+                self._states[record.permit_id] = EXPIRED
+                raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED_AT_COMMIT")
+            self._states[record.permit_id] = IN_FLIGHT
+            return ClaimReceipt(permit_id=record.permit_id, identity=record.identity,
+                                stage=record.stage, step=record.step,
+                                history_version=receipt["version"],
+                                incarnation=receipt["incarnation"], epoch=receipt["epoch"],
+                                commit_monotonic_ns=receipt["commit_monotonic_ns"],
+                                selected_age_ns=receipt["age_ns"],
+                                deadline_ns=record.deadline_ns)
 
     def receipt(self, handle, **fields):
         """Strict receipt validation; a receipt never grants authority."""
@@ -191,11 +245,21 @@ class AuthorityTransactionRegistry:
                     or fields["generation"] != record.controller_generation
                     or fields["target_digest"] != record.target_digest
                     or fields["controller_incarnation"] != record.incarnation
+                    or not isinstance(fields["controller_boot_incarnation"], str)
+                    or not fields["controller_boot_incarnation"]
+                    or fields["broker_incarnation"] != record.incarnation
+                    or fields["session_id"] != record.identity[1]
+                    or fields["deadline_ns"] != record.deadline_ns
                     or fields["clock_domain"] != "monotonic"
+                    or type(fields["claim_monotonic_ns"]) is not int
+                    or not record.issued_ns <= fields["claim_monotonic_ns"] <= self._clock_ns()
                     or type(fields["sequence"]) is not int or fields["sequence"] < 1
-                    or type(fields["observed_ns"]) is not int or fields["observed_ns"] < 0
-                    or fields["observed_ns"] > self._clock_ns()
+                    or type(fields["observed_ns"]) is not int
+                    or not fields["claim_monotonic_ns"] <= fields["observed_ns"] <= self._clock_ns()
+                    or fields["observed_ns"] > record.deadline_ns
                     or fields["verdict"] not in (ACCEPTED, REJECTED, UNKNOWN)):
+                # any malformed, late or unknown receive result is irreversible
+                self._states[record.permit_id] = UNKNOWN
                 raise AuthorityRefused("AUTHORITY_RECEIPT_INVALID")
             self._states[record.permit_id] = fields["verdict"]
             return fields["verdict"]
@@ -229,16 +293,20 @@ class ReservationFakeControllerPort:
         self._reservations = {}
         self._accepted_uuids = set()
         self._close_first = False
+        self._close_reason = None
         self._accept_first = False
+        self._boot_incarnation = f"{controller_incarnation}-boot"
         self._restarted = False
         self._io_blocked = False
         self.accepted_commands = 0
+        self._consumed = {}
         self.reserve_calls = 0
         self.send_calls = 0
         self.cancel_stop_pending = False
 
     def reserve(self, *, permit_id, goal_uuid, role, target_digest, generation,
-                controller_incarnation, deadline_ns, stage):
+                controller_incarnation, deadline_ns, stage, session_id="clock-session",
+                broker_incarnation=None, claim_monotonic_ns=None):
         with self._lock:
             self.reserve_calls += 1
             if stage != "route_dispatch":
@@ -250,14 +318,31 @@ class ReservationFakeControllerPort:
                 return REJECTED
             self._reservations[permit_id] = {"goal_uuid": goal_uuid, "role": role,
                                              "target_digest": target_digest,
-                                             "deadline_ns": deadline_ns}
+                                             "deadline_ns": deadline_ns,
+                                             "generation": generation,
+                                             "controller_incarnation": controller_incarnation,
+                                             "boot_incarnation": self._boot_incarnation,
+                                             "session_id": session_id,
+                                             "broker_incarnation": broker_incarnation,
+                                             "claim_monotonic_ns": (claim_monotonic_ns
+                                                                    if claim_monotonic_ns is not None
+                                                                    else self._clock_ns())}
             return ACCEPTED
 
     def arm_generation(self, generation, *, controller_incarnation=None):
         with self._lock:
+            # rearm invalidates every outstanding reservation under the controller mutex
+            self._reservations.clear()
             self._generation = generation
             if controller_incarnation is not None:
                 self._incarnation = controller_incarnation
+        return True
+
+    def close(self, reason="CLOSED"):
+        with self._lock:
+            self._reservations.clear()
+            self._close_first = True
+            self._close_reason = reason
         return True
 
     def block_io(self, blocked):
@@ -283,8 +368,8 @@ class ReservationFakeControllerPort:
             self._reservations.clear()
         return REJECTED
 
-    def send(self, *, goal_uuid, permit_id, role="arm", target_digest="d-1", generation=None,
-             observed_ns=None, controller_incarnation=None, sequence=None, deadline_ns=None):
+    def send(self, *, goal_uuid, permit_id, role, target_digest, generation,
+             controller_incarnation, sequence=None, deadline_ns=None):
         with self._lock:
             self.send_calls += 1
             if self._restarted or self._io_blocked or self._close_first:
@@ -296,10 +381,10 @@ class ReservationFakeControllerPort:
                 return REJECTED
             if role != reservation["role"] or target_digest != reservation["target_digest"]:
                 return REJECTED
-            if generation is not None and generation != self._generation:
+            if generation != self._generation or generation != reservation["generation"]:
                 return REJECTED
-            if (controller_incarnation is not None
-                    and controller_incarnation != self._incarnation):
+            if (controller_incarnation != self._incarnation
+                    or controller_incarnation != reservation["controller_incarnation"]):
                 return REJECTED
             if sequence is not None and sequence < 1:
                 return REJECTED
@@ -310,6 +395,7 @@ class ReservationFakeControllerPort:
                 return REJECTED
             if goal_uuid in self._accepted_uuids:
                 return REJECTED
+            self._consumed[permit_id] = dict(reservation)
             del self._reservations[permit_id]
             self._accepted_uuids.add(goal_uuid)
             self.accepted_commands += 1
@@ -318,14 +404,25 @@ class ReservationFakeControllerPort:
             return ACCEPTED
 
     def last_receipt(self, *, permit_id, verdict=ACCEPTED, sequence=1):
-        """Receipt fields describing the reservation this port actually consumed."""
+        """The receipt recorded from the controller's actual consumed reservation."""
 
         with self._lock:
-            return {"protocol_version": 1, "permit_id": permit_id, "goal_uuid": None,
-                    "role": None, "generation": self._generation,
-                    "target_digest": None, "controller_incarnation": self._incarnation,
+            consumed = self._consumed.get(permit_id)
+            if consumed is None:
+                raise AuthorityRefused("AUTHORITY_NO_CONSUMED_RESERVATION")
+            return {"protocol_version": 1, "permit_id": permit_id,
+                    "goal_uuid": consumed["goal_uuid"], "role": consumed["role"],
+                    "generation": consumed["generation"],
+                    "target_digest": consumed["target_digest"],
+                    "controller_incarnation": consumed["controller_incarnation"],
+                    "controller_boot_incarnation": consumed["boot_incarnation"],
+                    "broker_incarnation": consumed["broker_incarnation"],
+                    "session_id": consumed["session_id"],
+                    "deadline_ns": consumed["deadline_ns"],
+                    "clock_domain": "monotonic",
+                    "claim_monotonic_ns": consumed["claim_monotonic_ns"],
                     "verdict": verdict, "sequence": sequence,
-                    "observed_ns": self._clock_ns(), "clock_domain": "monotonic"}
+                    "observed_ns": self._clock_ns()}
 
     def late_receipt_after_timeout(self):
         with self._lock:
