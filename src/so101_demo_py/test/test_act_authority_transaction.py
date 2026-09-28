@@ -63,7 +63,8 @@ def _reserve(port, *, permit_id="p-1", goal_uuid="g-1", role="arm", target_diges
              deadline_ns=2_000_000_000):
     return port.reserve(permit_id=permit_id, goal_uuid=goal_uuid, role=role,
                         target_digest=target_digest, generation=1,
-                        controller_incarnation="i", deadline_ns=deadline_ns)
+                        controller_incarnation="i", deadline_ns=deadline_ns,
+                        stage="route_dispatch")
 
 
 def test_hazard_before_claim_produces_zero_reserve_and_zero_send():
@@ -244,10 +245,12 @@ def test_same_goal_uuid_cannot_be_accepted_twice_with_a_different_permit():
     module = _module()
     port = _fake()
     port.reserve(permit_id="p-1", goal_uuid="g-1", role="arm", target_digest="d-1",
-                 generation=1, controller_incarnation="i", deadline_ns=2_000_000_000)
+                 generation=1, controller_incarnation="i", deadline_ns=2_000_000_000,
+                 stage="route_dispatch")
     assert port.send(goal_uuid="g-1", permit_id="p-1") == "ACCEPTED"
     port.reserve(permit_id="p-2", goal_uuid="g-1", role="arm", target_digest="d-1",
-                 generation=1, controller_incarnation="i", deadline_ns=2_000_000_000)
+                 generation=1, controller_incarnation="i", deadline_ns=2_000_000_000,
+                 stage="route_dispatch")
     assert port.send(goal_uuid="g-1", permit_id="p-2") == "REJECTED"
     assert port.accepted_commands == 1
 
@@ -329,7 +332,8 @@ def _end_to_end(*, clock_ns=lambda: 1_000_000_000):
                         target_digest=permit.target_digest,
                         generation=permit.controller_generation,
                         controller_incarnation=permit.incarnation,
-                        deadline_ns=permit.deadline_ns) == "ACCEPTED"
+                        deadline_ns=permit.deadline_ns,
+                        stage=permit.stage) == "ACCEPTED"
     assert port.send(goal_uuid=permit.goal_uuid, permit_id=permit.permit_id) == "ACCEPTED"
     fields = port.last_receipt(permit_id=permit.permit_id)
     fields.update(goal_uuid=permit.goal_uuid, role=permit.role,
@@ -369,3 +373,33 @@ def test_controller_restart_invalidates_the_receipt_incarnation():
         registry.receipt(handle, **restarted)
     assert registry.state_of(handle) == "IN_FLIGHT"
     assert port.send(goal_uuid=permit.goal_uuid, permit_id=permit.permit_id) == "REJECTED"
+
+
+# --- stage semantics: only route dispatch may touch the controller ---
+
+
+def test_only_route_dispatch_uses_the_controller_reservation_protocol():
+    port = _fake()
+    for stage in ("sample", "proof", "permit", "final_acceptance"):
+        assert port.reserve(permit_id="p-1", goal_uuid="g-1", role="arm", target_digest="d-1",
+                            generation=1, controller_incarnation="i",
+                            deadline_ns=2_000_000_000, stage=stage) == "REJECTED"
+    assert port.reserve(permit_id="p-1", goal_uuid="g-1", role="arm", target_digest="d-1",
+                        generation=1, controller_incarnation="i",
+                        deadline_ns=2_000_000_000, stage="route_dispatch") == "ACCEPTED"
+    assert port.reserve_calls == 5
+    assert port.accepted_commands == 0
+
+
+def test_local_stage_claims_never_reserve_or_send():
+    registry = _registry()
+    port = _fake()
+    claimed = []
+    for stage in ("proof", "permit", "final_acceptance"):
+        handle = _issue(registry, stage=stage)
+        receipt = registry.claim(handle)
+        claimed.append((receipt.stage, registry.state_of(handle)))
+    assert [stage for stage, _ in claimed] == ["proof", "permit", "final_acceptance"]
+    assert all(state == "IN_FLIGHT" for _, state in claimed)
+    assert port.reserve_calls == 0 and port.send_calls == 0
+    assert port.accepted_commands == 0
