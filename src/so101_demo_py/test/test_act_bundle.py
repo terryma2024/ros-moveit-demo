@@ -141,3 +141,56 @@ def test_the_policy_interface_is_required_before_a_runner_may_use_it(tmp_path):
             require_policy_interface(bad)
     with pytest.raises(ValueError, match="POLICY_LOADER_REQUIRED"):
         load_policy(path, loader=None)
+
+
+def _committed(scene_ids=("act-1", "act-2"), *, split="train", status="PASSED", dataset_id=None):
+    return tuple({"scene_id": scene_id, "split": split, "status": status,
+                  "content": {"frames": 1, "state": [0.0] * 8},
+                  **({} if dataset_id is None else {"dataset_id": dataset_id})}
+                 for scene_id in scene_ids)
+
+
+def test_the_export_is_written_once_in_the_resolved_order(tmp_path):
+    import hashlib
+
+    from so101_demo.act.bundle import EXPORT_KEYS, export_dataset
+
+    output = tmp_path / "dataset"
+    document = export_dataset(_committed(), output, source_manifest_sha256="a" * 64,
+                              campaign_index_sha256="b" * 64)
+    assert set(document) == set(EXPORT_KEYS) | {"manifest_path", "export_sha256"}
+    assert document["scene_count"] == 2
+    assert [episode["scene_id"] for episode in document["episodes"]] == ["act-1", "act-2"]
+    manifest = output / "export-manifest.json"
+    assert hashlib.sha256(manifest.read_bytes()).hexdigest() == document["export_sha256"]
+    for episode in document["episodes"]:
+        path = output / "episodes" / f"{episode['scene_id']}.json"
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == episode["content_sha256"]
+    assert not list(output.rglob("*.partial"))
+    # a second export must not append into the first: the dataset cannot grow under a training run
+    with pytest.raises(ValueError, match="EXPORT_OUTPUT_EXISTS"):
+        export_dataset(_committed(), output, source_manifest_sha256="a" * 64,
+                       campaign_index_sha256="b" * 64)
+
+
+def test_the_export_refuses_what_must_not_enter_training(tmp_path):
+    from so101_demo.act.bundle import export_dataset
+
+    cases = ((_committed(()), "a" * 64, "b" * 64, "EXPORT_EMPTY"),
+             (_committed(("act-0917a-1",)), "a" * 64, "b" * 64, "EXPORT_STALE_DATASET_ID"),
+             (_committed(dataset_id="0917a-run"), "a" * 64, "b" * 64, "EXPORT_STALE_DATASET_ID"),
+             (_committed(split="rollout_test"), "a" * 64, "b" * 64, "EXPORT_SPLIT_FORBIDDEN"),
+             (_committed(split="functional"), "a" * 64, "b" * 64, "EXPORT_SPLIT_FORBIDDEN"),
+             (_committed(status="FAILED"), "a" * 64, "b" * 64, "EXPORT_EPISODE_NOT_PASSED"),
+             (_committed(("act-1", "act-1")), "a" * 64, "b" * 64, "EXPORT_DUPLICATE_SCENE"),
+             (({"scene_id": "act-1", "content": {}},), "short", "b" * 64,
+              "EXPORT_SOURCE_DIGEST_INVALID"),
+             ((({"scene_id": "act-1"},)), "a" * 64, "b" * 64,
+              "EXPORT_EPISODE_CONTENT_MISSING"),
+             ({"scene_id": "act-1"}, "a" * 64, "b" * 64, "EXPORT_EPISODES_INVALID"))
+    for index, (committed, source, index_digest, code) in enumerate(cases):
+        target = tmp_path / f"refused-{index}"
+        with pytest.raises(ValueError, match=code):
+            export_dataset(committed, target, source_manifest_sha256=source,
+                           campaign_index_sha256=index_digest)
+        assert not target.exists()            # a refused export leaves nothing behind
