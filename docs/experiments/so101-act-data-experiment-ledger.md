@@ -10032,3 +10032,21 @@ the runtime ladder for authorisation.
   `adapters/act/lerobot.py` (needs a training interpreter).
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-815 — Task 11A: the collection boundary across a real process
+
+- **Delivered:** `test/test_act_parallel_collection_subprocess.py`, the plan's missing subprocess test.
+  - the campaign runs in a **child interpreter** that inherits this environment, so the package is imported
+    where it will actually run rather than in the test process;
+  - the parent reads the child's JSON report and confirms the same facts on disk: the campaign index at the
+    path the child named, four scenes partitioned `[2, 2]` (the fixture's wave size), and a `PASSED` result
+    file per scene;
+  - **a refusal crosses the process boundary:** a manifest with no scenarios exits **non-zero** with
+    `CAMPAIGN_MANIFEST_INVALID` on stderr and leaves **no** campaign index behind.
+- **Verification:** focused tests **2 passed** (`gate6-batch3-py-gate/task11a20.{log,junit.xml}`), first run
+  green.
+- **Remaining plan artifacts:** `config/act/task8-preparation-receipt-schema.json` and
+  `cli/act_prepare_task8_live_artifacts.py` (Task 8P3; the offline-testable parts), and
+  `adapters/act/lerobot.py` (needs a training interpreter).
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
