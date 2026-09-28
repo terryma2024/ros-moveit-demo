@@ -6169,3 +6169,11 @@ status: PLANNED_ISOLATED_STACK
 - 证据（`experiments/exp568-authority-transaction/`）：`phaseB-manifest.txt`（`pytest --collect-only`）、`phaseB-red.log`、`phaseB-red-junit.xml`、`phaseB-red-result.log`（`elapsed_ns=1,140,772,688`）、`phaseB-tempfile.log`、`phaseB-name-set-verification.json` 与 `phaseB-summary.json`。**自动核验：manifest 127 个 testcase、JUnit 127 个 testcase，名称集合完全相等（missing/extra 均为空）**；8 个恢复的目标用例全部出现在 manifest 中。RED 结果 **23 failed / 104 passed**，其中 admission/history 组归阶段 C、authority transaction 组归阶段 D。
 - 本次改动只涉及测试文件；源码实现未改动。scratch 路径记录在 `phaseB-scratch.txt`，仅为删除候选，未删除任何证据。
 - 边界：Gate 5 仍 OPEN，未声明任何 blocker 关闭；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite。
+
+## CP-602 — EXP-568 阶段 C 部分完成：C1/C3 已提交，C2 仍有缺陷，阶段 D 未开始（当前套件为 RED）
+
+- **C1（提交 `18c2c4cc`）已完成**：新增共享校验器 `validate_stop_evidence(identity, evidence, *, now_ns)`，`retire`、`confirm_stop` 与 takeover commit 三处统一使用；强制 `authoritative`/`stopped`、身份绑定、**mandatory finite expiry**（`valid_until_monotonic_ns` 必填且必须晚于观测时间），并按 `FUTURE → EXPIRED → STALE` 顺序拒绝未来、过期与陈旧（`STOP_EVIDENCE_MAX_AGE_NS = 5 s`）；takeover commit 通过 `arm()` 再次调用同一校验器。
+- **C3（同一提交 `27479d5b`）已完成**：`admit_sample` 的最终拷贝完全在 admission/broker 锁之外（`history.step_at`），提交点在一个短临界区内用**拷贝之后新读取的 monotonic 时间**做年龄判定，并以未变化的 `commit_state()`（version/incarnation/epoch/readiness/hazard/last_source_end）做一次提交比较；“不得使用拷贝前缓存时间”的用例已加入。
+- **C2 仍未完成（已知缺陷）**：`_expire_deadlines` 的 SILENT 分支与部分 stale latch 路径的 version 递增替换未命中当前文件文本，因此 `test_history_version_changes_on_every_readiness_or_hazard_transition` 与 `test_every_hazard_path_advances_the_history_version` 仍失败；另有 `test_authority_consume_requires_token_and_controller_generation` 与 `test_checked_stage_revocation_after_checker_completion_refuses` 两个用例仍失败待定位。
+- 当前焦点套件（admission + history）：**4 failed / 84 passed**（RED，已提交，未声明关闭）。阶段 D（offline authority transaction：不透明单次 permit 注册表与状态机、固定语义本地 stage 入口、有状态对抗 fake controller 接收端口、`READY -> IN_FLIGHT` 短临界区重校验、零 I/O 持锁）**尚未开始**。
+- 边界：Gate 5 仍 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。下一步：修 C2 的 version 缺口与两个 consume 用例，然后实施阶段 D，最后用与阶段 B 完全相同的 manifest 跑 GREEN。
