@@ -6378,3 +6378,9 @@ status: PLANNED_ISOLATED_STACK
 - 第八次复核请求包 `handoff/2026-09-28-review8-request-exp570.md` 在上一轮引用的契约哈希早于 `5c4bfe60`（O(1) 索引与契约同步更新之前），且 `source-commit.txt` 仍指向 `bb8eaffd`。本轮同步：`source-commit.txt` 更新为当前被测提交、`green.log` 换为索引改造后的 GREEN 运行、`tested-source-hashes.txt` 重算（新增 `physics_clock_history.py`）、checkpoint 重新索引并更新 `source_commit`/`green.log_sha256`；请求包中的 HEAD、契约哈希（`7cc6f867…`）、lock audit 哈希（`1e116a95…`）与 checkpoint 哈希全部改为当前值，并把 `commit_receipt` 描述改为“O(1) 索引 + 只读 receipt、锁内无深拷贝”（与代码一致）。
 - 复核请求包新 SHA256 记录于本条目提交说明与 checkpoint；门禁仍为 **151 passed**（同一 151-name 集合）。
 - 边界：Gate 5 仍 OPEN，等待第八次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持封闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-628 — EXP-570：新增 O(1) 步号索引的驱逐验证探针（索引与窗口严格一致）
+
+- 上一轮为把 `commit_receipt()` 变成真正的 O(1)，引入了 `self._by_step` 步号索引（accept 路径重建、arm 清空）。索引的主要风险是**驱逐残留**：deque 满 512 后旧条目被丢弃，若索引未同步就会把已驱逐的 step 当成可用证据返回。本轮专门验证该路径，探针固化为 `experiments/exp570-dispatch-transaction/index-eviction-probe.py` 与 `index-eviction-probe.log`（`INDEX_EVICTION_PROBE PASS`）：写入 640 个样本后窗口与索引均为 512 且**集合完全相等**、step 1 已被驱逐且不在索引中、最新的 step 640 仍可提交、receipt 类型为 `mappingproxy`（只读）、被驱逐的 step 1 以 `PHYSICS_COMMIT_STEP_UNAVAILABLE` 拒绝而**不会**被陈旧索引条目放行。
+- 该探针是**回归护栏**而非行为变更：新旧两版实现（有界扫描版与 O(1) 索引版）都会通过它，因此按既定的 RED 纪律**不为它制造假 RED**，也不因此改动 151-name 集合；它作为已验证证据保存在 EXP-570 目录并登记于 checkpoint。
+- 边界：Gate 5 仍 OPEN，等待第八次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
