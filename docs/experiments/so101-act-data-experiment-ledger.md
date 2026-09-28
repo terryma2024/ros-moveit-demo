@@ -9579,3 +9579,32 @@ This resolves the design block **without authorizing runtime or motion**.
   real dependency resolution waits for a training interpreter that the no-runtime boundary excludes.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-794 — Task 12: the `act_train` CLI
+
+- **Delivered:** `cli/act_train.py` (+ `setup.py` entry) and `attach_episode_content` in
+  `act/training.py`, with `test_act_train_cli.py`.
+  - the plan's flags: `--manifest`, `--campaign-index`, `--gpu-binding`, `--config`, `--output`,
+    `--device`;
+  - **deliberate gate order:** `--device` must be `cuda` (`TRAINING_DEVICE_INVALID`); config and the
+    **resolved** dependency lock are validated before anything is written; the dataset is exported from
+    the campaign index rather than by scanning episode directories; episode content is read from **inside
+    the campaign root** and re-hashed against the recorded digest; an existing bundle **or** dataset is
+    `TRAINING_OUTPUT_EXISTS`; only then does the owner bind to the dataset and config hashes and the
+    trainer run;
+  - the lock path is **supplied** (`requirements_path=`) as the repo's other loaders supply a package
+    share, with the source-tree path only as the default;
+  - the production trainer fails closed: `TRAINING_INTERPRETER_REQUIRED`, then
+    `TRAINING_ADAPTER_UNAVAILABLE`.
+- **A real integration gap the test exposed:** `resolve_committed_episodes` was rebuilding each entry with
+  only its three digest fields, **silently dropping `content_path`/`content_sha256`**, so the CLI had no
+  content to export. The resolver now passes them through, with the reason recorded in the code — a
+  resolved episode that forgets where its content lives forces the exporter to guess.
+- **Two of my own test expectations were wrong** about gate order (an existing output is only reached once
+  the earlier gates pass); corrected in the tests.
+- **Verification:** **21 passed** across the five Task 12 modules
+  (`gate6-batch3-py-gate/task12h5.{log,junit.xml}`).
+- **Task 12 status:** every piece except the LeRobot adapter (`train_act_bundle`) is delivered; the adapter
+  needs a training interpreter, which the no-runtime boundary excludes.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
