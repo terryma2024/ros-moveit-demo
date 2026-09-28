@@ -5,6 +5,8 @@ records, opaque handles, registry-owned time, history-owned commit receipts, ful
 receipt validation and a stateful reservation fake with real thread barriers.
 """
 
+import copy
+import json
 import threading
 import time
 
@@ -75,32 +77,38 @@ def test_hazard_before_claim_produces_zero_reserve_and_zero_send():
 
 
 def test_large_copy_interleavings_hold_no_local_lock():
-    """The registry lock must stay free while controller I/O is in flight."""
+    """A real copy/serialization must not hold the registry lock or block revoke."""
 
     registry = _registry()
     handle = _issue(registry)
     registry.claim(handle)
-    lock_free = {}
+    payload = {"samples": [{"step": step, "values": [step * 1.0] * 64} for step in range(2048)]}
+    observed = {}
+    revoked = threading.Event()
 
-    class _ProbingPort:
-        def send(self, **kwargs):
-            acquired = registry._lock.acquire(blocking=False)
-            lock_free["free"] = acquired
-            if acquired:
-                registry._lock.release()
-            return "ACCEPTED"
+    def copy_build_serialize():
+        # a real, observable large copy and serialization, not a no-op
+        blob = json.dumps(payload).encode("utf-8")
+        copied = copy.deepcopy(payload)
+        acquired = registry._lock.acquire(blocking=False)
+        observed["lock_free"] = acquired
+        if acquired:
+            registry._lock.release()
+        observed["bytes"] = len(blob) + len(copied["samples"])
+        thread = threading.Thread(target=lambda: (registry.revoke("CLIENT_REVOKED"),
+                                                 revoked.set()))
+        thread.start()
+        thread.join(5.0)
+        observed["revoke_done"] = revoked.is_set()
+        return blob
 
-    port = _ProbingPort()
-    outcome = {}
-
-    def worker():
-        outcome["verdict"] = port.send(goal_uuid="g-1", permit_id=handle.permit_id)
-
-    thread = threading.Thread(target=worker)
-    thread.start()
-    thread.join(5.0)
-    assert outcome["verdict"] == "ACCEPTED"
-    assert lock_free["free"] is True, "the registry lock was held across controller I/O"
+    blob = copy_build_serialize()
+    assert len(blob) > 1024
+    assert observed["lock_free"] is True, "the registry lock was held across the copy"
+    assert observed["revoke_done"] is True, "revocation could not proceed during the copy"
+    assert registry.revoke_completed_without_waiting() is True
+    with pytest.raises(Exception):
+        registry.claim(handle)
 
 
 def test_reset_hazard_and_age_crossing_after_final_read_refuse_the_permit():
@@ -157,15 +165,18 @@ def test_controller_acceptance_before_close_yields_one_command_then_cancel():
 
 
 @pytest.mark.parametrize("field,value", [
-    ("goal_uuid", "other"), ("permit_id", "other"), ("target_digest", "other"),
-    ("role", "other"), ("generation", 99),
+    ("generation", 99), ("goal_uuid", "other"), ("permit_id", "other"),
+    ("target_digest", "other"), ("controller_incarnation", "other"),
+    ("sequence", -1), ("deadline_ns", 0), ("role", "other"),
 ])
 def test_wrong_field_is_rejected(field, value):
     port = _fake()
     _reserve(port)
-    call = {"goal_uuid": "g-1", "permit_id": "p-1"}
+    call = {"goal_uuid": "g-1", "permit_id": "p-1", "controller_incarnation": "i",
+            "sequence": 1, "deadline_ns": 2_000_000_000}
     call[field] = value
     assert port.send(**call) == "REJECTED"
+    assert port.accepted_commands == 0
 
 
 def test_replay_duplicate_late_and_restart_are_fail_closed():
