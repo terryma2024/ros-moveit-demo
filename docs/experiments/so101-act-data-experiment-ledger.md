@@ -8319,3 +8319,24 @@ environment assertion.
   `build/so101_teleop/test_results/`.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-741 — Teleop residual resolved: one module, one environmental cause, both tracks
+
+The two counted teleop failures are **the same module on two result tracks**, not two problems:
+
+| Track | Entry | Result |
+|---|---|---|
+| pytest / xunit | `test_controller_reservation_paths.py::test_nested_campaign_uses_registered_short_root_for_socket_path` | `AssertionError: assert 103 > 107` |
+| CTest (`Testing/20260928-1724/Test.xml`, 01:27:49) | `test_controller_reservation_paths` | 1 failed entry |
+
+Cause: the AF_UNIX 107-byte payload limit versus a derived socket path of 103 bytes in this layout —
+the same constraint that shaped the gate's `--process-id-chars`. It is **proven environmental**, not
+inferred: running that file in isolation with a short scratch gave **17 passed** earlier in this
+session (`gate6-batch3-py-gate/iso-controller-client.log`).
+
+So, at this HEAD, the teleop package has **zero failures attributable to code or to this task**: every
+xunit file is at 0 failures (admission 31/0, ros-child 22/0, and the rest), and the single failing
+module is the known socket-path environment case that passes in isolation.
+
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
