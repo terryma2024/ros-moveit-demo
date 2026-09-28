@@ -9654,3 +9654,26 @@ This resolves the design block **without authorizing runtime or motion**.
   needs a trained bundle.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-797 — Task 13 code complete, and a bundle/runner contract gap closed
+
+- **Delivered:** `cli/act_inference_worker.py` (+ `setup.py` entry) and the widened bundle contract.
+  - the worker reads one request per line and writes one reply per line; it refuses **before any work** when
+    the requests file is missing, when a replies file already exists (`INFERENCE_REPLIES_EXIST` — a previous
+    attempt's answers must never be mistaken for this one's) or when the bundle does not verify;
+  - it resets the model once for its session and attempt, emits exactly the **frozen execution prefix**, and
+    its production loader fails closed naming the absent training interpreter.
+- **A real contract gap the failing test exposed:** `ActPolicyRunner` requires `bundle["action"]`
+  (`execution_prefix`, the frozen statistics) while `load_bundle`'s closed key set — written in CP-786 — had
+  **no `action` field**, so the runner would have had to guess them at run time. `BUNDLE_KEYS` now includes
+  `action`, validated against the same closed shape as `training.yaml` (`chunk_size`, `execution_prefix >= 1`,
+  `temporal_ensembling` false, `tail_padding_mask` true), with the reason recorded in the source; the three
+  affected fixtures were updated and the whole Task 12/13 surface re-run.
+- **Verification:** **29 passed** across `test_act_inference_worker.py`, `test_act_bundle.py`,
+  `test_act_offline_evaluation.py`, `test_act_policy.py` and `test_act_train_cli.py`
+  (`gate6-batch3-py-gate/task13f.{log,junit.xml}`).
+- **Task 13 status:** code complete — `act/policy.py`, `config/act/runtime.yaml` + loader,
+  `adapters/act/inference_process.py`, `cli/act_inference_worker.py`. Only its live smoke needs a trained
+  bundle.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
