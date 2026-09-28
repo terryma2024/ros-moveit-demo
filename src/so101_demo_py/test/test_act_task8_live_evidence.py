@@ -604,3 +604,47 @@ def test_case_driver_reaches_the_window_and_seals_into_the_case_directory(tmp_pa
     assert set(artifact) == {"path", "sha256", "schema_version"}
     assert driver.window.grid_count == len(LiveEvidenceWindow.REQUIRED_PHASES)
     assert driver.window.event_count == 1
+
+
+def test_driver_observe_capture_composes_from_a_readback_capture(tmp_path):
+    """One call takes a readback capture through the driver to the frozen grid."""
+
+    from so101_demo.act.task8_live_evidence import CaseEvidenceDriver, LiveEvidenceWindow
+    from so101_demo.adapters.act.pick_place_readback import PickPlacePhysicalReadback
+
+    driver = CaseEvidenceDriver(case_id="full-02", staging_root=tmp_path, session_id="session-1",
+                                attempt_id="attempt-2", reset_epoch=7)
+    reference = sample(tmp_path, step=0)
+    for record in reference["raw_records"].values():
+        relative = record if isinstance(record, str) else (
+            record.get("path") or record.get("relative_path") or record.get("file"))
+        target = driver.case_root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source = tmp_path / relative
+        if not target.exists():
+            target.write_bytes(source.read_bytes() if source.is_file() else b"raw")
+    adapter = object.__new__(PickPlacePhysicalReadback)
+    identity = {"case_id": "full-02", "session_id": "session-1", "attempt_id": "attempt-2",
+                "reset_epoch": 7, "release_epoch": 0}
+    document = sample(tmp_path, step=0)
+    document.update(identity)
+    evidence = _Evidence(left=[_Contact()], right=[_Contact()], simulation_step=0,
+                         simulation_time_s=0.0, minimum_signed_distance_m=0.02)
+    frame = {"wrist_frame_valid": True, "wrist_target_visible": True}
+    contact = {"observation_valid": True, "bilateral_contact": True,
+               "no_fingertip_contact": False, "cup_supported": False, "released": False,
+               "placement_stable": False}
+    measurements = {"cup_support_distance_m": 0.02, "end_effector_position_m": [0.0, 0.0, 0.1],
+                    "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]}
+    for index, phase in enumerate(LiveEvidenceWindow.REQUIRED_PHASES):
+        captured = {"world": _Evidence(left=[_Contact()], right=[_Contact()],
+                                       simulation_step=index, simulation_time_s=index * 0.1,
+                                       minimum_signed_distance_m=0.02),
+                    "scene": {}, "contact": {}, "observation": {}, "reference": {},
+                    "source_stamps_s": document["source_stamps_s"],
+                    "source_received_wall_s": document["source_received_monotonic_s"]}
+        driver.observe_capture(adapter, captured, phase=phase, frame=frame, contact=contact,
+                               measurements=measurements, raw_records=document["raw_records"],
+                               support_distance_max_m=0.005)
+    assert driver.window.grid_count == len(LiveEvidenceWindow.REQUIRED_PHASES)
+    assert set(driver.seal()) == {"path", "sha256", "schema_version"}
