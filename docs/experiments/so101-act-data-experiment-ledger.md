@@ -7855,3 +7855,27 @@ evidence root; none reused another run's directory.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED; 43 dirty entries and 12 untracked user files
   preserved; nothing deleted.
+
+## CP-720 — Task 8P4 begun: campaign, release and retreat validation
+
+- **Delivered:** `act/task8_live_qualification.py` with `validate_campaign_summary` (closed shape
+  matching the trusted campaign summary; `status == "PASSED"`; nine prefixes; exactly five
+  **consecutive** fulls; one unique 64-hex journal digest per case), `validate_release_sample`
+  (support before opening, contact loss after, positive stability window, real file hashing to the
+  recorded digest) and `validate_retreat_sample` (positive distance, stable target, completion
+  within 120 s, same real-file requirement), plus a shared `require_regular_file`.
+- **Design point:** the retreat/release validators require a real dereferenceable sample file, not
+  just a hash, so a qualification cannot be produced from a hash alone; and a non-consecutive full
+  set is refused, so a broken campaign cannot be spliced into a qualification.
+- **Verification:** `test_act_task8_live_qualification.py` -> **3 passed**
+  (`gate6-batch3-py-gate/t8p4.{log,junit.xml}`), covering the happy paths and the discriminating
+  failures (non-PASSED status, wrong counts, non-consecutive fulls, duplicate/malformed digests,
+  extra key, missing support, missing contact loss, wrong hash, absent file, unstable target, zero
+  distance, deadline overrun).
+- **Remaining in 8P4:** the aggregator entry point `build_task8_qualified_report(...)` (consuming
+  the sub-slice C rules and the CP-718 identity binding rather than re-implementing them), its CLI
+  `act_build_task8_qualified_report`, the `QUALIFIED` schema/`calibration.py` updates, and the
+  integration test driving the real runner/adapter/campaign — spec recorded in
+  `experiments/gate6-runtime/task8-core/t8p3-remaining-plan.md`.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
