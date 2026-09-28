@@ -6255,3 +6255,9 @@ status: PLANNED_ISOLATED_STACK
 - 提交 `4571360d`（仅测试文件，测试名不变，集合仍为 135）：`test_large_copy_interleavings_hold_no_local_lock` 不再是 `lambda: None` 的空探针，而是在**真实控制器 I/O 执行期间**用非阻塞尝试证明 registry 锁未被持有（若被持有则断言失败）；`test_io_blocked_while_revoke_proceeds_without_the_broker_lock` 现在有**真实的阻塞发送线程**（Event 屏障），断言 revoke 在 I/O 阻塞期间仍能在 <100 ms 内完成、发送线程最终退出、且其后 `claim` 被拒绝。
 - 重新核验：五个 clock 模块 **135 passed**（manifest 135 = JUnit 135，名称集合相等，elapsed `979,170,575 ns`）；修复前 snapshot 上的 amended RED 用**同一 135-name 集合与修正后的测试**重跑，`same-set-verification.json` 再次确认严格同集（missing/extra 为空）。
 - 边界：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
+
+## CP-612 — EXP-569 复核包已固化：请求第七次本机独立 Astra/High 复核
+
+- 已固化复核请求包 \`handoff/2026-09-28-review7-request-exp569.md\`（SHA256 \`b31adddd9908f45b07aafc2a5f0b0bd62847679bab14921efe40e3a3efbeae0b\`）：逐条把第六次复核的 7 项要求映射到实现与用例（commit receipt 线性化点、opaque handle/私有不可变 record/registry 自身时钟/claim 不接调用方时间、fixed stage、全字段 receipt、有状态 reservation fake 与真实线程屏障、confirmed-stop/retirement 证据在每次 takeover 重新校验、旧回调旁路永久 fail-closed、断言完整性更正），并附严格同集证据（GREEN 135 passed / amended RED 34 failed 101 passed、manifest 与 JUnit 名称集合相等且 RED≡GREEN）、provenance 与 checkpoint 哈希。
+- checkpoint 刷新为 \`experiments/exp569-authority-protocol/checkpoint.json\`，SHA256 \`e6dbc7c32bb698ac44681437297b8bcb4ff376f4fb3eb1668d6e679eb165a291\`（24 个文件，逐文件读回一致）。
+- 状态：Gate 5 **仍为 OPEN**，等待第七次本机独立 Astra/High 复核（由用户指派的独立复核者执行，我不自批）；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 全部保持关闭（正式 accepted Train/Validation/Offline Test 仍为 \`0/0/0\`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。真实 C++ 接收事务/共享控制器 mutex/ROS goal 接受集成仍未实现、未验证，属 Gate 6 前置。
