@@ -39,6 +39,7 @@ def _report(tmp_path):
     return {
         "schema_version": 1, "status": "TASK8_READY",
         "source_commit": "a" * 40, "config_sha256": "b" * 64,
+        "source_provenance_sha256": "c" * 64,
         "measurements": measurements,
         "checks": {name: "PASS" if name not in ("release", "retreat") else "UNMEASURED"
                    for name in ("fov", "collision", "search", "synchronization",
@@ -55,6 +56,8 @@ def _manifest():
         anchors, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64,
         contact_policy_fingerprint="d" * 64,
+        calibration_report_path="calibration-report.json",
+        calibration_report_sha256="e" * 64,
     )
 
 

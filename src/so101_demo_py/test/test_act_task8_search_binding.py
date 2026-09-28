@@ -54,6 +54,8 @@ def _fixture(monkeypatch, *, epoch=1):
          "forward": {"cup_start_m": [0.02, -0.36, 0.165], "neck_start_rad": 0.0}},
         source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
+        calibration_report_path="calibration-report.json",
+        calibration_report_sha256="e" * 64,
     )
     request = {"mode": "phase_prefix", "stop_after": "SEARCH",
                "lifecycle": "FULL_RESTART", "scenario_id": "prefix-01",
