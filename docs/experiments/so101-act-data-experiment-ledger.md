@@ -10007,3 +10007,28 @@ the runtime ladder for authorisation.
 
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-814 — Task 15: the unified ACT collection test
+
+- **Delivered:** `test/teleop/test_unified_act_collection.py`, the plan's missing 11A/15 teleop test, following
+  one collection command from `POST /act/command` through the allow-list to the service.
+  - an accepted `start` reaches the service with its payload intact and `/act/status` returns the session
+    state;
+  - **a refused name never reaches the service** (`shell`, `exec`, `collect-anything`, `""` all answer 503
+    with `service.commands == []`);
+  - a service refusal is reported as 503 carrying the service's own code, and the service was asked exactly
+    once;
+  - **the routes are authority-gated**: the test asserts the ACT router carries a dependency, so the
+    collection path is not ungated;
+  - a body without a string `name` is a 422, and with no service wired the gateway refuses both an unknown
+    name and any command.
+- **My test bug:** the refusal case sent `start` without the payload the gateway requires, so it exercised
+  `ACT_COMMAND_PAYLOAD_REQUIRED` instead of the service refusal; corrected to send a payload, since the point
+  of that case is the service's answer rather than the schema.
+- **Verification:** **12 passed** across `test_act_gateway.py`, `test_act_routes.py` and
+  `test_unified_act_collection.py` (`gate6-batch3-py-gate/task15f.{log,junit.xml}`).
+- **Remaining plan artifacts:** `test/test_act_parallel_collection_subprocess.py`,
+  `config/act/task8-preparation-receipt-schema.json` and `cli/act_prepare_task8_live_artifacts.py` (8P3), and
+  `adapters/act/lerobot.py` (needs a training interpreter).
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
