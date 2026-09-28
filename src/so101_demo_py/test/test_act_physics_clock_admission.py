@@ -729,3 +729,222 @@ def _token(history, step, *, incarnation=None, version=None):
             "history_version": snapshot["version"] if version is None else version,
             "incarnation": snapshot["incarnation"] if incarnation is None else incarnation,
             "reset_epoch": snapshot["epoch"]}
+
+
+# --- restored regression tests (review 5 finding 4: these were claimed but absent) ---
+
+
+def test_retired_identity_is_permanently_closed():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _ready(now)
+    identity = admission.identity
+    admission.retire(identity=identity, stop_evidence=_retire_evidence(identity, now))
+    for stage in ("sample", "proof", "permit", "submit", "final_acceptance"):
+        with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_RETIRED"):
+            admission.fence(ticket="clock-session", generation=1, reset_epoch=1, stage=stage)
+    with pytest.raises(AdmissionRefused):
+        admission.admit_sample(sample=_sample(1), ticket="clock-session", generation=1,
+                               reset_epoch=1)
+
+
+def test_takeover_requires_still_valid_identity_bound_stop_evidence():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _ready(now)
+    identity = admission.identity
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_INVALID"):
+        admission.retire(identity=identity,
+                         stop_evidence={"authoritative": True, "stopped": True,
+                                        "identity": ("ticket-other",), "monotonic_ns": now[0]})
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_INVALID"):
+        admission.retire(identity=identity,
+                         stop_evidence={"authoritative": True, "stopped": True,
+                                        "identity": identity, "monotonic_ns": now[0],
+                                        "valid_until_monotonic_ns": now[0] - 1})
+    admission.retire(identity=identity, stop_evidence=_retire_evidence(identity, now))
+    now[0] += 120_000_000_000
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_EXPIRED"):
+        admission.arm(ticket="clock-session", generation=2, reset_epoch=1)
+
+
+def test_confirm_stop_requires_authoritative_identity_bound_evidence():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _ready(now)
+    identity = admission.identity
+    admission.revoke_current("PHYSICS_CLOCK_SILENT")
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_INVALID"):
+        admission.confirm_stop(identity=identity, stopped=True,
+                               evidence={"authoritative": True, "stopped": True,
+                                         "identity": ("ticket-other",), "monotonic_ns": now[0]})
+    record = admission.confirm_stop(identity=identity, stopped=True,
+                                    evidence=_stop_evidence(identity, now))
+    assert record["stop_evidence_monotonic_ns"] == now[0]
+    assert "expiry_to_stop_ns" not in record
+
+
+def test_selected_age_crossing_after_the_final_snapshot_is_rejected():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _ready(now, selected_max_age_s=.05)
+    last_end_ns = history._last_source_end_ns
+    calls = {"n": 0}
+    base = admission._clock_ns
+
+    def crossing_clock():
+        calls["n"] += 1
+        return last_end_ns + (20_000_000 if calls["n"] == 1 else 80_000_000)
+
+    admission._clock_ns = crossing_clock
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_SELECTED_STALE"):
+        admission.admit_sample(sample=_sample(1), ticket="clock-session", generation=1,
+                               reset_epoch=1)
+
+
+def test_history_version_changes_on_every_readiness_or_hazard_transition():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, _ = _admission(now)
+    history.arm(1, source_floor_s=0.0)
+    seen = [history.snapshot()["version"]]
+    history.accept_chunk(_chunk(0, _sample(1)))
+    seen.append(history.snapshot()["version"])
+    now[0] = history._last_source_end_ns + 400_000_000
+    assert history.check_health() is False
+    seen.append(history.snapshot()["version"])
+    assert len(set(seen)) == 3, seen
+
+
+def test_authority_consume_requires_token_and_controller_generation():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _ready(now)
+    consumed = []
+    with pytest.raises(ValueError):
+        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                stage="submit", consume=lambda: consumed.append("submit"))
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED"):
+        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                stage="submit", consume=lambda: consumed.append("submit"),
+                                evidence_token=_token(history, 1), controller_generation=99)
+    assert consumed == []
+
+
+def test_checked_stage_revocation_after_checker_completion_refuses():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _ready(now)
+    base = admission._clock_ns
+    calls = {"n": 0, "done": False}
+
+    def seam_clock():
+        calls["n"] += 1
+        if calls["n"] >= 2 and calls["done"]:
+            admission.revoke_current("PHYSICS_CLOCK_SILENT")
+        return base()
+
+    def checker():
+        calls["done"] = True
+        return "checked"
+
+    admission._clock_ns = seam_clock
+    with pytest.raises(AdmissionRefused):
+        admission.run_checked_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                    stage="proof", side_effect_free=True, checker=checker)
+    assert admission.checked_stages == 0
+
+
+def test_admit_sample_does_not_copy_under_the_broker_lock():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _ready(now)
+    reached = {"copied": False}
+    original = history.step_at
+
+    def tracking_step_at(step):
+        entry = original(step)
+        reached["copied"] = True
+        assert not admission._lock._is_owned(), "step_at must not run under the admission lock"
+        return entry
+
+    history.step_at = tracking_step_at
+    admitted = admission.admit_sample(sample=_sample(1), ticket="clock-session", generation=1,
+                                      reset_epoch=1)
+    assert reached["copied"] is True
+    assert admitted["command_authority"] is False
+
+
+# --- review 5 / design-review RED cases (implementation deliberately not present yet) ---
+
+
+def test_retirement_evidence_expiry_is_mandatory_and_finite():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _ready(now)
+    identity = admission.identity
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_INVALID"):
+        admission.retire(identity=identity,
+                         stop_evidence={"authoritative": True, "stopped": True,
+                                        "identity": identity, "monotonic_ns": now[0]})
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_INVALID"):
+        admission.confirm_stop(identity=identity, stopped=True,
+                               evidence={"authoritative": True, "stopped": True,
+                                         "identity": identity, "monotonic_ns": now[0]})
+
+
+def test_stop_evidence_rejects_stale_and_future_observation_times():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _ready(now)
+    identity = admission.identity
+    admission.revoke_current("PHYSICS_CLOCK_SILENT")
+    stale = dict(_stop_evidence(identity, now), monotonic_ns=1)
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_STALE"):
+        admission.confirm_stop(identity=identity, stopped=True, evidence=stale)
+    future = dict(_stop_evidence(identity, now), monotonic_ns=now[0] + 60_000_000_000)
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_STOP_EVIDENCE_FUTURE"):
+        admission.confirm_stop(identity=identity, stopped=True, evidence=future)
+
+
+def test_every_hazard_path_advances_the_history_version():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, _ = _admission(now)
+    history.arm(1, source_floor_s=0.0)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    before = history.snapshot()["version"]
+    now[0] = history._last_source_end_ns + 400_000_000
+    assert history.check_health() is False
+    assert history.snapshot()["version"] > before
+    now[0] += 400_000_000
+    with pytest.raises(ValueError):
+        history.step_at(1)
+    assert history.snapshot()["version"] > before
+
+
+def test_read_copy_commit_uses_time_read_after_the_final_copy():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _ready(now, selected_max_age_s=.05)
+    last_end_ns = history._last_source_end_ns
+    original = history.step_at
+    state = {"copied": False}
+
+    def slow_copy(step):
+        entry = original(step)
+        state["copied"] = True
+        now[0] = last_end_ns + 80_000_000      # the copy itself took 60 ms
+        return entry
+
+    history.step_at = slow_copy
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_SELECTED_STALE"):
+        admission.admit_sample(sample=_sample(1), ticket="clock-session", generation=1,
+                               reset_epoch=1)
+    assert state["copied"] is True
+
+
+def test_consume_rejects_negative_and_foreign_versions():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _ready(now)
+    consumed = []
+    negative = dict(_token(history, 1), history_version=-1)
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
+        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                stage="submit", consume=lambda: consumed.append("x"),
+                                evidence_token=negative, controller_generation=1)
+    foreign = dict(_token(history, 1), incarnation="other-incarnation")
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
+        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
+                                stage="submit", consume=lambda: consumed.append("x"),
+                                evidence_token=foreign, controller_generation=1)
+    assert consumed == []
+
