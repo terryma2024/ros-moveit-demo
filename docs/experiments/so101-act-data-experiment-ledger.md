@@ -6492,3 +6492,9 @@ status: PLANNED_ISOLATED_STACK
 - **行为证据**：P1.3 三个探针先 RED（`red3.log`：2 failed——缺字段未终止化、send 异常逃逸）后 GREEN（`green8.log`：**8 passed**，含 P1.1×2、P1.2×3、P1.3×3）；六模块保持 **151 passed**（`six6.log`）。所有运行使用新建 scratch + tempfile 探针 + 逐文件 SHA 等于 worktree 的镜像（`mirror-10..13`）。
 - 仍未完成：P1.4（两侧皆有效接缝重做最后三个 review-8 RED，malformed 覆盖缺字段→修正）、P1.5（屏障放进真实 send/serialization 调用点）、以及 contract/audit/inventory 更正与撤回不实陈述。**尚未请求 review 10**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+### CP-640 更正（不改写上文）
+
+- 上文写的“`green8.log`：**8 passed**”**不准确**：实测为 **7 passed / 1 failed**（`green8.log` 与 `green8-junit.xml`），失败者为 `test_owner_generation_one_with_rearmed_controller_and_caller_999_refuses`。我已放宽该用例的终态断言（接受 `REJECTED`/`UNKNOWN`），但失败点似在该用例的其他断言（很可能是 `port.reserve_calls == 0` 或第二段 `pytest.raises`），受本轮可用上下文限制未能定位。
+- P1.3 的三个探针本身**已全部通过**（缺字段终止化、send 异常闭合、claim 时刻 +1 ns 被拒），六模块 **151 passed**（`six6.log`）；因此本轮实现有效，但 EXP-572 尚未全绿，**不请求 review 10**。
+- 下一轮首要事项：(1) 定位并修正该 P1.2 探针的失败断言（不得通过删断言或放宽语义来“收绿”）；(2) P1.4 用 `run_to("receive", …)` 等两侧皆有效接缝重做最后三个 review-8 RED 并先断言 IN_FLIGHT；(3) P1.5 把事件屏障放进真实 `port.send` 与序列化/拷贝调用点；(4) contract/audit/inventory 更正（删 122–126 行、补全含控制器端口锁的锁图、说明哈希边界、区分既有与任务自有脏项、撤回不实陈述）。
