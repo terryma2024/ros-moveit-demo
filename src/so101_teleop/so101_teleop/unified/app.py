@@ -383,6 +383,35 @@ def instance_router(services: UnifiedServices) -> APIRouter:
     return router
 
 
+def act_router(services: UnifiedServices) -> APIRouter:
+    """ACT command and status routes, delegating to the allow-listed gateway."""
+
+    from so101_teleop.act_gateway import ActGateway
+
+    # the command route moves the arm, so it carries the same authority gate as the teleop mutations
+    router = APIRouter(dependencies=[Depends(require_authority("teleop"))])
+
+    @router.get("/act/status", tags=["act"])
+    async def act_status():
+        gateway = ActGateway(getattr(services, "act_gateway_service", None))
+        try:
+            return gateway.status()
+        except ValueError as error:
+            return unavailable(str(error), "No ACT session is available.")
+
+    @router.post("/act/command", tags=["act"])
+    async def act_command(body: dict):
+        gateway = ActGateway(getattr(services, "act_gateway_service", None))
+        if not isinstance(body, dict) or not isinstance(body.get("name"), str):
+            raise HTTPException(status_code=422, detail="ACT_COMMAND_INVALID")
+        try:
+            return gateway.command(body["name"], body.get("payload") or {})
+        except ValueError as error:
+            return unavailable(str(error), "The ACT command was refused.")
+
+    return router
+
+
 def health_router(services: UnifiedServices) -> APIRouter:
     router = APIRouter()
 
@@ -1020,6 +1049,7 @@ def create_unified_app(
 
     # Registration order is part of the contract: concrete API and WS routes first.
     app.include_router(instance_router(services))
+    app.include_router(act_router(services))
     app.include_router(health_router(services))
     app.include_router(teleop_router(services))
     app.include_router(tasks_router(services))
@@ -1127,6 +1157,7 @@ def schema_services() -> UnifiedServices:
 
 __all__ = [
     "API_NAMESPACES",
+    "act_router",
     "create_unified_app",
     "health_router",
     "instance_router",
