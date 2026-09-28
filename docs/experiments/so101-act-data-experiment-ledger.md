@@ -7071,3 +7071,23 @@ status: PLANNED_ISOLATED_STACK
 - **Unchanged:** formal accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED;
   Gate 6 runtime/goals/motion closed; `collection_*` NOT_PROVISIONED; no runtime process,
   goal or motion started by this task.
+
+## CP-690 — PLANNED: Gate 6 runtime qualification (authorized), MuJoCo simulation only
+
+- **Authorization:** user-authorized runtime start (simulation only). Excluded: real hardware,
+  formal collection, Task 12, W2/W8 campaign collection, push, evidence deletion, and any change
+  to the pre-existing `so101_gazebo_demo_cpp` formatting failures (that condition stays
+  recorded and out of scope).
+- **Lifecycle:** `REUSE_STACK` with fresh isolated sessions; unique `ROS_DOMAIN_ID` **197**
+  and session **gate6rt-20260928T205241-a1a9e6** allocated in `experiments/gate6-runtime/identities.txt`.
+- **Ladder (source -> preflight -> launch -> arm -> restricted recovery/reset -> exact ACT
+  acquire -> goals/motion -> cleanup), stop_after boundaries per the approved plan.** A-prime
+  ordering is mandatory: the restricted recovery/reset acquire-release happens first and must
+  not consume the one-shot session; only the exact `owner == act` acquire may consume it; no
+  generic fallback and no CLI bound mode.
+- **Pre-launch checks (all recorded in `experiments/gate6-runtime/launch-provenance.txt`):**
+  no conflicting runtime stack (0 matching processes), exact interpreter/overlay paths, installed
+  `ros_child`/broker library hashes recorded, fresh `/data` scratch with the exact-interpreter
+  `tempfile.gettempdir()` probe, and a fresh 0700 short IPC base.
+- **Boundaries:** formal accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED;
+  `collection_*` NOT_PROVISIONED; evidence preserved, nothing deleted.
