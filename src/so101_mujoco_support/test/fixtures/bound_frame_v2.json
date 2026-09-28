@@ -1,0 +1,40 @@
+{
+  "fields": {
+    "version": 2,
+    "operation": 1,
+    "generation": 1,
+    "role": 1,
+    "claim_monotonic_ns": 9906000000,
+    "deadline_ns": 39906000000,
+    "session_id": "clock-session",
+    "broker_incarnation": "clock-session",
+    "controller_incarnation": "inc-1",
+    "controller_boot_incarnation": "boot-1"
+  },
+  "goal_uuid_hex": "12345678123456781234567812345678",
+  "permit_uuid_hex": "0f9c1e2d3a4b4c5d8e7f6a5b4c3d2e1f",
+  "target_digest_hex": "709350546e50e2bdac2b6fda67aba06212a8b8a115442aa711f90b4ec0ea0902",
+  "goal_cdr_sha256": "709350546e50e2bdac2b6fda67aba06212a8b8a115442aa711f90b4ec0ea0902",
+  "goal_cdr_len": 308,
+  "frame_sha256": "aff77248a7743988932b36a9c38675e1326c65571b1837ab9fe2395e2fd9ec5c",
+  "frame_len": 484,
+  "goal_fields": {
+    "joint_names": [
+      "shoulder_pan",
+      "shoulder_lift",
+      "elbow_flex",
+      "wrist_flex",
+      "wrist_roll",
+      "gripper"
+    ],
+    "positions": [
+      0.1,
+      -0.2,
+      0.3,
+      -0.4,
+      0.5,
+      0.6
+    ],
+    "time_from_start_sec": 1
+  }
+}
