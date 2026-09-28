@@ -83,6 +83,12 @@ class RosPhysicsClockAdapter:
             self._notified_epochs.add(epoch)
             self.on_hazard(self.history.hazard)
 
+    @property
+    def evidence_ready(self):
+        """Delegate the fail-closed evidence predicate; never grants authority."""
+        with self._lock:
+            return self.history.evidence_ready
+
     def check_health(self, *, now_ns=None):
         """Poll the bounded health contract and notify at most once per epoch.
 

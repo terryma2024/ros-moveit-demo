@@ -198,6 +198,25 @@ class PhysicsClockHistory:
                 raise ValueError("PHYSICS_CLOCK_STALE")
             return recent
 
+    @property
+    def evidence_ready(self):
+        """True only for an armed, hazard-free epoch with currently fresh evidence.
+
+        This predicate never latches anything. An armed epoch without an accepted
+        chunk is **not** ready even while `check_health()` is still True, because
+        that verdict only means no deadline has expired yet; production must
+        require this property before any sample, permit or goal is used.
+        """
+        with self._lock:
+            if self.epoch is None or self.hazard is not None or not self._first_chunk_seen:
+                return False
+            now_ns = _integer(self.clock_ns(), "readback_ns", 1)
+            if (self.max_silence_ns is not None
+                    and now_ns - self._last_source_end_ns > self.max_silence_ns):
+                return False
+            return any(0 <= now_ns - entry["sample"].clock_interval_end_monotonic_ns
+                       <= self.max_age_ns for entry in self._history)
+
     def check_health(self, *, now_ns=None):
         """Latch a bounded silence or first-chunk failure and report health.
 

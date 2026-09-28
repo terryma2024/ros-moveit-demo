@@ -187,3 +187,59 @@ def test_unbounded_history_makes_no_silence_claim():
     now[0] += 5_000_000_000
     assert history.check_health() is True
     assert history.hazard is None
+
+
+def test_first_chunk_deadline_equality_is_strict():
+    """Exactly at the deadline is still healthy; one nanosecond later is not."""
+
+    timeout_ns = 100_000_000
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = _bounded_history(now, first_chunk_timeout_s=timeout_ns / 1e9)
+    history.arm(1, source_floor_s=0.0)
+    armed_ns = now[0]
+    now[0] = armed_ns + timeout_ns
+    assert history.check_health() is True
+    assert history.hazard is None
+    now[0] = armed_ns + timeout_ns + 1
+    assert history.check_health() is False
+    assert history.hazard == "PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT"
+
+
+def test_silence_deadline_equality_is_strict():
+    silence_ns = 50_000_000
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = _bounded_history(now, max_silence_s=silence_ns / 1e9)
+    history.arm(1, source_floor_s=0.0)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    last_end_ns = history._last_source_end_ns
+    now[0] = last_end_ns + silence_ns
+    assert history.check_health() is True
+    assert history.hazard is None
+    now[0] = last_end_ns + silence_ns + 1
+    assert history.check_health() is False
+    assert history.hazard == "PHYSICS_CLOCK_SILENT"
+
+
+def test_evidence_ready_requires_an_accepted_chunk_in_an_armed_healthy_epoch():
+    """A healthy pre-first-chunk verdict is not evidence and must not authorize."""
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = _bounded_history(now)
+    assert history.evidence_ready is False
+    history.arm(1, source_floor_s=0.0)
+    assert history.check_health() is True
+    assert history.evidence_ready is False
+    history.accept_chunk(_chunk(0, _sample(1)))
+    assert history.evidence_ready is True
+    now[0] += 60_000_000
+    assert history.check_health() is False
+    assert history.evidence_ready is False
+
+
+def test_evidence_ready_turns_false_when_the_retained_window_goes_stale():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = _history(now)  # already armed on epoch 1 with a zero floor
+    history.accept_chunk(_chunk(0, _sample(1)))
+    assert history.evidence_ready is True
+    now[0] += 300_000_000
+    assert history.evidence_ready is False
