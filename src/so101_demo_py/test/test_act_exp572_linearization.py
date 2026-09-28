@@ -257,10 +257,11 @@ def test_revoke_completes_while_the_real_controller_send_is_blocked():
 
 
 def test_revoke_completes_while_the_real_step_at_copy_is_blocked():
-    """The barrier fires inside the real deepcopy that step_at performs.
+    """The barrier fires from the real deepcopy inside ``step_at`` only.
 
-    ``step_at`` copies the selected entry while holding the history lock; the
-    admission lock is *not* held there, so revocation must still complete.
+    The history module's ``copy`` *binding* is replaced by a local proxy, so the
+    stdlib ``copy`` module is never mutated and unrelated copies (for example
+    ``copy.deepcopy(self._revoked)`` inside revocation) are untouched.
     """
 
     from so101_demo.adapters.act import physics_clock_history as history_module
@@ -269,17 +270,29 @@ def test_revoke_completes_while_the_real_step_at_copy_is_blocked():
     history, admission, registry, port, tx = _transaction(now)
     entered = threading.Event()
     release = threading.Event()
-    real_deepcopy = history_module.copy.deepcopy
-    payload = {"samples": [{"step": index, "values": [index * 1.0] * 64} for index in range(2048)]}
-    seen = {"calls": 0}
+    real_copy = history_module.copy
+    real_deepcopy = real_copy.deepcopy
+    seen = {"target": 0, "other": 0}
 
-    def blocking_deepcopy(obj, *args, **kwargs):
-        seen["calls"] += 1
-        entered.set()
-        release.wait(5.0)
+    def hook(obj, *args, **kwargs):
+        # only the retained physics evidence selected by step_at blocks
+        if type(obj).__name__ == "PhysicsStepEvidence":
+            seen["target"] += 1
+            entered.set()
+            release.wait(5.0)
+        else:
+            seen["other"] += 1
         return real_deepcopy(obj, *args, **kwargs)
 
-    history_module.copy.deepcopy = blocking_deepcopy
+    class _CopyProxy:
+        def deepcopy(self, obj, *args, **kwargs):
+            return hook(obj, *args, **kwargs)
+
+        def __getattr__(self, name):
+            return getattr(real_copy, name)
+
+    history_module.copy = _CopyProxy()
+    lock_held = {"value": None}
     outcome = {}
 
     def worker_body():
@@ -295,21 +308,34 @@ def test_revoke_completes_while_the_real_step_at_copy_is_blocked():
     try:
         worker.start()
         assert entered.wait(5.0), "the real deepcopy inside step_at was never entered"
-        assert seen["calls"] >= 1
+        # the history lock must be held by the copying (worker) thread
+        probe_acquired = []
+
+        def probe():
+            got = history._lock.acquire(blocking=False)
+            probe_acquired.append(got)
+            if got:
+                history._lock.release()
+
+        probe_thread = threading.Thread(target=probe)
+        probe_thread.start()
+        probe_thread.join(5.0)
+        lock_held["value"] = probe_acquired and not probe_acquired[0]
         began = time.monotonic()
         admission.revoke_current("CLIENT_REVOKED")
         elapsed = time.monotonic() - began
-        assert elapsed < 0.1, (
-            f"revocation blocked behind the real step_at copy: {elapsed:.3f}s")
+        assert elapsed < 0.1, f"revocation took {elapsed:.3f}s while the copy was blocked"
         release.set()
         worker.join(10.0)
         assert not worker.is_alive(), "the admission worker must terminate"
+        assert lock_held["value"] is True, "the barrier did not run under the history lock"
+        assert seen["target"] >= 1
         assert admission.revoked_record is not None
         assert "error" in outcome, outcome
         assert isinstance(outcome["error"], AdmissionRefused), outcome
     finally:
         release.set()
-        history_module.copy.deepcopy = real_deepcopy
+        history_module.copy = real_copy
         worker.join(5.0)
 
 
