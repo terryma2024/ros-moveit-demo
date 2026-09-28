@@ -272,3 +272,20 @@ def test_adapter_health_check_latches_silence_and_notifies_once_per_epoch():
     assert hazards == ["PHYSICS_CLOCK_SILENT"]  # one notification per epoch
     with pytest.raises(ValueError):
         history.step_at(1)
+
+
+def test_adapter_evidence_ready_delegates_and_never_authorizes_before_a_chunk():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = PhysicsClockHistory(
+        "clock-session", nq=2, nv=1, max_age_s=.2, max_source_step_gap_ns=3_000_000,
+        max_silence_s=.05, first_chunk_timeout_s=.1, clock_ns=lambda: now[0])
+    node = FakeNode()
+    hazards = []
+    adapter = RosPhysicsClockAdapter(node, history, on_hazard=hazards.append)
+    assert adapter.evidence_ready is False
+    adapter.arm(_reset(1))
+    assert adapter.check_health() is True
+    assert adapter.evidence_ready is False
+    adapter.accept_message(_chunk(0, _sample(1)))
+    assert adapter.evidence_ready is True
+    assert hazards == []
