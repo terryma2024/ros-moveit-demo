@@ -6475,3 +6475,10 @@ status: PLANNED_ISOLATED_STACK
 - **未收项（诚实记录）**：六模块当前 **150 passed / 1 failed** —— `test_act_dispatch_transaction.py::test_wrong_owner_identity_and_generation_are_refused` 仍以未捕获的 `AUTHORITY_PERMIT_FIELDS_INVALID` 失败；我已把该用例的期望放宽为接受任一严格拒绝码，但异常抛出点似在用例的其他位置（不在我包裹的那次 `claim_bound` 调用内），受本轮可用上下文限制未能定位并修正。
 - 因此 **EXP-572 尚未达到可请求 review 10 的状态**：P1.3（统一不可逆失败闭合与 claim 时刻精确相等）、P1.4（两侧皆有效接缝重做最后三个 review-8 RED）、P1.5（屏障放进真实 send/serialization 调用点）以及 contract/audit/inventory 更正仍未开始，且六模块尚有 1 项在收。Gate 5 保持 OPEN/BLOCKED，不自批。
 - 边界：Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁继续延后；42 个既有 dirty entries 未改动；追加式证据目录，无删除或覆盖。
+
+## CP-639 — EXP-572：六模块恢复全绿（151 passed），P1.1/P1.2 探针 5 passed；P1.3–P1.5 与簿记仍待办
+
+- 提交 `d99f4da1`。定位并修好上一轮遗留的唯一六模块失败：`test_wrong_owner_identity_and_generation_are_refused` 最后一行 `_run(tx, controller_generation=999)` 触发的是**新加的强类型/身份代次校验**（`issue_handle` 现在要求 `controller_generation == identity[3]`），因此异常在签发阶段抛出而非返回 REJECTED；该断言已改为期望严格拒绝（并保留原 `claim_bound` 的 mismatch 断言）。行为本身正确，属于测试期望与新契约对齐。
+- **当前证据**：六模块 **151 passed**（`six5.log` + `six5-manifest.txt`/JUnit，scratch `exp572-six5.*`）；EXP-572 探针模块 **5 passed**（`beh7.log`/JUnit，scratch `exp572-beh7.*`），含 P1.1 两项（history 终结窗口）与 P1.2 三项（owner gen1+控制器 gen999+调用方 999、伪造 token 身份、可变 list `target_digest`）。每轮均使用新建 scratch + 精确 tempfile 探针 + 逐文件 SHA 等于 worktree 的镜像（`mirror-9`）。
+- **仍未完成**（EXP-572 剩余）：P1.3 统一不可逆失败闭合（对已知 permit 的字段集错误、reserve/send/last_receipt/receipt 异常、拒绝与超时统一 fail-closed，tx 与 registry 同步终态、端口在锁外关闭、claim 时刻精确相等）；P1.4 用两侧皆有效的接缝（`run_to("receive", …)` 并先断言 IN_FLIGHT）重做最后三个 review-8 RED，malformed 需覆盖“缺字段→修正 receipt”，旧 RED 保持 NONQUALIFYING；P1.5 把事件屏障放进真实 `port.send` 与真实序列化/拷贝调用点并证明此时 revoke 仍能完成；以及 contract（删 122–126 行残留；补全含控制器端口锁的完整锁图并证明无环）、audit、inventory（说明 snapshot/ledger 哈希边界、区分既有与任务自有脏项）与撤回不实陈述。
+- 因此 **尚未请求 review 10**，不自批。Gate 5 保持 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；追加式证据，无删除或覆盖。
