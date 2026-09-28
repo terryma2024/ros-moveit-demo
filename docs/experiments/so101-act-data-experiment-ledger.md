@@ -6717,3 +6717,12 @@ status: PLANNED_ISOLATED_STACK
   - 下一轮修复方向（明确）：在 `admit_sample` 中把 `history.step_at(...)`（其内部深拷贝）移到 `with self._lock` **之外**执行，只在锁内做版本/化身/时间的统一提交校验；随后重跑该用例（应 <0.1 s）与 `test_io_blocked_while_revoke_proceeds_without_the_broker_lock`（保留有效）。
 - 未完成：上述拷贝移出锁的实现；四探针 + 六模块零警告全量复核（含命令/解释器/scratch/耗时/退出码/JUnit/provenance/整文件哈希记录）；最终 Gate-5 材料冻结（contract/lock graph 与实现逐条一致、清除 claim_guard/双 receipt/端口在 claim 内/警告/legacy 措辞）、重生成 change/evidence 清单、清单快照单独提交、review-11 请求包引用当前整文件 SHA-256。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-665 — EXP-573：真实 deepcopy 屏障的阻塞机制已定位（**不是** admission 锁，而是 history 锁）
+
+- 位置核对（源码事实）：`physics_clock_admission.py:395` 的 `entry = history.step_at(selection["step"])` 位于 `with self._lock:`（第 399 行）**之前**，即隔离拷贝**本来就在 admission 锁之外**——所以“拷贝在 admission 锁内”这一初步判断**不成立**，我在此更正上一节的表述。
+- 真正的阻塞机制：`step_at` 在拷贝期间持有 **history 锁**（`physics_clock_history.py:379 with self._lock:`，`copy.deepcopy` 在 394 行于该锁内执行）；而 `revoke_current` 路径在持 admission 锁的同时需要访问/改写 history 状态（`_revoke_locked` 内触及 history，见 216–262 行），因此被 history 锁挡住整整 5.000 s（`deepcopy.log` 实测 `assert 5.000223596012802 < 0.1` 失败）。
+- 因此这是一个**需要设计决定的真实缺口**，而不是可以自行猜测的接线问题：用户要求“revoke 只需 admission 即可完成”，但当前实现中 revoke 依赖 history 锁；两条可能的修法（(a) 让 revoke 只依赖 admission 状态与自身栅栏、不在锁内触碰 history；(b) 让 `step_at` 在锁内只取快照、把 `deepcopy` 移到锁外）会改变锁序与不变量，需在自主实现前确认选择。
+- 已固化的 RED：`test_revoke_completes_while_the_real_step_at_copy_is_blocked`（屏障注入真实 `physics_clock_history.copy.deepcopy`，从 `step_at` 的真实拷贝内部发出事件；worker 结果被捕获并断言 `AdmissionRefused`，`finally` 恢复原函数，无未处理线程异常警告）。改名后的 `test_revoke_completes_while_the_real_pre_boundary_copy_is_blocked` 已被该用例取代；send 入口并发用例保留有效。
+- 步骤 1 快照权威 RED/GREEN 已完成（见 CP-664）：GREEN 6 passed（当前树）、RED 6 failed（`3cb1f065`，同名同源、未破坏无关接缝）。
+- 边界：Gate 5 OPEN/BLOCKED，**不请求 review 11**，不自批；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
