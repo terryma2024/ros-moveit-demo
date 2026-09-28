@@ -301,3 +301,21 @@ def test_readback_adapter_emits_canonical_samples_through_one_builder(recorder):
             identity={"case_id": "full-01"}, phase="CLOSE", physics_step=0, sim_time_s=0.0,
             source_stamps_s={}, source_received_monotonic_s={}, raw_records={},
             holding_state="HOLDING", frame={}, contact={}, measurements={})
+
+
+def test_case_journal_path_is_strict_and_refuses_reuse(tmp_path):
+    from so101_demo.act.task8_live_evidence import resolve_case_journal_path
+
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    journal = resolve_case_journal_path(run_root, "prefix-01")
+    assert journal == run_root / "task8-live" / "cases" / "prefix-01.json"
+    journal.write_text("{}")
+    with pytest.raises(ValueError, match="TASK8_JOURNAL_EXISTS"):
+        resolve_case_journal_path(run_root, "prefix-01")     # never spliced into a continuation
+    (run_root / "task8-live" / "campaign-result.json").write_text("{}")
+    with pytest.raises(ValueError, match="TASK8_CAMPAIGN_JOURNAL_EXISTS"):
+        resolve_case_journal_path(run_root, "full-01")
+    for bad in ("../escape", "prefix-1", "PREFIX-01", "", 7):
+        with pytest.raises(ValueError):
+            resolve_case_journal_path(tmp_path / "fresh", bad)

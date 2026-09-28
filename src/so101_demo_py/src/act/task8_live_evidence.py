@@ -257,3 +257,32 @@ def build_live_evidence_sample(*, identity: dict, phase: str, physics_step: int,
         "cup_position_m": list(measurements["cup_position_m"]),
         "cup_orientation_xyzw": list(measurements["cup_orientation_xyzw"]),
     }
+
+
+_CASE_ID = re.compile(r"[a-z]+-[0-9]{2}\Z")
+
+
+def resolve_case_journal_path(run_root: Path, case_id: str) -> Path:
+    """The only legal journal path for a case, refusing anything that already exists.
+
+    Journals live strictly under ``<run-root>/task8-live/cases/`` so a resumed run cannot splice
+    old cases into a continuation and a first failure cannot be papered over by reusing a journal.
+    """
+
+    run_root = Path(run_root)
+    if not run_root.is_absolute() or ".." in run_root.parts or not run_root.is_dir() \
+            or run_root.is_symlink():
+        raise ValueError("TASK8_JOURNAL_RUN_ROOT_INVALID")
+    if type(case_id) is not str or _CASE_ID.fullmatch(case_id) is None:
+        raise ValueError("TASK8_JOURNAL_CASE_ID_INVALID")
+    root = run_root / "task8-live" / "cases"
+    root.mkdir(parents=True, exist_ok=True)
+    if root.is_symlink():
+        raise ValueError("TASK8_JOURNAL_ROOT_INVALID")
+    journal = root / f"{case_id}.json"
+    if journal.exists() or journal.is_symlink():
+        raise ValueError("TASK8_JOURNAL_EXISTS")
+    summary = run_root / "task8-live" / "campaign-result.json"
+    if summary.exists() or summary.is_symlink():
+        raise ValueError("TASK8_CAMPAIGN_JOURNAL_EXISTS")
+    return journal
