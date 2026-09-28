@@ -79,9 +79,11 @@ def test_owner_generation_one_with_rearmed_controller_and_caller_999_refuses():
     # a caller that simply agrees with the rearmed controller is still not authority:
     # the generation must equal the admission identity generation, so the permit is
     # never issued and the transaction reports a pre-issue refusal instead
-    assert tx.run(stage="route_dispatch", role="arm", goal_uuid="g-1", target_digest="d-1",
-                  controller_generation=999, controller_incarnation="i") == "REJECTED"
-    assert tx.failure and "PERMIT_FIELDS" in tx.failure
+    # a transaction is single-use, so the caller-generation case uses a fresh one
+    _, admission2, registry2, port2, tx2 = _transaction([SOURCE_BASE_NS + 3 * STEP_NS])
+    assert tx2.run(stage="route_dispatch", role="arm", goal_uuid="g-1", target_digest="d-1",
+                   controller_generation=999, controller_incarnation="i") == "REJECTED"
+    assert tx2.failure and "PERMIT_FIELDS" in tx2.failure
 
 
 def test_token_identity_must_equal_the_record_identity():
