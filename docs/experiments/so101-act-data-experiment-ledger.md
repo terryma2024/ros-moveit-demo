@@ -6384,3 +6384,15 @@ status: PLANNED_ISOLATED_STACK
 - 上一轮为把 `commit_receipt()` 变成真正的 O(1)，引入了 `self._by_step` 步号索引（accept 路径重建、arm 清空）。索引的主要风险是**驱逐残留**：deque 满 512 后旧条目被丢弃，若索引未同步就会把已驱逐的 step 当成可用证据返回。本轮专门验证该路径，探针固化为 `experiments/exp570-dispatch-transaction/index-eviction-probe.py` 与 `index-eviction-probe.log`（`INDEX_EVICTION_PROBE PASS`）：写入 640 个样本后窗口与索引均为 512 且**集合完全相等**、step 1 已被驱逐且不在索引中、最新的 step 640 仍可提交、receipt 类型为 `mappingproxy`（只读）、被驱逐的 step 1 以 `PHYSICS_COMMIT_STEP_UNAVAILABLE` 拒绝而**不会**被陈旧索引条目放行。
 - 该探针是**回归护栏**而非行为变更：新旧两版实现（有界扫描版与 O(1) 索引版）都会通过它，因此按既定的 RED 纪律**不为它制造假 RED**，也不因此改动 151-name 集合；它作为已验证证据保存在 EXP-570 目录并登记于 checkpoint。
 - 边界：Gate 5 仍 OPEN，等待第八次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-629 — EXP-571：证据更正（NONQUALIFYING 标记）+ 新 scratch 合格 GREEN + provenance 验证的 behavior RED
+
+- **证据更正**：上一批 EXP-571 RED/GREEN 输出复用了旧 scratch（`/tmp/exp568-final.txt`），违反 ai-station 的“每次运行使用注册根下唯一且此前不存在的 scratch”规则。已保留、未删除、未覆盖，并在 `experiments/exp571-claim-domain/NONQUALIFYING.md` 标记为**不可作为 EXP-571 采纳证据**。
+- **合格 GREEN**：新证据目录 `experiments/exp571-admission/`，scratch `scratch/exp571-green.atb1LUSP`（此前不存在）；用精确解释器先打印 `tempfile.gettempdir()` 并断言等于 `TMPDIR` 且位于注册根内（`scratch-probe.txt`：**SCRATCH_PROBE PASS**），并打印被测模块 `__file__`；六个模块 **158 passed**，elapsed `1,269,706,372 ns`，source commit `8f4aebcd`。
+- **provenance 验证的 behavior RED**：从 `git archive b917ae46` 显式物化修复前源码，PYTHONPATH 去掉 build tree 条目并把 snapshot 置前，运行前打印两个模块 `__file__` 并断言均在 snapshot 内（`red-provenance.txt`：**RED_PROVENANCE PASS**）。七个**新增**的 review-8 复现用例在修复前版本上 **5 failed / 2 passed**。
+  - **合格 behavior 失败（4）**：`test_timeout_terminalizes_both_transaction_and_registry`、`test_malformed_receipt_terminalizes_and_cannot_be_corrected`、`test_wrong_controller_boot_incarnation_is_refused`、`test_last_receipt_is_a_frozen_read_only_receive_record`。
+  - **契约接缝失败（1）**：`test_legacy_claim_api_is_permanently_closed`（不安全 API 仍存在），与 behavior 分开表述。
+  - **尚未复现（如实记录，不计入 RED）**：`test_revoke_completed_before_the_transition_stops_the_send` 与 `test_port_generation_is_the_authority_not_the_caller_integer` 在修复前版本上即通过，说明这两个构造尚未复现 review 8 报告的交错与代次替换。
+  - **排除为迁移诊断（非 behavior RED）**：`test_local_stage_claims_never_reserve_or_send`、`test_receipt_validation_rejects_invalid_fields`、`test_large_copy_interleavings_hold_no_local_lock` 及所有仍在调用已退役 legacy claim API 的既有用例。
+- 本轮实现（提交 `8f4aebcd`）：legacy `claim()` 永久 fail-closed；`terminate()` 统一不可逆终止并接入 timeout/拒绝/异常/无效 receipt 各路径；registry 绑定 broker 内部依赖（`bind`）且 `claim_bound` 不再接受调用方替换的 admission/history；claim 增加**控制器端口当前代次**校验；receipt 绑定控制器 boot 化身与 registry 记录的 claim 时刻；`last_receipt` 返回**接收时冻结**的只读记录；`run(stop_at=...)` 现在真正生效。
+- 冻结：inventory/哈希/保留-归档-删除候选账目见 `experiments/exp571-admission/inventory.json`；契约与 audit 哈希随 inventory 记录；**未删除任何证据**。Gate 5 仍 OPEN，现请求**第九次**本机独立 Astra/High 复核，不自批。Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动（本轮新增提交只含本轮范围内的文件）。
