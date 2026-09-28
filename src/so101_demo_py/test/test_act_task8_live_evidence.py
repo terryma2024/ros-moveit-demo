@@ -380,3 +380,21 @@ def test_campaign_case_list_is_exactly_nine_prefixes_then_five_fulls():
                    {"prefix_cases": [{"case_id": "prefix-1"}] * 9, "full_cases": []}):
         with pytest.raises(ValueError):
             require_campaign_cases(broken)
+
+
+def test_campaign_journal_plan_covers_all_fourteen_cases_before_anything_runs(tmp_path):
+    from so101_demo.act.task8_live_evidence import plan_campaign_journals
+
+    plan = plan_campaign_journals(tmp_path, _manifest())
+    assert [case_id for case_id, _ in plan] == [f"prefix-{i:02d}" for i in range(1, 10)] + \
+        [f"full-{i:02d}" for i in range(1, 6)]
+    assert len({path for _, path in plan}) == 14
+    assert all(path.parent == tmp_path / "task8-live" / "cases" for _, path in plan)
+    assert all(not path.exists() for _, path in plan)
+    # a conflicting existing journal stops the run before it starts
+    plan[0][1].write_text("{}")
+    with pytest.raises(ValueError, match="TASK8_JOURNAL_EXISTS"):
+        plan_campaign_journals(tmp_path, _manifest())
+    # an invalid bundle root is refused outright
+    with pytest.raises(ValueError, match="TASK8_CAMPAIGN_BUNDLE_ROOT_INVALID"):
+        plan_campaign_journals(tmp_path / "missing", _manifest())
