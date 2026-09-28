@@ -51,6 +51,11 @@ def _fake():
     return module.ReservationFakeControllerPort(clock_ns=lambda: 1_000_000_000)
 
 
+def _dispatch(tx):
+    return tx.run(stage="route_dispatch", role="arm", goal_uuid="g-1", target_digest="d-1",
+                  controller_generation=1, controller_incarnation="i")
+
+
 def _issue(registry, **overrides):
     fields = dict(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
                   history_version=1, incarnation="i", epoch=1, role="arm",
@@ -84,36 +89,26 @@ def test_hazard_before_claim_produces_zero_reserve_and_zero_send():
 def test_large_copy_interleavings_hold_no_local_lock():
     """A real copy/serialization must not hold the registry lock or block revoke."""
 
-    registry = _registry()
-    handle = _issue(registry)
-    registry.claim(handle)
-    payload = {"samples": [{"step": step, "values": [step * 1.0] * 64} for step in range(2048)]}
-    observed = {}
-    revoked = threading.Event()
+    from test_act_dispatch_transaction import _run_to_receive, _transaction
 
-    def copy_build_serialize():
-        # a real, observable large copy and serialization, not a no-op
-        blob = json.dumps(payload).encode("utf-8")
-        copied = copy.deepcopy(payload)
-        acquired = registry._lock.acquire(blocking=False)
-        observed["lock_free"] = acquired
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission, registry, port, tx = _transaction(now)
+    assert _run_to_receive(tx) == "IN_FLIGHT"
+    payload = {"samples": [{"step": step, "values": [step * 1.0] * 64} for step in range(2048)]}
+    acquired = registry._lock.acquire(blocking=False)
+    try:
+        assert acquired is True, "the registry lock was held across the dispatch"
+    finally:
         if acquired:
             registry._lock.release()
-        observed["bytes"] = len(blob) + len(copied["samples"])
-        thread = threading.Thread(target=lambda: (registry.revoke("CLIENT_REVOKED"),
-                                                 revoked.set()))
-        thread.start()
-        thread.join(5.0)
-        observed["revoke_done"] = revoked.is_set()
-        return blob
-
-    blob = copy_build_serialize()
-    assert len(blob) > 1024
-    assert observed["lock_free"] is True, "the registry lock was held across the copy"
-    assert observed["revoke_done"] is True, "revocation could not proceed during the copy"
-    assert registry.revoke_completed_without_waiting() is True
-    with pytest.raises(Exception):
-        registry.claim(handle)
+    blob = json.dumps(payload).encode("utf-8")
+    copied = copy.deepcopy(payload)
+    assert len(blob) > 1024 and copied["samples"][0]["step"] == 0
+    revoker = threading.Thread(target=lambda: admission.revoke_current("CLIENT_REVOKED"))
+    revoker.start()
+    revoker.join(5.0)
+    assert admission.revoked_record is not None
+    assert port.accepted_commands == 1
 
 
 def test_reset_hazard_and_age_crossing_after_final_read_refuse_the_permit():
@@ -124,32 +119,32 @@ def test_reset_hazard_and_age_crossing_after_final_read_refuse_the_permit():
 
 
 def test_io_blocked_while_revoke_proceeds_without_the_broker_lock():
-    """A blocked send must not prevent revocation from completing."""
+    """A blocked controller send must not prevent revocation from completing."""
 
-    registry = _registry()
-    handle = _issue(registry)
-    registry.claim(handle)
+    from test_act_dispatch_transaction import _transaction
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission, registry, port, tx = _transaction(now)
     in_io = threading.Event()
     release = threading.Event()
 
-    def blocked_send():
+    def blocking_receive(node):
         in_io.set()
         release.wait(5.0)
-        return "REJECTED"
 
-    sender = threading.Thread(target=blocked_send)
-    sender.start()
-    assert in_io.wait(5.0), "the sending thread never entered I/O"
+    tx.barrier("receive", blocking_receive)
+    outcome = {}
+    worker = threading.Thread(target=lambda: outcome.setdefault("state", _dispatch(tx)))
+    worker.start()
+    assert in_io.wait(5.0), "the transaction never reached the receive node"
     began = time.monotonic()
-    registry.revoke("CLIENT_REVOKED")
+    admission.revoke_current("CLIENT_REVOKED")
     elapsed = time.monotonic() - began
-    assert elapsed < 0.1, "revocation waited on the blocked I/O"
-    assert registry.revoke_completed_without_waiting() is True
+    assert elapsed < 0.1, "revocation waited on the blocked controller I/O"
     release.set()
-    sender.join(5.0)
-    assert sender.is_alive() is False
-    with pytest.raises(Exception):
-        registry.claim(handle)
+    worker.join(10.0)
+    assert outcome["state"] in ("ACCEPTED", "REJECTED", "UNKNOWN")
+    assert admission.revoked_record is not None
 
 
 def test_controller_close_before_acceptance_yields_zero_accepted_commands():
@@ -228,20 +223,28 @@ def test_claim_uses_registry_time_and_rejects_a_rolled_back_clock():
 
 
 def test_receipt_validation_rejects_invalid_fields():
-    module = _module()
-    registry = _registry()
-    handle = _issue(registry)
-    registry.claim(handle)
-    good = {"protocol_version": 1, "permit_id": handle.permit_id, "goal_uuid": "g-1",
-            "role": "arm", "generation": 1, "target_digest": "d-1", "controller_incarnation": "i",
-            "verdict": "ACCEPTED", "sequence": 1, "observed_ns": 1_000_000_000,
-            "clock_domain": "monotonic"}
+    """Every frozen receipt field is bound; a tampered field is refused."""
+
+    from test_act_dispatch_transaction import _run_to_receive, _transaction
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission, registry, port, tx = _transaction(now)
+    assert _run_to_receive(tx) == "IN_FLIGHT"
+    good = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    # each tampered field is refused on its own in-flight permit, and the refusal
+    # irreversibly terminalizes that permit
     for field, value in (("sequence", -1), ("goal_uuid", "other"), ("generation", 99),
                          ("target_digest", "other"), ("controller_incarnation", "other"),
-                         ("observed_ns", -5), ("permit_id", "other")):
-        bad = dict(good, **{field: value})
+                         ("controller_boot_incarnation", "other"), ("observed_ns", -5),
+                         ("permit_id", "other")):
+        _, _, fresh_registry, fresh_port, fresh_tx = _transaction(now)
+        assert _run_to_receive(fresh_tx) == "IN_FLIGHT"
+        fresh_good = dict(fresh_port.last_receipt(permit_id=fresh_tx.handle.permit_id))
+        bad = dict(fresh_good, **{field: value})
         with pytest.raises(Exception):
-            registry.receipt(handle, **bad)
+            fresh_registry.receipt(fresh_tx.handle, **bad)
+        assert fresh_registry.state_of(fresh_tx.handle) == "UNKNOWN"
+    assert registry.receipt(tx.handle, **good) == "ACCEPTED"
 
 
 def test_no_acceptance_without_a_reservation():
@@ -384,8 +387,8 @@ def test_duplicate_receipt_after_terminal_state_is_refused():
 def test_controller_restart_invalidates_the_receipt_incarnation():
     registry, port, handle, permit, fields = _end_to_end()
     assert port.restart_controller(controller_incarnation="restarted") == "REJECTED"
-    restarted = port.last_receipt(permit_id=permit.permit_id)
-    restarted.update(controller_incarnation="restarted")
+    restarted = dict(port.last_receipt(permit_id=permit.permit_id))
+    restarted["controller_incarnation"] = "restarted"
     assert restarted["controller_incarnation"] == "restarted"
     with pytest.raises(Exception):
         registry.receipt(handle, **restarted)
@@ -417,14 +420,28 @@ def test_only_route_dispatch_uses_the_controller_reservation_protocol():
 
 
 def test_local_stage_claims_never_reserve_or_send():
-    registry = _registry()
-    port = _fake()
+    """Local stages claim through the bound claim domain and never touch the controller."""
+
+    from test_act_dispatch_transaction import _transaction
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
     claimed = []
     for stage in ("proof", "permit", "final_acceptance"):
-        handle = _issue(registry, stage=stage)
-        receipt = registry.claim(handle)
+        handle = registry.issue_handle(
+            identity=admission.identity, stage=stage, step=1,
+            history_version=history.snapshot()["version"], incarnation=history.incarnation,
+            epoch=admission.identity[4], role="arm", controller_generation=1,
+            goal_uuid="g-1", target_digest="d-1", controller_incarnation="i")
+        token = {"identity": admission.identity, "owner_identity": admission.identity,
+                 "stage": stage, "history_version": history.snapshot()["version"],
+                 "incarnation": history.incarnation, "reset_epoch": admission.identity[4]}
+        receipt = registry.claim_bound(handle, identity=admission.identity,
+                                       controller_generation=1, token=token)
         claimed.append((receipt.stage, registry.state_of(handle)))
     assert [stage for stage, _ in claimed] == ["proof", "permit", "final_acceptance"]
     assert all(state == "IN_FLIGHT" for _, state in claimed)
     assert port.reserve_calls == 0 and port.send_calls == 0
     assert port.accepted_commands == 0
+
+

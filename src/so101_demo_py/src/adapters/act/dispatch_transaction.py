@@ -32,6 +32,7 @@ class OfflineDispatchTransaction:
         self.history = history
         self.registry = registry
         self.port = port
+        registry.bind(admission=admission, history=history, port=port)
         self._clock_ns = clock_ns
         self._permit_ttl_ns = permit_ttl_ns
         self._selected_max_age_ns = selected_max_age_ns
@@ -79,6 +80,7 @@ class OfflineDispatchTransaction:
                                               token=token)
         except AuthorityRefused as error:
             self.state, self.failure = "REJECTED", str(error)
+            self.registry.terminate(self.handle, reason=self.failure)
             return self.state
         self.node("claim")
         try:
@@ -91,10 +93,12 @@ class OfflineDispatchTransaction:
                 claim_monotonic_ns=claim.commit_monotonic_ns)
         except AuthorityRefused as error:
             self.state, self.failure = "REJECTED", str(error)
+            self.registry.terminate(self.handle, reason=self.failure)
             return self.state
         if reserved != ACCEPTED:
             self.state = "REJECTED"
             self.failure = "AUTHORITY_RESERVATION_REFUSED"
+            self.registry.terminate(self.handle, reason=self.failure)
             return self.state
         self.node("reserve")
         verdict = self.port.send(goal_uuid=goal_uuid, permit_id=self.handle.permit_id, role=role,
@@ -106,12 +110,14 @@ class OfflineDispatchTransaction:
             self.state = "IN_FLIGHT"
             return self.state
         if verdict != ACCEPTED:
-            # timeout/unknown are irreversible and close the controller generation
+            # timeout/unknown are irreversible: close the port *and* the permit
             self.port.close("DISPATCH_UNKNOWN")
+            self.registry.terminate(self.handle, reason="DISPATCH_UNKNOWN")
             self.state = UNKNOWN
             return self.state
         if timeout_ns is not None and self._clock_ns() - claim.commit_monotonic_ns > timeout_ns:
             self.port.close("DISPATCH_TIMEOUT")
+            self.registry.terminate(self.handle, reason="DISPATCH_TIMEOUT")
             self.state = UNKNOWN
             self.node("timeout")
             return self.state
@@ -121,6 +127,7 @@ class OfflineDispatchTransaction:
             self.receipt = self.registry.receipt(self.handle, **fields)
         except AuthorityRefused as error:
             self.state, self.failure = UNKNOWN, str(error)
+            self.registry.terminate(self.handle, reason=self.failure)
             return self.state
         self.state = self.receipt
         self.node("receipt")
