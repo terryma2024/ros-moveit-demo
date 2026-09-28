@@ -156,15 +156,17 @@ class OfflineDispatchTransaction:
             self.node("timeout")
             return self._fail_closed("DISPATCH_TIMEOUT")
         self.node("timeout")
-        from collections.abc import Mapping
-
-        fields = self.port.last_receipt(permit_id=self.handle.permit_id)
-        if not isinstance(fields, Mapping):
-            return self._fail_closed("AUTHORITY_READBACK_INVALID")
+        try:
+            fields = self.port.last_receipt(permit_id=self.handle.permit_id)
+        except self.OPERATIONAL_ERRORS as error:
+            return self._fail_closed(f"AUTHORITY_READBACK_FAILED:{error}")
+        problem = self._receipt_field_problem(fields)
+        if problem is not None:
+            return self._fail_closed(problem)
         try:
             self.receipt = self.registry.receipt(self.handle, **fields)
-        except AuthorityRefused as error:
-            return self._fail_closed(str(error))
+        except self.OPERATIONAL_ERRORS + (TypeError, KeyError) as error:
+            return self._fail_closed(f"AUTHORITY_RECEIPT_REFUSED:{error}")
         self.state = self.receipt
         self.node("receipt")
         return self.state
@@ -182,6 +184,30 @@ class OfflineDispatchTransaction:
         generation = port.current_generation() if hasattr(port, "current_generation") else None
         boot = port.boot_incarnation() if hasattr(port, "boot_incarnation") else "unknown"
         return {"generation": generation, "boot_incarnation": boot}
+
+    def _receipt_field_problem(self, fields):
+        """Return a refusal reason unless ``fields`` can bind safely.
+
+        Exact string keys, no ``handle`` (which would collide with the positional
+        argument) and exactly the frozen receipt field set are required, so the
+        ``**fields`` expansion below cannot raise outside the fail-closed boundary.
+        """
+
+        from collections.abc import Mapping as _Mapping
+
+        if not isinstance(fields, _Mapping):
+            return "AUTHORITY_READBACK_INVALID"
+        keys = list(fields.keys())
+        if any(not isinstance(key, str) for key in keys):
+            return "AUTHORITY_RECEIPT_KEY_TYPE"
+        if "handle" in keys:
+            return "AUTHORITY_RECEIPT_EXTRA_HANDLE"
+        expected = set(self.registry.receipt_field_names())
+        if set(keys) != expected:
+            missing = sorted(expected - set(keys))
+            extra = sorted(set(keys) - expected)
+            return f"AUTHORITY_RECEIPT_FIELD_SET:missing={missing}:extra={extra}"
+        return None
 
     def _fail_closed(self, reason):
         """One irreversible closure: transaction, permit and controller port together.
