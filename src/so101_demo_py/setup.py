@@ -115,6 +115,7 @@ setup(
             "act_collect = so101_demo.cli.act_collect:main",
             "act_collect_parallel = so101_demo.cli.act_collect_parallel:main",
             "act_offline_evaluate = so101_demo.cli.act_offline_evaluate:main",
+            "act_train = so101_demo.cli.act_train:main",
             "act_task8_live = so101_demo.cli.act_task8_live:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service

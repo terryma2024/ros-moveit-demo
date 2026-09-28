@@ -82,3 +82,40 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
             handle.flush()
             os.fsync(handle.fileno())
         temporary.replace(state_path)
+
+
+def attach_episode_content(committed, *, root) -> tuple:
+    """Read each committed episode's content from inside the campaign root, verifying what it claims.
+
+    Content is never taken on trust or by path inference: the file must sit under the root the campaign
+    index names, and when the entry records a content hash the bytes must match it.
+    """
+
+    base = Path(root).resolve()
+    resolved = []
+    for episode in committed:
+        if not isinstance(episode, dict):
+            raise ValueError("TRAINING_EPISODES_INVALID")
+        if isinstance(episode.get("content"), dict) and episode["content"]:
+            resolved.append(episode)
+            continue
+        name = episode.get("content_path")
+        if not isinstance(name, str) or not name:
+            raise ValueError("TRAINING_EPISODE_CONTENT_MISSING")
+        path = Path(name)
+        if not path.is_absolute():
+            path = base / name
+        resolved_path = path.resolve()
+        if not resolved_path.is_file() or not resolved_path.is_relative_to(base):
+            raise ValueError("TRAINING_EPISODE_CONTENT_MISSING")
+        try:
+            content = json.loads(resolved_path.read_bytes())
+        except ValueError as error:
+            raise ValueError("TRAINING_EPISODE_CONTENT_INVALID") from error
+        if not isinstance(content, dict) or not content:
+            raise ValueError("TRAINING_EPISODE_CONTENT_INVALID")
+        recorded = episode.get("content_sha256")
+        if isinstance(recorded, str) and hashlib.sha256(resolved_path.read_bytes()).hexdigest() != recorded:
+            raise ValueError("TRAINING_EPISODE_CONTENT_DIGEST_MISMATCH")
+        resolved.append({**episode, "content": content})
+    return tuple(resolved)
