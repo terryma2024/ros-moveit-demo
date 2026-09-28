@@ -6661,3 +6661,11 @@ status: PLANNED_ISOLATED_STACK
 - **文档同步**：Gate 6 契约改为“快照在边界前取得、`reserve` 侧重校验”，并明确端口锁**不**参与 claim 锁序；锁序审计新增 `exp573_lock_graph`（design B、快照来源、重校验位置、已删除的边界内端口查询与过时 `claim_guard` 措辞、claim 顺序仍为 registry → admission → history、无环结论不变）。两者哈希已记入本节。
 - 未完成：legacy claim 测试迁移（重命名仅证明旧 API 的用例、把声称 hazard/reset/age/deadline 的用例迁到 `claim_bound`/`OfflineDispatchTransaction`）；真实 `step_at` deepcopy 屏障（已有）与 send 入口测试（保留）；簿记（contract/audit/ledger 最终更正、重生成 change/evidence 清单、review 请求包引用**当前整文件哈希**且清单快照提交与 ledger/请求包提交显式分离）。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-659 — EXP-573：legacy claim 测试迁移尝试未达标，已回退（诚实记录）；P2 保持有效
+
+- 本轮尝试按用户要求迁移 legacy claim 测试：把 `test_hazard_before_claim_produces_zero_reserve_and_zero_send` 与 `test_reset_hazard_and_age_crossing_after_final_read_refuse_the_permit` 重命名并改为在**支持的路径**上断言（前者补上“撤销后经 `OfflineDispatchTransaction` 零发送/零接受”的真实断言；后者改为断言 stub 域**无法 seal**（`AUTHORITY_DOMAIN_INCOMPLETE`），即调用方无法用自造域走到 bound claim）。**结果不合格**：探针集仍 29 passed，但六模块出现 1 项失败——原因是我对该文件内异常别名的假设有误，重命名后的用例在 seal 期望处不成立；实现本身无缺陷。
+- 按既定纪律**不在失败状态上继续叠加**：尝试保存为 NONQUALIFYING（`experiments/exp573-single-receipt/nonqualifying/test_act_authority_transaction.legacy-migration-attempt.py`），并用 `git checkout HEAD~1 -- <file>` 回退该测试文件。
+- **回退后复核（新建 scratch + tempfile 探针 PASS + 镜像 `mirror-20`）**：六模块 **151 passed**（`verify2-six.log`/JUnit）；四探针 **29 passed**（`verify2-probes.log`/JUnit）。P1.1（单 receipt + 状态一致性检查）、P1.2（统一失败闭合）与 P2（控制器身份快照在边界前取得、`reserve` 侧重校验）的成果完整保留。
+- 仍未完成：(a) legacy claim 测试迁移——下一轮先读该文件**实际导入的异常符号**再改写，并逐个用例验证；(b) 簿记——contract/audit/ledger 最终更正、重生成 **change/evidence 两份清单**、review 请求包引用**当前整文件哈希**，且“清单快照提交”与“ledger/请求包提交”**显式分离**。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
