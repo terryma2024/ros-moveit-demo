@@ -8574,3 +8574,21 @@ test that a shorter gate run root clears.
   **8P3/8P4 xdist gate**.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-752 — Case rows name their live evidence and receipt paths (adapter still needed)
+
+- **Delivered:** in `pick_place_case_execution.py` (user-dirty; **one new hunk staged**, the other hunks
+  excluded per `gate6-batch3-commit/hunk-filter-round277.txt`), the published row gains
+  `live_evidence_path`, `live_evidence_sha256` (a prefix case carries the empty path and the zero
+  digest, per the row rules) and the two retirement receipt **paths** beside their hashes — the fields
+  the plan requires each case journal to store.
+- **Verification:** the user's own `test_task8_case_execution.py` still passes (**9 passed**),
+  `gate6-batch3-py-gate/caserow.{log,junit.xml}`.
+- **Still required (shape adapter, recorded in the plan file):** the published row (18 keys, with
+  `stack_receipt_sha256`/`child_receipt_sha256` and no identity digests) is **not** the 8P4 row shape
+  that `require_case_journal_row` (CP-714) and `validate_case_journals` (CP-721) expect, so an explicit
+  adapter is needed — mapping the receipt-hash keys, supplying the identity digests from the verified
+  bundle, and re-applying the prefix/full artifact rules. This is a pure function in this task's own
+  module and is the next step.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
