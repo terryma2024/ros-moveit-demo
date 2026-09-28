@@ -10284,3 +10284,44 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   a threshold or a pose.
 - **No code changed, no gate run, no runtime, no interpreter, no evidence deleted, no push, no gate lowered;**
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-826 — Behaviour-level reconciliation: 50 of 50 paths audited, 1 unresolved, 0 missing
+
+- **Why this second pass exists:** CP-822 accepted 44 of 50 evolved paths on structural-token presence, which
+  cannot establish equivalence for numeric values, defaults, control flow, ordering, timeouts, message
+  semantics, C++ behaviour or test intent. Every path was re-audited against the actual `cdd79d15..e2ec28c3`
+  hunks, with verdicts of equivalent, superseded, missing, intentionally rejected or unresolved.
+- **Report:** `semantic-audit-behavior/behavior-reconciliation.md` (52 rows: the 50 `e2ec28c3` paths plus the two
+  dependency-lock paths that belong to `fda21d53`), supported by `hunks/` (50 per-path hunks), `diffs/`
+  (key-by-key effective-value tables), `cpp-facts.json`, `adapters-facts.json`, `adapters-tests.json` and
+  `path-index.json`.
+- **Verdicts across the 50 paths: 42 equivalent (many strict supersets), 7 superseded, 1 unresolved, 0 missing,
+  0 intentional rejections inside this commit.** The intentional rejections belong to `fda21d53` (obsolete fork
+  pin `498472ac` vs HEAD's `54463fce`) and to `c26c358b` (patch-equivalent) and `cdd79d15` (older plan and
+  spec), as the user classified.
+- **What the behaviour view caught that tokens could not:**
+  - `backends/mujoco/reset.py`: the remote replaced a hard-coded six-joint check with a name-driven invariant;
+    HEAD's lines 30-48 are byte-identical and HEAD adds `ordered_positions` and a timeout check — equivalent,
+    not merely token-equal.
+  - `runtime/launch_composition.py`: the shutdown timeouts were **raised from 5.0 to 10.0** (`:166-167`) with
+    the escalation ladder preserved at `:413-414`; the exact numeric change is recorded, and no test pins the
+    absolute value.
+  - `adapters/act/ros_broker.py`: the remote's synchronous controller query with
+    `reference_timeout_s = min(.03, max_age)` was **removed** and replaced by a subscription-based
+    `ControllerReferenceObserver` plus `direct_goal_reference`; the freshness invariant survives as `max_age`
+    (asserted in `test_act_controller_reference.py:15`), and the exact 0.03 s deadline has no counterpart.
+  - `test/test_act_controller_reference.py`: four remote-only tests about the removed query each map to a named
+    current test, including `test_wrong_goal_joint_order_never_falls_back_to_measured_q` and
+    `test_reconstruction_leaves_driver_lock_available_to_independent_stop`.
+- **The one unresolved item, surfaced with its exact hunk rather than waved through:**
+  `src/so101_mujoco_support/src/simulation_evidence_plugin.cpp` line 47 in the remote reads
+  `if (!model || mj_version() != 340) {return false;}` while HEAD line 54 reads
+  `if (!model || mj_version() != mjVERSION_HEADER) {return false;}`. The invariant moved from "runtime MuJoCo
+  must be exactly 3.4.0" to "runtime MuJoCo must equal the headers the plugin was compiled against"; the second
+  form is conventional and arguably stronger, but it is a relaxation of the remote's exact pin and **no test in
+  the repository pins either form**. It is left for the user's decision rather than changed, since which form is
+  intended is a design question.
+- **No production code was changed and no gate was run**, because no behaviour was found missing; the only
+  unresolved path is a design question, not a regression. Boundaries held: no runtime or motion, no hardware, no
+  evidence deleted, no push, no gate lowered; the aborted-merge artifacts and the user's 43 modified and 12
+  untracked paths are untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
