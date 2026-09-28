@@ -10810,3 +10810,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-845 — Why provenance refused: the overlay must hold real copies, not symlinks
+
+- **Cause found by inspection, not by trying values.** `act/source_provenance.py` carries a closed role
+  registry (`_ROLE_SPECS`) mapping each runtime role to its source path and to the path it must occupy **inside
+  the install overlay**, for example
+  `("command_broker", "verbatim_install", "src/so101_demo_py/src/adapters/act/command_broker.py",
+  "so101_demo_py/lib/python3.12/site-packages/so101_demo/adapters/act/command_broker.py")`. The builder calls
+  `_regular(path, "SOURCE_PROVENANCE_INSTALL_MISSING")`, which uses `lstat` (`O_NOFOLLOW`) and requires
+  `S_ISREG`.
+- **Two concrete reasons the current worktree overlay fails that check:**
+  1. `install/so101_demo_py/lib/python3.12/site-packages/so101_demo/adapters/act/command_broker.py` is
+     **absent** from the overlay entirely;
+  2. `install/so101_teleop/lib/python3.12/site-packages/so101_teleop/unified/ros_child.py` is present but is a
+     **symlink**, and a symlink is not a regular file under `lstat`.
+- **So the requirement is a non-symlink install:** the runtime generation's provenance needs an overlay holding
+  **real copies** of the role files. The build space does contain regular files
+  (`build/so101_demo_py/so101_demo/adapters/act/command_broker.py` is a real file), but the role registry names
+  install-relative paths, so the correct action is to build the affected packages into a dedicated prefix
+  **without** `--symlink-install` and point `--install-overlay` at that prefix. This is a build step, not a
+  runtime launch, and it touches no user file.
+- **`--install-overlay` is a directory, not a file** - passing the worktree's `setup.bash` was my wrong
+  hypothesis and also failed with the same code, so the value is confirmed by the registry's install-relative
+  paths rather than by experiment.
+- **Boundaries:** no runtime composed (the stack still refuses without explicit calibration, CP-843), no
+  hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no ROS Python touched; user's 31 modified
+  and 12 untracked paths untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
