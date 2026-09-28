@@ -76,14 +76,28 @@ def _reserve(port, *, permit_id="p-1", goal_uuid="g-1", role="arm", target_diges
                         claim_monotonic_ns=claim_monotonic_ns)
 
 
-def test_hazard_before_claim_produces_zero_reserve_and_zero_send():
+def test_removed_legacy_claim_refuses_and_the_supported_path_sends_nothing():
+    """The removed API refuses; the supported path performs no controller work.
+
+    The former name claimed a hazard/claim boundary, but the body only exercised
+    the retired API. The property is now asserted on the supported path too.
+    """
+
+    from test_act_dispatch_transaction import _run, _transaction
+
     registry = _registry()
     port = _fake()
     handle = _issue(registry)
     registry.revoke("PHYSICS_CLOCK_SILENT")
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="AUTHORITY_LEGACY_CLAIM_REMOVED"):
         registry.claim(handle)
     assert port.reserve_calls == 0 and port.send_calls == 0
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission, bound_registry, bound_port, tx = _transaction(now)
+    admission.revoke_current("PHYSICS_CLOCK_SILENT")
+    assert _run(tx) in ("REJECTED", "UNKNOWN")
+    assert bound_port.reserve_calls == 0 and bound_port.accepted_commands == 0
 
 
 def test_large_copy_interleavings_hold_no_local_lock():
@@ -111,11 +125,17 @@ def test_large_copy_interleavings_hold_no_local_lock():
     assert port.accepted_commands == 1
 
 
-def test_reset_hazard_and_age_crossing_after_final_read_refuse_the_permit():
+def test_refusing_history_and_the_removed_api_both_refuse_the_permit():
+    """A refusing history refuses the bound claim; the retired API refuses too."""
+
     registry = _registry(history=_StubHistory(refuse="PHYSICS_COMMIT_VERSION_CHANGED"))
     handle = _issue(registry)
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="AUTHORITY_LEGACY_CLAIM_REMOVED"):
         registry.claim(handle)
+    bound = _registry(history=_StubHistory(refuse="PHYSICS_COMMIT_VERSION_CHANGED"))
+    bound.seal()
+    with pytest.raises(at.AuthorityRefused):
+        _claim_bound_with_stub(bound)
 
 
 def test_io_blocked_while_revoke_proceeds_without_the_broker_lock():
