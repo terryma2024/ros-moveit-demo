@@ -9350,3 +9350,25 @@ This resolves the design block **without authorizing runtime or motion**.
   stands.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-784 — Task 12 begins: what a training bundle may contain
+
+- **Delivered:** `act/bundle.py` with `training_rows` and `resolve_committed_episodes`, plus
+  `test_act_bundle.py`.
+  - `training_rows` returns the **train split alone**, so normalisation statistics can never be computed
+    from validation or test data; a bare string, rows without a `split` or a `None` row are
+    `TRAINING_ROWS_INVALID`, and a `rollout_test`/`offline_test` row is simply not selected.
+  - `resolve_committed_episodes` treats a **directory as nothing**: a scene resolves only when the
+    coordinator committed it *and* its journal and verifier hashes agree. A missing index yields `()`
+    (nothing was committed), a business `FAILED` is retained but never exported, short or conflicting
+    receipts are `EPISODE_RECEIPT_INVALID` / `EPISODE_RECEIPT_CONFLICT`, and a malformed index or
+    manifest is refused.
+  - both of the plan's Step-1 assertions pass **verbatim**, including the `== ()` case.
+- **Verification:** focused tests **4 passed** (`gate6-batch3-py-gate/task12.{log,junit.xml}`), first run
+  green; build and test exit statuses were captured into variables before being tested.
+- **Remaining in Task 12:** `export_dataset`, `TrainingRunOwner.acquire` (arbiter not IDLE, an existing
+  collection/broker/training lease on the same GPU, two run roots claiming concurrently, PID reuse,
+  expired heartbeat, owner/config/dataset/device mismatches), `train_act`, `load_bundle`, `load_policy`,
+  `config/act/training.yaml`, `config/act/requirements.lock` and the `act_train` CLI.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 now IN PROGRESS; `collection_*` NOT_PROVISIONED.
