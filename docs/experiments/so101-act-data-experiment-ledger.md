@@ -6515,3 +6515,14 @@ status: PLANNED_ISOLATED_STACK
 - **P1.4 仍未完成**，且已有明确下一步：需要一个**两侧都存在**的“claim 后、send 前”状态入口。最干净的方案是把该入口做成**生产侧**的显式测试接缝（例如 `OfflineDispatchTransaction.claim_only(...)`，在当前与后续版本都存在），随后三个用例用它取 IN_FLIGHT，再用 `port.accepted_fields()`（fake 侧返回真实消费字段）构造 receipt；不得手写 schema 字段，也不得放宽断言。
 - 其余未完成项不变：P1.5（屏障进真实 send/serialization 调用点）、contract 122–126 行删除与锁图补全（含控制器端口锁）、inventory 哈希边界与脏项归属说明、撤回不实陈述。**尚未请求 review 10**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-643 — EXP-572 P1.4 进展：三个用例改用真实 post-receive 字段，GREEN 7/7、RED 6/7（一项仍不可区分）
+
+- 提交 `bfdc2138`。按上一轮记录的方案重建：测试模块新增 `_compat(...)`（按 `inspect.signature` 适配两侧不同的签名）与 `_post_receive(...)`——用**两侧都存在的公开 API** 依次完成 claim → reserve → send，然后返回**控制器真实接收记录**（`port.last_receipt(...)`），不再手写 schema 字段、也不再依赖 `stop_at`/`run_to`。三个用例（malformed 缺字段→修正、错误 controller boot 化身、`last_receipt` 冻结只读）均改为基于该真实记录断言。
+- **实测**（每次新建 scratch + tempfile 探针 + 镜像逐文件 SHA 等于 worktree）：
+  - 当前树 GREEN：**7 passed**（`beh-green12.log`/JUnit，scratch `exp572-beh-green12.*`）；
+  - frozen `b917ae46` RED：**6 failed / 1 passed**（`beh-red9.log`/JUnit，scratch `exp572-beh-red9.*`；`BASELINE_PROVENANCE PASS`，模块与 `git show b917ae46` 逐字节相等）；
+  - 六模块：**151 passed**（`six9.log`/JUnit，scratch `exp572-six9.*`）。
+- **仍未达标的一项**：`test_wrong_controller_boot_incarnation_is_refused` 在基线**通过**，即尚未区分出 review 9 指出的“错误 boot 化身被接受”。可能原因是基线的 `RECEIPT_FIELDS` 与基线端口返回的字段集合彼此自洽，使该用例在基线上落到另一条拒绝路径。下一步须改为对该字段做**逐字段**断言（例如先断言真实记录被接受，再仅替换 boot 化身并要求拒绝），并复核基线确为 ACCEPTED。
+- 其余未完成项：P1.5（屏障进真实 send/serialization 调用点）、contract 122–126 行与锁图补全（含控制器端口锁）、inventory 哈希边界与脏项归属、撤回不实陈述。**尚未请求 review 10**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
