@@ -7743,3 +7743,24 @@ brief: CP-709; hook points: `experiments/gate6-runtime/task8-core/t8p3-remaining
   the 40-scene exact-W8 qualification, formal W8 and Task 12.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-714 — Task 8P3 sub-slice C: complete-journal-row rule
+
+- **Delivered:** `require_case_journal_row(row, *, mode)` in `act/task8_live_evidence.py` — closed
+  13-key row shape; strict `[a-z]+-[0-9]{2}` case id; mode agreement; `PASSED|FAILED` only; 64-hex
+  digests for source provenance, runtime config, policy fingerprint and manifest document;
+  **non-empty paths for both retirement receipts**; a prefix row may carry **no** live-evidence
+  artifact (`TASK8_PREFIX_EVIDENCE_FORBIDDEN`) while a full row must name one.
+- **Genuine defect the tests caught:** the first implementation validated all three paths uniformly,
+  so a legitimate prefix row was rejected as `TASK8_JOURNAL_PATH_INVALID` before the prefix rule
+  could apply. Fixed by requiring paths for the two receipts always and the artifact path only for a
+  full row — matching the plan's semantics rather than weakening the assertion.
+- **Verification:** 29 passed across the recorder, live-campaign and live-CLI suites
+  (`gate6-batch3-py-gate/t8p3journalrow{,2}.{log,junit.xml}`).
+- **Remaining:** the `CLOSE..FINAL_CHECK` capture-path extraction inside `pick_place_readback.py`
+  (hunk-staged against 191 lines of pre-existing user work), the canonical live CLI issuing one
+  production call for nine prefix + five full cases (now able to use both the journal-path and this
+  row rule), sub-slice B, the combined 8P3/8P4 xdist gate, 8P4, Tasks 9/10/11/11A-5, the final HEAD
+  freeze, Task 8L, W1, W2, the 40-scene exact-W8 qualification, formal W8 and Task 12.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
