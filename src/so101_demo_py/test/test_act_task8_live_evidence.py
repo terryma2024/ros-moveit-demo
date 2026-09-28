@@ -115,3 +115,34 @@ def test_occlusion_is_only_timed_for_a_valid_frame_with_hidden_target(recorder):
                          "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 0})
     index = json.loads(Path(artifact["path"]).read_text())
     assert index["samples"][0]["wrist_target_visible"] is False
+
+
+@pytest.mark.parametrize("mutation,code", [
+    ("gap", "TASK8_LIVE_EVIDENCE_GRID_GAP"),
+    ("duplicate", "TASK8_LIVE_EVIDENCE_GRID_REGRESSION"),
+    ("regression", "TASK8_LIVE_EVIDENCE_GRID_REGRESSION"),
+])
+def test_ten_hertz_grid_rejects_gaps_duplicates_and_regressions(mutation, code):
+    """A missing grid point is not occlusion and may not be smoothed over."""
+
+    from so101_demo.act.task8_live_evidence import validate_evidence_grid
+
+    times = [0.0, 0.1, 0.2, 0.3]
+    if mutation == "gap":
+        times = [0.0, 0.1, 0.3]
+    elif mutation == "duplicate":
+        times = [0.0, 0.1, 0.1, 0.2]
+    else:
+        times = [0.0, 0.1, 0.05, 0.2]
+    samples = [{"sim_time_s": value} for value in times]
+    with pytest.raises(ValueError, match=code):
+        validate_evidence_grid(samples, period_s=0.1, tolerance_s=0.01)
+
+
+def test_grid_accepts_a_complete_causal_sequence_and_reports_its_length():
+    from so101_demo.act.task8_live_evidence import validate_evidence_grid
+
+    samples = [{"sim_time_s": index * 0.1} for index in range(5)]
+    assert validate_evidence_grid(samples, period_s=0.1, tolerance_s=0.01) == 5
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_GRID_EMPTY"):
+        validate_evidence_grid([], period_s=0.1, tolerance_s=0.01)
