@@ -8399,3 +8399,27 @@ test that a shorter gate run root clears.
   the canonical live CLI, then the 8P4 real-composition integration test.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-744 — Readback supplies the canonical per-frame fields (append-only, hunk-staged)
+
+- **Delivered:** `PickPlacePhysicalReadback.capture_evidence_fields(captured, *,
+  support_distance_max_m, raw_records)` — appended to `pick_place_readback.py` with **no existing line
+  changed**, so the file's 191 lines of pre-existing user work are untouched and this task's diff is a
+  single new hunk (the other hunks were excluded; recorded in
+  `gate6-batch3-commit/hunk-filter-round260.txt`).
+- **Behaviour:** validates the capture's closed 7-key shape (`READBACK_CAPTURE_INVALID`), derives the
+  physics aggregates from the world evidence via `derive_frame_aggregates` (CP-743), requires a real
+  non-negative `simulation_step` and finite non-negative `simulation_time_s`, carries both stamp maps
+  and the caller's dereferenceable raw records, and leaves the release-epoch-relative fields to the
+  phase sequence.
+- **Verification:** **62 passed** across `test_act_task8_live_evidence.py` and the user-modified
+  `test_act_task8_readback.py` (`gate6-batch3-py-gate/capfields2.{log,junit.xml}`); the composition
+  test asserts the composed sample is shape-identical to the canonical 24-key sample and accepted by
+  the recorder verbatim. One failure on the way was my own test double missing step/time, which
+  correctly tripped the guard — the double was completed rather than the check loosened.
+- **Remaining for this boundary:** the CLOSE..FINAL_CHECK window itself (per-phase sampling on the
+  frozen 10 Hz grid via `validate_evidence_grid`, event samples at phase/release-epoch/contact edges,
+  per-case recorder writing into the case's private staging directory), then the canonical live CLI,
+  then the 8P4 real-composition integration test.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
