@@ -317,11 +317,12 @@ class AuthorityTransactionRegistry:
             raise AuthorityRefused("AUTHORITY_DOMAIN_UNSEALED")
         return self._admission, self._history, self._port
 
-    def terminate(self, handle, reason="AUTHORITY_TERMINAL"):
+    def terminate(self, handle, reason="AUTHORITY_TERMINAL", terminal=UNKNOWN):
         """One irreversible terminalization for timeout/reject/exception/invalid receipt.
 
-        Any non-terminal permit becomes UNKNOWN exactly once; later receipts are
-        refused and can never restore authority.
+        Any non-terminal permit becomes the requested terminal state exactly once
+        (`UNKNOWN` by default, `REJECTED` when a valid rejected receipt says so);
+        later receipts are refused and can never restore authority.
         """
 
         if not isinstance(handle, PermitHandle):
@@ -333,7 +334,7 @@ class AuthorityTransactionRegistry:
             state = self._states[record.permit_id]
             if state in TERMINAL:
                 return state
-            self._states[record.permit_id] = UNKNOWN
+            self._states[record.permit_id] = terminal
             self._terminal_reasons[record.permit_id] = reason
             return UNKNOWN
 

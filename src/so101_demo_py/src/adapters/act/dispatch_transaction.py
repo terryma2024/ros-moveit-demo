@@ -164,9 +164,16 @@ class OfflineDispatchTransaction:
         if problem is not None:
             return self._fail_closed(problem)
         try:
-            self.receipt = self.registry.receipt(self.handle, **fields)
+            verdict = self.registry.receipt(self.handle, **fields)
         except self.OPERATIONAL_ERRORS + (TypeError, KeyError) as error:
             return self._fail_closed(f"AUTHORITY_RECEIPT_REFUSED:{error}")
+        if verdict != ACCEPTED:
+            # a structurally valid non-ACCEPTED receipt is a terminal outcome:
+            # preserve its verdict and reason, but close through the same path
+            reason = fields.get("reason") or verdict
+            return self._fail_closed(f"AUTHORITY_RECEIPT_{verdict}:{reason}",
+                                     terminal=(REJECTED if verdict == REJECTED else UNKNOWN))
+        self.receipt = verdict
         self.state = self.receipt
         self.node("receipt")
         return self.state
@@ -209,7 +216,7 @@ class OfflineDispatchTransaction:
             return f"AUTHORITY_RECEIPT_FIELD_SET:missing={missing}:extra={extra}"
         return None
 
-    def _fail_closed(self, reason):
+    def _fail_closed(self, reason, terminal=UNKNOWN):
         """One irreversible closure: transaction, permit and controller port together.
 
         Called outside every critical section, so closing the controller port never
@@ -220,7 +227,7 @@ class OfflineDispatchTransaction:
         self.unusable = True
         if self.handle is not None:
             try:
-                self.registry.terminate(self.handle, reason=reason)
+                self.registry.terminate(self.handle, reason=reason, terminal=terminal)
             except AuthorityRefused:
                 pass
         try:
@@ -228,7 +235,7 @@ class OfflineDispatchTransaction:
         except Exception:  # noqa: BLE001 - a failed close is *not* success
             self.close_failed = True
             self.fencing_required = True
-        self.state = UNKNOWN
+        self.state = terminal
         return self.state
 
     def _should_stop(self, node):
