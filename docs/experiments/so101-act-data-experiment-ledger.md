@@ -9810,3 +9810,26 @@ This resolves the design block **without authorizing runtime or motion**.
   which is human-facing prose and will use the project's humanizer skill under `docs/guides/`.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-804 — Task 16: the evaluation CLI
+
+- **Delivered:** `cli/act_evaluate.py` (+ `setup.py` entry) and its tests.
+  - the plan's flags: `--manifest`, `--split rollout_validation|rollout_test|comparison`, `--bundle`,
+    `--calibration`, `--runtime-config`, `--root`, `--route act|moveit`;
+  - **reads the route's own runs file** (`<root>/<split>/<route>-runs.jsonl`) rather than scanning the root,
+    and summarises through Task 16's `summarize`;
+  - **once-only output:** a JSON report and a Markdown rendering; a second evaluation is
+    `EVALUATION_REPORT_EXISTS` and cannot overwrite the first;
+  - **reproducibility:** the report names the manifest, bundle, calibration and runtime config with their
+    digests;
+  - **per-scene evidence index:** every path must stay inside the root (absolute paths and `..` are
+    `EVALUATION_EVIDENCE_PATH_INVALID`), and a duplicate or malformed scene id is
+    `EVALUATION_SCENE_INDEX_INVALID`; an empty runs file is `EVALUATION_EMPTY`;
+  - named refusals for a missing manifest, bundle, calibration or runtime config.
+- **My test bug:** the invalid-split/route cases replaced positions in the argument list instead of the value
+  following each flag, so they exercised the manifest check instead; corrected in the test.
+- **Verification:** focused tests **6 passed** (`gate6-batch3-py-gate/task16d.{log,junit.xml}`).
+- **Remaining in Task 16:** `docs/guides/so101-act-head-wrist-rgb.md`, to be written with the project's
+  humanizer skill under `docs/guides/` as the repo requires for human-facing prose.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
