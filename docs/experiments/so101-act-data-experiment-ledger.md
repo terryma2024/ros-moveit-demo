@@ -10155,3 +10155,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-821 — The remote branch has diverged with its own ACT work; the merge is 56 real conflicts
+
+- **Published without destroying anything:** `git push origin codex/so101-act-data-0917a:refs/heads/codex/so101-act-data-0917a-dst`
+  (rc=0), verified with `git ls-remote`: the original branch still points at `e2ec28c3` (the user's four
+  commits, untouched) and the new branch at `78df6095` (this session's HEAD). No force-push was used.
+- **The divergence is substantive, not mechanical.** The remote has four commits we lack; `git cherry` shows
+  `c26c358b` already has an equivalent in our HEAD, while `fda21d53` (MuJoCo fork pin), `cdd79d15` (plan and
+  contracts) and `e2ec28c3` (data-safety WIP) do not. Since the common base `5182ed71`, ours changed **1037
+  paths** and theirs **94**.
+- **Merge attempted only in an isolated scratch worktree** (`merge-scratch/wt`, detached, `--no-commit`), so
+  the user's working tree and 43 modified/12 untracked files were never involved. It stopped with **56
+  conflicted paths: 39 both-added and 17 both-modified**, plus the `third_party/mujoco_ros2_control`
+  submodule, and **not one** of the 55 ordinary conflicts had byte-identical sides.
+- **The both-modified set is precisely where the user's own commits live** (`dependency-lock.yaml`,
+  `mujoco/dependency-lock.yaml`, `setup.py`, `backends/mujoco/{client,reset}.py`, `launch_composition.py`,
+  all of `so101_mujoco_support`, `teleop/server.py`, the plan and design docs, the submodule pointer); the
+  both-added set is overlapping ACT implementation both lineages created independently (six `act/*` modules,
+  ~20 `adapters/act/*`, ~18 `test/test_act_*.py`).
+- **Nothing was resolved**, because the user asked to see the conflicts first and because a wrong resolution
+  could silently discard their data-safety work or the fork pin. Inventory recorded in
+  `merge-scratch/conflict-summary.md` with `conflicts.txt`, `uuid-conflicts.txt` and `merge.log`.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
