@@ -9720,3 +9720,26 @@ This resolves the design block **without authorizing runtime or motion**.
   modification.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-800 — Task 14: the composition and its two-tier mode gates
+
+- **Delivered:** `runtime/act_composition.py` with `build_act_session_composition(...)`, plus
+  `test_act_composition.py`.
+  - `dry_run` / `plan_only`: only a valid mode, an absolute non-symlink evidence root and working ports;
+    `effects: False`, no artifacts — deliberately runnable **before a model exists**;
+  - `execute`: `effects: True` and a refusal unless **all five** artifacts are present as real files
+    (bundle, calibration, policy, activation receipt, runtime config), each with its own code
+    (`ACT_EXECUTE_*_REQUIRED`);
+  - deeper verification at execute: the bundle is loaded (a **tampered policy is caught at composition
+    time**, asserted by test) and the runtime settings are loaded (so a drifted or non-CUDA config cannot
+    reach a live run);
+  - refusals: `ACT_SESSION_MODE_INVALID`, `ACT_SESSION_EVIDENCE_ROOT_INVALID` (relative, missing or
+    symlinked root), and the port/inference contracts at construction.
+- **Verification:** focused tests **2 passed** (`gate6-batch3-py-gate/task14d.{log,junit.xml}`), first run
+  green.
+- **Remaining in Task 14:** `cli/act_session.py` with the plan's flags, submitting only its `OperationSpec`
+  to the unified service through an injectable factory; its `setup.py` entry; and the
+  `launch/so101_mujoco_act.launch.py` modification, which will be inspected before any edit so the change
+  stays minimal.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
