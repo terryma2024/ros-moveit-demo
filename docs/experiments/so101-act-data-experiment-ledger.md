@@ -8997,3 +8997,31 @@ This resolves the design block **without authorizing runtime or motion**.
   one reset per attempt; re-entry cannot overwrite a terminal state), then Task 11A.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-769 — Task 11 W1 CLI: refusal happens before any service exists
+
+- **Delivered:** `cli/act_collect.py` (+ `setup.py` entry) with the plan's exact flags
+  (`--manifest`, `--calibration`, `--policy`, `--activation-receipt`, `--root`, `--limit`,
+  `--qualification`) and its failure-matrix tests.
+  - **refusal precedes resources:** the payload is built and the selection computed first; the service
+    factory is invoked only after every check passes, so a refusal provably yields zero resets, zero
+    actions and zero children (the tests record factory calls and find none).
+  - **closed spec only:** the payload comes from CP-768's builder; the CLI constructs nothing else.
+  - **injected service:** `main(argv, *, service_factory=None)`; production uses a late
+    `compose_services` import as the existing live CLI does — no module or import-path loading.
+  - **qualification containment:** `--qualification` marks the payload and takes only the 8 functional /
+    40 load scenes; a formal-only manifest answers `COLLECTION_SELECTION_EMPTY`.
+  - **Rollout exclusion:** Rollout rows are excluded from both modes; a Rollout-only manifest selects
+    nothing.
+  - **admission refusal:** a service raising `CAMPAIGN_START_SCHEMA` leaves recorded reset and child
+    counts at 0.
+- **Three failures this round, all mine and all fixed in the tests:** a missing `import json` in the test
+  module, and a fixture written into a directory that did not exist yet. No guard was weakened. The
+  repo's NVMe scratch rule was honoured: `tempfile.gettempdir()` resolved inside
+  `pg11/tmp/task11i.5K9N` before the run.
+- **Verification:** focused tests **10 passed** (`gate6-batch3-py-gate/task11j.{log,junit.xml}`).
+- **Remaining in Task 11:** the rest of the failure matrix (one reset per attempt, re-entry cannot
+  overwrite a terminal state, recorder/persistence infra path), then Task 11A's parallel collection and
+  recovery modules against closed fixtures.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
