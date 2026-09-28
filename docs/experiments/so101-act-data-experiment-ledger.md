@@ -6553,3 +6553,12 @@ status: PLANNED_ISOLATED_STACK
 - 两次失败的手写尝试（`p14-attempt-unqualified-behavior-module.py`、`p14-attempt2-unqualified-behavior-module.py`）保留为 NONQUALIFYING；证据目录追加式，无删除或覆盖；42 个既有 dirty entries 未改动。
 - **仍未完成**：P1.5（事件屏障放进真实 `port.send` 与真实序列化/拷贝调用点，并证明此时 revoke 仍能完成、断言确已进入目标节点）；contract 122–126 行删除；锁图补全（含 claim 期间获取的控制器端口锁与无环证明）；inventory 的 snapshot/ledger 哈希边界说明与既有/任务自有脏项分离；撤回“所有异常路径已终止化并关闭控制器”的不实陈述。**尚未请求 review 10**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
+
+## CP-647 — EXP-572 P1.5：真实调用点屏障（send 内 / 边界前拷贝内），撤销在阻塞期间仍能完成
+
+- 提交 `b2fa293f`。两个新探针把事件屏障放进**真实调用点**，而不是调用之后：
+  - `test_revoke_completes_while_the_real_controller_send_is_blocked`：包装**真实 `port.send`**，进入后 signal 并阻塞；此时主线程执行 `admission.revoke_current(...)` 并测时——**必须在 <100 ms 内完成**（证明控制器 I/O 期间不持有 registry/admission/history 锁），随后释放、join 并断言事务线程已终止、`revoked_record` 存在、结果落在安全集合内；同时断言**确已进入** `port.send`（`entered.wait()`）。
+  - `test_revoke_completes_while_the_real_pre_boundary_copy_is_blocked`：包装**真实 `history.step_at`**（`admit_sample` 在边界**之前**的隔离拷贝点），在屏障内执行真实的大拷贝与序列化（2048 样本 `json.dumps` + `deepcopy`），并断言撤销在拷贝阻塞期间仍能完成——即大拷贝同样不在锁内。
+- **实测**：EXP-572 探针模块 **11 passed**（`p15b.log`/JUnit，scratch `exp572-p15b.*`）；六模块 **151 passed in 0.99s**（`p15-six.log`/JUnit，scratch `exp572-p15-six.*`）；镜像 `mirror-26` 逐文件 SHA 等于 worktree，每次运行前 tempfile 探针 PASS。证据追加式，未删除或覆盖；42 个既有 dirty entries 未改动。
+- **仍未完成（下一次复核前必须收尾）**：contract 122–126 行残留的 controller-reply/consume-callable 删除；锁图补全（含 **claim 期间获取的控制器端口锁**，并证明无环）；inventory 的 **snapshot/ledger 哈希边界**说明与**既有 vs 任务自有脏项**分离；撤回“所有异常路径已终止化并关闭控制器”的不实陈述。完成后再冻结 HEAD、跑同集 RED/GREEN 与六模块、更新契约/audit/ledger/inventory，然后请求 review 10。**本轮不请求 review 10**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
