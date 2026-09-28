@@ -6287,3 +6287,10 @@ status: PLANNED_ISOLATED_STACK
 - 集合 141→**143**，按要求**先同集 RED 再 GREEN**：修复前 snapshot 上同一 143-name 集合 amended RED **42 failed / 101 passed**（elapsed `944,880,444 ns`）；GREEN **143 passed**（manifest 143 = JUnit 143，名称集合相等，elapsed `1,008,020,662 ns`），`strict_same_set: true`、missing/extra 为空。
 - checkpoint 刷新为 `experiments/exp569-authority-protocol/checkpoint.json` SHA256 `c49d3e168ff82191c85dbe7b327ac4cedb7fadb31ca033fac8dcbd292d6f74ed`；复核请求包 `handoff/2026-09-28-review7-request-exp569.md` 已更新为当前 143-case 数字与新 checkpoint 哈希。
 - 边界：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
+
+## CP-616 — 证据完整性全量巡检（含一处漂移的追加修复）与快照同一性复核
+
+- 对注册证据根下**全部实验 checkpoint** 做逐文件哈希复核（共 3,600+ 个被索引文件）：除一处外全部一致；唯一漂移是 `exp568-authority-transaction/lock-order-audit.json`——本轮按第六次复核 P2 要求**有意**扩充了审计（A-1/A-2 closure 证据与 extended_scope），而其 checkpoint 写在该扩充之前。修复方式为**追加**：checkpoint 增加 `additive_updates` 记录（旧哈希/新哈希/原因）并重新索引，新 SHA256 `b9430ea3ea556b721b4898bc2595992de53ac8d9a5ea23f3468dee3636cb5989`；不改写、不删除任何既有证据。
+- 同时复核 amended RED 快照的**实现同一性**：`exp569-amended-red` 中的 `physics_clock_admission.py` 与 `physics_clock_history.py` 与 `git show 9f1cd77c` 对应文件**逐字节一致**，确认 RED 基线确实运行的是修复前实现。
+- 巡检结果与同一性结论固化为 `experiments/exp569-authority-protocol/evidence-integrity-sweep.json`。
+- 状态：Gate 5 仍 OPEN，等待第七次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`）；42 个既有 dirty entries 未改动；未运行 ordinary full suite；证据未删除。
