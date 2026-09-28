@@ -6957,3 +6957,22 @@ status: PLANNED_ISOLATED_STACK
   dispatch -> stopped/close/release -> ACT bound acquire; recovery must not submit trajectory,
   approve/submit prefix, or consume the session; second ACT acquire refused with no new
   arm/send), then root TDD with the 42-entry baseline diff protected. No CLI bound mode.
+
+## CP-686 — appended corrections (no history rewritten)
+
+- **False coverage claim corrected.** CP-683-era text cited "session-level coverage proves
+  the broker-bound behaviour". That was false: the broker-bound acquire/order/failure cases
+  did not exist at the time. They now exist as real `broker.handle` tests in
+  `test_gate6_command_broker_bound_acquire.py` (7 test functions), driving the real
+  `BoundAuthoritySession.arm/confirm` through a configurable client, plus the lock-barrier
+  suite and the two-stage Task-8 suite. The superseded numbers (order3 7/2, later 162) stay
+  in history as recorded.
+- **Two-root assumption superseded.** The Astra/High verdict (BLOCK, A-prime only) means the
+  standalone CLI is **not** a bound root; only the `ros_child` Task-8 profile may install the
+  one-shot session. Recorded in
+  `experiments/gate6-batch3-lock-audit/astra-verdict-a-prime.md`.
+- **Open scope question (blocking the root patch).** `_start_ros_broker` has no Task-8
+  indicator in scope and serves the pick-place-validation path too, so the bound session
+  cannot be scoped there without threading an explicit profile flag (option 1) or changing
+  that path's behaviour (option 2). Details in
+  `experiments/gate6-batch3-root-tdd/ros-child-wiring-gap.md`; no root patch applied.
