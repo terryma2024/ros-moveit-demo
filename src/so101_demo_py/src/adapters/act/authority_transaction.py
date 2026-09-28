@@ -343,6 +343,39 @@ class AuthorityTransactionRegistry:
         with self._lock:
             return self._terminal_reasons.get(handle.permit_id)
 
+    def reservation_binding(self, handle):
+        """Resolve an opaque permit handle to an immutable reservation binding.
+
+        The binding is built from the *actual* IN_FLIGHT record, its stored single
+        final claim receipt/instant and the broker-owned controller snapshot. No
+        caller-supplied value takes part, and the returned mapping is read-only.
+        """
+
+        from types import MappingProxyType
+
+        if not isinstance(handle, PermitHandle):
+            raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
+        with self._lock:
+            record = self._records.get(handle.permit_id)
+            if record is None:
+                raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
+            if self._states[record.permit_id] != IN_FLIGHT:
+                raise AuthorityRefused(
+                    f"AUTHORITY_PERMIT_NOT_IN_FLIGHT:{self._states[record.permit_id]}")
+            snapshot = self._controller_snapshots.get(record.permit_id)
+            if snapshot is None or len(snapshot) != 3:
+                raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
+            instant = self._claim_instant.get(record.permit_id)
+            if type(instant) is not int:
+                raise AuthorityRefused("AUTHORITY_CLAIM_INSTANT_MISSING")
+            return MappingProxyType({
+                "permit_id": record.permit_id, "goal_uuid": record.goal_uuid,
+                "role": record.role, "target_digest": record.target_digest,
+                "session_id": record.identity[1], "broker_incarnation": record.incarnation,
+                "generation": snapshot[0], "controller_incarnation": snapshot[1],
+                "controller_boot_incarnation": snapshot[2],
+                "claim_monotonic_ns": instant, "deadline_ns": record.deadline_ns})
+
     def receipt_field_names(self):
         """The frozen receipt field set (single source of truth for validation)."""
 
