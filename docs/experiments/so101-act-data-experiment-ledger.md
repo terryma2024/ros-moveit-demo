@@ -7820,3 +7820,18 @@ brief: CP-709; hook points: `experiments/gate6-runtime/task8-core/t8p3-remaining
   qualification, formal W8 and Task 12.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-718 — Task 8P3 sub-slice C: journal rows are bound to their own bundle
+
+- **Delivered:** `require_case_row_matches_bundle(row, *, identities, manifest_document_sha256)` in
+  `act/task8_live_evidence.py`: the row's `source_provenance_sha256`, `runtime_config_sha256` and
+  `contact_policy_fingerprint` must equal the bundle's identities and its
+  `manifest_document_sha256` must equal the bundle's, else `TASK8_JOURNAL_IDENTITY_MISMATCH`. A row
+  from another bundle, or one written after a controlled identity change, cannot be counted.
+- **Verification:** recorder suite **25 passed** (`gate6-batch3-py-gate/t8p3rowid.{log,junit.xml}`),
+  covering the match, each of the four mismatches, and an incomplete identity set.
+- **Sub-slice C rule set now complete in code:** legal journal path (CP-713), complete row (CP-714),
+  frozen fourteen-case list (CP-715), all-or-nothing journal plan (CP-716), verified payload
+  (CP-717) and this identity binding. The CLI and the readback capture-path extraction remain.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
