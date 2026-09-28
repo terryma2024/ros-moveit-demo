@@ -1,0 +1,303 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Mirrors the validator in act/task8_artifact_bundle.py, which does not load this file: admission enforces the contract in code, so this document describes it and a test compares the two so they cannot drift apart.",
+  "properties": {
+    "artifacts": {
+      "additionalProperties": false,
+      "properties": {
+        "activation_receipt": {
+          "additionalProperties": false,
+          "properties": {
+            "relative_path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "source_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "relative_path",
+            "sha256",
+            "source_sha256"
+          ],
+          "type": "object"
+        },
+        "anchors": {
+          "additionalProperties": false,
+          "properties": {
+            "relative_path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "source_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "relative_path",
+            "sha256",
+            "source_sha256"
+          ],
+          "type": "object"
+        },
+        "calibration_report": {
+          "additionalProperties": false,
+          "properties": {
+            "relative_path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "source_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "relative_path",
+            "sha256",
+            "source_sha256"
+          ],
+          "type": "object"
+        },
+        "collection_config": {
+          "additionalProperties": false,
+          "properties": {
+            "relative_path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "source_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "relative_path",
+            "sha256",
+            "source_sha256"
+          ],
+          "type": "object"
+        },
+        "head_search_qualification": {
+          "additionalProperties": false,
+          "properties": {
+            "relative_path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "source_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "relative_path",
+            "sha256",
+            "source_sha256"
+          ],
+          "type": "object"
+        },
+        "measurement_contract": {
+          "additionalProperties": false,
+          "properties": {
+            "relative_path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "source_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "relative_path",
+            "sha256",
+            "source_sha256"
+          ],
+          "type": "object"
+        },
+        "proposal": {
+          "additionalProperties": false,
+          "properties": {
+            "relative_path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "source_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "relative_path",
+            "sha256",
+            "source_sha256"
+          ],
+          "type": "object"
+        },
+        "runtime_config": {
+          "additionalProperties": false,
+          "properties": {
+            "relative_path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "source_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "relative_path",
+            "sha256",
+            "source_sha256"
+          ],
+          "type": "object"
+        },
+        "source_provenance": {
+          "additionalProperties": false,
+          "properties": {
+            "relative_path": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "source_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "relative_path",
+            "sha256",
+            "source_sha256"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "activation_receipt",
+        "anchors",
+        "calibration_report",
+        "collection_config",
+        "head_search_qualification",
+        "measurement_contract",
+        "proposal",
+        "runtime_config",
+        "source_provenance"
+      ],
+      "type": "object"
+    },
+    "bundle_root": {
+      "pattern": "^/",
+      "type": "string"
+    },
+    "identities": {
+      "additionalProperties": false,
+      "properties": {
+        "act_profile_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "anchors_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "contact_policy_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "runtime_config_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "source_provenance_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "act_profile_sha256",
+        "anchors_sha256",
+        "contact_policy_fingerprint",
+        "runtime_config_sha256",
+        "source_provenance_sha256"
+      ],
+      "type": "object"
+    },
+    "kind": {
+      "const": "task8_preparation_receipt"
+    },
+    "manifest_path": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "manifest_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "manifest_source_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "receipt_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 2
+    }
+  },
+  "required": [
+    "schema_version",
+    "kind",
+    "bundle_root",
+    "manifest_path",
+    "manifest_sha256",
+    "manifest_source_sha256",
+    "artifacts",
+    "identities",
+    "receipt_sha256"
+  ],
+  "title": "SO-101 Task 8 preparation receipt",
+  "type": "object"
+}
