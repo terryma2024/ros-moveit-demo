@@ -185,14 +185,16 @@ def require_gate(report: dict, gate: str) -> None:
         return
     if gate not in ("pick_place_validation", "task8_live"):
         raise ValueError("CALIBRATION_GATE_INVALID")
-    # a report may carry the live-campaign provenance block; the gate check is about the seven
-    # base fields and must not reject a qualification's extra provenance
+    # a report that does not claim TASK8_READY is answered with the documented code before its
+    # shape is judged, so an unready report never produces a field error
+    if not isinstance(report, dict) or report.get("status") != "TASK8_READY":
+        raise ValueError("CALIBRATION_REQUIRED")
+    # the gate is about the seven base fields being present and their values being valid; extra
+    # provenance a caller carries (the live-campaign block, audit annotations) is not an error
     base = ("schema_version", "status", "source_commit", "config_sha256",
             "source_provenance_sha256", "measurements", "checks")
-    if not isinstance(report, dict) or any(key not in report for key in base) \
-            or not set(report) <= set(base) | {"live_campaign"}:
-        from .contracts import ContractError
-        raise ContractError("FIELDS_INVALID")
+    if any(key not in report for key in base):
+        raise ValueError("CALIBRATION_REQUIRED")
     require_source_provenance(report)
     if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
             or report["status"] != "TASK8_READY"
