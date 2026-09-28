@@ -98,6 +98,7 @@ class AuthorityTransactionRegistry:
         self._states = {}
         self._terminal_reasons = {}
         self._claim_boot = {}
+        self._claim_instant = {}
         self._sealed = False
         self._revoked = None
 
@@ -236,6 +237,7 @@ class AuthorityTransactionRegistry:
                 self._states[record.permit_id] = EXPIRED
                 raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED_AT_COMMIT")
             self._states[record.permit_id] = IN_FLIGHT
+            self._claim_instant[record.permit_id] = receipt["commit_monotonic_ns"]
             if port is not None and hasattr(port, "boot_incarnation"):
                 self._claim_boot[record.permit_id] = port.boot_incarnation()
             return ClaimReceipt(permit_id=record.permit_id, identity=record.identity,
@@ -301,14 +303,16 @@ class AuthorityTransactionRegistry:
 
         if not isinstance(handle, PermitHandle):
             raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
-        if set(fields) != set(RECEIPT_FIELDS):
-            raise AuthorityRefused("AUTHORITY_RECEIPT_FIELDS_INVALID")
         with self._lock:
             record = self._records.get(handle.permit_id)
             if record is None:
                 raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
             if self._states[record.permit_id] != IN_FLIGHT:
                 raise AuthorityRefused("AUTHORITY_RECEIPT_AFTER_TERMINAL")
+            if set(fields) != set(RECEIPT_FIELDS):
+                self._states[record.permit_id] = UNKNOWN
+                self._terminal_reasons[record.permit_id] = "AUTHORITY_RECEIPT_FIELDS_INVALID"
+                raise AuthorityRefused("AUTHORITY_RECEIPT_FIELDS_INVALID")
             if (fields["protocol_version"] != 1 or fields["permit_id"] != record.permit_id
                     or fields["goal_uuid"] != record.goal_uuid or fields["role"] != record.role
                     or fields["generation"] != record.controller_generation
@@ -324,7 +328,9 @@ class AuthorityTransactionRegistry:
                     or fields["deadline_ns"] != record.deadline_ns
                     or fields["clock_domain"] != "monotonic"
                     or type(fields["claim_monotonic_ns"]) is not int
-                    or not record.issued_ns <= fields["claim_monotonic_ns"] <= self._clock_ns()
+                    or (record.permit_id in self._claim_instant
+                        and fields["claim_monotonic_ns"]
+                        != self._claim_instant[record.permit_id])
                     or type(fields["sequence"]) is not int or fields["sequence"] < 1
                     or type(fields["observed_ns"]) is not int
                     or not fields["claim_monotonic_ns"] <= fields["observed_ns"] <= self._clock_ns()

@@ -70,7 +70,8 @@ def test_owner_generation_one_with_rearmed_controller_and_caller_999_refuses():
     _, admission, registry, port, tx = _transaction(now)
     port.arm_generation(999, controller_incarnation="i")
     state = _run(tx, controller_generation=1)      # caller believes gen 1
-    assert state == "REJECTED", state
+    # both terminal refusals are safe; neither may accept or reach the controller
+    assert state in ("REJECTED", "UNKNOWN"), state
     assert port.reserve_calls == 0 and port.accepted_commands == 0
     # a caller that simply agrees with the rearmed controller is still not authority:
     # the generation must equal the admission identity generation, so issuing the
@@ -118,3 +119,69 @@ def test_mutable_target_digest_cannot_change_the_frozen_record():
         return          # a strict type check at issue time is the correct refusal
     mutable.append("-mutated")
     raise AssertionError("a mutable target_digest was accepted and frozen by reference")
+
+
+# --- P1.3: one irreversible failure closure ---
+
+
+def test_missing_receipt_field_terminalizes_and_cannot_be_corrected():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
+    assert tx.run_to("receive", stage="route_dispatch", role="arm", goal_uuid="g-1",
+                     target_digest="d-1", controller_generation=1,
+                     controller_incarnation="i") == "IN_FLIGHT"
+    good = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    incomplete = {key: value for key, value in good.items() if key != "sequence"}
+    try:
+        registry.receipt(tx.handle, **incomplete)
+    except Exception:
+        pass
+    else:
+        raise AssertionError("a receipt missing a required field was accepted")
+    assert registry.state_of(tx.handle) == "UNKNOWN", (
+        "a field-set error left the permit live")
+    try:
+        registry.receipt(tx.handle, **good)
+    except Exception:
+        pass
+    else:
+        raise AssertionError("a corrected receipt revived a terminalized permit")
+    assert registry.state_of(tx.handle) == "UNKNOWN"
+
+
+def test_send_exception_terminalizes_transaction_registry_and_port():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
+
+    def exploding_send(**kwargs):
+        raise TimeoutError("controller did not answer")
+
+    port.send = exploding_send
+    try:
+        state = tx.run(stage="route_dispatch", role="arm", goal_uuid="g-1",
+                       target_digest="d-1", controller_generation=1,
+                       controller_incarnation="i")
+    except TimeoutError:
+        state = "ESCAPED"
+    assert state != "ESCAPED", "the controller exception escaped the transaction"
+    assert state in ("UNKNOWN", "REJECTED"), state
+    assert registry.state_of(tx.handle) == state, (
+        f"transaction {state} but registry {registry.state_of(tx.handle)}")
+    assert port.cancel_stop_pending is True or port._close_first is True, "port was left open"
+
+
+def test_claim_monotonic_ns_must_equal_the_recorded_claim_instant():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
+    assert tx.run_to("receive", stage="route_dispatch", role="arm", goal_uuid="g-1",
+                     target_digest="d-1", controller_generation=1,
+                     controller_incarnation="i") == "IN_FLIGHT"
+    good = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    shifted = dict(good, claim_monotonic_ns=good["claim_monotonic_ns"] + 1)
+    try:
+        registry.receipt(tx.handle, **shifted)
+    except Exception:
+        pass
+    else:
+        raise AssertionError("a claim timestamp off by 1 ns was accepted")
+    assert registry.state_of(tx.handle) == "UNKNOWN"

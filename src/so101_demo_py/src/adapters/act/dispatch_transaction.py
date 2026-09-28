@@ -57,6 +57,23 @@ class OfflineDispatchTransaction:
     # ------------------------------------------------------------ transaction
     def run(self, *, stage, role, goal_uuid, target_digest, controller_generation,
             controller_incarnation, timeout_ns=None, stop_at=None):
+        try:
+            return self._run_guarded(
+                stage=stage, role=role, goal_uuid=goal_uuid, target_digest=target_digest,
+                controller_generation=controller_generation,
+                controller_incarnation=controller_incarnation, timeout_ns=timeout_ns,
+                stop_at=stop_at)
+        except self.OPERATIONAL_ERRORS as error:
+            if self.handle is None:
+                # no permit was ever issued: this is a contract violation by the
+                # caller (e.g. a generation that disagrees with the identity) and
+                # must surface, not be swallowed as a terminal outcome
+                raise
+            # operational failures are terminal; process-control exceptions are not caught
+            return self._fail_closed(f"{type(error).__name__}:{error}")
+
+    def _run_guarded(self, *, stage, role, goal_uuid, target_digest, controller_generation,
+                     controller_incarnation, timeout_ns=None, stop_at=None):
         """Run the transaction; ``stop_at`` halts after that node (test seam)."""
 
         if stop_at is not None and stop_at not in NODES:
@@ -146,6 +163,28 @@ class OfflineDispatchTransaction:
             return self.state
         self.state = self.receipt
         self.node("receipt")
+        return self.state
+
+    OPERATIONAL_ERRORS = (TimeoutError, OSError, ValueError, AuthorityRefused)
+
+    def _fail_closed(self, reason):
+        """One irreversible closure: transaction, permit and controller port together.
+
+        Called outside every critical section, so closing the controller port never
+        happens under the registry, admission or history locks.
+        """
+
+        self.failure = reason
+        if self.handle is not None:
+            try:
+                self.registry.terminate(self.handle, reason=reason)
+            except AuthorityRefused:
+                pass
+        try:
+            self.port.close(reason)
+        except Exception:  # noqa: BLE001 - the port may already be closed
+            pass
+        self.state = UNKNOWN
         return self.state
 
     def _should_stop(self, node):
