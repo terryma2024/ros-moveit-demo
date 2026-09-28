@@ -311,3 +311,30 @@ def test_live_cli_plans_all_fourteen_journals_or_nothing(tmp_path, monkeypatch):
                        "--journal", str(tmp_path / "journal.json"),
                        "--artifact-bundle", str(receipt),
                        "--journal-run-root", str(run_root)])
+
+
+def test_journal_run_root_reaches_the_composition_as_its_journal_parent(tmp_path, monkeypatch):
+    """The planned run root, not the requested journal's directory, owns the case journals."""
+
+    import asyncio
+
+    from so101_demo.cli import act_run_pick_place_validation as live_cli
+
+    seen = {}
+
+    async def fake_composition(manifest_path, parent, make_case):
+        seen["parent"] = Path(parent)
+        return {"status": "PASSED"}
+
+    monkeypatch.setattr(live_cli, "trusted_full_restart_composition",
+                        lambda: fake_composition)
+    monkeypatch.setattr(live_cli, "_validate_local_paths", lambda spec, journal: None)
+    monkeypatch.setattr(live_cli, "_case_owner_factory", lambda lifecycle, spec: object())
+
+    class _Spec:
+        payload = {"manifest_path": str(tmp_path / "manifest.json")}
+
+    run_root = tmp_path / "run"
+    asyncio.run(live_cli.run_admitted_campaign(_Spec(), object(), tmp_path / "elsewhere.json",
+                                              journal_parent=run_root / "task8-live" / "cases"))
+    assert seen["parent"] == run_root / "task8-live" / "cases"
