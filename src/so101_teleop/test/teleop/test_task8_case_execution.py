@@ -72,6 +72,7 @@ def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False
             if result is not None:
                 return result
             return {"status": "PASSED", "completed_phases": ["SEARCH"],
+                    "live_evidence_artifact": None,
                     "stopped_confirmed": True, "formal_episode_eligible": False}
 
     class Owner:
@@ -130,6 +131,8 @@ def test_case_result_is_written_only_after_own_stack_and_child_retire(tmp_path):
 
 def test_full_case_stays_ineligible_for_formal_collection(tmp_path):
     full = {"status": "PASSED", "completed_phases": list(Task8Runner.PHASES),
+            "live_evidence_artifact": {"path": str(tmp_path / "live.json"), "sha256": "a" * 64,
+                                       "schema_version": 1},
             "stopped_confirmed": True, "formal_episode_eligible": True}
     spec, owner, journal, events = _prepared(tmp_path, case_id="full-01", result=full)
     row = asyncio.run(run_pick_place_case(spec, "full-01", owner, journal))
