@@ -423,6 +423,16 @@ class PhysicsClockAdmission:
                     "identity": identity, "history_version": receipt["version"],
                     "command_authority": False, "stage": "sample"}
 
+    def claim_guard(self):
+        """Hold the admission lock across the whole broker claim boundary.
+
+        Owner state, the history commit and the permit transition must be
+        evaluated under this single lock so no revocation can slip between
+        the owner read and the state transition.
+        """
+
+        return self._lock
+
     def owner_is_active(self):
         """True while the current owner is neither revoked, retired nor stop-confirmed."""
 
