@@ -217,6 +217,8 @@ class OfflineDispatchTransaction:
         return None
 
     def _fail_closed(self, reason, terminal=UNKNOWN):
+        if terminal not in (UNKNOWN, REJECTED):
+            raise ValueError(f"DISPATCH_TERMINAL_INVALID:{terminal}")
         """One irreversible closure: transaction, permit and controller port together.
 
         Called outside every critical section, so closing the controller port never
@@ -227,7 +229,9 @@ class OfflineDispatchTransaction:
         self.unusable = True
         if self.handle is not None:
             try:
-                self.registry.terminate(self.handle, reason=reason, terminal=terminal)
+                # single-purpose terminalizer: a valid terminal receipt has already
+                # persisted UNKNOWN/REJECTED, so terminate never needs an override
+                self.registry.terminate(self.handle, reason=reason)
             except AuthorityRefused:
                 pass
         try:
