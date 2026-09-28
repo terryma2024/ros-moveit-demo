@@ -7934,3 +7934,23 @@ evidence root; none reused another run's directory.
   instead of a hand-written fixture, and the plan's wider failure matrix.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-723 — Task 8P4 CLI entry point
+
+- **Delivered:** `cli/act_build_task8_qualified_report.py` with the plan's exact five flags
+  (`--task8-ready`, `--preparation-receipt`, `--campaign-result`, `--case-root`, `--output`),
+  delegating to `build_task8_qualified_report` and printing the published path; the `setup.py`
+  console entry; and a CLI test that runs `main()` over the real fixture and asserts the published
+  document is `QUALIFIED`, the printed path is correct, and **a second run refuses to overwrite** the
+  published report (`TASK8_QUALIFICATION_OUTPUT_EXISTS`).
+- **Why the overwrite assertion matters:** once published, the qualification is immutable from the
+  producer's perspective, so re-running the CLI against the same output cannot silently replace it.
+- **Verification:** 14 passed under the module xdist gate `-n 8` in a fresh `/data` scratch
+  (`gate6-batch3-py-gate/t8p4cli.{log,junit.xml}`).
+- **Remaining in 8P4:** the `QUALIFIED` schema / `calibration.py` updates (the status is already in
+  the schema enum, but the report now carries a `live_campaign` block that must be admitted or
+  required for that status) and the plan's mandated integration test driving the real
+  `PickPlaceRunner`, adapter, `run_pick_place_case()` and trusted campaign with seal/dir-fsync
+  readback, plus the wider failure matrix.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
