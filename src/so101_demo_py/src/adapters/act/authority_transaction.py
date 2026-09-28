@@ -221,6 +221,18 @@ class AuthorityTransactionRegistry:
                     or receipt["incarnation"] != record.incarnation \
                     or receipt["epoch"] != record.epoch:
                 raise AuthorityRefused("AUTHORITY_COMMIT_IDENTITY_CHANGED")
+            # state consistency only: a re-entrant mutation inside the wrapped
+            # commit must be refused. No clock is read here, so this is not a
+            # second time validation of an already-linearized transition.
+            history = self._history
+            if history is not None:
+                if history.hazard is not None:
+                    raise AuthorityRefused(
+                        f"AUTHORITY_HISTORY_MUTATED_IN_BOUNDARY:{history.hazard}")
+                if (history.version != receipt["version"]
+                        or history.incarnation != receipt["incarnation"]
+                        or history.epoch != receipt["epoch"]):
+                    raise AuthorityRefused("AUTHORITY_HISTORY_MUTATED_IN_BOUNDARY")
             # one timestamp: the permit deadline is compared against the same
             # history-owned instant that validated readiness/hazard/age
             if receipt["commit_monotonic_ns"] > record.deadline_ns:

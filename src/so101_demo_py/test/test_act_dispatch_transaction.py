@@ -124,14 +124,16 @@ def test_permit_deadline_crossing_during_the_claim_commit_is_refused():
     original = admission.history_commit_receipt
     calls = {"n": 0}
 
-    def cross_then_commit(**kwargs):
-        # the permit's 1 ms lifetime elapses before the single history-owned
-        # validation reads its timestamp, which must then refuse
+    def cross_inside_the_commit(**kwargs):
+        # the permit's 1 ms lifetime elapses *inside* the single final commit, so
+        # the receipt's own commit_monotonic_ns exceeds the frozen deadline; the
+        # shared (history) clock is advanced, not the registry's private one, and
+        # the advance stays well below the selected max age
         calls["n"] += 1
         now[0] += 5_000_000
         return original(**kwargs)
 
-    admission.history_commit_receipt = cross_then_commit
+    admission.history_commit_receipt = cross_inside_the_commit
     state = _run(tx)
     assert calls["n"] >= 1
     assert state in ("REJECTED", "UNKNOWN"), state

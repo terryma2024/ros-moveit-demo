@@ -28,16 +28,18 @@ def test_hazard_latched_after_the_commit_still_refuses():
     history, admission, registry, port, tx = _transaction(now)
     original = admission.history_commit_receipt
 
-    def latch_then_commit(**kwargs):
-        # a hazard is latched *before* the single final validation, so the one
-        # history-owned timestamp must observe it and refuse the claim
+    def commit_then_latch(**kwargs):
+        # a re-entrant mutation inside the wrapped call: the receipt is valid,
+        # but the history state no longer matches it when the claim is about to
+        # transition, which the state-consistency check must refuse
+        receipt = original(**kwargs)
         with history._lock:
             if history.hazard is None:
                 history.hazard = "PHYSICS_CLOCK_SILENT"
                 history.version += 1
-        return original(**kwargs)
+        return receipt
 
-    admission.history_commit_receipt = latch_then_commit
+    admission.history_commit_receipt = commit_then_latch
     state = _run(tx)
     assert state in ("REJECTED", "UNKNOWN"), (
         f"a hazard latched inside the history window was ignored: state={state} "
@@ -45,27 +47,31 @@ def test_hazard_latched_after_the_commit_still_refuses():
     assert port.accepted_commands == 0
 
 
-def test_selected_age_crossing_after_the_commit_still_refuses():
+def test_selected_age_crossing_at_the_final_commit_refuses():
+    """The clock may cross the selected-age bound at the *one* final commit.
+
+    Coverage for a clock change after the declared linearization point lives in
+    the EXP-573 owner-window probe; by design a post-linearization clock change
+    does not retroactively invalidate the transition.
+    """
+
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission, registry, port, tx = _transaction(now)
     original = admission.history_commit_receipt
     last_end_ns = history._last_source_end_ns
 
-    def age_out_then_commit(**kwargs):
-        # the selection ages past its 50 ms bound *before* the single final
-        # validation, which therefore refuses at its own timestamp
+    def age_out_before_the_validation(**kwargs):
+        # still inside the single final commit: the selection is older than the
+        # 50 ms bound when the history-owned timestamp is taken
         now[0] = last_end_ns + 250_000_000
         return original(**kwargs)
 
-    admission.history_commit_receipt = age_out_then_commit
+    admission.history_commit_receipt = age_out_before_the_validation
     state = _run(tx)
     assert state in ("REJECTED", "UNKNOWN"), (
-        f"a selected-age crossing inside the history window was ignored: state={state} "
+        f"a selected-age crossing at the final commit was ignored: state={state} "
         f"accepted_commands={port.accepted_commands}")
     assert port.accepted_commands == 0
-
-
-# --- P1.2: full identity / generation binding and immutable scalar freezing ---
 
 
 def test_owner_generation_one_with_rearmed_controller_and_caller_999_refuses():
