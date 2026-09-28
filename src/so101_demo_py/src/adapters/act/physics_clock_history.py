@@ -89,6 +89,7 @@ class PhysicsClockHistory:
             self.epoch = epoch
             self.hazard = None
             self._history.clear()
+            self._by_step.clear()
             self._last_sequence = -1
             self._last_step = 0
             self._last_sim_ns = floor_ns
@@ -144,13 +145,10 @@ class PhysicsClockHistory:
                 raise ValueError("PHYSICS_COMMIT_VERSION_CHANGED")
             if self.incarnation != expected_incarnation or self.epoch != expected_epoch:
                 raise ValueError("PHYSICS_COMMIT_INCARNATION_CHANGED")
-            # bounded scan over the retained window (max 512 entries); the
-            # receipt itself is returned as a read-only view, so this is *not*
-            # claimed to be an O(1) lookup.
-            for candidate in reversed(self._history):
-                if candidate["sample"].physics_step == step:
-                    break
-            else:
+            # O(1) lookup through the step index maintained by the accept path;
+            # the receipt is returned as a read-only view so it cannot be mutated.
+            candidate = self._by_step.get(step)
+            if candidate is None:
                 raise ValueError("PHYSICS_COMMIT_STEP_UNAVAILABLE")
             sample = candidate["sample"]
             age_ns = now_ns - sample.clock_interval_end_monotonic_ns
@@ -284,6 +282,10 @@ class PhysicsClockHistory:
                        <= self.max_age_ns for entry in accepted):
                     raise ValueError("PHYSICS_SOURCE_CLOCK_INVALID")
                 self._history.extend(accepted)
+                # rebuild the step index for the retained window (O(window), amortised
+                # into the accept path) so the commit lookup is genuinely O(1)
+                self._by_step = {entry["sample"].physics_step: entry
+                                 for entry in self._history}
                 self._last_sequence = chunk.chunk_sequence
                 self._last_step = step
                 self._last_sim_ns = sim_ns
