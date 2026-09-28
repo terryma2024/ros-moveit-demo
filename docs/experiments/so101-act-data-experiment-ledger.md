@@ -6364,3 +6364,11 @@ status: PLANNED_ISOLATED_STACK
 - **lock audit 追加更正**：新增 `corrections` 段，记录第七次复核关于“并发测试与实际事务脱节”的整改——屏障已移入真实事务节点，in-node 大拷贝与阻塞发送线程都经由 `dispatch_transaction.py`，并附两个用例名作为 closure 证据；新 SHA256 `1e116a95abde5b6a19b922b75f28a55069d25558ae96b640be714c47740a8e70`。
 - **CP-611/613/614 追加更正（本节即更正记录，不改写旧条目）**：CP-611 所称“两处弱并发用例已换成真实线程/屏障探针”只对了“线程/屏障”一半——当时探针仍游离于事务之外，现已由 `dispatch_transaction.py` 的真实节点承担；CP-613 的“测试完整性修正”未涵盖 receipt 化身绑定与 reservation 冻结身份，本轮补齐；CP-614 的“A-1/A-2 关闭 + extended_scope”结论成立，但当时未记录“并发证据来自独立 Event 而非事务节点”这一缺口，现由上面的 audit correction 补记。
 - 边界：Gate 5 仍 OPEN，等待第八次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-626 — EXP-570：commit_receipt 升级为真正的 O(1) 索引查询 + 只读 receipt（151 保持绿）
+
+- 提交 `bb8eaffd`。上一轮我先把“immutable/O(1)”的说法改成“有界扫描、非 O(1)”（复核允许“改代码或改说法”）；本轮把**代码**补齐，使 O(1) 成为事实：`PhysicsClockHistory` 维护 `self._by_step` 步号索引，在 accept 路径上随保留窗口（512 条）重建、在 arm/`clear()` 时清空，`commit_receipt()` 通过该索引做 **O(1) 查询**；receipt 仍以**只读视图**（`MappingProxyType`）返回，锁内不做深拷贝。
+- 契约同步更新：`handoff/2026-09-28-gate6-owner-wiring-contract.md` 中该条改为“O(1) step index + read-only receipt + no deepcopy under the lock”，新 SHA256 记录在 checkpoint 中。
+- 门禁：六个模块 **151 passed**（同一 151-name 集合），证明这次索引接线没有破坏 accept/expiry/admission/authority 任何路径（上一轮的错误接线曾导致 19 项失败，本轮先验证再提交）。
+- checkpoint 刷新：`experiments/exp570-dispatch-transaction/checkpoint.json` SHA256 `7b5f99ececa8eadf13a83fa7d7af290f18d540db434e83d93557a7b62acb0e51`。
+- 边界：Gate 5 仍 OPEN，等待第八次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
