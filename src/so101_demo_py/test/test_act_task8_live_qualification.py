@@ -585,3 +585,132 @@ def test_chain_reaches_a_validated_journal_row_from_real_evidence(tmp_path):
                                     manifest_document_sha256=manifest["manifest_document_sha256"])
     assert _hashlib.sha256(_Path(row["live_evidence_path"]).read_bytes()).hexdigest() == \
         row["live_evidence_sha256"]
+
+
+def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
+    """The teleop case path publishes a journal whose result came from the real Task8Runner."""
+
+    import asyncio
+    import hashlib as _hashlib
+    import json as _json
+    import sys
+    import time
+    from pathlib import Path as _Path
+
+    here = _Path(__file__).resolve()
+    sys.path.insert(0, str(here.parent))
+    # <worktree>/src/so101_demo_py/test/<this file>: parents[2] is <worktree>/src
+    sys.path.insert(0, str(here.parents[2] / "so101_teleop" / "test" / "teleop"))
+    from test_task8_case_execution import CHILD_OWNER, STACK_OWNER
+
+    from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
+
+    from so101_demo.act.pick_place_validation_manifest import write_new_manifest
+    from so101_demo.act.task8 import Task8Runner
+    from so101_demo.act.task8_live_evidence import (
+        CaseEvidenceDriver, case_row_to_journal_row, require_case_row_matches_bundle,
+    )
+
+    receipt, _, bundled, identities = _full_fixture(tmp_path)
+    # a FRESH v2 document for the campaign: the bundled copy has been rebased by the bundle producer,
+    # so re-validating it here would compare against a different document digest
+    from so101_demo.act.pick_place_validation_manifest import (
+        ANCHOR_NAMES, build_pick_place_validation_manifest,
+    )
+    anchors = {name: {"cup_start_m": [0.25, 0.0, 0.15], "neck_start_rad": 0.0}
+               for name in ANCHOR_NAMES}
+    manifest = build_pick_place_validation_manifest(
+        anchors, source_sha256=identities["source_provenance_sha256"],
+        runtime_config_sha256=identities["runtime_config_sha256"],
+        collection_config_sha256=identities["act_profile_sha256"],
+        contact_policy_fingerprint=identities["contact_policy_fingerprint"],
+        calibration_report_path="calibration-report.json", calibration_report_sha256="e" * 64)
+    manifest_path = tmp_path / "manifest.json"
+    write_new_manifest(manifest_path, manifest)
+    manifest_digest = _hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+
+    campaign_id = "case-298"
+    stack_root = tmp_path / "task8-live" / campaign_id / "stack"
+    child_root = tmp_path / "child"
+    stack_root.mkdir(parents=True)
+    child_root.mkdir()
+
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    driver = CaseEvidenceDriver(case_id="full-01", staging_root=staging, session_id="session-298",
+                                attempt_id="full-01", reset_epoch=4)
+    from types import SimpleNamespace
+
+    context = SimpleNamespace(
+        campaign_id=campaign_id, manifest_sha256=manifest_digest,
+        workload_kind="task8_full", evidence_root=str(tmp_path), worker_count=1,
+        # the campaign binds the manifest to the admitted identity, so the context carries it
+        source_sha256=manifest["source_sha256"],
+        runtime_config_sha256=manifest["runtime_config_sha256"],
+        collection_config_sha256=manifest["collection_config_sha256"],
+        contact_policy_fingerprint=manifest["contact_policy_fingerprint"])
+    spec = SimpleNamespace(kind="task8_full", deadline_ns=time.monotonic_ns() + 60_000_000_000,
+                           payload={"evidence_root": str(tmp_path),
+                                    "manifest_path": str(manifest_path),
+                                    "manifest_sha256": manifest_digest})
+    journal = tmp_path / "result.json"
+
+    class Worker:
+        def __init__(self):
+            self.context = context            # the campaign reads it back off the worker
+            self.launch = SimpleNamespace(mujoco_session_id="session-298",
+                                          socket_root=str(child_root), ros_domain_id=198)
+
+        async def run_pick_place(self, request):
+            # the runner's request schema is closed: it wants exactly these keys and FULL_RESTART,
+            # while the campaign also carries contact_policy_fingerprint for its own binding check
+            runner_request_document = {
+                "mode": request["mode"], "stop_after": request["stop_after"],
+                "lifecycle": "FULL_RESTART", "scenario_id": request["scenario_id"],
+                "session_id": request["session_id"], "attempt_id": request["attempt_id"],
+                "deadline_ns": request["deadline_ns"],
+            }
+            return Task8Runner(_evidence_port(driver)).run(runner_request_document)
+
+    class Owner:
+        def __init__(self):
+            self.context = None
+            self.worker = Worker()
+            self.stack = SimpleNamespace(
+                launch=SimpleNamespace(evidence_root=str(stack_root)))
+            self.child_launch = self.worker.launch
+            self.stack_owner_key = STACK_OWNER
+            self.child_owner_key = CHILD_OWNER
+            self._stack_retired = self._child_retired = self._final_clear = False
+
+        async def start(self, passed):
+            self.context = context
+            return context, self.worker
+
+        async def retire_failed_start(self, *, attempt_id):
+            await self.finish(attempt_id=attempt_id)
+
+        async def finish(self, *, attempt_id):
+            (stack_root / "cleanup-receipt.json").write_text(_json.dumps({
+                "leader_pid": STACK_OWNER.pid, "pgid": STACK_OWNER.pgid,
+                "started_ticks": STACK_OWNER.started_ticks,
+                "argv_sha256": STACK_OWNER.argv_sha256, "group_clear": True,
+                "session_id": "session-298", "ros_domain_id": 198,
+                "physical_stop_confirmed": True, "graph_clear": True}))
+            (child_root / "cleanup-receipt.json").write_text(_json.dumps({
+                "leader_pid": CHILD_OWNER.pid, "pgid": CHILD_OWNER.pgid,
+                "started_ticks": CHILD_OWNER.started_ticks,
+                "argv_sha256": CHILD_OWNER.argv_sha256, "group_clear": True}))
+            self._stack_retired = self._child_retired = self._final_clear = True
+            self.context = None
+
+    row = asyncio.run(run_pick_place_case(spec, "full-01", Owner(), journal))
+    assert journal.is_file() and row["status"] == "PASSED"
+    assert row["live_evidence_path"] == "" or _Path(row["live_evidence_path"]).is_file()
+    if row["live_evidence_sha256"] != "0" * 64:
+        assert _hashlib.sha256(_Path(row["live_evidence_path"]).read_bytes()).hexdigest() == \
+            row["live_evidence_sha256"]
+    journal_row = case_row_to_journal_row(row, identities=identities,
+                                          manifest_document_sha256=manifest["manifest_document_sha256"])
+    require_case_row_matches_bundle(journal_row, identities=identities,
+                                    manifest_document_sha256=manifest["manifest_document_sha256"])
