@@ -60,3 +60,61 @@ def test_selected_age_crossing_after_the_commit_still_refuses():
         f"a selected-age crossing inside the history window was ignored: state={state} "
         f"accepted_commands={port.accepted_commands}")
     assert port.accepted_commands == 0
+
+
+# --- P1.2: full identity / generation binding and immutable scalar freezing ---
+
+
+def test_owner_generation_one_with_rearmed_controller_and_caller_999_refuses():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission, registry, port, tx = _transaction(now)
+    port.arm_generation(999, controller_incarnation="i")
+    state = _run(tx, controller_generation=1)      # caller believes gen 1
+    assert state == "REJECTED", state
+    assert port.reserve_calls == 0 and port.accepted_commands == 0
+    # a caller that simply agrees with the rearmed controller is still not authority:
+    # the generation must equal the admission identity generation, so issuing the
+    # permit itself refuses
+    import pytest
+
+    with pytest.raises(Exception):
+        tx.run(stage="route_dispatch", role="arm", goal_uuid="g-1", target_digest="d-1",
+               controller_generation=999, controller_incarnation="i")
+
+
+def test_token_identity_must_equal_the_record_identity():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
+    handle = registry.issue_handle(identity=admission.identity, stage="route_dispatch", step=1,
+                                   history_version=history.snapshot()["version"],
+                                   incarnation=history.incarnation, epoch=admission.identity[4],
+                                   role="arm", controller_generation=1, goal_uuid="g-1",
+                                   target_digest="d-1", controller_incarnation="i")
+    forged = {"identity": ("ticket-other", "session-other", history.incarnation, 1, 1),
+              "owner_identity": admission.identity, "stage": "route_dispatch",
+              "history_version": history.snapshot()["version"],
+              "incarnation": history.incarnation, "reset_epoch": admission.identity[4],
+              "physics_step": 1}
+    try:
+        registry.claim_bound(handle, identity=admission.identity, controller_generation=1,
+                             token=forged)
+    except Exception:
+        pass
+    else:
+        raise AssertionError("a token whose identity differs from the record was accepted")
+    assert port.reserve_calls == 0 and port.accepted_commands == 0
+
+
+def test_mutable_target_digest_cannot_change_the_frozen_record():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission, registry, port, tx = _transaction(now)
+    mutable = ["d", "-", "1"]
+    try:
+        handle = registry.issue_handle(identity=admission.identity, stage="route_dispatch", step=1,
+                                      history_version=1, incarnation="i", epoch=admission.identity[4],
+                                      role="arm", controller_generation=1, goal_uuid="g-1",
+                                      target_digest=mutable, controller_incarnation="i")
+    except Exception:
+        return          # a strict type check at issue time is the correct refusal
+    mutable.append("-mutated")
+    raise AssertionError("a mutable target_digest was accepted and frozen by reference")

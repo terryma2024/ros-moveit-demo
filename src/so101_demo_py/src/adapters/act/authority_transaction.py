@@ -106,12 +106,20 @@ class AuthorityTransactionRegistry:
                      controller_generation, goal_uuid, target_digest, controller_incarnation):
         if stage not in FIXED_STAGES:
             raise AuthorityRefused("AUTHORITY_STAGE_INVALID")
-        if (type(step) is not int or step < 1 or type(history_version) is not int
+        identity_ok = (type(identity) is tuple and len(identity) == 5
+                       and all(type(part) is str and part for part in identity[:3])
+                       and type(identity[3]) is int and type(identity[4]) is int)
+        if (not identity_ok
+                or type(step) is not int or step < 1 or type(history_version) is not int
                 or history_version < 0 or type(epoch) is not int or epoch < 1
                 or type(controller_generation) is not int or controller_generation < 0
-                or not isinstance(incarnation, str) or not incarnation
-                or not isinstance(controller_incarnation, str) or not controller_incarnation
-                or not goal_uuid or not target_digest or role not in ("arm", "gripper", "neck")):
+                or controller_generation != identity[3]
+                or type(incarnation) is not str or not incarnation
+                or type(controller_incarnation) is not str or not controller_incarnation
+                or type(goal_uuid) is not str or not goal_uuid
+                or type(target_digest) is not str or not target_digest
+                or type(role) is not str or role not in ("arm", "gripper", "neck")):
+            # every frozen field must be an immutable scalar of the right type
             raise AuthorityRefused("AUTHORITY_PERMIT_FIELDS_INVALID")
         now_ns = self._clock_ns()
         record = _Record(permit_id=str(uuid.uuid4()), identity=tuple(identity), stage=stage,
@@ -178,7 +186,16 @@ class AuthorityTransactionRegistry:
                     f"AUTHORITY_PERMIT_NOT_READY:{self._states[record.permit_id]}")
             if tuple(identity) != record.identity:
                 raise AuthorityRefused("AUTHORITY_OWNER_IDENTITY_MISMATCH")
-            if controller_generation != record.controller_generation:
+            token_identity = token.get("identity")
+            token_owner = token.get("owner_identity")
+            if (type(token_identity) is not tuple or token_identity != record.identity
+                    or type(token_owner) is not tuple or token_owner != record.identity):
+                # caller self-consistency is not authority: the token must carry
+                # exactly the record identity, for both its identity and its owner
+                raise AuthorityRefused("AUTHORITY_TOKEN_IDENTITY_MISMATCH")
+            if (controller_generation != record.controller_generation
+                    or controller_generation != record.identity[3]):
+                # the generation must agree with the admission identity *and* the record
                 raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
             if port is not None:
                 # the controller port's *current* armed generation is the authority,

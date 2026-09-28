@@ -103,7 +103,8 @@ def test_wrong_owner_identity_and_generation_are_refused():
                                    incarnation="inc-other", epoch=1, role="arm",
                                    controller_generation=999, goal_uuid="g-1", target_digest="d-1",
                                    controller_incarnation="inc-other")
-    with pytest.raises(at.AuthorityRefused, match="AUTHORITY_OWNER_IDENTITY_MISMATCH"):
+    with pytest.raises(at.AuthorityRefused,
+                       match="AUTHORITY_(OWNER|TOKEN)_IDENTITY_MISMATCH"):
         registry.claim_bound(handle, identity=admission.identity,
                              controller_generation=999,
                              token={"identity": admission.identity, "owner_identity": admission.identity,
