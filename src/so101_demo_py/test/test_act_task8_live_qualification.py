@@ -422,3 +422,117 @@ def test_real_runner_full_case_seals_evidence_through_an_evidence_port(tmp_path)
     # the recorded digest is the artifact's own bytes: the seal is not a label
     assert _hashlib.sha256(sealed.read_bytes()).hexdigest() == artifact["sha256"]
     assert driver.window.grid_count >= len(LiveEvidenceWindow.REQUIRED_PHASES) - 1
+
+
+def _evidence_port(driver, *, session_id="session-1", attempt_id="attempt-1"):
+    """A port implementing the runner's full contract, emitting evidence into `driver`.
+
+    Module-level (rather than nested in one test) so the closing integration harness can reuse it.
+    """
+
+    import hashlib as _hashlib
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from test_act_task8 import FakePort                       # noqa: E402
+    from test_act_task8_live_evidence import _Contact, _Evidence   # noqa: E402
+
+    from so101_demo.act.task8_live_evidence import (            # noqa: E402
+        LiveEvidenceWindow, derive_frame_aggregates,
+    )
+
+    class _EvidencePort(FakePort):
+        def __init__(self):
+            super().__init__()
+            self.root = driver.case_root
+            self._grid_index = 0
+
+        def _observe(self, phase, evidence):
+            self._grid_index += 1
+            at_s = (self._grid_index - 1) * 0.1
+            bilateral = bool(evidence.get("bilateral_contact"))
+            airborne = bool(evidence.get("cup_off_table"))
+            aggregates = derive_frame_aggregates(
+                _Evidence(left=[_Contact()] if bilateral else [],
+                          right=[_Contact()] if bilateral else [],
+                          other=[] if airborne else [_Contact(body2="table")],
+                          simulation_step=evidence["physics_step"], simulation_time_s=at_s,
+                          minimum_signed_distance_m=0.02 if airborne else 0.001),
+                support_distance_max_m=0.005)
+            record_dir = driver.case_root / "raw"
+            record_dir.mkdir(parents=True, exist_ok=True)
+            record = record_dir / f"grid-{self._grid_index}.json"
+            record.write_bytes(b"{}")
+            digest = _hashlib.sha256(record.read_bytes()).hexdigest()
+            stamps = {name: at_s
+                      for name in ("head", "wrist", "arm", "neck", "world", "scene", "contact")}
+            receipts = {name: 0.0 for name in stamps}
+            raw = {name: {"relative_path": f"raw/grid-{self._grid_index}.json",
+                          "sha256": digest}
+                   for name in stamps}
+            driver.observe(
+                {**aggregates, "physics_step": evidence["physics_step"], "sim_time_s": at_s,
+                 "source_stamps_s": stamps, "source_received_monotonic_s": receipts,
+                 "raw_records": raw},
+                phase=phase,
+                frame={"wrist_frame_valid": True, "wrist_target_visible": True},
+                contact={"observation_valid": True,
+                         "bilateral_contact": aggregates["bilateral_contact"],
+                         "no_fingertip_contact": aggregates["no_fingertip_contact"],
+                         "cup_supported": aggregates["cup_supported"],
+                         "released": evidence.get("released", False),
+                         "placement_stable": evidence.get("placement_stable", True)},
+                measurements={"cup_support_distance_m": aggregates["cup_support_distance_m"],
+                              "end_effector_position_m": [0.0, 0.0, 0.1],
+                              "cup_position_m": aggregates["cup_position_m"],
+                              "cup_orientation_xyzw": aggregates["cup_orientation_xyzw"]})
+
+        def run_phase(self, phase, req):
+            evidence = super().run_phase(phase, req)
+            if phase in LiveEvidenceWindow.REQUIRED_PHASES:
+                self._observe(phase, evidence)
+            return evidence
+
+        def set_down(self, req):
+            evidence = super().set_down(req)
+            self._observe("RELEASE", dict(evidence, bilateral_contact=False, cup_off_table=False,
+                                          released=True))
+            return evidence
+
+        def run_retreat_segment(self, direction, distance, req):
+            evidence = super().run_retreat_segment(direction, distance, req)
+            self._observe("RADIAL_RETREAT", dict(evidence, bilateral_contact=False,
+                                                 cup_off_table=False, released=True))
+            return evidence
+
+        def seal_live_evidence(self, req):
+            return driver.seal()
+
+    return _EvidencePort()
+
+
+def test_evidence_port_factory_seals_through_its_driver(tmp_path):
+    """The factory is the harness the closing integration test will use."""
+
+    import hashlib as _hashlib
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from test_act_task8 import request as runner_request
+
+    from so101_demo.act.task8 import Task8Runner
+    from so101_demo.act.task8_live_evidence import CaseEvidenceDriver
+
+    case_root = tmp_path / "staging"
+    case_root.mkdir()
+    driver = CaseEvidenceDriver(case_id="full-03", staging_root=case_root, session_id="session-1",
+                                attempt_id="attempt-3", reset_epoch=4)
+    port = _evidence_port(driver)
+    result = Task8Runner(port).run(runner_request(mode="full", stop_after=None))
+    assert result["status"] == "PASSED"
+    artifact = result["live_evidence_artifact"]
+    sealed = _Path(artifact["path"])
+    assert sealed.is_file()
+    assert _hashlib.sha256(sealed.read_bytes()).hexdigest() == artifact["sha256"]
