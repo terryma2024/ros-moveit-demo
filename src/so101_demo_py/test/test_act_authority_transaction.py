@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from test_act_physics_clock_admission import (SOURCE_BASE_NS, AdmissionRefused,
+from test_act_physics_clock_admission import (SOURCE_BASE_NS, STEP_NS, AdmissionRefused,
                                              PhysicsClockHistory, _admission, _chunk, _ready,
                                              _sample, _stop_evidence)
 

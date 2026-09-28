@@ -457,7 +457,12 @@ class PhysicsClockAdmission:
                     step=evidence_token["physics_step"],
                     max_age_ns=self._selected_max_age_ns)
             except ValueError as error:
-                raise AdmissionRefused(f"CLOCK_ADMISSION_EVIDENCE_TOKEN_STALE:{error}") from error
+                reason = str(error)
+                if reason.startswith("PHYSICS_CLOCK_"):
+                    raise AdmissionRefused(
+                        f"CLOCK_ADMISSION_HISTORY_UNHEALTHY:{reason}") from error
+                raise AdmissionRefused(
+                    f"CLOCK_ADMISSION_EVIDENCE_TOKEN_STALE:{reason}") from error
             return {"stage": stage, "identity": identity, "commit_receipt": receipt,
                     "command_authority": True, "stage_executed": stage}
 

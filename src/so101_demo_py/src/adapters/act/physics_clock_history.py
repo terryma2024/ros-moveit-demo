@@ -387,7 +387,9 @@ class PhysicsClockHistory:
                     break
             if selected is None:
                 if not any_fresh:
-                    self.hazard = self.hazard or "PHYSICS_CLOCK_STALE"
+                    if self.hazard is None:
+                        self.hazard = "PHYSICS_CLOCK_STALE"
+                        self.version += 1
                     raise ValueError("PHYSICS_CLOCK_STALE")
                 raise ValueError("PHYSICS_CLOCK_STEP_UNAVAILABLE")
             # The copy above can cross a deadline; revalidate before returning.
