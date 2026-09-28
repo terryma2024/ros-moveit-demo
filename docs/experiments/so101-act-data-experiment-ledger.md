@@ -8750,3 +8750,29 @@ Writing new code here would have duplicated working, tested behaviour — so Tas
 
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-760 — Task 10 is partially implemented: core + tests pass, the CLI is missing
+
+Checked Task 10's file list against the tree:
+
+| Plan file | State |
+|---|---|
+| `src/act/sampling.py` | **exists**, clean, 156 lines — `assert_separated`, `make_manifest(config, seed)`, `project_collection_manifest(split_manifest)` with `SPLITS` (train, validation, offline_test, rollout_validation, rollout_test) and `COLLECTION_SPLITS` = the first three |
+| `test/test_act_sampling.py` | **exists**, clean, 86 lines — **5 passed** (`gate6-batch3-py-gate/task10.{log,junit.xml}`) |
+| `src/cli/act_sample.py` | **missing** |
+| `setup.py` entry for `act_sample` | **missing** (no match) |
+
+**What the missing CLI needs, from reading `sampling.py`:** `make_manifest` consumes a config closed over
+`schema_version`, `config_sha256`, `minimum_gap_m`, `candidates` (one list per each of the five splits)
+and a **`candidate_port` whose `verify` is callable** — i.e. every candidate point is checked by a live
+port before it may be frozen, per the docstring ("Freeze candidates only after a physical port checks
+every actual point"). So `--calibration` must yield that port (Task 6 calibration → port construction),
+and the two optional outputs must generate the **8 functional qualification scenes** and **40
+sustained-load scenes**, mutually exclusive with the formal five sets and excluded from training.
+
+That is more than a thin wrapper: it needs the calibration→port path and the qualification scene
+generators, neither of which I have read. Recorded rather than half-built, so the next round starts from
+this contract.
+
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
