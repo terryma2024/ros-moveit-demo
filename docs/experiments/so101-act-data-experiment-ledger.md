@@ -9885,3 +9885,21 @@ This resolves the design block **without authorizing runtime or motion**.
   regenerated TypeScript schema, and the `task-app.tsx` wiring.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-808 — Task 15: the routes live in `unified/app.py`, not `api.py`
+
+- **Finding from reading the source, not the plan's file list:** `so101_teleop/api.py` documents that the
+  route table now lives in one place, `so101_teleop.unified.app`, and that this module used to hold a second
+  hand-maintained copy which was migrated away. Adding an ACT route there would recreate the duplicate that
+  refactor removed. `server.py` holds `TeleopService` with methods such as `execute_plan` rather than routes.
+- **All four wiring files are clean**, so none carries uncommitted user work; edits remain hunk-staged as
+  usual.
+- **Corrected order for the next increment, recorded in the plan file:** handlers in
+  `so101_teleop/unified/app.py` plus a service method beside `execute_plan`, then
+  `bun run generate:api` to regenerate the schema, then the `task-app.tsx` wiring. The web tests run as
+  `NODE_ENV=test bun run test -- <file>`, since `bun run test` alone resolves React's production build and
+  fails every render (the pre-existing panel tests fail identically).
+- **No code changed this round**, deliberately: the next edit touches a live server's single route table, and
+  a half-verified change there is worse than an accurate handover note.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
