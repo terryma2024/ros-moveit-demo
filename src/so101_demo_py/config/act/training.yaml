@@ -1,0 +1,17 @@
+schema_version: 1
+kind: act_training
+action:
+  chunk_size: 10
+  execution_prefix: 1
+  temporal_ensembling: false
+  tail_padding_mask: true
+observation:
+  cameras: [head, wrist]
+  state_dim: 8
+  action_dim: 6
+normalization:
+  split: train
+frozen:
+  seed: 20260924
+  # quoted: an unquoted all-digit hash is a YAML integer, not a string
+  preprocessing_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
