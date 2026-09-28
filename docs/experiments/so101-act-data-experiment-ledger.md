@@ -8262,3 +8262,22 @@ requirements plus one environment assertion.
   `build/so101_teleop/test_results/`.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-738 — Teleop: runner-result fixtures updated; ros-child provenance left open (with a reverted mis-edit)
+
+- **Fixed:** the fake runner results in `test_task8_case_execution.py` (user-dirty; staged hunk-wise,
+  other hunks excluded per `gate6-batch3-commit/hunk-filter-round249.txt`) now carry
+  `live_evidence_artifact`, the field the runner result contract gained in 8P3 sub-slice A. Those
+  **3 `TASK8_CASE_RESULT_INVALID` failures are gone**.
+- **Attempted and reverted:** adding `source_provenance_sha256` to the calibration document written by
+  `test_act_ros_child.py` cleared neither provenance failure and broke a document-equality assertion,
+  so I reverted exactly that replacement (inverse edit, validated with `ast.parse`), leaving the
+  user's own hunks untouched and the file at 2 failures / 29 passed as before.
+- **Still open (2):** `test_act_child_source_limits_require_measured_calibration` and
+  `test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8` in
+  `test_act_ros_child.py` raise `CALIBRATION_SOURCE_PROVENANCE_MISSING`. These need the **document the
+  gate consumes** to carry the provenance field (not merely the binding fixture), and the equality
+  assertion shows a test compares that document verbatim — so the fix must place the field where the
+  gate reads it without changing a document another assertion pins.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
