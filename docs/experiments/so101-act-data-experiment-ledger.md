@@ -6609,3 +6609,11 @@ status: PLANNED_ISOLATED_STACK
 - 证据纪律：追加式目录，未删除/覆盖任何证据；42 个既有 dirty entries 未改动。
 - 下一步（先 RED 后修，均在本实验内）：把上述路径统一走 `_fail_closed`，删除绕过它的内部 catch/return 分支；在 `**fields` 之前显式校验 readback 为 `Mapping`；把 `port.close` 失败记录为 `close_failed`/`fencing_required` 并让事务保持不可用（不再当作成功）；随后 **P2** 锁图二选一、legacy claim 测试迁移、以及簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且与清单快照分开提交）。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
+
+## CP-653 — EXP-573 P1.2 部分收绿：统一闭合计 4 passed / 5 failed（如实记录，未完成）
+
+- 提交 `5385fc72`。实现：所有已知 permit 的失败路径改为统一经 `_fail_closed(reason)`——claim 拒绝、reserve 拒绝/异常、send 拒绝、超时、receipt 失败均不再各自写状态；`_fail_closed` 现在设置 `unusable`、把 tx 置 `UNKNOWN`、`registry.terminate(...)`、并在锁外 `port.close(...)`；**close 失败不再当作成功**：记录 `close_failed` 与 `fencing_required` 并保持事务不可用；`run()` 在 `unusable` 后抛 `AUTHORITY_TRANSACTION_UNUSABLE`；readback 在 `**fields` 之前显式做 `isinstance(fields, Mapping)` 校验，非 Mapping（含 `None`）走同一闭合。
+- **实测**：P1.2 表驱动 **4 passed / 5 failed**（`p12-green.log`/JUnit，scratch `exp573-p12-green.*`），较修复前 2/7 有进展；仍失败的 5 行为：`claim refusal`、`readback exception`、`readback None`、`readback invalid type`、`test_port_close_failure_is_recorded_and_leaves_the_transaction_unusable`。其中 readback 三行的断言细节尚未定位（可能失败在我为这些行新增的某个属性断言上，而非闭合本身），close 失败行需确认 `close_failed`/`fencing_required` 的置位路径。
+- 证据纪律：新建 scratch + tempfile 探针 PASS + 镜像 `mirror-6` 逐文件 SHA 等于 worktree；追加式目录，未删除/覆盖；42 个既有 dirty entries 未改动。
+- 下一步：定位这 5 行的具体断言并收绿（不得放宽断言）；然后 P2 锁图二选一（含删除过时 `claim_guard` 描述）、legacy claim 测试迁移、真实 `step_at` deepcopy 屏障与 send 入口测试保留、以及簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且与清单快照分开提交）。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
