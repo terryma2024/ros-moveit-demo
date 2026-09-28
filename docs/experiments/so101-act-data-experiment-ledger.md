@@ -7046,3 +7046,28 @@ status: PLANNED_ISOLATED_STACK
   3-insertion user hunk. Evidence `experiments/gate6-batch3-commit/{stage5-check,hunk-filter-round88}.txt`.
 - **Unchanged:** formal accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED;
   Gate 6 runtime/goals/motion closed; `collection_*` NOT_PROVISIONED.
+
+## CP-689 — Pre-runtime closure: build gate, overlay provenance, and one pre-existing blocker
+
+- **Full workspace build gate** (fresh `--build-base`/`--install-base`, fresh `/data` scratch,
+  isolated `COLCON_HOME`/log, `BUILD_TESTING=ON`), evidence `experiments/gate6-build-gate/`:
+  **7 of 8 packages finished**, including every package that carries Phase 3b changes —
+  `so101_mujoco_support` (1 min 7 s), `so101_teleop` (1 min 9 s, contains the `ros_child`
+  Task-8 bound wiring) and `so101_demo_py` (8.7 s) — plus `panda_mujoco_demo`,
+  `pick_place_common`, `fixed_pose_goal`, `panda_gazebo_demo_cpp`.
+- **Single failure and it is pre-existing, outside this task:** `so101_gazebo_demo_cpp`
+  fails its own `cpp_quality_gate` with 8 `-Wclang-format-violations` errors in
+  `src/pick_place/planning_failure_diagnostics.cpp` (line 731),
+  `src/pick_place/world_reset_coordinator.cpp` (152-153) and
+  `test/pick_place/test_planning_failure_diagnostics.cpp` (329, 335). Those files belong to
+  the preserved pre-existing dirty batch and were never edited by this task; they are
+  recorded as a **known pre-existing condition**, not formatted or otherwise touched.
+- **Overlay provenance** (`experiments/gate6-build-gate/overlay-provenance.txt`): the five
+  task-owned Python modules and the installed `unified/ros_child.py` are compared
+  source-vs-install by hash, and the installed root is confirmed to carry the
+  `build_bound_act_broker` call.
+- **Closure manifest** for review: `experiments/gate6-closure/closure-manifest.md`
+  (gate PASS 5 340 nodes, C++ 131/0, focused 140, lock audit, boundaries).
+- **Unchanged:** formal accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED;
+  Gate 6 runtime/goals/motion closed; `collection_*` NOT_PROVISIONED; no runtime process,
+  goal or motion started by this task.
