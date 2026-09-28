@@ -10050,3 +10050,22 @@ the runtime ladder for authorisation.
   `adapters/act/lerobot.py` (needs a training interpreter).
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-816 — Task 8P3: the receipt schema must mirror the validator, not drive it
+
+- **Finding:** `config/act/task8-preparation-receipt-schema.json` is absent, and **no code loads it** (grepping
+  `src/` and `test/` for its name finds nothing); `task8-live-evidence-schema.json` does exist. So the schema
+  is documentation of the validator's contract, and it has to mirror the code exactly or it would misdescribe
+  what admission enforces.
+- **Contract established from `task8_artifact_bundle.py`:** `RECEIPT_NAME` published atomically; `kind` and
+  `schema_version` gated by constants; the five `_IDENTITIES` (`source_provenance_sha256`,
+  `runtime_config_sha256`, `anchors_sha256`, `contact_policy_fingerprint`, `act_profile_sha256`);
+  `manifest_sha256` and `manifest_source_sha256`; a manifest `manifest_document_sha256` computed with that
+  field removed first; a **self-digest** `receipt_sha256` computed over the document excluding itself and
+  recomputed by the validator; and a files map whose entries are exactly
+  `("relative_path", "sha256", "source_sha256")`, each target re-hashed.
+- **Next increment recorded in the plan file:** read the receipt literal at `task8_artifact_bundle.py:136-150`
+  for the exact top-level key list, write the schema to match field for field, and add a test that walks the
+  schema's required list against the receipt the code actually produces, so the two cannot drift apart.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
