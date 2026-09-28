@@ -319,3 +319,42 @@ def test_case_journal_path_is_strict_and_refuses_reuse(tmp_path):
     for bad in ("../escape", "prefix-1", "PREFIX-01", "", 7):
         with pytest.raises(ValueError):
             resolve_case_journal_path(tmp_path / "fresh", bad)
+
+
+def _journal_row(**overrides):
+    row = {"case_id": "full-01", "mode": "full", "status": "PASSED",
+           "live_evidence_path": "/run/task8-live/cases/full-01-live.json",
+           "live_evidence_sha256": "b" * 64,
+           "child_retirement_receipt_path": "/run/task8-live/cases/full-01-child.json",
+           "child_retirement_receipt_sha256": "c" * 64,
+           "stack_retirement_receipt_path": "/run/task8-live/cases/full-01-stack.json",
+           "stack_retirement_receipt_sha256": "d" * 64,
+           "source_provenance_sha256": "e" * 64, "runtime_config_sha256": "f" * 64,
+           "contact_policy_fingerprint": "a" * 64, "manifest_document_sha256": "9" * 64}
+    row.update(overrides)
+    return row
+
+
+def test_full_journal_row_requires_evidence_and_both_retirement_receipts():
+    from so101_demo.act.task8_live_evidence import require_case_journal_row
+
+    assert require_case_journal_row(_journal_row(), mode="full")["status"] == "PASSED"
+    for missing in ("live_evidence_sha256", "child_retirement_receipt_sha256",
+                    "stack_retirement_receipt_sha256", "manifest_document_sha256"):
+        with pytest.raises(ValueError):
+            require_case_journal_row(_journal_row(**{missing: "not-a-digest"}), mode="full")
+    with pytest.raises(ValueError, match="TASK8_JOURNAL_MODE_INVALID"):
+        require_case_journal_row(_journal_row(), mode="phase_prefix")
+    with pytest.raises(ValueError):
+        require_case_journal_row(_journal_row(extra=1), mode="full")
+
+
+def test_prefix_journal_row_may_never_carry_live_evidence():
+    from so101_demo.act.task8_live_evidence import require_case_journal_row
+
+    prefix = _journal_row(case_id="prefix-01", mode="phase_prefix", status="PASSED",
+                          live_evidence_path="", live_evidence_sha256="0" * 64)
+    assert require_case_journal_row(prefix, mode="phase_prefix")["case_id"] == "prefix-01"
+    leaky = dict(prefix, live_evidence_sha256="b" * 64)
+    with pytest.raises(ValueError, match="TASK8_PREFIX_EVIDENCE_FORBIDDEN"):
+        require_case_journal_row(leaky, mode="phase_prefix")
