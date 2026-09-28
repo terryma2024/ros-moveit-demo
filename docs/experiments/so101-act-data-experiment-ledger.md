@@ -8380,3 +8380,22 @@ test that a shorter gate run root clears.
 - **Boundaries:** formal accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED;
   `collection_*` NOT_PROVISIONED; MuJoCo-only with CUDA-only semantics and no CPU fallback; nothing
   deleted or overwritten.
+
+## CP-743 — CLOSE..FINAL_CHECK extraction: per-frame aggregates derived from physics evidence
+
+- **Delivered:** `derive_frame_aggregates(evidence, *, support_distance_max_m)` in
+  `act/task8_live_evidence.py`. It reads `SimulationEvidence` directly — the left/right fingertip
+  contact arrays, other-object contacts, `minimum_signed_distance_m` and `object_state` — and returns
+  `holding_state`, `bilateral_contact`, `no_fingertip_contact`, `cup_supported`,
+  `cup_support_distance_m` and the cup pose. `released` and `placement_stable` are **deliberately not
+  derived**: they are epoch- and window-relative, so the phase sequence supplies them.
+- **Why this came first:** reading the contact collector showed a contact frame is a **single pair**
+  (`geom_a`, `geom_b`, `signed_distance_m`, `normal_force_n`, …), not the aggregates the canonical
+  sample needs — so the readback cannot emit canonical samples until this derivation exists. Written in
+  this task's own module, so the user's 191 uncommitted readback lines remain untouched.
+- **Verification:** recorder suite **26 passed** (`gate6-batch3-py-gate/aggregates.{log,junit.xml}`)
+  covering held-on-both-pads-airborne, resting-on-support and single-pad-approach.
+- **Remaining for this boundary:** readback capture wiring for CLOSE..FINAL_CHECK (hunk-staged), then
+  the canonical live CLI, then the 8P4 real-composition integration test.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
