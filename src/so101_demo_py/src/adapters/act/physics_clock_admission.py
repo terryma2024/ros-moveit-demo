@@ -423,6 +423,13 @@ class PhysicsClockAdmission:
                     "identity": identity, "history_version": receipt["version"],
                     "command_authority": False, "stage": "sample"}
 
+    def owner_is_active(self):
+        """True while the current owner is neither revoked, retired nor stop-confirmed."""
+
+        with self._lock:
+            return (self._identity is not None and self._revoked is None
+                    and not self._retired)
+
     def history_commit_receipt(self, *, token, step, max_age_ns=None):
         """Broker-internal commit used by the authority claim (never called by callers)."""
 

@@ -41,6 +41,7 @@ class _Record:
     incarnation: str
     epoch: int
     role: str
+    controller_incarnation: str
     controller_generation: int
     goal_uuid: str
     target_digest: str
@@ -97,19 +98,21 @@ class AuthorityTransactionRegistry:
 
     # ---------------------------------------------------------------- issuing
     def issue_handle(self, *, identity, stage, step, history_version, incarnation, epoch, role,
-                     controller_generation, goal_uuid, target_digest):
+                     controller_generation, goal_uuid, target_digest, controller_incarnation):
         if stage not in FIXED_STAGES:
             raise AuthorityRefused("AUTHORITY_STAGE_INVALID")
         if (type(step) is not int or step < 1 or type(history_version) is not int
                 or history_version < 0 or type(epoch) is not int or epoch < 1
                 or type(controller_generation) is not int or controller_generation < 0
                 or not isinstance(incarnation, str) or not incarnation
+                or not isinstance(controller_incarnation, str) or not controller_incarnation
                 or not goal_uuid or not target_digest or role not in ("arm", "gripper", "neck")):
             raise AuthorityRefused("AUTHORITY_PERMIT_FIELDS_INVALID")
         now_ns = self._clock_ns()
         record = _Record(permit_id=str(uuid.uuid4()), identity=tuple(identity), stage=stage,
                          step=step, history_version=history_version, incarnation=incarnation,
-                         epoch=epoch, role=role, controller_generation=controller_generation,
+                         epoch=epoch, role=role, controller_incarnation=controller_incarnation,
+                         controller_generation=controller_generation,
                          goal_uuid=goal_uuid, target_digest=target_digest, issued_ns=now_ns,
                          deadline_ns=now_ns + self._ttl_ns)
         with self._lock:
@@ -211,6 +214,9 @@ class AuthorityTransactionRegistry:
                     token=token, step=record.step, max_age_ns=self._selected_max_age_ns)
             except Exception as error:  # noqa: BLE001
                 raise AuthorityRefused(f"AUTHORITY_COMMIT_REFUSED:{error}") from error
+            if not admission.owner_is_active():
+                self._states[record.permit_id] = REVOKED
+                raise AuthorityRefused("AUTHORITY_REVOKED_DURING_COMMIT")
             if receipt["version"] != record.history_version \
                     or receipt["incarnation"] != record.incarnation \
                     or receipt["epoch"] != record.epoch:
@@ -244,7 +250,7 @@ class AuthorityTransactionRegistry:
                     or fields["goal_uuid"] != record.goal_uuid or fields["role"] != record.role
                     or fields["generation"] != record.controller_generation
                     or fields["target_digest"] != record.target_digest
-                    or fields["controller_incarnation"] != record.incarnation
+                    or fields["controller_incarnation"] != record.controller_incarnation
                     or not isinstance(fields["controller_boot_incarnation"], str)
                     or not fields["controller_boot_incarnation"]
                     or fields["broker_incarnation"] != record.incarnation
