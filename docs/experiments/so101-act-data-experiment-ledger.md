@@ -8549,3 +8549,28 @@ test that a shorter gate run root clears.
   hand-written) and then the combined **8P3/8P4 xdist gate**.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-751 — 8P4 integration: the real runner seals a full case's evidence
+
+- **Delivered:** `test_real_runner_full_case_seals_evidence_through_an_evidence_port` in
+  `test_act_task8_live_qualification.py`. It runs the **real `Task8Runner`** over a port implementing the
+  full contract (`begin`, `run_phase`, `set_down`, `release_preflight`, `detach_moveit`,
+  `planning_attached`, `run_retreat_segment`, `safe_stop`, `seal_live_evidence`) where evidence flows
+  into `CaseEvidenceDriver` → `LiveEvidenceWindow` → `Task8LiveEvidenceRecorder` and
+  `seal_live_evidence` delegates to `CaseEvidenceDriver.seal()`.
+- **Assertions:** the full case returns `PASSED` **with** `live_evidence_artifact`; the sealed file
+  exists and **its bytes hash to the recorded digest** (the seal is evidence, not a label); the window
+  reached the required phases. Nothing is hand-written — the result comes from the runner, the artifact
+  from the recorder, and the recorder verifies its raw-record digests.
+- **Five of my own mistakes were caught by guards and fixed in the test, never in the guard:**
+  `FULL_RESTART_REQUIRED` (a `stop_after` with full mode), a cross-module `NameError`, the raw-record
+  shape **twice** (then I read the validator instead of guessing again: `relative_path` + `sha256`),
+  `GRID_GAP` (sim time derived from `physics_step`, which other calls also advance), and
+  `WINDOW_INCOMPLETE`/`KeyError` (the runner performs RELEASE via `set_down`, and not every evidence
+  dict carries every key).
+- **Verification:** qualification suite **16 passed** (`gate6-batch3-py-gate/integ8.{log,junit.xml}`).
+- **Remaining:** extend the chain to `run_pick_place_case()` producing a case journal whose row carries
+  the live artifact plus both retirement receipts, read back by the aggregator; then the combined
+  **8P3/8P4 xdist gate**.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
