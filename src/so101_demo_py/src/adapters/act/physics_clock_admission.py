@@ -448,6 +448,7 @@ class PhysicsClockAdmission:
                 raise AdmissionRefused("CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED")
             if (evidence_token["incarnation"] != identity[2]
                     or evidence_token["reset_epoch"] != identity[4]
+                    or evidence_token["history_version"] < 0
                     or evidence_token["history_version"] > snapshot["version"]):
                 raise AdmissionRefused("CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID")
             try:
