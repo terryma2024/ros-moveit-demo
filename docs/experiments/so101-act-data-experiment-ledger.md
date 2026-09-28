@@ -7466,3 +7466,29 @@ ancestors; reviewed plan SHA256 verified as
   the optional field, `require_qualified`/`require_gate` require it).
 - **Boundaries:** no runtime, controller goal or motion started; unrelated dirty files preserved;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-702 — Task 8P3 in progress: bundle and live-evidence halves delivered
+
+- **Delivered and tested (commit for this slice):** `act/task8_artifact_bundle.py`
+  (`Task8ArtifactInputs`, `prepare_task8_bundle`, `PreparedTask8Bundle`,
+  `verify_prepared_task8_bundle`, pure `validate_task8_startup_artifacts`),
+  `act/task8_live_evidence.py` (`Task8LiveEvidenceRecorder.append/seal`),
+  `config/act/task8-live-evidence-schema.json`, and the two focused test modules.
+- **RED -> GREEN:** bundle RED (5 collection errors) and recorder RED (10 errors) recorded, then
+  **15 passed** (`gate6-batch3-py-gate/t8p3{green2,le2}.{log,junit.xml}`).
+- **Verified properties:** bundle self-containment after the source evidence tree is renamed away;
+  no receipt means `TASK8_PREPARATION_REQUIRED`; receipt and each bundled artifact hash-checked with
+  a receipt self-hash; purity of startup validation (zero service/worker/broker constructions);
+  recorder samples closed over all seven sources with dereferenceable raw records; evidence loss
+  (`contact_observation_valid`/`wrist_frame_valid` false) refused while a genuine bounded occlusion
+  is accepted; one-way seal via destination-must-not-exist rename with directory fsyncs.
+- **Remaining in 8P3 (unchanged order):** port/runner wiring (`seal_live_evidence` only after a
+  full case's `FINAL_CHECK`, `live_evidence_artifact` with prefix `None`, per-case recorder in
+  `pick_place_search_port`, readback window from `CLOSE`); manifest v2
+  (`manifest_document_sha256` plus newline-preserving `manifest_file_sha256`), production payload
+  receipt fields with the Task 8 / collection payload split, `ActArtifactBinding` from the verified
+  bundle, receipt verification confined to `UnifiedWorkloadService.start(spec)`, the canonical
+  prepare/validate/live CLIs plus the two thin compatibility aliases, and journals carrying the
+  live evidence plus both retirement receipts. Then the combined 8P3/8P4 xdist gate and Task 8P4.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED; unrelated dirty files preserved.
