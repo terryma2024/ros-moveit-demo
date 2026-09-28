@@ -6482,3 +6482,13 @@ status: PLANNED_ISOLATED_STACK
 - **当前证据**：六模块 **151 passed**（`six5.log` + `six5-manifest.txt`/JUnit，scratch `exp572-six5.*`）；EXP-572 探针模块 **5 passed**（`beh7.log`/JUnit，scratch `exp572-beh7.*`），含 P1.1 两项（history 终结窗口）与 P1.2 三项（owner gen1+控制器 gen999+调用方 999、伪造 token 身份、可变 list `target_digest`）。每轮均使用新建 scratch + 精确 tempfile 探针 + 逐文件 SHA 等于 worktree 的镜像（`mirror-9`）。
 - **仍未完成**（EXP-572 剩余）：P1.3 统一不可逆失败闭合（对已知 permit 的字段集错误、reserve/send/last_receipt/receipt 异常、拒绝与超时统一 fail-closed，tx 与 registry 同步终态、端口在锁外关闭、claim 时刻精确相等）；P1.4 用两侧皆有效的接缝（`run_to("receive", …)` 并先断言 IN_FLIGHT）重做最后三个 review-8 RED，malformed 需覆盖“缺字段→修正 receipt”，旧 RED 保持 NONQUALIFYING；P1.5 把事件屏障放进真实 `port.send` 与真实序列化/拷贝调用点并证明此时 revoke 仍能完成；以及 contract（删 122–126 行残留；补全含控制器端口锁的完整锁图并证明无环）、audit、inventory（说明 snapshot/ledger 哈希边界、区分既有与任务自有脏项）与撤回不实陈述。
 - 因此 **尚未请求 review 10**，不自批。Gate 5 保持 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；追加式证据，无删除或覆盖。
+
+## CP-640 — EXP-572 P1.3 收绿：统一不可逆失败闭合 + claim 时刻精确相等
+
+- 提交 `53f7a6a8`。实现：
+  - `receipt()` 的**字段集校验移入锁内**：对已知 permit，缺字段/多字段不再只是抛错，而是把 permit 不可逆置为 `UNKNOWN`（记录 `AUTHORITY_RECEIPT_FIELDS_INVALID`）后再抛——因此“缺字段 → 仍 IN_FLIGHT → 修正 receipt 被接受”的路径被彻底关闭。
+  - **claim 时刻精确持久化**：`claim_bound` 在转移时把该 permit 的 claim 时刻（history commit 的 monotonic 值）写入 registry，`receipt()` 要求 `claim_monotonic_ns` **完全相等**（不再是区间判断），差 1 ns 即拒绝并终止化。
+  - **统一 fail-closed**：dispatch 新增 `_fail_closed(reason)`，在**所有锁之外**同步三件事——transacion 状态置 `UNKNOWN`、`registry.terminate(...)`、`port.close(...)`；`run()` 只把**运维类异常**（`TimeoutError`/`OSError`/`ValueError`/`AuthorityRefused`）导向它，且当**尚未签发 permit**（如调用方代次与身份不符）时**直接抛出**，属契约违规而非运行时失败；process-control 异常不被吞掉。
+- **行为证据**：P1.3 三个探针先 RED（`red3.log`：2 failed——缺字段未终止化、send 异常逃逸）后 GREEN（`green8.log`：**8 passed**，含 P1.1×2、P1.2×3、P1.3×3）；六模块保持 **151 passed**（`six6.log`）。所有运行使用新建 scratch + tempfile 探针 + 逐文件 SHA 等于 worktree 的镜像（`mirror-10..13`）。
+- 仍未完成：P1.4（两侧皆有效接缝重做最后三个 review-8 RED，malformed 覆盖缺字段→修正）、P1.5（屏障放进真实 send/serialization 调用点）、以及 contract/audit/inventory 更正与撤回不实陈述。**尚未请求 review 10**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
