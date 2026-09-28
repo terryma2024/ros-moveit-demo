@@ -32,7 +32,7 @@ class OfflineDispatchTransaction:
         self.history = history
         self.registry = registry
         self.port = port
-        registry.bind(admission=admission, history=history, port=port)
+        registry.bind(admission=admission, history=history, port=port).seal()
         self._clock_ns = clock_ns
         self._permit_ttl_ns = permit_ttl_ns
         self._selected_max_age_ns = selected_max_age_ns

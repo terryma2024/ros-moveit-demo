@@ -98,6 +98,7 @@ class AuthorityTransactionRegistry:
         self._states = {}
         self._terminal_reasons = {}
         self._claim_boot = {}
+        self._sealed = False
         self._revoked = None
 
     # ---------------------------------------------------------------- issuing
@@ -141,56 +142,17 @@ class AuthorityTransactionRegistry:
             return self._states.get(handle.permit_id, "UNKNOWN_PERMIT")
 
     # -------------------------------------------------------------- claiming
-    def claim(self, handle, *, admission=None, history=None):  # pragma: no cover - closed API
-        """Legacy claim API: permanently fail-closed.
+    def claim(self, *args, **kwargs):  # pragma: no cover - removed API
+        """Legacy claim API: removed, never merely deprecated.
 
         It accepted caller-substituted admission/history and a caller-supplied
-        time, so it may never be used again. The only supported path is
-        ``claim_bound`` with broker-owned dependencies.
+        time. The only supported path is ``claim_bound`` over sealed,
+        broker-owned dependencies.
         """
 
         raise AuthorityRefused("AUTHORITY_LEGACY_CLAIM_REMOVED")
-        if not isinstance(handle, PermitHandle):
-            raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
-        with self._lock:
-            record = self._records.get(handle.permit_id)
-            if record is None:
-                raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
-            if self._revoked is not None:
-                self._states[record.permit_id] = REVOKED
-                raise AuthorityRefused("AUTHORITY_REVOKED")
-            if self._states[record.permit_id] != READY:
-                raise AuthorityRefused(
-                    f"AUTHORITY_PERMIT_NOT_READY:{self._states[record.permit_id]}")
-            now_ns = self._clock_ns()
-            if now_ns > record.deadline_ns:
-                self._states[record.permit_id] = EXPIRED
-                raise AuthorityRefused("AUTHORITY_PERMIT_EXPIRED")
-            history = (history if history is not None else self._history
-                       if self._history is not None
-                       else getattr(admission or self._admission, "_history", None))
-            if history is None:
-                raise AuthorityRefused("AUTHORITY_HISTORY_REQUIRED")
-            try:
-                receipt = history.commit_receipt(
-                    expected_version=record.history_version,
-                    expected_incarnation=record.incarnation, expected_epoch=record.epoch,
-                    step=record.step,
-                    max_age_ns=self._selected_max_age_ns
-                    if self._selected_max_age_ns is not None else 1_000_000_000)
-            except ValueError as error:
-                raise AuthorityRefused(f"AUTHORITY_COMMIT_REFUSED:{error}") from error
-            self._states[record.permit_id] = IN_FLIGHT
-            if port is not None and hasattr(port, "boot_incarnation"):
-                self._claim_boot[record.permit_id] = port.boot_incarnation()
-            return ClaimReceipt(permit_id=record.permit_id, identity=record.identity,
-                                stage=record.stage, step=record.step,
-                                history_version=receipt["version"],
-                                incarnation=receipt["incarnation"], epoch=receipt["epoch"],
-                                commit_monotonic_ns=receipt["commit_monotonic_ns"],
-                                selected_age_ns=receipt["age_ns"], deadline_ns=record.deadline_ns)
 
-    def claim_bound(self, handle, *, admission=None, identity, controller_generation, token):
+    def claim_bound(self, handle, *, identity, controller_generation, token):
         """Broker-internal claim bound to the live owner, generation and history receipt.
 
         The admission/history objects are supplied by the broker itself, never by the
@@ -201,11 +163,10 @@ class AuthorityTransactionRegistry:
 
         if not isinstance(handle, PermitHandle):
             raise AuthorityRefused("AUTHORITY_HANDLE_REQUIRED")
-        if admission is None:
-            admission = self._admission
-        if not hasattr(admission, "fence") or not hasattr(admission, "history_commit_receipt"):
+        admission, history, port = self._domain()
+        if not hasattr(admission, "claim_guard"):
             raise AuthorityRefused("AUTHORITY_ADMISSION_DOMAIN_REQUIRED")
-        with self._lock:
+        with self._lock, admission.claim_guard():
             record = self._records.get(handle.permit_id)
             if record is None:
                 raise AuthorityRefused("AUTHORITY_PERMIT_UNKNOWN")
@@ -219,7 +180,6 @@ class AuthorityTransactionRegistry:
                 raise AuthorityRefused("AUTHORITY_OWNER_IDENTITY_MISMATCH")
             if controller_generation != record.controller_generation:
                 raise AuthorityRefused("AUTHORITY_CONTROLLER_GENERATION_CHANGED")
-            port = self._port
             if port is not None:
                 # the controller port's *current* armed generation is the authority,
                 # not a caller-provided integer that happens to match
@@ -257,8 +217,10 @@ class AuthorityTransactionRegistry:
                                 deadline_ns=record.deadline_ns)
 
     def bind(self, *, admission=None, history=None, port=None):
-        """Broker-only wiring of the claim domain dependencies."""
+        """Broker-only wiring; refused once the domain is sealed."""
 
+        if self._sealed:
+            raise AuthorityRefused("AUTHORITY_DOMAIN_SEALED")
         if admission is not None:
             self._admission = admission
         if history is not None:
@@ -266,6 +228,19 @@ class AuthorityTransactionRegistry:
         if port is not None:
             self._port = port
         return self
+
+    def seal(self):
+        """Freeze the dependency bindings; no further substitution is possible."""
+
+        if self._admission is None or self._history is None or self._port is None:
+            raise AuthorityRefused("AUTHORITY_DOMAIN_INCOMPLETE")
+        self._sealed = True
+        return self
+
+    def _domain(self):
+        if not self._sealed:
+            raise AuthorityRefused("AUTHORITY_DOMAIN_UNSEALED")
+        return self._admission, self._history, self._port
 
     def terminate(self, handle, reason="AUTHORITY_TERMINAL"):
         """One irreversible terminalization for timeout/reject/exception/invalid receipt.

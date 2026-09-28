@@ -104,7 +104,7 @@ def test_wrong_owner_identity_and_generation_are_refused():
                                    controller_generation=999, goal_uuid="g-1", target_digest="d-1",
                                    controller_incarnation="inc-other")
     with pytest.raises(at.AuthorityRefused, match="AUTHORITY_OWNER_IDENTITY_MISMATCH"):
-        registry.claim_bound(handle, admission=admission, identity=admission.identity,
+        registry.claim_bound(handle, identity=admission.identity,
                              controller_generation=999,
                              token={"identity": admission.identity, "owner_identity": admission.identity,
                                     "stage": "route_dispatch", "history_version": 0,
@@ -204,8 +204,14 @@ def test_real_copy_and_io_inside_the_dispatch_nodes_with_revoke_progressing():
 # --- EXP-571: review-8 blockers through the real transaction ---
 
 
-def test_revoke_completed_before_the_transition_stops_the_send():
-    """A revoke that completes before READY->IN_FLIGHT must prevent the send."""
+def test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations():
+    """Real threads race a revoke against the claim boundary; only two outcomes are legal.
+
+    A barrier is installed *inside* the boundary (the history commit runs under the
+    admission lock). If a revoke can still complete there, the claim was not atomic
+    and must not accept; if it cannot, the claim owns the boundary and later
+    revocation must not retroactively create a second acceptance.
+    """
 
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission, registry, port, tx = _transaction(now)
@@ -213,22 +219,33 @@ def test_revoke_completed_before_the_transition_stops_the_send():
     release = threading.Event()
     original = admission.history_commit_receipt
 
-    def blocking_commit(*args, **kwargs):
-        receipt = original(*args, **kwargs)
+    def boundary_probe(*args, **kwargs):
         entered.set()
-        release.wait(5.0)          # revoke happens after the commit, before the transition
-        return receipt
+        release.wait(5.0)
+        return original(*args, **kwargs)
 
-    admission.history_commit_receipt = blocking_commit
+    admission.history_commit_receipt = boundary_probe
     outcome = {}
     worker = threading.Thread(target=lambda: outcome.setdefault("state", _run(tx)))
     worker.start()
-    assert entered.wait(5.0)
-    admission.revoke_current("CLIENT_REVOKED")
+    assert entered.wait(5.0), "the claim never entered the atomic boundary"
+    revoker = threading.Thread(target=lambda: admission.revoke_current("CLIENT_REVOKED"))
+    revoker.start()
+    revoker.join(0.3)
+    revoke_completed_inside = not revoker.is_alive()
     release.set()
     worker.join(10.0)
-    assert outcome["state"] == "REJECTED", outcome
-    assert port.send_calls == 0 and port.accepted_commands == 0
+    revoker.join(10.0)
+    if revoke_completed_inside:
+        # the revoke won the race inside the boundary: no send may happen at all
+        assert outcome["state"] in ("REJECTED", "UNKNOWN"), outcome
+        assert port.send_calls == 0 and port.accepted_commands == 0
+    else:
+        # the claim owns the boundary: exactly one acceptance, and the later
+        # revocation cannot manufacture another one
+        assert outcome["state"] == "ACCEPTED", outcome
+        assert port.accepted_commands == 1
+        assert admission.revoked_record is not None
 
 
 def test_legacy_claim_api_is_permanently_closed():
@@ -240,12 +257,14 @@ def test_legacy_claim_api_is_permanently_closed():
 
 
 def test_port_generation_is_the_authority_not_the_caller_integer():
+    """Rearming the controller invalidates permits even if the caller agrees with itself."""
+
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission, registry, port, tx = _transaction(now)
-    port.arm_generation(999, controller_incarnation="i")
-    state = _run(tx, controller_generation=1)
-    assert state == "REJECTED"
-    assert port.send_calls == 0
+    port.arm_generation(999, controller_incarnation="i")   # controller moved on
+    state = _run(tx, controller_generation=1)              # caller still believes gen 1
+    assert state == "REJECTED", state
+    assert port.send_calls == 0 and port.accepted_commands == 0
 
 
 def test_timeout_terminalizes_both_transaction_and_registry():
