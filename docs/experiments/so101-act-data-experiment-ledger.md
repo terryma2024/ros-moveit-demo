@@ -5947,3 +5947,23 @@ status: PLANNED_ISOLATED_STACK
 - Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp558-adapter-latency/checkpoint.json`，SHA256 `135da39a35604ef1cc030d1540aacb5864e103a911ad00f4f7a9d93b8a626ee4`；读回核对 152 个索引文件、469,926 字节，索引集合与实际集合相等且逐文件哈希一致。保留 EXP-558 与全部更早实验；未归档任何批次。`__pycache__` 仅为删除候选，未删除任何证据。既有 dirty/untracked 工作仍未暂存。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
 - 仍未完成：生产接线尚未发生；`first_chunk_timeout_s` 需要同进程 resume 路径的复测；适配器没有自带定时器，轮询周期仍由 owner 保证。本实验不授予任何目标或采集权限。
 - Next discriminator: 用同进程（同一 broker/节点内）的 resume 路径复测 `arm → 首块` 与 `pause → 静默` 间隔，把 `max_age_s`、`max_silence_s`、`first_chunk_timeout_s` 三个值冻结成有依据的候选；随后才是把 `RosPhysicsClockAdapter` 接入 `PickPlaceRosEvidence` 与 SEARCH 证明链的那次实验（该次必须有全量 source/installed 门禁与独立复核）。
+
+## EXP-559 — 同进程生命周期时序与冻结边界
+
+status: PLANNED_ISOLATED_STACK
+
+- Prior EXP-558 / CP-583 与 2026-09-28 评审 handoff（SHA256 `b01bed16…`）第 1、2、3 项；source HEAD `ff5cb73e`；注册证据根、overlay `i`、运行时 `/usr/bin/python3` 与 `/opt/ros/jazzy/bin/ros2`；空域 148–150（首次标记错误尝试）与 151–153（有效尝试）。无目标、无运动、无 broker、`command_authority=False`。
+- Observation: EXP-558 的分进程服务调用把 `arm → 首块` 抬到 1.76–3.70 s，评审据此判定它不能用于冻结生产首块期限；同时评审要求把 `check_health()==True` 与“可用于证据”区分开，并明确期限比较的等号语义。
+- One variable: 用单进程 harness `inproc_session.py` 执行 pause/reset/arm/resume/收尾 pause（rclpy service client，全部在同一进程），驱动只负责启动、空域预检、readiness 与退役；另加 `evidence_ready` 谓词与期限等号测试。三次会话只改变会话/域。
+
+## CP-584 — 同进程时序测量完成，三个边界按实测冻结
+
+- EXP-559 是 `VALID_SOURCE_ONLY_INPROC_TIMING_BOUNDS_FROZEN_PENDING_REVIEW`。三次会话（域 151/152/153，每轮约 57–59 s）七项 readiness 通过、栈与 harness 退出码 0、最终图空、无错误；每次都 arm 到 epoch 1、接受 487–509 个块、180+ 次 `step_at` 读回成功，并在收尾暂停后 latch `PHYSICS_CLOCK_SILENT`（粘滞）。首次尝试因“首块标记”没有限定在 armed 代次而把重置前回调记成首块，已作为无效尝试保留、不计入。
+- 同进程时间线（排除进程启动）：`arm` 事务 0.06 ms；`arm → resume 请求` 0.39–8.01 ms；**`resume 请求 → 被接受` 0.18–0.23 ms**；**`resume 被接受 → 首个正代次块` 119.8–120.6 ms**（98 ms 组块 + 传输 + 派发）；`arm → 首块` **121.2–128.0 ms**；`最后一块 → 收尾 pause 请求` 15.6–15.7 ms；`pause 请求 → 被接受` 0.53–18.9 ms；`最后一块 → 静默 latch` 254.0–254.8 ms（在 `max_silence=0.25 s` 下，即检测延迟≈边界+≤5 ms）。
+- 种群（三次会话）：块到达间隔 p50 100.05 ms、p99 107–114 ms、**max 177.3–194.5 ms**；看门狗轮询间隔 p50 20.0 ms、**max 51.2–56.7 ms**；适配器回调整体成本 p50 15.3–15.5 ms、max 24.0–26.9 ms；回调入口处首样本年龄 max 115.4–127.8 ms；因此**校验时刻年龄上限 151.8 ms**（入口年龄 + 校验前工作）。
+- 冻结边界（模块 `src/so101_demo_py/src/adapters/act/physics_clock_bounds.py`，commit `19c25590`；规则：对实测最大值取 2×（首块期限 3×）后向上取整到 50 ms）：`SOURCE_STEP_GAP_NS = 6,000,000`（EXP-556 启发式拒绝阈值，**明确不**用作静默/年龄/首块边界）、`MAX_AGE_S = 0.35`（2×151.8 ms）、`MAX_SILENCE_S = 0.45`（2×194.5 ms，另覆盖 56.7 ms 的轮询滑移）、`FIRST_CHUNK_TIMEOUT_S = 0.40`（3×128.0 ms，另覆盖生产 owner 尚未编写的 arm→resume 路径）。`physics_clock_bounds.history_config()` 是唯一构造入口，测试断言每个边界都支配其观测最大值且保持 50 ms 网格。
+- 等号语义与证据资格（评审第 3 项）：确认并锁定现有比较为**严格大于**——恰好等于期限仍健康，超过 1 ns 才 latch（`test_first_chunk_deadline_equality_is_strict`、`test_silence_deadline_equality_is_strict`）；新增 `PhysicsClockHistory.evidence_ready` 与 `RosPhysicsClockAdapter.evidence_ready`（commit `f413370d`）：只有“已 armed + 无 hazard + 已接受过块 + 当前仍有新鲜保留样本”才为真，armed 但未收到首块时即使 `check_health()` 仍为 True 也必须为 False，且该谓词本身不 latch。焦点测试 44→47 全绿。
+- 边界：本实验没有跑全量门禁（按 handoff 的节奏，全量门禁留到接线/authority 边界）；没有接入生产、没有目标或硬件操作；`max_age_s` 是**摄入**边界，选中状态的新鲜度仍须由 owner 用更紧的独立边界约束（评审第 6 项）。
+- Provenance: source HEAD `ff5cb73e`（测量时）与 `19c25590`（冻结模块提交）；overlay `i`；三轮 `session-events.json`/`session-done.json`/驱动 `result.json`/`session.json`/launch argv/readiness/图检查/所有者身份全部保留；无效首轮 `attempt1-first-chunk-marker-bug` 一并保留。
+- Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp559-inproc-timing/checkpoint.json`，SHA256 `ae556e0efdd22b13a26fe3cc3f37c65d107193898d19eea6adf692f6b100587f`；读回核对 151 个索引文件、1,160,929 字节，索引集合与实际集合相等且逐文件哈希一致。保留 EXP-559 与全部更早实验；未归档任何批次。`__pycache__` 与 scratch 树仅为删除候选，未删除任何证据。正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
+- Next discriminator: 评审第 4 项——在保持不可变、顺序、粘滞 hazard 与可审计证据的前提下消除适配器与历史中可避免的深拷贝/整窗拷贝，先用焦点 RED→GREEN，再用同一 `inproc_session.py` harness 复测真实适配器成本；之后才是评审第 5 项（独立 GPT-6 Astra/High 复核冻结边界与集成设计）与第 6 项（接入 `PickPlaceRosEvidence` 与 SEARCH）。
