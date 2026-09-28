@@ -333,3 +333,76 @@ def test_selected_sample_expiring_before_use_closes_the_epoch():
         history.step_at(1)
     assert history.hazard == "PHYSICS_CLOCK_STALE"
     assert history.evidence_ready is False
+
+
+def _jumping_clock(*values):
+    """Clock that returns the given values in order, repeating the last one."""
+
+    state = {"index": 0}
+
+    def clock():
+        index = min(state["index"], len(values) - 1)
+        state["index"] += 1
+        return values[index]
+
+    return clock
+
+
+def test_first_chunk_deadline_crossed_during_validation_is_rejected():
+    """A deadline crossed while validating must not commit the first chunk."""
+
+    timeout_ns = 100_000_000
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history = _bounded_history(now, first_chunk_timeout_s=timeout_ns / 1e9)
+    history.arm(1, source_floor_s=0.0)
+    armed_ns = now[0]
+    at_deadline = armed_ns + timeout_ns
+    history.clock_ns = _jumping_clock(at_deadline, at_deadline + 5_000_000)
+    with pytest.raises(ValueError):
+        history.accept_chunk(_chunk(0, _sample(1)))
+    assert history.hazard == "PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT"
+    assert history.evidence_ready is False
+    assert history.check_health() is False
+
+
+def test_accept_chunk_rejects_a_sample_that_ages_out_during_validation():
+    """The acceptance linearization point must revalidate sample age."""
+
+    now = [NOW_NS]
+    history = _history(now)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    last_end_ns = history._last_source_end_ns
+    fresh_at_entry = last_end_ns + 190_000_000
+    stale_at_confirm = last_end_ns + 250_000_000
+    history.clock_ns = _jumping_clock(fresh_at_entry, stale_at_confirm)
+    with pytest.raises(ValueError):
+        history.accept_chunk(_chunk(1, _sample(2)))
+    assert history.hazard is not None
+    assert history.evidence_ready is False
+
+
+def test_step_at_rejects_a_sample_that_ages_out_during_the_copy():
+    """The readback linearization point must revalidate freshness."""
+
+    now = [NOW_NS]
+    history = _history(now)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    last_end_ns = history._last_source_end_ns
+    history.clock_ns = _jumping_clock(last_end_ns + 190_000_000,
+                                      last_end_ns + 250_000_000)
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_STALE"):
+        history.step_at(1)
+    assert history.hazard == "PHYSICS_CLOCK_STALE"
+    assert history.evidence_ready is False
+
+
+def test_recent_with_receipts_rejects_a_window_that_ages_out_during_the_copy():
+    now = [NOW_NS]
+    history = _history(now)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    last_end_ns = history._last_source_end_ns
+    history.clock_ns = _jumping_clock(last_end_ns + 190_000_000,
+                                      last_end_ns + 250_000_000)
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_STALE"):
+        history.recent_with_receipts()
+    assert history.hazard == "PHYSICS_CLOCK_STALE"
