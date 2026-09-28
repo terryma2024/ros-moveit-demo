@@ -8470,3 +8470,23 @@ test that a shorter gate run root clears.
   live CLI and the 8P4 real-composition integration test.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-747 — Readback capture to sealed case artifact, end to end in code
+
+- **Delivered:** `CaseEvidenceDriver.observe_capture(adapter, captured, *, phase, frame, contact,
+  measurements, raw_records, support_distance_max_m, event=False)`. The adapter supplies its own
+  per-frame fields (`capture_evidence_fields`, CP-744); this method only routes them into the
+  canonical sample, then to the frozen grid or the edge-event stream; sealing remains the window's
+  business (CP-745/746).
+- **Verification:** recorder suite **31 passed** (`gate6-batch3-py-gate/obscap.{log,junit.xml}`),
+  including a test that drives all seven required phases from synthetic captures through
+  `observe_capture` to a sealed artifact.
+- **Layering note:** because each component owns one concern (readback = values, window = cadence and
+  seal, driver = per-case staging and routing), the entire evidence chain was built **without editing
+  a single one of the 191 lines of pre-existing user work** in `pick_place_readback.py` — only
+  append-only additions there, staged hunk-wise.
+- **Remaining:** the canonical live CLI (one production call over nine prefix + five full cases,
+  journals written through the committed row rules) and the 8P4 real-composition integration test
+  through the real runner, adapter, `run_pick_place_case()` and trusted campaign.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
