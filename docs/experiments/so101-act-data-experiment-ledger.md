@@ -8925,3 +8925,24 @@ This resolves the design block **without authorizing runtime or motion**.
   preflight adapter for review and evidence before any Task 8L/W1 runtime.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-766 — Task 11 begins: the training-eligibility gate, with a plan inconsistency recorded
+
+- **Delivered:** `training_eligible(record)` in `act/collection.py` and `test/test_act_collection.py`
+  carrying the plan's Step-1 boundary test verbatim plus a five-way mutation matrix (one field changed at
+  a time).
+- **Plan inconsistency found and resolved in favour of fail-closed behaviour:** the plan's Step-1 test
+  passes records that carry **neither `status` nor `coordinator_committed`** and expects `False`, while
+  its Step-3 snippet reads `record["status"]` directly and would raise `KeyError` on exactly those cases.
+  The two cannot both hold; the gate now returns `False` for an incomplete or malformed record — it
+  guards what enters training data, so raising out of it is the wrong failure mode. Strictness is kept
+  where it matters: `done` and `coordinator_committed` must be literally `True`, `interventions` must be
+  `0`, and `status`/`qc` must match exactly.
+- **Verification:** focused tests **2 passed** (`gate6-batch3-py-gate/task11b.{log,junit.xml}`).
+- **Remaining in Task 11:** `prepare_scenario` (one reset, seven-joint readback, safe-readiness proof),
+  `collect_authorized_scenario` (search→QC with no second reset), the W1 debug CLI `act_collect` with its
+  `setup.py` entry, and the plan's failure matrix (admission refusal ⇒ zero reset/actions/children;
+  infra faults never sealed as business failures; one reset per attempt; re-entry cannot overwrite a
+  terminal state).
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
