@@ -9109,3 +9109,26 @@ This resolves the design block **without authorizing runtime or motion**.
   the composition and `act_collect_parallel`, then the teleop-side modifications and the live Steps 6–7.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-774 — Task 11A: wave recovery (terminal stays terminal, held is never reset blind)
+
+- **Delivered:** `act/parallel_collection_recovery.py` with
+  `ActFixedWaveRecovery.resume(wave_record, context)`, plus `ActCollectionResultStore.has_result` and a
+  new focused test module.
+  - **terminal stays terminal:** a scene that already has a sealed result is reported under
+    `already_terminal` and never re-collected (the reset port receives only the outstanding scene).
+  - **nothing held is reset blind:** for `HELD`/`UNKNOWN`, evidence is captured and **verified against
+    its bytes** (`RECOVERY_EVIDENCE_UNPROVEN` for a missing file, missing digest or mismatch), an
+    independent recovery transaction must report `recovered is True`
+    (`RECOVERY_TRANSACTION_UNPROVEN`), and only then does the reset run.
+  - **the order is the guarantee:** an events log asserts exactly `evidence → recover → reset`, so a
+    later edit cannot silently reorder the transaction.
+  - **unknown is not safe:** a holding state outside `SAFE`/`HELD`/`UNKNOWN` is refused; waves outside
+    the manifest are `WAVE_PARTITION_MISMATCH`; duplicates or a malformed record are `WAVE_RECORD_INVALID`;
+    every refusal path asserts nothing was reset.
+- **Verification:** focused tests **11 passed** (`gate6-batch3-py-gate/task11a4.{log,junit.xml}`), first
+  run green.
+- **Remaining in 11A:** `gpu_workload_client.py`, the runtime adapter, `FixedActCollectionCampaign`, the
+  composition and `act_collect_parallel`, then the teleop-side modifications and the live Steps 6–7.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
