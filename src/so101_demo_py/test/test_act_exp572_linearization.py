@@ -74,13 +74,11 @@ def test_owner_generation_one_with_rearmed_controller_and_caller_999_refuses():
     assert state in ("REJECTED", "UNKNOWN"), state
     assert port.reserve_calls == 0 and port.accepted_commands == 0
     # a caller that simply agrees with the rearmed controller is still not authority:
-    # the generation must equal the admission identity generation, so issuing the
-    # permit itself refuses
-    import pytest
-
-    with pytest.raises(Exception):
-        tx.run(stage="route_dispatch", role="arm", goal_uuid="g-1", target_digest="d-1",
-               controller_generation=999, controller_incarnation="i")
+    # the generation must equal the admission identity generation, so the permit is
+    # never issued and the transaction reports a pre-issue refusal instead
+    assert tx.run(stage="route_dispatch", role="arm", goal_uuid="g-1", target_digest="d-1",
+                  controller_generation=999, controller_incarnation="i") == "REJECTED"
+    assert tx.failure and "PERMIT_FIELDS" in tx.failure
 
 
 def test_token_identity_must_equal_the_record_identity():
@@ -185,3 +183,19 @@ def test_claim_monotonic_ns_must_equal_the_recorded_claim_instant():
     else:
         raise AssertionError("a claim timestamp off by 1 ns was accepted")
     assert registry.state_of(tx.handle) == "UNKNOWN"
+
+
+def test_pre_issue_refusal_is_a_transaction_result_without_side_effects():
+    """A refused permit issuance is a REJECTED outcome, not a terminalization."""
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
+    state = tx.run(stage="route_dispatch", role="arm", goal_uuid="g-1", target_digest="d-1",
+                   controller_generation=1 + 1, controller_incarnation="i")
+    assert state == "REJECTED", state
+    assert tx.failure and "PERMIT_FIELDS" in tx.failure, tx.failure
+    # no permit was issued, so nothing was terminalized and the controller
+    # generation was left untouched
+    assert tx.handle is None
+    assert port.reserve_calls == 0 and port.send_calls == 0
+    assert port._close_first is False and port.cancel_stop_pending is False
