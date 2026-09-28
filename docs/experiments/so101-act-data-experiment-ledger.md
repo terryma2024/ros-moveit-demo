@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 54d110720f11baf9406f6228afa425de8ca8defc (latest code commit; evidence/ledger-only commits up to CP-590 follow it)
+current_commit: a7c79e595922c4eaefbc8b6208dc324939d976f0 (latest code commit; evidence/ledger-only commits up to CP-591 follow it)
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -60,8 +60,8 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-590
-next_experiment: EXP-564 (owner-path predicate and expiry-to-stop qualification under load)
+latest_checkpoint: CP-591
+next_experiment: second local independent Astra/High Gate 5 review (bounds + offline admission contract + owner-path qualification); Gate 6 stays closed
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -6016,7 +6016,7 @@ status: PLANNED_SOURCE_ONLY
 - EXP-562 是 `VALID_SOURCE_ONLY_LINEARIZED_DEADLINES`。新增 4 个“期限在执行期间被跨越”的 RED 用例（首块期限在入口恰好到期但校验期间越界；接受时样本在拷贝期间变旧；`step_at` 与 `recent_with_receipts` 在拷贝期间变旧），实现前 4 failed / 27 passed，实现后焦点 GREEN **57 passed**；随后把 bounds 常量改为评审独立解码的精确整数并再次 GREEN 34 passed。
 - 评审独立复核的测量与我的窗口作用域复算一致，并已作为持久证据索引：EXP-556 正代次源起点间隔 max `2,536,550 / 2,534,770 / 2,530,660 ns`；EXP-559 窗口内块间隔 `111.336691 / 118.498471 / 122.997815 ms`；EXP-560 窗口内 `110.291747 / 107.913940 / 108.380232 ms`；EXP-559 精确年龄包络 `127,833,869 + 26,894,568 = 154,728,437 ns`；`arm_end → 首块完成` `128.046778 ms`（自 arm_begin 为 `128.110036 ms`）；回调 p50 优化前 `15.38–15.53 ms`、后 `7.81–8.06 ms`；单步读回 p50 前 `14.4–15.6 ms`、后 `0.195–0.203 ms`；看门狗最大间隔前 `56.701484 ms`、后 `46.518291 ms`；六个测量窗口 hazard 全为 0。`physics_clock_bounds.py` 的 `OBSERVED_*` 已改用这些精确整数（不再四舍五入到 154,720,000）。
 - 分析脚本与精确统计已落地并索引：`analysis/window_scoped.py`（原仅存在于 `/tmp`，现复制入注册证据根，含 stdout/stderr 与 SHA256）与 `analysis/exact-statistics.json`，后者明确标注四个冻结值仍是 `EXPERIMENTAL_CANDIDATES_NOT_PRODUCTION_GUARANTEES`。
-- 已更新账本头部（不重写历史条目）：`current_commit: 54d110720f11baf9406f6228afa425de8ca8defc (latest code commit; evidence/ledger-only commits up to CP-590 follow it)`，`latest_checkpoint: CP-587`，`next_experiment: EXP-563 (broker atomic admission/revocation contract, offline)`。
+- 已更新账本头部（不重写历史条目）：`current_commit: a7c79e595922c4eaefbc8b6208dc324939d976f0 (latest code commit; evidence/ledger-only commits up to CP-591 follow it)`，`latest_checkpoint: CP-587`，`next_experiment: EXP-563 (broker atomic admission/revocation contract, offline)`。
 - EXP-562 checkpoint：`experiments/exp562-clock-linearization/checkpoint.json`，SHA256 `7b75bf0b7972a36c56cfec3dedade5b7d2c11c63ee2f9bd609fba486bef9b30c`（索引 10 个文件，逐文件哈希读回一致）；RED/GREEN 的 scratch、tempfile 证明与 JUnit 同时在 `scratch/exp562-*` 保留。
 - 仍未完成的评审要求（按规定的 Gate 5 顺序）：(a) EXP-563——冻结并测试 broker 侧按完整 ticket/generation/epoch 身份的**原子准入与不可逆撤销**契约，每个 hazard 携带该身份，proof 登记/返回、permit 消耗、逐路由提交与最终接受都重新 fence，部分提交取消并确认停止，明确锁顺序使阻塞的 checker 不能阻塞撤销，缓存 readiness 绝不等于 authority，同时把“回调期间调用方消息独占”写成显式契约或改为边界快照；(b) EXP-564——在代表性负载下用实现的真实谓词限定 owner 路径，记录源结束、回调入口、接受完成、实际看门狗检查、撤销与确认停止，给出“到期→撤销→确认停止”的上界，并确认或收紧 0.40 s 首块期限（收尾暂停的 hazard 只证明关机闭合，不证明在运动中停机的尾延迟）。
 - 边界与状态：没有接入生产 authority，没有目标、许可、采集或 Gate 6 工作；正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`；保留全部更早实验与证据，未归档、未删除任何证据。完成 (a)(b) 并留下证据后，按评审要求**再次停在 Gate 5** 等待第二次本地独立评审，不自评通过 Gate 6。
@@ -6061,3 +6061,23 @@ status: PLANNED_SOURCE_ONLY
 - Durable checkpoint（按复核要求修正而不是另立终态）：`/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp563-clock-admission/checkpoint.json`，SHA256 `50ee01d446782f2379a22cc53719e8a5189f5906c65afcc958ca8bb942a48200`；索引 20 个文件（含本轮 RED/GREEN 日志、JUnit、tempfile 证明与 `origin-source-commit.txt`），逐文件哈希读回一致；状态为 `VALID_SOURCE_ONLY_OFFLINE_ADMISSION_CONTRACT_ORIGIN_IDENTITY_MANDATORY`。
 - 边界：契约仍为离线且无 authority；Gate 6、目标、运动、采集与 Task 12 全部保持关闭；正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`。
 - Next discriminator: EXP-564（仅在本次身份来源强制通过之后开始）——在代表性负载下用真实实现谓词限定 owner 路径，串起源结束 → 回调入口 → 接受完成 → 实际看门狗检查 → 撤销 → 确认停止，单独声明“到期→撤销→确认停止”上界，并确认或收紧 0.40 s 首块期限；EXP-564 结束后再次停在 Gate 5 等待本地 Astra 复核。
+
+## EXP-564 — 代表性 owner 路径上的真实谓词与到期→撤销→确认停止限定
+
+status: PLANNED_ISOLATED_STACK
+
+- Prior CP-590 与 Gate 5 顺序第 3 项；source HEAD `a7c79e59`；注册证据根、overlay `i`、运行时 `/usr/bin/python3` 与 `/opt/ros/jazzy/bin/ros2`；空域 157/158/159（每个都先验证为空）。无目标、无运动、无 broker goal；admission 仍是离线契约。
+- Observation: EXP-559/560 只测了裸适配器与冻结边界，没有把**离线 admission 门与真实 owner 轮询**串起来，也没有在真实 owner 路径上给出“到期 → 撤销 → 确认停止”的实测上界；评审明确禁止用收尾暂停的闭合冒充运动中的停机延迟。
+- One variable: 用单进程 owner harness（`owner_session.py`）在真实 ACT stack 上实例化冻结历史 + `RosPhysicsClockAdapter` + 离线 `PhysicsClockAdmission`（身份 = 会话/代次/epoch），以 20 ms 定时器轮询真实 `check_health()`，每 10 次轮询做一次 `admit_sample`；并在窗口**中段**主动 `SetPause(true)` 制造真实静默到期，再走撤销与权威停止取证，随后恢复并继续窗口。
+
+## CP-591 — owner 路径限定完成：首块期限确认、反应预算 47–53 µs、检测预算 284–295 ms
+
+- EXP-564 是 `VALID_SOURCE_ONLY_OWNER_PATH_QUALIFIED_BOUNDS_CONFIRMED`。三次会话（域 157/158/159，每轮约 50–51 s）七项 readiness 通过、栈与 harness 退出码 0、最终图空、无 error；每次都 arm 到 epoch 1、接受 419–451 个块、成功 admit 75–76 个选中样本，并在**中段到期**处撤销（`PHYSICS_CLOCK_SILENT`）且 `confirm_stop` 成功；收尾暂停的 hazard 单独记录，未用于任何在运动中的延迟声明。
+- 首块期限（在真实 owner 路径、无进程启动膨胀）：`arm_end → 首块` **119.96 / 116.81 / 123.03 ms**，`resume 被接受 → 首块` 111.8–112.6 ms，均低于冻结的 0.40 s，因此该候选**得到确认**（与 EXP-559 的 128.05 ms 同量级）。
+- 静默边界与轮询：窗口内块间隔 p50 100.0 ms、**max 107.0–108.0 ms**；看门狗实际轮询 p50 20.0 ms、**max 32.5–43.9 ms**；两者都低于冻结的 0.30 s，说明该候选在真实 owner 路径上成立。
+- 反应预算与检测预算**分开声明**：`静默 latch → 撤销` **18–21 µs**，`撤销 → 确认停止` **29–32 µs**，合计 `到期 → 撤销 → 确认停止` 上界 **53 µs**；而 `中段 pause 请求被接受 → 确认停止` 为 **284–295 ms**，由刻意设置的 0.30 s 静默边界主导——前者是 owner 反应预算，后者是检测预算，二者不可互相冒充。
+- 选中状态新鲜度：候选 `selected_max_age_s = 0.20 s` 下，窗口内被 admit 样本年龄 p50 41.8–60.7 ms、max 101.5–150.4 ms，全部通过；run-1 中有一个超龄样本被正确拒绝（`CLOCK_ADMISSION_SELECTED_STALE`），说明该边界是有效的而不是空设。`确认停止 → 恢复被接受` 为 10.5 ms。
+- Provenance: 三轮 `session-events.json`（含逐块 source end / 回调入口 / 接受完成、每次 health 判定与 admit、撤销与确认停止时刻）、驱动 `result.json`、readiness、图检查、所有者身份、harness 日志与 scratch 全部保留；source HEAD `a7c79e59`。
+- Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp564-owner-path/checkpoint.json`，SHA256 `195a1680430ab5a3157866d77332aebe17d44c479b338b005560bccaa7acc01a`；索引 78 个文件、逐文件哈希读回一致。
+- 边界（写入 checkpoint）：无目标/轨迹/运动授权，确认停止是权威的“已停止仿真证据”，**不是**受控轨迹的在运动中取消；收尾暂停闭合单独记录；admission 只在 harness 内构造，未接入任何生产入口；正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
+- Next discriminator: 按用户指示**停在 Gate 5**，把冻结边界、EXP-563 离线准入契约与 EXP-564 owner 路径限定一并提交第二次本地独立 Astra/High 复核；复核通过前不进入 Gate 6，不自评通过。
