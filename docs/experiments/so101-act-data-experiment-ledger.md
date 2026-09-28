@@ -9847,3 +9847,19 @@ This resolves the design block **without authorizing runtime or motion**.
   commit passed both guards.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-806 — Task 15's web surface is feasible here; the toolchain is present
+
+- **Checked, not assumed:** `bun 1.4.2`, `node v26.9.0`, `web/node_modules` present with `bun.lock`, and the
+  `test` script is `vitest run`; `vitest`, `@testing-library/react`, `@testing-library/user-event` and
+  `@playwright/test` are all installed.
+- **Conventions recorded:** panels live in `web/src/components/teleop/<name>-panel.tsx` with a sibling
+  `.test.tsx` (seven existing examples), and there is no separate `vitest.config.ts`.
+- **Consequence:** Task 15's remaining pieces (ACT command/status endpoints, OpenAPI entries, regenerated
+  TypeScript schema, `act-panel.tsx` and its test, `task-app.tsx` wiring) can be implemented **and verified**
+  in this worktree, unlike the LeRobot adapter, which needs a training interpreter. The order is recorded in
+  the plan file.
+- **No code changed this round:** the wiring files are pre-existing repo files, so they will be inspected for
+  local changes and hunk-staged before any edit rather than rewritten.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
