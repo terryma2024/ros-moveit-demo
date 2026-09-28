@@ -7801,3 +7801,22 @@ brief: CP-709; hook points: `experiments/gate6-runtime/task8-core/t8p3-remaining
   W2, the 40-scene exact-W8 qualification, formal W8 and Task 12.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-717 — Task 8P3: production payload derived from a verified bundle receipt
+
+- **Delivered:** `task8_bundle_payload(receipt_path)` in `act/task8_artifact_bundle.py` — verifies the
+  committed bundle first, then returns exactly `preparation_receipt_path` and
+  `preparation_receipt_sha256` (raw-byte digest, the value admission re-checks). An absolute
+  `..`-free path is required; a missing receipt raises `TASK8_PREPARATION_REQUIRED` and a malformed
+  one fails verification, so no payload can reference an uncommitted or tampered bundle.
+- **Why it matters:** this is the glue between preparation and admission — the CLI builds its
+  payload with it, and `UnifiedWorkloadService.start(spec)` verifies the same two fields before
+  acquiring mutation/GPU resources.
+- **Verification:** bundle suite **8 passed** (`gate6-batch3-py-gate/t8p3payload.{log,junit.xml}`).
+- **Remaining:** the `CLOSE..FINAL_CHECK` capture-path extraction in `pick_place_readback.py`
+  (hunk-staged against 191 lines of pre-existing user work) and the sub-slice C CLI consuming this
+  helper plus the fourteen-case journal plan; then sub-slice B, the combined 8P3/8P4 xdist gate,
+  8P4, Tasks 9/10/11/11A-5, the final HEAD freeze, Task 8L, W1, W2, the 40-scene exact-W8
+  qualification, formal W8 and Task 12.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
