@@ -7132,3 +7132,43 @@ status: PLANNED_ISOLATED_STACK
   0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED; the pre-existing
   `so101_gazebo_demo_cpp` formatting condition remains recorded and out of scope; no evidence
   deleted.
+
+## CP-692 — Runtime admission blocker fully characterised (user decision required)
+
+Exhaustive, source-derived investigation of the seven-artifact set required by
+`so101_teleop.unified.act_artifacts.ActArtifactBinding`
+(`source, manifest, runtime_config, collection_config, calibration_report, proposal,
+activation_receipt`; env `SO101_ACT_ARTIFACT_*`):
+
+- **Verified present:** anchors `config/act/task8-live-anchors.yaml` (`91bbecbfd0914507`);
+  proposal `experiments/exp213-final-live-campaign-v4/proposal-pass2.json`
+  (`aa3d562994127bf601a00d2cb5fabf53a76617fa2344f13a797c868e69151408`); activation receipt
+  `experiments/exp213-final-live-campaign-v4/activation-receipt.json`
+  (`d30f198825fd3e0781848e93f16ef55f6c055d83b45ca0f42e55e838e08cee91`); fingerprint
+  `0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11` (present in both files).
+- **Absent:** `runtime_config` — a closed-schema head-search JSON validated by
+  `so101_demo.act.head_search_binding.validate_head_search_binding` (exact keys, `yolo_seg`,
+  `image_size_px == 640`, `requested_device in {cuda,cpu}`, `torch_version`,
+  `ultralytics_version`); no producer exists in the repo CLIs and no such file exists anywhere
+  under `/data/work` or `/home/matianyi` (depth <= 6, excluding pytest fixtures). This also
+  disproves the earlier YAML candidate list: `ros2_controllers.yaml` / `mujoco_plugins.yaml` /
+  `parallel_batch_v*.yaml` cannot satisfy the schema.
+  `calibration_report` — ABSENT; exp129/exp228 are explicitly partial and `act_preflight` refused
+  with `CALIBRATION_SOURCE_CONFIG_MISMATCH` (rc=1, wrote nothing) because the measured report's
+  `source_commit`/`config_sha256` do not match `installed_calibration_identity(source_root)`.
+  `source`, `manifest`, `collection_config` — not authored; `collection_config` is hash-only
+  provenance (never parsed).
+- **Feasibility of authoring:** YOLO weights exist
+  (`/data/work/models/so101-perception/yolo11n-seg-plastic-cup/best.pt`, sha256
+  `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781`, 6 001 316 B) and a
+  torch-capable interpreter exists (`/data/work/venvs/so101-grounded-sam/bin/python`,
+  `torch 2.13.0+cu130`); the test venv has no torch/Ultralytics. Authoring a runtime_config and a
+  matching calibration report is therefore possible but constitutes **new** artifacts plus a
+  measurement (motion), i.e. beyond "use already-existing approved artifacts".
+- **Evidence:** `experiments/gate6-runtime/{artifact-enumeration.txt, artifact-candidates.txt,
+  head-search-inputs.txt, perception-env-check.txt, preflight-attempt.log, launch-provenance.txt,
+  overlay-refresh2-verify.txt}`.
+- **Boundaries:** no process, controller goal or motion started; no formal collection; formal
+  accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED; `collection_*`
+  NOT_PROVISIONED; the pre-existing `so101_gazebo_demo_cpp` formatting condition stays recorded
+  and out of scope; no evidence deleted.
