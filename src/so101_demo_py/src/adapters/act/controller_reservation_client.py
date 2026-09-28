@@ -6,6 +6,7 @@ import socket
 import stat
 import threading
 import time
+import json
 import uuid
 
 from control_msgs.action import FollowJointTrajectory
@@ -162,6 +163,49 @@ class ControllerReservationClient:
             "command_authority": False,
         }
 
+    RESERVATION_BINDING_FIELDS = ("permit_id", "goal_uuid", "role", "target_digest",
+                                  "session_id", "broker_incarnation", "generation",
+                                  "controller_incarnation", "controller_boot_incarnation",
+                                  "claim_monotonic_ns", "deadline_ns")
+
+    def _bound_payload(self, goal, *, identity, receipt, goal_uuid, now_ns):
+        """Validate the broker-owned binding and prefix it to the wire payload.
+
+        Only a broker-owned identity snapshot is accepted: a missing, malformed or
+        caller-supplied value fails closed before any socket is touched.
+        """
+
+        if (type(identity) is not tuple or len(identity) != 3
+                or type(identity[0]) is not int
+                or type(identity[1]) is not str or not identity[1]
+                or type(identity[2]) is not str or not identity[2]):
+            raise ValueError("CONTROLLER_RESERVATION_IDENTITY_INVALID")
+        from collections.abc import Mapping
+
+        if not isinstance(receipt, Mapping):
+            raise ValueError("CONTROLLER_RESERVATION_BINDING_INVALID")
+        binding = {}
+        for field in self.RESERVATION_BINDING_FIELDS:
+            if field not in receipt:
+                raise ValueError(f"CONTROLLER_RESERVATION_BINDING_MISSING:{field}")
+            binding[field] = receipt[field]
+        if binding["goal_uuid"] != goal_uuid:
+            raise ValueError("CONTROLLER_RESERVATION_BINDING_GOAL_MISMATCH")
+        if (binding["generation"] != identity[0]
+                or binding["controller_incarnation"] != identity[1]
+                or binding["controller_boot_incarnation"] != identity[2]):
+            raise ValueError("CONTROLLER_RESERVATION_BINDING_IDENTITY_MISMATCH")
+        for field in ("claim_monotonic_ns", "deadline_ns"):
+            if type(binding[field]) is not int:
+                raise ValueError(f"CONTROLLER_RESERVATION_BINDING_TYPE:{field}")
+        if now_ns is not None:
+            if type(now_ns) is not int or now_ns > binding["deadline_ns"]:
+                raise ValueError("CONTROLLER_RESERVATION_BINDING_LATE")
+        blob = json.dumps(binding, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if len(blob) > 4096:
+            raise ValueError("CONTROLLER_RESERVATION_BINDING_TOO_LARGE")
+        return len(blob).to_bytes(4, "big") + blob + serialize_message(goal)
+
     def reserve(self, ticket, kind, goal, goal_uuid):
         if (not isinstance(ticket, tuple) or not ticket
                 or not isinstance(goal, FollowJointTrajectory.Goal)):
@@ -170,6 +214,22 @@ class ControllerReservationClient:
         if str(uuid.UUID(goal_uuid)) != goal_uuid:
             raise ValueError("CONTROLLER_RESERVATION_UUID_INVALID")
         payload = serialize_message(goal)
+        generation = ticket[0]
+        with self._lock:
+            self._attempted.setdefault(generation, set()).add(kind)
+        return self._request(kind, 1, generation, native_uuid, payload)
+
+    def reserve_bound(self, ticket, kind, goal, goal_uuid, *, identity, receipt, now_ns=None):
+        """Reserve with the approved broker-owned binding carried on the wire."""
+
+        if (not isinstance(ticket, tuple) or not ticket
+                or not isinstance(goal, FollowJointTrajectory.Goal)):
+            raise TypeError("CONTROLLER_RESERVATION_GOAL_INVALID")
+        native_uuid = uuid.UUID(goal_uuid).bytes
+        if str(uuid.UUID(goal_uuid)) != goal_uuid:
+            raise ValueError("CONTROLLER_RESERVATION_UUID_INVALID")
+        payload = self._bound_payload(goal, identity=identity, receipt=receipt,
+                                      goal_uuid=goal_uuid, now_ns=now_ns)
         generation = ticket[0]
         with self._lock:
             self._attempted.setdefault(generation, set()).add(kind)
