@@ -10387,3 +10387,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **No production code changed, no gate run, no runtime or motion, no hardware, no evidence deleted, no push, no
   gate lowered;** user's 43 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-830 — Row 33 decided by the orchestrator: the stronger ABI parity guard stands
+
+- **Decision applied, no code change:** keep `mj_version() != mjVERSION_HEADER` at
+  `src/so101_mujoco_support/src/simulation_evidence_plugin.cpp:54` and do **not** restore the remote's hard-coded
+  `340`. Row 33 is classified **superseded by a stronger, version-agnostic ABI parity guard**: the runtime library
+  must match the headers the plugin was compiled against, which preserves the real safety invariant while letting
+  the dependency lock advance deliberately. The remote's `340` is an obsolete MuJoCo 3.4 pin and would make the
+  current controlled environment fail closed unconditionally.
+- **Evidence, as cited and as checked:** `/opt/ros/jazzy/opt/mujoco_vendor/include/mujoco/mujoco.h:19` defines
+  `mjVERSION_HEADER 3012000` (**verified**); `/opt/ros/jazzy/opt/mujoco_vendor/lib/libmujoco.so` resolves to
+  `libmujoco.so.3.12.0` (**verified**); `/opt/ros/jazzy/share/mujoco_vendor/cmake` exists with
+  `mujoco_vendorConfig.cmake` (**verified as a path**), while the retained `CMakeCache.txt` carrying
+  `mujoco_vendor_DIR` was **not located** within my search scope (worktree `build/` and the evidence-root scratch
+  roots, depth 5) - so that citation is reported as given rather than as independently seen.
+- **Accounting corrected and stated: 42 equivalent + 8 superseded = the 50 `e2ec28c3` paths, 0 missing,
+  0 unresolved**; the report's raw 52 rows include the two `dependency-lock.yaml` paths that belong to `fda21d53`.
+  CP-829's "43 equivalent, 7 superseded" was an addition slip of mine and is superseded by this recount.
+- **No production code changed, no gate run, no runtime or motion, no hardware, no evidence deleted, no push, no
+  gate lowered;** user's 43 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED. **Stopping for orchestrator review as instructed.**
