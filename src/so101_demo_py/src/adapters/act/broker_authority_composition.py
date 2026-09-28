@@ -42,14 +42,17 @@ DispatchKey = namedtuple("DispatchKey", "ticket role goal_uuid")
 class BrokerAuthorityComposition:
     """Owns admitted evidence, the dispatch keys and the sealed registry."""
 
-    def __init__(self, *, history, admission, registry, controller_port):
+    def __init__(self, *, history, admission, registry, controller_port,
+                 expected_roles=None):
         if type(registry) is not AuthorityTransactionRegistry:
             raise TypeError("COMPOSITION_REGISTRY_INVALID")
         if getattr(registry, "_sealed", False):
             raise ValueError("COMPOSITION_REGISTRY_ALREADY_SEALED")
-        for name, value in (("reservation_binding", getattr(controller_port, "identity_snapshot", None)),
-                            ("reserve", getattr(controller_port, "reserve", None)),
-                            ("send", getattr(controller_port, "send", None)),
+        # the production port contract is narrow on purpose: identity snapshot plus a
+        # real generation closure. reserve/send are NOT part of it -- the only
+        # dispatch path is CommandBroker.claim_prepared_goal -> reserve_bound -> send.
+        for name, value in (("identity_snapshot",
+                             getattr(controller_port, "identity_snapshot", None)),
                             ("close", getattr(controller_port, "close", None))):
             if not callable(value):
                 raise TypeError(f"COMPOSITION_PORT_INVALID:{name}")
@@ -64,6 +67,9 @@ class BrokerAuthorityComposition:
         self._domains: dict = {}
         self._tickets: dict = {}
         self._evidence: dict = {}
+        self._identities: dict = {}
+        self._expected_roles: tuple = tuple(expected_roles) if expected_roles else ()
+        self._live_generation = None
         self._handles: dict = {}
         self._used_keys: set = set()
         self._used_roles: dict = {}
@@ -94,6 +100,52 @@ class BrokerAuthorityComposition:
             self._domains[(session_id, attempt_id)] = {
                 "owner": owner, "session_id": session_id, "attempt_id": attempt_id,
                 "reset_epoch": reset_epoch, "generation": generation, "identity": identity}
+
+    def register_live_roles(self, *, entries):
+        """Atomically bind every ACK-confirmed live role (all or none)."""
+
+        if not entries:
+            raise ValueError("COMPOSITION_ROLES_EMPTY")
+        staged = {}
+        generation = None
+        for entry in entries:
+            role = entry.get("role")
+            if role not in ("arm", "gripper", "neck"):
+                raise ValueError("COMPOSITION_ROLE_INVALID")
+            if role in staged:
+                raise ValueError("COMPOSITION_ROLE_DUPLICATE")
+            value = entry.get("generation")
+            if type(value) is not int or value <= 0:
+                raise ValueError("COMPOSITION_GENERATION_INVALID")
+            if generation is None:
+                generation = value
+            elif value != generation:
+                raise ValueError("COMPOSITION_GENERATION_DRIFT")
+            incarnation, boot = entry.get("incarnation"), entry.get("boot")
+            if not isinstance(incarnation, str) or not incarnation or \
+                    not isinstance(boot, str) or not boot:
+                raise ValueError("COMPOSITION_IDENTITY_INVALID")
+            staged[role] = {"generation": value, "incarnation": incarnation, "boot": boot,
+                            "ticket": entry.get("ticket")}
+        with self._lock:                       # single commit: no partial identity state
+            if self._revoked_reason is not None:
+                raise AuthorityRefused(f"AUTHORITY_REVOKED:{self._revoked_reason}")
+            if self._expected_roles and set(staged) != set(self._expected_roles):
+                # the role set is frozen at install; a caller cannot widen or narrow it
+                raise ValueError(
+                    f"COMPOSITION_ROLE_SET_MISMATCH:{sorted(staged)}:{sorted(self._expected_roles)}")
+            if any(existing["generation"] != generation for existing in self._identities.values()):
+                raise ValueError("COMPOSITION_GENERATION_DRIFT")
+            self._identities.update(staged)
+            self._live_generation = generation
+            return dict(self._identities)
+
+    def confirmed_identity(self, role):
+        with self._lock:
+            entry = self._identities.get(role)
+            if entry is None:
+                raise ValueError(f"COMPOSITION_IDENTITY_UNCONFIRMED:{role}")
+            return (entry["generation"], entry["incarnation"], entry["boot"])
 
     def register_ticket(self, ticket, *, session_id, attempt_id, role, owner="act",
                         ticket_guard=None, allowed_roles=None):
@@ -209,7 +261,7 @@ class BrokerAuthorityComposition:
             self._pending_roles.setdefault(ticket, set()).add(role)
         try:
             digest = hashlib.sha256(serialize_message(goal)).hexdigest()  # canonical ROS bytes
-            snapshot_identity = self.controller_port.identity_snapshot()  # I/O, no locks held
+            snapshot_identity = self.controller_port.identity_snapshot(role)  # no locks held
             handle = self.registry.issue_handle(
                 identity=reference.identity, stage="route_dispatch", step=reference.step,
                 history_version=reference.history_version, incarnation=reference.incarnation,
@@ -267,33 +319,68 @@ class BrokerAuthorityComposition:
 
     # --- fail-closed revocation -------------------------------------------
     def revoke(self, reason: str) -> None:
-        """Latch and clear state atomically, then revoke/close outside the lock."""
+        """Latch, terminate every permit, revoke registry/admission, then close.
+
+        Order matters: the irreversible logical termination (handles, registry,
+        admission) runs first and is never skipped by a controller-side failure. The
+        controller close runs last; a failure there is recorded as
+        ``CLOSE_FAILED``/``FENCING_REQUIRED`` and aggregated, never masking the
+        terminalization that already happened.
+        """
 
         with self._lock:
+            if self._revoked_reason is not None and self._live_generation is None \
+                    and not self._handles:
+                return                      # already terminal: no second close/revoke
             if self._revoked_reason is None:
                 self._revoked_reason = reason
             handles = list(self._handles.values())
+            live_generation = self._live_generation
+            self._identities.clear()               # no cached live identity survives
+            self._live_generation = None
             self._evidence.clear()
             self._handles.clear()
             self._used_keys.clear()
             self._used_roles.clear()
             self._pending_keys.clear()
             self._pending_roles.clear()
-            admission, port = self.admission, self.controller_port
+            admission, port, registry = self.admission, self.controller_port, self.registry
         for handle in handles:
             self._terminalize(handle, reason)       # no orphan IN_FLIGHT permits
-        revoke_registry = getattr(self.registry, "revoke", None)
+        failures = []
+        revoke_registry = getattr(registry, "revoke", None)
         if callable(revoke_registry):
             try:
                 revoke_registry(reason)
-            except Exception:  # noqa: BLE001 - terminalization above is authoritative
-                pass
-        active = getattr(admission, "owner_is_active", None)
-        if callable(active) and active():
-            admission.revoke_current(reason)
-        close = getattr(port, "close", None)
-        if callable(close):
+            except Exception as failure:            # recorded, but terminalization goes on
+                failures.append(f"REGISTRY_REVOKE_FAILED:{failure}")
+        revoke_admission = getattr(admission, "revoke_current", None)
+        if callable(revoke_admission):
             try:
-                close(reason)
-            except Exception:  # noqa: BLE001 - closing is best-effort and irreversible
-                pass
+                revoke_admission(reason)
+            except Exception as failure:
+                failures.append(f"ADMISSION_REVOKE_FAILED:{failure}")
+        # exactly one close call: the precise live generation when there is one,
+        # otherwise the port closes its whole attempted range itself
+        closer = getattr(port, "close", None)
+        if callable(closer):
+            try:
+                closer(reason, generation=live_generation)
+            except Exception as failure:
+                # the authority is already logically terminated; a failed
+                # controller close only requires fencing, it does not undo it
+                failures.append(f"CLOSE_FAILED:{live_generation}:{failure}")
+                with self._lock:
+                    self._fencing_required = True
+        if failures:
+            with self._lock:
+                self._revocation_failures = tuple(failures)
+            raise AuthorityRefused("COMPOSITION_REVOKE_INCOMPLETE:" + "|".join(failures))
+
+    def fencing_required(self) -> bool:
+        with self._lock:
+            return bool(getattr(self, "_fencing_required", False))
+
+    def revocation_failures(self) -> tuple:
+        with self._lock:
+            return tuple(getattr(self, "_revocation_failures", ()))

@@ -44,7 +44,45 @@ public:
     const rclcpp_lifecycle::State & previous_state) override;
 
 protected:
-  ControllerGoalAdmission goal_admission_;
+  // Reachable by subclasses only (tests use it as the controlled lifecycle seam).
+  void close_reservation_service();
+  // The active bound gate is shared with the reservation service; the pointer is
+  // only copied/swapped under the lifecycle mutex. Production has no setter.
+  std::shared_ptr<ControllerGoalAdmission> active_goal_admission_;
+
+  // One decision helper shared by the rclcpp goal callback and the tests, so the
+  // tests exercise the real callback decision rather than a parallel copy.
+  rclcpp_action::GoalResponse decide_goal_admission(
+    const rclcpp_action::GoalUUID & uuid,
+    const std::shared_ptr<const control_msgs::action::FollowJointTrajectory::Goal> & goal);
+
+  // Brief pointer copy: callers must not hold the lifecycle mutex while using it.
+  std::shared_ptr<ControllerGoalAdmission> active_gate_copy() const
+  {
+    std::lock_guard<std::mutex> lock(reservation_mutex_);
+    return active_goal_admission_;
+  }
+
+  // Test-only injection point (protected, so production callers cannot reach it).
+  void install_active_gate_for_testing(std::shared_ptr<ControllerGoalAdmission> gate)
+  {
+    std::lock_guard<std::mutex> lock(reservation_mutex_);
+    active_goal_admission_ = std::move(gate);
+  }
+
+  // Atomically detach the service and the active gate, then release the mutex.
+  void detach_reservation_lifecycle(
+    std::unique_ptr<ControllerReservationService> * service,
+    std::shared_ptr<ControllerGoalAdmission> * gate)
+  {
+    std::lock_guard<std::mutex> lock(reservation_mutex_);
+    if (reservation_timer_) {
+      reservation_timer_->cancel();
+      reservation_timer_.reset();
+    }
+    *service = std::move(reservation_service_);
+    *gate = std::move(active_goal_admission_);
+  }
   std::optional<ControllerStopWitness::Proof> controller_stop_proof(
     int64_t now_monotonic_ns);
   std::optional<ControllerIngressWitness::Snapshot> controller_ingress_snapshot();
@@ -53,9 +91,8 @@ private:
   void configure_reservation_scope();
   void start_reservation_monitor();
   void poll_reservation_provision();
-  void close_reservation_service();
 
-  std::mutex reservation_mutex_;
+  mutable std::mutex reservation_mutex_;
   std::unique_ptr<ControllerReservationService> reservation_service_;
   rclcpp::TimerBase::SharedPtr reservation_timer_;
   std::filesystem::path reservation_provision_path_;

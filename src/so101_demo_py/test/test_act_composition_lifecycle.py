@@ -9,6 +9,7 @@ from control_msgs.action import FollowJointTrajectory
 from rclpy.serialization import serialize_message
 
 from so101_demo.adapters.act import authority_transaction as at
+from act_authority_test_adapter import ControllerAuthorityAdapter
 from so101_demo.adapters.act.broker_authority_composition import BrokerAuthorityComposition
 from test_act_dispatch_transaction import _transaction
 from test_act_physics_clock_history import SOURCE_BASE_NS, STEP_NS
@@ -29,7 +30,7 @@ class _Port:
         self.closed = []
         self._lock = threading.RLock()
 
-    def identity_snapshot(self):
+    def identity_snapshot(self, role="arm"):
         with self._lock:
             self.snapshots += 1
             if self.barrier is not None:
@@ -59,7 +60,7 @@ def _unsealed(now, *, port=None):
 def _composition(now, *, port=None, guard=None):
     history, admission, registry, port = _unsealed(now, port=port)
     comp = BrokerAuthorityComposition(history=history, admission=admission, registry=registry,
-                                      controller_port=port)
+                                      controller_port=ControllerAuthorityAdapter(port))
     identity = admission.identity
     comp.register_identity_domain(owner="act", session_id="clock-session", attempt_id="attempt-1",
                                   reset_epoch=1, generation=1, identity=identity)
@@ -151,7 +152,7 @@ def test_real_ownership_guard_rejects_swapped_and_same_valued_tickets():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission, registry, port = _unsealed(now)
     comp = BrokerAuthorityComposition(history=history, admission=admission, registry=registry,
-                                      controller_port=port)
+                                      controller_port=ControllerAuthorityAdapter(port))
     comp.register_identity_domain(owner="act", session_id="clock-session",
                                   attempt_id="attempt-1", reset_epoch=1, generation=1,
                                   identity=admission.identity)

@@ -79,6 +79,27 @@ public:
     service_identity_ = std::move(identity);
   }
 
+  // --- immutable construction mode (independent of the armed state) --------
+  bool has_service_identity() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return service_identity_.has_value();
+  }
+
+  // --- read-only views of the active gate (no setter exists) ---------------
+  uint64_t generation() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return mode_ == Mode::EXCLUSIVE ? generation_ : 0;
+  }
+
+  std::optional<ServiceControllerIdentity> service_identity() const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (mode_ != Mode::EXCLUSIVE || !service_identity_) {return std::nullopt;}
+    return service_identity_;
+  }
+
   // --- bound reservation state machine (v2 protocol) ----------------------
   // No serialization happens under this lock: the parser already stored the goal
   // digest in the request, and admit_bound_action digests before taking the lock.
@@ -420,7 +441,7 @@ private:
     mode_ = Mode::CLOSED;
   }
 
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   Clock clock_;
   int64_t validity_ns_;
   size_t max_goal_bytes_;

@@ -87,3 +87,25 @@ def test_normal_captured_flow_succeeds():
     assert _run(tx) == "ACCEPTED"
     assert port.accepted_commands == 1
     assert registry.controller_snapshot_of(tx.handle) is not None
+
+
+def test_terminalization_between_role_read_and_snapshot_fails_closed():
+    """A permit terminalized while the role snapshot is being read must not attach."""
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission, registry, port, tx = _transaction(now)
+    handle = _issue(history, admission, registry)
+    original = port.identity_snapshot
+    terminalized = {"done": False}
+
+    def snapshot_with_terminalization(role="arm"):
+        if not terminalized["done"]:
+            terminalized["done"] = True
+            registry.terminate(handle, reason="REVOKED_DURING_CAPTURE")
+        return original(role)
+
+    port.identity_snapshot = snapshot_with_terminalization
+    with pytest.raises(Exception):
+        registry.capture_controller_identity(handle)
+    assert terminalized["done"] is True
+    assert registry.controller_snapshot_of(handle) is None, "a snapshot was attached anyway"

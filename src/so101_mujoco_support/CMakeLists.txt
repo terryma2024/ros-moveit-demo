@@ -147,6 +147,33 @@ if(BUILD_TESTING)
   # Gate 6 Batch 3 (Phase 3a): bound reservation frame, bound admission state
   # machine and SHA-256 known answers. The frozen fixture is loaded by the tests
   # relative to __FILE__, so no install rule is required for it.
+  ament_add_gtest(test_gate6_service_identity
+    test/test_gate6_service_identity.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_service_identity PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_service_identity PRIVATE include)
+  ament_target_dependencies(test_gate6_service_identity
+    control_msgs controller_interface hardware_interface lifecycle_msgs rclcpp rclcpp_action)
+  target_link_libraries(test_gate6_service_identity so101_controller_reservation_protocol)
+
+  ament_add_gtest(test_gate6_bound_socket
+    test/test_gate6_bound_socket.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_bound_socket PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_bound_socket PRIVATE include)
+  ament_target_dependencies(test_gate6_bound_socket
+    control_msgs controller_interface hardware_interface lifecycle_msgs rclcpp rclcpp_action)
+  target_link_libraries(test_gate6_bound_socket so101_controller_reservation_protocol)
+
+  ament_add_gtest(test_gate6_lifecycle
+    test/test_gate6_lifecycle.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_lifecycle PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_lifecycle PRIVATE include)
+  ament_target_dependencies(test_gate6_lifecycle
+    control_msgs controller_interface hardware_interface lifecycle_msgs rclcpp rclcpp_action)
+  target_link_libraries(test_gate6_lifecycle so101_broker_owned_trajectory_controller)
+
   ament_add_gtest(test_gate6_bound_reservation_frame
     test/test_gate6_bound_reservation_frame.cpp
     APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
