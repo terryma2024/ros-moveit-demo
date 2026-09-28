@@ -524,3 +524,52 @@ class LiveEvidenceWindow:
     def _note_phase(self, phase) -> None:
         if phase in self.REQUIRED_PHASES and phase not in self._phases_seen:
             self._phases_seen.append(phase)
+
+
+class CaseEvidenceDriver:
+    """Drive one case's evidence window from readback fields into its private staging directory."""
+
+    def __init__(self, *, case_id: str, staging_root, session_id: str, attempt_id: str,
+                 reset_epoch: int, release_epoch: int = 0, period_s: float = 0.1,
+                 tolerance_s: float = 0.01, recorder_factory=None) -> None:
+        staging_root = Path(staging_root)
+        if not staging_root.is_absolute() or ".." in staging_root.parts \
+                or not staging_root.is_dir() or staging_root.is_symlink():
+            raise ValueError("TASK8_CASE_STAGING_ROOT_INVALID")
+        if not _CASE_ID.fullmatch(str(case_id)):
+            raise ValueError("TASK8_JOURNAL_CASE_ID_INVALID")
+        case_root = staging_root / case_id
+        if case_root.exists() and (case_root.is_symlink() or not case_root.is_dir()):
+            raise ValueError("TASK8_CASE_STAGING_ROOT_INVALID")
+        case_root.mkdir(exist_ok=True)
+        factory = recorder_factory or Task8LiveEvidenceRecorder
+        recorder = factory(case_id=case_id, evidence_root=case_root, session_id=session_id,
+                           attempt_id=attempt_id)
+        self.case_root = case_root
+        self._identity = {"case_id": case_id, "session_id": session_id,
+                          "attempt_id": attempt_id, "reset_epoch": reset_epoch,
+                          "release_epoch": release_epoch}
+        self._window = LiveEvidenceWindow(recorder, identity=self._identity, period_s=period_s,
+                                          tolerance_s=tolerance_s)
+
+    @property
+    def window(self) -> LiveEvidenceWindow:
+        return self._window
+
+    def observe(self, fields: dict, *, phase: str, frame: dict, contact: dict,
+                measurements: dict, event: bool = False) -> None:
+        """Compose one canonical sample from readback fields and route it to grid or event."""
+
+        document = build_live_evidence_sample(
+            identity=self._identity, phase=phase, physics_step=fields["physics_step"],
+            sim_time_s=fields["sim_time_s"], source_stamps_s=fields["source_stamps_s"],
+            source_received_monotonic_s=fields["source_received_monotonic_s"],
+            raw_records=fields["raw_records"], holding_state=fields["holding_state"],
+            frame=frame, contact=contact, measurements=measurements)
+        if event:
+            self._window.add_event(document)
+        else:
+            self._window.add_grid(document)
+
+    def seal(self) -> dict:
+        return self._window.seal()
