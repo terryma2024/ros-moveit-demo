@@ -69,6 +69,7 @@ class CommandBroker:
         self._acquire_pending=None
         self._release_pending=None        # exact (ticket, generation) release in flight
         self._cleanup_pending=None        # exact (generation, armed, reason) cleanup in flight
+        self._cleanup_inflight=None       # set while one drainer owns that token
         self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None;self._writes=[]
 
     def issue_prefix_source(self,*,ticket,prefix,source,source_kind,
@@ -200,17 +201,50 @@ class CommandBroker:
             # refreshes/confirms the stop state and never repeats the I/O
             self._stop_if_revoked()
         if cleanup is not None:
-            try:
-                self._cleanup_unlocked_io(cleanup, propagate=True)   # caller sees the stop error
-            except Exception:
-                with self._lock:
-                    if self._cleanup_pending==cleanup:
-                        self._cleanup_pending=None
-                raise                                    # no probe after a failed stop
+            self._drain_cleanup_once(cleanup, propagate=True)   # stop failure surfaces
+
+
+
+    def _pending_token_snapshot(self):
+        """The exact token a locked caller enqueued, or None (lock-only read)."""
+
+        with self._lock:
+            return self._cleanup_pending
+
+    def _drain_cleanup_once(self,cleanup,*,propagate=False):
+        """Single-flight claim, unlocked I/O, then locked finalization.
+
+        A duplicate or stale drainer is an idempotent no-op and never confirms a stop
+        against a non-STOPPING ownership state.
+        """
+
+        with self._lock:
+            if cleanup is None or self._cleanup_pending!=cleanup:
+                return False                      # stale or already claimed
+            if self._reset_ticket is not None or self._reset_applied:
+                # a prepared OR applied reset owns its own stop observation: the ordinary
+                # drainer must not run stop_all/refresh against that transaction
+                return False
+            if self._cleanup_inflight is not None:
+                return False                      # another drainer owns the token
+            self._cleanup_inflight=cleanup
+        try:
+            self._cleanup_unlocked_io(cleanup, propagate=propagate)
+        except Exception:
             with self._lock:
-                if self._cleanup_pending==cleanup:
-                    self._cleanup_pending=None          # only this exact token finalizes
-                self._stop_if_revoked()
+                if self._cleanup_pending==cleanup:self._cleanup_pending=None
+                if self._cleanup_inflight==cleanup:self._cleanup_inflight=None
+            raise
+        with self._lock:
+            if self._cleanup_inflight==cleanup:self._cleanup_inflight=None
+            if self._cleanup_pending==cleanup:self._cleanup_pending=None
+            # reset preparation owns its own stop observation: the ordinary drainer must
+            # not refresh or confirm ownership while a reset is prepared or applied
+            if (self.ownership.state=='STOPPING' and self._reset_ticket is None
+                    and not self._reset_applied):
+                if not any(not future.done() for future in self._writes) and self._driver_stopped():
+                    self.ownership.confirm_stopped(True)
+        return True
 
     def _cleanup_unlocked_io(self,cleanup,*,propagate=False):
         """Unlocked terminalization I/O: controller close, prefix invalidate, ROS stop.
@@ -222,6 +256,8 @@ class CommandBroker:
         """
 
         generation,armed,reason_text=cleanup
+        probe=getattr(self.driver,'refresh_stop',None)     # ROS readback: unlocked here
+        if callable(probe):probe()
         if armed is not None:
             try:self._close_controller_generation(armed)
             except RuntimeError:pass
@@ -260,16 +296,10 @@ class CommandBroker:
                 self._stopping_generation=generation
                 self._reset_ticket=None;self._reset_applied=False;self._post_reset_ticket=None
                 if self._prefix_sources is not None:self._prefix_sources.revoke()
-                if self._armed_generation is not None:
-                    try:self._close_controller_generation(self._armed_generation)
-                    except RuntimeError:pass
-                try:
-                    if self.prefix_executor is not None:self.prefix_executor.invalidate(self.ownership.reason or 'REVOKED')
-                except Exception as error:
-                    if self._fault_reason is None:self._fault_reason='PAIR_CANCEL_LOST'
-                    self.audit.append(dict(operation='invalidate_error',error=repr(error)))
-                finally:self.driver.stop_all(self.ownership.reason or 'REVOKED')
-            if hasattr(self.driver,'refresh_stop'):self.driver.refresh_stop()
+                # locked callers only enqueue the exact token; the single-flight drainer
+                # performs the controller close, pair cancel and driver stop unlocked
+                self._cleanup_pending=(generation,self._armed_generation,
+                                       self.ownership.reason or 'REVOKED')
             # probe only when the driver exposes the state: the phased cleanup runs the
             # stop first, so a double without stopped() must not surface an AttributeError
             probe=getattr(self.driver,'stopped',None)
@@ -277,7 +307,7 @@ class CommandBroker:
                     and probe()):
                 self.ownership.confirm_stopped(True)
 
-    def tick(self):
+    def tick(self,*,drain=True):
         cleanup=None
         with self._lock:
             hazard=getattr(self.driver,'hazard_reason',None)
@@ -297,10 +327,7 @@ class CommandBroker:
             # with the generation terminalized this only refreshes/confirms stop state
             self._stop_if_revoked()
         if cleanup is not None:
-            self._cleanup_unlocked_io(cleanup, propagate=True)          # socket + ROS calls, lock free
-            with self._lock:
-                if self._cleanup_pending==cleanup:self._cleanup_pending=None
-                self._stop_if_revoked()
+            self._drain_cleanup_once(cleanup, propagate=True) if drain else False
         with self._lock:
             if self.ownership.state=='IDLE' and hasattr(self.driver,'refresh_idle'):self.driver.refresh_idle()
             elif self._post_reset_ticket is not None:
@@ -327,10 +354,7 @@ class CommandBroker:
                     self._cleanup_pending=cleanup
                 self._stop_if_revoked()
         if cleanup is not None:
-            self._cleanup_unlocked_io(cleanup)          # socket + ROS calls, lock free
-            with self._lock:
-                if self._cleanup_pending==cleanup:self._cleanup_pending=None
-                self._stop_if_revoked()
+            self._drain_cleanup_once(cleanup)
 
     def _prepare_reset(self,scope,connection_id):
         with self._lock,self.ownership.authorized(*scope) as ticket:
@@ -342,7 +366,7 @@ class CommandBroker:
             deadline=time.monotonic()+5.
             while True:
                 with self._lock:
-                    self.tick()
+                    self.tick(drain=False)
                     with self.ownership.authorized(*scope):
                         self.ownership.require_ticket(ticket)
                         # Refresh real negative CancelGoal confirmations only
@@ -374,7 +398,7 @@ class CommandBroker:
 
         generation=None
         with self._lock:
-            self.tick()
+            self.tick(drain=False)
             if self._fault_reason:raise PermissionError(self._fault_reason)
             if self._release_pending is not None:
                 raise PermissionError('CONTROLLER_RELEASE_PENDING')
@@ -421,7 +445,7 @@ class CommandBroker:
         """
 
         with self._lock:
-            self.tick()
+            self.tick(drain=False)
             if self._fault_reason:raise PermissionError(self._fault_reason)
             if self._release_pending is not None:raise PermissionError('CONTROLLER_RELEASE_PENDING')
             if self._cleanup_pending is not None:raise PermissionError('CONTROLLER_CLEANUP_PENDING')
@@ -447,7 +471,7 @@ class CommandBroker:
         """
 
         with self._lock:
-            self.tick()
+            self.tick(drain=False)
             if self._fault_reason:raise PermissionError(self._fault_reason)
             if self._release_pending is not None:
                 raise PermissionError('CONTROLLER_RELEASE_PENDING')
@@ -473,7 +497,7 @@ class CommandBroker:
                 self._acquire_pending=None
             if failure is None:
                 try:
-                    self.tick()
+                    self.tick(drain=False)
                     if self.ownership.reason is not None or self.ownership.state!='RUNNING':
                         failure=PermissionError('CONTROLLER_RESERVATION_CONCURRENT_REVOKE')
                     elif not self._driver_stopped():
@@ -510,7 +534,7 @@ class CommandBroker:
         """
 
         with self._lock:
-            self.tick()
+            self.tick(drain=False)
             if self._fault_reason:raise PermissionError(self._fault_reason)
             if self._acquire_pending is not None:
                 raise PermissionError('BOUND_AUTHORITY_ACQUIRE_PENDING')
@@ -539,7 +563,7 @@ class CommandBroker:
                 self._acquire_pending=None           # only this exact attempt's marker
             if failure is None:
                 try:
-                    self.tick()
+                    self.tick(drain=False)
                     if self.ownership.reason is not None or self.ownership.state!='RUNNING':
                         failure=PermissionError('BOUND_AUTHORITY_CONCURRENT_REVOKE')
                     elif not self._driver_stopped():
@@ -642,7 +666,7 @@ class CommandBroker:
                 return response
             if operation in ('approve_prefix','submit_prefix'):
                 with self._lock:
-                    self.tick()
+                    self.tick(drain=False)
                     with self.ownership.authorized(*scope) as ticket:
                         if request['owner']!='act':raise PermissionError('PREFIX_OWNER_INVALID')
                         if self.prefix_executor is None:raise PermissionError('PREFIX_EXECUTOR_UNAVAILABLE')
@@ -671,7 +695,7 @@ class CommandBroker:
                 response['accepted']=True
                 return response
             with self._lock:
-                self.tick()
+                self.tick(drain=False)
                 if operation=='acquire':
                     if self._fault_reason:raise PermissionError(self._fault_reason)
                     if self.ownership.state!='IDLE':raise PermissionError('CONTROL_BUSY')
@@ -726,8 +750,14 @@ class CommandBroker:
                 response['accepted']=True
         except (KeyError,TypeError,ValueError,PermissionError,RuntimeError,OSError) as error:
             response['error']=str(error) or type(error).__name__
-            try:self.tick()
-            except Exception:pass
+        finally:
+            # public boundary exit: the dispatch lock is released, so any token enqueued
+            # by a locked caller is drained here with no lock held
+            try:
+                self._drain_cleanup_once(self._pending_token_snapshot())
+            except Exception as error:
+                if response.get('error') is None:
+                    response['error']=str(error) or type(error).__name__
         return response
 
 

@@ -453,3 +453,30 @@ def test_parent_death_revokes_and_cleans_up_without_holding_the_broker_lock():
                         "cleanup: the broker lock is held across the stop I/O")
     assert ownership.reason == "PARENT_DIED", ownership.reason
     assert server._stop.is_set(), "the server must stop after parent death"
+
+
+def test_handle_driven_revoke_does_not_hold_the_broker_lock_across_the_close():
+    """RED: a revoke observed inside handle() reaches the controller close in-lock."""
+
+    driver, port = _Driver(), _Port(block_close=True)
+    broker, ownership = _broker(driver, port)
+    assert broker.handle(_request("acquire"), "conn-1")["accepted"] is True
+    ownership.revoke("EXTERNAL_REVOKE")          # logical revoke; cleanup still pending
+    status_thread = threading.Thread(
+        target=lambda: broker.handle(_request("status", "r2"), "conn-1"), daemon=True)
+    status_thread.start()
+    assert port.close_entered.wait(5.0), "the handle-driven cleanup never reached the close"
+    progressed = threading.Event()
+
+    def run_other():
+        broker.handle(_request("status", "r3"), "conn-3")
+        progressed.set()
+
+    other = threading.Thread(target=run_other, daemon=True)
+    other.start()
+    observed = progressed.wait(1.0)
+    port.close_release.set()
+    status_thread.join(10.0)
+    other.join(5.0)
+    assert observed, ("a concurrent operation could not progress while a handle-driven revoke "
+                      "held the broker lock across the controller close")
