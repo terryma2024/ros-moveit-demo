@@ -7613,3 +7613,45 @@ ancestors; reviewed plan SHA256 verified as
   partial ones, with `seal_live_evidence` forwarding to `recorder.seal(identity)`.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-709 — Resume brief for the next session (Task 8P3 sub-slice A, port side)
+
+**Baseline to start from:** HEAD `6a757512` (CP-708). Committed and green: Task 8 core, 8P1, 8P2,
+8P3 bundle + recorder, manifest v2, validation CLI, sub-slice A runner side, grid validator and the
+canonical sample builder. Whole-tree check at `bc02b2dd`: ten Task 8 suites collected together ->
+**95 passed** (`gate6-batch3-py-gate/verifyHEAD.log`).
+
+**First action (RED, then implement):** in
+`src/so101_demo_py/test/test_act_task8_live_evidence.py` (this task's own module; the search-port and
+readback test files are user-modified) add focused tests with a fake boundary and a recording double
+asserting: (a) a port constructed without a recorder behaves exactly as today; (b) every search
+evidence frame reaches the recorder through `build_live_evidence_sample`; (c) a partial sample is
+refused and the case becomes INVALID; (d) `seal_live_evidence(request)` forwards the identity to
+`recorder.seal(...)` and returns the closed `{path, sha256, schema_version}` the runner validates.
+
+**Files to change, in this order:**
+1. `src/so101_demo_py/src/adapters/act/pick_place_search_port.py` — **clean**; add an optional
+   `evidence_recorder=None` to `PickPlaceSearchPhasePort.__init__` (validated as callable when set),
+   forward complete samples from `_search_evidence` through `build_live_evidence_sample`, propagate
+   recorder refusals, and add `seal_live_evidence(request)` forwarding to `recorder.seal(identity)`.
+2. `src/so101_demo_py/src/adapters/act/pick_place_readback.py` — carries **191 lines of pre-existing
+   user work**; add the canonical per-sample fields for `CLOSE..FINAL_CHECK` on the frozen grid
+   (event samples added, never substituted) and stage **only this task's hunks**
+   (`git diff -U0 | grep '^@@'` to count, then a marker-based hunk filter as in
+   `experiments/gate6-batch3-commit/hunk-filter-round148.txt`).
+
+**Commands that were used for every slice in this series** (NVMe scratch + exact interpreter):
+`mktemp -d $ACT_EVIDENCE/scratch/exp573-<slice>.XXXXXXXX` with `TMPDIR/TMP/TEMP` set and a
+`tempfile.gettempdir()` probe, a fresh mirror carrying `src/`, `test/`, `config/`, `assets/` and
+`so101_teleop`, then `$ACT_EVIDENCE/test-venv/bin/python -m pytest <suites> -q -p no:cacheprovider`.
+
+**After sub-slice A:** B (payload split and receipt verification in
+`UnifiedWorkloadService.start(spec)` before resource acquisition, `ActArtifactBinding` from the
+verified bundle), C (canonical live CLI, one production call for nine prefix + five full cases,
+journals carrying live evidence and both retirement receipts), then the handoff's combined 8P3/8P4
+xdist gate, 8P4, Tasks 9/10/11/11A-5, the single final HEAD freeze, Task 8L, W1, W2, the 40-scene
+exact-W8 qualification, formal W8 and Task 12. Full detail:
+`experiments/gate6-runtime/task8-core/{t8p3-remaining-plan.md,task8-artifact-index.md}`.
+
+**Boundaries:** no runtime/motion started; formal accepted 0/0/0; Task 12 NOT_STARTED;
+`collection_*` NOT_PROVISIONED; 43 dirty entries and 12 untracked user files preserved.
