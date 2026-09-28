@@ -52,7 +52,7 @@ def test_revocation_is_irreversible_and_carries_the_identity():
     history, admission = _admission(now)
     identity = _identity(admission)
     history.accept_chunk(_chunk(0, _sample(1)))
-    admission.note_hazard("PHYSICS_CLOCK_SILENT")
+    admission.note_hazard("PHYSICS_CLOCK_SILENT", origin_identity=admission.identity)
     record = admission.revoked_record
     assert record["reason"] == "PHYSICS_CLOCK_SILENT"
     assert record["identity"] == identity
@@ -61,7 +61,7 @@ def test_revocation_is_irreversible_and_carries_the_identity():
         with pytest.raises(AdmissionRefused):
             admission.fence(ticket="ticket-1", generation=7, reset_epoch=1, stage=stage)
     # A later hazard cannot replace the first one for the same identity.
-    admission.note_hazard("PHYSICS_CLOCK_CALLBACK_INVALID")
+    admission.note_hazard("PHYSICS_CLOCK_CALLBACK_INVALID", origin_identity=admission.identity)
     assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_SILENT"
     # Only a strictly newer identity clears revocation.
     admission.arm(ticket="ticket-1", generation=8, reset_epoch=1)
@@ -109,7 +109,7 @@ def test_revocation_is_not_blocked_by_a_running_checker():
     worker.start()
     assert entered.wait(5.0)
     began = time.monotonic()
-    admission.note_hazard("PHYSICS_CLOCK_STALE")
+    admission.note_hazard("PHYSICS_CLOCK_STALE", origin_identity=admission.identity)
     revoke_elapsed = time.monotonic() - began
     release.set()
     worker.join(5.0)
@@ -143,7 +143,7 @@ def test_expiry_to_confirmed_stop_is_measured_separately():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission = _admission(now)
     identity = _identity(admission)
-    admission.note_hazard("PHYSICS_CLOCK_SILENT")
+    admission.note_hazard("PHYSICS_CLOCK_SILENT", origin_identity=admission.identity)
     revoked_ns = admission.revoked_record["monotonic_ns"]
     now[0] = revoked_ns + 40_000_000
     admission.confirm_stop(identity=identity, stopped=True)
@@ -208,7 +208,7 @@ def test_revocation_triggered_before_the_commit_check_refuses_the_checked_stage(
     def revoking_clock():
         if state["armed"]:
             state["armed"] = False
-            admission.note_hazard("PHYSICS_CLOCK_SILENT")
+            admission.note_hazard("PHYSICS_CLOCK_SILENT", origin_identity=admission.identity)
         return base_clock()
 
     admission._clock_ns = revoking_clock
@@ -227,7 +227,7 @@ def test_revocation_after_the_commit_keeps_the_result_and_closes_the_identity():
     assert admission.run_checked_stage(ticket="ticket-1", generation=7, reset_epoch=1,
                                        stage="proof", checker=lambda: "checked") == "checked"
     assert admission.checked_stages == 1
-    admission.note_hazard("PHYSICS_CLOCK_SILENT")
+    admission.note_hazard("PHYSICS_CLOCK_SILENT", origin_identity=admission.identity)
     with pytest.raises(AdmissionRefused):
         admission.fence(ticket="ticket-1", generation=7, reset_epoch=1, stage="permit")
 
@@ -244,7 +244,7 @@ def test_sample_revoked_before_the_age_check_is_refused():
     def revoking_clock():
         if state["armed"]:
             state["armed"] = False
-            admission.note_hazard("PHYSICS_CLOCK_STALE")
+            admission.note_hazard("PHYSICS_CLOCK_STALE", origin_identity=admission.identity)
         return base_clock()
 
     admission._clock_ns = revoking_clock
@@ -315,3 +315,38 @@ def test_partial_cancel_failure_is_fail_closed():
     admission3.confirm_stop(identity=identity3, stopped=True)
     assert admission3.stop_confirmed is True
 
+
+
+def test_hazard_without_origin_identity_is_refused_and_does_not_revoke():
+    """A caller omission must never recreate the delayed-old-callback failure."""
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    identity = admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_ORIGIN_IDENTITY_REQUIRED"):
+        admission.note_hazard("PHYSICS_CLOCK_SILENT")
+    assert admission.revoked_record is None
+    assert admission.stale_hazards == []
+    assert admission.fence(ticket="ticket-1", generation=7, reset_epoch=1, stage="proof")
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_ORIGIN_IDENTITY_REQUIRED"):
+        admission.note_hazard("PHYSICS_CLOCK_SILENT", origin_identity=None)
+    assert admission.revoked_record is None
+    assert admission.identity == identity
+
+
+def test_administrative_revoke_current_is_explicit_and_irreversible():
+    """The broker's synchronous current-identity revoke is a separate, named API."""
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_UNARMED"):
+        admission.revoke_current("PHYSICS_CLOCK_OPERATOR_STOP")
+    identity = admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    record = admission.revoke_current("PHYSICS_CLOCK_OPERATOR_STOP")
+    assert record["applied"] is True
+    assert record["identity"] == identity
+    assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_OPERATOR_STOP"
+    admission.revoke_current("PHYSICS_CLOCK_SILENT")
+    assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_OPERATOR_STOP"
+    with pytest.raises(AdmissionRefused):
+        admission.fence(ticket="ticket-1", generation=7, reset_epoch=1, stage="permit")

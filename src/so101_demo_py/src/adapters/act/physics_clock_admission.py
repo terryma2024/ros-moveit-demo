@@ -33,6 +33,7 @@ EXPIRY_REASONS = frozenset({
 })
 STAGES = frozenset({"sample", "proof", "permit", "submit", "final_acceptance"})
 MAX_IDENTITY_INT = 2 ** 63 - 1
+_MISSING = object()
 
 
 def _validated_identity(ticket, generation, reset_epoch):
@@ -123,42 +124,64 @@ class PhysicsClockAdmission:
 
     # -------------------------------------------------------------- revocation
 
-    def note_hazard(self, reason, *, origin_identity=None):
-        """Capture a hazard together with the identity of the event that caused it.
+    def _revoke_locked(self, reason, *, now_ns):
+        """Apply an irreversible revocation for the current identity. Lock held."""
 
-        A hazard whose origin identity is not the current identity is recorded as
-        a stale event and does **not** revoke the current identity: a delayed
-        hazard from an older epoch must never close a newer arm.
+        if self._revoked is None:
+            self._revoked = {
+                "reason": reason,
+                "identity": self._identity,
+                "monotonic_ns": now_ns,
+                "expiry": reason in EXPIRY_REASONS,
+                "confirmed_stop_monotonic_ns": None,
+                "expiry_to_stop_ns": None,
+            }
+        self._stop_confirmed = False
+        record = copy.deepcopy(self._revoked)
+        record["applied"] = True
+        return record
+
+    def note_hazard(self, reason, *, origin_identity=_MISSING):
+        """Capture a callback hazard; the event's origin identity is mandatory.
+
+        The origin identity is required and must be one half of the complete
+        ``(ticket, generation, reset_epoch)`` identity carried by the event. An
+        omitted or ``None`` origin is refused and changes no state, so a caller
+        omission can never recreate the delayed-old-callback failure. A hazard
+        whose origin is not the current identity is recorded in ``stale_hazards``
+        and does **not** revoke the current identity.
         """
 
         if not isinstance(reason, str) or not reason:
             raise ValueError("CLOCK_ADMISSION_HAZARD_INVALID")
-        origin = None if origin_identity is None else _validated_identity(*origin_identity)
+        if origin_identity is _MISSING or origin_identity is None:
+            raise AdmissionRefused("CLOCK_ADMISSION_ORIGIN_IDENTITY_REQUIRED")
+        origin = _validated_identity(*origin_identity)
         with self._lock:
-            if origin is not None and origin != self._identity:
+            now_ns = self._clock_ns()
+            if origin != self._identity:
                 self._stale_hazards.append({
                     "reason": reason, "origin_identity": origin,
-                    "current_identity": self._identity,
-                    "monotonic_ns": self._clock_ns(),
+                    "current_identity": self._identity, "monotonic_ns": now_ns,
                 })
                 return {"applied": False, "reason": reason, "origin_identity": origin,
                         "current_identity": self._identity}
-            if self._revoked is None:
-                self._revoked = {
-                    "reason": reason,
-                    "identity": self._identity,
-                    "monotonic_ns": self._clock_ns(),
-                    "expiry": reason in EXPIRY_REASONS,
-                    "confirmed_stop_monotonic_ns": None,
-                    "expiry_to_stop_ns": None,
-                }
-            self._stop_confirmed = False
-            record = copy.deepcopy(self._revoked)
-            record["applied"] = True
-            return record
+            return self._revoke_locked(reason, now_ns=now_ns)
 
-    def revoke(self, reason):
-        return self.note_hazard(reason)
+    def revoke_current(self, reason):
+        """Broker-administrative revoke of whatever identity is current.
+
+        This is deliberately a **separate, explicitly named** API: it takes no
+        event identity, it refuses an unarmed gate, and it is irreversible for the
+        current identity.
+        """
+
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("CLOCK_ADMISSION_HAZARD_INVALID")
+        with self._lock:
+            if self._identity is None:
+                raise AdmissionRefused("CLOCK_ADMISSION_UNARMED")
+            return self._revoke_locked(reason, now_ns=self._clock_ns())
 
     @property
     def stale_hazards(self):
@@ -276,5 +299,5 @@ class PhysicsClockAdmission:
         except BaseException:  # noqa: BLE001 - recorded as a failed cancellation
             confirmed = False
         if not confirmed:
-            return self.note_hazard("PHYSICS_CLOCK_PARTIAL_CANCEL_FAILED")
-        return self.note_hazard("PHYSICS_CLOCK_PARTIAL_SUBMIT")
+            return self.revoke_current("PHYSICS_CLOCK_PARTIAL_CANCEL_FAILED")
+        return self.revoke_current("PHYSICS_CLOCK_PARTIAL_SUBMIT")
