@@ -6459,3 +6459,11 @@ status: PLANNED_ISOLATED_STACK
 - **证据纪律**：本轮使用**新的字节完备源码镜像** `experiments/exp572-linearization/mirror-1`，运行前逐文件断言四个模块 `under_mirror=True` 且 **SHA-256 等于 worktree 文件**（`red1-provenance.txt`：**MIRROR_PROVENANCE PASS**）；pytest 使用**全新且此前不存在**的 scratch `scratch/exp572-red1.YZ7Xo4aW`，并以精确解释器打印 `tempfile.gettempdir()` 断言等于 `TMPDIR`；目录为追加式，未删除或覆盖任何既有证据；42 个既有 dirty entries 未改动。
 - 下一步（同一 EXP-572 轮次内继续）：实现“registry -> admission -> history”的真正线性化——broker 自有的 claim context 先取 admission 再取 history，直到 registry 完成 `READY -> IN_FLIGHT` 才释放（`commit_receipt` 重入 history RLock），使上述两个探针转绿；随后依次处理 P1.2（完整身份/代次绑定与不可变标量冻结）、P1.3（统一不可逆失败闭合：字段集错误、send 异常/超时、claim 时刻精确相等）、P1.4（用两侧都有效的 `run_to("receive", …)` 重做最后三个 RED）、P1.5（把屏障放进真实 send/serialization 调用点），并更正 contract 122–126 行、补全锁图（含控制器端口锁）、说明 inventory 哈希边界、分离既有与任务自有脏项、撤回不实的“所有失败路径已终止化”陈述。
 - 边界：Gate 5 仍为 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁继续延后；未跑 ordinary full suite；无证据删除。
+
+## CP-637 — EXP-572 P1.1 收绿：admission+history 同持于 claim 边界内，历史在边界内二次校验
+
+- 提交 `90dda3db`。实现：`PhysicsClockAdmission.claim_context()` 作为上下文管理器，按 **admission -> history** 顺序取得 admission 锁与 history RLock 并**一直持有到 registry 完成转移**；`claim_bound` 改为在该边界内执行 owner 校验、history 提交、**边界内二次 history 提交校验**（`commit_receipt` 可重入 history RLock）、最终 permit deadline 复检与 `READY -> IN_FLIGHT`；若版本/化身/epoch 变化或历史拒绝（hazard 被 latch、选中年龄越界），抛出 `AUTHORITY_HISTORY_CHANGED_IN_BOUNDARY` 并终止化。reserve/send 仍在两个锁之外。
+- **行为证据**：review 9 P1.1 的两个确定性探针在修复前 **2 failed**（`red1.log`/JUnit，镜像 provenance PASS），修复后 **2 passed**（`green2.log`/JUnit；镜像模块 SHA 与 worktree 相等、scratch 探针 PASS）；六模块保持 **151 passed**（`six1.log`/JUnit）。每次 pytest 均使用新建且此前不存在的 scratch（`exp572-red1.*`、`exp572-green2.*`、`exp572-six1.*`），追加式目录，未删除或覆盖证据。
+- 证据包：`experiments/exp572-linearization/inventory.json`（含 RED/GREEN/六模块日志与 JUnit、各 scratch 路径、被测源码哈希、待办组列表与 NONQUALIFYING 说明）。
+- 尚未完成（继续本实验）：P1.2 完整身份/代次绑定与不可变标量冻结；P1.3 统一不可逆失败闭合（字段集错误、send 异常/超时、claim 时刻精确相等）；P1.4 用两侧皆有效的接缝重做最后三个 review-8 RED；P1.5 把事件屏障放进真实 send/serialization 调用点；以及 contract/audit/inventory 更正（删除 contract 122–126 残留、补全锁图含控制器端口锁、说明哈希边界、分离既有与任务自有脏项、撤回不实陈述）。
+- 边界：Gate 5 仍为 OPEN/BLOCKED，**尚未**请求 review 10，不自批；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；full/build/installed 门禁继续延后；42 个既有 dirty entries 未改动；无证据删除。
