@@ -9555,3 +9555,27 @@ This resolves the design block **without authorizing runtime or motion**.
   no-runtime boundary excludes.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-793 — Task 12: the gates before training, and the state it must leave
+
+- **Delivered:** `act/training.py` with `require_exported_dataset` and
+  `train_act(*, config, requirements, dataset, owner, output, trainer)`, plus `test_act_training.py`.
+  - **dataset integrity first:** every episode is re-hashed against the export manifest
+    (`TRAINING_EPISODE_DIGEST_MISMATCH`, `TRAINING_EPISODE_MISSING`, `TRAINING_DATASET_NOT_EXPORTED`,
+    `TRAINING_DATASET_MANIFEST_INVALID`), so a tampered dataset is caught **before** training rather than
+    discovered during it;
+  - **the pre-flight chain:** config present, dependency lock `RESOLVED`, owner on `cuda` with a run root,
+    a callable trainer, and an output path that does not exist (`TRAINING_OUTPUT_EXISTS`) — a previous
+    run's bundle is never overwritten;
+  - **always a terminal state:** a `…state.json` written atomically in a `finally`, carrying status,
+    dataset/config digests, device, run root, episode count and, on failure,
+    `"<ExceptionType>: message"`; the run then re-raises, so a failure is loud *and* preserved. A trainer
+    returning something that is not an `act_bundle` is `TRAINING_BUNDLE_INVALID` and still records state.
+  - the tests assert the property that matters: when any gate fails the trainer is **never called**
+    (`calls == []`), tampering included.
+- **Verification:** focused tests **3 passed** (`gate6-batch3-py-gate/task12g.{log,junit.xml}`), first run
+  green.
+- **Remaining in Task 12:** the `act_train` CLI and its `setup.py` entry, and the LeRobot adapter, whose
+  real dependency resolution waits for a training interpreter that the no-runtime boundary excludes.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
