@@ -387,7 +387,7 @@ class PhysicsClockAdmission:
                     "command_authority": False, "stage": "sample"}
 
     def consume_stage(self, *, ticket, generation, reset_epoch, stage, consume,
-                      generation_check=None, controller_generation=None):
+                      evidence_token, controller_generation, generation_check=None):
         """Atomic consume fence with live history and controller generation checks.
 
         Every authority stage validates the *current* history at its own
@@ -403,6 +403,14 @@ class PhysicsClockAdmission:
             raise ValueError("CLOCK_ADMISSION_CONSUME_INVALID")
         if generation_check is not None and not callable(generation_check):
             raise ValueError("CLOCK_ADMISSION_GENERATION_CHECK_INVALID")
+        if type(controller_generation) is not int:
+            raise ValueError("CLOCK_ADMISSION_CONTROLLER_GENERATION_REQUIRED")
+        if (not isinstance(evidence_token, dict)
+                or type(evidence_token.get("physics_step")) is not int
+                or type(evidence_token.get("history_version")) is not int
+                or type(evidence_token.get("reset_epoch")) is not int
+                or not isinstance(evidence_token.get("incarnation"), str)):
+            raise ValueError("CLOCK_ADMISSION_EVIDENCE_TOKEN_REQUIRED")
         identity = self._full_identity(ticket, generation, reset_epoch)
         history = self._history
         with self._lock:
@@ -420,8 +428,22 @@ class PhysicsClockAdmission:
             if (snapshot["session_id"] != identity[1] or snapshot["incarnation"] != identity[2]
                     or snapshot["epoch"] != identity[4]):
                 raise AdmissionRefused("CLOCK_ADMISSION_HISTORY_IDENTITY_MISMATCH")
+            if controller_generation != identity[3]:
+                raise AdmissionRefused("CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED")
             if generation_check is not None and not generation_check():
                 raise AdmissionRefused("CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED")
+            if (evidence_token["incarnation"] != identity[2]
+                    or evidence_token["reset_epoch"] != identity[4]
+                    or evidence_token["history_version"] > snapshot["version"]):
+                raise AdmissionRefused("CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID")
+            try:
+                selected = history.step_at(evidence_token["physics_step"])
+            except ValueError as error:
+                raise AdmissionRefused(
+                    f"CLOCK_ADMISSION_EVIDENCE_TOKEN_STALE:{error}") from error
+            age_ns = now_ns - selected["sample"].clock_interval_end_monotonic_ns
+            if not 0 <= age_ns <= self._selected_max_age_ns:
+                raise AdmissionRefused("CLOCK_ADMISSION_EVIDENCE_TOKEN_STALE")
             consume()
             return True
 
