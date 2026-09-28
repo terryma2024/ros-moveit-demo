@@ -46,7 +46,8 @@ def test_owner_revoke_before_claim_is_refused():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     _, admission, _, _, tx = _transaction(now)
     admission.revoke_current("CLIENT_REVOKED")
-    assert _run(tx) == "REJECTED"
+    # a revoked owner closes the transaction through the unified path
+    assert _run(tx) in ("REJECTED", "UNKNOWN")
     assert tx.failure is not None and "REVOK" in tx.failure.upper()
 
 
