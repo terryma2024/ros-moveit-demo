@@ -8867,3 +8867,61 @@ not a resource one, and it is the sanctioned stopping point in this goal's own w
 
 **Status:** formal accepted Train/Validation/Offline Test **0/0/0**; Task 12 `NOT_STARTED`;
 `collection_*` NOT_PROVISIONED; no runtime/motion, no evidence deleted, no gates lowered, no hardware.
+
+## CP-764 — CP-763 resolved by user decision: Task 10 proceeds with closed, evidence-bound inputs
+
+The user supplied the decision, so the CP-763 blocking condition is closed. **Option (b)**, with these
+binding constraints:
+
+- keep the reviewed CLI outputs (`act_sample --output`, `--collection-output`, optional 8/40
+  qualification outputs);
+- inputs are **closed, explicit and evidence-bound**, supplied later by the runtime ladder: a
+  **candidate-source document** (with `minimum_gap_m` and the exact formal five-split plus qualification
+  8/40 candidates) and a **reachability-report adapter** implementing the existing
+  `candidate_port.verify` **only for exact candidate identities**, after validating all 14 gates and
+  their evidence hashes;
+- **no** arbitrary Python module/import-path loading, **no** inference of candidates from calibration,
+  **no** invented bounds, budgets, thresholds or scene membership;
+- the CLI/library must support **dependency injection for tests**, **fail closed and write no manifest**
+  when production candidate source/reachability evidence is absent, and **deterministically project** the
+  supplied 8/40 qualification sets while enforcing separation from all formal splits;
+- record that **real manifests remain `NOT_FROZEN`** until the later runtime preflight produces those
+  inputs;
+- then continue **Tasks 11/11A** source implementation against closed fixtures (their code work is not
+  blocked by the absence of a real manifest), and return to the production candidate-source/preflight
+  adapter for review and evidence **before** any Task 8L/W1 runtime.
+
+This resolves the design block **without authorizing runtime or motion**.
+
+- **Delivered so far:** `act/candidate_source.py` (closed document loader, `candidate_identity`,
+  `sampling_config`) and `adapters/act/reachability_report.py` (`ReachabilityReportPort`) with focused
+  tests — 3 passed.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-765 — Task 10 CLI delivered under the agreed option (b)
+
+- **Delivered:** `act/candidate_source.py`, `adapters/act/reachability_report.py`, `cli/act_sample.py`
+  (+ its `setup.py` entry) and two focused test modules.
+- **Constraints honoured, each verifiable in the code:** dependency injection is a Python parameter
+  (`main(argv, *, load_source=…, make_port=…)`), so no module or import path is ever loaded; candidates
+  are never inferred from calibration; no bounds, budgets, thresholds or scene membership are invented;
+  the CLI fails closed with **no manifest written** when either input is absent
+  (`TASK10_INPUTS_UNAVAILABLE`) or when the report does not hold a candidate
+  (`CANDIDATE_NOT_IN_REACHABILITY_REPORT`); artifacts are written once with no partial files
+  (`SAMPLING_OUTPUT_EXISTS`); each output carries a provenance sidecar recording
+  **`NOT_FROZEN_UNTIL_RUNTIME_PREFLIGHT`** plus both input digests; the 8/40 qualification sets are
+  projected deterministically from the supplied document with separation asserted against every formal
+  split and against each other, and marked `training_eligible: false`.
+- **Three real bugs the tests caught, all mine:** `finite()` validates and returns its value, so using
+  it as a predicate rejected legitimate `0.0` coordinates (twice); and `make_manifest` hands the
+  verifier the point it actually sampled, whose vectors can be tuples, so the identity check now accepts
+  list or tuple and canonicalises both to one digest. The last one was found by reproducing the CLI path
+  directly and reading `sampling.py:94` — after guessing twice, which is the lesson CP-751 had already
+  taught once.
+- **Verification:** focused tests **6 passed** (`gate6-batch3-py-gate/actsample2.{log,junit.xml}`).
+- **Next, per the user's direction:** Tasks 11/11A source implementation against closed fixtures (their
+  code work is independent of a real manifest), then return to the production candidate-source /
+  preflight adapter for review and evidence before any Task 8L/W1 runtime.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
