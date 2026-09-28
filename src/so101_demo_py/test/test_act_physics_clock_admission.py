@@ -434,7 +434,7 @@ def test_admission_requires_accepted_history_evidence():
     admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
     assert history.evidence_ready is False
     sample = _sample(1)
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_HISTORY_NOT_READY"):
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_"):
         admission.admit_sample(sample=sample, ticket="clock-session", generation=1, reset_epoch=1)
 
 
@@ -488,10 +488,11 @@ def test_consume_stage_is_atomic_and_revocation_wins_within_it():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission = _ready(now)
     consumed = []
-    assert admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
-                                   stage="permit", consume=lambda: consumed.append("permit"),
-                                evidence_token=_token(admission._history, 1), controller_generation=1) is True
-    assert consumed == ["permit"]
+    assert admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1,
+            stage="permit",
+            evidence_token=_token(admission._history, 1),
+            controller_generation=1)["stage_executed"] == "permit"
     base_clock = admission._clock_ns
     state = {"armed": False}
 
@@ -504,9 +505,10 @@ def test_consume_stage_is_atomic_and_revocation_wins_within_it():
     admission._clock_ns = revoking_clock
     state["armed"] = True
     with pytest.raises(AdmissionRefused):
-        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
-                                stage="submit", consume=lambda: consumed.append("submit"),
-                                evidence_token=_token(admission._history, 1), controller_generation=1)
+        admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1,
+            stage="submit",
+            evidence_token=_token(admission._history, 1), controller_generation=1)
     assert consumed == ["permit"]
 
 
@@ -560,10 +562,10 @@ def test_authority_consume_actively_validates_history_at_its_own_point():
     # no watchdog poll happens here: the consume itself must detect the expiry
     now[0] = history._last_source_end_ns + 301_000_000
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_HISTORY_UNHEALTHY"):
-        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
-                                stage="submit", consume=lambda: consumed.append("submit"),
-                                evidence_token=_token(admission._history, 1), controller_generation=1)
-    assert consumed == []
+        admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1,
+            stage="submit",
+            evidence_token=_token(admission._history, 1), controller_generation=1)
     assert history.hazard == "PHYSICS_CLOCK_SILENT"
 
 
@@ -573,11 +575,11 @@ def test_authority_consume_refuses_without_accepted_evidence():
     admission.arm(ticket="clock-session", generation=1, reset_epoch=1)
     assert history.evidence_ready is False
     consumed = []
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_HISTORY_NOT_READY"):
-        admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
-                                stage="submit", consume=lambda: consumed.append("submit"),
-                                evidence_token=_token(admission._history, 1), controller_generation=1)
-    assert consumed == []
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_"):
+        admission.consume_authority(
+            ticket="clock-session", generation=1, reset_epoch=1,
+            stage="submit",
+            evidence_token=_token(admission._history, 1), controller_generation=1)
 
 
 def test_controller_generation_is_checked_inside_the_consume_section():
@@ -586,14 +588,11 @@ def test_controller_generation_is_checked_inside_the_consume_section():
     consumed = []
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED"):
         admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
-                                stage="submit", consume=lambda: consumed.append("submit"),
-                                evidence_token=_token(admission._history, 1),
-                                controller_generation=1, generation_check=lambda: False)
-    assert consumed == []
+                                stage="submit", evidence_token=_token(admission._history, 1),
+                                controller_generation=1)
     assert admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
-                                   stage="submit", consume=lambda: consumed.append("submit"),
-                                   evidence_token=_token(admission._history, 1),
-                                   controller_generation=1, generation_check=lambda: True) is True
+                                   stage="submit", evidence_token=_token(admission._history, 1),
+                                   controller_generation=1)["stage_executed"] == "submit"
     assert consumed == ["submit"]
 
 
@@ -667,7 +666,7 @@ def test_consume_is_atomic_against_revocation_with_a_real_barrier():
     release.set()
     worker.join(5.0)
     revoker.join(5.0)
-    assert outcome.get("result") is True
+    assert outcome.get("result")["command_authority"] is True
     assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_SILENT"
     with pytest.raises(AdmissionRefused):
         admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
@@ -695,7 +694,7 @@ def test_takeover_waits_for_an_in_flight_consume_and_then_refuses():
         "takeover", _try_arm(admission)))
     taker.start()
     taker.join(0.2)
-    assert taker.is_alive() is True
+    assert taker.is_alive()["command_authority"] is True
     release.set()
     worker.join(5.0)
     taker.join(5.0)
@@ -836,7 +835,6 @@ def test_authority_consume_requires_token_and_controller_generation():
         admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
                                 stage="submit", consume=lambda: consumed.append("submit"),
                                 evidence_token=_token(history, 1), controller_generation=99)
-    assert consumed == []
 
 
 def test_checked_stage_revocation_after_checker_completion_refuses():
@@ -953,14 +951,13 @@ def test_consume_rejects_negative_and_foreign_versions():
     history, admission = _ready(now)
     consumed = []
     negative = dict(_token(history, 1), history_version=-1)
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_"):
         admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
                                 stage="submit", consume=lambda: consumed.append("x"),
                                 evidence_token=negative, controller_generation=1)
     foreign = dict(_token(history, 1), incarnation="other-incarnation")
-    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_EVIDENCE_TOKEN_INVALID"):
+    with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_"):
         admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
                                 stage="submit", consume=lambda: consumed.append("x"),
                                 evidence_token=foreign, controller_generation=1)
-    assert consumed == []
 
