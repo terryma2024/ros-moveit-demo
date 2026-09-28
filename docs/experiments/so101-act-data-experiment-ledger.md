@@ -6534,3 +6534,11 @@ status: PLANNED_ISOLATED_STACK
 - **P1.4 结论**：仍未完成，且现状是“GREEN 7/7、baseline RED 6/7（boot 化身一项不可区分）”，与 CP-643 记录一致。明确下一步（供后续轮次直接执行，且不再靠猜测）：在**当前树**上先打印一次真实 `last_receipt` 与 registry 冻结字段的逐字段 diff，找出 `AUTHORITY_RECEIPT_INVALID` 的确切字段后再写 control/treatment；不得再以试错方式修改断言。
 - 其余未完成项不变：P1.5（屏障进真实 send/serialization 调用点）、contract 122–126 行删除与锁图补全（含控制器端口锁）、inventory 哈希边界与脏项归属说明、撤回不实陈述。**尚未请求 review 10**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-645 — EXP-572 P1.4 达标：七个行为用例在基线 **7 failed**、当前树 **7 passed**
+
+- 提交 `46db5ad4`。先用**逐字段诊断**（`experiments/exp572-linearization/p14-schema-diff.txt`）在当前树上打印真实 `last_receipt` 与 registry 冻结字段的对照，确认 `receipt -> ACCEPTED` 且字段集合相等；据此把测试侧 `_post_receive` 重写为**与诊断完全一致**的构造（每个 permit 独立 goal UUID、使用 `ClaimReceipt` 回报的 claim 时刻与 permit deadline、只用两侧都存在的公开 API），不再试错。
+- **实测**：当前树 `test_act_exp571_behavior.py` **7 passed**（`beh-green17.log`/JUnit，scratch `exp572-beh-green17.*`）；frozen `b917ae46` 同一文件 **7 failed**（`beh-red14.log`/JUnit，scratch `exp572-beh-red14.*`）——七个用例名称、源文件在两侧完全一致，全部可区分。六模块 **151 passed in 0.95s**（`six10.log` + manifest/JUnit，scratch `exp572-six10.*`）；EXP-572 探针模块 **9 passed in 0.14s**（`probes10.log`/JUnit，scratch `exp572-probes10.*`）。
+- 每次运行均为**新建且此前不存在**的 scratch，先以精确解释器断言 `tempfile.gettempdir() == TMPDIR`（SCRATCH_PROBE PASS），当前树使用逐文件 SHA 等于 worktree 的镜像（`mirror-24`），基线使用与 `git show b917ae46` 逐字节相等的快照（`baseline-red18`）。目录追加式，未删除或覆盖任何证据；42 个既有 dirty entries 未改动。
+- **仍未完成**：P1.5（把事件屏障放进真实 `port.send` 与真实序列化/拷贝调用点，并证明此时 revoke 仍能完成）；contract 122–126 行删除与锁图补全（含 claim 期间获取控制器端口锁、证明无环）；inventory 的 snapshot/ledger 哈希边界说明与“既有/任务自有”脏项分离；撤回“所有异常路径已终止化并关闭控制器”的不实陈述。**尚未请求 review 10**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
