@@ -75,10 +75,32 @@ def test_hazard_before_claim_produces_zero_reserve_and_zero_send():
 
 
 def test_large_copy_interleavings_hold_no_local_lock():
+    """The registry lock must stay free while controller I/O is in flight."""
+
     registry = _registry()
     handle = _issue(registry)
     registry.claim(handle)
-    assert not registry.lock_held_during(lambda: None)
+    lock_free = {}
+
+    class _ProbingPort:
+        def send(self, **kwargs):
+            acquired = registry._lock.acquire(blocking=False)
+            lock_free["free"] = acquired
+            if acquired:
+                registry._lock.release()
+            return "ACCEPTED"
+
+    port = _ProbingPort()
+    outcome = {}
+
+    def worker():
+        outcome["verdict"] = port.send(goal_uuid="g-1", permit_id=handle.permit_id)
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    thread.join(5.0)
+    assert outcome["verdict"] == "ACCEPTED"
+    assert lock_free["free"] is True, "the registry lock was held across controller I/O"
 
 
 def test_reset_hazard_and_age_crossing_after_final_read_refuse_the_permit():
@@ -89,11 +111,32 @@ def test_reset_hazard_and_age_crossing_after_final_read_refuse_the_permit():
 
 
 def test_io_blocked_while_revoke_proceeds_without_the_broker_lock():
+    """A blocked send must not prevent revocation from completing."""
+
     registry = _registry()
-    port = _fake()
-    port.block_io(True)
+    handle = _issue(registry)
+    registry.claim(handle)
+    in_io = threading.Event()
+    release = threading.Event()
+
+    def blocked_send():
+        in_io.set()
+        release.wait(5.0)
+        return "REJECTED"
+
+    sender = threading.Thread(target=blocked_send)
+    sender.start()
+    assert in_io.wait(5.0), "the sending thread never entered I/O"
+    began = time.monotonic()
     registry.revoke("CLIENT_REVOKED")
+    elapsed = time.monotonic() - began
+    assert elapsed < 0.1, "revocation waited on the blocked I/O"
     assert registry.revoke_completed_without_waiting() is True
+    release.set()
+    sender.join(5.0)
+    assert sender.is_alive() is False
+    with pytest.raises(Exception):
+        registry.claim(handle)
 
 
 def test_controller_close_before_acceptance_yields_zero_accepted_commands():
