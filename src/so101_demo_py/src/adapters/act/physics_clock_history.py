@@ -104,6 +104,16 @@ class PhysicsClockHistory:
                 self.hazard = reason
                 self.version += 1
 
+    def commit_state(self):
+        """Unified version/incarnation/epoch/time state for one commit validation."""
+
+        with self._lock:
+            return {"version": self.version, "session_id": self.session_id,
+                    "incarnation": self.incarnation, "epoch": self.epoch,
+                    "hazard": self.hazard, "last_source_end_ns": self._last_source_end_ns,
+                    "evidence_ready": (self.epoch is not None and self.hazard is None
+                                       and self._first_chunk_seen)}
+
     def snapshot(self):
         """Versioned view of the current history state for commit revalidation."""
 
