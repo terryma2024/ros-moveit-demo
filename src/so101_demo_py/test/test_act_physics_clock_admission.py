@@ -126,7 +126,7 @@ def test_partial_submit_cancels_and_requires_a_confirmed_stop():
     admission.record_partial_submit(
         ticket="ticket-1", generation=7, reset_epoch=1,
         accepted_routes=("arm",), rejected_routes=("gripper",),
-        cancel=lambda routes: cancelled.append(tuple(routes)))
+        cancel=lambda routes: cancelled.append(tuple(routes)) or True)
     assert cancelled == [("arm",)]
     assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_PARTIAL_SUBMIT"
     assert admission.stop_confirmed is False
@@ -168,4 +168,150 @@ def test_selected_state_freshness_is_tighter_than_ingestion_freshness():
             sample=history.step_at(1)["sample"],
             ticket="ticket-1", generation=7, reset_epoch=1)
     assert admission.revoked_record is None      # a refusal is not a hazard
+
+
+
+def _current(admission):
+    return admission.identity
+
+
+def test_delayed_hazard_from_an_old_identity_does_not_revoke_the_new_one():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    old = admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    new = admission.arm(ticket="ticket-1", generation=8, reset_epoch=1)
+    record = admission.note_hazard("PHYSICS_CLOCK_SILENT", origin_identity=old)
+    assert record["applied"] is False
+    assert admission.revoked_record is None
+    assert admission.stale_hazards[-1]["origin_identity"] == old
+    assert admission.stale_hazards[-1]["current_identity"] == new
+    assert admission.fence(ticket="ticket-1", generation=8, reset_epoch=1, stage="proof")
+
+
+def test_hazard_with_the_current_origin_identity_still_revokes():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    identity = admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    record = admission.note_hazard("PHYSICS_CLOCK_STALE", origin_identity=identity)
+    assert record["applied"] is True
+    assert record["identity"] == identity
+    assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_STALE"
+
+
+def test_revocation_triggered_before_the_commit_check_refuses_the_checked_stage():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    base_clock = admission._clock_ns
+    state = {"armed": False}
+
+    def revoking_clock():
+        if state["armed"]:
+            state["armed"] = False
+            admission.note_hazard("PHYSICS_CLOCK_SILENT")
+        return base_clock()
+
+    admission._clock_ns = revoking_clock
+    state["armed"] = True                     # fires inside the commit critical section
+    with pytest.raises(AdmissionRefused):
+        admission.run_checked_stage(ticket="ticket-1", generation=7, reset_epoch=1,
+                                    stage="proof", checker=lambda: "checked")
+    assert admission.checked_stages == 0
+    assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_SILENT"
+
+
+def test_revocation_after_the_commit_keeps_the_result_and_closes_the_identity():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    assert admission.run_checked_stage(ticket="ticket-1", generation=7, reset_epoch=1,
+                                       stage="proof", checker=lambda: "checked") == "checked"
+    assert admission.checked_stages == 1
+    admission.note_hazard("PHYSICS_CLOCK_SILENT")
+    with pytest.raises(AdmissionRefused):
+        admission.fence(ticket="ticket-1", generation=7, reset_epoch=1, stage="permit")
+
+
+def test_sample_revoked_before_the_age_check_is_refused():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    history, admission = _admission(now)
+    admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    sample = history.step_at(1)["sample"]
+    base_clock = admission._clock_ns
+    state = {"armed": False}
+
+    def revoking_clock():
+        if state["armed"]:
+            state["armed"] = False
+            admission.note_hazard("PHYSICS_CLOCK_STALE")
+        return base_clock()
+
+    admission._clock_ns = revoking_clock
+    state["armed"] = True
+    with pytest.raises(AdmissionRefused):
+        admission.admit_sample(sample=sample, ticket="ticket-1", generation=7, reset_epoch=1)
+    assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_STALE"
+
+
+@pytest.mark.parametrize("ticket,generation,epoch,accepted", [
+    ("ticket-1", 7, 1, False),        # same identity
+    ("ticket-0", 6, 1, False),        # older ticket and generation
+    ("ticket-9", 8, 1, True),         # ticket rotation with a newer generation
+    ("ticket-9", 7, 1, False),        # ticket rotation may not keep the generation
+    ("ticket-1", 7, 2, True),         # same generation, newer reset epoch
+    ("ticket-1", 7, 0, False),        # epoch rollback
+    ("ticket-1", 8, 1, True),         # newer generation
+    ("", 8, 1, False),                # empty ticket
+    ("ticket-1", -1, 1, False),       # negative generation
+])
+def test_identity_successor_semantics_are_explicit(ticket, generation, epoch, accepted):
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    if accepted:
+        assert admission.arm(ticket=ticket, generation=generation, reset_epoch=epoch) == (
+            ticket, generation, epoch)
+    else:
+        with pytest.raises(AdmissionRefused):
+            admission.arm(ticket=ticket, generation=generation, reset_epoch=epoch)
+
+
+def test_partial_cancel_failure_is_fail_closed():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission = _admission(now)
+    identity = admission.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+
+    def raising_cancel(_routes):
+        raise RuntimeError("cancel failed")
+
+    admission.record_partial_submit(ticket="ticket-1", generation=7, reset_epoch=1,
+                                    accepted_routes=("arm",), rejected_routes=("gripper",),
+                                    cancel=raising_cancel)
+    assert admission.revoked_record["reason"] == "PHYSICS_CLOCK_PARTIAL_CANCEL_FAILED"
+    assert admission.stop_confirmed is False
+    with pytest.raises(AdmissionRefused):
+        admission.fence(ticket="ticket-1", generation=7, reset_epoch=1, stage="submit")
+
+    now2 = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission2 = _admission(now2)
+    admission2.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    admission2.record_partial_submit(ticket="ticket-1", generation=7, reset_epoch=1,
+                                     accepted_routes=("arm",), rejected_routes=("gripper",),
+                                     cancel=lambda _routes: False)
+    assert admission2.revoked_record["reason"] == "PHYSICS_CLOCK_PARTIAL_CANCEL_FAILED"
+    assert admission2.stop_confirmed is False
+
+    now3 = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission3 = _admission(now3)
+    identity3 = admission3.arm(ticket="ticket-1", generation=7, reset_epoch=1)
+    admission3.record_partial_submit(ticket="ticket-1", generation=7, reset_epoch=1,
+                                     accepted_routes=("arm",), rejected_routes=("gripper",),
+                                     cancel=lambda _routes: True)
+    assert admission3.revoked_record["reason"] == "PHYSICS_CLOCK_PARTIAL_SUBMIT"
+    assert admission3.stop_confirmed is False
+    with pytest.raises(AdmissionRefused):
+        admission3.fence(ticket="ticket-1", generation=7, reset_epoch=1, stage="submit")
+    admission3.confirm_stop(identity=identity3, stopped=True)
+    assert admission3.stop_confirmed is True
 

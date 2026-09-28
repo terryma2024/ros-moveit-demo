@@ -32,6 +32,34 @@ EXPIRY_REASONS = frozenset({
     "PHYSICS_CLOCK_STALE",
 })
 STAGES = frozenset({"sample", "proof", "permit", "submit", "final_acceptance"})
+MAX_IDENTITY_INT = 2 ** 63 - 1
+
+
+def _validated_identity(ticket, generation, reset_epoch):
+    """Validate one identity; invalid values are refused, never coerced."""
+
+    if not isinstance(ticket, str) or not ticket:
+        raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_INVALID")
+    if type(generation) is not int or not 0 <= generation <= MAX_IDENTITY_INT:
+        raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_INVALID")
+    if type(reset_epoch) is not int or not 1 <= reset_epoch <= MAX_IDENTITY_INT:
+        raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_INVALID")
+    return (ticket, generation, reset_epoch)
+
+
+def identity_is_successor(candidate, current):
+    """Authoritative successor relation; never incidental tuple ordering.
+
+    Same ticket: ``(generation, reset_epoch)`` must increase lexicographically on
+    integers only. Ticket rotation: the generation must strictly increase, so a
+    rotated ticket can never rewind or repeat the current generation.
+    """
+
+    if current is None:
+        return True
+    if candidate[0] == current[0]:
+        return (candidate[1], candidate[2]) > (current[1], current[2])
+    return candidate[1] > current[1]
 
 
 class AdmissionRefused(ValueError):
@@ -57,14 +85,15 @@ class PhysicsClockAdmission:
         self._revoked = None
         self._stop_confirmed = False
         self._stages = []
+        self._stale_hazards = []
         self.checked_stages = 0
 
     # ---------------------------------------------------------------- identity
 
     def arm(self, *, ticket, generation, reset_epoch):
-        identity = (str(ticket), int(generation), int(reset_epoch))
+        identity = _validated_identity(ticket, generation, reset_epoch)
         with self._lock:
-            if self._identity is not None and identity <= self._identity:
+            if not identity_is_successor(identity, self._identity):
                 raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_NOT_NEWER")
             self._identity = identity
             self._revoked = None
@@ -94,12 +123,26 @@ class PhysicsClockAdmission:
 
     # -------------------------------------------------------------- revocation
 
-    def note_hazard(self, reason):
-        """Capture a hazard with the identity that was current when it happened."""
+    def note_hazard(self, reason, *, origin_identity=None):
+        """Capture a hazard together with the identity of the event that caused it.
+
+        A hazard whose origin identity is not the current identity is recorded as
+        a stale event and does **not** revoke the current identity: a delayed
+        hazard from an older epoch must never close a newer arm.
+        """
 
         if not isinstance(reason, str) or not reason:
             raise ValueError("CLOCK_ADMISSION_HAZARD_INVALID")
+        origin = None if origin_identity is None else _validated_identity(*origin_identity)
         with self._lock:
+            if origin is not None and origin != self._identity:
+                self._stale_hazards.append({
+                    "reason": reason, "origin_identity": origin,
+                    "current_identity": self._identity,
+                    "monotonic_ns": self._clock_ns(),
+                })
+                return {"applied": False, "reason": reason, "origin_identity": origin,
+                        "current_identity": self._identity}
             if self._revoked is None:
                 self._revoked = {
                     "reason": reason,
@@ -110,10 +153,17 @@ class PhysicsClockAdmission:
                     "expiry_to_stop_ns": None,
                 }
             self._stop_confirmed = False
-            return copy.deepcopy(self._revoked)
+            record = copy.deepcopy(self._revoked)
+            record["applied"] = True
+            return record
 
     def revoke(self, reason):
         return self.note_hazard(reason)
+
+    @property
+    def stale_hazards(self):
+        with self._lock:
+            return copy.deepcopy(self._stale_hazards)
 
     def confirm_stop(self, *, identity, stopped):
         """Record a confirmed physical stop for the revoked identity."""
@@ -135,25 +185,30 @@ class PhysicsClockAdmission:
 
     # ----------------------------------------------------------------- fencing
 
+    def _fence_locked(self, identity, stage, now_ns):
+        """Identity/revocation/stop-pending check plus the stage row. Lock held."""
+
+        if self._identity is None:
+            raise AdmissionRefused("CLOCK_ADMISSION_UNARMED")
+        if identity != self._identity:
+            raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_CHANGED")
+        if self._revoked is not None:
+            raise AdmissionRefused(f"CLOCK_ADMISSION_REVOKED:{self._revoked['reason']}")
+        if not self._stop_confirmed and any(row["stop_pending"] for row in self._stages):
+            raise AdmissionRefused("CLOCK_ADMISSION_STOP_PENDING")
+        self._stages.append({"stage": stage, "identity": identity,
+                             "monotonic_ns": now_ns, "stop_pending": False})
+        return True
+
     def fence(self, *, ticket, generation, reset_epoch, stage):
         """Short, O(1) re-fence used by every admission stage."""
 
         if stage not in STAGES:
             raise ValueError("CLOCK_ADMISSION_STAGE_INVALID")
-        identity = (str(ticket), int(generation), int(reset_epoch))
+        identity = _validated_identity(ticket, generation, reset_epoch)
         with self._lock:
-            if self._identity is None:
-                raise AdmissionRefused("CLOCK_ADMISSION_UNARMED")
-            if identity != self._identity:
-                raise AdmissionRefused("CLOCK_ADMISSION_IDENTITY_CHANGED")
-            if self._revoked is not None:
-                raise AdmissionRefused(f"CLOCK_ADMISSION_REVOKED:{self._revoked['reason']}")
-            if not self._stop_confirmed and any(
-                    row["stop_pending"] for row in self._stages):
-                raise AdmissionRefused("CLOCK_ADMISSION_STOP_PENDING")
-            self._stages.append({"stage": stage, "identity": identity,
-                                 "monotonic_ns": self._clock_ns(), "stop_pending": False})
-            return True
+            now_ns = self._clock_ns()
+            return self._fence_locked(identity, stage, now_ns)
 
     def run_checked_stage(self, *, ticket, generation, reset_epoch, stage, checker):
         """Run an expensive checker outside the lock, then re-fence before committing.
@@ -164,12 +219,18 @@ class PhysicsClockAdmission:
 
         if not callable(checker):
             raise ValueError("CLOCK_ADMISSION_CHECKER_INVALID")
+        identity = _validated_identity(ticket, generation, reset_epoch)
         self.fence(ticket=ticket, generation=generation, reset_epoch=reset_epoch,
                    stage=stage)
         result = checker()
-        self.fence(ticket=ticket, generation=generation, reset_epoch=reset_epoch,
-                   stage=stage)
+        # Commit linearization: the clock is sampled, the identity is re-fenced and
+        # the result is committed inside one critical section. A revocation that
+        # linearizes before this point refuses the stage; one that linearizes after
+        # it leaves this committed result valid and closes the identity for every
+        # later stage.
         with self._lock:
+            now_ns = self._clock_ns()
+            self._fence_locked(identity, stage, now_ns)
             self.checked_stages += 1
         return result
 
@@ -178,10 +239,13 @@ class PhysicsClockAdmission:
     def admit_sample(self, *, sample, ticket, generation, reset_epoch):
         """Admit one selected sample under identity fence and selected-state freshness."""
 
-        self.fence(ticket=ticket, generation=generation, reset_epoch=reset_epoch,
-                   stage="sample")
-        now_ns = self._clock_ns()
+        identity = _validated_identity(ticket, generation, reset_epoch)
+        # One critical section: identity/revocation, selected-state age and the
+        # return decision are linearized together, so a revocation can never land
+        # between the fence and the returned sample.
         with self._lock:
+            now_ns = self._clock_ns()
+            self._fence_locked(identity, "sample", now_ns)
             age_ns = now_ns - sample.clock_interval_end_monotonic_ns
             if not 0 <= age_ns <= self._selected_max_age_ns:
                 raise AdmissionRefused("CLOCK_ADMISSION_SELECTED_STALE")
@@ -191,7 +255,7 @@ class PhysicsClockAdmission:
                               accepted_routes, rejected_routes, cancel):
         """Cancel the accepted routes and keep the identity closed until a confirmed stop."""
 
-        identity = (str(ticket), int(generation), int(reset_epoch))
+        identity = _validated_identity(ticket, generation, reset_epoch)
         if not callable(cancel):
             raise ValueError("CLOCK_ADMISSION_CANCEL_INVALID")
         with self._lock:
@@ -203,5 +267,14 @@ class PhysicsClockAdmission:
                                  "monotonic_ns": self._clock_ns(), "stop_pending": True,
                                  "accepted_routes": tuple(accepted_routes),
                                  "rejected_routes": tuple(rejected_routes)})
-        cancel(tuple(accepted_routes))
+        # Fail closed: only a cancellation call that returns a truthy confirmation
+        # counts as cancelled. An exception or an unconfirmed return revokes with a
+        # distinct reason, and either way the identity stays closed until a
+        # matching confirmed stop is recorded.
+        try:
+            confirmed = bool(cancel(tuple(accepted_routes)))
+        except BaseException:  # noqa: BLE001 - recorded as a failed cancellation
+            confirmed = False
+        if not confirmed:
+            return self.note_hazard("PHYSICS_CLOCK_PARTIAL_CANCEL_FAILED")
         return self.note_hazard("PHYSICS_CLOCK_PARTIAL_SUBMIT")
