@@ -61,6 +61,22 @@ class OfflineDispatchTransaction:
 
         if stop_at is not None and stop_at not in NODES:
             raise ValueError(f"DISPATCH_NODE_UNKNOWN:{stop_at}")
+        changed = stop_at is not None
+        previous_stop = self._stop_at
+        if changed:
+            self._stop_at = stop_at
+        try:
+            return self._run_nodes(stage=stage, role=role, goal_uuid=goal_uuid,
+                                   target_digest=target_digest,
+                                   controller_generation=controller_generation,
+                                   controller_incarnation=controller_incarnation,
+                                   timeout_ns=timeout_ns)
+        finally:
+            if changed:
+                self._stop_at = previous_stop
+
+    def _run_nodes(self, *, stage, role, goal_uuid, target_digest, controller_generation,
+                   controller_incarnation, timeout_ns=None):
         self.node("prepare")
         identity = tuple(self.admission.identity)
         epoch = identity[4]

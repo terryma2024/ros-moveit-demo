@@ -11,6 +11,11 @@ from so101_demo.adapters.act import authority_transaction as at
 from so101_demo.adapters.act.dispatch_transaction import OfflineDispatchTransaction
 
 
+def _auth_helpers():
+    from test_act_authority_transaction import _issue, _registry
+    return _registry, _issue
+
+
 def _transaction(now, *, port=None, ttl_ns=30_000_000_000):
     history, admission = _ready(now)
     registry = at.AuthorityTransactionRegistry(
@@ -194,3 +199,100 @@ def test_real_copy_and_io_inside_the_dispatch_nodes_with_revoke_progressing():
     assert observed["bytes"] > 1024
     assert observed["revoked"] is True
     assert state == "ACCEPTED"
+
+
+# --- EXP-571: review-8 blockers through the real transaction ---
+
+
+def test_revoke_completed_before_the_transition_stops_the_send():
+    """A revoke that completes before READY->IN_FLIGHT must prevent the send."""
+
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission, registry, port, tx = _transaction(now)
+    entered = threading.Event()
+    release = threading.Event()
+    original = admission.history_commit_receipt
+
+    def blocking_commit(*args, **kwargs):
+        receipt = original(*args, **kwargs)
+        entered.set()
+        release.wait(5.0)          # revoke happens after the commit, before the transition
+        return receipt
+
+    admission.history_commit_receipt = blocking_commit
+    outcome = {}
+    worker = threading.Thread(target=lambda: outcome.setdefault("state", _run(tx)))
+    worker.start()
+    assert entered.wait(5.0)
+    admission.revoke_current("CLIENT_REVOKED")
+    release.set()
+    worker.join(10.0)
+    assert outcome["state"] == "REJECTED", outcome
+    assert port.send_calls == 0 and port.accepted_commands == 0
+
+
+def test_legacy_claim_api_is_permanently_closed():
+    _registry, _issue = _auth_helpers()
+    registry = _registry()
+    handle = _issue(registry)
+    with pytest.raises(Exception, match="AUTHORITY_LEGACY_CLAIM_REMOVED"):
+        registry.claim(handle)
+
+
+def test_port_generation_is_the_authority_not_the_caller_integer():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, admission, registry, port, tx = _transaction(now)
+    port.arm_generation(999, controller_incarnation="i")
+    state = _run(tx, controller_generation=1)
+    assert state == "REJECTED"
+    assert port.send_calls == 0
+
+
+def test_timeout_terminalizes_both_transaction_and_registry():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, _, registry, port, tx = _transaction(now)
+    state = _run(tx, timeout_ns=-1)
+    assert state == "UNKNOWN"
+    assert registry.state_of(tx.handle) == "UNKNOWN"
+    late = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    with pytest.raises(Exception):
+        registry.receipt(tx.handle, **late)
+    assert registry.state_of(tx.handle) == "UNKNOWN"
+
+
+def test_malformed_receipt_terminalizes_and_cannot_be_corrected():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, _, registry, port, tx = _transaction(now)
+    assert _run(tx, stop_at="receive") == "IN_FLIGHT"
+    good = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    with pytest.raises(Exception):
+        registry.receipt(tx.handle, **dict(good, sequence=-1))
+    assert registry.state_of(tx.handle) == "UNKNOWN"
+    with pytest.raises(Exception):
+        registry.receipt(tx.handle, **good)
+    assert registry.state_of(tx.handle) == "UNKNOWN"
+
+
+def test_wrong_controller_boot_incarnation_is_refused():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, _, registry, port, tx = _transaction(now)
+    assert _run(tx, stop_at="receive") == "IN_FLIGHT"
+    good = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    with pytest.raises(Exception):
+        registry.receipt(tx.handle, **dict(good, controller_boot_incarnation="someone-else"))
+
+
+def test_last_receipt_is_a_frozen_read_only_receive_record():
+    now = [SOURCE_BASE_NS + 3 * STEP_NS]
+    _, _, registry, port, tx = _transaction(now)
+    assert _run(tx, stop_at="receive") == "IN_FLIGHT"
+    first = port.last_receipt(permit_id=tx.handle.permit_id)
+    observed = first["observed_ns"]
+    now[0] += 5_000_000_000            # time passes; the record must not change
+    second = port.last_receipt(permit_id=tx.handle.permit_id)
+    assert second["observed_ns"] == observed
+    assert second["sequence"] == first["sequence"]
+    assert second["claim_monotonic_ns"] == first["claim_monotonic_ns"]
+    with pytest.raises(Exception):
+        second["verdict"] = "REJECTED"
+    assert registry.receipt(tx.handle, **dict(second)) == "ACCEPTED"
