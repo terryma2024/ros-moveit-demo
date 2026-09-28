@@ -292,3 +292,26 @@ def test_qualified_cli_runs_the_producer_end_to_end(tmp_path, capsys):
         cli.main(["--task8-ready", str(ready_path), "--preparation-receipt", str(receipt),
                   "--campaign-result", str(summary_path), "--case-root", str(case_root),
                   "--output", str(output)])
+
+
+def test_qualified_report_validates_only_with_its_campaign_block(tmp_path):
+    """The calibration validator requires the provenance block on a QUALIFIED report."""
+
+    import sys
+    from pathlib import Path as _Path
+
+    sys.path.insert(0, str(_Path(__file__).resolve().parent))
+    from test_act_calibration import report as qualified_report   # a fully valid QUALIFIED report
+
+    from so101_demo.act.calibration import require_qualified
+
+    document = qualified_report(tmp_path)
+    require_qualified(document)                       # accepted with its campaign block
+    del document["live_campaign"]
+    with pytest.raises(ValueError, match="FIELDS_INVALID"):
+        require_qualified(document)                   # a QUALIFIED without it is not well formed
+    # a well-formed block with the wrong number of journals is refused on its own terms
+    short_block = {"case_root": "/run", "campaign_result_sha256": "c" * 64,
+                   "preparation_receipt_sha256": "d" * 64, "journal_sha256": ["e" * 64] * 13}
+    with pytest.raises(ValueError, match="CALIBRATION_LIVE_CAMPAIGN_INVALID"):
+        require_qualified(dict(qualified_report(tmp_path), live_campaign=short_block))

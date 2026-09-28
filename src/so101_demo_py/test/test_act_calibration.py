@@ -97,8 +97,12 @@ def report(tmp_path):
         if key=="max_fine_corrections": value=3
         values[key]=dict(value=value,unit=unit,sample_path=str(sample),
                          sample_sha256=hashlib.sha256(sample.read_bytes()).hexdigest())
+    # a QUALIFIED report must trace to the live campaign that produced it
+    campaign = dict(case_root="/run", campaign_result_sha256="c"*64,
+                    preparation_receipt_sha256="d"*64,
+                    journal_sha256=["e"*64]*14)
     return dict(schema_version=1,status="QUALIFIED",source_commit="a"*40,config_sha256="b"*64,
-                source_provenance_sha256="a1"*32,
+                source_provenance_sha256="a1"*32, live_campaign=campaign,
                 measurements=values, checks={key:"PASS" for key in
                 ("fov","collision","search","synchronization","execution","release","retreat")})
 
