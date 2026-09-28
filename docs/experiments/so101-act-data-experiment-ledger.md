@@ -6797,3 +6797,16 @@ status: PLANNED_ISOLATED_STACK
 - **聚焦 RED/GREEN 证据**：新建 `test/test_act_batch1_owner_poll.py`（4 用例：健康无动作；健康丢失恰好闩锁一次+撤销一次；撤销后 `capture` 被拒；适配器回调进入同一闩锁）→ `batch1.log`/JUnit **4 passed**，rc=0，零警告；scratch `exp573-batch1.*`（唯一且此前不存在）+ tempfile 探针 PASS；当前树镜像 `mirror-48`。仅运行本批次直接相关测试，**未**运行全量套件。
 - **诚实范围说明**：本批次完成“边界持有适配器 + owner 轮询/闩锁/撤销/拒用”；**尚未**完成把 `evidence_ready()`/`accept_message()` 的**已接受物理证据**接入 SEARCH 的 selected-source 消费路径（该消费者在 `pick_place_sources.py:151` 起的工作类中），以及真实 C++ 预留/接收临界区（Batch 3）。未启动运行时、未授予控制器权威、未下发目标、未运动、未计入任何正式 episode。
 - 不变量：Gate 5 **DONE**（复核 14 APPROVE，范围仅源码/设计与离线契约）；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 仍关闭；42 个既有 dirty entries 未改动；证据追加式。
+
+## CP-674 — Gate 6 基线归位（不重写历史）：把误吸收的既有 WIP 从提交中拆出，dirty 回到 42
+
+- **事故如实记录**：Batch 1 提交 `b2c8e845` 时我 `git add` 了 `pick_place_sources.py`，而该文件本就在**既有 42 项 dirty** 中，导致提交把用户先前的 WIP（与我的 Batch 1 改动混在一起）一并吸收，dirty 一度降为 41。既未采用有损方案，也未改动历史。
+- **三方字节副本与哈希（新增追加式目录 `experiments/gate6-baseline-repair/`，保存 `three-copies.sha256`）**：
+  - 干净的 pre-Batch1（`git show d62eb060:`）`51946ebcee0789cab71365f7222c6013f40a7a871262993d64766adb4ff063a1`（`clean-pre-batch1.py`）
+  - 精确的 pre-Batch1 工作内容（含 WIP，取自已保存的 `mirror-47`）`ea8863a482d97860525c7f93961482d1a123f551e39c594c4694481d98ed7e23`（`wip-pre-batch1.py`）
+  - Batch 1 后的当前内容 `597ac257abd256ca8feaad3c60447f0c0d410e3993d8addf68ed37bda35065e8`（`current-after-batch1.py`）
+- **拆分**：`wip-delta.diff`（clean → WIP，40 行）与 `batch1-only.delta.diff`（WIP → 当前，77 行）；把 **Batch1-only delta 应用到干净内容**得到任务专用版本 `0d0e0df986a653ad45bafca1a31c24437eef600cc302fd64485add07a227c1cd`（`task-only.py`，`patch` 无冲突应用成功——分离**不模糊**，故未停工）。
+- **归位提交（新增提交，未 reset/rebase/amend）**：`02604b5a37b26c769e80dab25a04f4c05415393d` 只含任务专用内容；随后把 `current-after-batch1.py` 还原到工作树，使**用户原始 WIP 重新成为未提交修改**。
+- **验证（全部通过）**：工作树文件哈希 == 保存的当前内容哈希（True）；对最终工作树内容**反向移除 Batch1-only delta** 得到**精确的 mirror-47 WIP 哈希**（True）；HEAD 含 Batch1 行为（`poll_owner_health` 命中 1）且**不含** WIP（命中 0）；`git diff HEAD -- <file>` 已保存为 `worktree-vs-head.diff`（42 行，即被保留的原始 WIP）；**dirty 计数 = 42**。
+- **归位后聚焦复测**：Batch 1 的 4 个用例对**最终工作树内容**重跑 **4 passed**、rc=0、零警告（`batch1-repair.log`/JUnit，scratch `exp573-batch1-repair.*`，tempfile 探针 PASS，镜像 `mirror-49` 中该文件由保存的当前内容替换）。先前提交与证据全部保留，无删除或覆盖。
+- 下一步：Batch 2（broker 自有控制器身份与单一最终 history receipt 语义穿过真实集成边界），随后 Batch 3（真实 C++ 预留/接收临界区与 generation/boot/UUID fencing、超时、关闭、取消）。不变量：Gate 5 DONE（范围仅源码/设计与离线契约）；正式 accepted 0/0/0；Task 12 NOT_STARTED；Gate 6 runtime 关闭；无运行时/权威/目标/运动。
