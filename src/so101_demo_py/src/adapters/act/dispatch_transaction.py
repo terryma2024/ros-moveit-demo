@@ -119,18 +119,21 @@ class OfflineDispatchTransaction:
             self.state, self.failure = "REJECTED", str(error)
             return self.state
         try:
+            # broker-owned capture first (port mutex alone), then the claim
+            self.registry.capture_controller_identity(self.handle)
             claim = self.registry.claim_bound(self.handle, identity=identity,
                                               controller_generation=controller_generation,
-                                              token=token,
-                                              controller_snapshot=self._controller_snapshot())
+                                              token=token)
         except AuthorityRefused as error:
             return self._fail_closed(str(error))
         self.node("claim")
         try:
+            frozen = self.registry.controller_snapshot_of(self.handle) or (None, None, None)
             reserved = self.port.reserve(
                 permit_id=self.handle.permit_id, goal_uuid=goal_uuid, role=role,
                 target_digest=target_digest, generation=controller_generation,
                 controller_incarnation=controller_incarnation,
+                expected_boot_incarnation=frozen[2],
                 deadline_ns=claim.deadline_ns, stage=stage,
                 session_id=identity[1], broker_incarnation=identity[2],
                 claim_monotonic_ns=claim.commit_monotonic_ns)

@@ -456,6 +456,7 @@ def test_local_stage_claims_never_reserve_or_send():
         token = {"identity": admission.identity, "owner_identity": admission.identity,
                  "stage": stage, "history_version": history.snapshot()["version"],
                  "incarnation": history.incarnation, "reset_epoch": admission.identity[4]}
+        registry.capture_controller_identity(handle)
         receipt = registry.claim_bound(handle, identity=admission.identity,
                                        controller_generation=1, token=token)
         claimed.append((receipt.stage, registry.state_of(handle)))
