@@ -10179,3 +10179,43 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `merge-scratch/conflict-summary.md` with `conflicts.txt`, `uuid-conflicts.txt` and `merge.log`.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-822 — Reconciliation verdict: option 4, with a semantic coverage audit of the 50 evolved paths
+
+- **Decision applied: no merge and no wholesale cherry-pick.** The isolated mid-merge in `merge-scratch/wt`
+  was aborted (`git merge --abort`, rc=0); the scratch worktree **still exists and is still registered**
+  (detached at `78df6095`, now clean), and every conflict artifact is retained under
+  `merge-scratch/`: `conflicts.txt`, `uuid-conflicts.txt`, `merge.log`, `merge-attempt`-summary
+  (`conflict-summary.md`), `worktree-add.log`, `merge-abort.log`, `main-dirty-before.txt`,
+  `main-dirty-after.txt`. Nothing was deleted.
+- **Isolation verified, not assumed:** the main worktree's `git status --short` listing is **byte-identical**
+  before and after the abort (43 modified, 12 untracked, staged 0, HEAD `b77f105a`).
+- **Commit classification as directed:** `c26c358b` is patch-equivalent (also confirmed by `git cherry`) and
+  skipped; `fda21d53` pins obsolete fork `498472ac` while HEAD pins newer `54463fce`, so it is skipped and the
+  submodule is **not** downgraded; `cdd79d15` documents the older plan and spec, which must not replace the
+  evolved approved documents; `e2ec28c3` was audited path by path.
+- **Audit of `e2ec28c3`, verified independently of the classification given:** 84 paths, **0 absent at HEAD**,
+  **34 blob-identical**, **50 evolved**. For each of the 50 the structural tokens the commit introduced
+  (function and class names, error codes, YAML/JSON keys) were checked against HEAD's version of the same
+  file: **46 paths have every token present**, and the four with absent tokens were judged by hand:
+  - `adapters/act/detector.py` -> **superseded**: `RgbHeadModel` is replaced by `head_model_factory` plus
+    `HeadRgbDetector`/`BoundHeadDetector`, with provenance, tracking and attempt scoping added;
+  - `cli/act_preflight.py` -> **superseded**: same module, docstring, report shape and refusals, but identity
+    resolution and gating moved into `act.calibration` and the vocabulary gained `TASK8_READY`/`QUALIFIED`;
+    the single absent string is `ACT_PROFILE_UNAVAILABLE`;
+  - `test/test_act_controller_reference.py` -> **equivalent**: HEAD holds twelve or more tests over the same
+    behaviours with differently named doubles;
+  - `test/test_act_search.py` -> **equivalent**: HEAD's
+    `test_head_model_factory_preserves_generic_adapters_bgr_source` asserts the same channel-order conversion
+    (RGB `[250,20,10]` arrives as `[10,20,250]`) and additionally proves the caller's array is not mutated.
+- **Verdicts: 48 equivalent, 2 superseded, 0 missing, and no behaviour-specific rejection inside `e2ec28c3`.**
+  Therefore **no production code was changed** to remove textual differences, no RED/GREEN cycle was needed,
+  and **no gate was run**, since no code changed.
+- **Caveat recorded in the audit itself:** the 44 token-level verdicts assert that no symbol, error code or
+  configuration key the commit introduced is absent at HEAD; they are not each a line-by-line behavioural
+  re-review, and the audit says so rather than implying otherwise.
+- **Retained artifacts:** `semantic-audit/semantic-coverage-audit.md` (the detailed per-path audit),
+  `semantic-audit/coverage-raw.json`, `semantic-audit/paths.tsv`, `semantic-audit/different-paths.txt`,
+  `semantic-audit/e2ec28c3-name-status.txt`, plus the `merge-scratch/` set above.
+- **Boundaries:** no runtime or motion started, no hardware touched, no evidence deleted, no gate lowered, no
+  push; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
