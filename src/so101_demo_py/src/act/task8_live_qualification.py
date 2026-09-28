@@ -104,3 +104,39 @@ def validate_retreat_sample(sample: dict, *, deadline_s: float = 120.0) -> dict:
             or _digest(sample_path) != sample["sample_sha256"]:
         raise ValueError("TASK8_QUALIFICATION_SAMPLE_HASH_INVALID")
     return dict(sample)
+
+
+def validate_case_journals(case_root: Path, manifest: dict, *, identities: dict,
+                           manifest_document_sha256: str) -> tuple[dict, ...]:
+    """Load and re-check all fourteen case journals under one case root.
+
+    Each journal must be a complete row (evidence plus both retirement receipts), bound to this
+    bundle's identity, with a prefix carrying no live-evidence artifact and a full carrying one.
+    A missing, foreign or incomplete journal refuses the whole qualification.
+    """
+
+    import json
+
+    from .task8_live_evidence import (
+        require_campaign_cases, require_case_journal_row, require_case_row_matches_bundle,
+    )
+
+    case_root = Path(case_root)
+    if not case_root.is_absolute() or ".." in case_root.parts or not case_root.is_dir() \
+            or case_root.is_symlink():
+        raise ValueError("TASK8_QUALIFICATION_CASE_ROOT_INVALID")
+    rows = []
+    for case_id in require_campaign_cases(manifest):
+        mode = "phase_prefix" if case_id.startswith("prefix-") else "full"
+        journal = case_root / "task8-live" / "cases" / f"{case_id}.json"
+        journal = require_regular_file(journal, "TASK8_QUALIFICATION_JOURNAL_MISSING")
+        try:
+            row = json.loads(journal.read_bytes())
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("TASK8_QUALIFICATION_JOURNAL_INVALID") from error
+        if row.get("case_id") != case_id:
+            raise ValueError("TASK8_QUALIFICATION_JOURNAL_IDENTITY_MISMATCH")
+        row = require_case_journal_row(row, mode=mode)
+        rows.append(require_case_row_matches_bundle(
+            row, identities=identities, manifest_document_sha256=manifest_document_sha256))
+    return tuple(rows)
