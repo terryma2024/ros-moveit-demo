@@ -7675,3 +7675,19 @@ exact-W8 qualification, formal W8 and Task 12. Full detail:
   on the frozen grid — that file carries 191 lines of pre-existing user work and must be hunk-staged.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-711 — Task 8P3 sub-slice A: readback adapter emits canonical samples
+
+- **Delivered:** `PickPlacePhysicalReadback.live_evidence_sample(...)`, an **append-only** method
+  (inserted before the legacy aliases, colliding with none of the four pre-existing user hunks in
+  `pick_place_readback.py`) that emits one canonical sample by delegating to
+  `build_live_evidence_sample`. Two tests assert the adapter's output is shape-identical to the
+  recorder's canonical sample and accepted verbatim, and that an incomplete input raises.
+- **Honest scope:** the docstring states that the readback owns the values and that extracting them
+  directly from the capture path for `CLOSE..FINAL_CHECK` is the remaining wiring step — that
+  extraction was deliberately not guessed at.
+- **Verification:** 54 passed across the recorder and readback suites
+  (`gate6-batch3-py-gate/t8p3readback.{log,junit.xml}`); only this task's hunk of the readback file
+  was staged (1 of 5), recorded in `experiments/gate6-batch3-commit/hunk-filter-round164.txt`.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
