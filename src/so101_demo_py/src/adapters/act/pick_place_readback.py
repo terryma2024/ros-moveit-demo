@@ -390,6 +390,32 @@ class PickPlacePhysicalReadback:
         )
 
 
+    def capture_evidence_fields(self, captured, *, support_distance_max_m, raw_records):
+        """The canonical per-frame fields one capture() can supply, for CLOSE..FINAL_CHECK.
+
+        The physics aggregates come from the world evidence (never from a label); the step, sim time,
+        both stamp maps and the caller's dereferenceable raw records complete the frame. The
+        release-epoch-relative fields are the phase sequence's business, not this method's.
+        """
+
+        from so101_demo.act.task8_live_evidence import derive_frame_aggregates
+
+        if type(captured) is not dict or set(captured) != {
+                "world", "scene", "contact", "observation", "reference", "source_stamps_s",
+                "source_received_wall_s"}:
+            raise PickPlaceReadbackError("READBACK_CAPTURE_INVALID")
+        world = captured["world"]
+        aggregates = derive_frame_aggregates(world, support_distance_max_m=support_distance_max_m)
+        step = getattr(world, "simulation_step", None)
+        at_s = getattr(world, "simulation_time_s", None)
+        if type(step) is not int or step < 0 or not math.isfinite(at_s) or at_s < 0:
+            raise PickPlaceReadbackError("READBACK_CAPTURE_INVALID")
+        return {**aggregates, "physics_step": step, "sim_time_s": at_s,
+                "source_stamps_s": dict(captured["source_stamps_s"]),
+                "source_received_monotonic_s": dict(captured["source_received_wall_s"]),
+                "raw_records": dict(raw_records)}
+
+
 # Legacy Python API for version-one pick-place callers.
 Task8ReadbackError = PickPlaceReadbackError
 Task8PhysicalReadback = PickPlacePhysicalReadback
