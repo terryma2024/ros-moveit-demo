@@ -10325,3 +10325,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   unresolved path is a design question, not a regression. Boundaries held: no runtime or motion, no hardware, no
   evidence deleted, no push, no gate lowered; the aborted-merge artifacts and the user's 43 modified and 12
   untracked paths are untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-827 — Reconciliation coverage closed; ready for orchestrator review
+
+- **Coverage is exhaustive and re-verified after the report was written:** `e2ec28c3` touched 84 paths, of which
+  **34 are blob-identical to HEAD** (compared by object id, so no behaviour can differ) and **50 are evolved**,
+  and **every one of the 50 has a row in `semantic-audit-behavior/behavior-reconciliation.md`** with an empty
+  remainder when the two sets are differenced. 34 + 50 = 84, nothing unclassified.
+- **Verdicts across the 50 evolved paths: 42 equivalent (many strict supersets), 7 superseded, 1 unresolved,
+  0 missing.** The 52 rows in the report comprise those 50 plus the two `dependency-lock.yaml` paths that belong
+  to `fda21d53`, and the report says so explicitly so the counts cannot mislead.
+- **The single unresolved item** is `simulation_evidence_plugin.cpp`: the remote pinned
+  `mj_version() != 340` and HEAD compares against `mjVERSION_HEADER`, with no test pinning either form. It is
+  surfaced with both hunks quoted and is **not** treated as a missing behaviour, so no code was changed.
+- **No production code changed and no gate run**, because nothing was found missing; boundaries held throughout:
+  no runtime or motion, no hardware, no evidence deleted, no push, no gate lowered; the aborted-merge artifacts
+  remain in `merge-scratch/`; the user's 43 modified and 12 untracked paths are untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
+- **Status: the behaviour-level reconciliation is complete and ready for orchestrator review.** Two decisions
+  remain with the user and I am holding at them: (1) row 33's MuJoCo version pin, and (2) the earlier
+  training-interpreter versus runtime-ladder authorization. Per instruction I have not returned to the
+  pre-runtime adapter work.
