@@ -7439,3 +7439,30 @@ ancestors; reviewed plan SHA256 verified as
   `parallel_runtime.sha256 = 991b5c1b4fbd0cc1f0a97bd20a5b5a4e02028634f3f4ef288ad87554b383ab70`.
 - **Boundaries:** no runtime, controller goal or motion started; unrelated dirty files preserved;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-701 — Task 8P2 delivered: measurement contract, raw batch and deterministic aggregation
+
+- **RED -> GREEN**: new-module RED recorded per file (`task8_measurement_contract`,
+  `task8_calibration_aggregator`), then the schema-half RED (11 failures at
+  `CALIBRATION_SOURCE_PROVENANCE_MISSING`), then **43 passed** across the four suites
+  (`gate6-batch3-py-gate/t8p2{RED-summary,schema5,cli2,final}.{log,junit.xml}`).
+- **Delivered (plan Step 5 list, exactly 14 files, `diff --check` clean, expected == staged):**
+  `act/task8_measurement_contract.py`, `act/task8_calibration_aggregator.py`,
+  `cli/act_measure_task8_calibration.py`, `cli/act_build_task8_calibration_report.py`, the contract
+  schema and frozen template, `calibration-schema.json`, `act/calibration.py`,
+  `act/head_search_binding.py`, `setup.py`, and the four test modules -> commit `b6b9b3ec`.
+- **Step 4 matrix, all PASS** (`experiments/gate6-runtime/task8-core/t8p2-step4-matrix.txt`):
+  three outputs byte-identical for one sealed batch re-aggregated; four isolated one-byte tampers
+  rejected with no `TASK8_READY` left behind — raw frame and cleanup receipt ->
+  `CALIBRATION_BATCH_TAMPERED`, contract source hash -> `MEASUREMENT_CONTRACT_HASH_INVALID`,
+  source provenance edited inside the sealed batch -> `CALIBRATION_BATCH_TAMPERED`.
+- **Real weakness found by probe E and fixed in production:** the seal originally hashed every raw
+  file except `batch.json`, so the batch's own identity/status could be edited after sealing;
+  `close_measurement_batch` now stamps a self-hash over the canonical document and the aggregator
+  recomputes it.
+- **Design conformance:** `TASK8_READY` requires fov/collision/search/synchronization/execution all
+  PASS with release/retreat `UNMEASURED`; declared labels are never trusted; a qualified calibration
+  must carry `source_provenance_sha256` while partial reports stay valid (`validate_partial` admits
+  the optional field, `require_qualified`/`require_gate` require it).
+- **Boundaries:** no runtime, controller goal or motion started; unrelated dirty files preserved;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
