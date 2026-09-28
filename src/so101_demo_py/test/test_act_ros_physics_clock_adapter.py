@@ -77,6 +77,42 @@ def test_no_callback_does_not_imply_a_replayed_chunk_zero():
     assert hazards == []
 
 
+def test_valid_startup_epoch_zero_is_not_pending_and_does_not_poison_first_reset():
+    adapter, node, history, hazards, now = _fixture(
+        sample_capacity=1, chunk_capacity=1)
+    node.callback(_chunk(0, _sample(1, epoch=0)))
+    node.callback(_chunk(1, _sample(2, epoch=0)))
+    assert not adapter._pending
+    node.callback(_chunk(0, _sample(1)))
+    adapter.arm(_reset(1))
+    assert history.step_at(1)["received_monotonic_ns"] == NOW_NS
+    assert history.hazard is None and hazards == []
+
+
+def test_late_valid_epoch_zero_is_ignored_after_positive_reset_arm():
+    adapter, node, history, hazards, now = _fixture()
+    adapter.arm(_reset(1))
+    node.callback(_chunk(0, _sample(1, epoch=0)))
+    node.callback(_chunk(0, _sample(1)))
+    assert history.step_at(1)["sample"].reset_epoch == 1
+    assert history.hazard is None and hazards == []
+
+
+@pytest.mark.parametrize("damage", ["foreign", "malformed"])
+def test_foreign_or_malformed_epoch_zero_still_poison_first_reset(damage):
+    adapter, node, history, hazards, now = _fixture()
+    chunk = _chunk(0, _sample(1, epoch=0))
+    if damage == "foreign":
+        chunk.simulation_session_id = "foreign"
+        chunk.samples[0].simulation_session_id = "foreign"
+    else:
+        chunk.last_physics_step = 2
+    node.callback(chunk)
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_ARM_INVALID"):
+        adapter.arm(_reset(1))
+    assert history.hazard is not None and len(hazards) == 1
+
+
 def test_callback_waiting_on_arm_lock_is_consumed_once_with_original_receipt():
     adapter, node, history, hazards, now = _fixture()
     entered = threading.Event()
