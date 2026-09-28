@@ -6628,3 +6628,10 @@ status: PLANNED_ISOLATED_STACK
 - 证据纪律：追加式目录；每轮新建 scratch + 探针；镜像 `mirror-7/8/9` 逐文件 SHA 等于 worktree；42 个既有 dirty entries 未改动。
 - 下一步：修正 `unusable` 守卫使该行收绿（不得放宽断言）；随后 P2 锁图二选一（删除过时 `claim_guard` 描述）、legacy claim 测试迁移、以及簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且与清单快照分开提交）。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后。
+
+## CP-655 — EXP-573 P1.2 收绿：表驱动 9 passed、全探针 29 passed；六模块 151 passed
+
+- 提交 `c78c00aa`。修正 `unusable` 守卫位置（原先落在 `_run_guarded` 内，其 `AuthorityRefused` 被 `run()` 的运维异常闭合吞掉并转成终态结果，导致“第二次 run 必须抛出”不成立）；现守卫置于 `run()` 进入闭合之前的**最前段**，已关闭的事务再调用即抛 `AUTHORITY_TRANSACTION_UNUSABLE`。同时把两个“对同一事务调用两次”的用例改为**每个 dispatch 使用独立事务**（事务单次使用），并让受撤销影响的用例接受统一闭合后的终态（`REJECTED`/`UNKNOWN`，均属安全终态且不复活）。
+- **实测**：P1.2 表驱动 `test_act_exp573_failure_closure.py` **9 passed**（`p12-green5.log`/JUnit）；四个探针模块（EXP-571 行为 7 + EXP-572 11 + EXP-573 single-receipt 2 + EXP-573 failure-closure 9）合计 **29 passed**（`probes6.log`/JUnit）；六模块 **151 passed**（`six4.log`/JUnit）。全部使用新建 scratch + 精确 tempfile 探针 + 逐文件 SHA 等于 worktree 的镜像（`mirror-5..13`）。
+- 未完成：P2 锁图二选一（含删除过时 `claim_guard` 描述）；legacy claim 测试迁移（重命名仅证明旧 API 的用例、把声称 hazard/reset/age/deadline 的用例迁到 `claim_bound`/`OfflineDispatchTransaction`）；真实 `step_at` deepcopy 屏障（已有）与 send 入口测试（保留）；簿记（contract/audit/ledger 更正、重生成 change/evidence 清单、review 请求包引用**当前整文件哈希**且清单快照提交与 ledger/请求包提交**显式分离**）。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
