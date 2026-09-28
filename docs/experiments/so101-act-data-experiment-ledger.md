@@ -9630,3 +9630,27 @@ This resolves the design block **without authorizing runtime or motion**.
   `cli/act_inference_worker.py`.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-796 — Task 13: the isolation boundary and its frozen settings
+
+- **Delivered:** `config/act/runtime.yaml` + `act/runtime_config.py` and
+  `adapters/act/inference_process.py`, with `test_act_inference_process.py`.
+  - the frozen runtime settings: `device: cuda` with `allow_cpu_fallback: false`
+    (`RUNTIME_DEVICE_NOT_CUDA`), `queue_depth: 1` (`RUNTIME_QUEUE_DEPTH_INVALID`), positive
+    `request_timeout_s` / `max_reply_age_s` (`RUNTIME_TIMEOUT_INVALID`), closed keys;
+  - **one request in flight:** a second submit while one is pending is `INFERENCE_REQUEST_IN_FLIGHT` —
+    **refused rather than queued**, so a slow model cannot accumulate work behind the control loop;
+  - **a late answer is never applied:** `INFERENCE_REPLY_OUT_OF_ORDER` for a reply naming another
+    sequence, `INFERENCE_REPLY_STALE` for one older than the configured age — an action chunk computed for
+    a moment that has passed would command the arm with stale intent;
+  - **bounded waiting:** no reply inside the window returns `{}` (still pending), past the deadline
+    `INFERENCE_TIMEOUT`;
+  - **no orphan worker:** a transport that will not stop reports `INFERENCE_PROCESS_STILL_RUNNING` and the
+    boundary is **not** marked closed; after a clean close any submit is `INFERENCE_PROCESS_CLOSED`;
+  - clock and transport are injected, so no subprocess, socket or CUDA is touched in tests.
+- **Verification:** focused tests **3 passed** (`gate6-batch3-py-gate/task13b.{log,junit.xml}`), first run
+  green.
+- **Remaining in Task 13:** `cli/act_inference_worker.py` and its `setup.py` entry; then the live smoke
+  needs a trained bundle.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
