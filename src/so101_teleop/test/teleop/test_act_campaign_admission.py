@@ -158,6 +158,8 @@ def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="
             runtime_config_sha256=artifacts["runtime_config_sha256"],
             collection_config_sha256=artifacts["collection_config_sha256"],
             contact_policy_fingerprint=fingerprint,
+            calibration_report_path="calibration-report.json",
+            calibration_report_sha256="e" * 64,
         )
         manifest_path.write_bytes(_canonical(manifest))
     artifacts["manifest_path"] = str(manifest_path)

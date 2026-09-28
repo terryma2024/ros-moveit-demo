@@ -29,6 +29,8 @@ def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False
         anchors, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64,
         contact_policy_fingerprint="d" * 64,
+        calibration_report_path="calibration-report.json",
+        calibration_report_sha256="e" * 64,
     )
     manifest_path = tmp_path / "manifest.json"
     write_new_manifest(manifest_path, manifest)
