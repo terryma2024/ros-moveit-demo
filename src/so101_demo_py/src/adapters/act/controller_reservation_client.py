@@ -47,6 +47,7 @@ class ControllerReservationClient:
         self._deadline_port = deadline_port
         self._lock = threading.RLock()
         self._attempted = {}
+        self._authority = None
 
     def _deadline(self):
         deadline = time.monotonic() + self._timeout_s
@@ -168,6 +169,23 @@ class ControllerReservationClient:
                                   "controller_incarnation", "controller_boot_incarnation",
                                   "claim_monotonic_ns", "deadline_ns")
 
+    def install_authority(self, authority):
+        """Install the sealed broker-owned composition exactly once.
+
+        The dependency is type-checked against the real class (not duck-typed) and
+        cannot be rebound or replaced afterwards.
+        """
+
+        from so101_demo.adapters.act.broker_authority_composition import BrokerAuthorityComposition
+
+        with self._lock:
+            if self._authority is not None:
+                raise ValueError("CONTROLLER_RESERVATION_AUTHORITY_ALREADY_INSTALLED")
+            if type(authority) is not BrokerAuthorityComposition:
+                raise TypeError("CONTROLLER_RESERVATION_AUTHORITY_INVALID")
+            self._authority = authority
+        return True
+
     def _resolved_payload(self, kind, goal, *, handle, resolver, goal_uuid, now_ns):
         """Resolve an opaque handle through the sealed broker-owned resolver.
 
@@ -210,8 +228,8 @@ class ControllerReservationClient:
             self._attempted.setdefault(generation, set()).add(kind)
         return self._request(kind, 1, generation, native_uuid, payload)
 
-    def reserve_bound(self, ticket, kind, goal, goal_uuid, *, handle, resolver, now_ns=None):
-        """Reserve using only an opaque handle resolved by the sealed broker."""
+    def reserve_bound(self, ticket, kind, goal, goal_uuid, *, handle, now_ns=None):
+        """Reserve using only an opaque handle resolved by the installed authority."""
 
         if (not isinstance(ticket, tuple) or not ticket
                 or not isinstance(goal, FollowJointTrajectory.Goal)):
@@ -219,6 +237,9 @@ class ControllerReservationClient:
         native_uuid = uuid.UUID(goal_uuid).bytes
         if str(uuid.UUID(goal_uuid)) != goal_uuid:
             raise ValueError("CONTROLLER_RESERVATION_UUID_INVALID")
+        resolver = self._authority
+        if resolver is None:
+            raise ValueError("CONTROLLER_RESERVATION_AUTHORITY_MISSING")
         payload = self._resolved_payload(kind, goal, handle=handle, resolver=resolver,
                                          goal_uuid=goal_uuid, now_ns=now_ns)
         generation = ticket[0]
