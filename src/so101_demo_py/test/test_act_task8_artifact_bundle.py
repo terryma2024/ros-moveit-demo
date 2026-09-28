@@ -49,8 +49,7 @@ class ValidInputs:
             "schema_version": 2, "kind": "ACT_TASK8_LIVE", "manifest_sha256": "f" * 64})
 
 
-@pytest.fixture
-def valid_inputs(tmp_path):
+def _inputs(tmp_path):
     from so101_demo.act.task8_artifact_bundle import Task8ArtifactInputs
 
     source = ValidInputs(tmp_path / "evidence")
@@ -65,6 +64,11 @@ def valid_inputs(tmp_path):
         anchors=source.paths["anchors"], proposal=source.paths["proposal"],
         activation_receipt=source.paths["activation_receipt"], manifest=source.manifest,
         identities=source.identities)
+
+
+@pytest.fixture
+def valid_inputs(tmp_path):
+    return _inputs(tmp_path)
 
 
 def test_committed_bundle_survives_source_evidence_becoming_unavailable(valid_inputs, tmp_path):
@@ -156,3 +160,32 @@ def test_startup_validation_is_pure_and_acquires_nothing(valid_inputs, tmp_path,
     verified = validate_task8_startup_artifacts(payload)
     assert Path(verified.calibration_report).is_file()
     assert calls == []
+
+
+def test_validate_cli_reports_the_bundle_and_refuses_a_bare_directory(tmp_path):
+    from so101_demo.act.task8_artifact_bundle import prepare_task8_bundle
+    from so101_demo.cli import act_validate_task8_artifacts as validate_cli
+
+    inputs = _inputs(tmp_path)
+    receipt = prepare_task8_bundle(inputs, tmp_path / "bundle-cli")
+    assert validate_cli.main(["--preparation-receipt", str(receipt)]) == 0
+    with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
+        validate_cli.main(["--preparation-receipt", str(tmp_path / "bundle-cli" / "missing.json")])
+
+
+def test_legacy_live_entry_points_are_thin_forwarders():
+    """The two legacy modules must not carry a second implementation."""
+
+    here = Path(__file__).resolve()
+    # the CLI package lives at src/cli in the repository and at so101_demo/cli in a test mirror
+    candidates = [base / relative for base in here.parents
+                  for relative in ("src/cli", "cli", "so101_demo/cli")]
+    package = next((candidate for candidate in candidates
+                    if (candidate / "act_prepare_task8_live.py").is_file()), None)
+    assert package is not None, "the CLI package could not be located"
+    for name, target in (("act_prepare_task8_live.py", "act_prepare_pick_place_validation"),
+                         ("act_task8_live.py", "act_run_pick_place_validation")):
+        source = (package / name).read_text()
+        assert "sys.modules[__name__] = importlib.import_module(" in source
+        assert f"so101_demo.cli.{target}" in source
+        assert "def main" not in source
