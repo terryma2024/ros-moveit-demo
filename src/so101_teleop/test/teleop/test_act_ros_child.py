@@ -108,6 +108,12 @@ def qualified_report(tmp_path):
     return {
         "schema_version": 1, "status": "QUALIFIED", "source_commit": "a" * 40,
         "config_sha256": "b" * 64, "measurements": measurements,
+        # mandatory since 8P1/8P2, and a QUALIFIED report must trace to its live campaign (8P4)
+        "source_provenance_sha256": "c" * 64,
+        "live_campaign": {"case_root": str(tmp_path / "task8-live"),
+                          "campaign_result_sha256": "d" * 64,
+                          "preparation_receipt_sha256": "e" * 64,
+                          "journal_sha256": ["f" * 64] * 14},
         "checks": {name: "PASS" for name in
                    ("fov", "collision", "search", "synchronization", "execution", "release", "retreat")},
     }
