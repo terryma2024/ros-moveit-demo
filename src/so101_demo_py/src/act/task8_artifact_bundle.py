@@ -227,3 +227,29 @@ def task8_bundle_payload(receipt_path: Path) -> dict:
     verify_prepared_task8_bundle(receipt_path)
     return {"preparation_receipt_path": str(receipt_path),
             "preparation_receipt_sha256": _digest(receipt_path)}
+
+
+_TASK8_PAYLOAD_KEYS = ("preparation_receipt_path", "preparation_receipt_sha256")
+
+
+def require_task8_payload(payload: dict, *, collection_only_keys=()) -> dict:
+    """A Task 8 run's payload names its receipt and carries no collection-only field.
+
+    The two shapes are closed and exclusive: a payload that mixes them would leave admission unable
+    to decide which lifecycle it is authorising, so mixing is refused rather than resolved by
+    preference.
+    """
+
+    if type(payload) is not dict:
+        raise ValueError("TASK8_PAYLOAD_INVALID")
+    if any(key not in payload for key in _TASK8_PAYLOAD_KEYS):
+        raise ValueError("TASK8_PAYLOAD_INVALID")
+    path = payload["preparation_receipt_path"]
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise ValueError("TASK8_PAYLOAD_INVALID")
+    digest = payload["preparation_receipt_sha256"]
+    if not isinstance(digest, str) or _SHA.fullmatch(digest) is None:
+        raise ValueError("TASK8_PAYLOAD_INVALID")
+    if set(collection_only_keys) & set(payload):
+        raise ValueError("TASK8_PAYLOAD_SHAPE_CONFLICT")
+    return dict(payload)
