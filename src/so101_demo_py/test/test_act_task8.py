@@ -26,6 +26,7 @@ class FakePort:
         self.supported = True
         self.attached = True
         self.release_epoch = 0
+        self.physics_step = 0
 
     def begin(self, req):
         self.calls.append(("begin", req["lifecycle"]))
@@ -34,9 +35,11 @@ class FakePort:
                 "full_restart": req["lifecycle"] == "FULL_RESTART"}
 
     def evidence(self, phase, req):
+        self.physics_step += 1
         return {
             "phase": phase, "session_id": req["session_id"], "attempt_id": req["attempt_id"],
             "reset_epoch": 4, "release_epoch": self.release_epoch,
+            "physics_step": self.physics_step,
             "planning_ok": True, "controller_reference_ok": True, "joint_feedback_ok": True,
             "contact_ok": True, "mujoco_ok": True, "planning_scene_ok": True,
             "head_rgb_ok": True, "wrist_rgb_ok": True,
@@ -45,7 +48,8 @@ class FakePort:
             "bilateral_contact": phase in ("CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN"),
             "micro_lift_confirmed": phase in ("MICRO_LIFT", "TRANSPORT", "ALIGN"),
             "cup_off_table": phase in ("MICRO_LIFT", "TRANSPORT", "ALIGN"),
-            "cup_supported": self.supported, "released": phase in ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK"),
+            "cup_supported": self.supported and phase not in ("MICRO_LIFT", "TRANSPORT", "ALIGN"),
+            "released": phase in ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK"),
             "no_fingertip_contact": True, "placement_stable": True, "retreat_stable": True,
         }
 
@@ -60,10 +64,25 @@ class FakePort:
 
     def release_preflight(self, req):
         self.calls.append(("release_preflight", None))
+        self.physics_step += 1
         return {"holding_state": "HOLDING", "cup_supported": self.supported,
                 "fresh": True, "planning_attached": self.attached,
                 "session_id": req["session_id"], "attempt_id": req["attempt_id"],
-                "reset_epoch": 4, "release_epoch": self.release_epoch}
+                "reset_epoch": 4, "release_epoch": self.release_epoch,
+                "physics_step": self.physics_step}
+
+    def set_down(self, req):
+        self.calls.append(("set_down", None))
+        self.physics_step += 1
+        return {"session_id": req["session_id"], "attempt_id": req["attempt_id"],
+                "reset_epoch": 4, "release_epoch": self.release_epoch,
+                "physics_step": self.physics_step,
+                "holding_state": "HOLDING", "cup_supported": self.supported,
+                "bilateral_contact": True, "controller_stopped": True,
+                "controller_reference_ok": True, "joint_feedback_ok": True,
+                "planning_attached": self.attached, "contact_ok": True,
+                "mujoco_ok": True, "planning_scene_ok": True,
+                "head_rgb_ok": True, "wrist_rgb_ok": True}
 
     def detach_moveit(self, req):
         self.calls.append(("detach_moveit", None))
@@ -135,7 +154,7 @@ def test_release_detaches_before_opening_and_retreat_has_two_ordered_segments():
 def test_unsupported_release_never_sends_detach_or_open():
     port = FakePort()
     port.supported = False
-    with pytest.raises(PickPlaceError, match="RELEASE_UNSUPPORTED"):
+    with pytest.raises(PickPlaceError, match="SET_DOWN_EVIDENCE_INVALID"):
         PickPlaceRunner(port).run(request("full", None))
     assert ("detach_moveit", None) not in port.calls
     assert ("phase", "RELEASE") not in port.calls
@@ -185,3 +204,42 @@ def test_release_requires_new_epoch_evidence():
     with pytest.raises(PickPlaceError, match="PHASE_EVIDENCE_INVALID"):
         PickPlaceRunner(port).run(request("full", None))
     assert port.calls[-1][0] == "safe_stop"
+
+
+def test_full_set_down_occurs_after_suspended_align_and_before_detach():
+    port = FakePort()
+    PickPlaceRunner(port).run(request("full", None))
+    assert port.calls.index(("phase", "ALIGN")) < port.calls.index(("set_down", None))
+    assert port.calls.index(("set_down", None)) < port.calls.index(("release_preflight", None))
+    assert port.calls.index(("release_preflight", None)) < port.calls.index(("detach_moveit", None))
+    assert port.calls.index(("detach_moveit", None)) < port.calls.index(("phase", "RELEASE"))
+
+
+def test_set_down_must_prove_new_supported_step_before_detach_or_open():
+    class StaleSetDown(FakePort):
+        def set_down(self, req):
+            result = super().set_down(req)
+            result["physics_step"] -= 1
+            return result
+
+    port = StaleSetDown()
+    with pytest.raises(PickPlaceError, match="SET_DOWN_EVIDENCE_INVALID"):
+        PickPlaceRunner(port).run(request("full", None))
+    assert ("detach_moveit", None) not in port.calls
+    assert ("phase", "RELEASE") not in port.calls
+    assert port.calls[-1] == ("safe_stop", "TASK8_ABORT")
+
+
+@pytest.mark.parametrize("missing", ["controller_reference_ok", "joint_feedback_ok"])
+def test_set_down_requires_controller_reference_and_feedback(missing):
+    class MissingControllerEvidence(FakePort):
+        def set_down(self, req):
+            result = super().set_down(req)
+            result[missing] = False
+            return result
+
+    port = MissingControllerEvidence()
+    with pytest.raises(PickPlaceError, match="SET_DOWN_EVIDENCE_INVALID"):
+        PickPlaceRunner(port).run(request("full", None))
+    assert ("detach_moveit", None) not in port.calls
+    assert ("phase", "RELEASE") not in port.calls

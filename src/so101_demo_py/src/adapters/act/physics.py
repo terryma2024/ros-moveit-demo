@@ -110,8 +110,11 @@ class MujocoPathChecker:
             except (KeyError,TypeError,ValueError,IndexError,OverflowError) as error:
                 return self._reject('PATH_INPUT_INVALID',error=repr(error))
 
+    def _validate_prefix(self,prefix):
+        return validate_action_prefix(prefix)
+
     def _check(self,prefix,snapshot):
-        checked=validate_action_prefix(prefix)
+        checked=self._validate_prefix(prefix)
         if snapshot['model_sha256']!=self.model_sha256:return self._reject('PATH_MODEL_INVALID')
         if snapshot['holding_state'] not in ('EMPTY','HOLDING'):return self._reject('HOLDING_UNKNOWN')
         if snapshot['phase'] not in ('APPROACH','CONTACT','LIFT','TRANSPORT','RELEASE','RETREAT','FINAL'):
