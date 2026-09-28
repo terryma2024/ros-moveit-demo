@@ -58,7 +58,9 @@ def _frozen(tmp_path, *, episodes=10, cross_split=False, freeze_overrides=None, 
               "model_source": {"name": "act-v1", "sha256": "a" * 64},
               "dataset_sha256": "b" * 64, "config_sha256": "c" * 64, "policy_path": "policy.bin",
               "policy_sha256": hashlib.sha256(b"model").hexdigest(),
-              "normalization": {"split": "train", "mean": [0.0] * 6}}
+              "normalization": {"split": "train", "mean": [0.0] * 6},
+              "action": {"chunk_size": 10, "execution_prefix": 1,
+                         "temporal_ensembling": False, "tail_padding_mask": True}}
     assert set(bundle) == set(BUNDLE_KEYS)
     bundle_path = tmp_path / "bundle.json"
     bundle_path.write_text(json.dumps(bundle))

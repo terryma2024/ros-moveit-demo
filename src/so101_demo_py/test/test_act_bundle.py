@@ -71,7 +71,9 @@ def _write_bundle(tmp_path, *, policy_bytes=b"model-bytes", normalization=None, 
                 # `normalization or {...}` would repair the deliberately empty normalisation,
                 # so the case would never reach the guard it exists to exercise (as in CP-767)
                 "normalization": ({"split": "train", "mean": [0.0]}
-                                  if normalization is None else normalization)}
+                                  if normalization is None else normalization),
+                "action": {"chunk_size": 10, "execution_prefix": 1,
+                           "temporal_ensembling": False, "tail_padding_mask": True}}
     document.update(overrides)
     path = tmp_path / "bundle.json"
     path.write_text(json.dumps(document))
