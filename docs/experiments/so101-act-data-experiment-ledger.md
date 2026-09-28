@@ -7289,3 +7289,38 @@ This closes the last avenue that did not require motion. Evidence:
 - **Boundaries:** no process, controller goal or motion started; no calibration authored; formal
   accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED; gazebo formatting condition
   out of scope; evidence preserved.
+
+## CP-696 — head-search runtime_config authored with provenance; the measurement producer is missing
+
+Authorized artifact authoring began with the one artifact whose specification is fully determined
+by production code.
+
+- **Authored:** `experiments/gate6-runtime/artifacts/head-search-runtime-config.json`, sha256
+  `dc84e3d66173d3d06f68a101d529b3a5de561960db25325909c6f62f34957532`. Specification read from
+  `so101_demo.act.head_search_binding.validate_head_search_binding`: literal camera values
+  (`head_camera_frame`, 640x480), `yolo_seg` detector with a hash-matched weights path,
+  `image_size_px = 640`, bounded thread counts and version strings, and bounded positive motion
+  values. Inputs recorded: weights sha256
+  `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781`, `torch 2.13.0+cu130`,
+  `ultralytics 8.4.115`, `cuda available`, interpreter `/data/work/venvs/so101-grounded-sam/bin/python`.
+  Explicit choices (documented so the calibration sample can repeat the descriptor exactly):
+  `requested_device=cuda`, `allow_cpu_fallback=True`, `torch_threads=4`, `torch_interop_threads=1`,
+  `model_id=yolo11n-seg-plastic-cup`, `motion={0.02, 0.02, 1.0}`.
+- **Verified:** the production validator returned `HEAD_SEARCH_SAMPLE_MISMATCH` (the
+  calibration-pairing gate) rather than `HEAD_SEARCH_CONFIG_INVALID`, proving the runtime half meets
+  every schema constraint.
+- **Blocking gap, code-level:** the paired `TASK8_READY` calibration report requires a
+  `head_search_qualification` sample, and `head_search_qualification` / `observed_lock_frames`
+  appear in exactly three files — the validator and two test modules — with **no producer**. The
+  only calibration documents in the evidence root (exp130-wrist-camera, exp129, exp228) are all
+  `CALIBRATION_REQUIRED` with 7 of the required measurement keys and stale source/config identities.
+  The existing calibration CLIs (`act_collect_contact_calibration`, `act_analyze_contact_calibration`)
+  produce the contact-policy proposal — the approved `proposal-pass2.json` — not the `_MEASURED`
+  head-search calibration.
+- **Also still undetermined:** `collection_config` (the plan's
+  `src/so101_demo_py/config/act/parallel_collection_v3.yaml` does not exist and no `*collection*`
+  config exists in the repo) and `source` (no approved document names the file `source_sha256`
+  binds).
+- **Boundaries:** no process, controller goal or motion started; no measurement run; the authored
+  artifact lives in the evidence root, not the source tree; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED; evidence preserved.
