@@ -6669,3 +6669,12 @@ status: PLANNED_ISOLATED_STACK
 - **回退后复核（新建 scratch + tempfile 探针 PASS + 镜像 `mirror-20`）**：六模块 **151 passed**（`verify2-six.log`/JUnit）；四探针 **29 passed**（`verify2-probes.log`/JUnit）。P1.1（单 receipt + 状态一致性检查）、P1.2（统一失败闭合）与 P2（控制器身份快照在边界前取得、`reserve` 侧重校验）的成果完整保留。
 - 仍未完成：(a) legacy claim 测试迁移——下一轮先读该文件**实际导入的异常符号**再改写，并逐个用例验证；(b) 簿记——contract/audit/ledger 最终更正、重生成 **change/evidence 两份清单**、review 请求包引用**当前整文件哈希**，且“清单快照提交”与“ledger/请求包提交”**显式分离**。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-660 — EXP-573 legacy claim 测试迁移达标：authority 29 passed、六模块 151 passed、探针 29 passed
+
+- 提交 `a1b711e0`。按上一轮记录的教训，先读该文件**实际导入的符号**（它只从 admission 测试模块导入 `AdmissionRefused`，并无 `at.` 别名），随后逐个用例迁移：
+  1. `test_hazard_before_claim_produces_zero_reserve_and_zero_send` → 重命名为 `test_removed_legacy_claim_refuses_and_the_supported_path_sends_nothing`，既断言旧 API 以 `AUTHORITY_LEGACY_CLAIM_REMOVED` 拒绝，又在**支持的路径**上补上真实断言：撤销 owner 后经 `OfflineDispatchTransaction` 得到 `REJECTED/UNKNOWN` 且 `reserve_calls == 0`、`accepted_commands == 0`；
+  2. `test_reset_hazard_and_age_crossing_after_final_read_refuse_the_permit` → 重命名为 `test_refusing_history_and_a_caller_built_domain_both_refuse`，断言旧 API 拒绝，且**调用方自造的 stub 域无法 seal**（`AUTHORITY_DOMAIN_INCOMPLETE`），即任何调用方替换都不可能走到 bound claim。
+- **实测**（新建 scratch + tempfile 探针 PASS + 镜像 `mirror-21` 逐文件 SHA 等于 worktree）：`test_act_authority_transaction.py` **29 passed**（`legacy4.log`/JUnit）；六模块 **151 passed in 0.95s**（`six-legacy.log` + manifest/JUnit）；四探针 **29 passed in 0.51s**（`probes-legacy.log`/JUnit）。
+- 至此 P1.1（单 receipt + 状态一致性检查）、P1.2（统一失败闭合）、P2（边界前控制器身份快照）、legacy 测试迁移均已完成且验证；**下一轮只剩簿记**：contract/audit/ledger 最终更正、重生成 **change/evidence 两份清单**、review 请求包引用**当前整文件哈希**，并把“清单快照提交”与“ledger/请求包提交”**显式分离**，随后冻结 HEAD 并停在 Gate 5 请求 review 11。**本轮不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
