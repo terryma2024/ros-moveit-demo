@@ -406,3 +406,34 @@ def test_recent_with_receipts_rejects_a_window_that_ages_out_during_the_copy():
     with pytest.raises(ValueError, match="PHYSICS_CLOCK_STALE"):
         history.recent_with_receipts()
     assert history.hazard == "PHYSICS_CLOCK_STALE"
+
+
+def test_history_validates_and_retains_the_owned_snapshot(monkeypatch):
+    """Validation and retention must both apply to the copied sample.
+
+    A caller that mutates the live message between validation and retention must
+    not be able to change what the history accepts or keeps.
+    """
+
+    import so101_demo.adapters.act.physics_clock_history as module
+
+    real = module.copy.deepcopy
+    state = {"fired": False}
+
+    def mutating(value, *args, **kwargs):
+        owned = real(value, *args, **kwargs)
+        if not state["fired"] and isinstance(value, module.PhysicsStepEvidence):
+            state["fired"] = True
+            value.model_qpos = [9.0, 9.0]
+            value.physics_step = 999
+        return owned
+
+    now = [NOW_NS]
+    history = _history(now)
+    sample = _sample(1)
+    monkeypatch.setattr(module.copy, "deepcopy", mutating)
+    assert history.accept_chunk(_chunk(0, sample)) is True
+    monkeypatch.setattr(module.copy, "deepcopy", real)
+    retained = history.step_at(1)
+    assert tuple(retained["sample"].model_qpos) == (.1, .2)
+    assert retained["sample"].physics_step == 1
