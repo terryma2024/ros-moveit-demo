@@ -109,7 +109,7 @@ def validate_partial(report):
     # a partial report may or may not name its provenance: the field is optional here and
     # becomes mandatory only for TASK8_READY/QUALIFIED reports
     allowed = {"schema_version", "status", "source_commit", "config_sha256",
-               "source_provenance_sha256", "measurements", "checks"}
+               "source_provenance_sha256", "measurements", "checks", "live_campaign"}
     if not isinstance(report, dict) or not set(report) <= allowed or not {
             "schema_version", "status", "source_commit", "config_sha256",
             "measurements", "checks"} <= set(report):
@@ -142,10 +142,15 @@ def require_source_provenance(report: dict) -> str:
 
 def require_qualified(report):
     require_source_provenance(report)
-    fields(report, ("schema_version", "status", "source_commit", "config_sha256",
-                    "source_provenance_sha256", "measurements", "checks"))
+    base = ("schema_version", "status", "source_commit", "config_sha256",
+            "source_provenance_sha256", "measurements", "checks")
+    # a report that does not claim QUALIFIED is answered with the documented code, so the campaign
+    # requirement is only imposed on a report that actually claims to be qualified
+    if (not isinstance(report, dict) or any(key not in report for key in base)
+            or report.get("status") != "QUALIFIED"):
+        raise ValueError("CALIBRATION_REQUIRED")
+    fields(report, base + ("live_campaign",))
     if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
-            or report["status"] != "QUALIFIED"
             or not isinstance(report["source_commit"], str)
             or re.fullmatch(r"[0-9a-f]{40}", report["source_commit"]) is None):
         raise ValueError("CALIBRATION_REQUIRED")
@@ -154,6 +159,23 @@ def require_qualified(report):
     if any(value != "PASS" for value in report["checks"].values()):
         raise ValueError("CALIBRATION_REQUIRED")
     _validate_measurements(report["measurements"], complete=True)
+    _validate_live_campaign(report["live_campaign"])
+
+
+def _validate_live_campaign(block: object) -> None:
+    """A QUALIFIED report must trace to the live campaign that produced it."""
+
+    fields(block, ("case_root", "campaign_result_sha256", "preparation_receipt_sha256",
+                   "journal_sha256"))
+    if not isinstance(block["case_root"], str) or not block["case_root"]:
+        raise ValueError("CALIBRATION_LIVE_CAMPAIGN_INVALID")
+    sha256(block["campaign_result_sha256"])
+    sha256(block["preparation_receipt_sha256"])
+    journals = block["journal_sha256"]
+    if not isinstance(journals, list) or len(journals) != 14:
+        raise ValueError("CALIBRATION_LIVE_CAMPAIGN_INVALID")
+    for digest in journals:
+        sha256(digest)
 
 
 def require_gate(report: dict, gate: str) -> None:
@@ -163,8 +185,14 @@ def require_gate(report: dict, gate: str) -> None:
         return
     if gate not in ("pick_place_validation", "task8_live"):
         raise ValueError("CALIBRATION_GATE_INVALID")
-    fields(report, ("schema_version", "status", "source_commit", "config_sha256",
-                    "source_provenance_sha256", "measurements", "checks"))
+    # a report may carry the live-campaign provenance block; the gate check is about the seven
+    # base fields and must not reject a qualification's extra provenance
+    base = ("schema_version", "status", "source_commit", "config_sha256",
+            "source_provenance_sha256", "measurements", "checks")
+    if not isinstance(report, dict) or any(key not in report for key in base) \
+            or not set(report) <= set(base) | {"live_campaign"}:
+        from .contracts import ContractError
+        raise ContractError("FIELDS_INVALID")
     require_source_provenance(report)
     if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
             or report["status"] != "TASK8_READY"

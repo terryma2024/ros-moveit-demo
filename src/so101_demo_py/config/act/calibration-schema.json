@@ -1,938 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "status",
-    "source_commit",
-    "config_sha256",
-    "measurements",
-    "checks",
-    "source_provenance_sha256"
-  ],
   "properties": {
-    "schema_version": {
-      "const": 1
-    },
-    "status": {
-      "enum": [
-        "CALIBRATION_REQUIRED",
-        "TASK8_READY",
-        "QUALIFIED"
-      ]
-    },
-    "source_commit": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{40}$"
-    },
-    "config_sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "measurements": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "head_translation_m": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 3,
-              "maxItems": 3,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "m"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "head_rpy_rad": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 3,
-              "maxItems": 3,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "rad"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "wrist_translation_m": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 3,
-              "maxItems": 3,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "m"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "wrist_rpy_rad": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 3,
-              "maxItems": 3,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "rad"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "head_intrinsics_px": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 4,
-              "maxItems": 4,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "px"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "wrist_intrinsics_px": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 4,
-              "maxItems": 4,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "px"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "yaw_zero_bearing_rad": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "rad"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "horizontal_fov_rad": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "rad"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "coarse_step_rad": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "rad"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "search_timeout_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "max_fine_corrections": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "unit": {
-              "const": "count"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "max_fine_total_rad": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "rad"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "min_confidence": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "1"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "tracking_iou": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "1"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "min_bbox_aspect": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "1"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "center_deadband_px": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "px"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "vertical_bounds_px": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 2,
-              "maxItems": 2,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "px"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "min_area_px2": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "px^2"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "lock_valid_neck_rad": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 2,
-              "maxItems": 2,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "rad"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "velocity_limit_rad_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 6,
-              "maxItems": 6,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "rad/s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "acceleration_limit_rad_s2": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "array",
-              "minItems": 6,
-              "maxItems": 6,
-              "items": {
-                "type": "number"
-              }
-            },
-            "unit": {
-              "const": "rad/s^2"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "max_age_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "max_skew_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "grasp_occlusion_window_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "submit_lead_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "stop_velocity_rad_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "rad/s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "stop_latency_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "support_distance_m": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "m"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "release_stable_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "retreat_distance_m": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "m"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "placement_stable_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "path_step_s": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "s"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        },
-        "path_clearance_m": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "value",
-            "unit",
-            "sample_path",
-            "sample_sha256"
-          ],
-          "properties": {
-            "value": {
-              "type": "number"
-            },
-            "unit": {
-              "const": "m"
-            },
-            "sample_path": {
-              "type": "string"
-            },
-            "sample_sha256": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{64}$"
-            }
-          }
-        }
-      }
-    },
     "checks": {
-      "type": "object",
       "additionalProperties": false,
-      "required": [
-        "collision",
-        "execution",
-        "fov",
-        "release",
-        "retreat",
-        "search",
-        "synchronization"
-      ],
       "properties": {
-        "retreat": {
-          "enum": [
-            "PASS",
-            "FAIL",
-            "UNMEASURED"
-          ]
-        },
-        "fov": {
+        "collision": {
           "enum": [
             "PASS",
             "FAIL",
@@ -946,7 +19,7 @@
             "UNMEASURED"
           ]
         },
-        "search": {
+        "fov": {
           "enum": [
             "PASS",
             "FAIL",
@@ -960,25 +33,985 @@
             "UNMEASURED"
           ]
         },
-        "synchronization": {
+        "retreat": {
           "enum": [
             "PASS",
             "FAIL",
             "UNMEASURED"
           ]
         },
-        "collision": {
+        "search": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "UNMEASURED"
+          ]
+        },
+        "synchronization": {
           "enum": [
             "PASS",
             "FAIL",
             "UNMEASURED"
           ]
         }
-      }
+      },
+      "required": [
+        "collision",
+        "execution",
+        "fov",
+        "release",
+        "retreat",
+        "search",
+        "synchronization"
+      ],
+      "type": "object"
+    },
+    "config_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "live_campaign": {
+      "additionalProperties": false,
+      "properties": {
+        "campaign_result_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "case_root": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "journal_sha256": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 14,
+          "minItems": 14,
+          "type": "array"
+        },
+        "preparation_receipt_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "case_root",
+        "campaign_result_sha256",
+        "preparation_receipt_sha256",
+        "journal_sha256"
+      ],
+      "type": "object"
+    },
+    "measurements": {
+      "additionalProperties": false,
+      "properties": {
+        "acceleration_limit_rad_s2": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad/s^2"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 6,
+              "minItems": 6,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "center_deadband_px": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "px"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "coarse_step_rad": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "grasp_occlusion_window_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "head_intrinsics_px": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "px"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "head_rpy_rad": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "head_translation_m": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "horizontal_fov_rad": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "lock_valid_neck_rad": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "max_age_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "max_fine_corrections": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "count"
+            },
+            "value": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "max_fine_total_rad": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "max_skew_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "min_area_px2": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "px^2"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "min_bbox_aspect": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "min_confidence": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "path_clearance_m": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "path_step_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "placement_stable_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "release_stable_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "retreat_distance_m": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "search_timeout_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "stop_latency_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "stop_velocity_rad_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad/s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "submit_lead_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "support_distance_m": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "tracking_iou": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "velocity_limit_rad_s": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad/s"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 6,
+              "minItems": 6,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "vertical_bounds_px": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "px"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "wrist_intrinsics_px": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "px"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "wrist_rpy_rad": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "wrist_translation_m": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "value": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        },
+        "yaw_zero_bearing_rad": {
+          "additionalProperties": false,
+          "properties": {
+            "sample_path": {
+              "type": "string"
+            },
+            "sample_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "unit": {
+              "const": "rad"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit",
+            "sample_path",
+            "sample_sha256"
+          ],
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_commit": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
     },
     "source_provenance_sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "CALIBRATION_REQUIRED",
+        "TASK8_READY",
+        "QUALIFIED"
+      ]
     }
-  }
+  },
+  "required": [
+    "schema_version",
+    "status",
+    "source_commit",
+    "config_sha256",
+    "measurements",
+    "checks",
+    "source_provenance_sha256"
+  ],
+  "type": "object"
 }
