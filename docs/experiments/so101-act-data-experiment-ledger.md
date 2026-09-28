@@ -6318,3 +6318,10 @@ status: PLANNED_ISOLATED_STACK
 - 被测源码 provenance 已更新（`tested-source-hashes.txt`），checkpoint SHA256 `b47901d0538677d987fee5882120eb9de1485a6ede0cbf392590529b912b0c9b`。
 - 未完项（复核 required 3–7）：补全 timeout/unknown 的不可逆 close 语义；更新 Gate 6 契约（移除 `consume_stage`/callback，纳入状态机/锁序/完整 receipt-timeout）；更正 `commit_receipt` 的 immutable/O(1) 说法；追加更正 CP-611/613/614 与 lock audit；严格同集 RED→GREEN 后请求第八次复核。
 - 边界：Gate 5 仍 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-620 — EXP-570 续修：生命周期用例改用控制器真实消费记录（仍 7 failed）
+
+- 提交 `8d48e481`。按第七次复核 “测试不得手工读取 private record 拼 receipt” 的要求，把四个生命周期用例的公共辅助 `_end_to_end` 重写为**运行真实离线 dispatch 事务**（`prepare -> claim -> reserve -> receive -> timeout -> receipt`），receipt 字段全部来自 `ReservationFakeControllerPort.last_receipt(...)`（控制器**真实消费**的记录），不再从 registry 私有状态拼装。
+- 诚实状态：集合仍为 **151 个用例、7 failed / 144 passed**。7 个失败用例：`test_same_goal_uuid_cannot_be_accepted_twice_with_a_different_permit`、`test_timeout_then_late_acceptance_never_revives_the_permit`、`test_duplicate_receipt_after_terminal_state_is_refused`、`test_controller_restart_invalidates_the_receipt_incarnation`、`test_generation_one_reservation_is_dead_after_rearm_to_two`、`test_receipt_observed_at_zero_after_thirty_one_seconds_is_refused`、`test_real_copy_and_io_inside_the_dispatch_nodes_with_revoke_progressing`。清单固化于 `experiments/exp570-dispatch-transaction/failing-tests.txt`；checkpoint SHA256 `1a677dc3ce47a65b083dc7e24b499dc8258f31453341de05058f3fcb64889e7b`。**未声明任何关闭**。
+- 说明：本轮内多次迭代未能把这 7 项收绿，且我已接近本轮可用的上下文预算；继续盲改有引入新缺陷的风险（此前已发生过一次需要回退的批量改动）。因此在此停下并如实记录，下一轮应从这 7 个具名用例出发做一次专注修复。
+- 边界：Gate 5 仍 OPEN；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
