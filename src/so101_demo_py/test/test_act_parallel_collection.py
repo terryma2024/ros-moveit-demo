@@ -252,3 +252,74 @@ def test_the_real_wave_size_partitions_a_full_formal_manifest(tmp_path):
     assert tuple(map(len, outcome["waves"])) == (20, 20, 5)
     assert outcome["scene_count"] == 45 and len(outcome["collected"]) == 45
     assert _json.loads(open(outcome["campaign_index"]).read())["scene_count"] == 45
+
+
+def test_workload_refuses_an_unadmitted_lease_and_never_widens_a_wave(tmp_path):
+    from so101_demo.act.parallel_collection import (
+        ActFixedCollectionWorkload, FixedActCollectionCampaign,
+    )
+
+    rows = [{"scene_id": f"act-{index}", "split": "train"} for index in range(3)]
+    manifest = {"kind": "W8", "scenarios": rows,
+                "qualification_contract": {"revoked": False, "scenes": 40}}
+    campaign = FixedActCollectionCampaign(manifest, {"max_wave_size": 2, "qualification": False},
+                                          context=None, root=tmp_path,
+                                          collect_port=_CollectPort(), claim=_Claim())
+    workload = ActFixedCollectionWorkload(campaign, runtime=None)
+    lease = {"admitted": True, "start_event_id": "start-1", "start_event_type": "campaign_start",
+             "reset_epoch": 4}
+    outcome = workload.run_authorized(lease, start_event_id="start-1",
+                                      start_event_type="campaign_start", reset_epoch=4)
+    assert outcome["scene_count"] == 3 and outcome["claim_released"] is True
+    assert workload.kind == "act_fixed_collection"
+
+    # an unadmitted or mismatched lease refuses before any collection happens
+    for bad in ({"admitted": False, "start_event_id": "start-1",
+                 "start_event_type": "campaign_start", "reset_epoch": 4},
+                {"admitted": True, "start_event_id": "other",
+                 "start_event_type": "campaign_start", "reset_epoch": 4},
+                {"admitted": True, "start_event_id": "start-2",
+                 "start_event_type": "campaign_start", "reset_epoch": 4},
+                None):
+        with pytest.raises(ValueError, match="ACT_COLLECTION_LEASE_UNAVAILABLE"):
+            ActFixedCollectionWorkload(campaign, runtime=None).run_authorized(
+                bad, start_event_id="start-1", start_event_type="campaign_start", reset_epoch=4)
+    with pytest.raises(ValueError, match="ACT_COLLECTION_RESET_EPOCH_MISMATCH"):
+        ActFixedCollectionWorkload(campaign, runtime=None).run_authorized(
+            lease, start_event_id="start-1", start_event_type="campaign_start", reset_epoch=9)
+
+
+def test_workload_runs_inside_a_boundary_when_the_worker_supplies_one(tmp_path):
+    from so101_demo.act.parallel_collection import (
+        ActFixedCollectionWorkload, FixedActCollectionCampaign,
+    )
+
+    bounds = []
+
+    def boundary(work):
+        bounds.append("enter")
+        try:
+            return work()
+        finally:
+            bounds.append("exit")
+
+    manifest = {"kind": "W8", "scenarios": [{"scene_id": "act-0", "split": "train"}],
+                "qualification_contract": {"revoked": False, "scenes": 40}}
+    campaign = FixedActCollectionCampaign(manifest, {"max_wave_size": 20, "qualification": False},
+                                          context=None, root=tmp_path, collect_port=_CollectPort(),
+                                          claim=_Claim())
+    workload = ActFixedCollectionWorkload(campaign, runtime=None, boundary=boundary)
+    workload.run_authorized({"admitted": True, "start_event_id": "s", "start_event_type": "t",
+                             "reset_epoch": 1}, start_event_id="s", start_event_type="t",
+                            reset_epoch=1)
+    assert bounds == ["enter", "exit"]
+
+
+def test_workload_needs_a_campaign_that_can_run():
+    from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
+
+    workload = ActFixedCollectionWorkload(object(), runtime=None)
+    with pytest.raises(ValueError, match="ACT_COLLECTION_CAMPAIGN_UNAVAILABLE"):
+        workload.run_authorized({"admitted": True, "start_event_id": "s",
+                                 "start_event_type": "t", "reset_epoch": 1},
+                                start_event_id="s", start_event_type="t", reset_epoch=1)
