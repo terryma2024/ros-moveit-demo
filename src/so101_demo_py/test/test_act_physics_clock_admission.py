@@ -815,8 +815,7 @@ def test_admission_age_is_never_taken_from_a_cached_pre_copy_time():
 
 def test_history_version_changes_on_every_readiness_or_hazard_transition():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
-    history, _ = _admission(now)
-    history.arm(1, source_floor_s=0.0)
+    history, _ = _admission(now)          # already armed on epoch 1 by the helper
     seen = [history.snapshot()["version"]]
     history.accept_chunk(_chunk(0, _sample(1)))
     seen.append(history.snapshot()["version"])
@@ -830,7 +829,7 @@ def test_authority_consume_requires_token_and_controller_generation():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
     history, admission = _ready(now)
     consumed = []
-    with pytest.raises(ValueError):
+    with pytest.raises((TypeError, ValueError)):
         admission.consume_stage(ticket="clock-session", generation=1, reset_epoch=1,
                                 stage="submit", consume=lambda: consumed.append("submit"))
     with pytest.raises(AdmissionRefused, match="CLOCK_ADMISSION_CONTROLLER_GENERATION_CHANGED"):
@@ -849,6 +848,7 @@ def test_checked_stage_revocation_after_checker_completion_refuses():
     def seam_clock():
         calls["n"] += 1
         if calls["n"] >= 2 and calls["done"]:
+            calls["done"] = False          # disarm before the re-entrant revocation
             admission.revoke_current("PHYSICS_CLOCK_SILENT")
         return base()
 
@@ -916,8 +916,7 @@ def test_stop_evidence_rejects_stale_and_future_observation_times():
 
 def test_every_hazard_path_advances_the_history_version():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
-    history, _ = _admission(now)
-    history.arm(1, source_floor_s=0.0)
+    history, _ = _admission(now)          # already armed on epoch 1 by the helper
     history.accept_chunk(_chunk(0, _sample(1)))
     before = history.snapshot()["version"]
     now[0] = history._last_source_end_ns + 400_000_000

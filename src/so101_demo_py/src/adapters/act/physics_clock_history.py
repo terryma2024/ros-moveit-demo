@@ -132,10 +132,14 @@ class PhysicsClockHistory:
         if not self._first_chunk_seen:
             if (self.first_chunk_timeout_ns is not None
                     and now_ns - self._armed_monotonic_ns > self.first_chunk_timeout_ns):
+                # Hazard transitions from None exactly once, so the version
+                # advances exactly once per real transition.
                 self.hazard = "PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT"
+                self.version += 1
         elif (self.max_silence_ns is not None
                 and now_ns - self._last_source_end_ns > self.max_silence_ns):
             self.hazard = "PHYSICS_CLOCK_SILENT"
+            self.version += 1
 
     def accept_chunk(self, chunk, *, received_monotonic_ns=None):
         with self._lock:
