@@ -78,6 +78,8 @@ def prepared(tmp_path):
     manifest = build_task8_live_manifest(
         ANCHORS, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
+        calibration_report_path="calibration-report.json",
+        calibration_report_sha256="e" * 64,
     )
     path = tmp_path / "manifest.json"
     write_new_manifest(path, manifest)
@@ -89,25 +91,33 @@ def prepared(tmp_path):
     return spec, context
 
 
-def test_missing_full_restart_owner_refuses_before_admission(tmp_path):
+def test_missing_full_restart_owner_refuses_before_admission(tmp_path, monkeypatch):
     spec, context = prepared(tmp_path)
     worker = Worker(context)
     lifecycle = Lifecycle(context, worker)
     journal = tmp_path / "task8-live" / "cases.jsonl"
     journal.parent.mkdir()
-    with pytest.raises(RuntimeError, match="FULL_RESTART_PROOF_UNAVAILABLE"):
+    # the static proof is the installed production composition: removing it must
+    # still refuse before admission, exactly as an absent owner factory did
+    from so101_demo.cli import act_run_pick_place_validation as cli
+    monkeypatch.setattr(cli, "trusted_full_restart_composition", lambda: None)
+    with pytest.raises((RuntimeError, ValueError), match="FULL_RESTART_PROOF_UNAVAILABLE"):
         asyncio.run(run_admitted_campaign(spec, lifecycle, journal))
     assert worker.requests == []
     assert lifecycle.starts == lifecycle.finishes == 0
     assert not journal.exists()
 
 
-def test_fence_precedes_even_a_refusing_admission(tmp_path):
+def test_fence_precedes_even_a_refusing_admission(tmp_path, monkeypatch):
     spec, context = prepared(tmp_path)
     worker = Worker(context)
     lifecycle = Lifecycle(context, worker, refuse=True)
     journal = tmp_path / "cases.jsonl"
-    with pytest.raises(RuntimeError, match="FULL_RESTART_PROOF_UNAVAILABLE"):
+    # the static proof is the installed production composition: removing it must
+    # still refuse before admission, exactly as an absent owner factory did
+    from so101_demo.cli import act_run_pick_place_validation as cli
+    monkeypatch.setattr(cli, "trusted_full_restart_composition", lambda: None)
+    with pytest.raises((RuntimeError, ValueError), match="FULL_RESTART_PROOF_UNAVAILABLE"):
         asyncio.run(run_admitted_campaign(spec, lifecycle, journal))
     assert lifecycle.starts == 0 and lifecycle.finishes == 0
     assert worker.requests == [] and not journal.exists()
