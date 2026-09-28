@@ -122,7 +122,18 @@ class CommandBroker:
             if gid in self._goal_tickets:raise RuntimeError('GOAL_ID_REUSED')
             self._goal_tickets[gid]=ticket
             registered=True
-            if self.reservation_port.reserve(ticket,kind,goal,goal_uuid) is not True:
+            # Gate 6 Batch 2 correction: when this broker owns a sealed resolver
+            # and the ticket already carries an opaque permit handle, reserve
+            # through the broker-owned binding. No caller-supplied identity,
+            # snapshot, instant, deadline or receipt value exists on this path.
+            handle = getattr(self, "_permit_handles", {}).get(ticket)
+            resolver = getattr(self, "reservation_resolver", None)
+            if handle is not None and resolver is not None:
+                reserved = self.reservation_port.reserve_bound(
+                    ticket, kind, goal, goal_uuid, handle=handle, resolver=resolver)
+            else:
+                reserved = self.reservation_port.reserve(ticket, kind, goal, goal_uuid)
+            if reserved is not True:
                 raise PermissionError('CONTROLLER_RESERVATION_REJECTED')
             self.ownership.require_ticket(ticket)
             if identifier(self.driver.send_prepared(gid,kind,goal,goal_uuid))!=gid:

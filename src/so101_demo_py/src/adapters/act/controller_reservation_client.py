@@ -168,40 +168,31 @@ class ControllerReservationClient:
                                   "controller_incarnation", "controller_boot_incarnation",
                                   "claim_monotonic_ns", "deadline_ns")
 
-    def _bound_payload(self, goal, *, identity, receipt, goal_uuid, now_ns):
-        """Validate the broker-owned binding and prefix it to the wire payload.
+    def _resolved_payload(self, kind, goal, *, handle, resolver, goal_uuid, now_ns):
+        """Resolve an opaque handle through the sealed broker-owned resolver.
 
-        Only a broker-owned identity snapshot is accepted: a missing, malformed or
-        caller-supplied value fails closed before any socket is touched.
+        No caller-supplied identity, snapshot, instant, deadline or receipt mapping
+        is accepted anywhere on this path: the binding comes from the resolver.
         """
 
-        if (type(identity) is not tuple or len(identity) != 3
-                or type(identity[0]) is not int
-                or type(identity[1]) is not str or not identity[1]
-                or type(identity[2]) is not str or not identity[2]):
-            raise ValueError("CONTROLLER_RESERVATION_IDENTITY_INVALID")
-        from collections.abc import Mapping
-
-        if not isinstance(receipt, Mapping):
-            raise ValueError("CONTROLLER_RESERVATION_BINDING_INVALID")
-        binding = {}
+        if handle is None or resolver is None:
+            raise ValueError("CONTROLLER_RESERVATION_HANDLE_REQUIRED")
+        resolve = getattr(resolver, "reservation_binding", None)
+        if not callable(resolve):
+            raise ValueError("CONTROLLER_RESERVATION_RESOLVER_INVALID")
+        binding = resolve(handle)
         for field in self.RESERVATION_BINDING_FIELDS:
-            if field not in receipt:
+            if field not in binding:
                 raise ValueError(f"CONTROLLER_RESERVATION_BINDING_MISSING:{field}")
-            binding[field] = receipt[field]
-        if binding["goal_uuid"] != goal_uuid:
+        if binding["goal_uuid"] != goal_uuid or binding["role"] != kind:
             raise ValueError("CONTROLLER_RESERVATION_BINDING_GOAL_MISMATCH")
-        if (binding["generation"] != identity[0]
-                or binding["controller_incarnation"] != identity[1]
-                or binding["controller_boot_incarnation"] != identity[2]):
-            raise ValueError("CONTROLLER_RESERVATION_BINDING_IDENTITY_MISMATCH")
         for field in ("claim_monotonic_ns", "deadline_ns"):
             if type(binding[field]) is not int:
                 raise ValueError(f"CONTROLLER_RESERVATION_BINDING_TYPE:{field}")
-        if now_ns is not None:
-            if type(now_ns) is not int or now_ns > binding["deadline_ns"]:
-                raise ValueError("CONTROLLER_RESERVATION_BINDING_LATE")
-        blob = json.dumps(binding, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if now_ns is not None and (type(now_ns) is not int or now_ns > binding["deadline_ns"]):
+            raise ValueError("CONTROLLER_RESERVATION_BINDING_LATE")
+        blob = json.dumps({field: binding[field] for field in self.RESERVATION_BINDING_FIELDS},
+                          sort_keys=True, separators=(",", ":")).encode("utf-8")
         if len(blob) > 4096:
             raise ValueError("CONTROLLER_RESERVATION_BINDING_TOO_LARGE")
         return len(blob).to_bytes(4, "big") + blob + serialize_message(goal)
@@ -219,8 +210,8 @@ class ControllerReservationClient:
             self._attempted.setdefault(generation, set()).add(kind)
         return self._request(kind, 1, generation, native_uuid, payload)
 
-    def reserve_bound(self, ticket, kind, goal, goal_uuid, *, identity, receipt, now_ns=None):
-        """Reserve with the approved broker-owned binding carried on the wire."""
+    def reserve_bound(self, ticket, kind, goal, goal_uuid, *, handle, resolver, now_ns=None):
+        """Reserve using only an opaque handle resolved by the sealed broker."""
 
         if (not isinstance(ticket, tuple) or not ticket
                 or not isinstance(goal, FollowJointTrajectory.Goal)):
@@ -228,8 +219,8 @@ class ControllerReservationClient:
         native_uuid = uuid.UUID(goal_uuid).bytes
         if str(uuid.UUID(goal_uuid)) != goal_uuid:
             raise ValueError("CONTROLLER_RESERVATION_UUID_INVALID")
-        payload = self._bound_payload(goal, identity=identity, receipt=receipt,
-                                      goal_uuid=goal_uuid, now_ns=now_ns)
+        payload = self._resolved_payload(kind, goal, handle=handle, resolver=resolver,
+                                         goal_uuid=goal_uuid, now_ns=now_ns)
         generation = ticket[0]
         with self._lock:
             self._attempted.setdefault(generation, set()).add(kind)
