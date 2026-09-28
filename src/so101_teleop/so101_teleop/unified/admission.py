@@ -245,6 +245,12 @@ _ACT_PAYLOAD_KEYS = frozenset({
     "calibration_report_path", "calibration_report_sha256",
 })
 
+# the Task 8 group names its preparation receipt; collection keys must never appear in it
+_TASK8_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
+    "preparation_receipt_path", "preparation_receipt_sha256"})
+_COLLECTION_ONLY_KEYS = frozenset({
+    "qualification_mode", "qualification_receipt_path"})
+
 
 def _real_owner(pid: int, started_ticks: int) -> bool:
     from ..process_identity import ProcessIdentityError, read_identity
@@ -335,12 +341,22 @@ class UnifiedWorkloadService:
         if spec.runtime_id != self.runtime_id or spec.deadline_ns <= self.clock_ns():
             raise ValueError("CAMPAIGN_RUNTIME_OR_DEADLINE_INVALID")
         payload = spec.payload
-        if (isinstance(payload, dict)
-                and set(payload) == _ACT_PAYLOAD_KEYS - {
-                    "calibration_report_path", "calibration_report_sha256"}):
-            raise ValueError("CALIBRATION_REQUIRED")
-        if not isinstance(payload, dict) or set(payload) != _ACT_PAYLOAD_KEYS:
+        if not isinstance(payload, dict):
             raise ValueError("CAMPAIGN_START_SCHEMA")
+        task8 = spec.kind in ("task8_phase", "task8_full")
+        expected = _TASK8_PAYLOAD_KEYS if task8 else _ACT_PAYLOAD_KEYS
+        if set(payload) != expected:
+            # a payload missing only the calibration pair is a calibration problem, not a schema one
+            if set(payload) == expected - {"calibration_report_path",
+                                           "calibration_report_sha256"}:
+                raise ValueError("CALIBRATION_REQUIRED")
+            raise ValueError("CAMPAIGN_START_SCHEMA")
+        if task8:
+            # the receipt is verified before any mutation/GPU acquisition, and the verified bundle is
+            # the only object an ActArtifactBinding may be built from
+            from so101_demo.act.task8_artifact_bundle import verify_task8_startup_receipt
+            verify_task8_startup_receipt(
+                payload, collection_only_keys=_COLLECTION_ONLY_KEYS)
         if payload["backend"] != "mujoco":
             raise ValueError("MUJOCO_ONLY")
         if payload["service_epoch"] != self.service_epoch or payload["resource_binding_id"] != self.resource_binding_id:
