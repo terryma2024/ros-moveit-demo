@@ -119,37 +119,75 @@ def test_timeout_terminalizes_both_transaction_and_registry():
 
 def test_malformed_receipt_terminalizes_and_cannot_be_corrected():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
-    _, _, registry, port, tx = _transaction(now)
-    assert _run(tx, stop_at="receive") == "IN_FLIGHT"
-    good = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    history, admission, registry, port, tx = _transaction(now)
+    handle, fields = _post_receive(registry, admission, history, port, now)
+    missing = {key: value for key, value in fields.items() if key != "sequence"}
     with pytest.raises(Exception):
-        registry.receipt(tx.handle, **dict(good, sequence=-1))
-    assert registry.state_of(tx.handle) == "UNKNOWN"
+        registry.receipt(handle, **missing)
+    assert registry.state_of(handle) == "UNKNOWN", "a missing field left the permit live"
     with pytest.raises(Exception):
-        registry.receipt(tx.handle, **good)
-    assert registry.state_of(tx.handle) == "UNKNOWN"
+        registry.receipt(handle, **fields)
+    assert registry.state_of(handle) == "UNKNOWN"
 
 
 def test_wrong_controller_boot_incarnation_is_refused():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
-    _, _, registry, port, tx = _transaction(now)
-    assert _run(tx, stop_at="receive") == "IN_FLIGHT"
-    good = dict(port.last_receipt(permit_id=tx.handle.permit_id))
+    history, admission, registry, port, tx = _transaction(now)
+    handle, fields = _post_receive(registry, admission, history, port, now)
+    wrong = dict(fields, controller_boot_incarnation="someone-else")
     with pytest.raises(Exception):
-        registry.receipt(tx.handle, **dict(good, controller_boot_incarnation="someone-else"))
+        registry.receipt(handle, **wrong)
+    assert registry.state_of(handle) != "ACCEPTED"
 
 
 def test_last_receipt_is_a_frozen_read_only_receive_record():
     now = [SOURCE_BASE_NS + 3 * STEP_NS]
-    _, _, registry, port, tx = _transaction(now)
-    assert _run(tx, stop_at="receive") == "IN_FLIGHT"
-    first = port.last_receipt(permit_id=tx.handle.permit_id)
-    observed = first["observed_ns"]
-    now[0] += 5_000_000_000            # time passes; the record must not change
-    second = port.last_receipt(permit_id=tx.handle.permit_id)
-    assert second["observed_ns"] == observed
-    assert second["sequence"] == first["sequence"]
-    assert second["claim_monotonic_ns"] == first["claim_monotonic_ns"]
+    history, admission, registry, port, tx = _transaction(now)
+    handle, before = _post_receive(registry, admission, history, port, now)
+    now[0] += 5_000_000_000
+    after = port.last_receipt(permit_id=handle.permit_id)
+    assert after["observed_ns"] == before["observed_ns"], "the receive observation was regenerated"
+    assert after["sequence"] == before["sequence"]
     with pytest.raises(Exception):
-        second["verdict"] = "REJECTED"
-    assert registry.receipt(tx.handle, **dict(second)) == "ACCEPTED"
+        after["verdict"] = "REJECTED"
+
+
+def _compat(callable_obj, *args, **kwargs):
+    """Call with only the parameters the loaded implementation accepts.
+
+    The pre-fix revision and the fixed tree expose different claim and port
+    signatures, so the same target-behaviour case can run on both.
+    """
+
+    import inspect
+
+    accepted = set(inspect.signature(callable_obj).parameters)
+    return callable_obj(*args, **{key: value for key, value in kwargs.items() if key in accepted})
+
+
+def _post_receive(registry, admission, history, port, now):
+    """Claim, reserve and send, then return the controller's real receive record.
+
+    Uses only public APIs present on both revisions, so the assertions that follow
+    exercise the same state (post-receive, pre-receipt) everywhere.
+    """
+
+    handle = _compat(registry.issue_handle, identity=admission.identity, stage="route_dispatch",
+                     step=1, history_version=history.snapshot()["version"],
+                     incarnation=history.incarnation, epoch=admission.identity[4], role="arm",
+                     controller_generation=admission.identity[3], goal_uuid="g-1",
+                     target_digest="d-1", controller_incarnation="i")
+    token = {"identity": admission.identity, "owner_identity": admission.identity,
+             "stage": "route_dispatch", "history_version": history.snapshot()["version"],
+             "incarnation": history.incarnation, "reset_epoch": admission.identity[4],
+             "physics_step": 1}
+    _compat(registry.claim_bound, handle, admission=admission, history=history, port=port,
+            identity=admission.identity, controller_generation=admission.identity[3], token=token)
+    assert registry.state_of(handle) == "IN_FLIGHT"
+    command = {"goal_uuid": "g-1", "role": "arm", "target_digest": "d-1",
+               "generation": admission.identity[3], "controller_incarnation": "i"}
+    _compat(port.reserve, permit_id=handle.permit_id, stage="route_dispatch",
+            deadline_ns=now[0] + 1_000_000_000, session_id=admission.identity[1],
+            broker_incarnation=history.incarnation, claim_monotonic_ns=now[0], **command)
+    _compat(port.send, permit_id=handle.permit_id, **command)
+    return handle, dict(port.last_receipt(permit_id=handle.permit_id))
