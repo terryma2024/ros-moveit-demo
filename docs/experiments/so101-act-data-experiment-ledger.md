@@ -9154,3 +9154,29 @@ This resolves the design block **without authorizing runtime or motion**.
   (`bridge`, `teleop_service`, `contracts`, `admission`) and the live Steps 6–7.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-776 — Task 11A: the campaign holds its claim until the last scene is terminal
+
+- **Delivered:** `FixedActCollectionCampaign(manifest, config, context, root, *, collect_port, claim,
+  store=None)` in `act/parallel_collection.py`, with tests.
+  - the frozen manifest is partitioned **once**; the campaign index is published **before** any scene is
+    collected (the test asserts the exact partition `[[act-0, act-1], [act-2, act-3], [act-4]]` and the
+    collection order);
+  - a scene the store reports sealed is listed under `already_terminal` and never handed to the
+    collection port — it is never collected twice;
+  - every result goes through the append-once store, so a record not naming its own scene is
+    `CAMPAIGN_RESULT_INVALID`;
+  - **the claim is held to the end:** `release` runs only after every scene is terminal, and the failure
+    test asserts **no release at all** when a scene raises, so an unresolved campaign cannot hand the
+    stack to the next run;
+  - the mode gate runs in the constructor, so an inadmissible manifest fails before any work.
+- **One recurring mistake, caught by the store's own guard:** the fixture root was created *after* the
+  fixture used it (`RESULT_ROOT_INVALID`) — the same class of slip as round 303, again fixed in the test
+  rather than by relaxing the guard.
+- **Verification:** focused tests **16 passed** across `test_act_parallel_collection.py`,
+  `…_recovery.py` and `test_act_gpu_workload_client.py`
+  (`gate6-batch3-py-gate/task11a7.{log,junit.xml}`).
+- **Remaining in 11A:** `act_collect_parallel` and `runtime/act_fixed_collection_composition.py`, the
+  runtime/results adapters, then the teleop-side modifications and the live Steps 6–7.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
