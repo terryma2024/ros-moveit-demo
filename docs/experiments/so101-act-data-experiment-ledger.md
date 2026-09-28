@@ -8633,3 +8633,22 @@ test that a shorter gate run root clears.
   reading it back), then the combined 8P3/8P4 xdist gate.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-755 — Producer-to-journal leg closed against real evidence
+
+- **Delivered:** `test_chain_reaches_a_validated_journal_row_from_real_evidence` in
+  `test_act_task8_live_qualification.py`. The **real `Task8Runner`** runs a full case through the
+  evidence-port factory and seals an artifact; that artifact's path/digest plus two **real**
+  retirement-receipt files (with their own digests) form a published-row-shaped document; the CP-753
+  adapter maps it to the journal row; and the row is checked by the **aggregator's own** validators —
+  `require_case_row_matches_bundle` (identity binding against the verified bundle) and a re-hash of the
+  live-evidence bytes against the row's recorded digest.
+- **Why it matters:** the read side is now exercised by execution, not by inspection, and a row cannot
+  pass while pointing at different bytes than it claims.
+- **Verification:** qualification suite **18 passed** (`gate6-batch3-py-gate/chain.{log,junit.xml}`).
+- **Remaining (last leg of this boundary):** the teleop side — an owner/worker double whose
+  `run_pick_place(request)` injects `lifecycle="FULL_RESTART"` and calls the real runner, so
+  `run_pick_place_case()` itself publishes the journal that this path validates (contract recorded in the
+  plan file, round 280). Then the combined **8P3/8P4 xdist gate**.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
