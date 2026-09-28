@@ -1,0 +1,8 @@
+schema_version: 1
+kind: act_runtime
+inference:
+  device: cuda
+  queue_depth: 1
+  request_timeout_s: 0.5
+  max_reply_age_s: 0.3
+  allow_cpu_fallback: false
