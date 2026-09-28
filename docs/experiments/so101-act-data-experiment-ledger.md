@@ -8840,3 +8840,30 @@ verification until that step runs?
 
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-763 — The plan is blocked at Task 10's CLI by one unanswered design question (all later code gates on it)
+
+Scanned every later task's `Create:` list for anything implementable without runtime and without Task 10's
+outputs:
+
+| Task | Files | State |
+|---|---|---|
+| 11 (collection) | `act/collection.py` (20-line stub, clean), `cli/act_collect.py`, `test/test_act_collection.py` | CLI and tests missing; the CLI consumes a Task 10 manifest (`--manifest`) and real collection (runtime) |
+| 11A (parallel collection) | `act/parallel_collection.py`, `…_recovery.py`, `adapters/act/gpu_workload_client.py` | missing; needs runtime and GPU |
+| 12 (export/training) | `act/bundle.py`, `act/training_owner.py`, `adapters/act/lerobot.py`, `cli/act_train.py` | missing; needs collected data |
+| 12A (offline evaluation) | `act/offline_evaluation.py`, `cli/act_offline_evaluate.py`, test | missing; evaluates frozen Offline Test data that does not exist |
+| 13 (ACT runner) | `act/policy.py`, `test_act_policy.py`, `adapters/act/inference_process.py`, `cli/act_inference_worker.py` | missing; needs a trained policy |
+| 14, 15, 16 | `act/session.py`, teleop `act_gateway.py`, `act/evaluation.py`, `cli/act_evaluate.py`, the guide | missing; sit downstream of 12–13 |
+
+So every remaining code task either consumes Task 10's manifest (which cannot be frozen without the three
+undefined inputs) or consumes runtime artifacts (collection, training, policies) that do not exist and
+whose production is excluded by the standing instruction not to run runtime/motion.
+
+**Blocking condition, unchanged across rounds 293, 294 and 295:** `act_sample` needs the candidate
+source, the candidate port and the qualification scene generators, none of which the reviewed plan
+defines and none of which exist in the tree; two of them decide which scenes may enter training and which
+are admissible for the W2 qualification that gates formal collection. This is a user-decision blocker,
+not a resource one, and it is the sanctioned stopping point in this goal's own wording.
+
+**Status:** formal accepted Train/Validation/Offline Test **0/0/0**; Task 12 `NOT_STARTED`;
+`collection_*` NOT_PROVISIONED; no runtime/motion, no evidence deleted, no gates lowered, no hardware.
