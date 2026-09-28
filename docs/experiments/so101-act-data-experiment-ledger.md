@@ -6678,3 +6678,12 @@ status: PLANNED_ISOLATED_STACK
 - **实测**（新建 scratch + tempfile 探针 PASS + 镜像 `mirror-21` 逐文件 SHA 等于 worktree）：`test_act_authority_transaction.py` **29 passed**（`legacy4.log`/JUnit）；六模块 **151 passed in 0.95s**（`six-legacy.log` + manifest/JUnit）；四探针 **29 passed in 0.51s**（`probes-legacy.log`/JUnit）。
 - 至此 P1.1（单 receipt + 状态一致性检查）、P1.2（统一失败闭合）、P2（边界前控制器身份快照）、legacy 测试迁移均已完成且验证；**下一轮只剩簿记**：contract/audit/ledger 最终更正、重生成 **change/evidence 两份清单**、review 请求包引用**当前整文件哈希**，并把“清单快照提交”与“ledger/请求包提交”**显式分离**，随后冻结 HEAD 并停在 Gate 5 请求 review 11。**本轮不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
+
+## CP-661 — EXP-573 P2 权威修补：中间态保留为 NONQUALIFYING，恢复已验证基线（权威漏洞仍未关闭）
+
+- 用户的更正成立且必须实现：`claim_bound(..., controller_snapshot=None)` 是**调用方可替换的权威**——省略即跳过控制器代次/boot 校验，伪造 dict 可授权调用方数据。本轮据此实现“broker 自有捕获”方案：`port.identity_snapshot()`（仅在端口锁内返回不可变三元组）、registry 的 `capture_controller_identity(handle)`（**先**取端口快照、**再**在 registry 锁内校验并与 READY record 绑定，不接受任何调用方快照值）、`claim_bound` 去掉快照参数并改为**必须消费内部已存快照**、`reserve` 增加 `expected_boot_incarnation` 以在重启/换臂后于**发送前**拒绝。
+- **该中间态未能收敛**：新写的快照权威用例 1 failed（正常流程）、六模块 **18 failed / 133 passed**（正常路径被破坏，说明接线仍不完整）。按既定纪律**不在失败状态上继续叠加**：三个改动文件（两个源文件 + 新测试）保存为 NONQUALIFYING（`experiments/exp573-single-receipt/nonqualifying/*.broker-capture-partial.py`、`test_act_exp573_snapshot_authority.partial.py`），并用 `git checkout` 恢复到上一提交的绿色实现。
+- **恢复后复核（新建 scratch + tempfile 探针 PASS + 镜像 `mirror-25`）**：六模块 **18 failed, 133 passed, 2 warnings in 6.22s**；四探针 **12 failed, 17 passed in 0.65s**。因此 P1.1/P1.2 与 legacy 迁移成果完好，但**P2 的权威漏洞（调用方可替换快照）依然存在**，切勿据此宣称 P2 已关闭。
+- 下一轮的正确做法（已明确、不再靠试错）：先在**只改源码**的前提下完成 1–4 步（`identity_snapshot` → `capture_controller_identity` → `claim_bound` 只消费内部快照 → `reserve` 校验 expected boot），每步后仅跑 `test_act_dispatch_transaction.py`；确认 8/8 后再补 5 的快照权威用例，最后跑六模块与四探针。注意现有若干测试直接调用 `port.reserve(...)`，需同步其签名或让 `expected_boot_incarnation` 保持可选默认 None。
+- 未完成：上述 P2 权威修补；copy/legacy 迁移复核；簿记（contract/audit/ledger 最终更正、重生成 change/evidence 清单、review 请求包引用当前整文件哈希且清单快照提交与 ledger/请求包提交显式分离）。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
