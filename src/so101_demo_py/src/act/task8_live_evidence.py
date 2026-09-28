@@ -573,3 +573,18 @@ class CaseEvidenceDriver:
 
     def seal(self) -> dict:
         return self._window.seal()
+    def observe_capture(self, adapter, captured, *, phase: str, frame: dict, contact: dict,
+                        measurements: dict, raw_records: dict, support_distance_max_m: float,
+                        event: bool = False) -> None:
+        """Compose the per-frame fields from a readback capture and record the sample.
+
+        The adapter supplies the fields (its own capture shape is its business); this method only
+        routes them, so the readback and the evidence window stay independently testable.
+        """
+
+        fields = adapter.capture_evidence_fields(captured,
+                                                 support_distance_max_m=support_distance_max_m,
+                                                 raw_records=raw_records)
+        self.observe(fields, phase=phase, frame=frame, contact=contact,
+                     measurements=measurements, event=event)
+
