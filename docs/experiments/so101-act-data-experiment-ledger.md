@@ -9440,3 +9440,27 @@ This resolves the design block **without authorizing runtime or motion**.
   and the read-only guarantee (no backprop, no statistic updates, no checkpoint selection).
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 IN PROGRESS; 12A IN PROGRESS; `collection_*` NOT_PROVISIONED.
+
+## CP-788 — Task 12A: read-only evaluation behind a verified freeze
+
+- **Delivered:** `load_freeze` and `evaluate_offline` in `act/offline_evaluation.py`, with tests.
+  - **freeze verification first:** exactly the six frozen fields (each 64-hex) plus a sibling
+    `freeze-paths.json` of absolute paths; every file is re-read and must match
+    (`FREEZE_INVALID`, `FREEZE_PATHS_*`, `FREEZE_FILE_MISSING`, `FREEZE_DIGEST_MISMATCH`) — nothing is
+    inferred before this passes. The bundle and dataset manifest are additionally re-hashed against the
+    freeze (`FREEZE_BUNDLE_MISMATCH`, `FREEZE_MANIFEST_MISMATCH`).
+  - **the plan's gates:** at least **10** successful Offline Test episodes
+    (`OFFLINE_TEST_EPISODES_INSUFFICIENT`) and no cross-split chunk (`CROSS_SPLIT_CHUNK_FORBIDDEN`).
+  - **reporting:** per-episode MAE/RMSE and valid-target counts, with an **episode-equal** overall mean
+    (`byte_weighted: false`), so a long episode cannot dominate the score.
+  - **read-only:** the model is reset per episode, the bundle's normalisation is snapshotted and compared
+    after inference (`EVALUATION_MUTATED_STATISTICS`), and the only write is a once-only atomic output
+    document (`EVALUATION_OUTPUT_EXISTS`, no `.partial` residue). No backprop, no statistic updates, no
+    checkpoint selection.
+- **A bug in my module, found by reading the frame:** `NameError: Path` came from
+  `offline_evaluation.py` using `Path` without a module-level import; pytest's short traceback pointed at
+  the test call site, which sent me looking in the wrong file for two rounds. Fixed at the module.
+- **Verification:** focused tests **7 passed** (`gate6-batch3-py-gate/task12a5.{log,junit.xml}`).
+- **Remaining in 12A:** the `act_offline_evaluate` CLI and its `setup.py` entry.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 + 12A IN PROGRESS; `collection_*` NOT_PROVISIONED.
