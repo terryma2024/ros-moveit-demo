@@ -8776,3 +8776,35 @@ this contract.
 
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-761 — Task 10 boundary: the candidate port is a live MoveIt preflight that does not exist yet
+
+**Evidence gathered this round:**
+
+- The port contract is exactly `verify(item) -> dict` over the 14 `REACHABILITY_GATES` in
+  `act/sampling.py` (`table_clear`, `collision_free`, `pregrasp_ik`/`grasp_ik`/`lift_ik`/`place_ik`/
+  `retreat_ik`, the matching six `*_plan` gates, plus `head_visible` and `wrist_visible`), with
+  `item = {xy, arm_q, search_start_rad, seed}`. The sampling test's double (`Checked`) shows the shape.
+- **No implementation exists:** grepping the whole package for `pregrasp_plan` or `wrist_visible`
+  outside `sampling.py` returns nothing, and the only preflight-ish module
+  (`application/cup_pose_preflight.py`) is unrelated to ACT candidate reachability.
+- `act_preflight.py` (existing CLI) validates an already-measured report; it does not evaluate
+  candidates. `application/qualification.py` is the runtime *runner* that consumes batches
+  (`--batch-id`, `--fingerprint`, `--count`), not a candidate verifier.
+- The reviewed plan's Task 10 section names the CLI's arguments and outputs but **does not specify how
+  the candidate port is constructed** beyond "Consumes: Task 6 calibration and full MoveIt preflight".
+
+**Consequence:** `make_manifest` may freeze a candidate only after a physical check of the actual point,
+so `act_sample` cannot be exercised end to end without either the live MoveIt preflight (runtime — out of
+scope under the current instruction not to run runtime/motion) or a **plan-sanctioned injection point**
+for the port, which the plan does not define. Implementing one now would mean choosing that design
+unilaterally, in a module that gates which scenes may ever enter training.
+
+**Precise question for the user (one):** for `act_sample`, should the candidate port be
+(a) built from the live Task 6 calibration + MoveIt preflight now, with the runtime preflight authorized
+for this purpose; or (b) an explicit, documented constructor parameter (CLI `--candidate-port-module`
+or similar) that the runtime ladder supplies later, with the CLI's own tests using a double — accepting
+that the manifest cannot be frozen from real verification until the runtime step?
+
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
