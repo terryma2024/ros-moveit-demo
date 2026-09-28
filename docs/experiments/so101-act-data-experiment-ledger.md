@@ -7954,3 +7954,26 @@ evidence root; none reused another run's directory.
   readback, plus the wider failure matrix.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-724 — Task 8P4: a `QUALIFIED` report must trace to its live campaign
+
+- **Delivered:** `require_qualified` now keeps the documented `CALIBRATION_REQUIRED` answer for any
+  report that does not claim `QUALIFIED`, and imposes a `live_campaign` block on one that does
+  (non-empty `case_root`; 64-hex `campaign_result_sha256` and `preparation_receipt_sha256`; exactly
+  fourteen 64-hex journal digests, else `CALIBRATION_LIVE_CAMPAIGN_INVALID`). The schema gains the
+  matching property with the file's own inline digest pattern; `require_gate` and `validate_partial`
+  accept the block as an optional superset member rather than rejecting a qualification's provenance.
+  `test_act_calibration.py` (in 8P4's own file list) carries the block in its QUALIFIED fixture.
+- **Five defects found and fixed while landing this** — each was mine, and the fixes kept the
+  assertions rather than weakening them: (1) requiring the block *before* the status check turned a
+  TASK8_READY rejection into `FIELDS_INVALID` instead of `CALIBRATION_REQUIRED`; (2) a `$ref` to a
+  `$defs/sha256` that does not exist in that schema, replaced with the inline pattern used
+  elsewhere; (3) `require_gate` rejecting the extra key; (4) `validate_partial` doing the same;
+  (5) my own test asserting the wrong code for a partial block (now a well-formed block with 13
+  journals, which exercises the real validation path).
+- **Verification:** 68 passed across seven suites under the module xdist gate `-n 8`
+  (`gate6-batch3-py-gate/t8p4schema{2..6}.log`, final run `t8p4schema6.{log,junit.xml}`).
+- **Remaining in 8P4:** the plan-mandated integration test driving the real `PickPlaceRunner`,
+  execution-port adapter, `run_pick_place_case()` and trusted campaign with seal/dir-fsync readback.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
