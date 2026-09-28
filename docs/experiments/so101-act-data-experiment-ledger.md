@@ -9697,3 +9697,26 @@ This resolves the design block **without authorizing runtime or motion**.
   unified service) and the launch-file modification.
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-799 — Task 14: the session, its commander and its tick
+
+- **Delivered:** `ActSession` in `act/session.py`, with tests.
+  - **one commander per session:** the identity is fixed at construction and a command from anyone else is
+    `COMMAND_NOT_OWNED` — the test asserts the refused command **never reached the worker port**, so
+    ownership is enforced before any effect;
+  - **a tick never waits on the model:** `tick()` reports `waiting: True` while a request is in flight, and a
+    reply advances the phase to `ACT` with its sequence and actions; refusals for stale or misordered replies
+    propagate from Task 13's boundary rather than being applied;
+  - **the retry budget is one, and a new attempt forgets the cup:** a successful retry increments `attempts`
+    and resets the cup state to `UNKNOWN`, so the new attempt re-establishes what it holds; a `HOLDING` cup
+    is refused without consuming the budget;
+  - closed lifecycle: submissions after `close()` are `SESSION_CLOSED`; an invalid commander, missing ports
+    or a malformed attempt count are refused at construction.
+- **Verification:** focused tests **5 passed** (`gate6-batch3-py-gate/task14c.{log,junit.xml}`), first run
+  green.
+- **Remaining in Task 14:** `runtime/act_composition.py` (mode gates: `dry_run`/`plan_only`/`execute`, and an
+  `execute` composition that lacks a verified bundle, calibration, activated policy or runtime config is
+  refused), `cli/act_session.py` submitting only an `OperationSpec`, its `setup.py` entry, and the launch-file
+  modification.
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
