@@ -145,6 +145,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--journal", type=Path, required=True)
     parser.add_argument("--artifact-bundle", type=Path,
                         help="prepared Task 8 receipt; verified before any resource is acquired")
+    parser.add_argument("--journal-run-root", type=Path,
+                        help="run root whose fourteen case journals must all be free before the run")
     args = parser.parse_args(argv)
     spec = load_spec_file(args.spec)
     _validate_local_paths(spec, args.journal)
@@ -165,6 +167,19 @@ def main(argv: list[str] | None = None) -> int:
         declared = spec.payload.get("preparation_receipt_path")
         if declared is not None and Path(declared).resolve() != receipt.resolve():
             raise ValueError("TASK8_BUNDLE_SPEC_MISMATCH")
+        if args.journal_run_root is not None:
+            # all-or-nothing: either every one of the fourteen journals is free, or nothing starts
+            import json
+
+            from so101_demo.act.task8_live_evidence import plan_campaign_journals
+
+            bundle = verify_task8_startup_receipt({
+                "preparation_receipt_path": str(receipt),
+                "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest()})
+            manifest = json.loads(Path(bundle.manifest).read_bytes())
+            plan = plan_campaign_journals(args.journal_run_root, manifest)
+            if len(plan) != 14:
+                raise ValueError("TASK8_CAMPAIGN_JOURNAL_PLAN_INCOMPLETE")
     PickPlaceValidationCampaign.require_full_restart_lifecycle()
 
     from so101_teleop.unified.bridge import ActCampaignChildOwner, ActCampaignLifecycle
