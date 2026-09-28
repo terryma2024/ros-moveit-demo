@@ -10752,3 +10752,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** still no runtime or motion started, no hardware, no Gazebo, no push, no evidence deleted, no
   gate lowered, no ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted
   0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-843 — First runtime step: the ACT launch refused to compose without explicit calibration
+
+- **The measurement run executed and failed closed, by design.** The stack was launched as the runbook
+  requires (explicit `session_id`, `task_evidence_root` overridden into the generation subroot, headless false,
+  sensor rendering on, teleop excluded) and the launch aborted with
+  `[ERROR] [launch]: Caught exception in launch (see debug for traceback): EXPLICIT_CALIBRATION_PARAMETERS_REQUIRED`
+  (`logs/launch-task8l-gen2-20260928T235335Z.log`).
+- **Nothing composed, so nothing was measured, and nothing was left behind:** readiness `no`, **0 nodes**,
+  only `/parameter_events` and `/rosout` present, and all four candidate topics reported "does not appear to be
+  published yet"; GPU stayed at 0 % / 288 MiB before and after; the teardown trap ran (INT, then TERM, then
+  KILL on the process group) and **0 runtime processes are live now**.
+- **The requirement, located in the source rather than guessed:**
+  `runtime/launch_composition.py:2339` raises it when, in calibration mode, **the speed and age parameters are
+  empty**, and the launch declares `act_calibration_mode` (default `"true"`), `act_calibration_report`
+  (default `""`) and `act_motion_calibration_manifest` (default `""`). In other words the ACT stack refuses to
+  run on implicit calibration: the calibration must be measured and supplied explicitly.
+- **This is the plan's own ordering, encountered live:** Task 8L is provenance -> measurement -> report ->
+  bundle -> live, and the measurement pass is what produces the calibration report and motion calibration
+  manifest that the launch then consumes. So the next step is to run the measurement CLIs
+  (`act_measure_task8_calibration`, then `act_build_task8_calibration_report`, with
+  `act_build_task8_source_provenance` and `act_prepare_task8_live_artifacts` alongside), and only then relaunch
+  passing `act_calibration_report:=...` and `act_motion_calibration_manifest:=...` explicitly (or
+  `act_calibration_mode:=false` once the qualification phase is reached).
+- **No threshold was adjusted, no calibration value was invented, and no CPU fallback was used** - the refusal is
+  the gate working, not a defect to route around.
+- **Boundaries:** no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no ROS Python touched;
+  user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
