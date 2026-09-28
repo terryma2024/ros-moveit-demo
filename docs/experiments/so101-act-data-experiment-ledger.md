@@ -8146,3 +8146,23 @@ partial credit is claimed.
   (hunk-staged, as for the demo files), then 8P3's tail and 8P4's integration test.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-732 — Production regression from the v2 rename found and fixed; teleop kwargs propagated
+
+- **Production regression (mine), found by the teleop suite:** `pick_place_full_restart_campaign.py`
+  built the campaign summary as `"manifest_sha256": manifest["manifest_sha256"]`, but the v2 live
+  manifest renamed that internal digest to `manifest_document_sha256` — so every real campaign run
+  would have raised `KeyError` while constructing the summary. Fixed minimally: the summary **field
+  name stays** `manifest_sha256` (no downstream reader changes) and its value is read from
+  `manifest["manifest_document_sha256"]`, which is the same document digest it always meant; the
+  separate `manifest_file_sha256` is untouched. Verified: `test_task8_full_restart_campaign.py`
+  -> 6 passed.
+- **v2 kwargs propagated into the teleop fixtures:** `test_task8_full_restart_campaign.py` and
+  `test_task8_case_execution.py` (user-dirty; two-line additions only, other hunks excluded per
+  `gate6-batch3-commit/hunk-filter-round232.txt`) and the clean
+  `test_act_campaign_admission.py`. Teleop suite moved from **51 to 41 failures, 0 errors**.
+- **Remaining teleop classes** (recorded in the plan file): 20 regex mismatches from changed error
+  codes, 8 `CAMPAIGN_START_SCHEMA` (Task 8 fixtures predating the receipt requirement), 3
+  `TASK8_CASE_RESULT_INVALID`, 2 `CALIBRATION_SOURCE_PROVENANCE_MISSING`, 1 path-length assertion.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
