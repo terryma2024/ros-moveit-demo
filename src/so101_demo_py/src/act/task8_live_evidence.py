@@ -587,4 +587,3 @@ class CaseEvidenceDriver:
                                                  raw_records=raw_records)
         self.observe(fields, phase=phase, frame=frame, contact=contact,
                      measurements=measurements, event=event)
-
