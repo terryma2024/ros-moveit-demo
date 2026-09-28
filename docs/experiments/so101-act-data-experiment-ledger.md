@@ -7903,3 +7903,34 @@ evidence root; none reused another run's directory.
   `QUALIFIED` schema/`calibration.py` updates and the real-composition integration test.
 - **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
   NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-722 — Task 8P4: deterministic `QUALIFIED` producer from a complete live campaign
+
+- **Delivered:** `build_task8_qualified_report(task8_ready_report, preparation_receipt,
+  campaign_result, case_root, output)` in `act/task8_live_qualification.py`. It refuses a
+  non-`TASK8_READY` input, requires the five measurement checks PASS with release/retreat still
+  `UNMEASURED`, verifies the preparation receipt, binds the ready report's
+  `source_provenance_sha256` to the bundle identity, validates the campaign summary and all fourteen
+  journals through the committed rules, then writes the new `QUALIFIED` document (checks flipped to
+  PASS, a `live_campaign` block carrying the case root, both receipt digests and the fourteen journal
+  digests) **atomically via a `.partial` rename**. The input report is never rewritten; a failure
+  leaves no output and no partial; an existing output is refused.
+- **Fixture blocker from round 189 resolved:** `test_act_task8_artifact_bundle.py::_inputs` supplies
+  a stub manifest (`{"schema_version": 2, "kind": "ACT_TASK8_LIVE", "manifest_sha256": "f"*64}`) with
+  no `prefix_cases`/`full_cases`/`manifest_document_sha256`, so the producer legitimately raised
+  `KeyError: 'prefix_cases'`. The 8P4 fixture now builds a **real v2 manifest** through
+  `build_pick_place_validation_manifest` using anchors that satisfy `_require_anchors` for all three
+  `ANCHOR_NAMES`, with the four identity digests taken from the bundle fixture's own identities, and
+  reuses `_inputs` for everything else via `dataclasses.replace`. The bundled manifest is read
+  through `verify_prepared_task8_bundle(...).manifest` rather than an assumed filename (my round-189
+  mistake).
+- **Verification:** 13 passed under the module xdist gate `-n 8` (`min(8, 32 CPUs)`) with the exact
+  venv Python and a `TMPDIR` probe in a fresh `/data` scratch
+  (`gate6-batch3-py-gate/t8p4f.{log,junit.xml}`): the happy path (byte-identical input report, no
+  partial), three gate failures each leaving no output, and the output-exists refusal.
+- **Remaining in 8P4:** the CLI `act_build_task8_qualified_report` with its five flags and the
+  `setup.py` entry, the `QUALIFIED` schema/`calibration.py` updates, plus the plan's mandated
+  integration test that drives the real `PickPlaceRunner`/adapter/`run_pick_place_case()`/campaign
+  instead of a hand-written fixture, and the plan's wider failure matrix.
+- **Boundaries:** no runtime, controller goal or motion started; formal accepted 0/0/0; Task 12
+  NOT_STARTED; `collection_*` NOT_PROVISIONED.
