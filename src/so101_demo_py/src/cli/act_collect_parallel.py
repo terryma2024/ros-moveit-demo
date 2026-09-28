@@ -13,6 +13,18 @@ from pathlib import Path
 from so101_demo.runtime.act_fixed_collection_composition import build_fixed_collection_spec
 
 
+def _context_from_service():
+    """The admitted context the payload needs: epoch, binding, proposal, children and source."""
+
+    from so101_teleop.unified.compose import compose_services  # late import, as the live CLIs do
+
+    services = compose_services()
+    context = getattr(services, "act_collection_context", None)
+    if context is None:
+        raise ValueError(f"ACT_COLLECTION_CONTEXT_UNAVAILABLE: {services.act_error}")
+    return context
+
+
 def _service(payload: dict):
     from so101_teleop.unified.compose import compose_services  # late import, as the live CLIs do
 
@@ -22,7 +34,7 @@ def _service(payload: dict):
     return services.act_workload
 
 
-def main(argv: list[str] | None = None, *, service_factory=None) -> int:
+def main(argv: list[str] | None = None, *, service_factory=None, context_factory=None) -> int:
     parser = argparse.ArgumentParser(prog="act_collect_parallel", description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--split-manifest", type=Path)
@@ -39,6 +51,7 @@ def main(argv: list[str] | None = None, *, service_factory=None) -> int:
     args = parser.parse_args(argv)
 
     spec = build_fixed_collection_spec(
+        context=(context_factory or _context_from_service)(),
         manifest=args.manifest, split_manifest=args.split_manifest,
         calibration_report=args.calibration, policy=args.policy,
         activation_receipt=args.activation_receipt, collection_config=args.collection_config,
@@ -46,10 +59,8 @@ def main(argv: list[str] | None = None, *, service_factory=None) -> int:
         qualification=bool(args.qualification), worker_count=args.worker_count,
         qualification_contract=args.qualification_contract, resume=bool(args.resume))
     service = (service_factory or _service)(spec)
-    plane = "qualification" if spec["qualification"] else "formal"
-    result = service.start(spec, {"plane": plane, "resume": spec["resume"],
-                                  "wave_index_path": spec["wave_index_path"],
-                                  "worker_count": spec["worker_count"]})
+    plane = "qualification" if spec["payload"]["qualification_mode"] else "formal"
+    result = service.start(spec, {"plane": plane, "worker_count": spec["payload"]["worker_count"]})
     print(json.dumps({"plane": plane, "result": result}, sort_keys=True))
     return 0
 
