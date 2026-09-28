@@ -139,3 +139,80 @@ def load_policy(bundle_path, *, loader) -> object:
     if not callable(loader):
         raise ValueError("POLICY_LOADER_REQUIRED")
     return require_policy_interface(loader(bundle))
+
+
+EXPORT_KEYS = frozenset({"schema_version", "kind", "episodes", "scene_count",
+                         "source_manifest_sha256", "campaign_index_sha256"})
+_STALE_DATASET_IDS = ("0917a",)
+_COLLECTION_SPLITS = ("train", "validation", "offline_test")
+_NEWLINE = bytes((10,))
+
+
+def export_dataset(committed, output, *, source_manifest_sha256: str,
+                   campaign_index_sha256: str) -> dict:
+    """Write the immutable export: one document per committed episode plus a digest manifest.
+
+    The export is written once. An existing output directory is a refusal rather than a place to append,
+    because a dataset that grows underneath a training run invalidates every metric computed from it. The
+    episode order is the order the caller resolved -- the frozen manifest order -- and each episode's bytes
+    are hashed into the manifest so a later edit is detectable.
+    """
+
+    import hashlib
+    import os
+
+    _bundle_digest(source_manifest_sha256, "EXPORT_SOURCE_DIGEST_INVALID")
+    _bundle_digest(campaign_index_sha256, "EXPORT_INDEX_DIGEST_INVALID")
+    if not isinstance(committed, (list, tuple)):
+        raise ValueError("EXPORT_EPISODES_INVALID")
+    episodes = list(committed)
+    if not episodes:
+        raise ValueError("EXPORT_EMPTY")
+    target = Path(output)
+    if target.exists() or target.is_symlink():
+        raise ValueError("EXPORT_OUTPUT_EXISTS")
+
+    records, seen = [], set()
+    for episode in episodes:
+        if not isinstance(episode, dict) or not isinstance(episode.get("scene_id"), str):
+            raise ValueError("EXPORT_EPISODES_INVALID")
+        scene_id = episode["scene_id"]
+        if scene_id in seen:
+            raise ValueError("EXPORT_DUPLICATE_SCENE")
+        seen.add(scene_id)
+        split = episode.get("split")
+        if split is not None and split not in _COLLECTION_SPLITS:
+            raise ValueError("EXPORT_SPLIT_FORBIDDEN")
+        if any(stale in scene_id or stale in str(episode.get("dataset_id", ""))
+               for stale in _STALE_DATASET_IDS):
+            raise ValueError("EXPORT_STALE_DATASET_ID")
+        if episode.get("status", "PASSED") != "PASSED":
+            raise ValueError("EXPORT_EPISODE_NOT_PASSED")
+        content = episode.get("content")
+        if not isinstance(content, dict) or not content:
+            raise ValueError("EXPORT_EPISODE_CONTENT_MISSING")
+        payload = json.dumps(content, sort_keys=True, indent=2).encode() + _NEWLINE
+        records.append({"scene_id": scene_id, "split": split,
+                        "content_sha256": hashlib.sha256(payload).hexdigest(),
+                        "payload": payload})
+
+    target.mkdir(parents=True)
+    episodes_dir = target / "episodes"
+    episodes_dir.mkdir()
+    for record in records:
+        path = episodes_dir / (record["scene_id"] + ".json")
+        temporary = path.with_name(path.name + ".partial")
+        with open(temporary, "wb") as handle:
+            handle.write(record["payload"])
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    document = {"schema_version": 1, "kind": "act_dataset_export", "scene_count": len(records),
+                "source_manifest_sha256": source_manifest_sha256,
+                "campaign_index_sha256": campaign_index_sha256,
+                "episodes": [{"scene_id": record["scene_id"], "split": record["split"],
+                              "content_sha256": record["content_sha256"]} for record in records]}
+    manifest_path = target / "export-manifest.json"
+    manifest_path.write_text(json.dumps(document, sort_keys=True, indent=2) + chr(10))
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    return {**document, "manifest_path": str(manifest_path), "export_sha256": digest}
