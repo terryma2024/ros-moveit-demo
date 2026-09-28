@@ -8808,3 +8808,35 @@ that the manifest cannot be frozen from real verification until the runtime step
 
 - **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
   formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
+
+## CP-762 — Task 10 CLI is under-specified against the tree: three open inputs, not one
+
+Checked the remaining input the CLI was assumed to read:
+
+- **The ACT calibration report cannot supply the sampling inputs.** `config/act/calibration-schema.json`
+  has exactly eight top-level properties — `schema_version`, `status`, `source_commit`, `config_sha256`,
+  `source_provenance_sha256`, `measurements`, `checks`, `live_campaign` — with **no workspace bounds, no
+  candidate budget, no reachability data**. `act/sampling.py` likewise has no bounds/budget notion, and
+  no file under `src/act` or `config/act` mentions a budget.
+- Combined with CP-761, `act_sample` therefore lacks **three** inputs the reviewed plan does not define:
+  1. the **candidate source** (the per-split `{xy, arm_q, search_start_rad, seed}` lists and
+     `minimum_gap_m`) — the CLI signature has no config argument;
+  2. the **candidate port** that physically verifies each point against the 14 reachability gates —
+     nothing in the package implements `verify`, and the plan names only "Task 6 calibration and full
+     MoveIt preflight", which does not exist as an artifact;
+  3. the **qualification scene generators** (8 functional, 40 sustained-load), which my greps show do not
+     exist anywhere.
+
+Two of those three decide which scenes may ever enter training (1) and which are admissible for the W2
+qualification that gates formal collection (3). Choosing them unilaterally would put implementation
+convenience ahead of the plan, in exactly the place the plan is most careful — so I am holding rather
+than inventing, and restating the single question needed to proceed.
+
+**Question (unchanged, now carrying more evidence):** should `act_sample` (a) read a
+plan-sanctioned config file (please name it) plus the live MoveIt preflight, or (b) take the candidate
+source, the port and the scene generators as explicit, documented inputs supplied by the runtime ladder —
+with the CLI's own tests using doubles and the ledger recording that no manifest can be frozen from real
+verification until that step runs?
+
+- **Boundaries:** no runtime/motion, no evidence deleted, no gates lowered, no hardware touched;
+  formal accepted 0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED.
