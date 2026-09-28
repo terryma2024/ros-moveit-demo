@@ -6696,3 +6696,13 @@ status: PLANNED_ISOLATED_STACK
 - **失败定位（供下一轮直接执行）**：失败集合中的 `test_controller_acceptance_before_close_yields_one_command_then_cancel`、`test_wrong_field_is_rejected[...]` 等用例**直接**调用 `registry.claim_bound(...)`，在新契约下必须先经过 broker 捕获；因此修复的主战场在**测试侧**——在所有直接调用 `claim_bound` 的辅助函数中先插入 `registry.capture_controller_identity(handle)`（并让 `port.reserve` 的 `expected_boot_incarnation` 保持可选默认 `None`，以兼容测试直接调用）。下一轮按此顺序执行：只改源码 → 跑 `test_act_dispatch_transaction.py`（须 8/8）→ 补测试侧捕获 → 跑六模块 → 再写 `test_act_exp573_snapshot_authority.py` 的五项 RED/GREEN 用例。
 - 未完成：上述 P2 权威修补；copy/legacy 迁移复核；簿记（contract/audit/ledger 最终更正、重生成 change/evidence 清单、review 请求包引用**当前整文件哈希**且“清单快照提交”与“ledger/请求包提交”**显式分离**）。**不请求 review 11**，不自批。
 - 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；证据追加式，无删除或覆盖。
+
+## CP-663 — EXP-573 P2 权威漏洞关闭（步骤 1–3）：broker 自有捕获落地，六模块 151 / 探针 29 全绿
+
+- 提交 `3663f2d9`。按用户给出的分步方案，从保存的中间态文件重新实现并**逐步验证**：
+  1. **生产源码**：新增 `ReservationFakeControllerPort.identity_snapshot()`（仅在端口锁内返回不可变 `(generation, controller_incarnation, boot_incarnation)`，无 I/O、无回调）；新增 `AuthorityTransactionRegistry.capture_controller_identity(handle)`——**先**在 registry 锁之外读取绑定端口的快照，**再**在 registry 锁内校验其与 READY record 的 generation/incarnation/identity[3] 一致并绑定到该 permit，**不接受任何调用方快照值**（多余参数直接 TypeError）；`claim_bound` **删除** `controller_snapshot` 参数，在 registry → admission → history 边界内**强制消费内部快照**（缺失即 `AUTHORITY_CONTROLLER_GENERATION_CHANGED`），boot 从内部快照持久化；`reserve` 与 `send` 重校验 generation、controller incarnation 与 expected boot（`port.reserve` 的 `expected_boot_incarnation` 仅对底层直接调用保持可选默认 `None`，支持的交易路径始终传入）。
+  2. **dispatch 模块单独验证**：`test_act_dispatch_transaction.py` 由 4 failed 修到 **8 passed**（`step2d.log`/JUnit）；期间修正了两个我自己的接线缺陷：boot 校验被放进了 `send` 而非 `reserve`（NameError），以及 `send` 中残留的裸参数读取（已删除，改为按 reservation 中记录的 expected boot 重校验）。
+  3. **测试侧迁移**：所有直接调用 `registry.claim_bound` 的辅助/用例先调用 `registry.capture_controller_identity(handle)`（三个测试文件各一处）；一处“陈旧控制器代次”用例改为由**捕获**拒绝（`AUTHORITY_CONTROLLER_GENERATION_CHANGED`）——这正是新契约的正确语义，未暴露任何调用方取值以迁就用例。
+- **实测（新建 scratch + tempfile 探针 PASS + 逐文件 SHA 等于 worktree 的镜像 `mirror-27..33`）**：六模块 **151 passed**（`step3d-six.log`/JUnit）；四探针 **29 passed**（`step3d-probes.log`/JUnit）。
+- 未完成（下一轮）：步骤 4 的五项快照权威行为用例（无捕获即拒绝、`claim_bound` 拒绝任何 snapshot kwarg、伪造值无法安装因捕获无值参数、rearm/boot 在捕获与 reserve 之间变化须拒绝且零发送、正常流程成功）——先在**未修复的旧提交**上取同名同源的 RED，再在修复树上取 GREEN；步骤 5 的零警告复核与全部任务自有改动提交；随后真实 deepcopy 屏障验证与最终簿记。**不请求 review 11**，不自批。
+- 边界：Gate 5 OPEN/BLOCKED；Gate 6 与所有 runtime 权威关闭（正式 accepted 0/0/0）；full/build/installed 门禁延后；42 个既有 dirty entries 未改动；证据追加式，无删除或覆盖。
