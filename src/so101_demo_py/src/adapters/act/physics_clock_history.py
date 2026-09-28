@@ -150,23 +150,27 @@ class PhysicsClockHistory:
                 accepted = []
                 for sample in samples:
                     step += 1
-                    if (not isinstance(sample, PhysicsStepEvidence)
-                            or sample.simulation_session_id != self.session_id
-                            or sample.reset_epoch != self.epoch
-                            or _integer(sample.physics_step, "physics_step", 1) != step
-                            or sample.truncated is not False
-                            or sample.diagnostic_hazard_breached is not False
-                            or len(sample.model_qpos) != self.nq
-                            or len(sample.model_qvel) != self.nv
-                            or any(not math.isfinite(value) for value in sample.model_qpos)
-                            or any(not math.isfinite(value) for value in sample.model_qvel)):
+                    # Owned snapshot first: the callback message is borrowed for the
+                    # duration of the callback only, so validation and retention must
+                    # both apply to one private copy of the same bytes.
+                    owned = copy.deepcopy(sample)
+                    if (not isinstance(owned, PhysicsStepEvidence)
+                            or owned.simulation_session_id != self.session_id
+                            or owned.reset_epoch != self.epoch
+                            or _integer(owned.physics_step, "physics_step", 1) != step
+                            or owned.truncated is not False
+                            or owned.diagnostic_hazard_breached is not False
+                            or len(owned.model_qpos) != self.nq
+                            or len(owned.model_qvel) != self.nv
+                            or any(not math.isfinite(value) for value in owned.model_qpos)
+                            or any(not math.isfinite(value) for value in owned.model_qvel)):
                         raise ValueError("PHYSICS_SAMPLE_INVALID")
-                    current_sim_ns = _simulation_ns(sample.simulation_time_s)
+                    current_sim_ns = _simulation_ns(owned.simulation_time_s)
                     if current_sim_ns - sim_ns != _STEP_NS:
                         raise ValueError("PHYSICS_SIMULATION_STEP_GAP")
-                    begin = _integer(sample.clock_interval_begin_monotonic_ns,
+                    begin = _integer(owned.clock_interval_begin_monotonic_ns,
                                      "source_begin_ns", 1)
-                    end = _integer(sample.clock_interval_end_monotonic_ns,
+                    end = _integer(owned.clock_interval_end_monotonic_ns,
                                    "source_end_ns", 1)
                     if (begin < end_previous or end < begin or
                             end - begin > self.max_source_step_gap_ns or
@@ -176,7 +180,7 @@ class PhysicsClockHistory:
                             not 0 <= now_ns - end <= self.max_age_ns):
                         raise ValueError("PHYSICS_SOURCE_CLOCK_INVALID")
                     accepted.append({
-                        "sample": copy.deepcopy(sample),
+                        "sample": owned,
                         "received_monotonic_ns": receipt_ns,
                         "command_authority": False,
                     })
