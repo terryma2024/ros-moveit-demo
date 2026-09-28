@@ -1,0 +1,9 @@
+# Training dependencies for Task 12. This file is deliberately UNRESOLVED: the versions can only be
+# pinned by resolving the selected LeRobot / PyTorch release inside a separate training interpreter, and
+# inventing numbers here would defeat the point of the lock. A training run refuses to start until this
+# says RESOLVED with every package carrying its source SHA.
+schema_version: 1
+kind: act_training_requirements
+status: UNRESOLVED
+resolver: null
+packages: []
