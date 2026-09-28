@@ -6372,3 +6372,9 @@ status: PLANNED_ISOLATED_STACK
 - 门禁：六个模块 **151 passed**（同一 151-name 集合），证明这次索引接线没有破坏 accept/expiry/admission/authority 任何路径（上一轮的错误接线曾导致 19 项失败，本轮先验证再提交）。
 - checkpoint 刷新：`experiments/exp570-dispatch-transaction/checkpoint.json` SHA256 `7b5f99ececa8eadf13a83fa7d7af290f18d540db434e83d93557a7b62acb0e51`。
 - 边界：Gate 5 仍 OPEN，等待第八次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持关闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
+
+## CP-627 — 复核包与 checkpoint 哈希同步（防止因陈述不一致被判 BLOCK）
+
+- 第八次复核请求包 `handoff/2026-09-28-review8-request-exp570.md` 在上一轮引用的契约哈希早于 `5c4bfe60`（O(1) 索引与契约同步更新之前），且 `source-commit.txt` 仍指向 `bb8eaffd`。本轮同步：`source-commit.txt` 更新为当前被测提交、`green.log` 换为索引改造后的 GREEN 运行、`tested-source-hashes.txt` 重算（新增 `physics_clock_history.py`）、checkpoint 重新索引并更新 `source_commit`/`green.log_sha256`；请求包中的 HEAD、契约哈希（`7cc6f867…`）、lock audit 哈希（`1e116a95…`）与 checkpoint 哈希全部改为当前值，并把 `commit_receipt` 描述改为“O(1) 索引 + 只读 receipt、锁内无深拷贝”（与代码一致）。
+- 复核请求包新 SHA256 记录于本条目提交说明与 checkpoint；门禁仍为 **151 passed**（同一 151-name 集合）。
+- 边界：Gate 5 仍 OPEN，等待第八次本机独立 Astra/High 复核；Gate 6 runtime、authority、goals、motion、正式采集与 Task 12 保持封闭（正式 accepted 0/0/0）；未做 C++/Gate 6 runtime；未跑 ordinary full suite；42 个既有 dirty entries 未改动；证据未删除。
