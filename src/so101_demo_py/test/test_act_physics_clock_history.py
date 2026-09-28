@@ -243,3 +243,29 @@ def test_evidence_ready_turns_false_when_the_retained_window_goes_stale():
     assert history.evidence_ready is True
     now[0] += 300_000_000
     assert history.evidence_ready is False
+
+
+def test_step_at_copies_only_the_selected_sample(monkeypatch):
+    """A targeted read must not deep-copy the whole fresh window."""
+
+    import so101_demo.adapters.act.physics_clock_history as module
+
+    calls = {"count": 0}
+    real = module.copy.deepcopy
+
+    def counting(value, *args, **kwargs):
+        calls["count"] += 1
+        return real(value, *args, **kwargs)
+
+    now = [NOW_NS]
+    history = _history(now)
+    history.accept_chunk(_chunk(0, *(_sample(step) for step in range(1, 11))))
+    history.accept_chunk(_chunk(1, *(_sample(step) for step in range(11, 21))))
+    monkeypatch.setattr(module.copy, "deepcopy", counting)
+    selected = history.step_at(15)
+    assert selected["sample"].physics_step == 15
+    assert calls["count"] <= 2, calls["count"]
+    calls["count"] = 0
+    frames = history.recent_with_receipts()
+    assert len(frames) == 20
+    assert calls["count"] == 20

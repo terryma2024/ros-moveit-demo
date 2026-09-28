@@ -289,3 +289,20 @@ def test_adapter_evidence_ready_delegates_and_never_authorizes_before_a_chunk():
     adapter.accept_message(_chunk(0, _sample(1)))
     assert adapter.evidence_ready is True
     assert hazards == []
+
+
+def test_pending_chunk_keeps_nested_evidence_after_later_mutation():
+    """Chunks retained before the arm must be isolated before they are stored."""
+
+    adapter, node, history, hazards, now = _fixture()
+    chunk = _chunk(0, _sample(1))
+    chunk.samples[0].model_qpos[0] = .1
+    chunk.samples[0].net_contact_force_world_n.x = 1.
+    node.callback(chunk)
+    chunk.samples[0].model_qpos[0] = 9.
+    chunk.samples[0].net_contact_force_world_n.x = 9.
+    adapter.arm(_reset(1))
+    selected = history.step_at(1)
+    assert tuple(selected["sample"].model_qpos) == (.1, .2)
+    assert selected["sample"].net_contact_force_world_n.x == 1.
+    assert hazards == []
