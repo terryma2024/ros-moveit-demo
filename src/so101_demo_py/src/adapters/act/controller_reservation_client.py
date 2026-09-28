@@ -18,6 +18,56 @@ _ROLE_CODES = {"arm": 1, "gripper": 2, "neck": 3}
 _MAX_INGRESS_SNAPSHOT_AGE_NS = 200_000_000
 
 
+def _encode_bound_frame(*, generation, goal_uuid, role, permit_uuid, target_digest,
+                        claim_monotonic_ns, deadline_ns, session_id, broker_incarnation,
+                        controller_incarnation, controller_boot_incarnation, goal_cdr,
+                        capability):
+    """Private v2 binary codec (frozen schema); never a public authority API.
+
+    The capability is mandatory: it is never defaulted, must be exactly 32 bytes
+    and must not be all zeroes.
+    """
+
+    import struct
+
+    if not isinstance(capability, bytes) or len(capability) != 32 or not any(capability):
+        raise ValueError("BOUND_CAPABILITY_INVALID")
+    if type(generation) is not int or generation <= 0:
+        raise ValueError("BOUND_GENERATION_INVALID")
+    if len(bytes(goal_uuid)) != 16 or not any(goal_uuid):
+        raise ValueError("BOUND_GOAL_UUID_INVALID")
+    if type(role) is not int or role not in (1, 2, 3):
+        raise ValueError("BOUND_ROLE_INVALID")
+    if len(bytes(permit_uuid)) != 16 or not any(permit_uuid) \
+            or (permit_uuid[6] >> 4) != 4 or (permit_uuid[8] & 0xC0) != 0x80:
+        raise ValueError("BOUND_PERMIT_UUID_INVALID")
+    if len(bytes(target_digest)) != 32 or not any(target_digest):
+        raise ValueError("BOUND_DIGEST_INVALID")
+    if (type(claim_monotonic_ns) is not int or type(deadline_ns) is not int
+            or claim_monotonic_ns <= 0 or deadline_ns <= 0
+            or claim_monotonic_ns > deadline_ns):
+        raise ValueError("BOUND_TIME_INVALID")
+    if not goal_cdr or len(goal_cdr) > 1048576:
+        raise ValueError("BOUND_GOAL_INVALID")
+
+    def bounded(value):
+        raw = value.encode("ascii")
+        if not 0 < len(raw) <= 64 or any(byte < 0x20 or byte > 0x7E for byte in raw):
+            raise ValueError("BOUND_STRING_INVALID")
+        return bytes((len(raw),)) + raw
+
+    body = b"SOGB" + bytes((2, 1)) + capability
+    body += struct.pack(">Q", generation) + bytes(goal_uuid) + bytes((role,))
+    body += bytes(permit_uuid) + bytes(target_digest)
+    body += struct.pack(">q", claim_monotonic_ns) + struct.pack(">q", deadline_ns)
+    body += bounded(session_id) + bounded(broker_incarnation)
+    body += bounded(controller_incarnation) + bounded(controller_boot_incarnation)
+    body += struct.pack(">I", len(goal_cdr)) + goal_cdr
+    if len(body) > 1048640:
+        raise ValueError("BOUND_BODY_TOO_LARGE")
+    return struct.pack(">I", len(body)) + body
+
+
 class ControllerReservationClient:
     def __init__(self, endpoints, *, capability, timeout_s, deadline_port=None):
         if not isinstance(endpoints, dict) or not endpoints:

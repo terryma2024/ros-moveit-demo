@@ -144,6 +144,35 @@ if(BUILD_TESTING)
   target_compile_features(test_controller_stop_witness PRIVATE cxx_std_17)
   target_include_directories(test_controller_stop_witness PRIVATE include)
 
+  # Gate 6 Batch 3 (Phase 3a): bound reservation frame, bound admission state
+  # machine and SHA-256 known answers. The frozen fixture is loaded by the tests
+  # relative to __FILE__, so no install rule is required for it.
+  ament_add_gtest(test_gate6_bound_reservation_frame
+    test/test_gate6_bound_reservation_frame.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_bound_reservation_frame PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_bound_reservation_frame PRIVATE include)
+  ament_target_dependencies(test_gate6_bound_reservation_frame
+    control_msgs rclcpp trajectory_msgs)
+  target_link_libraries(test_gate6_bound_reservation_frame
+    so101_controller_reservation_protocol)
+
+  ament_add_gtest(test_gate6_bound_admission_state
+    test/test_gate6_bound_admission_state.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_bound_admission_state PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_bound_admission_state PRIVATE include)
+  ament_target_dependencies(test_gate6_bound_admission_state
+    control_msgs rclcpp trajectory_msgs)
+  target_link_libraries(test_gate6_bound_admission_state
+    so101_controller_reservation_protocol)
+
+  ament_add_gtest(test_gate6_sha256_vectors
+    test/test_gate6_sha256_vectors.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_sha256_vectors PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_sha256_vectors PRIVATE include)
+
   ament_add_gtest(test_controller_reservation_protocol
     test/test_controller_reservation_protocol.cpp
     APPEND_LIBRARY_DIRS ${so101_test_library_dirs})

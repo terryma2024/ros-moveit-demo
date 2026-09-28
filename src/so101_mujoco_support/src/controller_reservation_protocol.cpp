@@ -188,3 +188,137 @@ std::array<uint8_t, 40> encode_controller_ingress_reply(
 }
 
 }  // namespace so101_mujoco_support
+namespace so101_mujoco_support
+{
+
+// ---------------------------------------------------------------------------
+// Frozen v2 bound reservation frame (see the Batch 3 protocol audit).
+// Structure parsing and CDR deserialization happen here, outside any gate mutex,
+// producing an immutable value; semantic validation happens in the admission.
+// ---------------------------------------------------------------------------
+namespace
+{
+uint32_t read_u32_be(const uint8_t * bytes)
+{
+  return (static_cast<uint32_t>(bytes[0]) << 24) | (static_cast<uint32_t>(bytes[1]) << 16) |
+         (static_cast<uint32_t>(bytes[2]) << 8) | static_cast<uint32_t>(bytes[3]);
+}
+
+constexpr size_t bound_prefix_size = 6;      // "SOGB" + version + operation
+constexpr size_t bound_capability_size = 32;
+constexpr size_t bound_fixed_size = 8 + 16 + 1 + 16 + 32 + 8 + 8;
+
+bool all_zero(const uint8_t * bytes, size_t size)
+{
+  for (size_t index = 0; index < size; ++index) {
+    if (bytes[index] != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string read_bounded_string(const uint8_t * body, size_t body_size, size_t & offset)
+{
+  if (offset + 1 > body_size) {throw std::invalid_argument("BOUND_STRING_TRUNCATED");}
+  const size_t length = body[offset++];
+  if (length == 0 || length > so101_mujoco_support::kMaxIncarnationBytes ||
+    offset + length > body_size)
+  {
+    throw std::invalid_argument("BOUND_STRING_INVALID");
+  }
+  std::string value(reinterpret_cast<const char *>(body + offset), length);   // no whole-body copy
+  offset += length;
+  for (const char character : value) {
+    const auto code = static_cast<unsigned char>(character);
+    if (code < 0x20 || code > 0x7e) {throw std::invalid_argument("BOUND_STRING_NOT_ASCII");}
+  }
+  return value;
+}
+}  // namespace
+
+BoundControllerReservationRequest parse_bound_controller_reservation_frame(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability,
+  ControllerReservationRole expected_role)
+{
+  if (frame.size() < prefix_size + bound_prefix_size + bound_capability_size) {
+    throw std::invalid_argument("BOUND_FRAME_TRUNCATED");
+  }
+  const uint32_t declared = read_u32_be(frame.data());
+  if (declared != frame.size() - prefix_size || declared > kMaxBoundBodyBytes) {
+    throw std::invalid_argument("BOUND_FRAME_LENGTH_INVALID");
+  }
+  const uint8_t * body = frame.data() + prefix_size;
+  const size_t body_size = declared;
+  if (std::memcmp(body, "SOGB", 4) != 0) {throw std::invalid_argument("BOUND_FRAME_MAGIC");}
+  if (body[4] != kBoundProtocolVersion) {throw std::invalid_argument("BOUND_FRAME_VERSION");}
+  if (body[5] != kBoundReservationOperation) {throw std::invalid_argument("BOUND_FRAME_OPERATION");}
+  if (std::memcmp(body + bound_prefix_size, expected_capability.data(),
+                  bound_capability_size) != 0)
+  {
+    throw std::invalid_argument("BOUND_FRAME_CAPABILITY");
+  }
+  size_t offset = bound_prefix_size + bound_capability_size;
+  if (offset + bound_fixed_size > body_size) {
+    throw std::invalid_argument("BOUND_FRAME_TRUNCATED");
+  }
+  BoundControllerReservationRequest request;   // NSDMIs initialise every field
+  request.generation = read_u64(body + offset);
+  if (request.generation == 0) {throw std::invalid_argument("BOUND_FRAME_GENERATION_INVALID");}
+  offset += 8;
+  std::memcpy(request.uuid.data(), body + offset, 16);
+  if (all_zero(request.uuid.data(), 16)) {
+    throw std::invalid_argument("BOUND_FRAME_GOAL_UUID_INVALID");
+  }
+  offset += 16;
+  const uint8_t role_byte = body[offset++];
+  if (role_byte != static_cast<uint8_t>(expected_role)) {
+    throw std::invalid_argument("BOUND_FRAME_ROLE_MISMATCH");
+  }
+  request.role = expected_role;
+  std::memcpy(request.permit_uuid.data(), body + offset, 16);
+  if (all_zero(request.permit_uuid.data(), 16) || (request.permit_uuid[6] >> 4) != 4 ||
+    (request.permit_uuid[8] & 0xc0) != 0x80)
+  {
+    throw std::invalid_argument("BOUND_FRAME_PERMIT_UUID_INVALID");   // RFC 4122 v4 + variant
+  }
+  offset += 16;
+  std::memcpy(request.target_digest.data(), body + offset, 32);
+  if (all_zero(request.target_digest.data(), 32)) {
+    throw std::invalid_argument("BOUND_FRAME_DIGEST_INVALID");
+  }
+  offset += 32;
+  request.claim_monotonic_ns = static_cast<int64_t>(read_u64(body + offset));
+  offset += 8;
+  request.deadline_ns = static_cast<int64_t>(read_u64(body + offset));
+  offset += 8;
+  if (request.claim_monotonic_ns <= 0 || request.deadline_ns <= 0 ||
+    request.claim_monotonic_ns > request.deadline_ns)
+  {
+    throw std::invalid_argument("BOUND_FRAME_TIME_INVALID");
+  }
+  request.session_id = read_bounded_string(body, body_size, offset);
+  request.broker_incarnation = read_bounded_string(body, body_size, offset);
+  request.controller_incarnation = read_bounded_string(body, body_size, offset);
+  request.controller_boot_incarnation = read_bounded_string(body, body_size, offset);
+  if (offset + 4 > body_size) {throw std::invalid_argument("BOUND_FRAME_GOAL_LENGTH_MISSING");}
+  const uint32_t goal_length = read_u32_be(body + offset);
+  offset += 4;
+  if (goal_length == 0 || goal_length > kMaxGoalCdrBytes || offset + goal_length != body_size) {
+    throw std::invalid_argument("BOUND_FRAME_GOAL_LENGTH_INVALID");
+  }
+  rclcpp::SerializedMessage serialized(goal_length);
+  auto & raw = serialized.get_rcl_serialized_message();
+  std::memcpy(raw.buffer, body + offset, goal_length);
+  raw.buffer_length = goal_length;
+  try {
+    rclcpp::Serialization<ControllerGoalAdmission::Goal> serializer;
+    serializer.deserialize_message(&serialized, &request.goal);
+  } catch (const std::exception & error) {
+    throw std::invalid_argument(std::string("BOUND_FRAME_GOAL_CDR_INVALID:") + error.what());
+  }
+  return request;
+}
+
+}  // namespace so101_mujoco_support
