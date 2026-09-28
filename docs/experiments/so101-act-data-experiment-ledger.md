@@ -7091,3 +7091,44 @@ status: PLANNED_ISOLATED_STACK
   `tempfile.gettempdir()` probe, and a fresh 0700 short IPC base.
 - **Boundaries:** formal accepted Train/Validation/Offline Test 0/0/0; Task 12 NOT_STARTED;
   `collection_*` NOT_PROVISIONED; evidence preserved, nothing deleted.
+
+## CP-691 — P0 owner-composition boundary GREEN; runtime still gated by absent admitted artifacts
+
+- **Gap closed (production wiring, not a test tweak).** `act_run_pick_place_validation` no longer
+  refuses unconditionally: `PickPlaceValidationCampaign.trusted_full_restart_composition()` imports
+  `run_full_restart_campaign` and `run_pick_place_case` **by name** from the installed production
+  modules and returns the campaign coroutine only when both are coroutine functions; the gate
+  `require_full_restart_lifecycle()` takes **no argument** (a caller-supplied lambda raises
+  `TypeError`, so no surrogate proof is possible) and still raises `FULL_RESTART_PROOF_UNAVAILABLE`
+  when that composition is unavailable. `run_admitted_campaign` fails closed on `None`, otherwise
+  calls the production composition with `_case_owner_factory(lifecycle, spec)`, which constructs a
+  **fresh** `PickPlaceCaseOwner` per case (fresh `ActCampaignChildOwner`; one instance refuses a
+  second case), `stack_factory` = `make_pick_place_act_stack` with `ros2 = shutil.which("ros2")` and
+  the readiness entry resolved lazily at owner start, and an async `final_clear_probe` that verifies
+  the domain id and returns the real `RosGraphClearProbe(launch)()`. The admitted spec binds every
+  case (no runtime drift). Startup-only campaign admission and the per-case full-restart retirement
+  contract are preserved.
+- **Re-pointed, not weakened:** `test_missing_full_restart_owner_refuses_before_admission`,
+  `test_fence_precedes_even_a_refusing_admission` and
+  `test_full_restart_cannot_be_claimed_from_one_reused_child` now remove the static proof and keep
+  every original assertion (refusal before admission, `starts == finishes == 0`,
+  `worker.requests == []`, no journal).
+- **Evidence:** RED recorded first (4 failed, `gate6-batch3-py-gate/ownerRED.*`), then GREEN
+  **11 passed** (`ownerGREEN4.*`) and the wider regression **147 passed** (`wide.*`); the recipe and
+  every resolved production API are in `experiments/gate6-runtime/artifact-enumeration.txt`.
+- **Overlay refreshed** for `so101_demo_py` (rc=0) and verified source<->install:
+  `act/pick_place_validation_campaign.py` `64042c6ab429` and
+  `cli/act_run_pick_place_validation.py` `7f06d310f3dc` both **MATCH**
+  (`experiments/gate6-runtime/overlay-refresh2-verify.txt`).
+- **Runtime blocker, precise:** admission cannot pass because the required TASK8_READY artifacts are
+  absent — no admitted `calibration_report` (exp129/exp228 are explicitly partial and were not
+  relabelled), no `runtime_config`, no `collection_config`, no canonical `--source`, and therefore
+  no `ActArtifactBinding` bundle (`manifest`, `runtime_config`, `calibration_report`, `proposal`,
+  `activation_receipt`). Verified available: anchors `config/act/task8-live-anchors.yaml`
+  (`91bbecbfd0914507`), proposal `aa3d562994127bf601a00d2cb5fabf53a76617fa2344f13a797c868e69151408`,
+  activation receipt `d30f198825fd3e0781848e93f16ef55f6c055d83b45ca0f42e55e838e08cee91`,
+  fingerprint `0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11`.
+- **Boundaries:** no process, goal or motion started; formal accepted Train/Validation/Offline Test
+  0/0/0; Task 12 NOT_STARTED; `collection_*` NOT_PROVISIONED; the pre-existing
+  `so101_gazebo_demo_cpp` formatting condition remains recorded and out of scope; no evidence
+  deleted.
