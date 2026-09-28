@@ -54,7 +54,8 @@ def _fake():
 def _issue(registry, **overrides):
     fields = dict(identity=("t", "s", "i", 1, 1), stage="route_dispatch", step=1,
                   history_version=1, incarnation="i", epoch=1, role="arm",
-                  controller_generation=1, goal_uuid="g-1", target_digest="d-1")
+                  controller_generation=1, goal_uuid="g-1", target_digest="d-1",
+                  controller_incarnation="i")
     fields.update(overrides)
     return registry.issue_handle(**fields)
 

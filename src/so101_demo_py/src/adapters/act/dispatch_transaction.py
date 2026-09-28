@@ -66,7 +66,7 @@ class OfflineDispatchTransaction:
             identity=identity, stage=stage, step=1, history_version=token["history_version"],
             incarnation=token["incarnation"], epoch=epoch, role=role,
             controller_generation=controller_generation, goal_uuid=goal_uuid,
-            target_digest=target_digest)
+            target_digest=target_digest, controller_incarnation=controller_incarnation)
         try:
             claim = self.registry.claim_bound(self.handle, admission=self.admission,
                                               identity=identity,
