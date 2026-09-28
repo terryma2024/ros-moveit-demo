@@ -6036,3 +6036,19 @@ status: PLANNED_SOURCE_ONLY
 - Durable checkpoint: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp563-clock-admission/checkpoint.json`，SHA256 `045e6fa6c3846540228934fd8c5bb3bcf5d00eea1674bf8dbf7796f609137af5`；索引 8 个文件、逐文件哈希读回一致；RED/GREEN 日志、JUnit、tempfile 证明与 scratch 同时保留。
 - 边界：本模块是**离线契约**，没有被任何生产入口构造，没有接入 `PickPlaceRosEvidence` 或 SEARCH，没有目标、许可、采集或 Gate 6 工作；正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`；Task 12 `NOT_STARTED`。
 - 仍待完成（Gate 5 顺序第 3 项，EXP-564）：在代表性负载下用实现的真实谓词限定 owner 路径，串起“源结束 → 回调入口 → 接受完成 → 实际看门狗检查 → 撤销 → 确认停止”，给出并单独声明“到期→撤销→确认停止”的上界，同时确认或收紧 0.40 s 首块期限；已完成后再停在 Gate 5 等待第二次本地独立评审。
+
+## EXP-563b — 监控评审补遗：原子性与身份来源修正
+
+status: PLANNED_SOURCE_ONLY
+
+- Prior CP-588 与监控评审补遗（`handoff/2026-09-28-exp563-monitor-review-addendum.md`，SHA256 `aa2ffad9ea11b922e11c7c267a5c3c49093cffa2e063a6adfd8e375ffd234822`，收据 `handoff/2026-09-28-exp563-monitor-review-addendum.receipt`）；被复核契约提交 `8a74c9d7`；source HEAD `3eca8f4d`；无域、无 stack、无目标。
+- Observation: 补遗判定 EXP-563 未关闭，列出五项阻塞缺陷：hazard 用接收时刻身份而不是事件携带身份，迟到的旧代次 hazard 可以撤销新的 arm；`run_checked_stage` 的第二次 fence 与返回之间可被撤销插入而仍返回结果；`admit_sample` 的 fence 与年龄检查/返回之间同样存在窗口；`arm` 用普通元组比较（ticket 字符串字典序压过 generation/epoch）而不是权威后继关系；`record_partial_submit` 在取消抛异常或未确认时没有 fail-closed 处置。
+- One variable: 只修这五项契约缺陷并补确定性并发 RED/GREEN——不改生产接线、不改 authority、不改任何边界数值。
+
+## CP-589 — 五项补遗缺陷已全部关闭，EXP-563 现在才可视为完成
+
+- 修正内容：**(1) 事件来源身份**——`note_hazard(reason, origin_identity=...)` 只在来源身份等于当前身份时撤销；来源为旧/异身份时记入 `stale_hazards`（含来源身份、当前身份与时刻）并返回 `applied=False`，绝不撤销新的 arm。**(2) checked 阶段提交线性化**——时钟采样、身份 re-fence 与结果提交合并进同一个临界区：撤销线性化在其之前则拒绝，在其之后则已提交结果有效且该身份对所有后续阶段关闭；`_fence_locked` 复用于入口与提交。**(3) 样本原子性**——`admit_sample` 在同一临界区内完成身份/撤销判定、选中状态年龄判定与返回决定，撤销无法落在 fence 与返回之间。**(4) 权威后继关系**——新增 `_validated_identity` 与 `identity_is_successor`：同 ticket 要求 `(generation, reset_epoch)` 在整数上严格递增，换 ticket 要求 generation 严格增大，空 ticket、负 generation、越界或 rollback 一律以 `CLOCK_ADMISSION_IDENTITY_INVALID`/`IDENTITY_NOT_NEWER` 拒绝，不再依赖元组字典序。**(5) 部分取消 fail-closed**——取消调用抛异常或返回非真值确认时以 `PHYSICS_CLOCK_PARTIAL_CANCEL_FAILED` 撤销（与已确认取消的 `PHYSICS_CLOCK_PARTIAL_SUBMIT` 区分），两种情况下身份都必须等到匹配的确认停止才可再用。
+- 确定性并发测试：以注入时钟作为提交/年龄路径的确定性屏障（同线程 RLock 可重入）验证“撤销先于提交检查→拒绝且 `checked_stages == 0`”和“撤销后于提交→结果有效且后续阶段拒绝”；`admit_sample` 在屏障处被撤销时拒绝样本；另有旧身份 hazard 不撤销新身份、当前身份 hazard 正常撤销、以及 9 组后继关系参数化用例。RED 为 5 failed / 17 passed（旧身份 origin 参数缺失、样本窗口未关闭、`ticket-9/7/1` 被错误接受、部分取消未 fail closed 等），修正后四个时钟测试模块 **80 passed**。同时更新了既有“部分提交”用例，使其提供真实的取消确认。
+- Durable checkpoint（已按补遗要求修正而非另立终态）：`/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/exp563-clock-admission/checkpoint.json`，SHA256 `7b366d4e408fcd1a88fd3febbde6b3117ce411930ad2a43b6673dd6e3a7fd3e8`；索引 14 个文件（含补遗 RED/GREEN 日志、JUnit、tempfile 证明与 `addendum-source-commit.txt`），逐文件哈希读回一致；状态改为 `VALID_SOURCE_ONLY_OFFLINE_ADMISSION_CONTRACT_AFTER_MONITOR_ADDENDUM`。
+- 边界：契约仍然离线、无 authority，没有被任何生产入口构造；Gate 6、目标、运动、采集与 Task 12 全部保持关闭；正式 accepted Train/Validation/Offline Test 仍为 `0/0/0`。
+- Next discriminator: 只有在以上五项都有证据化处置之后才允许开始 EXP-564——在代表性负载下用真实实现谓词限定 owner 路径，串起源结束 → 回调入口 → 接受完成 → 实际看门狗检查 → 撤销 → 确认停止，单独声明“到期→撤销→确认停止”上界，并确认或收紧 0.40 s 首块期限；EXP-564 结束后再次停在 Gate 5 等待本地 Astra 复核。
