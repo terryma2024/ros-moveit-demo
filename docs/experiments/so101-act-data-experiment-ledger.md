@@ -18206,3 +18206,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   mean something when they run.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   (authoritative descriptor document; one authorised live stack for the recording half) remain open and independent.
+
+## CP-1152 — The failure is in the release-to-retreat transition, and the retreat is never called
+
+- **Two prints, both decisive:**
+  ```
+  phase=SEARCH    holding=EMPTY   released=False supported=False bilateral=False micro=False offtable=False step=2
+  phase=APPROACH  ... step=3      phase=CLOSE  ... bilateral=True  step=4
+  phase=MICRO_LIFT holding=HOLDING ... step=5   phase=TRANSPORT ... step=6   phase=ALIGN ... step=7
+  phase=RELEASE   holding=EMPTY   released=True supported=True bilateral=False micro=True offtable=True step=10
+  stopped: PickPlaceError PHASE_EVIDENCE_INVALID
+  ```
+  Every phase from SEARCH through **RELEASE** was accepted by the real validator - the runner called the next one each
+  time - and the **retreat print never ran**, so `run_retreat_segment` is **never reached**.
+- **So the failure sits between the last phase and the retreat**, in the release handshake: the code that runs after RELEASE
+  (the set-down/release block, whose contracts I satisfied earlier in isolation) is now being driven **in sequence** with
+  state my fake carries forward - and something about that sequence is refused. The next read is the block between the phase
+  loop and the retreat call, not the retreat itself; **CP-1151's guess that the retreat was the last contract was wrong in
+  the same way CP-1149's guess about its shape was** - the fix each time came from printing, not from reasoning.
+- **What the print also proves, which matters for the final test:** the case genuinely runs the nine-phase sequence through
+  the production validator, phase by phase, with the hold and release semantics the runner enforces. A case driven this far
+  is a case whose SEARCH rows, release event and FINAL_CHECK come from real code - which is the whole point of Boundary V.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  remain open and independent.
