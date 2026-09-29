@@ -20215,3 +20215,20 @@ not an inference of mine.**
   CP-1235; the extracted shape validator is committed and shared (CP-1230); item 1 is committed and re-verified (CP-1234).
 - **State:** HEAD `d8bc31fc` plus this checkpoint; all three test files parse; nothing committed while red; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1239 — Astra item 2 COMPLETE: required descriptor, shared production shape, 88 passed
+
+- **GREEN: `88 passed, rc=0`** across the descriptor, bundle, binding, contract, admission and driver suites
+  (`experiments/gate6-batch3-py-gate/rev2c-green8.log`), and the four repairs that got there were each a **single line I had
+  actually read** after four failed pattern-based rewrites. **The lesson is in the ledger four times now and it is the operative
+  one: read the line, edit the line.**
+- **What item 2 delivers, against Astra's wording:**
+  | requirement | state |
+  | --- | --- |
+  | CLI parses the descriptor **once** and passes the same frozen document into the context | ✅ the same `_document["runtime_descriptor"]` the CUDA policy was enforced on (CP-1229) |
+  | descriptor is a **required** context field, `None` bypass deleted | ✅ this checkpoint, RED proven first |
+  | the shared rule reuses/extends the **full production shape validator** | ✅ `validate_head_search_shape` extracted from `validate_head_search_binding`, both call it (CP-1230) |
+  | negatives: missing/extra field, bad camera/motion, CPU/fallback | ✅ extra **inside** `head_search`, unknown **top-level** field and non-dict `motion` refused by the shape rule; camera **keys** refused by the deeper binding checks (the binding suite covers it); CPU/fallback and opaque-digest already refused |
+- **State:** HEAD at this commit plus this checkpoint; staged 0; **items 1 and 2 complete**; items 3, 4, 5 remain in Astra's order;
+  the build tree is in sync for the modules touched this round, and **that sync must be re-established after any further `src/`
+  edit** - verified per file, not assumed; no stack, no hardware, nothing deleted, nothing pushed.
