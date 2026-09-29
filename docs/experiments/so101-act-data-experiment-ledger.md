@@ -13991,3 +13991,32 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   source now named; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17
   candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate,
   no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-972 — The readback carries typed evidence objects, so the pair evidence does reach the recorder
+
+- **Read the port's readback validation and the prerequisite from CP-971 is satisfied in principle.** The physical
+  readback is a dict with exactly `world`, `scene`, `contact`, `observation`, `reference`, `source_stamps_s` and
+  `source_received_wall_s`; the receipts must cover all seven sources; and `world` is a **`SimulationEvidence`
+  object** (checked as `isinstance(world, SimulationEvidence)`, with `simulation_session_id`, `reset_epoch`,
+  `simulation_step` and `paused` fields read from it), not a plain mapping. So `scene` and `contact` are typed evidence
+  objects too, and the exact collision-pair distances the design's rules need are carried **inside them** - which is
+  what the recorder seals into the raw records that Task 8 must read.
+- **That closes the chain end to end for the three raw-dependent rules:** design rule -> the MuJoCo pair reader
+  (`measure_task_scene_geometry` -> `TaskGeometryPair.signed_distance_m`) -> the port's typed `scene`/`contact`
+  evidence -> the sealed raw record indexed by the recorder -> Task 8's derivation. No link is missing, and no
+  substitute source is needed.
+- **One read left before the rules can be written to real field names:** the serialized shape of those `scene`/`contact`
+  evidence objects - the field names for the pair set, each pair's identifiers and its `signed_distance_m`, and the
+  active-contact flag - since `world` being a typed object means the raw record holds a serialized form of it rather
+  than the attribute names I can see in the class.
+- **What will then be written, in order:** the occlusion window (CLOSE->RELEASE longest contiguous legitimate
+  occlusion, needing the wrist records' owner and phase checks), the `support_distance_m` contact proof (the exact
+  pair's active contact plus `max(0, d_signed)`, three frames, max of the three), the `retreat_distance_m` correction
+  (radial displacement relative to the placed cup at the first readback satisfying clearance + contact + pose), the
+  `placement_stable_s` correction (longest contiguous source-stamp duration with pose, linear/angular velocity, table
+  support and forbidden-contact all holding), and `release_stable_s` to its own row's wording.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge and corrected field name green at 29, with two functions provisional and now every rule's evidence
+  source identified; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17
+  candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate,
+  no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
