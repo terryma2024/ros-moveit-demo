@@ -26908,3 +26908,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   2. **keep the rule and re-stamp** earlier samples with the later epoch: **this falsifies the capture time** - SEARCH really was captured before the release - and this batch will not do it;
   3. a third option the review did not raise and I record for completeness: **seal one artifact per epoch** (a pre-release artifact and a post-release one). **Cleaner semantically, larger change, and it changes what "the sealed artifact" means for every consumer** - so it is the owner's call, not a quiet implementation choice.
 - **State:** the decision is now a one-line rule change with a named blast radius, or a redesign with a named cost. Gate3 continues in parallel. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1613 — Item 5 CLOSED: the teleop gate now genuinely runs eight workers, and it is green
+
+### The record, and every number in it comes from this run
+
+| signal | value |
+| --- | --- |
+| **CTest failures** | **0** — `colcon test-result`: **1432 tests, 0 errors, 0 failures, 43 skipped** (pytest totals: **1272 passed / 43 skipped**) |
+| **`created: 8/8 workers` banners** | **117** — one per registered test, captured because the run used `--ctest-args -V` |
+| **colcon per-test xunit files** | **117** under `build/so101_teleop/test_results/so101_teleop/` |
+| **scratch + IPC base** | `tempdir assertion OK: <root>/scratch/final-boundary-v3c-teleop-20260929-212804/tmp`; `ipc base: /tmp/s101-v3c-ipc-967462 (mode 700)` |
+| **command line** | `PYTEST_ADDOPTS="-n 8 -p no:cacheprovider"` with `colcon test --packages-select so101_teleop --event-handlers console_direct+ --ctest-args -V`, after `colcon build --packages-select so101_teleop` (`build_rc=0`, 34 s) |
+| **elapsed / rc** | **235 s**, `teleop_rc=0` |
+
+### What it took, and why the review's item 5 was right three times over
+
+1. **`--pytest-args` never reached pytest** because `so101_teleop` is `ament_cmake` (CP-1603) - **so the earlier "green" teleop numbers were a serial run**, and they also **produced no JUnit** (CP-1604);
+2. **the first real eight-worker run exposed a shared-resource defect**: every CTest-launched pytest process shared one `SO101_IPC_SOCKET_BASE`, and xdist's per-worker directory `<base>/gw0` collided
+   (`INTERNALERROR> FileExistsError`) - fixed at the conftest with a pid-bearing root, **RED reproduced, GREEN passed under a real `-n 8`** (CP-1606/1607);
+3. **the repository's own guard then caught my unregistered test module** (CP-1608) - so the module is registered and the package rebuilt (CP-1609), **and the gate re-measured rather than re-labelled.**
+
+### The two reading rules this item produced, which apply to every gate from here
+
+- **`rc` is not the verdict:** `colcon test` returned **0 while a CTest test was failing** (CP-1611). The verdict is the **failure count**, with the banners, the xunit files and the scratch assertion as the supporting signals. **The next invocation will pass `--return-code-on-test-failure` so that `rc` stops being a formality** - and until it does, no gate's `rc` will be quoted alone.
+- **a value handed to many processes is a resource, not a parameter:** that one sentence covers both the socket base and the `--junit-xml` path (CP-1606, CP-1610).
+
+### State
+- **Item 5 closed**; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612) and its three options stated; items 3, 4, 6, 7 untouched.
+- **The demo leg and the serial CTest leg of the boundary are the CP-1591/1594 records; the teleop leg's citable record is now THIS one, not the CP-1592 serial run.**
+- Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live not started; goal still paused+disarmed.
