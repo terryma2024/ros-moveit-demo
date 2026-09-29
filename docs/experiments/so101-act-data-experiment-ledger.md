@@ -26467,3 +26467,31 @@ pick the flattering number.**
   this audit and this correction did.
 - **State:** packet and index updated and audited; ledger current; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack, no CUDA, no actuators. **The batch is at the boundary described
   in the question below, and the goal stays active.**
+
+## CP-1589 — CORRECTION: the final-boundary runs in CP-1579..CP-1588 are INVALID and must not be counted
+
+- **The owner's finding, accepted without qualification:** `run-demo.sh`, `run-teleop.sh` and `run-ctest.sh` all set
+  `TMPDIR/TMP/TEMP` to the **same** scratch directory, `scratch/final-boundary-20260929-201359/tmp`, and re-ran against it.
+  **AGENTS.md requires every pytest or benchmark run to use a fresh, previously nonexistent NVMe scratch directory**, and
+  one scratch shared by three legs is exactly what that rule forbids. **So those runs are non-compliant evidence.**
+- **What is therefore RETRACTED:**
+  | entry | claim as written | status now |
+  | --- | --- | --- |
+  | CP-1579 | demo `rc=0`, 5731 passed / 163 skipped | **INVALID — non-counting** |
+  | CP-1584 | teleop `rc=0`, 1430 / 0 / 0 / 43 | **INVALID — non-counting** |
+  | CP-1585 | CTest `-j 8` two SIGTERM failures, serial green | **INVALID — non-counting** (the observation stays as a finding; the numbers do not count) |
+  | CP-1586 | "THE FINAL INTEGRATION BOUNDARY IS COMPLETE AND GREEN" | **RETRACTED.** The boundary is **NOT** compliant-green |
+  | CP-1587 / CP-1588 | packet Addendum 3 and the evidence index's "revision batch 3" section | **their numbers must be replaced**; the sections stay, marked as superseded evidence |
+- **What is NOT retracted, because it does not rest on those runs:** the boundary's **three findings** - the driver's unforwarded end-effector (CP-1577), this batch's seal identity read (CP-1582) and the seal's refusal of a
+  disagreeing caller (CP-1583), the gate scripts' missing `SO101_IPC_SOCKET_BASE` (CP-1583), and the `ctest -j 8` **observation** itself. **Each was diagnosed from a failure's own message or a failed test's name, and each fix is
+  committed with its own focused evidence.** The **correction is about which runs may be cited as admission evidence**, and about the claim that the boundary passed.
+- **And the retention rule holds, as it has throughout:** **every log, JUnit file, CTest `Testing/` directory and scratch tree named in CP-1574..CP-1588 is RETAINED.** Nothing is deleted, moved or compressed. They are
+  reclassified, not removed - which is the whole point of keeping a ledger that can be corrected.
+- **What the replacement boundary must do, per the owner's instruction, and it is what the next entries will record:**
+  1. **three new, previously nonexistent scratch directories**, one per leg, each under this task's single evidence root;
+  2. **each leg sets its own `TMPDIR`/`TMP`/`TEMP`** and, before running anything, **fail-closed asserts that `tempfile.gettempdir()` equals that leg's directory exactly** - printed by that leg's exact interpreter;
+  3. **new log, JUnit and result paths** for every leg, so nothing mixes with the invalid runs;
+  4. **a new 0700 IPC base** for teleop and CTest; **CTest serial only** - the approved 116-test boundary, never `-j 8`;
+  5. **one run per leg** on the reduced cadence: demo ordinary gate `-n 8` with the benchmark suite excluded, teleop package gate `-n 8`, serial CTest;
+  6. **per-leg scratch, assertion output, command, rc, counts and elapsed recorded**, with every new scratch classified as a **deletion candidate** and **not deleted**.
+- **State:** the goal stays **active**; no new session, goal, worktree or stack; nothing pushed, nothing deleted; no live stack, no CUDA, no actuators, no hardware, and **P2's live half is not started.**
