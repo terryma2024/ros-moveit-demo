@@ -570,8 +570,15 @@ class PickPlaceSearchPhasePort:
         execute = getattr(self.boundary, "sequence_phase", None)
         if not callable(execute):
             raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
+        # the phase runs on the SEARCH evidence this port validated and froze: APPROACH prepares its expert route from
+        # exactly those two documents, so they travel with the call instead of the boundary reaching back for them
+        handoff = {}
+        if self._validated_search_observation is not None:
+            handoff["observed"] = self.validated_search_observation()
+            handoff["selected_source"] = self.selected_prefix_source(
+                max_skew_s=finite(self.boundary.reset.sources.readback.max_skew))
         try:
-            facts = execute(phase, request)
+            facts = execute(phase, request, **handoff)
         except PickPlaceSearchPortError:
             raise
         except Exception as error:
