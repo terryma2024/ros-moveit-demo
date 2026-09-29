@@ -14155,3 +14155,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   31; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate
   search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push,
   no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-978 — Placement stability via the span helper, and four duplicate definitions my appends had left
+
+- **`placement_stable_s` corrected to the design's row:** it now returns the **longest contiguous source-stamp span in
+  FINAL_CHECK over which the caller's predicate holds** - the row states pose, linear/angular velocity, table support
+  and forbidden contact together, and three of those four come from the raw records, so the predicate is supplied by
+  the caller and the structure is the shared span helper (a frame break ends the span here; only the occlusion row
+  requires a break to fail the run).
+- **A real hazard found and removed: four stale duplicate definitions.** Because several of my edits **appended** to
+  the module, `build_qualified_measurements`, `_span_s`, `retreat_distance_m` and `placement_stable_s` each existed
+  **twice**, and Python takes the last - so the *earlier*, corrected `placement_stable_s` was being **silently
+  shadowed** by the older `samples` version, which is exactly why the new signature appeared "unexpected". The
+  duplicates are gone (kept the first of each), the superseded test is removed, and the file parses with **31 passed,
+  rc=0** (`beh-task8-green13.log`).
+- **The lesson, and it is a new one for this session:** appending to a module and later editing "the same" function by
+  text search can leave two definitions, and the shadowing is invisible in a diff of the appended region. The rule
+  adopted: after any append-then-edit of a module, **list its top-level definitions and check for repeats** before
+  trusting a test result - a passing suite would not have caught a shadowed *unused* duplicate.
+- **Remaining in Task 8:** implement `release_stable_s` and `grasp_occlusion_window_s` through the span helper with
+  their predicates (`strict_breaks=True` for occlusion, with the wrist owner check); then wire `collect_live_runs` from
+  the validated rows into `build_task8_qualified_report` with the readback and `require_qualified(report)`.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge, corrected field name, support-distance pair rule, span helper, retreat rule and placement rule green
+  at 31; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate
+  search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push,
+  no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
