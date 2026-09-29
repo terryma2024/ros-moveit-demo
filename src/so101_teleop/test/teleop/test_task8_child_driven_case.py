@@ -10,6 +10,7 @@ test already builds.
 from __future__ import annotations
 
 import asyncio
+import pytest
 import dataclasses
 import hashlib
 import sys
@@ -592,3 +593,30 @@ def test_the_real_case_execution_publishes_the_journal_row_for_a_prefix_case(tmp
     assert Path(row["stack_retirement_receipt_path"]).is_file()
     assert Path(row["child_retirement_receipt_path"]).is_file()
     assert events == ["start", "execute", "finish"]
+
+    # and the trusted path's own translator: the row a campaign publishes becomes the journal row the
+    # aggregator reads, validated by the same rule the aggregator applies
+    import hashlib as _hashlib
+    from so101_demo.act.task8_live_evidence import case_row_to_journal_row
+
+    identities = {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                  "contact_policy_fingerprint": "d" * 64}
+    manifest_sha256 = _hashlib.sha256((tmp_path / "manifest.json").read_bytes()).hexdigest()
+    journal_row = case_row_to_journal_row(row, identities=identities,
+                                          manifest_document_sha256=manifest_sha256)
+
+    assert journal_row["case_id"] == "prefix-01"
+    assert journal_row["mode"] == "phase_prefix"
+    for name, value in identities.items():
+        assert journal_row[name] == value, f"the bundle identity {name} is carried into the journal row"
+    assert journal_row["manifest_document_sha256"] == manifest_sha256
+    # the producer's receipt digests survive the translation under the journal's own names
+    assert journal_row["child_retirement_receipt_sha256"] == row["child_receipt_sha256"]
+    assert journal_row["stack_retirement_receipt_sha256"] == row["stack_receipt_sha256"]
+    assert journal_row["live_evidence_sha256"] == "0" * 64
+
+    # negative: a row that lost a required field is refused by the trusted translator, not accepted loosely
+    tampered = {key: value for key, value in row.items() if key != "child_receipt_sha256"}
+    with pytest.raises(ValueError, match="TASK8_CASE_ROW_INVALID"):
+        case_row_to_journal_row(tampered, identities=identities,
+                                manifest_document_sha256=manifest_sha256)
