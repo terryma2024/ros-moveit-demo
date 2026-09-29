@@ -25859,3 +25859,16 @@ picture in both directions.**
   **in the working tree, green in principle, and uncommitted until those call sites are updated.**
 - **The next round's first action is therefore small and exact:** update those two call sites to `run_retreat_segment(request, direction=..., distance_m=...)`, re-run the focused set, and commit the
   signature fix with them.
+
+## CP-1552 — The retreat fix is committed; the case manifest gets the run past `begin` and the route comes from the factory
+
+- **`54 passed`** in the focused set, and **the retreat signature fix is committed** (`71ef0f56`) - which closes CP-1551a's correction: the fix stopped being "in the tree" and became history.
+- **And reading `begin` settled the last named blocker in one pass.** The port selects its candidate from `reset.manifest` - `(*manifest["prefix_cases"], *manifest["full_cases"])` filtered by
+  `case_id == request["scenario_id"]` and agreeing on `mode`, `stop_after` and `lifecycle` - then requires `manifest["contact_policy_fingerprint"] == reset.sources.contact_pairs.fingerprint`, and for a
+  **non-default anchor** builds the route from the **factory** and checks `isinstance(route, VisibleApproachExpertRoute)` plus the route manifest's policy fingerprint.
+- **So the composite now supplies a case manifest with exactly one FULL case matching this request**, a non-default anchor (a `"default"` anchor would require a `TrustedVisibleApproachSourcePort`),
+  and the route through the factory - **which is why the earlier direct assignment kept disappearing: `begin` builds the route itself and replaces it.**
+- **The run now gets past `begin` and into the phase documents**, where the runner's verifier still refuses one. **The probes that answer this are already written; they just have to mirror the test's
+  request exactly (mode, stop_after, lifecycle and the live-evidence binding) - three fields and one binding, and the trace will name the phase.**
+- **State:** P1-1..P1-3 green and committed; every production fix committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed,
+  nothing deleted; no hardware.
