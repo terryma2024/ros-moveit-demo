@@ -13038,3 +13038,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7's module green; the port attachment green; the user's six in-flight
   files intact; Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware;
   formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-934 — The window's grid is now fed from real readback (81 passed)
+
+- **Implemented the per-phase feed** in `src/adapters/act/pick_place_search_port.py`: `run_phase`, immediately after
+  the search evidence is validated and before it is returned, hands the window one grid sample via a new
+  `_grid_sample(phase, observed, evidence)`. The sample's `sim_time_s` comes from the readback's own values -
+  `observation`, `world` or `reference`, whichever carries `sim_time_s` / `simulation_time_s` /
+  `requested_sim_time_s` - and its `physics_step` is the evidence's own integer step. If either is unavailable the
+  port raises `LIVE_EVIDENCE_SIM_TIME_UNAVAILABLE` or `LIVE_EVIDENCE_STEP_UNAVAILABLE` rather than inventing a
+  timestamp, so a grid point can only ever record measured provenance. The first SEARCH observation therefore opens
+  the window, exactly as the approved plan requires.
+- **Verified: 81 passed, rc=0** across the runner, live-evidence, live-qualification and search-port suites
+  (`beh-task7-port8.log`).
+- **Remaining Task 7 work:** (1) `PickPlaceCaseOwner._retire`, close or invalid-seal an open window immediately
+  before the child retirement step so both `finish()` and `retire_failed_start()` are covered; (2)
+  `pick_place_case_execution.py`, read the returned `live_evidence_artifact` back before the journal row; (3) the
+  production-chain test.
+- **State:** Tasks 1-6 committed and green; Task 7's module, runner baseline and port (attachment plus grid feed) all
+  green; the user's six in-flight files intact; Tasks 8-10 untouched; no runtime, no package gate, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
