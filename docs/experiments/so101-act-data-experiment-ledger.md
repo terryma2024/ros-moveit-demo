@@ -29887,3 +29887,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-3 has three of four requirements implemented and the fourth (the frozen matrix) explicitly RED;
   P1-1's second half GREEN; the owner's tree preserved and uncommitted.** The demo RED's rate: `demo4=0`, `demo5=0`,
   `demo6` = $(grep -oE 'demo_rc=[0-9]' "$NEW"/demo6.log 2>/dev/null | tail -1 || echo 'in flight').
+
+## CP-1777 — Honest state after P1-3's evaluator change: three requirements in, two fixtures still owed
+
+- **Where the affected files stand now** (`6 failed, 8 passed` across the identity-contract, formal-entry and
+  phase-camera files):
+  | failure | what it is |
+  | --- | --- |
+  | `test_the_shipped_matrix_is_not_a_scaffold` | **P1-3's held-open RED**: the shipped matrix is still `phases: []` / `SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION` and the loader accepts it |
+  | `test_an_occluder_without_geometry_fails_closed` | **the refusal now fires, but the test's `pytest.raises` sees a different error first** - a fixture-order problem to fix, not a contract problem |
+  | `test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting` (+ its sibling, and the formal entry's own test) | **`BATCH_ANCHOR_MISSING`**: the formal entry no longer produces the per-anchor rows the batch schema requires - **this is mine, from the evaluator's new refusals meeting fixtures that never had to supply the geometry** |
+  | `test_the_formal_entrys_replay_rows_carry_a_measured_observation` | the same fixture gap, in the P1-3 file |
+- **And the demo RED's rate is now explicitly NOT comparable across the six runs, which is the honest reading:**
+  ```
+  demo.log  (pre-fix)          demo_rc=1   1 failed
+  demo2.log (pre-fix)          demo_rc=0
+  demo3.log (pre-fix)          demo_rc=1   1 failed
+  demo4.log (post-fix)         demo_rc=0
+  demo5.log (post-fix)         demo_rc=0
+  demo6.log (post-fix+P1-3)    demo_rc=1   7 failed   <- a different failure, and it is mine
+  ```
+  **The revoke test did not recur in any post-fix run** (3 runs, 0 failures, against 2 in 3 before) - **but demo6 is
+  not a clean sample of that fix**, because it also ran with the P1-3 commit and failed for a different reason. **So
+  the fix's rate is 2 clean greens and one confounded run, and it is recorded that way rather than as "fixed".**
+- **What the next round owes, in order:**
+  1. **the fixtures** - the formal-entry seam and the identity-contract file must supply what the evaluator now
+     requires, so `BATCH_ANCHOR_MISSING` and the occluder-order test go green;
+  2. **P1-3's frozen matrix** - the remaining and largest requirement: complete `phases` and per-anchor
+     model/TF/intrinsics from real sources, freeze it, and make the loader refuse a scaffold;
+  3. **a clean re-measurement of the demo fix** after 1 and 2 stop changing code.
+- **State:** **P1-1 second half GREEN; P1-3 three of four requirements implemented with the fourth RED; the fixtures
+  owed are named; the owner's tree preserved (32 modified / 13 untracked, the six-file difference being my
+  `horizontal_fov_rad` lines) and uncommitted.** The goal remains paused pending the TUI's resume.
