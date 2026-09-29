@@ -22858,3 +22858,18 @@ not an inference of mine.**
   rather than a minute. **Both changes are mine to make in the fixture, and neither touches production.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1380 — The instrument answers it in five seconds: the segment is spinning inside `_next`, and my `_raw` call is why
+
+- **Measured:** with a shortened 5-second deadline the probe ran **5.63 s and logged 612,500+ captures** - roughly 120,000 calls per second - and
+  **not one `search` call**. **So the spin is entirely inside the segment's `_next` retry loop**, and the search never gets a chance to run: the
+  outer loop has not reached its first `tick`.
+- **And that pins the cause on my substitution, not on production:** `_next` retries only when `capture` raises a **`PickPlaceReadbackError`**,
+  which here can only come from `pick_place_scene_geometry(self.geometry, raw, ...)` rejecting the raw document. **The suite's `_Sources.capture`
+  builds its raw with arguments it chooses (its lines 75-84, printed above); I bypassed that method because its assertion refuses my case, and
+  called `_raw(after_step + 1)` with the defaults - so the geometry helper is rejecting a readback with no fingertips and the suite's default
+  pose.** One read of those lines gives the exact call to mirror.
+- **So the fix is one line, and it is the same "shared builder, local identity" move as CP-1368:** call `_raw(...)` with the same arguments the
+  suite's own capture passes, and stamp this case's identity on top.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
