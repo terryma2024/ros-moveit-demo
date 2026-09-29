@@ -333,3 +333,33 @@ def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_pa
     sealed.write_text(json.dumps(document))
     with pytest.raises(ValueError, match="BATCH_INVALID"):
         validate_closed_batch(root)
+
+
+def test_a_batch_hiding_a_symlink_is_refused_even_when_it_is_indexed(tmp_path):
+    """Boundary IV: the closed raw index is regular files only, so an indexed symlink must be refused."""
+
+    import hashlib as _hashlib
+
+    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+
+    root = tmp_path / "batch"
+    (root / "raw").mkdir(parents=True)
+    real = root / "raw" / "real.json"
+    real.write_text('{"row": 1}')
+    link = root / "raw" / "link.json"
+    link.symlink_to(real)
+    assert link.is_symlink(), "the fixture must actually contain a symlink"
+
+    digest = _hashlib.sha256(real.read_bytes()).hexdigest()
+    identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
+    identity["source_commit"] = "b" * 40
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                "anchors": ["default", "left", "forward"], "identity": identity,
+                "files": {"raw/real.json": digest, "raw/link.json": digest}}
+    document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
+    write_closed_json(root / "batch.json", document)
+    # the rule already exists and is better named than the fixture assumed: an indexed symlink is refused as a path
+    # problem rather than as a closure problem, which is the more precise diagnosis
+    with pytest.raises(ValueError, match="BATCH_PATH_INVALID"):
+        validate_closed_batch(root)
