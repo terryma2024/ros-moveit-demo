@@ -24176,3 +24176,15 @@ not an inference of mine.**
 - **State:** nothing pushed, nothing deleted, no self-approval; the review request stands with the digest below.
 
 *(Packet size 23306 bytes, sha256 `7de92953cc5033c99d35e793729dc51752773f35ee91692fcebee79581f171fe` as of this checkpoint.)*
+
+## CP-1459 — The indexed rows are adjacent, not merely ordered
+
+- **The reviewer's phrase "adjacent support rows" has an honest counterpart at this scope**, and it is now asserted rather than assumed: the indexed
+  samples' `sim_time_s` **advance by exactly the window's own period** - every delta strictly positive, and every adjacent pair within `_tolerance_s` of
+  `_period_s` - read from the window's own private values, so the index is a **frame history at the window's cadence**, not a set of stamps that happen to
+  be sorted.
+- **Together with the epoch assertions already in place** (`{reset_epoch}` equals the case's bound generation and `{release_epoch} == {0}`), the fixture
+  now covers the two properties the review's sentence names - **same epoch**, and **adjacent rows** - within everything a bounded case can produce, and
+  the qualification rule itself states what a bounded case cannot (CP-1457).
+- **State:** committed with the focused file green (`7 passed`); the packet is unchanged this round, so its digest stays
+  `7de92953cc5033c99d35e793729dc51752773f35ee91692fcebee79581f171fe`; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
