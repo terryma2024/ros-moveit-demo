@@ -141,6 +141,19 @@ def test_full_case_stays_ineligible_for_formal_collection(tmp_path):
     assert row["eligible_for_formal_collection"] is False
 
 
+def test_a_full_case_whose_artifact_does_not_read_back_is_refused(tmp_path):
+    """The journal row must not be published when the sealed artifact's bytes disagree with its digest."""
+
+    artifact = tmp_path / "live.json"
+    artifact.write_bytes(b'{"case": "full-01"}')
+    full = {"status": "PASSED", "completed_phases": list(Task8Runner.PHASES),
+            "live_evidence_artifact": {"path": str(artifact), "sha256": "b" * 64, "schema_version": 1},
+            "stopped_confirmed": True, "formal_episode_eligible": True}
+    spec, owner, journal, events = _prepared(tmp_path, case_id="full-01", result=full)
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_READBACK_MISMATCH"):
+        asyncio.run(run_pick_place_case(spec, "full-01", owner, journal))
+    assert not journal.exists()
+
 def test_case_rejects_forged_phase_result_after_retiring(tmp_path):
     forged = {"status": "PASSED", "completed_phases": ["SEARCH", "APPROACH"],
               "stopped_confirmed": True, "formal_episode_eligible": False}
