@@ -280,13 +280,26 @@ class _Boundary:
             stop_wall_s = max(observation.physical_readback["source_received_wall_s"].values())
             reference_hash = "a" * 64
             event_hash = "b" * 64
+            # `prepare` requires the snapshot keys to be EXACTLY the route's `_ROLES`, and the native proof's
+            # `latest_source_receipt_monotonic_ns` to equal the newest source receipt in nanoseconds - both read off
+            # the production code rather than chosen (CP-1882's next step)
+            from so101_demo.adapters.act.visible_approach_expert_route import _ROLES as _ROUTE_ROLES
+
+            _receipts = observation.physical_readback["source_received_wall_s"]
+            _latest_receipt_ns = max(round(float(value) * 1_000_000_000) for value in _receipts.values())
             snapshots = {kind: {"role": kind, "owner_generation": self.owner_generation,
                                 "ingress_sequence": index + 1,
                                 "last_ingress_monotonic_ns": 1, "observed_monotonic_ns": 2,
                                 "received_monotonic_ns": 3, "command_authority": False}
-                         for index, kind in enumerate(("arm", "gripper", "neck"))}
+                         for index, kind in enumerate(_ROUTE_ROLES)}
+            from so101_demo.adapters.act.visible_approach_expert_route import _BRIDGE_NS as _BRIDGE
+
             common = {"selected_source_sha256": digest, "stop_confirmed_wall_s": stop_wall_s,
                       "command_authority": False, "eligible_for_collection": False}
+            # `prepare` requires the reference's instants to be DERIVED: the selected one from the frozen source's own
+            # simulation time, the bridge one exactly `_BRIDGE_NS` before it (CP-1882's next step)
+            _selected_ns = round(frozen["simulation_time_s"] * 1_000_000_000)
+            _bridge_ns = _selected_ns - _BRIDGE
             observation = _dc.replace(
                 observation,
                 stationary_physics_proof={
@@ -295,7 +308,7 @@ class _Boundary:
                     "physics_step_fence": marker, "controller_interval_proof_required": True},
                 stationary_reference_proof={
                     **common, "reference_window_sha256": reference_hash,
-                    "selected_sim_time_ns": 1_200_000_000, "bridge_sim_time_ns": 1_100_000_000,
+                    "selected_sim_time_ns": _selected_ns, "bridge_sim_time_ns": _bridge_ns,
                     "owner_goal_interval_proof_required": True},
                 local_owner_goal_proof={
                     **common, "reference_window_sha256": reference_hash,
@@ -304,7 +317,7 @@ class _Boundary:
                 native_controller_ingress_proof={
                     **common, "reference_window_sha256": reference_hash,
                     "control_event_window_sha256": event_hash, "owner_generation": self.owner_generation,
-                    "latest_source_receipt_monotonic_ns": 1,
+                    "latest_source_receipt_monotonic_ns": _latest_receipt_ns,
                     "ingress_sequence_by_controller": {kind: snapshots[kind]["ingress_sequence"]
                                                        for kind in snapshots},
                     "native_snapshots": snapshots,

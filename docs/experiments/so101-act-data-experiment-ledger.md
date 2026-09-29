@@ -33140,3 +33140,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress: the SEARCH evidence, the four proofs, the native ingress and the source port's scope all
   pass; the route's `prepare` is the next check.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6,
   the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1883 — `proofs` passes; the native snapshot check is the next condition
+
+- **Two checks cleared by two edits, both of them "derive it, do not write it down":**
+  ```
+  before: visible_approach_expert_route.py:132 -> ValueError("proofs")
+  after:  visible_approach_expert_route.py:152 -> ValueError("native")
+  ```
+  and the edits were:
+  | the condition | what it required |
+  | --- | --- |
+  | `reference["selected_sim_time_ns"] == round(source["simulation_time_s"] * 1e9)` | **the frozen source's own simulation time**, not `1_200_000_000` |
+  | `reference["bridge_sim_time_ns"] == selected_sim_time_ns - _BRIDGE_NS` | **exactly `_BRIDGE_NS` (100 ms) before it**, not `1_100_000_000` (which happened to be right - and would have stopped being right the moment the source's time changed) |
+  | `set(snapshots) == set(_ROLES)` | **the route's own `_ROLES`**, imported rather than spelled out |
+  | `latest_source_receipt_monotonic_ns == max(round(v * 1e9) for v in source["source_received_wall_s"].values())` | **the newest source receipt**, computed |
+  **so the template's literals were right for the template's source and wrong for any other - which is exactly the drift this drive keeps finding.**
+- **And the registration has now passed, in order:** the phase evidence, the four proofs' structure, the native-ingress
+  digest, the source port's seven-condition scope, **and the route's `proofs` check** - **with the route's own `native`
+  snapshot check next** (lines 139-151, whose conditions include the snapshot key set, the receipt instant, and
+  per-role fields the earlier read began to show).
+- **State:** **P1-5 in progress: two checks cleared this round, and the native snapshot validation is the remaining one in
+  `prepare` - from which the route's template and the run's own values must agree.** P1-1 through P1-4 CLOSED. The demo
+  RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so
+  they are not re-stated.**
