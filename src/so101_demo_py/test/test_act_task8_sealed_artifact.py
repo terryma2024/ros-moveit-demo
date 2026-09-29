@@ -89,7 +89,15 @@ def test_the_index_chains_to_complete_canonical_records(tmp_path):
 
 
 def test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period(tmp_path):
-    """Assertions 6 and 7 - coverage with the repeated phase, and the cadence the recorder enforces."""
+    """Assertions 6 and 7 - coverage with the repeated phase, and the cadence the recorder enforces.
+
+    Be precise about what assertion 7 establishes, because the review was right to press on it: the substituted world's
+    grid clock is IMPOSED by this fixture (`_stamped_add_grid` stamps each sample one period after the last), so this
+    checks the RECORDER's rule rather than the cadence of source records. It cannot be otherwise here: the prefix's
+    target grid is fixed by contract (`contracts.py:86-90` - `target_interval_s` must be exactly 0.002 s if declared),
+    so a case clock bounded by that window cannot step the 0.1 s the recorder wants. A real MuJoCo run has no such
+    conflict, and the place where source-record cadence becomes provable is the production qualification path.
+    """
 
     _result, index, path = _sealed_case(tmp_path)
 
