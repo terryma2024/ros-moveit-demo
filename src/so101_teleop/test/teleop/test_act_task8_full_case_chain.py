@@ -194,6 +194,12 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
 
     lease_owner = "act" if "act" in OWNERS else sorted(OWNERS)[0]
     reset.act_context = connection.acquire(owner=lease_owner, session_id=session_id, attempt_id="full-01")
+    # and the three things the boundary needs to attach the four proofs the expert route's registration reads
+    # (CP-1869): the switch, the route's own max_skew (the same value the factory was given), and the ownership
+    # generation the ticket will carry - read off the ownership the production broker holds
+    boundary.attach_proofs = True
+    boundary.max_skew = float(authority["motion"]["max_skew_s"])
+    boundary.owner_generation = broker.ownership.generation
     boundary.contact_pairs = contact_pairs
     if not callable(getattr(boundary, "capture", None)):
         boundary.capture = sources.capture
