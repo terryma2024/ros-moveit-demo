@@ -10944,3 +10944,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-850 — The last provenance rule: receipt dependencies must be real, non-symlink files
+
+- **Read the exact check instead of guessing again.** `source_provenance.py:247-251`, inside the compiled-role
+  verifier, does this for every entry of the receipt's `dependency_sha256`:
+  ```python
+  for relative, digest in dependencies.items():
+      if _SHA.fullmatch(str(digest)) is None or type(relative) is not str:
+          raise ValueError("SOURCE_PROVENANCE_RECEIPT_INVALID")
+      candidate = source_root / relative
+      _regular(candidate, "SOURCE_PROVENANCE_RECEIPT_INPUT_MISSING")
+  ```
+  and `_regular` is the same `lstat`/`S_ISREG` check used everywhere: **a symlink fails it**. `ldd` prints the
+  soname path, which for most system libraries is a symlink (`libm.so.6` -> `libm-2.39.so`), so my receipts
+  failed on exactly that: the dependency keys were resolvable but were symlinks.
+- **Fix identified and mechanical:** re-resolve every dependency through `Path(...).resolve()` before hashing and
+  record the resolved path, so each key names a real regular file that lives on disk under `source_root / key`.
+- **Also resolved this round:** the staged vendored plugin now sits at the registry's expected path
+  (`install-copy/so101_mujoco_support/lib/libmujoco_ros2_control.so`, 14.8 MB, copied from the dependency
+  overlay where the vendored package's own build placed it) with a receipt built from **real** inputs found in
+  the submodule (`third_party/mujoco_ros2_control/mujoco_ros2_control_plugins/src/*.cpp|*.hpp`, 12 sources and
+  13 headers) plus the vendored MuJoCo header, and 83 hashed dependencies. Provenance accepted every role except
+  this final dependency rule, which is the same rule the two worktree-plugin receipts must also satisfy.
+- **Interpretation recorded for the user, because it is a judgement call:** I read the registry's
+  `verbatim_install` semantics as a **staging tree** - the overlay holds exact copies and is what the check
+  measures - which is why staging the vendored `.so` at the registry's path is legitimate here rather than
+  fabrication: the artefact, its digest, its real build inputs and its real dependencies are all recorded from
+  what exists. If instead the plan intends a **merged colcon prefix** built from every package including the
+  submodule, then the Python and share role paths would have to change too, and that remains the open question
+  from CP-849.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
