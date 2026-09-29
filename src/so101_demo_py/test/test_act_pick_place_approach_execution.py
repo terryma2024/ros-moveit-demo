@@ -87,8 +87,9 @@ def _case(tmp_path, calls, *, with_screen=True, with_executor=True, with_wait=Tr
     boundary = SimpleNamespace(
         reset=SimpleNamespace(receipt=SimpleNamespace(new_epoch=2), sources=sources, broker=broker),
         approach_screen=screen if with_screen else None,
-        approach_facts=lambda snapshot, request, *, support_distance_max_m: (
-            calls.append(("facts", support_distance_max_m)) or {"physics_step": 10}))
+        # the validator is phase-aware now, so the stub mirrors that signature and records which phase it was asked about
+        sequence_facts=lambda phase, snapshot, request, *, support_distance_max_m: (
+            calls.append(("facts", support_distance_max_m, phase)) or {"physics_step": 10}))
     # the preparation is a DOCUMENT, so it is a dict - the method reads prepared["prefix"] and its two digests
     return boundary, {"prefix": prefix, "source_artifact_sha256": "ac" * 32,
                       "policy_fingerprint": "ad" * 32}, ticket
@@ -131,6 +132,7 @@ def test_the_chain_issues_approves_submits_waits_takes_the_snapshot_inspects_and
     assert calls[0][1] == "EXPERT_ROUTE" and calls[1][1] == "EXPERT_ROUTE"
     assert calls[2][1] == "PERMIT" and calls[3][1] == 42 and calls[4][1] == 42
     assert calls[7][1] == 0.02, "the admitted support distance reaches the facts validator"
+    assert calls[7][2] == "APPROACH", "and the validator is told which phase it is establishing"
     assert set(result) == {"proof", "current_snapshot", "facts"}
     assert result["proof"].status == "SAFE", "the proof is computed by the production prover over the real snapshot"
     assert result["current_snapshot"]["observation"]["sim_time_s"] == 1.32, "the readback is what is returned"
