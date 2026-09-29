@@ -34001,3 +34001,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1 half done - the bottom-io frame contract is RED→GREEN with evidence (CP-1910); the other half is the
   production client above, which is the next implementation.** **Task-list statuses unchanged: P1-1 in_progress, P1-6
   completed, five pending.**
+
+## CP-1912 — The production low-level client exists, is MuJoCo-backed, and passes its own tests
+
+- **New module:** `src/so101_demo_py/src/act/task8_measurement_client.py` - `MujocoMeasurementClient`, the surface
+  `Task8StackAdapter` delegates to (`launch/close/cleanup/readback/run_search/camera_info/tf/probe`) plus the three the
+  controller adapter calls (`frame/neck_feedback/command`). **Nothing here is a constant chosen to satisfy a check:**
+  | method | what it returns, and from where |
+  | --- | --- |
+  | `launch(anchor)` / `readback(anchor)` | the run's OWN identity: `session_id`/`attempt_id` as constructed, `reset_epoch` incremented per launch; plus the model's real `sim_time_s`, `physics_step`, `neck_yaw_rad` |
+  | `run_search(anchor, request)` | a real neck sweep in the real model, one row per step, cup projected through the real camera pose/intrinsics, occlusion decided against the real occluder geometry; `found` is that decision's outcome |
+  | `camera_info(anchor)` | real intrinsics of the camera the model has (`head_camera`, fovy 60) **with `intrinsics_provenance: "model_cam_fovy"`**, because P1-3 forbids presenting a model-derived value as an independent measurement |
+  | `tf(anchor)` | `cam_xpos`/`cam_xmat`/`xpos` from the same `mj_forward` pass, `provenance: "mj_forward:…"` |
+  | `probe(anchor, command)` | the fixed non-contact probe applied to the model, with the contacts MuJoCo actually found |
+  | `cleanup(anchor, generation)` | generation-scoped, refused by name without a generation |
+- **Real names taken from the model, not guessed:** `head_camera` (fovy 60°), `neck_yaw_joint` (qposadr 6, dofadr 6),
+  `cup_free_joint` (qposadr 7), `plastic_cup`, and the arm joints are literally named `1`…`6` (nq=14, nv=13, 3 cameras).
+- **Two of my own bugs were caught by the tests and fixed, and the entries are kept because they are the reason to run
+  them:** the client used `self.mujoco` where the attribute is `self._mujoco` (3 sites), and the rotation helper indexed a
+  flat 9-element `cam_xmat` as if it were 3×3.
+  ```
+  $VENV/bin/python -m pytest -q src/so101_demo_py/test/test_act_task8_measurement_client.py
+      7 passed in 0.83 s                     (after colcon build --packages-select so101_demo_py, rc=0)
+  ```
+- **State:** **P1-1 in progress: the frame contract (CP-1910) and the production client (this entry) are done; what
+  remains is wiring the client into `build_real_providers`' formal path plus the real `phase_path`/trajectory, and then an
+  actual run of `build_production_measurement_driver` with the seam unset, recorded with input, output, exit code and log.**
+  **Task-list statuses unchanged: P1-1 in_progress, P1-6 completed, five pending.**
