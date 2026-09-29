@@ -17227,3 +17227,37 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   verdicts, so once the grouping is given, the wiring is small.
 - **State:** Boundary IV's index half complete and green; the publishing half blocked on this mapping plus the seven
   support fields reaching the report (CP-1100's RED, currently `21 == 28`). Suite 1 failed / 18 passed in that module.
+
+## CP-1106 — CORRECTION: CP-1105 was wrong on both counts, and the mapping was in a file I had already read from
+
+**The user refuted CP-1105 directly, and the refutation is correct. I verified it in the source before writing this.**
+
+- **CP-1105's claim "the 28-to-7 grouping does not exist in the tree" is FALSE.** It exists, as the authoritative
+  contract, in `src/so101_demo_py/src/act/calibration.py`:
+  | check | fields |
+  | --- | --- |
+  | `fov` | head_translation_m, head_rpy_rad, wrist_translation_m, wrist_rpy_rad, head_intrinsics_px, wrist_intrinsics_px, yaw_zero_bearing_rad, horizontal_fov_rad, lock_valid_neck_rad (9) |
+  | `search` | coarse_step_rad, search_timeout_s, max_fine_corrections, max_fine_total_rad, min_confidence, tracking_iou, min_bbox_aspect, center_deadband_px, vertical_bounds_px, min_area_px2 (10) |
+  | `synchronization` | max_age_s, max_skew_s (2) |
+  | `collision` | path_step_s, path_clearance_m (2) |
+  | `execution` | velocity_limit_rad_s, acceleration_limit_rad_s2, submit_lead_s, stop_velocity_rad_s, stop_latency_s (5) |
+  **9 + 10 + 2 + 2 + 5 = 28** - exactly v2's 21 measurements + 7 support. `release` and `retreat` are the live-only
+  groups (3 + 2 = 5), which is where the later 33-field QUALIFIED comes from, and they must **not** be folded into the
+  28-field TASK8_READY.
+- **CP-1105's claim that the ready document needs all seven checks PASS is also FALSE.** `require_gate(report,
+  "task8_live")` requires **`PICK_PLACE_READY_CHECKS`** = the five above to be `"PASS"` **and** the remaining two
+  (`release`, `retreat`) to be exactly **`"UNMEASURED"`**; it then enforces the 28 fields through
+  `CHECK_MEASUREMENTS[check] <= set(report["measurements"])` with `CALIBRATION_CHECK_EVIDENCE_MISSING`. Only the later
+  **33-field QUALIFIED** report goes through `require_qualified()`, which demands all seven PASS, complete measurements and
+  a `live_campaign` block with 14 journal digests.
+- **How I got it wrong, stated plainly so it is not repeated:** at CP-1004 I read `REQUIRED_CHECKS` out of this very file
+  and built a conclusion on it, but never read the **other three names defined in the same module** -
+  `CHECK_MEASUREMENTS`, `PICK_PLACE_READY_CHECKS`, and the two gates - and then reported a blocker to the user on the
+  strength of that partial read. The lesson is sharper than "read the interface": **when a file defines a contract, read
+  the contract's own names, not the one symbol the current question happens to need.** A blocker raised on an unread file
+  costs the user a decision.
+- **Consequences, correcting the plan rather than the history:** no new grouping is needed and `REQUIRED_CHECKS` must not
+  be changed; the ready report's five checks are aggregated from the existing per-field `compute_field` verdicts over the
+  existing `CHECK_MEASUREMENTS` groups, release/retreat stay `UNMEASURED`, and all 28 fields must be present **with their
+  approved closed-sample citations**. CP-1103/CP-1104's other findings stand (v2 is 21 + 7 with per-field comparators; the
+  comparator layer and closed-sample builders already exist in `task8_measurement_formulas.py`).
