@@ -29350,3 +29350,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and leg 2 is re-running with that fix, a **fresh short scratch** (`experiments/v5a/t-teleop2`, `teleop2.log`) and the same `PYTEST_ADDOPTS="-n 8"`.
 - **And the two red herrings are worth the line, because both looked like real failures:** `--rerun-failed` (a CTest hint that reads as "tests failed") and `1 package had test failures` (colcon's summary of the same refusal). **The artefact that settles it is the 121-byte log with nothing between Start and End** - which is the batch's rule again: read the artefact, not the summary.
 - **State:** **leg 1 green; leg 2 re-running with a result base that exists; leg 3 (serial CTest) after it**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1749 — The teleop leg's CTest executes ZERO tests, twice, while `ctest -N` sees 117
+
+- **The measurements, in the order they were taken:**
+  ```
+  leg 2 run 1 and run 2:   teleop_rc=1   "1 package had test failures"
+  build/so101_teleop/Testing/Temporary/LastTest.log     121 bytes, Start then End, NOTHING between
+  ctest -N (build/so101_teleop)                        Total Tests: 117
+  newest timestamped log:  LastTest_20260929-1622.log  498504 bytes, every "Test Passed."   <- YESTERDAY's run
+  xunit files present:     build/so101_teleop/test_results/so101_teleop/*.xunit.xml          <- not $ROOT/teleop-results
+  ```
+  **So the leg collects 117 tests and executes none, and the artefacts agree with that reading**: today's runs left no timestamped CTest log at all, while yesterday's passing run left one 498 KB long; the xunit files live under `build/…/test_results`, **not** under the `--test-result-base` the script passes (so colcon is overriding that option, and creating the directory - CP-1748's fix - was necessary but not sufficient).
+- **And this is the boundary doing its job rather than a product failure:** the failure is in the **harness** (how the leg invokes `colcon test`/`ctest`), and it is reproducible, which is what makes it fixable. **The next command is the one that separates harness from product**, run by hand in the build directory with the leg's own environment:
+  ```
+  cd build/so101_teleop && ctest --output-on-failure -V        # with TMPDIR/ROS overlay exactly as the leg sets them
+  ```
+  If that runs the 117 and passes, the leg's invocation is what is wrong and the fix is in `run-teleop.sh`; if it also executes nothing, the fault is in how the build tree was prepared for this boundary.
+- **State:** **leg 1 green; leg 2 blocked on a harness question with a named next command; leg 3 (serial CTest) after it**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
