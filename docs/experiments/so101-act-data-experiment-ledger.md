@@ -28419,3 +28419,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Which makes the issuing seam the place, and the only question left is what it is given:** the fixture's issuer is
   `issue_prefix_source=lambda **kwargs: _receipt(kwargs["prefix"], ...)`, and the boundary calls it during APPROACH preparation - **so the next probe is two lines: print `sorted(kwargs)` at that seam**, and whatever carries the observation (the prefix's own `observation_time_s`, or a source document beside it) is what the prefix must be set from before signing.
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: the window and the signature each green alone and one seam from both being green together**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1698 — The window is green and the chain moved again: `PATH_TIME_AXIS_INVALID`
+
+- **The probe again did what a patch could not:**
+  ```
+  PROBE origin=1.65 first=1.752 header=1.7 ok=True      <- the prefix window now passes
+  cause: ValueError PATH_TIME_AXIS_INVALID              <- and the refusal moved one link
+  ```
+  **Two changes bought that:** the prefix **leads** the readback by half a period (`origin = moment + 0.05`) so the ~0.102 s window can contain the header the boundary takes from its **own next capture**, and the signing seam **no longer moves the prefix** - it signs what the last readback produced, which is what will be executed.
+- **The next link is the path's own time axis**, whose rule the boundary states in its own comment: *"the request's time axis is the CASE's own clock (`bridge <= observation < start < first target`), so the two times come from the execution layer that knows them"*. **The fixture must supply those times consistently with the clock it now has** - which is the same
+  migration, one layer deeper.
+- **And the honest engineering note, because it belongs in the record rather than in another patch:** this fixture's clock has now cost **nine links** (CP-1689 … 1697), each found by reading a cause rather than guessing, and **every one of them is the same tension in a new place** - a contract that pins a window to 0.1 s against a case that runs for about a second. **The migration is still the right direction** (the verdict requires a monotonic fixture clock and no rewriting, and the production side is already in), **but the next step should consider the fixture's clock model as a whole** - one sequence, one lead, one signing point, named in one place - **rather than a tenth local patch.**
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: prefix window green, path time axis outstanding**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
