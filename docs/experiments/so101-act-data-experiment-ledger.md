@@ -24510,3 +24510,21 @@ picture in both directions.**
   through the same `io_client`.
 - **State:** the composition and test edits stay **uncommitted** while the contract is red, per this batch's rule; the ledger checkpoint is committed on its own. No new session, goal,
   worktree or stack; nothing pushed, nothing deleted; no real hardware.
+
+## CP-1475 — P1-1 is GREEN: the production composition drives a real measurement
+
+- **`2 passed`** in the new contract file and **`47 passed`** across the four touched test files
+  (`experiments/gate8-p11/green-15.log`), after a RED that failed for exactly the reason the review gave
+  (`red-1.log`).
+- **What changed, and every piece is the review's own wording:**
+  | finding | what the composition does now |
+  | --- | --- |
+  | `controller=None` | the 18-field config comes from its one real source, `HeadSearchBinding.search_config` over the **admitted calibration**, with named refusals (`PRODUCTION_CALIBRATION_REPORT_REQUIRED`, `PRODUCTION_MEASUREMENT_IDENTITY_REQUIRED`); the `controller_settings` argument **no caller ever passed** is deleted |
+  | the clock is a dict | `_MonotonicClock.monotonic()`, which is what the driver calls |
+  | `PersistentTaskStack` implements no protocol | **`Task8StackAdapter`** implements all eight methods over **one `io_client`** seam, owning no policy |
+  | phase camera only echoes an occluder | it reports the **admitted camera geometry and matrix digest** |
+  | the controller is not callable | **`MeasurementControllerAdapter`**: per sample it stamps the client's frame and neck feedback with the case identity, ticks the **real** `HeadSearchController`, issues the resulting command through the same client, and returns the controller's own document as the ack |
+- **What the contract asserts, so types and keys cannot satisfy it:** a **`CLOSED`** batch over all three anchors; cleanup **`CONFIRMED`** for the context's generation and exactly once; the **ten-member `MeasurementIdentity`**; an **index whose files are re-hashed** by the test; **30 controller commands** carrying the state machine's own statuses; and the fail-closed direction - a client that refuses `launch` seals **`INVALID`** carrying that client's own code.
+- **And the test that enshrined the old behaviour is replaced, not weakened:** `test_real_production_providers_are_built_from_the_admitted_descriptor` asserted types, keys and the dead parameter; it is now
+  `..._from_the_admitted_context`, which asserts the **named refusal** when the admitted context is incomplete and **driveability** when it is complete.
+- **State:** committed. P1-1 done; next is P1-2 (the descriptor validator). No new session/goal/worktree/stack; nothing pushed, nothing deleted; no real hardware.
