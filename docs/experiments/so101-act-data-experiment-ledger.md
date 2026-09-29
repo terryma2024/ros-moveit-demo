@@ -26588,3 +26588,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 ### State
 - **The three legs are compliant-green. The next actions are the ones the owner ordered after this point:** re-update **packet / evidence index / hash**, and **only then** propose the independent GPT-6 Astra / High review.
 - Nothing pushed; no new session, goal, worktree or stack; no live stack, no CUDA, no actuators, no hardware; **P2's live half not started**; goal active.
+
+## CP-1595 — The packet and the evidence index now carry the CORRECTED boundary, and both were audited
+
+- **The packet (`task8-astra-rereview-packet.md`, 31987 bytes, sha256 begins `fe029a4e34c90b75`):**
+  - the correction banner now reads **"CORRECTION (CP-1589, RESOLVED at CP-1594)"** and names the retracted scratch (`scratch/final-boundary-20260929-201359`) against the corrected ones (`scratch/final-boundary-v2-{demo,teleop,ctest}-*`),
+    stating that the numbers below were **replaced** by a boundary that ran each leg on its own fresh scratch with the fail-closed equality assertion;
+  - the boundary table now carries **the compliant numbers with each leg's own scratch path**: demo `rc=0`, 5731 passed / 163 skipped, 228 s; teleop `rc=0`, 1430 / 0 / 0 / 43, 217 s; CTest `rc=0`,
+    `100% tests passed, 0 tests failed out of 116`, 216 s, result in `Testing/20260929-1252`;
+  - the parameters line says **"a separate fresh scratch per leg"** and the retention line says each scratch is a **deletion candidate and NOT deleted**.
+- **The evidence index (`task9-package-gate-evidence-index.md`, 15499 bytes, sha256 begins `ca82ccead5a50262`)** gained an **addendum to revision batch 3** with the corrected artefacts and hashes (the packet, both demo
+  logs including the retained failed attempt, both teleop logs and JUnit, the `colcon test-result` summary, the CTest log), the per-leg table, the IPC base with its mode, the CTest `Testing/` directory and its UTC-name convention,
+  and an explicit sentence that **the retracted run's artefacts are retained and are not evidence**.
+- **And the audit was re-run after both edits: every table row's size and sha256 prefix verifies.** The earlier audit's lesson stands and was applied - *quote the tool, do not retype it* - and this time the numbers quoted are
+  the compliant ones.
+- **State:** the last item on the owner's list before proposing a review is done. **The independent GPT-6 Astra / High review is the next action and this agent does not perform it.** Nothing pushed, nothing deleted; no new session,
+  goal, worktree or stack; no hardware; no live stack; P2's live half not started; goal active.
