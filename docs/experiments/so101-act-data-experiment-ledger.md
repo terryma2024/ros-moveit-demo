@@ -26346,3 +26346,18 @@ picture in both directions.**
 - **Why this entry exists at all:** the boundary's whole purpose is that a green-looking gate is not evidence. **`rc=0` and "no FAILED lines" are two readings; the third - the accumulated result files - disagrees, and the boundary
   report must say so rather than pick the flattering one.**
 - **State:** demo `rc=0` (5731/163, fresh); teleop `rc=0` with a contested result file set; CTest in flight; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
+
+## CP-1582 — The teleop leg's failures, read by name: one is a defect in MY change, one is my gate script, one is registration
+
+- **The mixture is resolved, and each class is attributed:**
+  | class | failure | attribution |
+  | --- | --- | --- |
+  | **2** | `AttributeError: 'PickPlaceSearchPhasePort' object has no attribute 'boundary'` in `test_task8_live_evidence_production_chain` | **a real defect in this batch's change.** Its `_port_with(recorder, window)` builds the port with `object.__new__` and sets the two attributes it needed **when `seal_live_evidence` read the epochs from the runner's request** - and CP-1555 moved that read to `self.boundary.reset.receipt.new_epoch`. **The demo gate could not see this: the test lives in the teleop package.** |
+  | **20** | `MutationError: BRIDGE_CHILD_EXITED: 1` and `IPC_SOCKET_PATH_TOO_LONG: /data/work/so101-e...` in `test_unified_bridge`, `_cleanup`, `_two_channel` | **my gate script's omission, and the ledger already said so.** The sanctioned boundary recorded "IPC base 0700" and **my `run-teleop.sh` never set `SO101_IPC_SOCKET_BASE`**, so the child's socket base defaulted to the long evidence-root path and the kernel refused it. **Nothing about the code is implicated; the script is.** |
+  | **13** | `*.xunit.missing_result` ("The test did not generate a result file") | a **registration/collection** class: those names appear in `colcon`'s result set without a result file, which is a bookkeeping fact to explain rather than a test that ran and failed |
+- **And one contract question surfaced by the first class, which the next round settles rather than papers over:** the test calls `seal_live_evidence({..., "reset_epoch": 4, "release_epoch": 7})` - the **runner's** vocabulary - and the port **now ignores those two fields** in favour of the case's own state.
+  **Ignoring a caller's claim about identity is worse than refusing it**, so the fix is: the seal takes its values from the case **and refuses a request whose epochs disagree with them, by name.** That keeps the identity honest *and* keeps the
+  caller's claim checkable - and it is the same shape as every other refusal in this port.
+- **So the boundary has now earned its keep twice in one run:** it found the production defect in the demo module (the driver never forwarded the end-effector, CP-1577), and it found a second defect **in this batch's own seal identity** that
+  only the teleop package could see. **Neither was visible to the focused sets, and both would have reached a reviewer.**
+- **State:** demo `rc=0` (5731/163, fresh); teleop `rc=0` **but not green** - the three classes above are outstanding; CTest in flight; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
