@@ -16956,3 +16956,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary IV still ahead:** missing **phase** coverage, mixed contract across roots, time reversal; then the publishing
   half - real measured values, the four canonical documents, a real 28-field `TASK8_READY`, render-twice byte comparison
   with a single publish, on-disk readback, `require_gate(report, "task8_live")` and `validate_head_search_binding()`.
+
+## CP-1092 — What the remaining index dimensions still need, checked rather than assumed
+
+- **Mixed contract across roots is already partly guarded, and I checked before writing a RED for it:** the entry compares
+  each batch's `measurement_contract_sha256` against the bound contract (the CP-1078 fix), so a batch measured under a
+  foreign contract cannot be aggregated. What is **not** guarded is two batches that agree with the bound contract but
+  disagree with each other on a *different* identity member - the provenance set is checked, the rest of the ten are not
+  compared across roots.
+- **Time reversal needs something the index does not yet carry:** the validator sees **files and digests**
+  (`{"relative_path": sha256}`), not stamps, so an index whose rows go backwards in source time is invisible to it. Making
+  reversal refusable means the index has to carry each row's `source_stamp` and `receive_monotonic_s` beside its digest -
+  which is a **change to the index's shape**, and therefore a paired change like the identity, keys, digest and anchor
+  migrations before it: the writers must put stamps in the index, the fixtures must follow, and only then can the rule
+  exist.
+- **Phase coverage has the same shape as anchor coverage** and can reuse CP-1091's map: the driver's nine phase rows per
+  anchor are the evidence, so "a declared phase with no row" is refusable once the phase set is declared somewhere the
+  validator can read - which today it is not.
+- **So the honest state of Boundary IV's index work:** entry-validates-first ✅, canonical shape ✅, self-digest ✅,
+  symlink ✅, contamination ✅, anchor coverage ✅, contract-vs-bound ✅; **open** - identity agreement across roots beyond
+  provenance, time reversal (needs stamps in the index), phase coverage (needs a declared phase set), and then the whole
+  publishing half. None of the open items is a one-line rule, and each needs its writer-and-validator pairing, which is
+  now the established pattern of this boundary.
