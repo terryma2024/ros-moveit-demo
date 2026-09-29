@@ -21239,3 +21239,19 @@ not an inference of mine.**
   binder was given. **That is the next action, and it is a print rather than a redesign.**
 - **State:** the fixture is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing deleted, nothing
   pushed.
+
+## CP-1288 — The missing file was the receipt the admission helper deliberately does not write
+
+- **Read from `_write_policy`'s return block: the helper writes `proposal.json` and hands back
+  `receipt_path = tmp_path / "activation.json"` - but never writes it.** It returns the receipt *document* instead, so writing it is the
+  caller's job. **That was the FileNotFoundError**, and the fix is one line in my fixture; the helper is not defective, I simply used
+  half of its contract.
+- **With the receipt written, the failure moved back to `ACT_ARTIFACT_BINDING_INVALID`** - i.e. the binder refuses the binding again, but
+  now with a **complete** document set, so what remains is `verify()`'s own rules rather than a missing file. **I read that function only
+  as far as line 158** (the shape checks and the digest loop), so whatever it validates after that - plausibly the proposal and receipt
+  contents, since that is what the policy checks at `:499-510` do - is the next read, and it is bounded.
+- **The pattern is unchanged and worth restating:** every failure of this fixture has been inside a production check, in the order the
+  production code enforces them - shape, digests, evidence-root placement, policy validity, and now whatever `verify` checks last. **A
+  fake-heavy fixture would have passed six rounds ago and proved nothing.**
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
+  deleted, nothing pushed.
