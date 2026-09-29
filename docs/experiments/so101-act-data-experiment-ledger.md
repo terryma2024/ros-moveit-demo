@@ -24616,3 +24616,29 @@ picture in both directions.**
   therefore keeps the adapter of its most recent search for a documented `canonical_evidence(captured, *, support_distance_max_m, raw_records)`, and the **port** -
   which owns the recorder's evidence root - writes the raw records the recorder will index.
 - **State:** the RED is committed with the tests; P1-1 and P1-2 stay green. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1480 — P1-3's port half is implemented; the one remaining unknown is the seven-source raw mapping
+
+- **What is in place (uncommitted while the port's own file is red, per this batch's rule) - `14 passed, 1 failed`** in `test_act_task8_search_port.py`
+  (`experiments/gate8-p13/green-5.log`):
+  - `bind_live_evidence(window, *, support_distance_max_m, raw_records_root)`: **the admitted threshold and the raw-record root travel with the attachment**,
+    and either being absent is refused at attach time by name - **no default is ever invented**;
+  - `_grid_sample` now: **(1)** writes the capture's raw documents under the root (0600, fsync'd, digests computed), **(2)** asks the boundary for the
+    canonical fields, **(3)** builds the canonical 24-key sample with the production `build_live_evidence_sample`, mapping the boundary's fields into the
+    builder's `frame`/`contact`/`measurements` groups; every missing piece raises **`TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: <what>`**;
+  - `run_phase` **no longer has an `is not None` guard** - a phase with an attached window records or refuses, never skips;
+  - and **the port's own refusals survive the phase's wrap**: `except PickPlaceSearchPortError: ... raise` was added, because otherwise the named code was
+    hidden behind `TASK8_SEARCH_EVIDENCE_INVALID` - which is exactly how the original defect stayed invisible.
+- **Four failures found by running, each fixed at the right layer rather than papered over:** the raw encoder refused **numpy arrays** (legitimate capture
+  content) -> `_raw_document` now converts arrays structurally; the test file's error class came from the legacy alias module (NameError) -> the real module is
+  imported; the port needs a **root**, not the recorder object -> an explicit `raw_records_root`; and the request is a **dict** in this port -> the identity reads
+  `request["scenario_id"]` like the phase document does.
+- **The one remaining unknown, named exactly:** the recorder's canonical sources are **`_SOURCES = ("world", "scene", "contact", "head", "wrist", "arm",
+  "neck")`** (seven), while `PickPlacePhysicalReadback.capture` returns **five documents** - `world, scene, contact, observation, reference` plus
+  `source_stamps_s` from `audit["source_stamps"]`. **So the raw records for `head`, `wrist`, `arm` and `neck` are the per-camera entries inside
+  `observation` (the RGB sample's audit), and the mapping from those to four of the seven names has to be read from the RGB adapter before the port can write
+  them.** That is the next read, and it is the last one between this port and a green P1-3.
+- **Also still to do for P1-3:** the boundary's `canonical_evidence` (it must keep the adapter its `search` built), the child-port builder passing the admitted
+  threshold and root, and **deleting the fixture's pre-filled nine-phase path** plus the CP-1471 strict-xfail marker.
+- **State:** P1-1 and P1-2 remain green and committed; this round's code is uncommitted and the port's file is red on exactly the mapping above. No new
+  session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
