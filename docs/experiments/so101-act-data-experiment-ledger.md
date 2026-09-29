@@ -24842,3 +24842,22 @@ picture in both directions.**
   `selected_prefix_source` handoff), driven by the runner's `_verify_phase` rather than by a test written to agree with itself.
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress with stage 1 done. No new session, goal, worktree or stack; nothing pushed, nothing deleted;
   no hardware.
+
+## CP-1490 — The eight phases get the same split SEARCH already proves: the boundary executes, the port validates
+
+- **What reading `VisibleApproachExpertRoute` settled:** `prepare(observed, *, selected_source, owner_ticket, active_policy_fingerprint)` validates that **every SEARCH fence
+  agrees** (the frozen source equals its own `freeze_selected_search_source`, the owner ticket's five parts match `("act", session, attempt)`, the candidate manifest and
+  policy fingerprint hash-match, and the four stationary proofs are present), and `qualify(prepared, proof, *, current_snapshot)` closes the loop. **That machinery belongs to
+  the boundary** - it needs the broker's owner ticket, the candidate manifest, the policy fingerprint and the live snapshot, none of which the port holds.
+- **So each phase follows the split SEARCH already proves, rather than inventing another one:**
+  1. **the boundary executes** the phase (for APPROACH: prepare the expert route from the port's frozen handoff, drive it, qualify it) and returns the phase's own
+     observation/document;
+  2. **the port validates** it - scope, epochs, the eight gates, the per-phase holding/release predicates - and **builds the 25-key evidence document** with the same
+     readback-derived fields the SEARCH evidence uses, so one evidence builder serves the whole sequence;
+  3. **the runner's `_verify_phase` is the judge**, not a test written to agree with the port.
+- **The port's existing handoff surface is exactly what APPROACH needs** (`validated_search_observation()`, `selected_prefix_source(max_skew_s=...)` via
+  `freeze_selected_search_source`) - which is evidence that this split was the intended shape all along, and that the earlier batches built the seam before the phase.
+- **Test plan for APPROACH (next round, RED first):** a focused test that runs SEARCH then **APPROACH** through the port and lets `PickPlaceRunner._verify_phase` judge the
+  document, plus the negative half - a phase document that violates its own predicate (e.g. CLOSE without `bilateral_contact`) must be refused by name rather than accepted.
+  **The fixture supplies the substituted I/O only** (the expert route's motion and the readback), exactly as it now does for SEARCH.
+- **State:** P1-1..P1-3 green and committed; P1-4 stage 1 committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
