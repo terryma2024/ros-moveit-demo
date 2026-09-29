@@ -31177,3 +31177,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `run_pick_place_case` through a full case with this authority - then the aggregator join, then the xfail and the
   duplicate chain removed together. P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate
   and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1820 — The drive's five steps, each of them already proven separately
+
+- **`_prepare_child_case` already carries the two values my CP-1811 wiring added** - read at the port's construction:
+  ```python
+  port = ChildPort(session_id=session_id, expert_route_factory=expert_route_factory, route_motion=route_motion)
+  …
+  child = RclpyActionDriver(pick_place_port=port, owner=owner, broker=FakeBroker(), act_hashes=bound_hashes, …)
+  ```
+  so **the factory and the motion reach the port, and the child is built over that port.** What the harness does not yet
+  do is mount APPROACH's authority on it.
+- **And the sequence the evidence now fixes, in order, with the constraint CP-1819 found:**
+  1. **build the route manifest** - `build_route_manifest(scene_path=…, plugin_path=…, profile_path=…, session_id=…,
+     attempt_id=…)`, the same three admitted config files the task-6 diagnostic test uses;
+  2. **derive the document** - `route_motion_configuration(manifest)`;
+  3. **build the checker** - `MujocoPathProcess(…, allowed_pairs_by_phase=checker_pairs_by_phase(motion))`, which
+     CP-1816 proved greets with the admitted `model_sha256`;
+  4. **learn the hash and bind the sources to it** - `sources.contact_pairs.model_sha256 = checker.model_sha256`,
+     **which cannot happen before step 3** because the hash comes from the compiled model;
+  5. **mount the screen on the port** - `PickPlaceApproachPathScreen(search_port=port, sources=…, broker=…,
+     path_checker=checker, cancelled=…)`, and **only now** call `run_pick_place_case` with the factory available.
+  **A caller can do 1-5 after `_prepare_child_case` returns and before it runs**, which is exactly what the full-case
+  module is positioned to do.
+- **So P1-5's remainder is now a sequence rather than a question, and every element of it has its own passing evidence:**
+  the factory pass-through (CP-1811), the checker's construction and handshake (CP-1816), the screen's mount and its
+  coherence refusal (CP-1818), and the assembly of all of it from the admitted document (CP-1819). **What the drive adds
+  is a full case that gets past APPROACH and reports what only a full case can - and then the aggregator join, and then
+  the xfail and the duplicate chain removed together.**
+- **State:** **P1-5 in progress; its capability is assembled and evidenced, and the drive's five ordered steps are
+  recorded with the one constraint that makes the order matter.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
