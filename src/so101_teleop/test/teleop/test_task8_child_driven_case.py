@@ -249,6 +249,14 @@ class _Boundary:
         decision = dict(_locked(), attempt_id=request["attempt_id"])
         sources = _ChildSources(session_id=request["session_id"], reset_epoch=self.reset_epoch,
                                 model_sha256=getattr(self, "model_sha256", None))
+        # P1-5/CP-1899: the PRODUCTION boundary methods this harness adopts ask their reset's sources for the readback by
+        # name (`current_readback` -> `self.reset.sources.capture(attempt_id)`), so the boundary publishes the sources it
+        # built and installs the adapter that gives that reader the step bookkeeping the queue needs.
+        self._last_search_sources = sources
+        _previous = getattr(self.reset.sources, "capture", None)
+        _adapter = _SourcesCapture(lambda: getattr(self, "_last_search_sources", None))
+        _adapter._last_step = getattr(_previous, "_last_step", 0)
+        self.reset.sources.capture = _adapter
         # CP-1884/1885: the frames this search builds must carry vectors of the MODEL's length, because
         # `selected_approach_candidate` validates them with `vector(scene["qpos"], model.nq)` - and this is a FRESH
         # sources object per search, so the dimensions are forwarded here rather than set on the boundary's own
@@ -360,6 +368,27 @@ class _Boundary:
         self.calls.append("safe_stop")
         self.stopped = True
         return True
+
+
+class _SourcesCapture:
+    """The production boundary's readback entry point, over a queue that wants the step it must move past.
+
+    `current_readback` calls `self.reset.sources.capture(request["attempt_id"])` - one argument - while the substituted
+    sources advance a queued scenario and assert the step they must move past. The adapter resolves the sources the
+    SEARCH built (one sensor, shared with the search) and remembers the last step it returned. Named substitution.
+    """
+
+    def __init__(self, resolve):
+        self._resolve = resolve
+        self._last_step = 0
+
+    def __call__(self, attempt_id):
+        sources = self._resolve()
+        if sources is None:
+            raise RuntimeError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:no_search_sources")
+        row = sources.capture(attempt_id, after_step=self._last_step)
+        self._last_step = int(row["world"].simulation_step)
+        return row
 
 
 class _ChildSources(_Sources):

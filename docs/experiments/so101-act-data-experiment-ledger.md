@@ -33631,3 +33631,42 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | **now** | **5793 passed, 163 skipped, rc 0** | **after P1-1 through P1-6**, with every change above |
 - **State:** **P1-1 through P1-6 CLOSED and the demo package gate green; the teleop suite and the serial CTest are the
   remaining re-measurements before the packet is final.** **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1899 — The teleop gate's twenty-eight failures were mine, and one adapter fixed twenty of them
+
+- **Classified from the log before anything was touched:**
+  ```
+  28 failed, 1081 passed, 42 skipped, rc 1
+    7 test_unified_bridge.py        7 test_unified_bridge_cleanup.py
+    6 test_unified_two_channel.py   5 test_task8_child_driven_case.py
+    3 test_task8_live_evidence_production_chain.py
+  error kinds: 5 AttributeError: 'types.SimpleNamespace' object has no attribute 'capture'
+               3 TypeError: Task8LiveEvidenceRecorder.append() missing … 'kind'
+  and the unified_* failures all carried TASK8_SEARCH_EVIDENCE_INVALID / ACT_TASK8_FAILED
+  ```
+  **so twenty of the twenty-eight were one root cause, and that root cause was mine:** adopting the PRODUCTION
+  boundary's methods (CP-1891) made `current_readback` - and therefore the search-evidence path - ask
+  `self.reset.sources.capture(...)`, **while the harness's `reset.sources` is a `SimpleNamespace` with no such method.**
+  The other three were the same P1-4 blast radius as CP-1897.
+- **The fix is the adapter, placed where all of them read it - inside the harness, at the search that builds the sources:**
+  ```python
+  self._last_search_sources = sources
+  _previous = getattr(self.reset.sources, "capture", None)
+  _adapter = _SourcesCapture(lambda: getattr(self, "_last_search_sources", None))
+  _adapter._last_step = getattr(_previous, "_last_step", 0)
+  self.reset.sources.capture = _adapter
+  ```
+  **so the production boundary's one-argument readback call lands on the substituted queue, which needs the step it must
+  move past - and the adapter carries that bookkeeping across searches rather than resetting it.**
+- **And two mechanical slips are recorded with their corrections, because both were caught by the suite and not by me:**
+  1. the first attempt placed the adapter inside the `SimpleNamespace(...)` call's argument list,
+     `SyntaxError: expression cannot contain assignment` - **moved into `search`, where it belongs anyway**;
+  2. the widened patcher then gave `kind="grid"` to a **list** append (`seen.append(sample["phase"])` →
+     `TypeError: list.append() takes no keyword arguments`) - **restored line by line.**
+- **Result, on the affected files:**
+  ```
+  teleop/test_task8_live_evidence_production_chain.py + teleop/test_task8_child_driven_case.py
+      13 passed in 6.45s
+  ```
+- **State:** **P1-1 through P1-6 CLOSED; the teleop suite is being re-measured with the adapter in place.** **Task-list
+  statuses are unchanged, so they are not re-stated.**
