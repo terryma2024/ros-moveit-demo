@@ -68,6 +68,12 @@ def main(argv=None) -> int:
             if args.context is None:
                 raise ValueError("MEASUREMENT_CONTEXT_REQUIRED")
             context = json.loads(args.context.read_text())
+            # section 4.2: the parsed descriptor travels in the context, and its CUDA policy is enforced here,
+            # before any branch - a driver-based run must not bypass it
+            from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
+
+            if "runtime_descriptor" in context:
+                require_runtime_descriptor(context["runtime_descriptor"])
             from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
             context = CalibrationMeasurementContext(
                 generation=context["generation"],
