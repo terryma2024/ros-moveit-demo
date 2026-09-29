@@ -17283,3 +17283,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State: 2 failed / 18 passed** in that module, both failures being the publishing-half REDs (`21 == 28` and the gate) now
   blocked on fixture evidence rather than on missing production logic. No rule was weakened, `REQUIRED_CHECKS` is
   unchanged, and the user's correction is recorded at CP-1106.
+
+## CP-1108 — The fixture's evidence spec, read from the formulas rather than guessed 28 times
+
+- **Read the comparator return shape and the geometry formulas' expected inputs, so the next round can write the
+  fixture in one pass instead of discovering key names one `KeyError` at a time:**
+  | piece | shape |
+  | --- | --- |
+  | `compute_field(field, raw, contract)` returns | `{"field", "configured_limit", "observed_summary", "reported_value", "verdict", "raw_refs"}` - so a published entry takes its **numeric value from `reported_value`**, its unit from the contract entry, and its citation from the group's closed sample |
+  | raw evidence container | `{"measurements": {field: <evidence>}, "configured": {field: <limit>}}`, with `_limit(raw, field)` reading `configured` |
+  | `head\|wrist_translation_m` | `{"samples": [[x,y,z], …], "expected": [x,y,z], "tolerance_m": t}` |
+  | `head\|wrist_rpy_rad` | `{"quaternions": [[w,x,y,z], …], "expected": [r,p,y], "tolerance_rad": t}` (`expected` optional, defaulting to a true verdict) |
+  | `yaw_zero_bearing_rad` | `{"rotations": [[9 numbers], …], "expected": θ, "tolerance_rad": t}`, evaluated on the rotation's forward axis |
+- **Coverage measured rather than assumed:** all **28** formulas are registered in `task8_measurement_formulas.py`, but the
+  per-field case table in `test_act_task8_measurement_formulas.py` (`FIELD_CASES`) covers only **14**; the 14 without cases
+  are exactly the geometry, TF, camera and support fields above. So the aggregator's fixture takes its raw records from
+  `FIELD_CASES` for the 14, and builds the other 14 from the shapes in the table - both suites then agree by construction
+  rather than by coincidence.
+- **One last thing to read before writing it (`_f_intrinsics`, plus the four at the file's lower section: neck interval,
+  installed limits, path clearance):** their evidence keys are not yet in this table, and reading them costs one call
+  rather than 14 failed runs.
+- **State: unchanged at 2 failed / 18 passed** in the aggregator module, both failures being the publishing-half REDs, now
+  blocked only on fixture evidence. The v2 checks dispatch and the support-closed-sample citation from CP-1107 stand.
