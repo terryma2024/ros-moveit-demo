@@ -16576,3 +16576,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary II remaining, precisely:** the **live search** through the port (the detector/controller calls per geometry
   sample approximate it but are not the search path), and **CameraInfo/TF raw rows** per anchor. Both depend on what the
   stack exposes, so the composition surface has to be defined deliberately rather than inferred.
+
+## CP-1072 — Boundary II, sixth piece: CameraInfo and TF rows per anchor
+
+- **RED on both halves:** no camera row existed (`FileNotFoundError` for `camera-info.json`), and a stack that could
+  not report camera evidence still sealed **CLOSED**.
+- **The fix:** each anchor writes `camera-info.json` (the intrinsics the camera reported) and `tf.json` (the head and
+  wrist transforms used), both with the full provenance set and the lifecycle stamp, and a missing or raising camera
+  surface becomes **`MEASUREMENT_CAMERA_REQUIRED: <anchor>: <ErrorType>`** - so the batch cannot claim intrinsics the
+  stack never produced.
+- **Eight doubles grew the surface**, the same signal as every other Boundary II piece; the readback-refusal test still
+  fails where it should, because the driver reads the identity **before** the camera.
+- **GREEN: 17 passed, rc=0**, scratch `<R>/scratch/r673c.<n>` with `TMPDIR` verified through the exact test interpreter;
+  RED `beh-r673-red.log`, intermediate `beh-r673-green.log` (8 failed as the doubles caught up), final
+  `beh-r673-green2.log`.
+- **Boundary II remaining: the live search through the port.** The detector and controller calls per geometry sample
+  approximate it but are not the search path; wiring the real search depends on the stack exposing it, and the composition
+  of those adapters is the launch entry's job - the structural item that also has to be defined deliberately.
