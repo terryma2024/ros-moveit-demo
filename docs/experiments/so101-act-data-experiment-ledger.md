@@ -23609,3 +23609,17 @@ not an inference of mine.**
   recommendation is to submit items 1-4 now and re-approve P1-5 as its own round.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1427 — The recorder is bound to the boundary now, and the probe proves it
+
+- **The fix, and it was one line in the right place:** the child attaches its evidence window to the **PORT**, while the object that produces readbacks is
+  the **BOUNDARY** - so the boundary never held a recorder and my recording code had always early-returned. `ChildPort.bind_live_evidence` now
+  forwards `_evidence_recorder` to its boundary, **and the probe immediately shows the child's real recorder:**
+  ```
+  [probe] recorder identity: case-05 session-item5 attempt-item5 | sealed: False | entries: 0
+  ```
+  **Identity matches the case, the recorder is unsealed, and it is empty - which is exactly the state my `record_phases` is written for.**
+- **So P1-5's first half is one append away from being complete**, and every downstream piece is already proven against a recorder of this shape
+  (CP-1420). **The remaining outcome line is captured above for the next read.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
