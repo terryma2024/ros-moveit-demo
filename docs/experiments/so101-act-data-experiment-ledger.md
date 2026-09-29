@@ -14778,3 +14778,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   in-flight chain files whose commit would unblock the driver); Tasks 9-10 untouched; the goal is armed with a
   756-round budget; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED; gen3 retained and ineligible with gen4 reserved for Task 10.
+
+## CP-1004 — Owner decision 1 implemented: report version fixed at 1, production readback proven
+
+- **The decision, from the owner:** the final `TASK8_READY`/`QUALIFIED` calibration report is fixed at
+  **`schema_version = 1`**, the measurement contract stays **v2**, and **`require_qualified` is not loosened** to
+  accept a v2 report. Fixtures and assertions were corrected accordingly.
+- **What was wrong and is now right:** the ready-report fixture wrote `schema_version: 2`, which the licence gate
+  refuses by design - and the production producer was already correct (`task8_calibration_aggregator` writes the ready
+  report at its own `SCHEMA_VERSION = 1`), so the conflict CP-1000/CP-1001 recorded was a **fixture** defect, not a
+  protocol one. That is the resolution the owner's decision implies and it is what the code now shows.
+- **Two real production improvements came out of making the gate accept the published document:**
+  1. `build_qualified_measurements` now gives each of the five live-only entries the **`sample_path` and
+     `sample_sha256` of the run whose value produced the reported extremum** (deterministically the first such run) -
+     the report contract requires every entry to cite its own sealed sample, and the merged entries had carried only
+     `value` and `unit`;
+  2. the gate's own rules are now visible in the ledger for the next reader: the unit must match the contract, a
+     scalar must be finite / a vector the right length, a `count` must be an integer of at least one, `min_confidence`
+     and `tracking_iou` must lie in `(0, 1]`, and the cited sample must be an **absolute, non-symlink, existing** file
+     (its digest is checked too).
+- **The proof the owner asked for:** the weld test now generates the qualified report and calls the production
+  readback - `require_qualified(json.loads(output.read_bytes()))` - and it **passes**, with the document asserted at
+  `schema_version == 1` and exactly **33** measurements, while the ready report is verified not to have been rewritten.
+- **Verified: 52 passed, rc=0** (`beh-r599e.log`) across the live-qualification and Task 8 runner suites.
+- **Next under the approved decisions:** bind the three anchor starts to the real
+  `config/act/task8-live-anchors.yaml` (default `0.1 rad`, `left 0.0`, `forward 0.0`) and record the approved bootstrap
+  envelope `[-2*pi, 2*pi]` on the search candidate - with `lock_valid_neck_rad` still to be measured by the approved
+  full-path sweep and every other provisional value left fail-closed.
