@@ -20735,3 +20735,27 @@ not an inference of mine.**
   fixtures I had not read.
 - **State:** HEAD `88916d08` plus this checkpoint; items 1-4 complete and committed; item 5 not yet started; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1264 — `_run_pick_place`'s preconditions, read line by line, and they define the fixture exactly
+
+- **From the body (`ros_child.py:483-535`), the entry refuses unless every one of these holds - so the fixture has to supply them all,
+  and each is an external fact rather than a stub the test may invent:**
+  | # | precondition | the fixture's answer |
+  | --- | --- | --- |
+  | 1 | `_pick_place_port is not None` | inject the port at construction (line 186's parameter) |
+  | 2 | `_act_cancelled` clear | fresh child |
+  | 3 | `_act_hashes` is a dict with **exactly** `_ACT_HASH_ENV`'s keys and all 64-hex values | set them on the child |
+  | 4 | **every** hash key appears in `request.payload` with the **same** value | build the request payload from the same dict - this is the coupling that makes a hand-written request fail |
+  | 5 | `request.deadline_ns > time.monotonic_ns()` | a real future deadline |
+  | 6 | `_pick_place_startup_used` false | one case per child, which is also what the startup rule means |
+  | 7 | `startup_proof_consumer` injected (else the real one is used) | inject it and return a receipt - **and the port must expose `bind_startup_receipt`, or the entry raises `ACT_TASK8_PORT_INVALID`** |
+  | 8 | `_act_artifacts` present with `.evidence_root`, and the port must expose `bind_live_evidence` | this is what makes the **real `CaseEvidenceDriver`** get built (line 518) and its window attached to the port |
+- **So the fixture is a child built with a port, a startup consumer, a bound hash set and an artifacts object carrying
+  `evidence_root` - and nothing else faked.** The port itself must satisfy the runner contract plus `bind_startup_receipt` and
+  `bind_live_evidence`, which is precisely the port the Boundary V chain test already builds at
+  `src/so101_teleop/test/teleop/test_task8_case_runner_chain.py`. **Reusing that port rather than writing a second one is the next
+  decision to make on evidence, not on convenience.**
+- **Still to read before writing the fixture:** `ros_child.py:535-570` - how the task dict is handed to `PickPlaceRunner` and what the
+  entry returns - since the assertions must be built from the returned dict and the sealed records it points at.
+- **State:** HEAD `1e8b387d` plus this checkpoint; items 1-4 complete; item 5 not started; no stack, no hardware, nothing deleted,
+  nothing pushed.
