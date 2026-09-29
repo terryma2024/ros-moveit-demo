@@ -31602,3 +31602,45 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress; one input left to read (the driver the child hands its broker) before the construction is
   written.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review
   packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1833 — The last unknown resolved: `driver=broker`, and the harness's stand-in IS the driver
+
+- **The child's own call answers CP-1832's open question in one line** (`ros_child.py:286-297`):
+  ```python
+  _bound = build_bound_act_broker(
+      reservation_port=reservation_port, session_id=session_id,
+      roles=("arm", "gripper", "neck"), history=_history,
+      admission=_admission, registry=_registry,
+      driver=broker,                      # <- the local `broker` object IS the driver
+      ownership=ownership, simulation_session_id=session_id,
+      prefix_source_authority=source_authority,
+      prefix_source_port=self._act_visible_source)
+  self._act_command_broker = _bound["broker"]
+  ```
+  **and the legacy branch beside it confirms the reading** - `CommandBroker(broker, ownership=…, simulation_session_id=…,
+  reservation_port=…, prefix_source_authority=…, prefix_source_port=…)` - **the same object as the driver, wrapped.**
+  **So `FakeBroker` in the harness, whose name suggests it replaces the broker, is in fact the DRIVER**; `CommandBroker`
+  is what wraps it, and `build_bound_act_broker` is what builds that wrapper with the authority and the trusted source
+  port installed.
+- **Which makes the construction fully determined, with no invented input left:**
+  ```python
+  ownership = Ownership()
+  client, servers = _real_client(("arm", "gripper", "neck"))            # gate-6 fixtures
+  history, admission, registry = physics_clock_domain(                  # production, not the doubles
+      session_id=session_id, nq=model.nq, nv=model.nv, settings=…)
+  bound = build_bound_act_broker(
+      reservation_port=client, session_id=session_id, roles=("arm", "gripper", "neck"),
+      history=history, admission=admission, registry=registry,
+      driver=FakeBroker(),                                              # the external I/O: ROS
+      ownership=ownership, simulation_session_id=session_id,
+      prefix_source_authority=PrefixSourceAuthority(
+          ticket_guard=ownership.require_ticket, max_observation_age_s=…, max_prefix_age_s=…),
+      prefix_source_port=TrustedVisibleApproachSourcePort())
+  broker = bound["broker"]
+  ```
+  **and then `_prepare_child_case(..., broker=broker)` (CP-1831), with `reset.broker` set to that same object so
+  `begin`'s `isinstance(reset.broker._prefix_source_port, TrustedVisibleApproachSourcePort)` passes because the
+  production composition root installed it.**
+- **State:** **P1-5 in progress; every input of the faithful branch is now sourced, and the construction is written down
+  in this ledger entry rather than in a guess.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the
+  final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
