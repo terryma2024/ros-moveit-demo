@@ -16077,3 +16077,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **What remains for decision B:** the child wiring - call `driver.bind_reset_epoch(new_epoch)` after the reset begin
   receipt is verified and before the first SEARCH evidence write, as a hunk-level addition so the owner's in-flight work
   stays unstaged - and then the single full gate at the Task 9 boundary.
+
+## CP-1052 — The verified receipt reaches the window: the port binds the epoch
+
+- **Put the call exactly where the owner asked - after the reset begin receipt is verified and before the first evidence
+  write - and the port's own `begin` is that place:** `pick_place_search_port.py:131-142` calls
+  `self.boundary.begin(request)` and then validates the result (exact key set, `session_id`/`attempt_id` matching the
+  request, `reset_epoch` a positive int, `release_epoch == 0`, `full_restart is False`), raising `reset proof` otherwise.
+  The bind is inserted **immediately after** that validation and before the method returns, so no sample can have been
+  recorded yet - `_grid_sample` runs later in the phase loop.
+- **Fail-closed rather than tolerant:** `_bind_case_epoch(result)` returns quietly when no window is attached, but
+  raises `TASK8_LIVE_EVIDENCE_WINDOW_INVALID` when a window is attached **without** a callable `bind_reset_epoch`, so a
+  window that cannot take an epoch is refused instead of silently recording an unknown generation.
+- **Verified: 42 passed, rc=0** (`beh-r650.log`), with a new test asserting the epoch reaches the attached window, that a
+  window without the bind is refused, and that no window means nothing to bind.
+- **What remains:** the child-side attachment in `ros_child.py` (`bind_live_evidence(driver.window)` where the case
+  identity and `attempt_id` are in hand, as a hunk-level addition so the owner's in-flight work stays unstaged), and then
+  the single full gate at the Task 9 boundary from fresh NVMe scratch - with nothing committed while it runs (CP-1030).
