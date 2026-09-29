@@ -28230,3 +28230,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The fix is therefore a plumbing change rather than a new source of truth:** derive the canonical fields **once per emission**, hand them to `_phase_instants` for the instants and to the sample builder for the content, and the search's iterations - which the boundary's fields carry when the run has them - become the phase's sampled instants at the frozen period.
 - **And one more hardcoded epoch was found in passing, correctly so:** `_search_evidence` writes `"release_epoch": 0` for the SEARCH phase document. **That one is right** - SEARCH precedes the release - and it is worth distinguishing from the defect CP-1679 fixed, which was the *sample identity* claiming 0 for every phase including the post-release ones.
 - **State:** **P1-4 pieces 1-2 green; piece 3's mechanism in, its plumbing identified to the key level; piece 4 blocking**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1687 — Piece 3 works: the port's RED is green, and its fallout is five named expectations (one of them a real bug)
+
+- **`3 passed` for `test_act_task8_live_epoch_and_edges.py`** - all three P1-4 cases:
+  | case | now |
+  | --- | --- |
+  | each sample carries the epoch the port's own rule gives its phase | green |
+  | the sealed identity is the epoch the case actually ended in | green |
+  | **the port feeds EDGE events beside the frozen grid** - one grid point per instant the phase reports, `event_count >= 1`, and `"command"` among the reasons | **green** |
+- **And the mechanism is grounded in data the port verifiably holds, which CP-1686's key list forced:** the base instants come from `observed.physical_readback["observation"]["sim_time_s"]` (the readback's clock, not the phase document's facts) and the count from `observed.search_result["iterations"]` - **the phase's own sampled moments, already validated by the port.**
+- **The fallout, `5 failed, 83 passed`, and every one of the five is the OLD "one sample per phase" assumption meeting the new rule:**
+  | failure | what it is |
+  | --- | --- |
+  | `test_a_search_phase_records_a_canonical_sample_through_the_port` | asserts `window._grid_count == 1` - **the exact assumption the finding removed** |
+  | `test_approach_prepares_qualifies_and_the_runner_accepts_the_document` | the same assumption on the APPROACH path |
+  | `test_the_index_chains_to_complete_canonical_records` (sealed artifact) | asserts `sample_count == 10` ("nine phases, two retreat segments") |
+  | `test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period` | the cadence assertion, which the **fixture's** `_stamped_add_grid` rewrite currently satisfies while the port now supplies real instants |
+  | `test_every_sample_names_its_own_raw_sources` | **and this one is a REAL bug rather than a stale expectation** |
+- **The real bug, named:** `_grid_sample` writes its raw records under `capture = f"{phase}-{physics_step:07d}"`. **Within one phase the physics step is the same for every instant**, so a phase with N instants writes N samples that all name the SAME capture - and the raw-record write is `O_EXCL`, so they collide or share, and "every sample names its own raw record" stops being true. **The capture name must carry the instant, not only the phase and the step.**
+- **Next, in order:** (a) the capture name per instant - the one behavioural fix; (b) the four stale expectations, each restated as the rule they were approximating (`grid_count` follows the phase's instants; the index's sample count follows the case's instants; the cadence is the port's clock, which makes the fixture's rewrite removable); (c) **piece 4** - the fixture on one monotonic source clock with no timestamp rewriting.
+- **State:** **P1-4 pieces 1-3 working, piece 4 outstanding, five expectations to restate (one of them a real collision bug)**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
