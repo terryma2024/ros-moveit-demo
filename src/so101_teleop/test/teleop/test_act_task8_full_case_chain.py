@@ -202,7 +202,10 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     boundary.owner_generation = broker.ownership.generation
     # the epoch the source port compares against ADVANCES in `begin`, after the broker was built - so the broker is
     # given a live reader rather than the value that held at construction (CP-1877)
-    broker.epoch_reader = lambda: {"session_id": session_id, "reset_epoch": boundary.reset_epoch}
+    # NOT `broker.epoch_reader`: `FakeBroker.__getattr__` answers every name it does not own with a callable, so the
+    # driver's own `getattr(self, "epoch_reader", None)` finds a CALLABLE rather than nothing and calls it - which
+    # returns `True`, not an epoch dict. The attribute must be set on the DRIVER, where that lookup happens.
+    broker.driver.epoch_reader = lambda: {"session_id": session_id, "reset_epoch": boundary.reset_epoch}
     boundary.contact_pairs = contact_pairs
     if not callable(getattr(boundary, "capture", None)):
         boundary.capture = sources.capture
