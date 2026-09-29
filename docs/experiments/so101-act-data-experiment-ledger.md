@@ -18435,3 +18435,25 @@ not an inference of mine.**
   through `ros_child._run_pick_place`.
 - **State:** goal active (revision 51, cap 1000), HEAD `e8162d2f`, staged 0, tree 31 modified + 14 untracked. No full suite,
   no push, no stack, no hardware.
+
+## CP-1161 — RED proven on the runtime-config binding: a CPU-fallback config is accepted
+
+- **The RED, and it fails on the boundary rather than on scaffolding:**
+  `Failed: DID NOT RAISE <class 'ValueError'>` from `test/test_act_task8_runtime_config_binding.py`, which builds the
+  bundle from `valid_inputs`' own fixture with the runtime config replaced by a validator-shaped document whose detector
+  block sets `allow_cpu_fallback: true`. **§4.2 forbids exactly that**, and the bundle - the place where the file is bound -
+  accepts it today.
+- **Why the bundle is the right boundary for this RED:** the approved design binds the runtime config into the bundle and
+  its receipt, and §6 keeps `UnifiedWorkloadService.start(spec)` as the only resource gate; so neither the bundle nor the
+  entry may treat the file as opaque content. My CP-1131 finding was that the CLI only digests it, and this RED shows the
+  same gap one layer along - the artefact that carries it does not parse it either.
+- **Two iterations to get there, both recorded rather than hidden:** the first attempt failed with
+  `prepare_task8_bundle() missing 1 required positional argument: 'bundle_root'`, which is a fixture error and was **not**
+  counted as a RED; only this second run, which reaches the assertion, is.
+- **The GREEN next round, exactly:** parse the runtime config through the production validator at this boundary, refuse
+  symlink, extra or malformed content, refuse `allow_cpu_fallback` true and any device disagreement with
+  `parallel_batch_v3.yaml`, and bind the **canonical bytes and SHA256** - the same parsed descriptor, not a re-constructed
+  dict, being what later reaches admission, the context and the driver.
+- **State:** goal active (revision 51, cap 1000); new untracked test file
+  `src/so101_demo_py/test/test_act_task8_runtime_config_binding.py` is now committed as the RED; tree otherwise unchanged.
+  No full suite, no push, no stack, no hardware. Evidence `beh-r763-red.log` (fixture error) and `beh-r764-red.log` (the RED).
