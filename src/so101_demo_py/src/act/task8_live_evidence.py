@@ -439,15 +439,17 @@ def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
 
 
 class LiveEvidenceWindow:
-    """The CLOSE..FINAL_CHECK evidence window: a frozen 10 Hz grid plus edge events.
+    """The SEARCH..FINAL_CHECK evidence window: a frozen 10 Hz grid plus edge events.
 
-    The window opens at CLOSE. Grid samples must advance on the frozen period (gaps, duplicates and
-    regressions are refused); event samples are recorded as additions and can never stand in for a
-    grid point. Sealing requires the window to have reached FINAL_CHECK.
+    The window opens at SEARCH, so the scan and approach that precede the grasp are part of the same
+    evidence window. Grid samples must advance on the frozen period (gaps, duplicates and regressions
+    are refused); event samples are recorded as additions and can never stand in for a grid point.
+    Sealing requires the window to have reached FINAL_CHECK.
     """
 
-    REQUIRED_PHASES = ("CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE", "RADIAL_RETREAT",
-                       "FINAL_CHECK")
+    # the design's phase-camera coverage table and the approved plan name these nine phases exactly
+    REQUIRED_PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE",
+                       "RADIAL_RETREAT", "FINAL_CHECK")
 
     def __init__(self, recorder, *, identity, period_s: float = 0.1,
                  tolerance_s: float = 0.01) -> None:
