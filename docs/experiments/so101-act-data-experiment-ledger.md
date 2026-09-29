@@ -16427,3 +16427,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Evidence:** `beh-r665.log` and `beh-r665b.log`, rc=1 each, scratch `<R>/scratch/r665.*` and `r665b.*` with `TMPDIR`
   verified through the exact test interpreter; 11 of 12 tests in the module pass, the twelfth being my in-progress fixture.
   **No production code was changed for this piece**, and none of the earlier Boundary I fixes regressed.
+
+## CP-1065 — Boundary I complete: the single seal owner is pinned behaviourally
+
+- **The fixture question from CP-1064 is answered, and the answer is reassuring:** the module the tests import resolves
+  through `build/so101_demo_py/so101_demo/cli/...`, but `os.path.realpath` of that file **is my edited source**
+  (`same file as my source: True`), and the resolved text contains `--context` - so there is **no stale-copy hazard**;
+  edits to the CLI are live. The `TypeError` was mine twice over: a `Path` object passed where argparse needs a string
+  (`"--ledger", tmp_path / "ledger-two.md"`), and - before that - treating the driver's first argument as a path when
+  the CLI hands it the **bound contract document**.
+- **The ownership rule is now an assertion, not a convention.** The new test drives the real CLI with real fake driver
+  modules and asserts both halves:
+  1. a driver that writes raw evidence and does **not** seal leaves the CLI to seal once - the batch is `CLOSED`, the
+     driver's `raw.json` is listed **inside** the seal, and the ledger records exactly one `VALID` transition;
+  2. a driver that seals the batch itself makes the CLI's later close refuse with the **named**
+     `MEASUREMENT_BATCH_ALREADY_CLOSED`.
+- **GREEN: 12 passed, rc=0**, 1 s, scratch `<R>/scratch/r666.<n>` with `TMPDIR` verified through the exact test
+  interpreter.
+- **Boundary I is therefore complete**, on three pieces each taken RED first: the sealed batch carries the contract's
+  ten-member identity with the `contract_sha256`/`measurement_contract_sha256` fissure closed (`f6b334c3`); the CLI's
+  runtime context lives in its own document and a missing one is refused by name (`be3c6d6e`); and the batch has one
+  seal owner with a named refusal for a second attempt (this commit).
+- **Next: Boundary II** - the Task 5 production MuJoCo measurement driver - beginning with its RED, and with the two
+  facts this stretch established: the config contract at `config/act/task8-calibration-measurement-contract-v2.json` is
+  an **unbound template**, and `production_driver()` must be composed from the launch entry with real adapters.
