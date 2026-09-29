@@ -19506,3 +19506,57 @@ not an inference of mine.**
 - **Evidence and state:** HEAD `aa49002e`; staged 0; ledger 918 checkpoints; run roots `scratch/g794`, `scratch/g798w1`,
   `scratch/g802`, `s799`…`s804/tmp` retained as deletion candidates, nothing deleted; formal accepted Train/Validation/Offline
   Test 0/0/0; `collection_*` NOT_PROVISIONED; the 17 provisional values still `null` with `requires_approved_value: true`.
+
+## CP-1209 — CORRECTION of two facts I stated, before touching anything
+
+- **The owner corrected two claims I had written as findings, and both corrections are right:**
+  1. **`tools/so101_pytest_gate.py` does not write or export `SO101_IPC_SOCKET_BASE`.** The value in my gate runs came from **my
+     own outer command** (`export SO101_IPC_SOCKET_BASE=/tmp/s101-g794`), not from the runner. My CP-1206/CP-1207 sentence that
+     "the runner already exports a short `/tmp` path" was **wrong** and is retracted here: the environment hook exists in the
+     repository, but the *runner* does not set it, so the module cannot rely on it being present.
+  2. **That base directory was not pre-created** in those runs, so `test_client_rejects_symlinked_ancestor_before_connecting`
+     and its neighbours had a **second, independent** failure - a `FileNotFoundError` from a missing base - on top of the path
+     length. So my counts (16 failures) conflate two causes, and "the gate fails only because of path length" was **narrower
+     than the truth**. The path-length measurement itself stands (CP-1201/CP-1204/CP-1205); the attribution is corrected.
+- **What the owner has authorised, and the constraints I must honour:** a fixture-only change to
+  `src/so101_demo_py/test/test_controller_reservation_client.py::socket_path` - prefer `SO101_IPC_SOCKET_BASE` when it is set,
+  requiring it to be **absolute, real, pre-existing and mode 0700** and short; keep the current `TMPDIR/../../ipc` fallback
+  otherwise; still create a **unique** `res-*` private directory per call via `mkdtemp` so no two calls or runs share an
+  endpoint; make the existing distinct-scratch test **explicitly unset** the variable; add a minimal test that the returned path
+  lies under the base and that two calls differ; and **fail closed** on an invalid, missing or symlinked base rather than
+  creating or accepting it.
+- **Next, in order:** read the repository's existing short-IPC safety contract so the fixture mirrors it instead of inventing
+  its own rules; then the RED with a long `TMPDIR` and a freshly created 0700 short base; then the GREEN; then **one** full
+  formal gate at a real boundary - fresh NVMe scratch, `TMPDIR`/`TMP`/`TEMP` verified through the exact interpreter, a fresh
+  0700 IPC base, the ordinary `so101_demo_py` scope under `pytest-xdist` with `workers=min(8, CPU)` and benchmark excluded, plus
+  the plan's package/colcon gate. **The file-sharded runner's pass is not a substitute for those**, and if the plan still wants
+  runner validation it is one extra run afterwards, classified explicitly.
+
+## CP-1210 — Authorised fixture fix, RED then GREEN, with exit codes, JUnit and path-length evidence
+
+- **RED, at the runner's own scratch depth:** `TMPDIR = <R>/scratch/gRED/69f0/s/1a0d/tmp` (**88** characters, exactly the
+  shape `create_process_layout` produces) and a **freshly created, pre-existing, mode 0700** `/tmp/s101-red1209` exported as
+  `SO101_IPC_SOCKET_BASE`. Result: **15 failed / 2 passed**, with **`OSError: AF_UNIX path too long`** - the module ignored the
+  valid short base and kept deriving its socket root from `TMPDIR/../../ipc`. JUnit
+  `experiments/gate6-batch3-py-gate/red1209b-junit.xml` (16 testcases), log `red1209b.log`.
+  A first attempt with an 82-character `TMPDIR` **passed 17/17** and is kept as `red1209.log`: it shows the binding factor is
+  not raw `TMPDIR` length but **where `parents[2]` lands**, which is why the runner's layout is the failing one.
+- **GREEN, same environment, one file changed:** **19 passed, rc=0** (`green1209b.log`, JUnit
+  `green1209b-junit.xml`) - the module's own socket tests pass, my three new cases pass, and the two failures in the first
+  GREEN attempt were **my own extra assertion** (it measured a path under pytest's `tmp_path`, 185 characters, and was measuring
+  the wrong thing), which I removed rather than weakening the rule it was trying to express.
+- **What the fixture now does, exactly as authorised:** prefers `SO101_IPC_SOCKET_BASE` when it is **absolute, an existing real
+  directory and private to its owner** (`st_mode & 0o077` refused, mirroring the teleop conftest's own check); otherwise keeps
+  the `TMPDIR/../../ipc` fallback and its `mkdir`; still creates a **unique `res-*` directory per call** with `mkdtemp`, so no
+  two calls - or two concurrent runs - share an endpoint; an invalid, missing, loose or symlinked base **raises** rather than
+  being created or accepted. **No production code changed.**
+- **Also corrected in the ledger before any of it (CP-1209):** the runner does **not** export `SO101_IPC_SOCKET_BASE` - that
+  was my own outer command - and the earlier `g794` base was **not pre-created**, so those runs carried a second, independent
+  `FileNotFoundError` cause I had conflated with the path length.
+- **Next, per the owner: one full formal gate at a real boundary** - a fresh, previously nonexistent NVMe scratch with
+  `TMPDIR`/`TMP`/`TEMP` verified through the exact interpreter, a fresh real 0700 short IPC base, the ordinary `so101_demo_py`
+  scope under `pytest-xdist` with `workers=min(8, CPU)` and benchmark excluded, plus the plan's package/colcon gate. **The
+  file-sharded runner's pass is not a substitute for either**, and a runner re-run, if the plan still wants one, comes after
+  and is classified explicitly.
+- **State:** HEAD at this commit; staged 0; every failure log, JUnit file and scratch/IPC directory retained; no push, no
+  stack, no hardware.
