@@ -38,7 +38,7 @@ def _context_document(tmp_path, descriptor):
     }
 
 
-def _invoke(tmp_path, context):
+def _invoke(tmp_path, context, driver="descriptor_driver:fill"):
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
     from so101_demo.cli import act_measure_task8_calibration as measure
 
@@ -48,17 +48,20 @@ def _invoke(tmp_path, context):
     identities.write_text(json.dumps(_cli_identities()))
     context_path = tmp_path / "context.json"
     context_path.write_text(json.dumps(context))
-    driver = tmp_path / "descriptor_driver.py"
-    driver.write_text("def fill(contract, root):\n"
+    driver_file = tmp_path / "descriptor_driver.py"      # the module on disk; the `driver` parameter is the spec string
+    driver_file.write_text("def fill(contract, root):\n"
                       "    import json, pathlib\n"
                       "    root = pathlib.Path(root)\n"
                       "    root.mkdir(parents=True, exist_ok=True)\n"
                       "    (root / 'execution.json').write_text(json.dumps({}))\n")
     sys.path.insert(0, str(tmp_path))
-    return measure.main(["--contract", str(bound),
-                         "--identities", str(identities), "--batch-root", str(tmp_path / "batch"),
-                         "--ledger", str(tmp_path / "ledger.md"), "--driver", "descriptor_driver:fill",
-                         "--context", str(context_path)])
+    argv = ["--contract", str(bound),
+            "--identities", str(identities), "--batch-root", str(tmp_path / "batch"),
+            "--ledger", str(tmp_path / "ledger.md"),
+            "--context", str(context_path)]
+    if driver is not None:                     # omitted means: use the production composition, not the test seam
+        argv += ["--driver", driver]
+    return measure.main(argv)
 
 
 def test_a_context_descriptor_allowing_cpu_fallback_is_refused_before_measuring(tmp_path):
@@ -76,3 +79,31 @@ def test_a_context_carrying_only_a_digest_is_refused(tmp_path):
     document["runtime_config_sha256"] = "f" * 64          # provenance without a descriptor
     with pytest.raises(ValueError, match="MEASUREMENT_RUNTIME_DESCRIPTOR_REQUIRED"):
         _invoke(tmp_path, document)
+
+
+def test_the_cli_composes_the_production_driver_without_the_injected_test_seam(tmp_path, monkeypatch):
+    """Astra item 1: with ``--driver`` omitted the CLI must build the real driver through the one composition.
+
+    The seam used here is the **external I/O** one the composition itself reads - the stack, detector, controller,
+    phase camera and clock - which is what a test is allowed to stand in for. The driver is *not* injected: the
+    composition, its ordering, its single-stack rule and its descriptor/binding checks are all under test.
+    """
+
+    recorded = tmp_path / "providers-recorded.txt"
+    (tmp_path / "fake_providers.py").write_text(
+        "import pathlib\n"
+        "def build():\n"
+        f"    pathlib.Path({str(recorded)!r}).write_text('built')\n"
+        "    return {'stack': object(), 'clock': object(), 'detector': object(),\n"
+        "            'controller': object(), 'phase_camera': object()}\n")
+    monkeypatch.setenv("SO101_TASK8_PROVIDER_SEAM", "fake_providers:build")
+
+    context = _context_document(tmp_path, _descriptor())
+    with pytest.raises(BaseException) as caught:
+        _invoke(tmp_path, context, driver=None)
+
+    # the composition ran: it resolved the external I/O seam, so the driver it builds is the real one - whatever
+    # happens afterwards inside the run is the fakes' business, not a wiring error
+    assert recorded.exists(), "the composition must build its providers"
+    assert "PRODUCTION_DRIVER_WIRING_PENDING" not in str(caught.value)
+    assert "PRODUCTION_PROVIDERS_UNAVAILABLE" not in str(caught.value)
