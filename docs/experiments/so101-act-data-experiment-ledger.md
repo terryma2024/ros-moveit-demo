@@ -22915,3 +22915,18 @@ not an inference of mine.**
   adapter gets a pending decision then the lock, and `reset_epoch` matches the proof.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1383 — The spin is gone; the queue now exhausts, and the instrument that found the spin will find this
+
+- **Measured:** the run dropped from **5.6 s of spinning** to **0.77 s with a defined refusal** - `SOURCE_STEP_NOT_ADVANCED` ->
+  `SEARCH_SOURCE_TIMEOUT` - which is the segment's own bounded give-up path rather than a deadline burn. **So the queued scenario works and
+  the remaining question is simply how many rows the loop consumes.**
+- **What I changed and why it is right even though it did not finish:** the queue now carries a deliberate retry then **every step from 3 to 59**
+  with advancing sim times and real wall receipts (the interval selects only after fifty **advancing** steps, so a single jump to 53 - the
+  suite's own shortcut - is not enough here). **The rows are built by the shared `_raw` builder and stamped with this case's identity, which is
+  the rule the whole item has followed.**
+- **The next instrument is the same one that paid off at CP-1380:** print the `after_step` at the moment the queue empties, and the adapter's
+  tick count, so the shortage is a number rather than a guess. **No further change to production and no further guessing at which collaborator
+  is unhappy.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
