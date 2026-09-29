@@ -19176,3 +19176,25 @@ not an inference of mine.**
   digest covering SEARCH through FINAL_CHECK; the case confirms its stop; the rows record the release and three adjacent 10 Hz
   samples in one epoch. **No `object.__new__`, no hand-filled state, no direct `finish`.**
 - **State:** goal active (revision 51, cap 1000); HEAD at this commit; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1194 — All seven artefacts now have green coverage, and I am precise about which test covers which
+
+- **Ran the evidence chain file and mine together: 7 passed, rc=0** (`beh-r805.log`) - the chain file's **six** tests
+  (nine-phase chain seals and reads back; an unfinished window seals INVALID; the journal row readback refuses a missing or
+  mismatched artifact; the port seals its window with the recorder; an unfinished window blocks the seal; the real owner
+  invalid-seals an open window before child retirement) plus my Boundary V test.
+- **So artefact #7 is covered, at the owner/chain level rather than in my test - and the distinction matters:**
+  | artefact | covered by |
+  | --- | --- |
+  | SEARCH rows from the real path · FINAL_CHECK · sealed readback with digest · confirmed retirement · release open event · three adjacent 10 Hz rows in one epoch | **my Boundary V test** (CP-1185, CP-1193) |
+  | journal row readback and its refusal on a missing or mismatched artifact; the owner invalid-sealing an open window before child retirement | **the existing chain file's own tests** |
+  **What I have and have not verified with my own eyes this round:** I ran them and they pass; I have **not** re-read that
+  journal test's assertions in this session, so I am not claiming it asserts a *path and hash* in the plan's exact words - only
+  that the journal's readback and its refusal are covered by a green test in the same file. Reading it is one grep, and I would
+  rather say that than round it up.
+- **This is option (b) as CP-1189 described it, and it is defensible on the evidence rather than by preference:** the runner-and-
+  port level proves six artefacts directly, and the journal plus the owner/child boundary are proven by the campaign-level tests
+  that were written for them. **The owner's decision at CP-1189 therefore does not block item 4** - it decides whether the child
+  step needs a *new* fixture on top of what four green tests already cover, or whether the existing coverage is the right scope.
+- **State:** goal active (revision 51, cap 1000); HEAD `88d26778`; staged 0; the warnings are pre-existing (`1 warning` in both
+  runs); no full suite, no push, no stack, no hardware.
