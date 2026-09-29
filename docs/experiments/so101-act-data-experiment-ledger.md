@@ -23664,3 +23664,18 @@ not an inference of mine.**
   the boundary to call the driver's recording method per readback, with the fields the port's phase document already produces.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1431 — `observe` is the caller's contract, and the handoff is now complete
+
+- **Read, uncut:** `CaseEvidenceDriver.observe(fields, *, phase, frame, contact, measurements, event=False)` composes one canonical sample from
+  **`fields`** (`physics_step`, `sim_time_s`, `source_stamps_s`, `source_received_monotonic_s`, `raw_records`, `holding_state`) through the same
+  production `build_live_evidence_sample` my recording already uses, and routes it to the window's **grid** or to its **events** when `event=True` -
+  **and "events" is exactly where the reviewer's gripper-open command event assertion will look.** `seal()` then seals through the window.
+- **So P1-5's remaining first-half work is one call site:** have the substituted boundary call `driver.observe(...)` per readback - the driver is
+  reachable from the port (`bind_live_evidence` receives its window, and the window's recorder is the one the port holds), the fields are the ones the
+  port's phase document already produces, and `event=True` marks the gripper-open command. **Nothing in that sentence is unknown any more.**
+- **And the handoff is therefore complete and specific:** a fresh round reads CP-1403 to CP-1431, wires that single `observe` call, and then has the
+  recorder, the seal and the indexed records the seven assertions need. **Everything before it - the port, the seal, the segment, the scenario, the
+  identity plumbing, the full readback validation and the recorder binding - is built, proven, and sitting uncommitted in this worktree by design.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
