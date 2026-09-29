@@ -113,6 +113,8 @@ def maybe_provision_pick_place_port(driver):
         campaign_id=os.environ["SO101_ACT_CAMPAIGN_ID"],
         worker_id=worker_id, generation=generation,
         scene_node_factory=service_node_factory,
+        policy_proposal_path=policy_paths["proposal"],
+        policy_receipt_path=policy_paths["activation_receipt"],
     )
 
 
@@ -518,7 +520,11 @@ class RclpyActionDriver:
                                           staging_root=artifacts.evidence_root,
                                           session_id=request.session_id, attempt_id=request.attempt_id)
             try:
-                attach(evidence.window)
+                attach(evidence.window,
+                       support_distance_max_m=request.payload["support_distance_max_m"],
+                       # the recorder's own root is the driver's case root, so the raw records it will index must live there -
+       # not one level up in the staging root, which is where the first version put them
+       raw_records_root=evidence.case_root)
             except Exception as error:
                 raise MutationError("ACT_TASK8_PORT_INVALID") from error
         from so101_demo.act.pick_place_runner import PickPlaceRunner

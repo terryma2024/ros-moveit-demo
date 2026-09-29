@@ -71,6 +71,9 @@ class _StackOwner(BaseModel):
 
 class _PickPlacePayload(_ActPayload):
     scenario_id: str = Field(min_length=1)
+    # the support distance the case admits for "the cup is supported": part of the case definition, because the
+    # evidence that says so is derived from it and an invented default would be a measurement nobody admitted
+    support_distance_max_m: float = Field(gt=0)
     manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     runtime_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     contact_policy_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")

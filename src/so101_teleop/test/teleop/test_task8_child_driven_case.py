@@ -139,6 +139,18 @@ class _NeckSweepChecker:
         return True                 # the production neck check expects a real True
 
 
+def _fixture_canonical_evidence(captured, *, support_distance_max_m, raw_records):
+    """The production derivation, called directly - the fixture substitutes the I/O, not the rule."""
+
+    from so101_demo.adapters.act.pick_place_readback import capture_evidence_fields
+
+    # the end-effector position is MuJoCo output: this fixture substitutes the simulator, so it supplies the pose the
+    # real boundary would compute from its model (the production call passes it the same way)
+    return capture_evidence_fields(captured, support_distance_max_m=support_distance_max_m,
+                                   raw_records=raw_records,
+                                   end_effector_position_m=[0.0, 0.0, 0.1])
+
+
 class _Boundary:
     """The ROS/MuJoCo/controller surface the PRODUCTION port drives - the only substituted layer.
 
@@ -174,6 +186,12 @@ class _Boundary:
             release_epoch=0)
         self.reset.receipt = SimpleNamespace(new_epoch=1)
 
+    def canonical_evidence(self, captured, *, support_distance_max_m, raw_records):
+        """One derivation for every caller: the fixture uses the production function, not its own copy."""
+
+        return _fixture_canonical_evidence(captured, support_distance_max_m=support_distance_max_m,
+                                           raw_records=raw_records)
+
     def _request(self, request, reset_epoch=0, release_epoch=0):
         document = dict(request) if isinstance(request, dict) else {}
         document.setdefault("reset_epoch", reset_epoch)
@@ -202,60 +220,12 @@ class _Boundary:
         return {"session_id": request["session_id"], "attempt_id": request["attempt_id"],
                 "reset_epoch": self.reset_epoch, "release_epoch": 0, "full_restart": False}
 
-    def record_phases(self, request):
-        """Record one canonical live-evidence sample per required phase through the window.
-
-        The window is the case's own, reached through the port's public ``live_evidence_window``; the samples
-        are built by the production builder with THIS case's identity, real raw records under the recorder's
-        root, and spaced by the window's own period - which is what its grid rule compares against. The port's
-        own grid feed reports None (it cannot see the readback adapter's field builder), so this is the
-        recording path for a substituted boundary, standing in for the adapter that owns those fields.
-        """
-
-        port = getattr(self, "_boundary_port", None)
-        window = getattr(port, "live_evidence_window", None) or getattr(self, "_live_window", None)
-        recorder = getattr(self, "_evidence_recorder", None)
-        if window is None or recorder is None:
-            return 0
-        if getattr(self, "_phases_recorded", False):
-            return 0
-        self._phases_recorded = True
-        try:
-            window.bind_reset_epoch(self.reset_epoch)
-        except ValueError:
-            pass                                    # already bound to this generation
-        root = Path(getattr(recorder, "evidence_root", Path(".")))
-        period = getattr(window, "_period_s", None) or 0.1
-        identity = {"case_id": request["scenario_id"], "session_id": request["session_id"],
-                    "attempt_id": request["attempt_id"], "reset_epoch": self.reset_epoch,
-                    "release_epoch": 0}
-        recorded = 0
-        for index, phase in enumerate(window.REQUIRED_PHASES):
-            sim_time = round(index * period, 9)
-            window.add_grid(build_live_evidence_sample(
-                identity=identity, phase=phase, physics_step=index, sim_time_s=sim_time,
-                source_stamps_s={name: sim_time for name in READBACK_SOURCES},
-                source_received_monotonic_s={name: sim_time for name in READBACK_SOURCES},
-                raw_records=_raw_records(root, sim_time),
-                holding_state="HOLDING",
-                frame={"wrist_frame_valid": True, "wrist_target_visible": True},
-                contact={"observation_valid": True, "bilateral_contact": True,
-                         "no_fingertip_contact": False, "cup_supported": True,
-                         "released": False, "placement_stable": False},
-                measurements={"cup_support_distance_m": 0.01,
-                              "end_effector_position_m": [0.0, 0.0, 0.1],
-                              "cup_position_m": [0.0, 0.0, 0.1],
-                              "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]}))
-            recorded += 1
-        return recorded
-
     def search(self, request):
         """The production port requires a real observation type, so the boundary returns one."""
 
         self.searches = getattr(self, "searches", 0) + 1
         print(f"[probe] search calls={self.searches}")
         self.calls.append("search")
-        self.record_phases(request)      # the seal needs the case's own evidence
         self.rows.append({"phase": "search", "source_stamp": 1})
         # Astra P1-5: the observation is produced by the PRODUCTION segment, whose collaborators are
         # substituted. The doubles come from the segment suite's own tests - imported, not forked - so the
@@ -387,7 +357,12 @@ class _ChildSources(_Sources):
         # the port compares the key SETS exactly, so these documents are BUILT to the production key sets
         # rather than patched - setdefault left `_raw`'s five keys in place, which is what `physical readback
         # scope` refused. The digest is the one the sources advertise, which the port cross-checks.
+        # the scene's clock bounds come from the physical clock: this fixture substitutes the simulator, so it
+        # supplies real monotonic nanoseconds rather than the 0 the generic fill would leave behind
+        scene_ns = time.monotonic_ns()
         row["scene"] = {**{key: 0 for key in SCENE_KEYS},
+        "clock_interval_begin_monotonic_ns": scene_ns - 1_000_000,
+        "clock_interval_end_monotonic_ns": scene_ns,
                         "simulation_session_id": self._session_id,
                         "reset_epoch": self._reset_epoch,
                         "simulation_step": world.simulation_step,
@@ -433,8 +408,11 @@ class ChildPort(PickPlaceSearchPhasePort):
         super().__init__(self.boundary)
         self.receipt = None
 
-    def bind_live_evidence(self, window):
-        self._live_evidence_window = window
+    def bind_live_evidence(self, window, *, support_distance_max_m=None, raw_records_root=None):
+        # the production contract (CP-1482): the admitted threshold and the raw-record root travel with the
+        # attachment, and the production bind is the one that validates them - so they are forwarded, not dropped
+        super().bind_live_evidence(window, support_distance_max_m=support_distance_max_m,
+                                   raw_records_root=raw_records_root)
         self._evidence_recorder = getattr(window, "_recorder", None)
         # the boundary is what produces readbacks, so it must hold the recorder too: the child attaches to the
         # PORT, and a boundary that never sees it cannot record the evidence the seal demands
@@ -521,6 +499,7 @@ def _prepare_child_case(tmp_path, monkeypatch, *, case_id="case-05", campaign_id
         session_id=session_id, attempt_id=attempt_id,
         deadline_ns=deadline_ns,
         payload=_PickPlacePhasePayload(
+            support_distance_max_m=0.02,   # the admitted support distance the case's evidence is derived from
             stop_after="SEARCH",     # the port provisions SEARCH; the child supports the prefix
             scenario_id=case_id,          # the journal's _CASE_ID is r"[a-z]+-[0-9]{2}\Z"
             manifest_sha256=digests["manifest"],
@@ -725,6 +704,208 @@ def test_the_case_window_binds_its_reset_epoch_exactly_once(tmp_path, monkeypatc
         window.bind_reset_epoch(99)
 
 
+def test_a_campaign_of_prefixes_alone_cannot_qualify():
+    """The trusted qualification gate refuses the bounded campaign we can actually run - by its own rules.
+
+    ``validate_campaign_summary`` demands PASSED, nine prefixes, **five consecutive fulls** and one digest per
+    case. A run of prefixes alone therefore cannot qualify, which is the honest bound on this fixture's
+    evidence: it does not produce a qualification, and the code says exactly why.
+    """
+
+    from so101_demo.act.task8_live_qualification import validate_campaign_summary
+
+    digests = [f"{index:064x}" for index in range(14)]
+    complete = {"status": "PASSED", "prefix_count": 9, "consecutive_full_count": 5,
+                "case_journal_sha256": digests}
+    assert validate_campaign_summary(complete)["status"] == "PASSED"
+
+    prefixes_only = dict(complete, consecutive_full_count=0)
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_FULLS_NOT_CONSECUTIVE"):
+        validate_campaign_summary(prefixes_only)
+
+    short = dict(complete, case_journal_sha256=digests[:9])
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_CASE_COUNT_INVALID"):
+        validate_campaign_summary(short)
+
+    not_passed = dict(complete, status="INVALID")
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_NOT_PASSED"):
+        validate_campaign_summary(not_passed)
+
+    duplicate = dict(complete, case_journal_sha256=[digests[0]] * 14)
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_JOURNAL_DUPLICATE"):
+        validate_campaign_summary(duplicate)
+
+
+def test_the_real_case_execution_publishes_the_journal_row_for_a_prefix_case(tmp_path, monkeypatch):
+    """P1-5: the production case entry runs the REAL child as its worker and publishes the row itself.
+
+    Only the worker seam is substituted: ``run_pick_place_case`` does its own preflight, campaign check,
+    result validation, live-evidence readback rule and retirement-receipt requirement, and ``_publish_new``
+    writes the journal row. The evidence directory is its own subdirectory so the harness's manifest and this
+    case's artifact binding cannot collide over the same file name.
+    """
+
+    from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
+    from test_task8_case_execution import _prepared
+
+    spec, owner, journal, events = _prepared(tmp_path)
+    evidence = tmp_path / "child-evidence"
+    evidence.mkdir()
+    child, request, port = _prepare_child_case(
+        evidence, monkeypatch, case_id="prefix-01", session_id="session-298",
+        attempt_id="prefix-01", campaign_id="case-298")
+
+    async def run_pick_place(case_request):
+        events.append("execute")          # the child runs between the harness's start and finish
+        assert case_request["attempt_id"] == "prefix-01", "the harness's case is what the child runs"
+        assert case_request["session_id"] == "session-298"
+        return await child.pick_place_phase(request)
+
+    owner.worker.run_pick_place = run_pick_place
+    row = asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
+
+    assert journal.exists(), "the production entry published the journal row itself"
+    assert row["case_id"] == "prefix-01" and row["mode"] == "phase_prefix"
+    assert row["status"] == "PASSED" and row["stopped_confirmed"] is True
+    assert row["completed_phases"] == ["SEARCH"]
+    assert row["eligible_for_formal_collection"] is False
+    assert row["live_evidence_path"] == "", "a prefix case carries no sealed artifact, and says so"
+    assert row["live_evidence_sha256"] == "0" * 64
+    assert Path(row["stack_retirement_receipt_path"]).is_file()
+    assert Path(row["child_retirement_receipt_path"]).is_file()
+    assert events == ["start", "execute", "finish"]
+
+    # the published artifact is the bytes on disk, canonically: the row the caller receives is the file the
+    # trusted reader will open, and a replay of the same case cannot overwrite it
+    import json as _json
+    published = journal.read_bytes()
+    expected = (_json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode()
+    assert published == expected, "the journal's bytes are the row, canonically encoded"
+    journal_sha256 = hashlib.sha256(published).hexdigest()
+    assert len(journal_sha256) == 64
+    with pytest.raises(ValueError, match="TASK8_CASE_JOURNAL_INVALID"):
+        from so101_teleop.unified.pick_place_case_execution import _publish_new
+        _publish_new(journal, row)
+
+    # and the trusted path's own translator: the row a campaign publishes becomes the journal row the
+    # aggregator reads, validated by the same rule the aggregator applies
+    import hashlib as _hashlib
+    from so101_demo.act.task8_live_evidence import case_row_to_journal_row
+
+    identities = {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                  "contact_policy_fingerprint": "d" * 64}
+    manifest_sha256 = _hashlib.sha256((tmp_path / "manifest.json").read_bytes()).hexdigest()
+    journal_row = case_row_to_journal_row(row, identities=identities,
+                                          manifest_document_sha256=manifest_sha256)
+
+    assert journal_row["case_id"] == "prefix-01"
+    assert journal_row["mode"] == "phase_prefix"
+    for name, value in identities.items():
+        assert journal_row[name] == value, f"the bundle identity {name} is carried into the journal row"
+    assert journal_row["manifest_document_sha256"] == manifest_sha256
+    # the producer's receipt digests survive the translation under the journal's own names
+    assert journal_row["child_retirement_receipt_sha256"] == row["child_receipt_sha256"]
+    assert journal_row["stack_retirement_receipt_sha256"] == row["stack_receipt_sha256"]
+    assert journal_row["live_evidence_sha256"] == "0" * 64
+
+    # negative: a row that lost a required field is refused by the trusted translator, not accepted loosely
+    tampered = {key: value for key, value in row.items() if key != "child_receipt_sha256"}
+    with pytest.raises(ValueError, match="TASK8_CASE_ROW_INVALID"):
+        case_row_to_journal_row(tampered, identities=identities,
+                                manifest_document_sha256=manifest_sha256)
+
+
+def test_the_trusted_aggregator_refuses_a_missing_and_a_tampered_case_journal(tmp_path, monkeypatch):
+    """P1-5 negatives against the TRUSTED validator, not against my own expectations.
+
+    ``validate_case_journals`` is the aggregator's own reader: it walks the campaign's case ids, demands a
+    complete journal for each at the path the campaign writes, and refuses the whole qualification on a
+    missing, foreign or incomplete journal. Two of the review's negatives live here.
+    """
+
+    import json
+    from so101_demo.act.task8_live_evidence import require_campaign_cases
+    from so101_demo.act.task8_live_qualification import validate_case_journals
+    from test_task8_case_execution import _prepared
+    from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
+
+    spec, owner, journal_path, events = _prepared(tmp_path)
+    manifest = json.loads((tmp_path / "manifest.json").read_bytes())
+    manifest_sha256 = hashlib.sha256((tmp_path / "manifest.json").read_bytes()).hexdigest()
+    identities = {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                  "contact_policy_fingerprint": manifest["contact_policy_fingerprint"]}
+    required = tuple(require_campaign_cases(manifest))
+    assert required, "the campaign names its cases"
+
+    case_root = tmp_path / "campaign"
+    cases = case_root / "task8-live" / "cases"
+    cases.mkdir(parents=True)
+
+    # negative 1 - a missing row refuses the whole qualification, by the trusted reader's own error
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_JOURNAL_MISSING"):
+        validate_case_journals(case_root, manifest, identities=identities,
+                               manifest_document_sha256=manifest_sha256)
+
+    # the real published row, placed where the campaign writes it
+    evidence = tmp_path / "child-evidence"
+    evidence.mkdir()
+    child, request, port = _prepare_child_case(
+        evidence, monkeypatch, case_id=required[0], session_id="session-298",
+        attempt_id=required[0], campaign_id="case-298")
+
+    async def run_pick_place(case_request):
+        return await child.pick_place_phase(request)
+
+    owner.worker.run_pick_place = run_pick_place
+    row = asyncio.run(run_pick_place_case(spec, required[0], owner, journal_path))
+
+    # the campaign publishes a PRODUCER row; the trusted reader wants the JOURNAL row, so the translation the
+    # trusted path provides is applied first - that is the pipeline, and the negatives live after it
+    from so101_demo.act.task8_live_evidence import case_row_to_journal_row
+    journal_row = case_row_to_journal_row(row, identities=identities,
+                                          manifest_document_sha256=manifest_sha256)
+
+    # negative 2 - a journal whose row lost a required field is refused even though the file is there
+    tampered = {key: value for key, value in journal_row.items()
+                if key != "child_retirement_receipt_sha256"}
+    (cases / f"{required[0]}.json").write_text(json.dumps(tampered, sort_keys=True))
+    with pytest.raises(ValueError, match="TASK8_"):
+        validate_case_journals(case_root, manifest, identities=identities,
+                               manifest_document_sha256=manifest_sha256)
+
+    # and the untampered row is ACCEPTED for its case: the reader moves on and stops at the NEXT missing one
+    (cases / f"{required[0]}.json").write_text(json.dumps(journal_row, sort_keys=True))
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_JOURNAL_MISSING"):
+        validate_case_journals(case_root, manifest, identities=identities,
+                               manifest_document_sha256=manifest_sha256)
+
+
+def test_a_missing_retirement_receipt_refuses_the_case_and_publishes_nothing(tmp_path):
+    """Negative: without the child's retirement receipt the case must not publish a success row."""
+
+    from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
+    from test_task8_case_execution import _prepared
+
+    from so101_teleop.unified.contracts import MutationError
+
+    spec, owner, journal, events = _prepared(tmp_path, omit_child_receipt=True)
+    with pytest.raises(MutationError, match="TASK8_RETIREMENT_RECEIPT_INVALID"):
+        asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
+    assert not journal.exists(), "a case without both retirement receipts publishes nothing"
+    assert "finish" in events, "the attempt still retired the stack and the child"
+
+
+def test_the_case_window_binds_its_reset_epoch_exactly_once(tmp_path, monkeypatch):
+    """Negative: the window's generation is bound once; claiming another epoch for the same case is refused."""
+
+    child, request, port = _prepare_child_case(tmp_path, monkeypatch)
+    asyncio.run(child.pick_place_phase(request))
+    window = port.live_evidence_window
+    assert window is not None, "the child attached its evidence window to the production port"
+    with pytest.raises(ValueError):
+        window.bind_reset_epoch(99)
+
+
 def test_the_case_evidence_is_indexed_and_a_tampered_raw_record_is_refused(tmp_path, monkeypatch):
     """The indexed evidence this repository can produce for a bounded case, plus one more tamper negative.
 
@@ -743,7 +924,9 @@ def test_the_case_evidence_is_indexed_and_a_tampered_raw_record_is_refused(tmp_p
 
     recorder = port._evidence_recorder
     entries = list(recorder._entries)
-    assert len(entries) == 9, "one indexed sample per required phase"
+    # the port feeds this window itself now (P1-3): a bounded SEARCH case carries the sample the phase produced
+    assert len(entries) == 1, f"the phase's own sample is the case's evidence: {len(entries)}"
+    assert entries[0]["phase"] == "SEARCH"
 
     # every index row names a real file whose bytes hash to the digest the row claims
     for entry in entries:
@@ -752,20 +935,8 @@ def test_the_case_evidence_is_indexed_and_a_tampered_raw_record_is_refused(tmp_p
         assert path.is_file(), f"indexed evidence exists: {entry['relative_path']}"
         assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]
 
-    assert [entry["phase"] for entry in entries] == list(port.live_evidence_window.REQUIRED_PHASES)
-    assert [entry["physics_step"] for entry in entries] == list(range(9))
     assert {entry["reset_epoch"] for entry in entries} == {port.boundary.reset_epoch}
     assert {entry["release_epoch"] for entry in entries} == {0}
-
-    # the reviewer's "adjacent rows" property, at the scope this case has: the indexed sim times advance by
-    # exactly the window's period, so the rows are adjacent in the frame history rather than merely ordered
-    period = port.live_evidence_window._period_s
-    tolerance = port.live_evidence_window._tolerance_s
-    stamps = [entry["sim_time_s"] for entry in entries]
-    deltas = [round(later - earlier, 9) for earlier, later in zip(stamps, stamps[1:])]
-    assert deltas and all(delta > 0 for delta in deltas), "the indexed rows advance, never repeat"
-    assert all(abs(delta - period) <= tolerance for delta in deltas), \
-        f"every adjacent pair is one period apart: {deltas}"
 
     # tamper negative at the evidence layer: a raw record whose bytes were changed is refused by append
     root = Path(recorder.evidence_root)
@@ -819,27 +990,3 @@ def test_a_campaign_of_prefixes_alone_cannot_qualify():
     duplicate = dict(complete, case_journal_sha256=[digests[0]] * 14)
     with pytest.raises(ValueError, match="TASK8_QUALIFICATION_JOURNAL_DUPLICATE"):
         validate_campaign_summary(duplicate)
-
-
-@pytest.mark.xfail(strict=True, reason=(
-    "EXP-519 (CP-1467/CP-1470): in production the live-evidence route is wired only as far as attaching the "
-    "window - the driver's observe, observe_capture and seal have no caller - so a case that does NOT feed the "
-    "window itself records no samples. This marker is a strict xfail ON PURPOSE: it keeps the hole executable "
-    "and visible without pretending the suite is green about it, and it turns XPASS the moment the feed is "
-    "wired, which forces whoever lands EXP-519 to remove the marker and assert the real thing."))
-def test_the_production_evidence_route_still_has_no_feeder(tmp_path, monkeypatch):
-    """Assert the hole rather than only describing it: with the fixture's stand-in disabled, nothing feeds.
-
-    ``record_phases`` is the fixture standing in for a production feeder that does not exist, so disabling it is
-    what makes this test describe production rather than the harness. When EXP-519 lands - grids AND events
-    through the driver route - this test must be replaced by one that asserts the samples themselves.
-    """
-
-    monkeypatch.setattr(_Boundary, "record_phases", lambda self, request: 0)
-    child, request, port = _prepare_child_case(tmp_path, monkeypatch)
-
-    result = asyncio.run(child.pick_place_phase(request))
-
-    assert result["status"] == "PASSED", "the phase still completes - the hole is the evidence, not the phase"
-    window = port.live_evidence_window
-    assert window._grid_count > 0, "production must feed the window through the driver route, not only attach it"

@@ -44,6 +44,7 @@ def request(*, worker_id="w00", generation=3, operation="task8_phase"):
     payload = (
         {"reason": "operator"} if operation == "cancel" else
         {"scenario_id": "scene-1", "stop_after": "MICRO_LIFT", "manifest_sha256": "a" * 64,
+        "support_distance_max_m": 0.02,   # the admitted support distance (P1-3)
          "runtime_config_sha256": "b" * 64, "contact_policy_fingerprint": "c" * 64,
          "stack_owner": {"pid": 12345, "pgid": 12345, "started_ticks": 101,
                          "argv_sha256": "1" * 64, "environment_sha256": "2" * 64}}
@@ -606,6 +607,7 @@ def test_act_task8_child_routes_closed_hashes_to_runner_and_confirms_stop():
             self.phases = []
             self.stops = []
             self.startup_receipt = None
+            self.physics_step = 0
 
         def bind_startup_receipt(self, receipt):
             self.startup_receipt = receipt
@@ -617,9 +619,11 @@ def test_act_task8_child_routes_closed_hashes_to_runner_and_confirms_stop():
 
         def run_phase(self, phase, req):
             self.phases.append(phase)
+            self.physics_step += 1
             return {
                 "phase": phase, "session_id": req["session_id"], "attempt_id": req["attempt_id"],
                 "reset_epoch": 1, "release_epoch": 0,
+                "physics_step": self.physics_step,
                 "planning_ok": True, "controller_reference_ok": True,
                 "joint_feedback_ok": True, "contact_ok": True, "mujoco_ok": True,
                 "planning_scene_ok": True, "head_rgb_ok": True, "wrist_rgb_ok": True,

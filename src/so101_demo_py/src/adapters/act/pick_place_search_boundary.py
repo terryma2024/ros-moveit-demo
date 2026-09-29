@@ -86,6 +86,23 @@ class PickPlaceSearchBoundary:
         self._request = dict(request)
         return result
 
+    def canonical_evidence(self, captured, *, support_distance_max_m, raw_records):
+        """Derive the canonical evidence fields for THIS case's capture, through the real readback adapter.
+
+        The port records the raw documents and the sample, but it cannot derive the fields: the derivation lives in
+        the readback module, next to the capture whose documents it reads. Calling it here - rather than having the
+        port approximate it - is what keeps one derivation for every caller (Astra re-review #3, finding 3).
+        """
+
+        from .pick_place_readback import PickPlaceReadbackError, capture_evidence_fields
+
+        try:
+            return capture_evidence_fields(captured, support_distance_max_m=support_distance_max_m,
+                                           raw_records=raw_records)
+        except (KeyError, TypeError, ValueError, PickPlaceReadbackError) as error:
+            raise PickPlaceSearchBoundaryError("TASK8_EVIDENCE_FIELDS_INVALID") from error
+
+
     def search(self, request: dict):
         if self._request is None:
             raise PickPlaceSearchBoundaryError("TASK8_BEGIN_REQUIRED")
