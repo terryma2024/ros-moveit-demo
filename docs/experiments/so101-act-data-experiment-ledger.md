@@ -19198,3 +19198,33 @@ not an inference of mine.**
   step needs a *new* fixture on top of what four green tests already cover, or whether the existing coverage is the right scope.
 - **State:** goal active (revision 51, cap 1000); HEAD `88d26778`; staged 0; the warnings are pre-existing (`1 warning` in both
   runs); no full suite, no push, no stack, no hardware.
+
+## CP-1195 — The journal artefact confirmed, by reading rather than by rounding up
+
+- **The grep CP-1194 promised, kept:** `test_the_journal_row_readback_refuses_a_missing_or_mismatched_artifact` exercises
+  `pick_place_case_execution._require_live_evidence_readback(artifact, request)` - a **production** function - and its
+  assertions are exactly the plan's wording:
+  | assertion | meaning |
+  | --- | --- |
+  | `TASK8_LIVE_EVIDENCE_READBACK_MISSING` with no artifact | a full case must carry one |
+  | accepts `{"path": <file>, "sha256": <sha256 of its bytes>, "schema_version": 1}` | the readback is **by path and hash** |
+  | `TASK8_LIVE_EVIDENCE_READBACK_MISMATCH` on a wrong digest | the hash is verified, not trusted |
+  | `TASK8_LIVE_EVIDENCE_UNEXPECTED` for `phase_prefix` | a prefix is never an episode and must carry none |
+  So **"journal path and hash" is asserted**, and I can now say that having read the assertions rather than inferring them from
+  a test's name - the distinction CP-1194 deliberately left open.
+- **Boundary V's seven artefacts, complete and sourced:**
+  | # | artefact | where it is proven |
+  | --- | --- | --- |
+  | 1 | SEARCH rows from the real path | my `test_task8_case_runner_chain.py` |
+  | 2 | FINAL_CHECK reached | same |
+  | 3 | sealed artifact read back, digest verified | same |
+  | 4 | confirmed retirement | same |
+  | 5 | release open event | same |
+  | 6 | three adjacent 10 Hz support rows in one epoch | same |
+  | 7 | journal path and hash, verified on readback | `test_task8_live_evidence_production_chain.py` |
+  **Six in one test that drives the real runner and seals real evidence, and the seventh in the production readback the chain
+  file already covered** - which is option (b) as CP-1189 set it out, now backed by reading rather than by preference.
+- **What remains genuinely open, and it is the owner's:** whether item 4 additionally wants a fixture that drives the **child**
+  (`_run_pick_place`) rather than the runner, given that the child's own artifacts are *loaded* rather than injected (CP-1189)
+  and the owner/child boundary already has green tests. That decision does not block anything else on the list.
+- **State:** goal active (revision 51, cap 1000); HEAD `285e45c7`; staged 0; no full suite, no push, no stack, no hardware.
