@@ -14990,3 +14990,43 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   verified scratch) and its current blocker is now measured rather than unknown; Task 10 stays blocked until the 17
   search values are independently designed and reviewed. No runtime, no package gate claim, no push, no evidence
   deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1012 — Root cause of the 21 failures: the scratch path makes the child's IPC socket too long (A/B proven)
+
+- **The child's own traceback named it:** running one failing test with `-s` shows the spawned helper
+  (`test/e2e/noros_child_helper.py:115`) dying inside `child_run...start()` with
+  **`MutationError: IPC_SOCKET_PATH_TOO_LONG`** and a path beginning
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch-r604.T81a/tmp/so101b...` - the child builds its
+  Unix-domain IPC socket **under `TMPDIR`**, and the mandated scratch location's prefix alone is **82 characters**
+  before the socket name, past the platform's socket-path limit.
+- **A/B with one variable - the only thing changed was `TMPDIR`:**
+  | `TMPDIR` | Result |
+  | --- | --- |
+  | registered evidence-root scratch (82-char prefix) | **7 failed**, all `IPC_SOCKET_PATH_TOO_LONG` (`beh-r603-serial.log`) |
+  | `/tmp/so101-debug-r604-tmp` (25 characters) | **9 passed, rc=0** (`beh-r604-ab.log`) |
+  Nothing else differed: same worktree, same commit, same interpreter, same overlay, same test file. So the 21 package
+  failures are **not** a code defect, **not** caused by this task's changes, and **not** a parallelism artefact - they
+  are an artefact of where the scratch directory lives.
+- **This is a conflict between two mandated rules rather than a bug in either:** the repository rule requires pytest
+  fixtures on ai-station to use a fresh scratch directory **under the task's registered evidence root** with
+  `TMPDIR`/`TMP`/`TEMP` pointing there, while the unified child builds its IPC socket under `TMPDIR` and that root's path
+  is long enough to overflow the socket limit. Both rules are being followed; together they cannot both be satisfied
+  for these tests.
+- **The skill's guidance settles what must NOT be done:** when a gate hits shared-resource or path conflicts, "fix
+  isolation and test design, then re-run the same parallel gate; do not fall back to single-process or serial groups to
+  claim a pass". So the resolution is not to move `TMPDIR` silently to `/tmp` for the gate and call it green, and not to
+  shrink the collection scope.
+- **Candidate resolutions, all of which change something a reviewer should see:**
+  1. **shorten the socket path in the child** - e.g. an `AF_UNIX` abstract socket, or a short hashed socket name in a
+     short base directory, which fixes the class of problem rather than this instance and is a change to production IPC
+     code (`unified/child_runtime.py`, `child_run*.py`) that the repo owner's domain covers;
+  2. **allow a short, separately registered scratch for the gate** - i.e. amend the evidence-root rule to permit
+     `/tmp/so101-debug-<task-id>/` (already the sanctioned location for ordinary low-rate logs) as the gate's `TMPDIR`,
+     keeping the high-frequency evidence inside the registered root;
+  3. **shorten the registered root's path**, which is the least attractive: the root is already recorded in the ledger
+     and referenced by evidence, and renaming it would invalidate recorded paths (the repo rule explicitly forbids
+     rewriting history when migrating).
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller's address recorded (CP-1010); Task 9's
+  gate requirements pinned, and its blocker now **diagnosed to a rule conflict with a proven A/B** rather than an
+  unknown; Task 10 blocked until the 17 search values are reviewed. No runtime, no package-gate claim, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
