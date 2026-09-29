@@ -19975,3 +19975,30 @@ not an inference of mine.**
 - **State:** HEAD `a2bed149` plus this checkpoint; staged 0; the added test and `_invoke` parameter are **uncommitted in the working
   tree while red-for-the-wrong-reason** (the owner's rule for new tests); no source change yet; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1228 — Item 1's RED now fails for the right reason, at the CLI boundary
+
+- **The bug was mine and it was a shadowing error, found by reading rather than guessing:** `_invoke` assigned
+  `driver = tmp_path / "descriptor_driver.py"` - a `Path` - over my new `driver` **parameter**, so `driver is not None` was
+  always true, `--driver` was always passed, and the CLI received a `PosixPath` where it expected a spec string. That is what
+  `'PosixPath' object is not subscriptable` was. Renamed to `driver_file`; the parameter is the spec string again.
+- **The RED, run on the whole descriptor test file:**
+  ```
+  rc=1 :: 1 failed, 2 passed
+  assert "PRODUCTION_DRIVER_WIRING_PENDING" not in message
+  PRODUCTION_DRIVER_WIRING_PENDING: stack
+  ```
+  So with `--driver` omitted the CLI **does** reach `production_driver()` and dies exactly where Astra said it would: the factory
+  is called with no collaborators. **This is the finding reproduced at its real boundary, and the two pre-existing descriptor
+  tests still pass alongside it** - so the RED is about item 1 and nothing else.
+- **The GREEN design, decided now so the implementation is not improvised:** the composition is **provider-level, not
+  driver-level**. A single trusted builder takes the **external-I/O providers** (stack, detector, controller port, phase-camera
+  evaluator, clock) - with the real ROS/MuJoCo constructors as its only defaults - and it is the thing the CLI calls when
+  `--driver` is absent. The composition itself then owns the rules Astra listed: one stack built **once**, CUDA with no CPU
+  fallback checked from the **context's own descriptor** (not re-read from disk), resource binding **only at this entry**, and
+  generation-scoped cleanup. A test may substitute the providers because that is the external I/O seam; it may **not** substitute
+  the driver, because that would skip the composition under test - which is exactly the distinction between the CLI's `--driver`
+  argument and the wiring.
+- **State:** the RED is **uncommitted in the working tree while red** (the owner's rule for new tests), alongside the `_invoke`
+  parameter that makes the seam omittable; no production source changed yet in this batch; HEAD `3a58418f` plus this checkpoint;
+  no stack, no hardware, nothing deleted, nothing pushed.
