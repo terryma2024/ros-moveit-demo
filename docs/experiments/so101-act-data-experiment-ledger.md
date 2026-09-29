@@ -26042,3 +26042,22 @@ picture in both directions.**
   the identity matching the case; the phases covering the runner's nine; and the sim times advancing by exactly one period** - **and the four negatives tamper with a record, drop a record, swap the identity and
   miscount the index, each of which must refuse by name.**
 - **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1563 — The sealed chain, fully specified: an index of 24-key records, and the production names for every break
+
+- **One more probe and the chain is complete.** Each index entry is
+  `{phase, physics_step, relative_path, release_epoch, reset_epoch, sha256}` with `relative_path` = `live-evidence-staging/sample-NNNNNN.json`, and **the file it points at is the canonical 24-key sample**
+  (the same keys `build_live_evidence_sample` produces). **So "seven indexed assertions read from records" has a precise, checkable meaning.**
+- **The seven assertions, each read from the records rather than from the run's return value:**
+  1. the artifact's own `sha256` matches the file it names (`_require_live_evidence_readback`'s rule, the production check);
+  2. `sample_count` equals the number of index entries;
+  3. every entry's `relative_path` is relative and traversal-free, and its `sha256` matches the record's bytes;
+  4. every record carries the case identity (`case_id`, `session_id`, `attempt_id`) and the epochs the index declares;
+  5. every record is a **complete canonical sample** - the 24 keys, no more and no fewer;
+  6. the indexed phases **cover the runner's nine**, with `RADIAL_RETREAT` appearing **twice** (two segments, one phase);
+  7. the records' `sim_time_s` advance **exactly one period** per sample, which is the recorder's own rule.
+- **And the four negatives each hit a PRODUCTION refusal rather than a private one:** a tampered record or altered digest is `TASK8_LIVE_EVIDENCE_READBACK_MISMATCH` (or the recorder's digest rule); a missing
+  record is `..._READBACK_MISSING`; a foreign identity is `TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH`; and a broken cadence is `TASK8_LIVE_EVIDENCE_GRID_GAP` / `..._GRID_REGRESSION`. **The negatives are therefore tests of the
+  repository's own guards, not of assertions this file invents.**
+- **This is the last piece of P1-4**, and the test that carries it is the next action; after it, P2, the final integration boundary, and the review.
+- **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
