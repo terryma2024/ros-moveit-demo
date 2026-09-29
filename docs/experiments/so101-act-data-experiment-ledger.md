@@ -12670,3 +12670,35 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Open approval unchanged:** the 17 search configuration values, the three anchors' `neck_start_rad` and the
   candidate safe interval remain `null` with `requires_approved_value: true`, pending an approved source or an
   upstream approval step (CP-879, CP-881).
+
+## CP-919 — Task 7 steps 3-4: six of the eight plan-named files carry uncommitted user work
+
+- **Checked every file the plan names for Task 7 steps 3-4 before touching any of them**, as the handoff required:
+
+  | Status | File |
+  | --- | --- |
+  | clean | `src/so101_demo_py/src/act/task8_live_evidence.py` (my Task 7 work, committed) |
+  | clean | `src/so101_demo_py/config/act/task8-live-evidence-schema.json` |
+  | **modified** | `src/so101_demo_py/src/act/pick_place_runner.py` |
+  | **modified** | `src/so101_demo_py/src/adapters/act/pick_place_child_port.py` |
+  | **modified** | `src/so101_teleop/so101_teleop/unified/ros_child.py` |
+  | **modified** | `src/so101_teleop/so101_teleop/unified/pick_place_case_execution.py` |
+  | **modified** | `src/so101_teleop/so101_teleop/unified/pick_place_case_owner.py` |
+  | **modified** | `src/so101_teleop/test/teleop/test_task8_case_execution.py` |
+  | absent | `src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py` (to be created) |
+
+- **Why this matters and why I stopped short of editing:** the standing rules require preserving the user's
+  uncommitted work, and these six files are the *entire* wiring surface of steps 3-4 - the recorder provisioning,
+  the child binding before `PickPlaceRunner`, the SEARCH open / FINAL_CHECK seal, and the artifact readback before
+  journal publication. Layering new edits onto six files of in-flight user work without knowing what those changes
+  are would risk exactly the kind of silent conflict the preservation rule exists to prevent, and reviewing a
+  combined diff afterwards cannot cleanly separate my change from theirs.
+- **The precise question for the user:** should I (a) read the user's six modified files, then make minimal,
+  additive, per-file-diffed edits that carry their current content forward untouched, or (b) wait until that
+  in-flight work is committed so the Task 7 wiring lands on a clean base? Both are safe under the rules; (b) makes
+  the review at Task 9 cleaner, and (a) keeps progress moving now. I have not started editing, so either answer is
+  available without rework.
+- **Everything else in Task 7 is complete and green:** the nine-phase window, `correlate_release_open`, the
+  audit-camera exclusion, and the builder's key-set validations - **37 passed** for the module and **76** across the
+  focused set. Tasks 1-6 are committed and green; Tasks 8-10 are untouched. No runtime, no package gate, no push,
+  no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
