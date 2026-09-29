@@ -12938,3 +12938,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7's module green (37 / 76); the wiring design corrected and now anchored in a clean file; the
   user's six in-flight files byte-for-byte untouched; Tasks 1-6 committed and green; Tasks 8-10 untouched; no
   runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-930 — INCIDENT AND REPAIR: my commit/revert cycle displaced the user's in-flight runner changes
+
+- **What I did wrong.** When I landed the (later withdrawn) runner window edit I staged the **whole file**
+  (`git add src/so101_demo_py/src/act/pick_place_runner.py`), which committed the user's 46 uncommitted in-flight
+  lines together with my own. Reverting that commit (`git revert 5f0e58af`, previously recorded as CP-927 as a
+  clean withdrawal) therefore removed **their** changes as well as mine. The evidence is unambiguous:
+  `after_step` appears **6 times** in `5f0e58af:pick_place_runner.py` and **0 times** in the working tree afterwards,
+  and `test_act_task8.py` - which had been green at 14 passed - began failing 9 tests with
+  `TypeError: PickPlaceRunner._verify_phase() takes 6 positional arguments but 7 were given`, exactly the symptom of
+  the user's new signature being gone.
+- **Why the earlier checks missed it.** I verified "the runner is back to the user's state" by checking for the
+  absence of **my** marker (`window_factory`) and treating that as proof of restoration. The absence of my change is
+  not the same as the presence of theirs, and the focused run I used to confirm the revert was against the
+  live-evidence module, not the runner's own suite.
+- **The repair.** Reconstructed the user's content from `5f0e58af:pick_place_runner.py` - the commit that captured it -
+  with line-based surgery that removes exactly three things (my `window_factory` parameter continuation, my attribute
+  comment and assignment, and my `window = None` block through the `completed: list[str] = []` marker) and refuses to
+  write unless both conditions hold: **no `window_factory` remains** and **at least six `after_step` occurrences are
+  present**. Both held; the file now shows `window_factory: 0`, `after_step: 6`, `def set_down: 1`, matching the user's
+  in-flight state.
+- **Independent confirmation of the diagnosis:** the failure signature above
+  (`_verify_phase() takes 6 positional arguments but 7 were given`) is precisely a *caller updated for the new
+  signature against a module that no longer has it* - i.e. the displaced state, not a defect in their work.
+- **Pending verification, stated rather than assumed:** the re-run of `test_act_task8.py` after the repair returned
+  **rc=2 with a collection error**, so that suite's status is **unknown** at this checkpoint and must be re-run before
+  anything else is concluded about it. A collection error is not evidence either way.
+- **Rule adopted to prevent recurrence:** never `git add` a file that carries uncommitted user work when committing my
+  own change to it. Stage hunks (`git add -p` equivalent) or, where the tooling allows, commit to a file I own and
+  keep my edits in the user's dirty file uncommitted until their work is committed. And when withdrawing such an edit,
+  verify restoration by the **presence of their markers**, never by the absence of mine.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
