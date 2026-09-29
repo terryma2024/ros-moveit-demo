@@ -14736,3 +14736,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search
   values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no
   evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1002 — Final verification and the three decisions that remain
+
+- **Verified at HEAD `3a4326f0`:** `test_act_task8_live_qualification.py`, `test_act_task8.py` and
+  `test_act_task8_measurement_formulas.py` report **120 passed, rc=0** (`beh-r596.log`); `staged` is **0** and the
+  tree stands at **30 modified + 13 untracked**, all the user's apart from the three documented insertions in
+  `pick_place_case_owner.py`, `pick_place_case_execution.py` and `test/teleop/test_task8_case_execution.py`.
+- **The three decisions that remain, each with its evidence recorded:**
+  1. **the report's schema version** - the plan requires the Task 8P4 report to pass `require_qualified`, the gate
+     hard-requires `schema_version == 1`, and the repository's ready fixture writes `2`, while neither approved
+     document names the value (CP-1000, CP-1001). Choosing means either declaring a published artefact at version 1 or
+     loosening a production gate;
+  2. **the 17 search configuration values, the three anchors' `neck_start_rad` starts and the candidate safe interval** -
+     committed as `null` with `requires_approved_value: true` because no approved source enumerates them and the only
+     concrete numbers in the tree model *measured* values (CP-879, CP-881);
+  3. **the in-flight chain files** - committing or stashing them turns the driver wiring (whose contract is recorded at
+     CP-993) from an edit inside someone else's uncommitted work into a clean, verifiable change.
+- **What is finished and needs no decision:** Tasks 1-7's module work, and Task 8's code side end to end - the rules,
+  span helper, collection layer (now on the validated row contract), raw reader, extractor factories, record binding,
+  the weld with its refusal cleanup, and the corrections that reading found along the way (the phase range in the
+  occlusion rule, the row-field mismatch, the identity-key resolution, the two names for the support measurement).
+- **Boundaries held for the whole session:** no runtime started, no package gate run, nothing pushed, no evidence
+  deleted, no hardware touched; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED;
+  gen3 retained and ineligible with gen4 reserved for Task 10.
