@@ -31562,3 +31562,43 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress; the harness is ready to receive the production broker and the construction is fully
   specified.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review
   packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1832 — The composition root read to its return, and its inputs resolved one by one
+
+- **`build_bound_act_broker` is short and its shape is unambiguous:**
+  ```python
+  session = BoundAuthoritySession(reservation_port=…, session_id=…, roles=…, history=…, admission=…, registry=…)
+  broker  = CommandBroker(driver, ownership=ownership, simulation_session_id=simulation_session_id,
+                          reservation_port=reservation_port, prefix_source_authority=prefix_source_authority,
+                          prefix_source_port=prefix_source_port,
+                          authority=session.composition, bound_authority_session=session)
+  return {"session": session, "broker": broker}
+  ```
+  **Construction performs no controller I/O** - the session is sealed and installed, and the per-role identities are
+  confirmed later, at the exact ACT acquire after `arm_generation`.
+- **And the domain has a PRODUCTION constructor the harness can use, which is the honest choice over the gate-6
+  doubles:**
+  ```python
+  def physics_clock_domain(*, session_id, nq, nv, settings, clock_ns=None):
+      …  needs settings["max_wall_age_s"] and settings["max_sim_gap_s"], both > 0, "the keys bound_act_source_settings
+         returns; a mismatch fails closed"
+      history   = PhysicsClockHistory(session_id=…, nq=…, nv=…, max_age_s=…, max_source_step_gap_ns=…)
+      admission = PhysicsClockAdmission(history, selected_max_age_s=…)
+      registry  = AuthorityTransactionRegistry(clock_ns=…, history=history)
+  ```
+  **`nq`/`nv` come from the ACT model (which the harness already compiles), and `settings` is calibrated data** - so the
+  domain can be **production** rather than the gate-6 test doubles, and the doubles are kept for what they were written
+  for. **That narrows the substitution list to the two entries CP-1828 named: the reservation sockets and the driver.**
+- **The full input table, resolved:**
+  | input | source |
+  | --- | --- |
+  | `reservation_port` | `_real_client(roles)` over `_AckServer`s (gate-6 fixtures) |
+  | `history`, `admission`, `registry` | **`physics_clock_domain(session_id=…, nq=model.nq, nv=model.nv, settings=…)`** - production |
+  | `driver` | **the open question**: `CommandBroker` dispatches through it, and the harness's `FakeBroker` is named for the broker it replaces - so what the child hands over as its driver has to be read before this is written |
+  | `ownership` | `Ownership()` (`so101_demo.act.ownership`) |
+  | `prefix_source_authority` | `PrefixSourceAuthority(ticket_guard=ownership.require_ticket, max_observation_age_s=…, max_prefix_age_s=…)` |
+  | `prefix_source_port` | `TrustedVisibleApproachSourcePort()` |
+  | `simulation_session_id`, `roles`, `session_id` | the case's own values |
+- **State:** **P1-5 in progress; one input left to read (the driver the child hands its broker) before the construction is
+  written.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review
+  packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
