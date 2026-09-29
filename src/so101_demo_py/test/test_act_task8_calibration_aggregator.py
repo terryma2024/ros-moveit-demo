@@ -264,6 +264,12 @@ def _sealed_batch(root, payload):
     identity = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
     raw = write_closed_json(Path(root) / "raw" / "records.json", payload)
     files = {"raw/records.json": hashlib.sha256(raw.read_bytes()).hexdigest()}
+    # the batch declares three anchors, so it must evidence them: the aggregator's per-anchor sync file is the
+    # convention it consumes, and indexing what it wrote keeps the fixture schema-true by construction
+    for anchor in ("default", "left", "forward"):
+        synced = write_closed_json(Path(root) / "sync" / f"{anchor}.json",
+                                  {"samples": [{"age_s": 0.05, "skew_s": 0.01} for _ in range(4)]})
+        files[f"sync/{anchor}.json"] = hashlib.sha256(synced.read_bytes()).hexdigest()
     from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
 
     document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",

@@ -154,7 +154,9 @@ def test_closed_batch_accepts_an_indexed_batch_and_rejects_closure_violations(tm
     identity["source_commit"] = "b" * 40
     batch = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
              "anchors": ["default", "left", "forward"], "batch_sha256": "0" * 64,
-             "identity": identity, "files": {str(raw.relative_to(root)): hashlib.sha256(raw.read_bytes()).hexdigest()}}
+             "identity": identity,
+             "files": _index_anchor_evidence(root, {str(raw.relative_to(root)): hashlib.sha256(raw.read_bytes()).hexdigest()},
+                                             write_closed_json, hashlib)}
     from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
 
     batch.pop("batch_sha256")
@@ -325,6 +327,9 @@ def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_pa
     root = tmp_path / "batch"
     root.mkdir()
     (root / "raw.json").write_text('{"row": 1}')
+    for anchor in ("default", "left", "forward"):                       # the seal declares three, so evidence three
+        (root / "sync").mkdir(exist_ok=True)
+        (root / "sync" / f"{anchor}.json").write_text('{"samples": []}')
     sealed = Path(close_measurement_batch(root, require_v2_identity(identities)))
     assert validate_closed_batch(root) is not None, "an untouched sealed batch validates"
 
@@ -333,6 +338,15 @@ def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_pa
     sealed.write_text(json.dumps(document))
     with pytest.raises(ValueError, match="BATCH_INVALID"):
         validate_closed_batch(root)
+
+
+def _index_anchor_evidence(root, files, write_closed_json, hashlib_module):
+    """Give a hand-built batch one indexed per-anchor file per anchor it declares."""
+
+    for anchor in ("default", "left", "forward"):
+        written = write_closed_json(Path(root) / "sync" / f"{anchor}.json", {"samples": []})
+        files[f"sync/{anchor}.json"] = hashlib_module.sha256(written.read_bytes()).hexdigest()
+    return files
 
 
 def test_a_batch_hiding_a_symlink_is_refused_even_when_it_is_indexed(tmp_path):
@@ -356,7 +370,8 @@ def test_a_batch_hiding_a_symlink_is_refused_even_when_it_is_indexed(tmp_path):
     identity["source_commit"] = "b" * 40
     document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
                 "anchors": ["default", "left", "forward"], "identity": identity,
-                "files": {"raw/real.json": digest, "raw/link.json": digest}}
+                "files": _index_anchor_evidence(root, {"raw/real.json": digest, "raw/link.json": digest},
+                                                write_closed_json, _hashlib)}
     document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
     write_closed_json(root / "batch.json", document)
     # the rule already exists and is better named than the fixture assumed: an indexed symlink is refused as a path
@@ -386,7 +401,8 @@ def test_a_batch_records_its_cleanup_and_a_contaminated_one_is_refused(tmp_path)
         identity["source_commit"] = "b" * 40
         document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
                     "anchors": ["default", "left", "forward"], "identity": identity,
-                    "files": {"raw/row.json": digest},
+                    "files": _index_anchor_evidence(root, {"raw/row.json": digest}, write_closed_json,
+                                                    _hashlib),
                     "cleanup": {"requested": {"anchor": "forward", "generation": "gen-1"}, "status": "CONFIRMED"},
                     "contamination": contamination}
         document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
@@ -399,3 +415,27 @@ def test_a_batch_records_its_cleanup_and_a_contaminated_one_is_refused(tmp_path)
     dirty = build(tmp_path / "dirty", "CLEANUP_REFUSED: RuntimeError")
     with pytest.raises(ValueError, match="BATCH_INVALID"):
         validate_closed_batch(dirty)
+
+
+def test_a_batch_that_does_not_cover_every_declared_anchor_is_refused(tmp_path):
+    """Boundary IV: the raw index closes over anchors, so a declared anchor with no rows disqualifies the batch."""
+
+    import hashlib as _hashlib
+
+    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+
+    root = tmp_path / "batch"
+    (root / "anchors" / "default").mkdir(parents=True)
+    (root / "anchors" / "default" / "geometry-00.json").write_text('{"row": 1}')
+    digest = _hashlib.sha256((root / "anchors" / "default" / "geometry-00.json").read_bytes()).hexdigest()
+    identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
+    identity["source_commit"] = "b" * 40
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                "anchors": ["default", "left", "forward"], "identity": identity,
+                "files": {"anchors/default/geometry-00.json": digest}}          # only one of three anchors
+    document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
+    write_closed_json(root / "batch.json", document)
+
+    with pytest.raises(ValueError, match="BATCH_ANCHOR_MISSING"):
+        validate_closed_batch(root)
