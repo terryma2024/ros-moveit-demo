@@ -26955,3 +26955,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Item 6 closed**, with one honest qualification: **line 68's row (the packet) verifies now** - the revision-batch-3 section lists the packet's current hash, and this round confirmed the current artefact - **so whatever the review saw at line 68 has been superseded by the
   packet's later revisions** rather than by a silent edit; **the note added this round says so.**
 - **State:** items 5 and 6 closed; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 3, 4, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1615 — CORRECTION to CP-1614, and both stale rows are now actually fixed
+
+- **What CP-1614 got wrong, and it is the third time this batch has made the same mistake:** its entry says *"line 68's row (the packet) verifies now"* - **it did not.** L68 still read `22000` bytes and `71ce937a…` while the packet is
+  **31987** bytes, sha256 `fe029a4e…`. **I wrote that sentence from the revision-batch-3 section's row rather than from the line in question**, which is exactly the error CP-1595 committed and CP-1596 corrected. **The rule stands and is now applied
+  again: a claim about a specific artefact is written only after reading that artefact.**
+- **And the audit's failure explains why it survived twice:** the row's **name cell carries a parenthetical suffix and backticks**, so the "absolute layout" pattern did not match it - **so a "full-table" audit that matches by cell SHAPE will
+  keep missing rows that vary in shape.** Widened to match **by path** (`^\|.*?\|\s*`?((?:/|\.\.?/)[^|`]+?)`?\s*\|\s*(\d+)\s*\|\s*`?([0-9a-f]{6,})`?\s*\|`), it caught L68 immediately:
+  ```
+  L68 MISMATCH task8-astra-rereview-packet.md
+  ```
+- **Both rows are now corrected** - `gate7-p15-boundary/README.txt` (`1876 -> 3662` bytes) and the packet (`22000 -> 31987` bytes, `71ce937a… -> fe029a4e…`) - **each carrying an explicit note that the earlier values are superseded and why the audit had
+  missed it**, and the path-matched audit reports **0 mismatched**.
+- **The generalisable rule, worth more than the two rows:** **match artefacts by identity (their path), not by the shape of the cell that describes them** - the same principle as CP-1611's "a value handed to many processes is a resource, not a parameter".
+  Both are cases of a check that was satisfied by the wrong thing.
+- **State:** items 5 and 6 closed with this correction applied; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 3, 4, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
