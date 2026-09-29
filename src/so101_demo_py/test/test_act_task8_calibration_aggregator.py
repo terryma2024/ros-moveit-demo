@@ -528,8 +528,20 @@ def _v2_batch(root, contract):
     identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
     identities["measurement_contract_sha256"] = contract["contract_sha256"]
     # the published entries are written before the seal, because the seal indexes every file it closes over
-    measurements = {name: {"value": 1.0, "unit": entry.get("unit", "count")}
-                    for name, entry in {**contract["measurements"], **contract["support"]}.items()}
+    # the declared unit and size per field are the repository's own REQUIRED_MEASUREMENTS, so the published entries
+    # take their shape from it rather than from a uniform scalar
+    from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
+
+    # REQUIRED_MEASUREMENTS carries 33 fields; the ready report is the contract's 28, so the live-only five stay out
+    ready_fields = {**contract["measurements"], **contract["support"]}
+    measurements = {}
+    for name, (unit, size) in REQUIRED_MEASUREMENTS.items():
+        if name not in ready_fields:
+            continue
+        value = 1 if unit == "count" else ([1.0] * size if size != 1 else 1.0)
+        if name in ("min_confidence", "tracking_iou"):
+            value = 0.5
+        measurements[name] = {"value": value, "unit": unit}
     write_closed_json(root / "measurements.json",
                       {"measurements": measurements,
                        "camera_measurements": {name: {"value": 1.0, "unit": "px"} for name in (
