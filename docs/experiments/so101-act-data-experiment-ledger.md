@@ -24445,3 +24445,25 @@ picture in both directions.**
 - **And it is honest about its own role:** the test's docstring says `record_phases` is the fixture standing in for a production feeder that does not exist,
   so a reader who finds this test learns both the hole and the fact that the other focused tests depend on the stand-in.
 - **State:** committed; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1472 — Astra re-review #3 verdict: CHANGES_REQUIRED; P1-1's RED is in place
+
+- **The owner relayed the independent GPT-6 Astra/High verdict: `CHANGES_REQUIRED`, with Task8L/live and `runtime-task8l-gen4` NOT approved.** Baseline for
+  this revision: **HEAD `03a0faad`**, packet **22641 bytes / sha256 `f661dabd...7b44`**, gates valid but not a release (demo 5651 passed / 163 skipped,
+  teleop 1266 / 43, CTest 116 with 2/2 targeted), **and because focused tests were added after the boundary, a final boundary must be re-run once the five
+  findings are done - the old numbers may not be reused as a whole-tree conclusion.**
+- **The five findings, in the review's own terms, are the batch's task list now:** P1-1 the production composition still cannot run; P1-2 the descriptor
+  validator is still weak; P1-3 SEARCH evidence must not silently be `None`; P1-4 the full chain must not shrink to a prefix; P2 the CLI's terminal state must
+  close out atomically and compare the seal's ten-field identity against the admitted identity.
+- **P1-1's RED is committed and failing for the right reason** (`experiments/gate8-p11/red-1.log`, **2 failed**):
+  `test_act_task8_production_composition_contract.py` drives the **real** composition path - `build_production_measurement_driver` with **no injected
+  providers** and the provider seam removed from the environment - and substitutes **only the lowest-level MuJoCo/ROS client** through one `io_client`
+  argument. **Its current failure is `TypeError: build_real_providers() got an unexpected keyword argument 'io_client'`**, i.e. there is not even a seam for
+  the external I/O, and behind that sit the findings the review named: a `None` controller, a clock that is not a clock, and a `PersistentTaskStack` that
+  implements none of `launch / close / cleanup / camera_info / tf / search / probe`.
+- **What the RED asserts, so the GREEN cannot be satisfied by types or keys:** the batch seals **`CLOSED`** with every anchor **`COLLECTED`**, the
+  client's own values travel through the stack adapter (`launch`, `cleanup` with the context's generation, and a `search` call), and a client that refuses
+  `launch` seals an **`INVALID`** batch **carrying that client's own error code** - the fail-closed direction, asserted rather than assumed.
+- **Execution order from here:** P1-1 GREEN (real adapters over the one I/O seam) → P1-2 → P1-3 (route (a), frozen) → P1-4 (the nine phases) → P2 → **one
+  final integration boundary** on a fresh NVMe scratch with the exact interpreter's `TMPDIR`/`TMP`/`TEMP` verified first → ledger/packet/evidence index →
+  independent Astra review. **No new session, goal, worktree or stack; no push, no deletion, no real hardware; all existing dirty work and evidence kept.**
