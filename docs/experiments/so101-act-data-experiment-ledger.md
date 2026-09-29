@@ -27460,3 +27460,12 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   3. **CP-1635** - which component supplies the per-run identity.
 - **And the shape of the correction is the batch's own rule applied to itself one more time:** a claim about the goal's state is only as good as the last `get_goal`, exactly as a claim about an artefact is only as good as a read of that artefact.
 - **State:** goal **active and armed**; three decisions requested; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1644 — All three decisions are in, and they are the batch's plan for the remaining work
+
+- **The owner chose, and each choice is the one whose evidence the ledger had already gathered:**
+  1. **CP-1612 → change the seal rule** to *"entries are non-decreasing in release epoch, and the last entry equals the identity"*. **One line (`task8_live_evidence.py:165`), blast radius named, and it keeps each sample's capture time truthful.**
+  2. **CP-1620 → enforce the cleanup proof for EVERY `CLOSED` batch.** **The parked patch already contains the rule, the helper's keywords and the test-file completions**; what follows is completing the sealing fixtures that the rule then refuses - measured at 25+ and mechanical.
+  3. **CP-1635 → the driver passes the per-run values into the composition** (`session_id`, `attempt_id`, `search_start_rad`), which matches where those values are produced. **The context keeps carrying them as the transport; the driver is the component that fills them.**
+- **The order the work now takes, and why it is this order:** **CP-1620 first** (it is already written, parked, and its cost is fixture completion rather than design), **then CP-1612** (one rule, one RED), **then CP-1635** (the driver's wiring, one RED) - and **only then item 7's re-run boundary**, because that boundary must measure code that has stopped changing.
+- **State:** three decisions recorded; goal active and armed; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
