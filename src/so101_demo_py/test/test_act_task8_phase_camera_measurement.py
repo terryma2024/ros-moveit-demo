@@ -34,7 +34,7 @@ def _matrix_document():
 
     return {"schema_version": 1, "kind": "task8_phase_camera_matrix", "matrix_sha256": "a" * 64,
             "occluders": ["fixed_fingertip_00", "jaw_visual_00"],
-            "camera": {"frame_id": "head_camera_frame", "width_px": 640, "height_px": 480,
+            "camera": {"frame_id": "head_camera_frame", "width_px": 640, "height_px": 480, "horizontal_fov_rad": 1.0,
                        "position_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
 
 
@@ -50,10 +50,23 @@ def _target():
     return {"class_id": "plastic_cup", "position_m": [0.10, 0.10, 0.02], "radius_m": 0.03}
 
 
-def _evaluator(document, *, trajectory=None, target=None):
+def _occluder_geometry(document=None):
+    """Geometry for EVERY occluder the matrix admits - the fail-closed contract P1-3 (rereview 5) requires.
+
+    The evaluator used to skip an admitted occluder whose geometry was absent, so a measurement could quietly ignore a
+    named occluder. It now refuses by name, which means a fixture must supply what the matrix names.
+    """
+
+    names = (document or _matrix_document())["occluders"]
+    return {name: {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005} for name in names}
+
+
+def _evaluator(document, *, trajectory=None, target=None, occluder_geometry=None):
     """The evaluator, given the geometry a measurement actually has."""
 
-    return PhaseCameraMatrixEvaluator(document, trajectory=trajectory or _trajectory(), target=target or _target())
+    return PhaseCameraMatrixEvaluator(
+        document, trajectory=trajectory or _trajectory(), target=target or _target(),
+        occluder_geometry=_occluder_geometry(document) if occluder_geometry is None else occluder_geometry)
 
 
 def test_moving_the_target_changes_the_observation():
