@@ -16871,3 +16871,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary IV still ahead:** missing anchor/phase and mixed-contract index dimensions, then the publishing half - real
   measured values, the four canonical documents, a real 28-field `TASK8_READY`, render-twice byte comparison with a single
   publish, on-disk readback, `require_gate` and `validate_head_search_binding`.
+
+## CP-1087 — The anchor-coverage RED is proven; my rule for it rested on a convention I had not checked
+
+- **RED, clean:** a batch that declares `["default", "left", "forward"]` while indexing rows for **only** `default`
+  validates today - `Failed: DID NOT RAISE <class 'ValueError'>` - because the closure check compares the files present
+  against the files listed and never asks whether the declared anchors are covered.
+- **My first rule for it was wrong and is reverted:** I required every declared anchor to have rows under
+  `anchors/<anchor>/`, which took the suite from **30 passed** to **15 failed / 16 passed** - because the batches in the
+  tree do **not** share that layout (the aggregator's fixtures index `raw/records.json`, others `fov/<anchor>.json` and
+  friends, while only the driver writes `anchors/<anchor>/…`). **The convention was mine, not the tree's**, and a
+  validator rule built on it would have declared most real batches invalid.
+- **State kept green apart from the new RED: the suite is back to 30 passed / 1 failed**, that one failure being the new
+  test, exactly the "proven RED awaiting its paired change" state used at CP-1083. Logs: RED `beh-r687-red.log`, the wrong
+  rule `beh-r687-green.log` (15 failed), restored `beh-r687-restored.log`; scratch `<R>/scratch/r687c.<n>` with `TMPDIR`
+  verified through the exact test interpreter.
+- **What the paired change needs, precisely:** the anchor x phase x source index must be defined from the layout the
+  **writers** actually produce - the driver's `anchors/<anchor>/<name>.json`, and whatever the aggregator's fixtures and
+  the canonical documents use - and then the fixtures and the rule move together. Until that convention is read rather
+  than assumed, this dimension stays open, and I am not going to guess it a second time.
