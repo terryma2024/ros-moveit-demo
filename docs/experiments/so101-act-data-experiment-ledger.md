@@ -22382,3 +22382,23 @@ not an inference of mine.**
   `scenario_id`, `session_id`, `attempt_id`, `reset_epoch` and `release_epoch` - the five fields the production seal reads.
 - **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
   nothing pushed.
+
+## CP-1349 — Step 1's diff, fixed line by line, plus the one name left to check
+
+- **The fixture's body is now fully read** (`test_task8_child_driven_case.py:143-200`): `port = ChildPort()`; a `monkeypatch.setattr(chain,
+  "_identity", ...)` whose lambda reads **`port.reset_epoch` and `port.release_epoch`** (the row builder taking the epochs from the port's
+  own attributes - **the "old release-event" problem the reviewer says remains**); the child built with `broker=FakeBroker()`; and exactly the
+  two assertions the reviewer counted (`port.receipt == {"proof": "startup"}` and `result["stopped_confirmed"] is True`).
+- **Step 1's diff:**
+  1. a `_Boundary` double exposing what the production constructor validates - `begin`, `search`, `safe_stop`, and a
+     `neck_sweep_checker` with `check` - where `begin` records the startup handshake and the two epochs live **on the boundary**, and each
+     request the double emits carries `scenario_id`, `session_id`, `attempt_id`, `reset_epoch`, `release_epoch`;
+  2. `class ChildPort(PickPlaceSearchPhasePort)` constructed as `super().__init__(self.boundary)`, overriding **only**
+     `bind_live_evidence` (to fill `_live_evidence_window` and `_evidence_recorder` from the child's real window) - **the seal is inherited**;
+  3. the `chain._identity` monkeypatch is **replaced** by the production path: the rows must be built from the epochs the **request** carries,
+     which is what the production seal asserts against.
+- **One name to check before writing it:** whether the production `bind_startup_receipt` stores what the fixture's assertion reads as
+  `port.receipt` (its body is printed above). If it stores it elsewhere, the assertion moves to that name rather than the fixture keeping an
+  override - **the assertion is about the startup proof reaching the port, and it should read the production attribute, not a fixture one.**
+- **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
+  nothing pushed.
