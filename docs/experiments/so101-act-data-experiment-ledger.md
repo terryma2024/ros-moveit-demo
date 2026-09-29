@@ -21593,3 +21593,22 @@ not an inference of mine.**
   | gate logs and JUnit artefacts (1412 files) | this session | **9.6 GB** |
   | short IPC bases under `/tmp` | this session | 1.5 MB, 98 directories |
 - **State:** HEAD `52c8874b` plus this checkpoint; every gate result stands; no live stack, no hardware; nothing deleted, nothing pushed.
+
+## CP-1307 — RETRACTION: the second Astra re-review says CHANGES_REQUIRED, and my "all five complete" claims do not stand
+
+- **The verdict file was read in full and its digest verified before anything else:**
+  `handoffs/20260930-task7-onward/task8-astra-rereview2-changes-required.md`, **6261 bytes**, sha256
+  `198d729648e92c54aedb208d64aba9977cb59d86809c79c8da78ccfa9de132f2` - **matches the owner's stated digest**.
+- **What I retract, in plain words: CP-1297 through CP-1304 claimed that Astra items 1-5 were complete and that the gates closed them.
+  The reviewer's answer is that the recorded test results are real but they do not close these P1s.** Specifically:
+  | my claim | the reviewer's finding |
+  | --- | --- |
+  | item 1 complete: one trusted production composition | `task8_production_composition.py:38-46` still raises `PRODUCTION_PROVIDERS_UNAVAILABLE` when the seam is absent; the **formal CLI provides no real providers**; the factory is called with **no** arguments, so it cannot prove detector construction from the admitted CUDA configuration. **Five `object()` providers prove nothing.** |
+  | item 2 complete: full production shape shared | `head_search_binding.py:109-115` **lost** the original `head_search.schema_version == 1` rejection; malformed detector/camera/motion and missing weights/version still pass; **the new tests removed bad-camera assertions**; `task8_calibration_admission.py:115-123` **drops the descriptor in `to_dict()`**; the CLI reads the context **twice** |
+  | item 3 complete: one seal owner | the driver's **INVALID** batch is reported **VALID with exit 0** - `act_measure_task8_calibration.py:98-106` ignores the returned status and appends `VALID` |
+  | item 4 complete: per-root authority | `task8_calibration_aggregator.py:276` compares `measurements.json.head_search` with the **entire** `{schema_version, head_search}` descriptor, so a normal equal payload can fail; the positive coverage omitted the payload descriptor and missed it |
+  | item 5 complete: child-driven fixture | it **still inherits the chain test's `FakePort` and its fake seal**; assertions cover only the startup receipt and `stopped_confirmed`; it does not drive `run_pick_place_case()`, the real execution adapter/seal, the trusted campaign-to-qualification aggregator, or the seven indexed evidence assertions |
+  | the CTest registration fix | `CMakeLists.txt:105-106` was **not present in the reviewed `build/so101_teleop/CTestTestfile.cmake`**, so direct xdist evidence cannot replace a rebuilt CTest/package gate |
+- **The task list was updated before any code change, as instructed**, listing P1-1 through P1-5, the single final integration boundary, the packet/ledger correction and the further independent review - and the goal was resumed (now revision 61, active).
+- **Constraints in force for this batch:** no Task 10, no live MuJoCo, no `runtime-task8l-gen4`, no CUDA, no actuators, no hardware; **cleanup is not authorised** - all classified deletion candidates stay; no push; every dirty/user file and all evidence preserved; **focused RED/GREEN per item, one full integration boundary only after all five are GREEN.**
+- **State:** HEAD `fe6b6fb5` plus this checkpoint; nothing else changed yet in this batch; nothing deleted, nothing pushed.
