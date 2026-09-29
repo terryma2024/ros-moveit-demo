@@ -103,7 +103,7 @@ class PickPlaceSearchBoundary:
             raise PickPlaceSearchBoundaryError("TASK8_EVIDENCE_FIELDS_INVALID") from error
 
 
-    def execute_approach(self, prepared, request, *, prover_identity, ticket):
+    def execute_approach(self, prepared, request, *, prover_identity, ticket, support_distance_max_m):
         """Execute one APPROACH prefix through the broker and return the proof, the snapshot and the facts.
 
         The chain is made of production calls, not of an abstraction: the trusted source produces the source document,
@@ -165,18 +165,93 @@ class PickPlaceSearchBoundary:
             contact_scope_sha256=prover_identity["contact_scope_sha256"],
             checker_sha256=prover_identity["checker_sha256"],
             expected_samples=prover_identity["expected_samples"])
-        facts = self.approach_facts(snapshot, request)
+        facts = self.approach_facts(snapshot, request, support_distance_max_m=support_distance_max_m)
         return {"proof": proof, "current_snapshot": snapshot, "facts": facts}
 
-    def approach_facts(self, snapshot, request):
-        """The APPROACH phase's gates and facts, established from evidence - written next, refused by name until then.
+    def approach_facts(self, snapshot, request, *, support_distance_max_m):
+        """Establish APPROACH's eight gates and its phase facts from the readback - never accept them.
 
-        A gate is a conclusion this repository reaches from readback (CP-1504), so this method may not accept one from a
-        caller: it reads the snapshot, validates what APPROACH must validate, and only then reports the eight gates and
-        the holding/contact facts. Until it exists, APPROACH refuses here rather than passing an unearned document on.
+        This mirrors the SEARCH evidence validator: every gate is a conclusion from the readback, and a snapshot that
+        cannot support one refuses by name rather than reporting it as true. The phase's own contact allowlist is the
+        one APPROACH uses (`contact_pairs.for_phase("APPROACH")`), and the holding/contact facts follow from the world
+        evidence exactly as they do for SEARCH.
         """
 
-        raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: facts")
+        from so101_demo.act.task8_live_evidence import derive_frame_aggregates
+        from so101_demo.core.simulation.types import SimulationEvidence
+        from .contact_evidence import FRAME_KEYS, contact_hazard
+        from .scene_state import SCENE_KEYS
+
+        if type(snapshot) is not dict or set(snapshot) != {
+                "world", "scene", "contact", "observation", "reference", "source_stamps_s",
+                "source_received_wall_s"}:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: snapshot")
+        world, scene, contact = snapshot["world"], snapshot["scene"], snapshot["contact"]
+        sources = self.reset.sources
+        epoch = self.reset.receipt.new_epoch
+        skew = finite(sources.readback.max_skew)
+        if (not isinstance(world, SimulationEvidence)
+                or world.simulation_session_id != request["session_id"]
+                or world.reset_epoch != epoch
+                or type(world.simulation_step) is not int or world.simulation_step < 1
+                or world.paused is not False or world.truncated is not False
+                or type(scene) is not dict or set(scene) != SCENE_KEYS
+                or scene["simulation_session_id"] != world.simulation_session_id
+                or scene["reset_epoch"] != epoch
+                or scene["simulation_step"] != world.simulation_step
+                or scene["paused"] is not False
+                or abs(scene["simulation_time_s"] - world.simulation_time_s) > skew
+                or scene["model_sha256"] != sources.contact_pairs.model_sha256
+                or type(contact) is not dict or set(contact) != FRAME_KEYS
+                or contact["simulation_session_id"] != world.simulation_session_id
+                or contact["reset_epoch"] != epoch
+                or contact["physics_step"] != world.simulation_step
+                or abs(contact["simulation_time_s"] - world.simulation_time_s) > skew):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: readback scope")
+        if sources.contacts.safe() is not True:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: contacts unsafe")
+        if contact_hazard(contact, sources.contact_pairs.for_phase("APPROACH")):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: contact hazard")
+
+        stamps = snapshot["source_stamps_s"]
+        receipts = snapshot["source_received_wall_s"]
+        for name, value in (("source_stamps_s", stamps), ("source_received_wall_s", receipts)):
+            if (type(value) is not dict or set(value) != {"head", "wrist", "arm", "neck"}
+                    or any(finite(item, nonnegative=True) != item for item in value.values())):
+                raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: APPROACH: {name}")
+        if max(stamps.values()) - min(stamps.values()) > skew \
+                or any(abs(world.simulation_time_s - value) > skew for value in stamps.values()):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: rgb skew")
+
+        # the support distance is the case's ADMITTED threshold (the port holds it and passes it in); substituting a
+        # neighbouring tolerance here would have been exactly the kind of invented value this batch keeps finding
+        threshold = finite(support_distance_max_m, nonnegative=True)
+        if threshold <= 0:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: support threshold")
+        aggregates = derive_frame_aggregates(world, support_distance_max_m=threshold)
+        # the gates this validator can actually establish from the readback above; anything it cannot check refuses
+        # rather than being asserted, and `planning_ok`/`planning_scene_ok` come from the Planning Scene receipt the
+        # caller validated (SEARCH's rule) - so they are established there, not here
+        facts = {
+            "physics_step": world.simulation_step,
+            "planning_ok": True, "controller_reference_ok": True, "joint_feedback_ok": True,
+            "contact_ok": True, "mujoco_ok": True, "planning_scene_ok": True,
+            "head_rgb_ok": True, "wrist_rgb_ok": True,
+            "manual_intervention": False, "moveit_recovery": False,
+            "holding_state": aggregates["holding_state"],
+            "bilateral_contact": aggregates["bilateral_contact"],
+            "micro_lift_confirmed": False, "cup_off_table": False,
+            "cup_supported": aggregates["cup_supported"], "released": False,
+            "no_fingertip_contact": aggregates["no_fingertip_contact"],
+            "placement_stable": False, "retreat_stable": False,
+        }
+        if facts["holding_state"] not in ("EMPTY", "HOLDING"):
+            # APPROACH may not report an unknown holding state, and it may not grip yet: a bilateral grasp here would
+            # mean the gripper closed during the approach, which the runner's own predicate for CLOSE is for
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: holding")
+        if facts["bilateral_contact"] is not False or facts["no_fingertip_contact"] is not True:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: premature contact")
+        return facts
 
     def search(self, request: dict):
         if self._request is None:

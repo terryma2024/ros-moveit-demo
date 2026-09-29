@@ -458,7 +458,7 @@ class _PrefixSource:
     def __call__(self, ticket):
         return {"kind": "PREFIX_SOURCE", "ticket": ticket}
 
-def test_approach_prepares_qualifies_and_the_runner_accepts_the_document():
+def test_approach_prepares_qualifies_and_the_runner_accepts_the_document(tmp_path):
     """APPROACH's own path: the port prepares and qualifies, the boundary executes, the runner judges.
 
     The expert route's construction needs packaged candidate assets, so the test installs the route object the SEARCH
@@ -485,8 +485,9 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document():
             calls.append(("qualify", prepared["kind"], proof, current_snapshot))
             return {"ok": True}
 
-    def execute_approach(prepared, request, *, prover_identity, ticket):
-        calls.append(("execute", prepared["kind"], prover_identity["expected_samples"], ticket[2:]))
+    def execute_approach(prepared, request, *, prover_identity, ticket, support_distance_max_m):
+        calls.append(("execute", prepared["kind"], prover_identity["expected_samples"], ticket[2:],
+                      support_distance_max_m))
         return {"proof": "PROOF", "current_snapshot": {"step": 21},
                 "facts": _sequence_facts(21, holding_state="EMPTY")}
 
@@ -499,6 +500,16 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document():
     port.boundary.reset.sources.contact_pairs.fingerprint = "policy-fingerprint"
     port._expert_route = _Route()
     port.boundary.execute_approach = execute_approach
+    # a full case carries its evidence window, and the admitted support distance lives on that attachment (P1-3)
+    _recorder, window = _p13_window(tmp_path)
+    # the SEARCH phase records through the boundary's canonical derivation, so this stub supplies it the same way the
+    # P1-3 tests do (the production boundary derives it from the readback module)
+    from so101_demo.adapters.act.pick_place_readback import capture_evidence_fields
+
+    port.boundary.canonical_evidence = lambda captured, *, support_distance_max_m, raw_records: capture_evidence_fields(
+        captured, support_distance_max_m=support_distance_max_m, raw_records=raw_records,
+        end_effector_position_m=[0.0, 0.0, 0.1])   # the MuJoCo-derived pose the fixture stands in for
+    port.bind_live_evidence(window, support_distance_max_m=0.02, raw_records_root=tmp_path)
     bind(port)
     port.begin(request())
     search = port.run_phase("SEARCH", request())
@@ -507,6 +518,7 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document():
     assert [call[0] for call in calls] == ["prepare", "execute", "qualify"], calls
     assert calls[1][2] == 701, "the prover identity's expected_samples comes from the route's manifest"
     assert calls[1][3] == ("act", SESSION, ATTEMPT), "and the ticket names this case"
+    assert calls[1][4] == 0.02, "the case's ADMITTED support distance travels with the call"
     assert calls[0][1][2:] == ("act", SESSION, ATTEMPT), "the owner ticket names this case"
     assert calls[0][2] == "c" * 0 or isinstance(calls[0][2], str), "and the active policy fingerprint is passed"
     runner = PickPlaceRunner(port)
