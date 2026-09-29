@@ -18061,3 +18061,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** the new test currently fails by design (it is the RED), and the pre-existing suites are untouched: the teleop
   production-chain and case-execution files were **16 passed** at CP-1143 and nothing has changed them. No full suite,
   nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions remain open and independent.
+
+## CP-1145 — The runner validates every port return; two contracts satisfied, the next one named
+
+- **Read both conditions and made the fake satisfy them:** `begin(request)` must return a dict whose **key set equals
+  `_BEGIN_KEYS`** and whose values satisfy `session_id`/`attempt_id` equal to the request, `reset_epoch` and `release_epoch`
+  non-negative ints and `full_restart` a bool; `safe_stop(reason, request)` must return **exactly `True`** - a dict with
+  `stopped_confirmed` is refused as `STOP_NOT_CONFIRMED`. Both are now satisfied in the fake.
+- **The test then named the next contract: `PickPlaceError: PHASE_EVIDENCE_INVALID`** - so `run_phase`'s return is validated
+  the same way. **The pattern is now clear: every port return value is checked against an exact shape**, which is the same
+  fail-closed posture as the child's hash and startup guardrails.
+- **What that means for the remaining work, honestly:** Boundary V's fake needs one read per method family
+  (`_PHASE_KEYS`, the release/`set_down` and retreat shapes) rather than a single read, so the test will take a few more
+  rounds of the same small step - each of which names its own contract and none of which implies a production change. That
+  is slower than writing a loose fake, and it is the only version of this test that would mean anything: a fake that
+  satisfies the real validation is evidence, a fake that bypasses it is decoration.
+- **State:** the new test fails by design on the current contract; the teleop suite around it is untouched (16 passed at
+  CP-1143, nothing has changed those files). No full suite, nothing weakened, nothing deleted, no push, no stack, no
+  hardware. The owner's two decisions remain open and independent.
