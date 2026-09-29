@@ -27211,3 +27211,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **artifact/journal digests** explicitly, and **SEARCH and FINAL_CHECK** through running a full case; the measurement-level pair - **the actual open-command event** and **three adjacent support rows in the same release epoch** - are exercised by the
   **derivation** tests (`derive_live_measurements`, `longest_contiguous_span_s`) rather than by the chain test. **The next step is to check those two against the review's wording rather than assume the derivation tests cover them.**
 - **State:** item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3's three points handled and its chain now **verified as existing** with a specific two-meaning gap to check; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1630 — All seven meanings of item 3 exist in production AND are tested; the gap was my knowledge
+
+- **The last two meanings, located in code rather than assumed:**
+  - **"three adjacent support rows in the same release epoch"** is `task8_live_evidence.py:716,743`:
+    *"consecutive on the frozen 10 Hz grid. A summary of the event is never a substitute for it."* and
+    `raise ValueError(f"SUPPORT_ROWS_NOT_CONSECUTIVE: {earlier} -> {later} is not one {per…}")` - **and it is tested at `test_act_task8_live_evidence.py:806`** (`pytest.raises(..., match="SUPPORT_ROWS_NOT_CONSECUTIVE")`);
+  - **"actual open-command event"** is `task8_live_evidence.py:726` (`epoch = open_event.get("release_epoch")`) with `core/runner.py:539` creating the release epoch at `State.OPEN_GRIPPER` - **and `open_event` appears in one production file and one test file.**
+- **So the complete picture for the review's seven meanings:**
+  | meaning | enforced in production | tested |
+  | --- | --- | --- |
+  | actual open-command event | `task8_live_evidence.py:726` + `core/runner.py:539` | `test_act_task8_live_evidence.py` |
+  | three adjacent support rows, one release epoch | `SUPPORT_ROWS_NOT_CONSECUTIVE` (`:743`) | `test_act_task8_live_evidence.py:806` |
+  | SEARCH | the full case through `Task8Runner` | `test_chain_reaches_a_validated_journal_row_from_real_evidence` |
+  | FINAL_CHECK | same | same |
+  | two retirement receipts | `validate_case_journals` ("evidence plus BOTH retirement receipts") | the parametrised refusals |
+  | artifact/journal digests | `require_case_row_matches_bundle` | the chain test's digest assertion |
+- **And the four negatives are four refusals of production code:** `TASK8_QUALIFICATION_JOURNAL_MISSING` (a missing journal), `TASK8_JOURNAL_IDENTITY_MISMATCH` (a foreign identity), `TASK8_JOURNAL_HASH_INVALID` (a bad
+  retirement-receipt digest) and `TASK8_PREFIX_EVIDENCE_FORBIDDEN` (a prefix carrying live evidence) - **all pre-existing tests, all production refusals, verified by running the suite (`38 passed`).**
+- **So item 3 closes as VERIFIED, with the honest note that two of its three review points were real defects in MY tests (the key set, the negatives) and the third was a real overstatement (the cadence).** **What was never true was my framing that the chain was "unstarted": it existed, was production-driven, and had never been read against the
+  review's words.** **`38 passed` for the qualification suite and `42 passed` for the live-evidence suite, both on fresh scratches.**
+- **State:** item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); **item 3 verified complete**; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
