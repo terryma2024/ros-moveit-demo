@@ -16046,3 +16046,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   is scoped to fourteen sites with its RED contract written out above; Task 10 remains blocked until the 17 provisional
   search values are independently designed and Astra-reviewed; no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1051 — Decision B's contract implemented: the reset epoch binds once, fail-closed (RED then GREEN)
+
+- **RED first:** the two new tests failed with `ImportError: cannot import name 'UNBOUND_RESET_EPOCH'` and
+  `AttributeError: 'LiveEvidenceWindow' object has no attribute 'bind_reset_epoch'` - an honest RED for a new API.
+- **The contract as implemented in `task8_live_evidence.py`:**
+  - `UNBOUND_RESET_EPOCH = None` at module scope, documented as "not knowable when it is constructed - only the reset
+    receipt knows it";
+  - the window **forces** `identity["reset_epoch"]` unbound at construction regardless of what its caller passed, so the
+    old constructor-argument route cannot quietly survive;
+  - `bind_reset_epoch(epoch)` refuses a second bind (`TASK8_RESET_EPOCH_ALREADY_BOUND`), refuses a bind after open, seal
+    **or invalidation** (`TASK8_RESET_EPOCH_BOUND_TOO_LATE`), and refuses a non-integer, boolean or negative epoch
+    (`TASK8_RESET_EPOCH_INVALID`); `reset_epoch` and `identity` are exposed read-only;
+  - `add_grid`, `add_event` and `seal` each begin with `_require_bound()`, so an unbound window cannot record or seal
+    (`TASK8_RESET_EPOCH_UNBOUND`) and every sample and the seal identity carry the bound generation;
+  - `CaseEvidenceDriver` defaults `reset_epoch=None` and exposes `bind_reset_epoch` delegating to its window.
+- **One design consequence found while making RED pass, now asserted rather than assumed:** "bound after the window
+  opened" is **unreachable by construction** - an unbound window cannot open - so the reachable too-late case is a window
+  invalidated by the retirement path before its epoch arrived, and that is what the test asserts. The unreachable case is
+  still refused by the same guard.
+- **All fourteen sites bound explicitly:** the scripted update inserted 8 binds in `test_act_task8_live_evidence.py`,
+  4 in `test_act_task8_live_qualification.py` and 5 in the teleop chain test, each using the epoch its identity already
+  carried, so the sites keep their original semantics while going through the new one-shot route.
+- **Two mistakes of mine on the way, both repaired and both recorded:** an anchor that did not match aborted a patch
+  before it wrote anything (no partial state), and a later AST-based cleanup deleted the bodies of two `with` blocks
+  along with the lines it targeted, breaking the file. **The repair was truncation to the file's intact head plus
+  re-appending both tests** - not another surgical edit - and the compile check that followed is what proves it.
+- **Verified: 79 passed** (live evidence + live qualification) and **6 passed** (teleop production chain), rc=0 in both.
+- **What remains for decision B:** the child wiring - call `driver.bind_reset_epoch(new_epoch)` after the reset begin
+  receipt is verified and before the first SEARCH evidence write, as a hunk-level addition so the owner's in-flight work
+  stays unstaged - and then the single full gate at the Task 9 boundary.
