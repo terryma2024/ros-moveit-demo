@@ -25374,3 +25374,20 @@ picture in both directions.**
 - **Next:** the MICRO_LIFT test with a real `DynamicPickTemplate` and a stub IK, judged by the runner - then TRANSPORT and ALIGN follow the same path, and the release phases need their epoch evidence designed.
 - **State:** P1-1..P1-3 green and committed; SEARCH, APPROACH and CLOSE committed; MICRO_LIFT/TRANSPORT/ALIGN implemented, MICRO_LIFT's test next. No new session, goal, worktree or stack; nothing pushed,
   nothing deleted; no hardware.
+
+## CP-1522 — MICRO_LIFT is proven by the runner, and it caught a production error that would have commanded the wrong joint
+
+- **`49 passed`** across the motion-phase, CLOSE, port, APPROACH-execution, goals-builder and path-screen files. **MICRO_LIFT now has APPROACH's and CLOSE's standard:** the target is asserted
+  **by value** (the grasp pose lifted by the template's own `micro_lift_world_z_clearance_m`, within 1e-9), the arm goal is asserted field by field, the flags are established from the readback, and
+  `PickPlaceRunner._verify_phase` judges **both** the unstamped refusal and the stamped acceptance.
+- **Two production fixes the test forced, and the first one matters:**
+  1. **the arm goal's rows are the ARM'S FIVE joints.** I had written `observation["state"][:6]`, which sends six values under five names - **the wire would have refused the goal**, and had it
+     accepted shorter names the command could have gone to the wrong joint. **A row/name mismatch is the kind of bug that looks like a working dispatch until the arm moves.**
+  2. the phase-to-state mapping became a module constant (`PHASE_MOTION_STATES`) and the cup pose is wrapped in the geometry type the resolver takes - both structural, neither behavioural.
+- **A cup still on the table cannot claim a lift:** the lifted phases (MICRO_LIFT, TRANSPORT, ALIGN) now carry the **necessary** predicate their flags mean - `HOLDING`, bilateral, `micro_lift_confirmed`,
+  `cup_off_table` - so the contradiction fails inside the boundary rather than downstream in the runner. **The runner is still the only judge; this is a guard that agrees with it.**
+- **And the release phases refuse by name** (`RELEASE`, `RADIAL_RETREAT`, `FINAL_CHECK`), because their flags need the release epoch's evidence and the place target's tolerances. **That design is the
+  next real piece of work, not another fixture.**
+- **Where P1-4 stands:** SEARCH, APPROACH, CLOSE and MICRO_LIFT are proven; **TRANSPORT and ALIGN use the same path and need only their own tests** (aim, assert, judge); **RELEASE, RADIAL_RETREAT and
+  FINAL_CHECK need their evidence designed**; then the seal, the full-case journal and the seven indexed assertions with their four negatives.
+- **State:** P1-1..P1-3 green and committed; SEARCH, APPROACH, CLOSE, MICRO_LIFT committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
