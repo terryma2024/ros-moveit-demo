@@ -238,3 +238,80 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     if sample is not None:
         outputs["head_search_qualification"] = sample
     return outputs
+
+
+# --- protocol v2 seam: derive verdicts from raw evidence, never from labels ---------------------------------
+# The approved protocol requires every field to be recomputed from raw evidence. These helpers consume the
+# closed, indexed batch and the formula module; they never read `target_in_view`, `qualified`, `contact_ok` or
+# any `*_ok` flag, and they iterate **every** supplied root rather than the first one.
+
+def derive_field_verdicts(roots, contract: dict) -> dict:
+    """Per-root, per-field verdicts recomputed from the sealed batch's raw records."""
+
+    from so101_demo.act.task8_measurement_formulas import compute_field, require_raw_inputs
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+
+    per_root = {}
+    for root in roots:
+        index = validate_closed_batch(Path(root))
+        raw = _load_raw_records(index)
+        require_raw_inputs(raw)
+        verdicts = {}
+        for section in ("measurements", "support"):
+            for field in contract[section]:
+                if field not in raw["measurements"]:
+                    # a field with no raw record is explicitly UNMEASURED - never a silent pass
+                    verdicts[field] = "UNMEASURED"
+                    continue
+                verdicts[field] = compute_field(field, raw, contract)["verdict"]
+        per_root[str(root)] = verdicts
+    return per_root
+
+
+def _load_raw_records(index) -> dict:
+    """Read the indexed raw files only - nothing outside `batch.json.files` is ever opened."""
+
+    measurements, configured = {}, {}
+    for relative in sorted(index.files):
+        path = index.path(relative)
+        document = json.loads(path.read_bytes())
+        if not isinstance(document, dict):
+            raise ValueError("RAW_EVIDENCE_REQUIRED: raw record must be a JSON object")
+        for key in (document.get("measurements") or {}):
+            if key in _LABELS or (isinstance(key, str) and key.endswith("_ok")):
+                raise ValueError(f"RAW_EVIDENCE_REQUIRED: {key} is a label, not raw evidence")
+        measurements.update(document.get("measurements") or {})
+        configured.update(document.get("configured") or {})
+    return {"measurements": measurements, "configured": configured}
+
+
+_LABELS = frozenset({"qualified", "target_in_view", "contact_ok", "stop_confirmed"})
+
+
+def derived_checks(roots, contract: dict) -> dict:
+    """Fold the per-field verdicts of every root into the five check verdicts.
+
+    A check passes only when every member field passes on every root; any FAIL/INVALID member fails the check,
+    and a member with no raw record makes the check UNMEASURED - so an absent measurement can never be read as a
+    pass. The member sets come from `calibration.CHECK_MEASUREMENTS`, the repository's own grouping, rather than
+    a private list.
+    """
+
+    from so101_demo.act.calibration import CHECK_MEASUREMENTS
+
+    per_root = derive_field_verdicts(roots, contract)
+    checks = {}
+    for name in _CHECKS:
+        members = CHECK_MEASUREMENTS.get(name)
+        if not members:
+            checks[name] = "UNMEASURED"
+            continue
+        verdicts = [verdicts.get(field, "UNMEASURED")
+                    for verdicts in per_root.values() for field in sorted(members)]
+        if any(verdict in ("FAIL", "INVALID") for verdict in verdicts):
+            checks[name] = "FAIL"
+        elif any(verdict == "UNMEASURED" for verdict in verdicts):
+            checks[name] = "UNMEASURED"
+        else:
+            checks[name] = "PASS"
+    return checks
