@@ -18389,3 +18389,26 @@ not an inference of mine.**
 - **Still not authorised, and not to be worked around:** starting a live MuJoCo stack. Boundary V's code/component work, the
   formal Task 9 package/xdist gate and the Astra implementation re-review come first; only after Astra APPROVED does the
   approved Task 10 start a single MuJoCo/CUDA production measurement from a new generation.
+
+## CP-1159 — The runtime-config RED's target located, so the next round is mechanical
+
+- **`act_prepare_task8_live_artifacts` is not a separate entry - it is a legacy alias:** the module is eight lines and
+  rebinds itself to `so101_demo.cli.act_prepare_pick_place_validation`, which is the same entry CP-1131 read. So the
+  runtime-config parsing the owner's item 1 asks for belongs in **that one entry**, and there is no second CLI to keep in
+  step.
+- **Its inputs are already known from CP-1130/CP-1131** - `--anchors`, `--source`, `--runtime-config`, `--collection-config`,
+  `--policy-fingerprint`, `--calibration-report`, `--output` - and CP-1131 established the defect precisely:
+  `--runtime-config` is used **only** as `runtime_config_sha256=_digest_regular_file(args.runtime_config)`, so an opaque file
+  passes and a CPU-fallback or device-inconsistent one is never noticed. That is exactly what §4.2 forbids.
+- **The fixtures needed for a real RED already exist in the tree:** `test/test_act_task8_artifact_bundle.py`,
+  `test/test_act_task8_live_artifacts_alias.py`, `test/test_act_task8_live_cli.py` (which builds `ANCHORS`, a manifest with
+  `runtime_config_sha256`, and an `OperationSpec`) and `test/test_act_task8_manifest.py` all exercise this entry or its
+  artefacts. So the RED is an **extension of an existing test module**, not a new harness - the same lesson as CP-1142/CP-1143,
+  applied before writing a line this time.
+- **The RED itself, specified for the next round:** invoking that entry with a runtime config whose detector block sets
+  `allow_cpu_fallback=True` (or whose device semantics disagree with `parallel_batch_v3.yaml`) must be **refused**; with a
+  runtime config that the production validator parses and whose `head_search` block is canonical, the entry must **accept**
+  it and bind its **canonical bytes and SHA256** into the receipt/context. Plus the refusals §4.2 names: symlink, extra or
+  malformed content.
+- **State:** decision recorded at CP-1158, goal resumed and active (revision 51, cap raised to 1000 at the owner's request),
+  HEAD `7cb55ddb`, staged 0, tree unchanged at 31 modified + 14 untracked. No full suite, no push, no stack, no hardware.
