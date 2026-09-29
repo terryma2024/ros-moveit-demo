@@ -23482,3 +23482,16 @@ not an inference of mine.**
   that is the refusal. **Those twenty-five lines are the next read, and they are the last thing between this fixture and a recorded case.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1418 — The key sets match exactly, so the refusal is in the part of `append` below line 100
+
+- **Both lists, read side by side:** `build_live_evidence_sample`'s returned dictionary carries 24 keys and `_SAMPLE_KEYS` lists the same 24 in the
+  same order - case, session, attempt, both epochs, step, sim time, phase, both stamp maps, raw records, holding state, the two frame booleans,
+  the six contact booleans, and the four measurements. **And `_refuse_audit_camera` only rejects a `task_camera` key, which my seven
+  `READBACK_SOURCES` do not contain.**
+- **So the shape is right and the refusal is in a later check** - the finiteness and enumeration rules from line 100 onward, which the earlier read
+  cut off. **That is the next read, uncut, and it is the last gate in the recorder step.**
+- **And the honest clock: eighteen rounds remain, this is a single validation function away, and P1-5's case-level assertions plus the four
+  negatives, the integration boundary and the packet correction are all still ahead of it.** The recommendation I made at CP-1397 stands unchanged.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
