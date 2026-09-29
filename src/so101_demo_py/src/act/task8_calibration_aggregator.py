@@ -151,6 +151,12 @@ def _execution(root: Path) -> str:
     return "PASS"
 
 
+def _bare(entry):
+    """A sample records bare values; the published report records unit-bearing entries."""
+
+    return entry.get("value") if isinstance(entry, dict) else entry
+
+
 def _write(path: Path, document: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = _canonical(document)
@@ -224,16 +230,34 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     ready = all(checks[name] == "PASS" for name in _CHECKS)
     sample = None
     if readings is not None:
+        # the sample's shape is the binding's own vocabulary, taken from it rather than restated: the head-search
+        # fields, the camera fields, an integer lock-frame count (the binding refuses a mapping) and the commit and
+        # config the binding compares against the report
+        from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
+
+        def _lock_frames(value):
+            if isinstance(value, dict) and value:
+                return min(int(count) for count in value.values())
+            return 0
+
         sample_document = {
             "schema_version": SCHEMA_VERSION, "kind": "head_search_qualification",
             "status": "PASS" if ready else "FAIL",
-            "measurements": {name: readings["measurements"][name]
-                             for name in sorted(readings["measurements"])},
-            "camera_measurements": {name: readings["camera_measurements"][name]
-                                    for name in sorted(readings["camera_measurements"])},
-            "observed_lock_frames": readings.get("observed_lock_frames", {}),
+            "measurements": {name: _bare(readings["measurements"][name]) for name in sorted(_MEASURED)
+                             if name in readings["measurements"]},
+            "camera_measurements": {name: _bare(readings["camera_measurements"][name])
+                                    for name in sorted(_CAMERA_MEASURED)
+                                    if name in readings["camera_measurements"]},
+            "observed_lock_frames": _lock_frames(readings.get("observed_lock_frames", {})),
+            "source_commit": next(iter(batches))[1]["source_commit"],
+            "config_sha256": next(iter(batches))[1]["config_sha256"],
             "source_provenance_sha256": source_provenance_sha256,
         }
+        # the runtime descriptor the measurement was taken under is passed through when the batch recorded it, and
+        # never invented here: the binding compares it against the runtime asking for the report, so a fabricated one
+        # would let a report claim a configuration nobody measured under
+        if isinstance(readings.get("head_search"), dict):
+            sample_document["head_search"] = readings["head_search"]
         sample = _write(output_root / "head-search-qualification.json", sample_document)
     # the support fields have their own approved closed sample, so they are published with their own citation rather
     # than borrowing the head-search one
@@ -241,10 +265,6 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     support_sample = None
     if sample is not None and support_names:
         from so101_demo.act.task8_measurement_formulas import build_support_closed_sample
-
-        # the support closed sample takes bare values, while the published report carries unit-bearing entries
-        def _bare(entry):
-            return entry.get("value") if isinstance(entry, dict) else entry
 
         support_document = build_support_closed_sample(
             support={name: _bare(readings["measurements"][name]) for name in sorted(support_names)
