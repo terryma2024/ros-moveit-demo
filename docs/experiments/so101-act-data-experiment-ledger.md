@@ -12838,3 +12838,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7 module complete and green (37 module / 76 focused set); Tasks 1-6 committed and green; Tasks 8-10
   untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-925 — The runner's run loop read: three exact insertion points for the window calls
+
+- **Read `PickPlaceRunner.run`.** Its shape is: `_validate_request(request)`; a `try:` that sets `started = True`
+  before `self.port.begin(request)` (so even an uncertain begin counts as task-owned activity needing a physical
+  stop); validation of the `_BEGIN_KEYS` response including `full_restart is True` (`FULL_RESTART_NOT_PROVED`
+  otherwise); then `reset_epoch`, `release_epoch` and `latest_step = 0`; then a `for phase in self.PHASES:` loop that
+  checks `request["deadline_ns"] <= self.clock_ns()` (`TASK8_DEADLINE_EXPIRED`), calls `_set_down` and
+  `_release_preflight` before `RELEASE`, does the two-direction retreat probing before `RADIAL_RETREAT`, and
+  otherwise advances through `_verify_phase`, each helper returning the new `latest_step`.
+- **The three insertion points are therefore exact, and each is one or two lines:**
+  1. **open**: immediately after `release_epoch` and `latest_step = 0` are established and before the phase loop -
+     the window opens at the first verified phase, which is `PHASES[0]` = SEARCH;
+  2. **record**: inside the loop where `latest_step` is reassigned by `_verify_phase` - after an accepted phase, emit
+     one grid sample carrying that phase and the accepted `physics_step`, so the recorder rides the runner's own
+     monotonic counter rather than inventing a second one;
+  3. **seal**: after the loop completes and before the successful return, so the window is sealed only once
+     FINAL_CHECK has been verified - and the failure paths deliberately do **not** seal here, because the plan puts
+     the failure seal in the owner's `_retire` (CP-921), which covers both `finish()` and `retire_failed_start()`.
+- **Why the separation is deliberate:** sealing on the success path in the runner and on the failure path in
+  `_retire` keeps each seal with the code that knows the window's state, and avoids two competing seal sites racing
+  over the same window. The runner's own `_stop` path stays untouched.
+- **Discipline:** still **zero edits** to the user's six in-flight files; seven rounds of reading have produced a
+  complete, anchored edit plan. The next round begins the edits, starting with the runner's optional window
+  parameter and these three call sites.
+- **State:** Task 7 module complete and green (37 module / 76 focused set); Tasks 1-6 committed and green; Tasks 8-10
+  untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
