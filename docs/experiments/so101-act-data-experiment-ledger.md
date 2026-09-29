@@ -25821,3 +25821,18 @@ picture in both directions.**
   which clause fails - not a sixth guess.**
 - **State:** P1-1..P1-3 green and committed; the five corrections and the full-case test are **uncommitted while red**, per this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing
   deleted; no hardware.
+
+## CP-1550 — Three corrections committed; the probe needs one more binding to answer the last question
+
+- **`54 passed`** across the six focused files, and **the three corrections are committed** (`3ceef4f8`) - **which also remedies the loss CP-1549 recorded: a fix worth making is now
+  committed as soon as its own file is green.**
+- **The two updated tests taught the fixture one more shape:** the planning scene must be **stateful**, because the release's `detach_moveit` **reads its own postcondition back** - a stub that always
+  reports "attached" is refused by name (`planning scene still attached`), which is the guard working rather than a test problem.
+- **And the full-case run still ends at `PHASE_EVIDENCE_INVALID` - a name BOTH the port and the runner use**, which is why the last two probes were ambiguous: the port wraps a boundary refusal with
+  the same code the runner uses for its own phase check. **The probe settled which one it is, and then found the next thing:** with the case targets bound but **no live-evidence attachment**, the
+  boundary refuses `support_distance_max_m` - **because the admitted support distance travels with the *evidence* attachment, not with the case targets.** My probes had been calling
+  `bind_case_targets` and not `bind_live_evidence`; **the test calls both, so the run's own failure is the runner's check, not the port's.**
+- **So the next action is one probe with BOTH bindings** and the runner's own `_verify_phase` called directly on the document the port produced - **the three-line experiment that identifies the
+  failing clause, and the same technique that has now settled six questions in this stretch.**
+- **State:** P1-1..P1-3 green and committed; the three corrections committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed,
+  nothing deleted; no hardware.
