@@ -24097,3 +24097,17 @@ not an inference of mine.**
   is therefore not a fixture limitation I am reporting; it is what the repository's own dispatch loop implies.**
 - **Packet note appended** so the review sees this reasoning where it will read it, and the packet's digest is re-measured below.
 - **State:** no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1454 — The bounded case's indexed evidence is asserted, with one more tamper negative
+
+- **What the recorder actually persists** (`task8_live_evidence.py:132-149`): each sample is written **once** to
+  `staging/sample-NNNNNN.json` at mode 0600 and **fsync'd**, and an **index row per sample** records
+  `{relative_path, sha256, physics_step, phase, sim_time_s, wrist_target_visible, release_epoch, reset_epoch}`.
+- **What the new test asserts, all from the run itself (`6 passed` in the focused file):** nine indexed samples, one per required phase, in the
+  window's own `REQUIRED_PHASES` order, steps 0..8; **every row's file exists and its bytes hash to the digest the row claims, recomputed
+  independently in the test**; every row carries the case's bound reset epoch and release epoch 0.
+- **And one more tamper negative at the evidence layer, refused by production code:** after changing one raw record's bytes, the recorder's `append`
+  refuses the sample with **`TASK8_LIVE_EVIDENCE_RAW_RECORD_INVALID`**.
+- **Why this shape and not the sealed artifact:** a bounded (prefix) case is defined **not** to seal (CP-1445), so the index plus the bytes it names is
+  the strongest evidence this case can carry - **and it is now asserted rather than assumed.**
+- **State:** committed with the focused file green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
