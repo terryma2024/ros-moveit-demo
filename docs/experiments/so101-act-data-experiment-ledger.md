@@ -25080,3 +25080,21 @@ picture in both directions.**
   `submit` -> wait on `goal_state` -> `build_approach_goals` -> `screen.inspect` -> `PathProver.prove` -> snapshot and facts - and test the boundary level with
   substituted physics. **Every piece of that chain now exists and is individually verified; what is left is joining them.**
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1504 — A correction to the plan: the eight gates are ESTABLISHED by validation, not reported by an executor
+
+- **Reading `execute_approach` against the SEARCH path shows I had the last piece backwards.** For SEARCH, the port does not receive a gate document: its `_search_evidence`
+  **validates the readback** (`SimulationEvidence`, the scene's key set, the contact frame, the stamps' skew, the neck path, the Planning Scene receipt) and only then sets
+  `planning_ok`, `controller_reference_ok`, `joint_feedback_ok`, `contact_ok`, `mujoco_ok`, `planning_scene_ok`, `head_rgb_ok`, `wrist_rgb_ok` to `True`. **A gate is a
+  conclusion this repository reaches from evidence, not a value someone hands over.**
+- **So `facts` may not come from the execution seam.** The seam's job is the prefix - source, permit, submitted goal ids - and the goals builder. **The gates and the per-phase
+  facts must be established the same way SEARCH's are: by validating the APPROACH snapshot and readback**, in a validator of the same shape as `_search_evidence`.
+- **Which splits the remaining APPROACH work cleanly, and both halves are now well understood:**
+  1. **the chain** (this is joinable today): trusted source -> `issue_prefix_source` -> `approve_with_source` -> `submit` -> wait on `goal_state` -> `build_approach_goals`
+     -> `screen.inspect` -> `PathProver.prove`, ending with the proof and the current snapshot;
+  2. **the validator** (the last piece): an APPROACH evidence validator that reads the snapshot and readback and **establishes** the eight gates and the holding/contact facts,
+     mirroring `_search_evidence` - and refusing by name when anything it needs is absent.
+- **And the seam is thinner than the earlier checkpoint said:** `execute_approach(prepared, request, *, prover_identity, ticket)` should call the broker's **own**
+  `prefix_executor` rather than an `executor.run(...)` abstraction, and the gate half should delegate to the validator, which refuses by name until it exists. **That keeps
+  the chain real, the missing piece named, and no value invented anywhere.**
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
