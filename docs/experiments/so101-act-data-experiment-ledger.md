@@ -20232,3 +20232,33 @@ not an inference of mine.**
 - **State:** HEAD at this commit plus this checkpoint; staged 0; **items 1 and 2 complete**; items 3, 4, 5 remain in Astra's order;
   the build tree is in sync for the modules touched this round, and **that sync must be re-established after any further `src/`
   edit** - verified per file, not assumed; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1240 — Item 3's contract read, and the RED it dictates
+
+- **The validator the driver's output must satisfy, read from the schema module:**
+  ```python
+  def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchIndex:
+      """Closure first, then digests: nothing is opened that the index does not name."""
+      recorded = _load(root / "batch.json", "BATCH_INVALID")
+      if not _BATCH_REQUIRED <= set(recorded) <= _BATCH_KEYS or recorded.get("kind") != BATCH_KIND:
+          raise ValueError("BATCH_INVALID")
+      if recorded.get("status") not in BATCH_STATUSES:
+          raise ValueError("BATCH_INVALID")
+      identity = MeasurementIdentity.require(recorded.get("identity"))
+      files = recorded.get("files")
+  ```
+  So a closed batch is one `batch.json` whose key set is **between `_BATCH_REQUIRED` and `_BATCH_KEYS`**, whose `kind` is
+  `BATCH_KIND`, whose `status` is one of `BATCH_STATUSES`, whose `identity` satisfies `MeasurementIdentity.require` - the
+  **ten-segment identity** - and whose `files` index names every artefact, **the descriptor among them**. That is exactly the list
+  Astra said the driver's own batch lacks.
+- **Also established:** the CLI imports and calls `close_measurement_batch(args.batch_root, identity)` **after** the driver has
+  already written its batch (the import site is printed above together with the module that defines it), so the two seal owners are
+  real and the second one must go. **One owner, using the schema's identity and key contract, with the descriptor in the hash index
+  and `INVALID`/cleanup semantics preserved.**
+- **The RED for the next round, stated so it can be written directly and cannot pass vacuously:** drive the **real**
+  `Task8MujocoMeasurementDriver` through the composition with fake external-I/O providers, then hand its output directory straight to
+  `validate_closed_batch(...)` and require a `BatchIndex` back; then hand that index to the aggregator. **No `rglob` over JSON, no
+  hand-built batch, no second seal.** Today it must fail on the driver's own batch - missing `batch_sha256`, incomplete identity,
+  descriptor absent from `files`, or `anchors` shaped incompatibly - and the failure message will say which.
+- **State:** items 1 and 2 are complete and committed; HEAD `8c828d58` plus this checkpoint; no source changed yet for item 3; no
+  stack, no hardware, nothing deleted, nothing pushed.
