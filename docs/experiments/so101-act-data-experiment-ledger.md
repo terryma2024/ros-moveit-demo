@@ -23546,3 +23546,16 @@ not an inference of mine.**
   samples it feeds are the ones the seven indexed assertions will read, which is exactly where the reviewer's second half begins.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1422 — `record_evidence` forwards to `append`, so the probe that matters is the CHILD recorder's identity
+
+- **Read (`pick_place_search_port.py:167-180`):** `record_evidence(sample)` requires `type(sample) is dict` and **`len(sample) == 24`**, then calls
+  `recorder.append(sample)` and re-raises any refusal wrapped as `TASK8_SEARCH_PORT_EVIDENCE_INVALID`. **So it is a thin forwarder, not a second
+  builder** - and my boundary's direct `append` call is the same operation.
+- **Which makes CP-1420's probe the important one and its conclusion firmer:** a sample built exactly as the fixture builds it passes
+  `append`'s every rule on a **fresh** recorder, yet the same call fails against the **child's** recorder. **The difference must therefore be the
+  recorder's own identity or its state, not the sample's shape - and the next probe prints the child recorder's `case_id`, `session_id` and
+  `attempt_id` beside the sample's, plus whether it is already sealed.** (`IDENTITY_MISMATCH` is a distinct code and did not appear, so my first
+  suspicion is the *state*: a sample recorded after the window has moved on, or an ordering the window refuses.)
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
