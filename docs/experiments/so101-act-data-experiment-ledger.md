@@ -12584,3 +12584,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   to whoever resumes - including the reviewer at Task 9.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-915 — Task 7 WIP: suite down to two failures, both with known next actions
+
+- **Updated two things in the test module, both from reading the code rather than guessing:** the window test that
+  encoded the old contract now probes a phase **outside** the required nine (`IDLE`) for its not-open assertion and
+  opens at **SEARCH**, the runner's entry point; and my builder fixture now carries exactly the five identity keys
+  `build_live_evidence_sample` requires (`case_id`, `session_id`, `attempt_id`, `reset_epoch`, `release_epoch`),
+  read from its own validation.
+- **A scripting error worth recording:** my first attempt at this patch asserted on an anchor with the wrong
+  leading whitespace and **aborted before writing anything** - so the run that followed showed the same three
+  failures with the old test name, and I could see from the traceback that no file had changed. The retry used
+  whitespace-insensitive, occurrence-counted replacements and printed which edits it applied, which is why the
+  second run moved as expected (**3 failed / 34 passed -> 2 failed / 35 passed**,
+  `beh-task7-green4.log`).
+- **The two that remain:**
+  1. `test_case_driver_reaches_the_window_and_seals_into_the_case_directory` - the case-driver path still drives the
+     old phase sequence; it moves to SEARCH with the runner wiring in the plan's step 3.
+  2. `test_every_ten_hz_row_cites_its_raw_records_and_identity` - my test now passes the identity gate and fails on
+     the builder's next validation, so the remaining work is to read that validation (from the identity check
+     onward) and shape the `source_stamps_s` / `source_received_monotonic_s` / `raw_records` fixture to it - again
+     without loosening the builder.
+- **State:** Task 7 in progress at a WIP commit that names its own red suite; Tasks 1-6 committed and green; no
+  runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
