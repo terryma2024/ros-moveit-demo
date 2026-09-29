@@ -26373,3 +26373,21 @@ picture in both directions.**
 - **The lesson, stated plainly because it cost two rounds:** **the sanctioned recipe's parameters are part of the recipe.** "IPC base 0700" was written down in this ledger from the previous boundary and I re-typed the gate script
   without it - which is exactly the failure mode the ledger exists to prevent.
 - **State:** demo `rc=0`; teleop re-running with the fix; CTest re-run pending (it showed the same four failures, three of them the IPC class); nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
+
+## CP-1584 — The teleop gate is GREEN: 1430 tests, 0 errors, 0 failures, 43 skipped
+
+- **The numbers, from this run:**
+  ```
+  colcon test-result: Summary: 1430 tests, 0 errors, 0 failures, 43 skipped
+  this run's own pytest totals: 1271 passed, 43 skipped
+  teleop_rc=0 elapsed_s=217
+  ```
+  and **zero `FAILED`/`ERROR` lines** in `experiments/final-boundary/teleop2.log` - **the run with `SO101_IPC_SOCKET_BASE` set to a 0700 directory, which is what the recipe said all along.**
+- **So the teleop leg's three classes are all resolved, and each resolution was a different kind of work:** the **defect in this batch's seal identity** (CP-1582/1583) fixed in the port **and** in the
+  test's double, the **gate script's missing IPC base** fixed in both scripts, and the **registration class** (`missing_result`) resolved by the rerun itself - which is what "bookkeeping, not a failure" meant, and it is now
+  demonstrated rather than asserted.
+- **And the boundary now stands at two legs green:** demo `rc=0` (5731 passed / 163 skipped) and teleop `rc=0` (**1430 / 0 / 0 / 43**), both with **fresh** numbers, both with the sanctioned parameters
+  (32 CPUs, `-n 8`, benchmark excluded, fresh scratch with the literal `tempfile.gettempdir()` check, IPC base at 0700), both with their logs and JUnit under the registered evidence root.
+- **CTest is re-running** (`experiments/final-boundary/ctest2.log`); its earlier run showed the same four failures as the xunit set - the two chain tests (now fixed) and the three IPC-class unified tests (now fixed) - **so its
+  fresh result is the boundary's last leg.**
+- **State:** two legs green with fresh numbers; CTest in flight; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
