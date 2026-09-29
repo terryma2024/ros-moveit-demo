@@ -18901,3 +18901,24 @@ not an inference of mine.**
   the print.
 - **State:** goal active (revision 51, cap 1000); HEAD `83cb2f05`; staged 0; the untracked test remains failing and uncommitted;
   no full suite, no push, no stack, no hardware.
+
+## CP-1182 — `add_grid` appends to the recorder itself, and a print shows my rows accepted - so the gap is elsewhere
+
+- **Two things settled by reading `add_grid` (lines 538-550):**
+  1. it performs the identical continuity check against its **own** `_last_grid_s` and `_period_s`
+     (`abs(delta - self._period_s) > self._tolerance_s` -> `GRID_GAP`), with `GRID_REGRESSION` for a non-increasing stamp;
+  2. **it calls `self._recorder.append(sample)` itself** - which answers CP-1176's open question: the pair
+     (`recorder.append` + `window.add_grid`) that the chain test performs is belt-and-braces, and `add_grid` alone is
+     sufficient. My port uses `add_grid` alone, so it is not double-feeding.
+- **And a standalone print showed my rows are accepted by the window:** with `PERIOD_S = 0.1`, stamps
+  `0.2, 0.30000000000000004, 0.4` were each accepted by `add_grid`, so the period and the delta rule are satisfied for the
+  phases I printed. **The gap in the test therefore comes from a row outside that pattern**, and the next diagnostic is
+  exactly the same print but **inside the test** - printing each stamp and delta as the port feeds them, so the offending row
+  names itself instead of being inferred.
+- **The candidate worth checking first, because it is the one that differs between my print and the test:** the print
+  incremented `step` by hand; the test increments it inside `run_phase` **and** `run_retreat_segment`, and the retreat path is
+  reached twice per case, so a stamp can repeat or skip if the increment and the recorded stamp ever disagree. That is a
+  one-line check in the diagnostic rather than a theory.
+- **State:** goal active (revision 51, cap 1000); HEAD `5275f614`; staged 0; the untracked test remains failing and
+  uncommitted; logs `beh-r787.log` (the accepted-row print) and `beh-r788.log` (the test); no full suite, no push, no stack,
+  no hardware.
