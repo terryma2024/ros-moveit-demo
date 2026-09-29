@@ -27349,3 +27349,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   (`task8_measurement_driver.py:118` takes them from the anchor report). **CP-1635's two options stand:** the per-run values travel from the driver into the composition, or the entry pre-allocates the run identity at admission.
 - **State:** item 1 **context fields added and the contract test now uses them**; the CLI half awaits CP-1635. Item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all
   five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1637 — The packet and index now say the boundary legs are superseded; one index row still needs its hash
+
+- **Applied this round, as CP-1622/CP-1623 promised:**
+  - **the packet carries a SUPERSEDED banner ahead of Addendum 3** stating that the three legs were measured **before** the remediation and that the code has changed since (the CLI's terminal state and seal identity, the context's fields, the still-open cleanup-proof scope), so
+    **their numbers must not be quoted as the batch's current boundary**; it also records the **withdrawal of the `Testing/20260929-1252` citation** and notes that the reviewer's audit confirmed both stale index rows;
+  - **the index carries the same note** at its end. **Packet: 32915 bytes, sha256 begins `6236c84d4d707149`. Index: sha256 begins `b691438a2b99dcb7`.**
+- **And one row is now stale BECAUSE of that edit, which is the CP-1615/1616 lesson applied to my own work:** line 68 still carries the packet's **pre-banner** size and hash (`31987`, `fe029a4e…`), and **four
+  attempts to update it programmatically failed to match the row** - the last one after the row was printed raw with `cat -A` and read correctly, which means the failure is in my tooling rather than in the row. **The honest move is to stop iterating and use a literal line replacement next, then re-audit** - the round is recorded with the defect visible rather than
+  with a fourth failed attempt.
+- **What that leaves, stated plainly:** the index's **path-matched whole-index audit** reports **26 rows checked, 1 mismatched** - that row - and everything else verifies. **No claim of a clean audit is made for this round.**
+- **State:** the supersession is recorded where a reviewer will see it; the one stale row and the audit are the next step. Item 1's context half is done with its CLI half awaiting CP-1635; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
