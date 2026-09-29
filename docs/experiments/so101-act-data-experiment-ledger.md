@@ -25986,3 +25986,21 @@ picture in both directions.**
 - **What this milestone does establish, and what it does not:** it establishes that **the production runner, port, nine phases, validators, seal and recorder work together end to end** and that every document they produce satisfies the
   contracts the repository enforces. It does **not** establish that a robot or MuJoCo performed a pick-and-place, and nothing in this batch has run against live hardware or a real simulator session.
 - **State:** P1-1..P1-3 green and committed; the nine-phase milestone committed; the full-case test is now part of the focused set and green. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1560 — The close-out's components all exist; what is missing is the test that drives them in order
+
+- **Reconnaissance for P1-4's remaining items ("full case -> journal -> trusted aggregator with a sealed artifact, seven indexed assertions read from records, four negatives breaking the chain"),
+  and every component is already in the tree:**
+  | component | where | what it gives the close-out |
+  | --- | --- | --- |
+  | the full case | `PickPlaceRunner` + `PickPlaceSearchPhasePort` | **now runs and seals** (CP-1559): nine phases verified, `live_evidence_artifact` with a path |
+  | the seal | `port.seal_live_evidence` -> `Task8LiveEvidenceRecorder.seal` | the sealed artifact the assertions will read |
+  | the journal | `PickPlaceValidationCampaign(manifest_path, context, worker, journal_path, ...)` with `planned_cases(deadline_ns)` | the case record and its planned cases (105 lines, one pre-existing dirty line) |
+  | **the trusted aggregator** | `task8_calibration_aggregator.aggregate_task8_calibration(batch_roots, contract, output_root)` | the verdicts, and beside it **`_require_sealed_batch(root)`**, **`_read_indexed(root, batch)`**, `derive_field_verdicts`, `derived_checks` |
+- **And the naming lines up with the review's wording, which is worth saying because it means the deliverable is a TEST rather than a subsystem:** the aggregator **already reads an INDEXED batch** (`_read_indexed`) and **already
+  requires the batch to be SEALED** (`_require_sealed_batch`) - so "seven indexed assertions read from records, four negatives breaking the chain" is the test that drives **case -> seal -> aggregate -> assert**, not new
+  production machinery.
+- **Which is the same conclusion this batch has reached at every layer:** the repository built the components and never drove them together; the work is to drive them, name every refusal, and prove the verdicts come from records.
+- **The test's shape, so the next rounds are mechanical:** (1) run the nine-phase case and seal; (2) point the aggregator at the sealed batch root and require its verdicts; (3) assert the **seven indexed facts** against the
+  records the aggregator read; (4) break the chain in **four** distinct ways - an unsealed batch, a corrupted record, a foreign identity, and a missing index entry - and require a **named refusal** for each.
+- **State:** P1-1..P1-3 green and committed; the nine-phase milestone committed; the full-case test part of the focused set and green. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
