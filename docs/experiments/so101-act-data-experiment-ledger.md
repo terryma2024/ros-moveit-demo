@@ -15161,3 +15161,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   possibly-altered args - and the socket-path question (CP-1012/CP-1016) still stands pending that re-measurement; Task
   10 blocked until the 17 search values are reviewed. No runtime, no package-gate claim, no push, no evidence deleted,
   no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1019 — Teleop gate re-measured with verified arguments: the socket conflict survives
+
+- **Corrected invocation, run in the background (job `bash-2721`), `log/latest_test` cleared first so the previous run's
+  artefacts could not be mistaken for this one's:** `colcon test --packages-select so101_teleop`
+  `--pytest-args -q -n 8 -p no:cacheprovider --return-code-on-test-failure`, from a fresh verified evidence-root
+  scratch. Result: **rc=1, "96% tests passed, 5 tests failed out of 113"**.
+- **The socket failure persists under the correct runner and the corrected arguments**, so CP-1012's question is now
+  established twice over and is **not** an artefact of my invocation: colcon's captured output still contains
+  **26 × `IPC_SOCKET_PATH_TOO_LONG`** and 42 × `BRIDGE_CHILD_EXITED`. The conflict between the evidence-root scratch
+  rule and the child's `TMPDIR`-derived Unix socket path is real, and the decision asked for at CP-1016 stands.
+- **Two things this run does NOT establish, recorded rather than glossed:**
+  1. **which five entries failed is unknown.** The captured output carries no test names, colcon's `Testing/*.xml` was
+     not produced where I looked, and the summary only points at `--rerun-failed --output-on-failure`. The captured
+     plugin list shows **ament lint plugins** (`ament-copyright`, `ament-pep257`, `ament-flake8`, `ament-xmllint`)
+     participating in `colcon test` for this package, so the 113 entries **include lint tests** and some of the five
+     failures may be lint rather than behaviour. I will not attribute them either way without seeing them.
+  2. **whether `-n 8` was in effect is not established either** - no xdist worker markers appear in the captured output,
+     and for a Python package colcon runs pytest per test file at the ctest level, so the parallelism that matters for
+     this gate may be colcon's own executor rather than pytest's `-n`. The skill's requirement is a parallel gate at
+     `min(8, nproc)` workers; which layer provides it here has to be shown, not assumed.
+- **Next, in order:** (a) identify the five failing entries with `--rerun-failed --output-on-failure` so lint failures
+  and socket failures are separated; (b) show the parallelism actually used; (c) only then run the demo scope the same
+  way. The socket question stays with the owner meanwhile, unchanged and now doubly evidenced.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's teleop scope measured at 5 failures of 113 with verified arguments and two open attribution
+  questions above; the demo scope still unmeasured; Task 10 blocked until the 17 search values are reviewed. No runtime,
+  no package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
