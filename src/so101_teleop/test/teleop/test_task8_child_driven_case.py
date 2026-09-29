@@ -257,6 +257,7 @@ class _Boundary:
         sources.scene_qpos = getattr(self, "scene_qpos", None)
         sources.scene_qvel = getattr(self, "scene_qvel", None)
         sources.cup_start_m = getattr(self, "cup_start_m", None)
+        sources.joint_start_rad = getattr(self, "joint_start_rad", None)
         # the fence and the deadline both compare against the segment's clock, so the clock is the REAL one -
         # the segment suite's `_segment` helper pins it to a frozen list, which cannot work here. Everything
         # else (boundary, verifiers, geometry, timings) comes from the imported doubles unchanged.
@@ -496,7 +497,9 @@ class _ChildSources(_Sources):
         row["observation"] = {
             "session_id": self._session_id, "attempt_id": attempt_id,
             "sim_time_s": world.simulation_time_s,
-            "state": [0.0] * 6 + [1.0, 0.0],
+            # P1-5/CP-1888: the candidate compares `state[:6]` with the route's own start, so it carries the
+            # manifest's `joint_start_rad` rather than six zeros
+            "state": list(getattr(self, "joint_start_rad", None) or [0.0] * 6) + [1.0, 0.0],
             "head": numpy.zeros((480, 640, 3), dtype=numpy.uint8),
             "wrist": numpy.zeros((480, 640, 3), dtype=numpy.uint8)}
         # the port requires EXACTLY this key set, with the requested time equal to the world's and three

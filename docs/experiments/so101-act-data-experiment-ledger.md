@@ -33284,3 +33284,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   position and the cup's uprightness now all come from the documents the check compares them against.** P1-1 through P1-4
   CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses
   are unchanged, so they are not re-stated.**
+
+## CP-1888 — The chain's own evidence sealing makes the frozen source stale before the second registration
+
+- **Measured, with timestamps at every step between the boundary's hand-off and the consumer:**
+  ```
+  +0.001 s   _search_evidence entry / exit (0.000 s) - so the port's evidence assembly is NOT the cost
+  +0.001 s   register entry
+  +0.001 s   route.prepare entry        <- the FIRST registration, which passes
+  +0.932 s   route.prepare entry        <- a SECOND registration, 0.93 s later
+             -> selected_approach_candidate.py:98  SELECTED_APPROACH_SOURCE_STALE
+  ```
+  **and the staleness numbers themselves:**
+  ```
+  now=200314.849  max_age=0.2 (the ADMITTED `motion["max_age_s"]`)
+  receipts={world/scene/contact/head/wrist/arm/neck: 200313.770}   future=[]   oldest gap=1.079 s
+  ```
+- **So the finding is a property of the pipeline, not of the fixture:** the source is frozen from the last readback, the
+  first registration accepts it, **and by the time a second registration compares it, roughly a second of production work
+  has passed** - which exceeds the admitted `max_age_s = 0.2 s`. **Two measurements bound where that second goes:**
+  `_search_evidence` is 0.000 s, and the in-process path checker's calls are 0.022 s each (eight of them observed), **so
+  the remainder sits in the port's own evidence sealing between the two registrations.**
+- **Which is exactly the class of finding P1-5 exists to produce** - like CP-1814's checker argument and CP-1838's clock
+  domain: **invisible from either file alone, and only visible when the whole chain runs.** **And it is recorded rather
+  than worked around:** my one attempt (re-stamping the receipts at the hand-off, modelling a sensor that delivers when
+  read) did not change the outcome, **so it was reverted - the fixture's receipts stay truthful capture stamps, and the
+  ~0.93 s is not something a fixture should paper over.**
+- **State:** **P1-5 in progress with a named finding: the admitted `max_age_s` and the pipeline's own
+  readback→second-registration latency are inconsistent, and the second registration is where the chain stops.** P1-1
+  through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**

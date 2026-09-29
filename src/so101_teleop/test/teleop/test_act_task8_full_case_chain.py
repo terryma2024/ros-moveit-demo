@@ -93,7 +93,9 @@ def _approach_authority(*, session_id: str, attempt_id: str) -> dict:
             source_profile_path=config / "task6_visible_approach_v1.json",
             candidate_profile_path=config / "visible_approach_candidate_v1.json",
             session_id=request["session_id"], attempt_id=request["attempt_id"],
-            max_skew_s=motion["max_skew_s"], max_source_age_s=min(readback_joint_tolerance, motion["max_age_s"]),
+            # P1-5/CP-1888: the source age bound is the ADMITTED one - `min(0.01, …)` was this harness's own
+            # invention, and a fixture that substitutes I/O cannot honour a ten-millisecond freshness window
+            max_skew_s=motion["max_skew_s"], max_source_age_s=motion["max_age_s"],
             joint_tolerance_rad=readback_joint_tolerance, cup_tolerance_m=readback_cup_tolerance,
             stop_velocity_rad_s=motion["stop_velocity_rad_s"])
         return VisibleApproachExpertRoute(candidate, policy_fingerprint=_POLICY_FINGERPRINT)
@@ -151,12 +153,21 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     _model = authority["checker"].model
     _key = _mujoco.mj_name2id(_model, _mujoco.mjtObj.mjOBJ_KEY, "task_start")
     _qpos0 = _model.key_qpos[_key] if _key >= 0 else _model.qpos0
-    boundary.scene_qpos = tuple(float(value) for value in _qpos0)
+    _start = [float(value) for value in _qpos0]
+    # the route's start is the MANIFEST's, not the keyframe's: the candidate compares the scene's joints with
+    # `segments[0]["prior"]`, which the manifest builder takes from the profile's `joint_start_rad`
+    # (`[-0.25, -0.5, 1.5, 0.0, 0.0, 0.0]`) plus `neck_start_rad` - so the cup comes from the keyframe and the arm
+    # from the manifest, and both are read rather than chosen (CP-1887)
+    for _index, _value in enumerate(authority["manifest"]["joint_start_rad"]):
+        _start[_index] = float(_value)
+    _start[6] = float(authority["manifest"]["neck_start_rad"])
+    boundary.scene_qpos = tuple(_start)
     boundary.scene_qvel = tuple(0.0 for _ in range(int(_model.nv)))
     # `authority["manifest"]` is the ROUTE manifest the manifest-builder returned (`build_route_manifest`), and its
     # top-level `cup_start_m` is the same value the candidate's own route document pins - while `live_manifest` here is
     # the campaign payload, a different document (CP-1886)
     boundary.cup_start_m = tuple(float(value) for value in authority["manifest"]["cup_start_m"])
+    boundary.joint_start_rad = tuple(float(value) for value in authority["manifest"]["joint_start_rad"])
     # P1-5/CP-1876: the boundary ALREADY builds `reset.sources` with the members its readers use, and its own comment
     # records that an earlier fix "in the wrong place did not take" because a second namespace was built beside it -
     # so this ADDS to what is already there rather than replacing it.
@@ -229,6 +240,25 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     boundary.contact_pairs = contact_pairs
     if not callable(getattr(boundary, "capture", None)):
         boundary.capture = sources.capture
+    # TEMPORARY DIAGNOSTIC
+    from so101_demo.adapters.act.selected_approach_candidate import (
+        SelectedApproachCandidate as _SAC2)
+
+    _orig2 = _SAC2.prepare
+
+    def _diag2(self, observed, *, selected_source):
+        try:
+            return _orig2(self, observed, selected_source=selected_source)
+        except ValueError as _error:
+            if str(_error) != "SELECTED_APPROACH_SOURCE_STALE":
+                raise
+            _now = self.monotonic()
+            print(f"[xdiag] consumer now={_now!r} max_age={self.max_age!r}")
+            print(f"[xdiag] source receipts={selected_source['source_received_wall_s']!r}")
+            print(f"[xdiag] obs receipts={observed.physical_readback['source_received_wall_s']!r}")
+            raise
+
+    _SAC2.prepare = _diag2
     port.approach_screen = PickPlaceApproachPathScreen(
         search_port=port, sources=boundary, broker=boundary, path_checker=authority["checker"],
         cancelled=threading.Event())
