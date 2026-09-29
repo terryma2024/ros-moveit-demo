@@ -34193,3 +34193,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   credentials and no one-off cache path appears in it**, and both verification commands were run before being written
   down (`5 × OK` for the YOLO subset, `13 × OK` for the Grounded-SAM subset, rc=0 for each).
 - **State:** **P1-1 in progress; the descriptor step (D) is next.** **Task-list statuses unchanged.**
+
+## CP-1918 — The descriptor's exact schema, and the real values the verified asset supplies
+
+- **`head_search_binding.validate_head_search_shape` fixes the detector block completely:**
+  ```
+  keys exactly: backend, weights_path, weights_sha256, model_id, image_size_px,
+                requested_device, allow_cpu_fallback, torch_threads
+  weights_path    : str, a regular file whose digest `_regular_digest(path)` must equal `weights_sha256`
+                    (`validate_head_search_binding`: HEAD_SEARCH_WEIGHTS_INVALID otherwise)
+  image_size_px   : int, and it MUST be 640
+  requested_device: "cuda" | "cpu"      allow_cpu_fallback: bool
+  ```
+  and `require_runtime_descriptor` adds the policy on top: `requested_device == "cuda"` and
+  `allow_cpu_fallback is False`, otherwise `TASK8_PREPARATION_CUDA_REQUIRED`.
+- **So the four values the descriptor needs are now REAL and verified rather than invented:**
+  ```
+  weights_path    = R/models/huggingface/so101-yolo11n-seg-plastic-cup/b55430fb…/best.pt    (6001316 B)
+  weights_sha256  = f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781       (== SHA256SUMS ✓)
+  image_size_px   = 640                                                    (required constant)
+  requested_device= "cuda"   allow_cpu_fallback = False                    (CUDA only, no CPU fallback)
+  model_id        = the real id from the asset's own model/provenance.json (read, not chosen)
+  ```
+- **What still stands between this and the run:** `validate_head_search_binding(runtime, calibration)` also takes the
+  **calibration report**, which is produced by the approved entry `act_build_task8_calibration_report.py`; and the case
+  entry additionally wants the measurement contract (present ✓), the identity document
+  (`act_build_task8_source_provenance.py`) and the context document. **The next step is therefore to run those approved
+  producers with the verified asset values above, then the formal composition with the seam unset** - the work that
+  remains inside this task item.
+- **State:** **P1-1 in progress. Done this turn: A (pinned downloads), B (fail-closed verification), C (role separation),
+  E (English README), plus the descriptor's exact requirements and values. Remaining: D's producers, the phase-path
+  provider, and the run itself with its rc/log.** **Task-list statuses: P1-1 in_progress, P1-6 completed, five pending.**
