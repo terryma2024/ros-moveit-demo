@@ -205,7 +205,7 @@ class PickPlaceSearchBoundary:
         if type(snapshot) is not dict or set(snapshot) != {
                 "world", "scene", "contact", "observation", "reference", "source_stamps_s",
                 "source_received_wall_s"}:
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: snapshot")
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: snapshot")
         world, scene, contact = snapshot["world"], snapshot["scene"], snapshot["contact"]
         sources = self.reset.sources
         epoch = self.reset.receipt.new_epoch
@@ -227,27 +227,27 @@ class PickPlaceSearchBoundary:
                 or contact["reset_epoch"] != epoch
                 or contact["physics_step"] != world.simulation_step
                 or abs(contact["simulation_time_s"] - world.simulation_time_s) > skew):
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: readback scope")
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: readback scope")
         if sources.contacts.safe() is not True:
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: contacts unsafe")
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: contacts unsafe")
         if contact_hazard(contact, sources.contact_pairs.for_phase("APPROACH")):
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: contact hazard")
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: contact hazard")
 
         stamps = snapshot["source_stamps_s"]
         receipts = snapshot["source_received_wall_s"]
         for name, value in (("source_stamps_s", stamps), ("source_received_wall_s", receipts)):
             if (type(value) is not dict or set(value) != {"head", "wrist", "arm", "neck"}
                     or any(finite(item, nonnegative=True) != item for item in value.values())):
-                raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: APPROACH: {name}")
+                raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: {name}")
         if max(stamps.values()) - min(stamps.values()) > skew \
                 or any(abs(world.simulation_time_s - value) > skew for value in stamps.values()):
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: rgb skew")
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: rgb skew")
 
         # the support distance is the case's ADMITTED threshold (the port holds it and passes it in); substituting a
         # neighbouring tolerance here would have been exactly the kind of invented value this batch keeps finding
         threshold = finite(support_distance_max_m, nonnegative=True)
         if threshold <= 0:
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: support threshold")
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: support threshold")
         aggregates = derive_frame_aggregates(world, support_distance_max_m=threshold)
         # the gates this validator can actually establish from the readback above; anything it cannot check refuses
         # rather than being asserted, and `planning_ok`/`planning_scene_ok` come from the Planning Scene receipt the
@@ -271,7 +271,7 @@ class PickPlaceSearchBoundary:
         # component can establish, mirrored from it so a contradiction is caught here rather than downstream
         if phase == "CLOSE" and (facts["bilateral_contact"] is not True
                                  or facts["no_fingertip_contact"] is not False):
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: CLOSE: no bilateral grasp")
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: no bilateral grasp")
         if phase in ("APPROACH",) and (facts["bilateral_contact"] is not False
                                        or facts["no_fingertip_contact"] is not True):
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: premature contact")
