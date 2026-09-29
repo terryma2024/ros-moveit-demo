@@ -22779,3 +22779,23 @@ not an inference of mine.**
   owner and the next reviewer see it, not just the ledger's optimism.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1374 — Decisive: the fence is REAL code fed by the double's clock, and I made the two disagree
+
+- **The call site, read verbatim (`pick_place_search_segment.py:114-115`):**
+  ```python
+  marker = self.sources.physics_fence.request_after_stop(
+      reset_epoch, stopped_wall_s, request["deadline_ns"])
+  ```
+  So the fence's deadline **is** the request's (as I hoped), and the fence itself lives on **`self.sources.physics_fence`** - i.e. it comes from
+  the **sources double**, which the segment suite supplies and which its own tests exercise.
+- **And that makes my last two rounds' confusion explicable in one sentence:** the fence is real production code carrying the **suite's** clock,
+  while CP-1372 made the **segment** carry the **real** clock - so `stopped_wall_s` (real, ~1.7e9) is far greater than the fence's
+  `monotonic()` (the suite's ~10.0), and `sent < stopped_wall_s` refuses **exactly as observed**. **My fix did not fail; it made the two clocks
+  disagree, which is a different and better-diagnosed fault than the one I was chasing.**
+- **The fix is therefore consistency, not another substitution:** give the fence the **same real clock** the segment now uses - my `_ChildSources`
+  overrides `physics_fence` with one built from `monotonic=time.monotonic, clock_ns=time.monotonic_ns` (its constructor's parameters are the next
+  read) - and then every clock in the chain is real while every I/O collaborator stays substituted. **That is the honest end state: one clock, one
+  reality, substituted hardware.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
