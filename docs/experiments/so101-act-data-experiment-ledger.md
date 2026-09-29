@@ -31094,3 +31094,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress with its checker verified end to end; P1-1 through P1-4 CLOSED.** The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1817 — The screen's contract, and the one check that makes it an inspection rather than a formality
+
+- **`PickPlaceApproachPathScreen.__init__`, read in full** (`pick_place_approach_path_screen.py:34`):
+  ```python
+  def __init__(self, *, search_port, sources, broker, path_checker, cancelled):
+      if (not callable(getattr(search_port, "validated_search_observation", None))
+              or not callable(getattr(sources, "capture", None))
+              or not callable(getattr(path_checker, "check_path", None))
+              or not callable(getattr(cancelled, "is_set", None))
+              or getattr(sources.contact_pairs, "model_sha256", None)
+              != getattr(path_checker, "model_sha256", None)):
+          raise ValueError("PICK_PLACE_APPROACH_SCREEN_CONFIG_INVALID")
+  ```
+  with its own one-line purpose: *"Inspect submitted rows against fresh measured physics **without command
+  authority**."*
+- **So mounting the screen costs four callables and one equality** - and the equality is the interesting one:
+  **`sources.contact_pairs.model_sha256` must equal `path_checker.model_sha256`**, i.e. **the sources that will measure
+  the rows and the checker that will judge the path must be looking at the same compiled model.** That is the rule the
+  builder's comment meant by *"the screen needs a path checker whose model hash matches the sources'"*, and it is the
+  reason the screen cannot be mounted over a harness whose sources are bound to a different model - **the screen would
+  be inspecting fresh measurements of one robot against a path admitted for another.**
+- **Which is exactly what `route_motion_configuration` already supplies on the checker side** (CP-1816: the checker
+  greets with `3c876e7bbf879dbf…` and the assertion holds), **so what the harness owes is `sources` whose
+  `contact_pairs` carries that same hash, plus `capture`, plus a `cancelled` with `is_set`.** The broker is stored and
+  not validated - **and deliberately so, since the screen has no command authority to exercise.**
+- **State:** **P1-5 in progress: the checker is verified, and mounting the screen is now a named four-callable,
+  one-hash requirement rather than an unknown.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6,
+  the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
