@@ -31824,3 +31824,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   has a defect to fix - recorded, with its cause and its one-line repair.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1839 — The trusted-source-port check PASSED, and the next gap is a fixture member
+
+- **The clock fix worked, and the drive cleared the check the faithful branch was built for:**
+  ```
+  pick_place_search_port.py:228 in begin
+      test_task8_child_driven_case.py:233 in begin
+          AttributeError: 'types.SimpleNamespace' object has no attribute 'receipt'
+  ```
+  **`begin` is past `isinstance(reset.broker._prefix_source_port, TrustedVisibleApproachSourcePort)`** - which is the
+  assertion CP-1824 recorded as the blocker and CP-1833's construction was written to satisfy. **It passed because the
+  PRODUCTION composition root installed the collaborator, not because a fake was taught to answer yes.**
+- **And what remains is a fixture member rather than a design question:** the failure is now inside the harness's own
+  `_Boundary.begin` (line 233), reading a `receipt` off one of the `SimpleNamespace`s the mount supplies. **That is the
+  same class of gap as CP-1823's `manifest`/`session_id`/`broker` chain** - each one named by the code that needs it, each
+  one small - **and it is the last layer between the drive and a full case actually running.**
+- **The production defects found by this drive, recorded together because they share a cause:** CP-1814
+  (`MujocoPathChecker` missing `allowed_pairs_by_phase` at the call site) and CP-1838 (`clock_ns=None` forwarded over a
+  callable default). **Both are disagreements between two files, both invisible from either file alone, and both were
+  found by using the production constructors rather than doubles** - which is the same conclusion every step of P1-5 has
+  reached, now with two concrete production fixes to show for it.
+- **State:** **P1-5 in progress: the faithful branch runs, the authority is accepted by production code, and the
+  remaining gap is a fixture member the harness's own boundary reads.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
