@@ -31901,3 +31901,47 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   boundary constructs its own - with the segment suite's setup - rather than assembling a double member by member.**
   P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1842 — `reset.sources` is production's `PickPlaceRosEvidence`, and that is a structural finding
+
+- **Read to the bottom of the double, and the answer is that the test's `_ChildSources` is the wrong KIND for this
+  member:**
+  ```python
+  class _ChildSources(_Sources):
+      def __init__(self, *, session_id, reset_epoch):
+          …
+          super().__init__(*rows); self._session_id = session_id; self._reset_epoch = reset_epoch; self._step = 0
+          self._model_sha256 = "e" * 64
+          self.contact_pairs = SimpleNamespace(model_sha256=…, for_phase=lambda phase: frozenset())
+          self.contacts = SimpleNamespace(safe=lambda: True)
+          self.physics_fence = SimpleNamespace(request_after_stop=…)
+      def capture(self, attempt_id, *, after_step): …
+  ```
+  **it has `contact_pairs`, `contacts`, `physics_fence` and `capture` - and no `readback`** - while the port's
+  `_search_evidence` reads `sources.readback`. And in production that member's owner is named plainly:
+  ```python
+  # ros_child.py:311
+  self._act_sources = PickPlaceRosEvidence(self._node, broker, model=self._act_model,
+                                           contact_pairs=self._act_contact_pairs, session_id=session_id, **settings)
+  ```
+  **so `reset.sources` is production's `PickPlaceRosEvidence`**, which is built from **a ROS node**, the broker, the
+  model and the contact pairs - **and the test double is a different class with a different surface.**
+- **Which is the first point in this drive where the faithful branch meets a genuinely new substitution rather than a
+  member to add:** everything so far has been "supply the collaborator production supplies" (the broker, the screen, the
+  checker, the reset); **this one is "the port reads a member of an object that production builds from a ROS node"** -
+  so the honest options are:
+  1. **build a `PickPlaceRosEvidence`** with a minimal node - **i.e. substitute ROS at the node level**, which the verdict
+     permits as external I/O **but which is a real integration to construct**; or
+  2. **supply `readback` on the sources the harness already has** - **honest only if what the port does with it is
+     reproducible from the substituted readback**, and **it must be said which of the two is being done rather than
+     letting a namespace grow.**
+- **And reviewing the classes confirms the shape of that choice:** `_ChildSources` **is** the segment suite's own
+  substitution for the same production object, **built with its builders and its identity** - so option 2 is not
+  inventing a surface, it is **the same substitution the segment suite already makes**, one member short of what this
+  port path reads. **That is what makes option 2 defensible, and it is also the reason to say so explicitly in the code
+  rather than in a comment about a member that happened to be missing.**
+- **State:** **P1-5 in progress, with the drive inside `run_phase` and one structural question recorded: whether
+  `reset.sources` is a real `PickPlaceRosEvidence` over a substituted node, or the segment suite's own substitution with
+  `readback` supplied - and the answer recorded in the code, either way.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
