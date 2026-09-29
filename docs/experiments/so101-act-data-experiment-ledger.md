@@ -19292,3 +19292,27 @@ not an inference of mine.**
   targeted runs never collect, or in a collection-level interaction the full gate exposes.
 - **State:** HEAD `b251d457`; staged 0; gate log `experiments/gate6-batch3-py-gate/g794.log` retained; scratch
   `scratch/r807.8601` retained; no full re-run attempted while my context was short; no push, no stack, no hardware.
+
+## CP-1199 — Correcting my own inference: the sharder is load-balanced, so shard-06 is not computable from filenames
+
+- **I nearly recorded a wrong answer as a fact, and caught it by reading the loop instead of trusting my arithmetic.** I
+  assumed the sharder assigned every Nth module (`shards[index].append(path)` with a modular index) and ran the arithmetic to
+  list shard-06's modules - 46 of them, mine among them. **The actual rule is a load balance:**
+  ```python
+  for path in weighted:
+      index = min(range(worker_count), key=lambda item: (loads[item], item))
+      shards[index].append(path)
+      loads[index] += durations.get(path, fallback)
+  ```
+  So each module goes to the **currently least-loaded worker**, weighted by a **duration** from a timings source. **Shard-06's
+  contents therefore depend on the timings, not on the file list**, and the 46 names I printed are *not* shard-06. Recording
+  that plainly because a plausible-looking wrong list is worse than no list.
+- **What that means for finding the failing test, and it is now narrower:** the runner writes `nodeids.json` and `pytest.log`
+  per process under `create_process_layout`'s `root = run_root / physical_name`, and my earlier search found no such directory
+  - so either the run root is somewhere I did not look, or the layout is cleaned up after the failure. **The next read is the
+  runner's own flags** (printed above) for a keep/report option, and failing that, a re-run with its stdout captured, since the
+  gate fails fast on shard-06 and its per-node ids are what I actually need.
+- **Also worth stating: the gate's `--timings` flag exists**, which is how `durations` is supplied in the first place - so the
+  same flag that influences the shard assignment can also make the assignment reproducible between runs, which is the property
+  I want before chasing a specific shard.
+- **State:** HEAD `3d373595`; staged 0; no gate re-run this round; no push, no stack, no hardware.
