@@ -16013,3 +16013,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Two test assertions updated deliberately, not silently:** `test_compact_layout_preserves_existing_directory_on_collision`
   asserted `tmp_dir.parent == root` (the old shape) and now asserts the three-level depth while still checking that a
   colliding layout raises `FileExistsError` and preserves existing files.
+
+## CP-1050 — Decision B scoped: the strict unbound contract touches fourteen construction sites
+
+- **Measured before editing, because the strict reading of option (ii) looked expensive and the number decides
+  whether it is.** A repo-wide search for `reset_epoch` returns **622 mentions across more than a hundred test files** -
+  which would be a prohibitive change if they were all in scope. They are not: those are overwhelmingly *simulation
+  evidence* epochs. The sites that actually construct the objects B changes are **fourteen**:
+  | site | count |
+  | --- | --- |
+  | `src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py` | 5 |
+  | `src/so101_demo_py/test/test_act_task8_live_evidence.py` | 4 |
+  | `src/so101_demo_py/test/test_act_task8_live_qualification.py` | 4 |
+  | `src/so101_demo_py/src/act/task8_live_evidence.py` (the driver's own window, `:582`) | 1 |
+- **So the strict contract is affordable, and that is now established rather than assumed.** The work for the next round,
+  in order:
+  1. **RED** in `test_act_task8_live_evidence.py`: a window whose identity is unbound refuses `add_grid`, `add_event` and
+     `seal`; `bind_reset_epoch(epoch)` succeeds exactly once and lands in the identity the recorder sees; a second bind is
+     refused; a bind after `add_grid`, after `seal`, or after `invalidate` is refused; and a negative or boolean epoch is
+     refused as invalid. The recorder double already records the identity it is sealed with, so "all samples and the seal
+     identity read the same bound epoch" is assertable rather than asserted by eye.
+  2. **the change** in `task8_live_evidence.py`: `UNBOUND_RESET_EPOCH = None` at module scope, the window forcing
+     `identity["reset_epoch"]` to unbound at construction and refusing observation/sealing until bound, and
+     `bind_reset_epoch` enforcing one-shot, in-generation, pre-open, pre-seal, non-bool, non-negative; the driver defaults
+     `reset_epoch=None`, exposes `bind_reset_epoch`, and `observe` inherits the window's refusal.
+  3. **the fourteen call sites** updated to bind explicitly - which is the point of the option, not collateral damage.
+  4. **the child wiring**: call `driver.bind_reset_epoch(new_epoch)` after the reset begin receipt is verified and before
+     the first SEARCH evidence write, at `ros_child.py:505`'s neighbourhood, staged hunk-level so the owner's in-flight
+     work stays unstaged.
+- **State:** decision A is **implemented, committed and verified** (CP-1049: gate scratch depth fixed, 42 tests in the
+  gate runner's suite, and `test_controller_reservation_client.py` now **17 passed** at the documented depth); decision B
+  is scoped to fourteen sites with its RED contract written out above; Task 10 remains blocked until the 17 provisional
+  search values are independently designed and Astra-reviewed; no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
