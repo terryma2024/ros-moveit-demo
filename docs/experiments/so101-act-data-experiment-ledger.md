@@ -15096,3 +15096,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the honest outcome rather than asking for a decision about my own mistake.
 - **Not yet claimed:** whether the teleop colcon gate is green, and whether the socket error appears under it. The
   result will be recorded when the job settles; nothing above should be read as its outcome.
+
+## CP-1016 — The colcon gate halves the damage but the socket conflict is real, not an artefact
+
+- **Result of the background run (job `bash-2712`, 3 min 3 s):** `colcon test --packages-select so101_teleop` with
+  `--pytest-args "-q -n 8 -p no:cacheprovider"` finished **with test failures, rc=1**; colcon's own summary reports
+  **"95% tests passed, 6 tests failed out of 113"** (`log/latest_test/so101_teleop/stdout_stderr.log`).
+- **The failure kinds, counted from colcon's captured pytest output:** **26 × `IPC_SOCKET_PATH_TOO_LONG`** and
+  42 × `BRIDGE_CHILD_EXITED` - so the socket-path error **does reproduce under the correct runner**, and CP-1012's
+  question is therefore **not** an artefact of bare pytest and is **not** withdrawn. CP-1014's caution was right to
+  check, and the check has now been made.
+- **Both runners' numbers, for the record:** bare pytest gave 21 failed / 1076 passed while colcon gives 6 failed of
+  113 (95% passed). The difference is the runner's environment, and it means the majority of the bare-pytest failures
+  were environmental noise - but the socket failure survives the correct runner, so it is a property of the scratch path
+  and the child's socket, not of how I invoked pytest.
+- **The question therefore stands, now with colcon evidence behind it:** the registered evidence root's scratch prefix
+  is 82 characters before the socket name, past the platform's Unix-socket limit, while the repository rule requires
+  pytest fixtures to keep `TMPDIR`/`TMP`/`TEMP` under that very root. The options remain (1) shorten the socket path in
+  the child (an `AF_UNIX` abstract socket or a short hashed name) - the real fix, touching production IPC code;
+  (2) permit a short, separately registered scratch as the gate's `TMPDIR`, keeping high-frequency evidence in the
+  root - the immediate unblock; (3) shorten the registered root, which the migration rule discourages. What the skill
+  forbids and I will not do is lower the gate to serial or shrink its collection scope to claim a pass.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's scope and runner are now measured - teleop 6 failures of 113 under colcon, all traceable to the
+  socket path - and the demo scope still needs its colcon gate run; Task 10 blocked until the 17 search values are
+  reviewed. No runtime, no package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
