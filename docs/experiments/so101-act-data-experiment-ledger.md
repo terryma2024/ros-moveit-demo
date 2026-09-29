@@ -19361,3 +19361,20 @@ not an inference of mine.**
   **That is a runner change with its own RED/GREEN, not a workaround to paper over in a test.**
 - **State:** HEAD `b542091a`; staged 0; both gate run roots and the short-TMPDIR log retained as deletion candidates; no push,
   no stack, no hardware.
+
+## CP-1202 — The runner's own test file cannot collect in the gate's environment, and that is a finding in itself
+
+- **Wrote the RED CP-1201 called for - a test measuring that the runner's scratch layout leaves room for a socket inside the
+  AF_UNIX budget - and it could not run: pytest reported `ModuleNotFoundError: No module named 'tools'` at **collection**, not
+  from my assertion. My test's import was inside the function and I corrected its path (`parents[3]`, since `parents[2]` is
+  `src` and there is no `src/tools`), and the error persisted, which means **the file's own import convention** is what fails
+  here rather than anything I just added.
+- **I removed my test rather than leave an uncollectable file behind:** a test that cannot even be collected in the environment
+  the gate uses is a landmine for whoever runs that file next, and it would have made every later run of the runner's suite
+  report an error instead of its 42 passes. The finding stays; the file goes back to how the owner had it.
+- **What the next attempt needs first, and it is one read:** how that file imports the runner (its first lines are printed
+  above) - the existing tests must do it in a way that works, so the RED should copy that convention exactly instead of
+  inventing `sys.path` manipulation. **That is the same lesson as CP-1142 and CP-1186, and the third time this stretch that
+  guessing an import cost a round.**
+- **State:** HEAD `09b9cec6`; staged 0; the runner's scratch layout is unchanged, so the gate remains red for the measured
+  path-length reason (CP-1201) until that layout is shortened; no push, no stack, no hardware.
