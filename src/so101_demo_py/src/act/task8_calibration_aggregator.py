@@ -298,7 +298,9 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
         "measurements": report_measurements,
         "checks": checks,
     }
-    report_path = _write(output_root / "calibration-report.json", report)
+    # the canonical name, taken from this module's own DOCUMENTS tuple: the file used to be written as
+    # calibration-report.json, which is a name no definition in the tree uses
+    report_path = _write(output_root / DOCUMENTS[2], report)
     receipt = {
         "schema_version": SCHEMA_VERSION, "kind": "task8_calibration_aggregation_receipt",
         "batch_roots": [str(root) for root in roots],
@@ -310,7 +312,7 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
         # the receipt is the index of a publication, so every document it publishes is vouched for here
         "task8_ready_support_sha256": _digest(support_sample) if support_sample is not None else None,
     }
-    receipt_path = _write(output_root / "aggregation-receipt.json", receipt)
+    receipt_path = _write(output_root / DOCUMENTS[3], receipt)
     outputs = {"calibration_report": report_path, "aggregation_receipt": receipt_path}
     if sample is not None:
         outputs["head_search_qualification"] = sample

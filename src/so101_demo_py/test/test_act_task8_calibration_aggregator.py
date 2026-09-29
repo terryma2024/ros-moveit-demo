@@ -662,3 +662,18 @@ def test_the_receipt_vouches_for_every_document_the_aggregation_publishes(tmp_pa
             continue
         assert _hashlib.sha256(Path(path).read_bytes()).hexdigest() in digests, \
             f"the receipt vouches for {name}"
+
+
+def test_the_aggregation_publishes_exactly_the_canonical_document_names(tmp_path):
+    """Boundary IV item 1: the four documents are named by the module's own DOCUMENTS tuple, not by a private choice."""
+
+    from so101_demo.act.task8_calibration_aggregator import DOCUMENTS, aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _v2_batch(tmp_path / "batch", contract)
+    out = tmp_path / "out"
+    aggregate_task8_calibration((batch,), contract, out)
+    written = sorted(path.name for path in Path(out).rglob("*") if path.is_file())
+    assert written == sorted(DOCUMENTS), f"published {written}"
