@@ -12655,3 +12655,18 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py` keeping the real chain end to end.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-918 — Task 7 module work closed out; handoff refreshed for steps 3-4
+
+- **Appended the completion state to the handoff** (`handoffs/20260930-task7-onward/HANDOFF.md`): the commit chain,
+  the two verified suite results with their commands, an explicit list of what is done and must not be redone, the
+  five ordered steps that remain, and the plan's file list for them - with a reminder to check each teleop file for
+  user-dirtiness before editing, since those were not checked this session.
+- **State at this checkpoint:** Tasks 1-6 committed and green; Task 7's module-level work complete and green
+  (**37 passed** for the module, **76** across the focused set); the remaining Task 7 work is the composition wiring
+  across the demo and teleop packages plus the production-chain test; Tasks 8-10 untouched. No runtime, no package
+  gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained and
+  ineligible, gen4 reserved for Task 10.
+- **Open approval unchanged:** the 17 search configuration values, the three anchors' `neck_start_rad` and the
+  candidate safe interval remain `null` with `requires_approved_value: true`, pending an approved source or an
+  upstream approval step (CP-879, CP-881).
