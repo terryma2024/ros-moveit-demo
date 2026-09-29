@@ -264,10 +264,12 @@ def _sealed_batch(root, payload):
     identity = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
     raw = write_closed_json(Path(root) / "raw" / "records.json", payload)
     files = {"raw/records.json": hashlib.sha256(raw.read_bytes()).hexdigest()}
-    write_closed_json(Path(root) / "batch.json",
-                      {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
-                       "anchors": ["default", "left", "forward"], "batch_sha256": "0" * 64,
-                       "identity": identity, "files": files})
+    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                "anchors": ["default", "left", "forward"], "identity": identity, "files": files}
+    document["batch_sha256"] = hashlib.sha256(_seal_canonical(document)).hexdigest()
+    write_closed_json(Path(root) / "batch.json", document)
     return Path(root)
 
 

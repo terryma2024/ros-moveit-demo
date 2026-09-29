@@ -169,6 +169,14 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
         raise ValueError("BATCH_INVALID")
     if _SHA256.fullmatch(str(recorded.get("batch_sha256"))) is None:
         raise ValueError("BATCH_INVALID")
+    # the seal computes this digest over the document minus itself, which is what makes a sealed batch uneditable, so
+    # the validator recomputes it with the seal's own canonicalisation instead of trusting the field's shape
+    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+
+    recomputed = hashlib.sha256(_seal_canonical({key: value for key, value in recorded.items()
+                                                if key != "batch_sha256"})).hexdigest()
+    if recorded["batch_sha256"] != recomputed:
+        raise ValueError("BATCH_INVALID")
     found = _regular_files(root)
     if set(found) != set(files):
         raise ValueError("BATCH_CLOSURE_INVALID")
