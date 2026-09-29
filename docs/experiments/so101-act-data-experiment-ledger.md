@@ -11431,3 +11431,42 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed yet, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
   no ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-867 — Ruling 2 pre-measurement step done: five-key identities built, contract bound BEFORE measuring
+
+- **The identities document was built from production rules only** - no hand-filled value, no reuse of any
+  earlier report - and written canonically to `runtime-task8l-gen3/measurement/measurement-identities.json`
+  (exact five-key set, compact canonical JSON, fail-closed readback that re-parsed the bytes and compared them):
+
+  | key | value | production rule |
+  |---|---|---|
+  | `source_provenance_sha256` | `59b67aaa1363cb5329f7513c955454315cc4c5b960230e940586eb21a7e58e59` | SHA256 of this generation's provenance document (CP-866) |
+  | `runtime_config_sha256` | `3890d6979bf964084d371f50ae268373681d035b94e1e2163f01af64bc905641` | SHA256 of the raw `config/act/runtime.yaml` |
+  | `anchors_sha256` | `91bbecbfd0914507ff7e55cd554960ce089375b5944809732512e645de42d10b` | SHA256 of the raw `config/act/task8-live-anchors.yaml` |
+  | `contact_policy_fingerprint` | `0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11` | the approved contact policy fingerprint, read from the activation/policy documents and **asserted equal** between `held_cup_transfer_v3.json` and `task6_contact_transition_v1.json` |
+  | `act_profile_sha256` | `0aef56dfaf527e3fa7ffe53e1a073ed417a74d1a690cb18a7c670d7708b8da3f` | `installed_calibration_identity()` against the overlay this generation's runtime loads |
+
+  Identities file sha256: `c11408f8632a1a0965ff5567e72821f60b67e19f57cdb50f58b81283264f32ca`.
+- **The contract was bound BEFORE any measurement, through the existing production function** -
+  `bind_measurement_contract(template, identities, output)` - with no second binding implementation. Result:
+  `runtime-task8l-gen3/measurement/measurement-contract.json`, `contract_sha256`
+  `b7c293ca80195766b8e86167f98256f4bc4620630e7fff4111d209cbb1087f0d`, and the bound document carries
+  `source_hashes.template = 2968b8ca42cd12b90bf0c3a4a256629f8884dac69e57a4e864792221388c95df`
+  (the template's own SHA256) and the identities verbatim. It was then **verified** by
+  `load_measurement_contract(..., expected_hashes=identities)`, which refuses the unbound template and any foreign
+  identity.
+- **Command and interpreter recorded as ruling 2 requires:**
+  `$R/test-venv/bin/python` (the exact installed interpreter), invoked from the worktree with the gen3 install
+  overlay and the dependency overlay sourced; log `gen3/logs/identities.log`.
+- **One production-usage detail found by running rather than assuming:** `installed_calibration_identity()` called
+  without `source_root` raises `CALIBRATION_SOURCE_UNAVAILABLE` when the package is a **copy install** (its
+  default root is the copied package directory, which is not a git tree). Passing the worktree via the function's
+  own `source_root` parameter is what that parameter exists for, and it keeps the profile digest coming from the
+  overlay the runtime loads while the commit comes from the worktree.
+- **Next, in ruling 2's order:** run the fresh MuJoCo measurement against this bound contract (offline aggregation
+  then produces the new `TASK8_READY` report, head-search sample and aggregation receipt), and only after that the
+  artifact preparation, live, and `QUALIFIED` steps. A resource bottleneck at any point stops the run with
+  evidence rather than lowering a threshold.
+- **Boundaries:** no runtime composed yet, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
+  no ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
