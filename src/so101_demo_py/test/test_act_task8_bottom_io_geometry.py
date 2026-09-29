@@ -81,3 +81,48 @@ def test_a_missing_scene_is_refused_by_name(tmp_path):
     with pytest.raises(BottomIOError) as error:
         occluder_geometry_from_model(tmp_path / "absent.xml")
     assert "SCENE_MISSING" in str(error.value)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# the frame source: the model's own camera, rendered headless (CP-1798 proved this host can)
+# ----------------------------------------------------------------------------------------------------------------------
+
+def test_the_frame_source_renders_the_named_camera_at_the_admitted_size():
+    import numpy as np
+
+    from so101_demo.act.task8_bottom_io import ModelFrameSource
+
+    with ModelFrameSource(_scene()) as source:
+        frame = source({"anchor": "default"})
+        assert isinstance(frame, np.ndarray) and frame.shape == (480, 640, 3)
+        assert frame.dtype == np.uint8
+        assert float(frame.std()) > 1.0, "a blank buffer is not a frame the model rendered"
+        # and a DIFFERENT camera gives a different image, which is what proves the name was honoured
+        wrist = source({"camera": "wrist_camera"})
+        assert wrist.shape == frame.shape
+        assert not np.array_equal(wrist, frame), "head and wrist cameras cannot see the same thing"
+
+
+def test_an_unknown_camera_is_refused_by_name():
+    from so101_demo.act.task8_bottom_io import ModelFrameSource
+
+    with pytest.raises(BottomIOError) as error:
+        ModelFrameSource(_scene(), camera="no_such_camera")
+    assert "FRAME_CAMERA_MISSING" in str(error.value)
+
+    with ModelFrameSource(_scene()) as source:
+        with pytest.raises(BottomIOError) as error:
+            source({"camera": "no_such_camera"})
+        assert "FRAME_CAMERA_MISSING" in str(error.value)
+
+
+def test_posing_the_arm_changes_what_the_wrist_camera_sees():
+    import numpy as np
+
+    from so101_demo.act.task8_bottom_io import ModelFrameSource
+
+    with ModelFrameSource(_scene(), camera="wrist_camera") as source:
+        at_rest = source({}).copy()
+        source.pose([0.4, -0.3, 0.2, 0.0, 0.5, 0.0, 0.3])
+        posed = source({})
+        assert not np.array_equal(at_rest, posed), "a gripper-mounted camera must follow the joints"
