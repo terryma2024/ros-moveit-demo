@@ -201,6 +201,18 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
         if not any(entry.startswith(directory) for entry in indexed) and not (per_topic & indexed):
             raise ValueError("BATCH_ANCHOR_MISSING")
 
+    # when an anchor is evidenced the way the driver writes it, the index also closes over the nine phases: the phase
+    # rows are the coverage the contract's matrix depends on, and a missing one is invisible to the closure check
+    phases = ("search", "approach", "close", "micro_lift", "transport", "align", "release", "radial_retreat",
+              "final_check")
+    for anchor in anchors:
+        rows = {entry for entry in indexed if entry.startswith(f"anchors/{anchor}/")}
+        if not rows:
+            continue          # the aggregator's per-topic convention carries no phase dimension
+        for name in phases:
+            if not any(entry.endswith(f"-{name}.json") for entry in rows):
+                raise ValueError("BATCH_PHASE_MISSING")
+
     for relative, digest in files.items():
         if _SHA256.fullmatch(str(digest)) is None or found[relative] != digest:
             raise ValueError("BATCH_CLOSURE_INVALID")
