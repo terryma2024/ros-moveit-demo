@@ -21012,3 +21012,17 @@ not an inference of mine.**
   eight-precondition list exists for.
 - **State:** HEAD `ad8c2f38` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten and fully specified; no
   stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1277 — The one coupling that stands between item 5's specification and its write
+
+- **Everything is specified except how the reusable port gets its recorder, and that is not a detail:** in the chain test the port is
+  constructed **with a recorder** (`FakePort(recorder)`) because the test creates the recorder and the window itself. **Item 5 is the
+  opposite direction** - the **child** constructs the `CaseEvidenceDriver` and hands the port `evidence.window` - so the port would
+  have to seal through a window whose recorder it was never given. Its `bind_live_evidence` and `seal_live_evidence` bodies are printed
+  above; **that is the read that decides whether the port can be reused as-is, needs its recorder derived from the window, or needs a
+  thin subclass in the new file** - and a subclass in my own file is the option that keeps the chain test untouched.
+- **Why I am stopping rather than writing it now:** writing the fixture and *then* discovering this would mean a test that fails for a
+  reason unrelated to what it is testing, which is the failure mode this batch has already paid for four times. **One read, then the
+  write** - and the write is the last step of item 5.
+- **State:** HEAD `70b22503` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
+  nothing deleted, nothing pushed.
