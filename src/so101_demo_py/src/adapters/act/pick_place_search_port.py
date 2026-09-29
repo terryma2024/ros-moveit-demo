@@ -84,6 +84,16 @@ class PickPlaceSearchPhasePort:
             raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_WINDOW_INVALID")
         self._live_evidence_window = window
 
+    def _bind_case_epoch(self, result: dict) -> None:
+        """Give the attached window the epoch of the receipt just verified; refuse a window that cannot take it."""
+
+        if self._live_evidence_window is None:
+            return
+        bind = getattr(self._live_evidence_window, "bind_reset_epoch", None)
+        if not callable(bind):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_WINDOW_INVALID")
+        bind(result["reset_epoch"])
+
     def _stop_or_raise(self, reason: str, request: dict) -> None:
         try:
             confirmed = self.boundary.safe_stop(reason, request)
@@ -140,6 +150,10 @@ class PickPlaceSearchPhasePort:
                     or result["release_epoch"] != 0
                     or result["full_restart"] is not False):
                 raise ValueError("reset proof")
+            # The verified receipt is the only thing that knows this case's reset generation, and nothing has been
+            # recorded yet, so this is where the window's identity learns its epoch - and where a window that cannot
+            # bind at all is refused rather than left to stamp an unknown generation into every sample.
+            self._bind_case_epoch(result)
             # The child already consumed the owner-issued fresh-stack receipt.
             # Final FULL_RESTART qualification additionally requires the parent
             # to verify exact stack and child retirement after this case.
