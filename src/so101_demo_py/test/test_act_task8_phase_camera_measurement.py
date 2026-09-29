@@ -122,3 +122,68 @@ def test_the_formal_entrys_replay_rows_carry_a_measured_observation(tmp_path, mo
             "the driver must hand the evaluator the run's trajectory, camera and target")
         assert observation["samples"], f"{row.name} must retain its per-sample inputs and results"
         assert len(observation["samples"]) > 1, "2 ms sampling over a phase is more than one sample"
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# P1-3 (rereview 5): the four things the verdict requires that this file did not yet assert, each in its own words.
+# ----------------------------------------------------------------------------------------------------------------------
+
+def test_the_shipped_matrix_is_not_a_scaffold():
+    """*"`config/act/task8-phase-camera-matrix-v1.json` still has `phases: []` and `SCAFFOLD_PENDING…`."*
+
+    A matrix that admits no phase cannot bind a measurement, so shipping one must be refused by name rather than
+    loaded and used to substitute defaults.
+    """
+
+    from so101_demo.act.task8_measurement_schema import load_phase_camera_matrix
+
+    with pytest.raises(ValueError) as error:
+        load_phase_camera_matrix()
+    assert "PHASE_CAMERA" in str(error.value).upper(), str(error.value)
+
+
+def test_a_camera_without_intrinsics_is_refused_rather_than_defaulted():
+    """*"Production reads a missing singular `camera` entry and substitutes defaults."*
+
+    `width_px`/`height_px`/`horizontal_fov_rad` are what the projection is made of; inventing them (640/480/1.0 rad)
+    makes `in_frame` a statement about the defaults.
+    """
+
+    document = _matrix_document()
+    for name in ("width_px", "height_px", "horizontal_fov_rad"):
+        document["camera"].pop(name, None)
+    with pytest.raises(ValueError) as error:
+        _evaluator(document)("CLOSE", 0)
+    assert "CAMERA" in str(error.value).upper(), str(error.value)
+
+
+def test_a_target_projected_outside_the_image_is_not_in_frame():
+    """*"marks every positive-depth projection `in_frame=True` without image-bound checks"*.
+
+    Put the cup far off to the side: the pinhole still projects it (positive depth), and the honest answer is that it
+    is outside the image - `u` beyond the width - not that it is visible.
+    """
+
+    document = _matrix_document()
+    far = _target()
+    far["position_m"] = [12.0, 0.0, 0.02]          # ~1 m off-axis with a 0.5 m standoff: far outside a 640 px image
+    observation = _evaluator(document, target=far)("CLOSE", 0)
+    samples = observation.get("samples") or []
+    assert samples, "the phase path was sampled"
+    assert all(sample.get("in_frame") is False for sample in samples), (
+        "a projection outside the image is not in frame: "
+        f"{[sample.get('bbox_px') for sample in samples][:3]}")
+
+
+def test_an_occluder_without_geometry_fails_closed():
+    """*"silently skips absent occluder geometry"*.
+
+    The admitted matrix names five occluders; without their geometry the visibility decision cannot be made, and the
+    evaluator must say so by name instead of returning a measurement that quietly ignored them.
+    """
+
+    document = _matrix_document()
+    with pytest.raises(ValueError) as error:
+        PhaseCameraMatrixEvaluator(document, trajectory=_trajectory(), target=_target(),
+                                   occluder_geometry={})("CLOSE", 0)
+    assert "OCCLUDER" in str(error.value).upper(), str(error.value)
