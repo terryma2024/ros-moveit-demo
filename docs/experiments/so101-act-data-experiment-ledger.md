@@ -25158,3 +25158,18 @@ picture in both directions.**
   lesson as the calibration fixture (CP-1503) and the payload schema (CP-1487).
 - **State:** the boundary chain test is **uncommitted** while red; the `time_axis` production fix and the two corrected fixtures are part of it. Everything else in this stretch is
   committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1509 — The snapshot belongs to the executor, and that explains the last four failures
+
+- **`BrokerPairedExecution.__init__(broker, *, snapshot_port, check_port, reference_port, sim_clock, ...)`** - read at `broker_execution.py:31-32` - **owns a `snapshot_port`**. And
+  `PathProver.prove` reads exactly the members such a port produces (`model_sha256`, the state vectors, `controller_bridge`, `model_qpos`), which the screen test's fixture builds as its own
+  document rather than taking from the raw readback.
+- **So `execute_approach` has one more correction to make:** it currently captures its snapshot from `self.reset.sources.capture(...)` and hands that to `prove`, **but the proof's snapshot is the
+  executor's own snapshot port's document** - the thing the checker will be run against. **Taking it from the readback was my choice, and four consecutive `KeyError`s said so.**
+- **And that is why the test kept needing "one more key":** I was hand-building the wrong document. **The fix is not another field; it is the right producer** - ask the executor (or its
+  `snapshot_port`) for the snapshot it will be checked against, and let the checker inspect that. The goals' held row still comes from the capture, because the goals are about the robot's
+  state, not about the proof's snapshot.
+- **Which leaves the chain test's remaining work small and well-defined:** take the snapshot from the executor's port, and reuse the screen test's `physical_inputs()` for the real model, the real
+  search readback and the real sources - **the fixture that already drives a real screen with a real snapshot.**
+- **State:** the boundary chain test is still **uncommitted** while red; the `time_axis` fix, the fixture corrections and this correction belong to it. No new session, goal, worktree or stack;
+  nothing pushed, nothing deleted; no hardware.
