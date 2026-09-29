@@ -23324,3 +23324,17 @@ not an inference of mine.**
   rather than a hunt.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1408 — Fifth anchor miss, and this time the ledger names the cost as well as the cause
+
+- **What happened:** my replacement was conditioned on the string `READBACK_SOURCES` appearing in line 348 - and it does not, because the earlier
+  edit wrote `row["source_stamps_s"] = dict(stamps)`. **So the script printed the line number, matched nothing, and wrote the file unchanged**;
+  the run reproduces `RGB source skew` exactly. **The line's real content and its neighbours are printed above.**
+- **The rule I wrote at CP-1406 and did not follow: read or grep the target line IN THE SAME CALL that edits it.** This is the fifth miss of the
+  item, and the fix is trivial - replace **line 348** with the four-RGB-stamp construction the port's own check describes
+  (`set(stamps) == {"head", "wrist", "arm", "neck"}`, each within `skew` of the world time, with `skew > 0`).
+- **And a substantive gain from the same read:** `contact_hazard`'s uncut body explained the hazard in one line (`allowed_pairs` must be a
+  `set`/`frozenset`; a dict returns `True`) and simultaneously **disproved** my earlier plan of setting `evidence_loss`/`truncated` True - that
+  combination *is* the hazard. **Reading uncut is what has moved this item; my anchors are what have slowed it.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
