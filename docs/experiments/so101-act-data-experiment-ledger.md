@@ -29809,3 +29809,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   stand-in's dictionaries are the next edit** (test-side), after which P1-3's GREEN tackles the four production
   requirements (frozen matrix, no defaulted intrinsics, image bounds, fail-closed occluders). The demo RED's rate
   measurement is still in flight (`demo4.log` green).
+
+## CP-1774 — The seam's detector stand-in now returns the real type, and the formal entry's test exercises it
+
+- **The edit (test-side, and that is the point):** `_Detector.detect(frame, query)` in
+  `test_act_task8_formal_measurement_entry.py` returned `{"detections": [], "backend": "bottom-io-stand-in"}`; it now
+  builds the production type:
+  ```python
+  return DetectionBatch(model_id="bottom-io-stand-in", weights_sha256="b" * 64, runtime_device="cuda",
+                        inference_latency_ms=0.0, image_width=640, image_height=480, candidates=())
+  ```
+  **Substituting bottom I/O does not license substituting the interface** - which is the verdict's own sentence for
+  P1-1 (*"keep the real interface/return type and replace only bottom I/O"*), applied to the harness that had been
+  quietly avoiding it.
+- **Evidence:** `5 passed` across the formal-entry file and the new `test_act_task8_detector_raw_evidence.py` -
+  so the formal entry now seals **through the real protocol**, with the camera and the client still stood in for.
+- **And the demo RED's rate measurement has its third sample:**
+  ```
+  demo4.log: demo_rc=0     demo5.log: demo_rc=0     demo6.log: (in flight)
+  ```
+  **before the fix 2 failures in 3 full-gate runs; after the fix 2 greens in 2 so far** - the third is running, and
+  the rate will be recorded as a rate rather than as a single green.
+- **State:** **P1-1's second half GREEN and its seam mismatch closed test-side; P1-3's RED stands with its four
+  requirements; the next work is P1-3's GREEN** (a frozen matrix that refuses a scaffold, intrinsics that are not
+  defaulted, image bounds on `in_frame`, and occluders that fail closed).
