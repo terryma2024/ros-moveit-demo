@@ -14524,3 +14524,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries held for the whole session:** no runtime started, no package gate run, nothing pushed, no evidence
   deleted, no hardware touched; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED;
   gen3 retained and ineligible with gen4 reserved for Task 10.
+
+## CP-993 — The missing driver's contract recorded in the handoff
+
+- **Appended the driver contract to `handoffs/20260930-task7-onward/HANDOFF.md`**, assembled from code read rather than
+  inferred: the `observe_capture` call with the exact twelve keys its three validated mappings require
+  (`frame`, `contact`, `measurements`), the `captured` shape that `PickPlacePhysicalReadback.capture` must produce, the
+  fact that the adapter derives aggregates from the **world** evidence via `derive_frame_aggregates` and passes
+  `raw_records` through unchanged, and the requirement that each record entry name its file and digest because
+  `make_raw_reader` will verify exactly those later.
+- **Why this is worth a checkpoint:** it converts "wire the driver" into a call signature with named arguments,
+  validated key sets and a stated close condition - so whoever writes it (the user in their in-flight chain, or a later
+  session once those files are committed) does not have to re-derive any of it, and the two record-shape facts
+  (`pair_key`, the wrist occlusion fields) become readable the moment it exists.
+- **State:** Tasks 1-7 module work complete and green; Task 8's code side complete and green at 50 focused tests; the
+  driver is the remaining dependency and its contract is now recorded; Tasks 9-10 untouched; the goal is armed with a
+  756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
+  candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
