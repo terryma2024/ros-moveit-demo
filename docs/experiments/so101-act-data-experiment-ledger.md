@@ -14884,3 +14884,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   restored file. When the owner commits their side, the merged file is what the Task 9 gate will exercise.
 - **Next:** file 2 of 3, `test/teleop/test_task8_case_execution.py`, where my hunks are the real-sealed-artifact
   fixture change and the negative case; then file 3, the interleaved `pick_place_case_owner.py`.
+
+## CP-1008 — Decision 4, file 2 of 3: the test module's separable hunk is committed, the entangled one is not
+
+- **What was separable:** my negative case
+  `test_a_full_case_whose_artifact_does_not_read_back_is_refused` - it asserts that a full case whose artifact bytes
+  disagree with its recorded digest is refused with `TASK8_LIVE_EVIDENCE_READBACK_MISMATCH` **and that no journal is
+  written**. Its anchor (`def test_case_rejects_forged_phase_result_after_retiring(`) exists in HEAD, so the index
+  content could be built as **HEAD + that function alone**.
+- **What is genuinely entangled and therefore NOT staged:** my fixture edit that makes the full-case fixture write a real
+  sealed artifact - it lives **inside** the owner's modified test function (`test_full_case_stays_ineligible_for_formal_collection`),
+  which their hunks also touch, so no index content can carry mine without theirs. It stays in the working tree and is
+  recorded here rather than forced.
+- **Verified before committing:** index vs HEAD *"1 file changed, 13 insertions(+)"* with **0** of their lines; the
+  **staged content compiles on its own** (written out and compiled via `python -m py_compile`); the worktree was
+  restored byte-for-byte from a copy kept outside the repository; their three lines remain unstaged afterwards; and the
+  teleop suite reports **10 passed, rc=0** (`beh-r600.log`).
+- **Committed `bf306b43`** (`test(act): refuse a full case whose sealed artifact does not read back`), with the file
+  still reporting ` M` - my separable work committed, their work untouched, my entangled edit pending alongside theirs.
+- **Next:** file 3 of 3, `pick_place_case_owner.py`, whose middle hunk interleaves my three window-invalidate lines with
+  the owner's child-retirement block moved before the stack - the case this round's technique was built for.
