@@ -20002,3 +20002,29 @@ not an inference of mine.**
 - **State:** the RED is **uncommitted in the working tree while red** (the owner's rule for new tests), alongside the `_invoke`
   parameter that makes the seam omittable; no production source changed yet in this batch; HEAD `3a58418f` plus this checkpoint;
   no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1229 — Astra item 1 GREEN: the CLI composes the driver instead of dead-ending
+
+- **GREEN at the boundary the RED was written for: 3 passed** (`experiments/gate6-batch3-py-gate/rev1-green.log`) - the new
+  composition test plus the two pre-existing descriptor tests, so nothing was traded away to get there.
+- **What changed, and it is one seam plus one call site:**
+  - **new** `src/act/task8_production_composition.py`: `build_production_measurement_driver(*, context, providers=None)`. It is the
+    single trusted composition. The descriptor carried by the context is the **only** authority for the device policy (checked with
+    the shared `require_runtime_descriptor`, so CUDA with no CPU fallback), `resource_binding.bound_at_entry` must be true -
+    **binding happens here and only here** - the generation must be present for scoped cleanup, and the **stack is built once** and
+    handed to the driver rather than being re-created per anchor. The seam is `SO101_TASK8_PROVIDER_SEAM` (`module:factory`),
+    deliberately at the **external I/O** level: tests stand in for the ROS/MuJoCo stack, clock, detector, controller port and
+    phase-camera evaluator, while the composition's own ordering and rules stay under test.
+  - **CLI**: the `else` branch now passes `runtime_descriptor=_document["runtime_descriptor"]` - the **same parsed document** the
+    CUDA policy was enforced on, not a re-read of the file (Astra item 2's first half) - and calls the composition instead of
+    `production_driver()`. The `--driver` branch is untouched and still described as the test-only injection.
+- **How the test avoids the vacuous pass I caught at CP-1227:** it asserts a **positive** fact - the providers seam was actually
+  built, recorded by the fake factory writing a file - not merely the absence of one error message. The absence assertions are
+  kept as secondary guards only.
+- **Items still open in this batch: 2** (make `runtime_descriptor` required and delete the `None` bypass; extract the full
+  production shape validator from `head_search_binding`; add the missing/extra/bad-camera/bad-motion/CPU negatives), **3** (one seal
+  owner - the CLI's `close_measurement_batch` must go, the driver must use the real contract identity/schema, descriptor into the
+  hash index, `anchors` schema-compatible; RED is a real driver output passing `validate_closed_batch` and then the aggregator),
+  **4** (per-root authoritative indexed descriptor in the aggregator), **5** (the child-driven Boundary V fixture).
+- **State:** commit for item 1 made with the test already green, per the owner's rule; HEAD at that commit plus this checkpoint;
+  no stack, no hardware, nothing deleted, nothing pushed.
