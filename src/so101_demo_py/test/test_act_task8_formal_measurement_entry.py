@@ -98,13 +98,23 @@ class _Client:
 
 
 class _Detector:
-    """The REAL detector protocol: `detect(frame, query)`, and deliberately no `__call__`."""
+    """The REAL detector protocol and the REAL return TYPE: `detect(frame, query)` -> `DetectionBatch`.
+
+    P1-1 (rereview 5): this stand-in used to return a dictionary (`{"detections": []}`), which is why the protocol
+    mismatch between the production detector and the driver stayed invisible - the adapter passed `detect()` through
+    unchanged and only a real `DetectionBatch` fails to serialize. Substituting bottom I/O does not license substituting
+    the interface, so this now builds the production type, with readers for the parts the record must carry.
+    """
 
     cold_start_latency_ms = 1.0
 
     def detect(self, frame, query):
         del frame, query
-        return {"detections": [], "backend": "bottom-io-stand-in"}
+        from so101_demo.core.detection import DetectionBatch
+
+        return DetectionBatch(
+            model_id="bottom-io-stand-in", weights_sha256="b" * 64, runtime_device="cuda",
+            inference_latency_ms=0.0, image_width=640, image_height=480, candidates=())
 '''
 
 
