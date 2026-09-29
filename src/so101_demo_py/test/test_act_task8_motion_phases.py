@@ -68,7 +68,8 @@ def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=Tru
         approach_screen=screen)
     if with_ik:
         boundary.motion_target_joints = lambda target: (calls.append(("ik", target)) or (0.5,) * 5)
-    for name in ("sequence_phase", "sequence_facts", "_motion_facts", "_release_facts", "_gripper_open_rad"):
+    for name in ("sequence_phase", "sequence_facts", "_checked_aggregates", "_motion_facts", "_release_facts",
+                 "_gripper_open_rad"):
         setattr(boundary, name, MethodType(getattr(PickPlaceSearchBoundary, name), boundary))
     return (boundary, ticket, capture,
             _template() if with_template else None,
