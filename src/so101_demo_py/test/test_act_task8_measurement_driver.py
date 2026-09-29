@@ -185,3 +185,80 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
     assert stack.closed == list(ANCHORS), "every anchor is closed"
     assert stack.cleaned == [(ANCHORS[-1], "generation-1")]
     assert len(phases) == len(ANCHORS) * 9, f"nine phases per anchor, saw {len(phases)}"
+
+
+def _measurement_context(tmp_path, generation="generation-1"):
+    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+
+    return CalibrationMeasurementContext(
+        generation=generation, contract_sha256="a" * 64, measurement_plan_sha256="b" * 64,
+        safe_interval_rad=(-0.1, 0.1), candidate_sha256="c" * 64, policy_sha256="d" * 64,
+        driver_source_sha256="e" * 64, controller_generation="controller-1",
+        broker_generation="broker-1", evidence_root=str(tmp_path),
+        resource_binding={"bound_at_entry": True, "cpu_cores": 8, "gpu_device": "0"})
+
+
+def test_a_failed_anchor_keeps_a_cleanup_receipt_in_the_sealed_batch(tmp_path):
+    """Boundary II: a failure seals INVALID, cleans up once for this generation, and keeps the receipt as evidence."""
+
+    from so101_demo.act.task8_measurement_driver import ANCHORS, Task8MujocoMeasurementDriver
+
+    cleaned = []
+
+    class Stack:
+        def launch(self, anchor):
+            pass
+
+        def close(self, anchor):
+            pass
+
+        def cleanup(self, anchor, generation):
+            cleaned.append((anchor, generation))
+
+    class Clock:
+        def monotonic(self):
+            return 0.0
+
+    def detector(request):
+        raise RuntimeError("DETECTOR_UNAVAILABLE")
+
+    driver = Task8MujocoMeasurementDriver(
+        stack=Stack(), clock=Clock(), detector=detector, controller=lambda command: {"accepted": True},
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+    sealed = driver.run(_measurement_context(tmp_path), tmp_path / "batch")
+    document = json.loads(Path(sealed).read_text())
+
+    assert document["status"] == "INVALID"
+    assert cleaned == [(ANCHORS[0], "generation-1")], "cleanup runs once, for this case's own generation"
+    text = json.dumps(document)
+    assert "cleanup" in text, "the sealed batch keeps the cleanup receipt"
+    assert ANCHORS[0] in text and ANCHORS[1] not in text, "no later anchor is attempted after a failure"
+
+
+def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
+    """A cleanup that fails must be recorded as contamination rather than escaping as an unattributed exception."""
+
+    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+
+    class Stack:
+        def launch(self, anchor):
+            pass
+
+        def close(self, anchor):
+            pass
+
+        def cleanup(self, anchor, generation):
+            raise RuntimeError("CLEANUP_REFUSED")
+
+    class Clock:
+        def monotonic(self):
+            return 0.0
+
+    driver = Task8MujocoMeasurementDriver(
+        stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
+        controller=lambda command: {"accepted": True},
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+    sealed = driver.run(_measurement_context(tmp_path), tmp_path / "batch")
+    document = json.loads(Path(sealed).read_text())
+    assert document["status"] == "INVALID"
+    assert "contaminat" in json.dumps(document).lower(), "a failed cleanup is recorded as contamination"
