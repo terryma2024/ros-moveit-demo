@@ -21220,3 +21220,22 @@ not an inference of mine.**
   typing. **One edit to the fixture, one run, and item 5 either passes or names the next condition.**
 - **State:** the child-driven test file remains **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1287 — The fixture now passes the production binder; one artefact path is missing
+
+- **Real progress, and it is the kind that matters:** reusing the admission suite's `_write_policy` (given the **evidence root**, so its
+  documents land where the binder requires them) took the fixture **past the binder, past the policy validators and past the child's
+  own construction checks** - it now fails on a **missing file** rather than on a refused document:
+  ```
+  FileNotFoundError: .../pytest-of-matianyi/pytest-0/test_the_child_runs_a_full_case.../<something>
+  ```
+  **That is the first time this fixture has reached the production code with everything accepted**, and it is what CP-1285/1286 predicted
+  reusing the admission fixtures would do.
+- **The remaining fault is a path I did not create:** the traceback names a file under the test's own tmp directory that does not
+  exist. `_write_policy`'s return block (lines 66-78 of the admission suite) is printed above, which is what decides whether the receipt
+  path it hands back is the one it wrote - **and if it is, then the missing file is one of my own four raw artefacts, whose names the
+  binder does not fix but the child's readers might.**
+- **One print settles it:** list `evidence_root` and the artifact directory at the moment of failure and compare against what the
+  binder was given. **That is the next action, and it is a print rather than a redesign.**
+- **State:** the fixture is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing deleted, nothing
+  pushed.
