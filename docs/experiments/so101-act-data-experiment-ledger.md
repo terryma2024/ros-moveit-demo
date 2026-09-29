@@ -23384,3 +23384,21 @@ not an inference of mine.**
   satisfied; this is the last collaborator before the port returns.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1412 — LANDMARK: the port's entire validation passes and the PRODUCTION SEAL is now running
+
+- **The refusal changed layer completely:** from `TASK8_SEARCH_EVIDENCE_INVALID` (the port refusing my evidence) to
+  **`TASK8_LIVE_EVIDENCE_SAMPLE_INVALID`** from the production recorder. **That means the port validated the whole readback end to end - scope,
+  contact hazard, RGB scope, RGB skew, controller reference, neck path, planning scene - completed its phase document, and handed the case to the
+  production seal path, which is exactly what P1-5's first complaint was about.**
+- **And the remaining refusal is the right one to have:** the recorder validates the **samples** it records, and my substituted boundary produces
+  readbacks without **recording live-evidence samples** - so the recorder is being asked to seal a case it never saw evidence for. **That is
+  precisely the case-level evidence the reviewer's second half demands (the seven indexed assertions), and it is now the next piece of work rather
+  than a hidden prerequisite.**
+- **The path that got here, for the packet's benefit:** one `isinstance` line my truncated reads had hidden (CP-1403) explained thirty rounds of
+  refusals; after it, production named every field in turn - the sixteen-field `SimulationEvidence`, the `ObjectState` with an integer `body_id`,
+  the image-array observation, the four RGB stamps, the frozenset of allowed pairs, the controller reference's three vectors, the scene's `qpos`,
+  the neck index and tolerance - **and every single one was a fixture gap, never a production defect.** The two production defects found in this
+  batch were elsewhere (the INVALID-batch schema, CP-1329) and both are fixed.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
