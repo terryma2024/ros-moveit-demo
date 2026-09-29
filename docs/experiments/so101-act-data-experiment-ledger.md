@@ -12298,3 +12298,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   check rather than a presence check.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-903 — Task 6 RED established (deterministic offline aggregator)
+
+- **Test file created:** `test/test_act_task8_calibration_render.py`, covering the plan's Task 6 requirements:
+  - **byte determinism** - two renders of one immutable fixture with the same canonical `publication_root` produce
+    identical bytes, and exactly the four documents (`head-search-qualification.json`,
+    `task8-ready-support.json`, `task8-ready-calibration.json`, `aggregation-receipt.json`);
+  - **publishing** writes exactly those bytes, and every receipt `sample_path` is absolute, present on disk, and
+    matches its `sample_sha256`;
+  - **refusals** - a sealed `INVALID` batch, a batch missing an anchor, and a malformed identity are refused rather
+    than partially aggregated;
+  - **unindexed reads rejected** - a file present on disk but absent from the index must not influence the result;
+  - **label vs number mutation** - mutating a raw label leaves the rendering unchanged, while mutating a raw number
+    changes it (raw number/mask mutation must fail the digest or the recomputation);
+  - **time reversal rejected** - anchors presented out of order fail with `ANCHOR_ORDER`.
+- **RED run:** `python -m pytest -q -p no:cacheprovider test/test_act_task8_calibration_render.py
+  test/test_act_task8_calibration_aggregator.py` -> **exit code 1, elapsed <1 s**, result **8 failed, 14 passed**
+  (`beh-task6-red.log`), the failures being `ImportError: cannot import name 'render_task8_calibration'` plus the
+  publish path - exactly the boundary the plan predicts for this step. The 14 passes are the existing aggregator
+  tests, whose behaviour the closure must preserve.
+- **Next:** implement `render_task8_calibration(batch_root, contract, publication_root)` and
+  `publish_task8_calibration(rendered, publication_root)` with canonical bytes and atomic writes, replace the
+  labelled helpers at the aggregator's call site, run `require_gate(report, "task8_live")` and
+  `validate_head_search_binding(runtime, report)` against the published files, then GREEN and the plan's four-file
+  commit.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
