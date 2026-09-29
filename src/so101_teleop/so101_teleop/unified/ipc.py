@@ -77,6 +77,8 @@ class _PickPlacePayload(_ActPayload):
     # the gripper's closed position is the case's own admitted target: CLOSE must not invent it, and a case that
     # omits it fails closed by name when CLOSE runs
     gripper_closed_rad: float = Field(gt=0)
+    # and the time it takes: a duration the phase would otherwise have to invent
+    close_duration_s: float = Field(gt=0)
     manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     runtime_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     contact_policy_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
