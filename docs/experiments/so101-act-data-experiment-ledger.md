@@ -22139,3 +22139,18 @@ not an inference of mine.**
   still raises.
 - **State:** nothing changed yet in this round's source; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing
   deleted, nothing pushed.
+
+## CP-1336 — Why P1-4's RED needs a hand-built root: the fixture's two descriptor branches are exclusive
+
+- **Read from the builder:** the payload's `head_search` block is written **only** when
+  `descriptor is not None and not descriptor_as_index_file`, while the **indexed** `runtime-descriptor.json` is written **only** when
+  `descriptor_as_index_file` is true. **The two branches cannot both fire**, so no existing test can produce the production combination -
+  a payload that carries the inner block **and** a sealed, indexed descriptor. **That is precisely why the reviewer found the existing
+  positive coverage "omits the payload descriptor and misses this bug".**
+- **So the RED is a hand-built root rather than a new fixture mode:** pass a payload dict that **itself** contains
+  `"head_search": <inner block>` (the builder writes the caller's payload verbatim) together with `descriptor=<the full document>` and the
+  indexed branch on. Today the aggregator compares the inner block against the whole document and raises `CALIBRATION_IDENTITY_MISMATCH`.
+- **And the GREEN remains the two parts CP-1335 fixed:** compare at **one** layer, and validate each sealed descriptor with
+  `validate_head_search_shape`.
+- **State:** nothing changed in the source this round; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing
+  deleted, nothing pushed.
