@@ -19895,3 +19895,29 @@ not an inference of mine.**
   reversible and produced evidence. **I am stopping rather than inventing a fifth thing**, because the next real actions - starting a
   MuJoCo/CUDA stack or widening Boundary V - are exactly the two the owner fenced off.
 - **State:** HEAD `f97dc3fa`; staged 0; ledger current; every artefact retained; no push, no stack, no hardware.
+
+## CP-1225 — Astra verdict CHANGES_REQUIRED: five P1 items, one integration revision batch
+
+- **The independent GPT-6 Astra / High final implementation review is IN, and its verdict is `CHANGES_REQUIRED`.** All five
+  findings are P1 and, per the owner, inside the already approved design/plan. The dependency block at CP-1224 is therefore
+  **resolved by the verdict**, the goal is resumed and active, and the revision batch starts here. **Task 10, the MuJoCo/CUDA
+  stack, the production measurement and hardware remain unauthorised** until a green re-review.
+- **The five items, each with the RED its own boundary needs, in the order they must be solved:**
+  | # | finding | RED at the real boundary | GREEN |
+  | --- | --- | --- | --- |
+  | 1 | the measurement CLI calls `production_driver()` with no arguments while the driver needs stack/detector/controller/phase_camera/clock, so the only path is `PRODUCTION_DRIVER_WIRING_PENDING` | a test that drives the CLI entry **without** `--driver` and reaches a wired driver through the single trusted composition | one production composition: single MuJoCo/CUDA stack, CUDA with no CPU fallback, resource binding only at the entry, generation-scoped cleanup. Tests may fake **external I/O seams only**; injecting a fake driver through CLI `--driver` must not count as production wiring |
+  | 2 | the runtime descriptor is not carried end to end and the shared validator is too weak (default `None` bypass) | CLI → context → driver identity: one parse, one frozen descriptor, positive path; plus missing/extra field, bad camera, bad motion, CPU/fallback negatives | the CLI parses once and passes the **same frozen descriptor** into `CalibrationMeasurementContext` as a required field (serialisation kept where needed); the `None` default bypass is deleted; `task8_artifact_bundle`'s shared rule **reuses or extracts the full production shape validator** from `head_search_binding`, covering closed `head_search`, camera, motion, weights, versions, extra fields and CUDA/fallback |
+  | 3 | two seal owners: the driver writes `batch.json` and the CLI then calls `close_measurement_batch`, which must raise `MEASUREMENT_BATCH_ALREADY_CLOSED`; the driver's own batch also lacks `batch_sha256`, the full ten-segment identity, an indexed descriptor and schema-compatible `anchors` | **a real driver output fed straight into `validate_closed_batch` and then into the aggregator** - found by the pipeline, not by an `rglob` over JSON | exactly one seal owner, using `task8_measurement_schema`'s real contract identity/schema, descriptor inside the hash index, INVALID/cleanup semantics preserved, no second seal |
+  | 4 | the aggregator can treat `measurements.json.head_search` as a second authority or fallback | a multi-root case where one root lacks a sealed/indexed descriptor must fail closed; the sealed descriptor with identical payload must pass | **every** batch root must carry the sealed/indexed descriptor with the same canonical shape and identity, compared at the same level; the four existing negatives kept |
+  | 5 | Boundary V needs the child-driven production-chain fixture Astra explicitly asked for (decision (c), now in scope) | a fixture that drives `_run_pick_place` through the normal construction/loading entry with the real runner, execution adapter, recorder/window seal, case journal and the trusted campaign→qualification aggregator | only ROS/MuJoCo/controller/process I/O replaced; **no `object.__new__`, no hand-written final result/artifact index/journal, no FakePort sealing its own evidence**; the readback must come from sealed/indexed records and yield the **real gripper-open command event**, three adjacent support rows in the **same release epoch**, SEARCH/FINAL_CHECK, both retirement receipts and the journal hash. `released=True` does not substitute for an open event, and the first three rows after a fixed identity do not make a release window |
+- **Method for the batch, fixed now so the rounds stay honest:** build each item's RED so it can enter **its own real boundary**, then the
+  minimum implementation to GREEN, then move on - **no full suite per item**. After all five are GREEN, run the integration boundary
+  **once**: fresh, previously nonexistent NVMe scratch under this evidence root with `TMPDIR`/`TMP`/`TEMP` verified through the exact
+  interpreter, `workers = min(8, CPU)`, one full ordinary `so101_demo_py` and one full ordinary `so101_teleop` pytest-xdist/package
+  gate each, benchmark excluded, keeping JUnit, exit codes, skip counts, elapsed and provenance.
+- **Consequence recorded in advance, because it is a rule and not a detail:** any controlled source, config or policy change
+  invalidates earlier Task 8L / bundle / live / QUALIFIED results, so those can only be redone from a **new run root** - the existing
+  evidence stays as history and is not reused as if nothing changed.
+- **State before the batch:** HEAD `c1bd765f`, staged 0, tree 31 modified + 13 untracked (owner's work untouched), both gates green
+  as of CP-1211/CP-1221, `runtime-task8l-gen2`/`gen3` retained and `gen4` not yet created, no stack, no hardware, nothing deleted,
+  nothing pushed.
