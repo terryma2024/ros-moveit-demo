@@ -24214,3 +24214,26 @@ not an inference of mine.**
   3. **a replay of the same case is refused** with `TASK8_CASE_JOURNAL_INVALID` by the no-overwrite rule - **published evidence cannot be replaced by
      re-running the case**, which is the artifact-layer half of the review's tamper concern.
 - **State:** committed; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1462 — Provenance and the RED anchor for this batch, written because the skill requires them per record
+
+- **Provenance for every checkpoint in this batch (CP-1444 - CP-1461), stated rather than implied:**
+  | field | value |
+  | --- | --- |
+  | source commit | the checkpoint's own commit in `docs/experiments/so101-act-data-experiment-ledger.md`; the code tested is `9c6c5ca4` onward, HEAD `05149e2a` at the time of writing |
+  | worktree / branch | `.worktrees/so101-act-data-0917a` / `codex/so101-act-data-0917a` |
+  | runtime executable | `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python` (verified executable, pytest 7.4.4, xdist 3.8.0) |
+  | install overlay | `$W/install/setup.bash` over `/opt/ros/jazzy/setup.bash` and `$R/i/setup.bash`; the adapter's build copy **resolves to the src file** after the CP-1450 rebuild |
+  | `ROS_DOMAIN_ID` | **unset** - and deliberately so: this batch starts **no** ROS graph and no `/move_group` |
+  | `GZ_PARTITION` | **unset** - this batch starts **no** Gazebo |
+  | evidence root | `/data/work/so101-evidence/act-data/20260924-fbc25063-resume` (the task's single registered root) |
+  | scratch | a fresh, previously nonexistent `scratch/<run>/tmp` per run, with `TMPDIR`/`TMP`/`TEMP` verified through the exact interpreter |
+- **The RED anchor, found rather than remembered:** the pre-fix focused runs are retained in `experiments/gate6-batch3-py-gate/` (**102 `p15-*.log`
+  files**), and **`p15-inner5.log` carries the first `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID`** - the port handing its three-key document to the 24-key
+  recorder. **So the port defect's RED is a retained log, and its GREEN is the focused file (7 passed) plus the boundary gates (CP-1450).**
+- **Honest boundary on that claim:** the **unit-level** contract test (CP-1460) was written **after** the fix, so it has no separate RED of its own; the RED
+  it protects is the end-to-end one in `p15-inner5.log`. **I did not re-break production code to manufacture a second RED, because the worktree carries the
+  owner's uncommitted work and re-breaking it is a worse risk than an honestly-labelled absence.**
+- **This checkpoint exists because the skill requires source commit, overlay, runtime executable, `ROS_DOMAIN_ID` and `GZ_PARTITION` per record** - the
+  earlier checkpoints in this batch named commits and the interpreter but left the last two implicit. **Stating "unset, because no stack was started" is
+  the honest form of that field, not a blank.**
