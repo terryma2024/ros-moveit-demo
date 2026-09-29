@@ -30161,3 +30161,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   a boolean mask; and the aggregator's refusal path is exercised by the RED rather than swallowed.
 - **State:** **P1-2: emission wired and reaching the formulas; the per-field shape table is the next edit.**
   P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
+
+## CP-1786 — The chain now walks field by field, and each step names the next shape
+
+- **The progression, three refusals in a row, each one further into the aggregator:**
+  ```
+  1.  formulas.py:51   RAW_EVIDENCE_REQUIRED: no raw measurements in payload   -> nothing was emitted
+  2.  formulas.py:214  TypeError: list indices must be integers or slices      -> emitted, wrong shape for one field
+  3.  formulas.py:224  TypeError: '<=' not supported between instances …       -> shape right, the LIMIT's type is not
+  ```
+  **Step 3 is `vertical_bounds_px`**, which reads bbox centres and compares them against a configured **interval** - so
+  the `configured_limit` the contract carries for that field is not the scalar my emission passes through unchanged.
+- **And the enumeration that makes this finite is now in hand:** the contract declares **21 head-search fields plus 7
+  support fields**, and the formulas module has one function per field, reading its evidence either as a list, as a
+  document (`DOCUMENT_EVIDENCE_FIELDS`, declared this round and asserted against the formulas' own behaviour by a test
+  that will be added with it), or - as step 3 shows - **as a list of items whose limit is itself a structured value.**
+  **So "make the driver emit what the aggregator requires" is a bounded table of 28 fields, not an open-ended chase**,
+  and each step of it is arriving with a named error rather than a guess.
+- **What stands after this round:** the shape declaration exists in the formulas module (`DOCUMENT_EVIDENCE_FIELDS`)
+  and the driver consults it, so **the two families are presented differently by construction**; the contract reaches
+  the driver; the emission is at write time with no post-seal change; and the stand-in detector finds the cup.
+- **State:** **P1-2: emission reaches and now steps through the formulas; the per-field limit shapes are the next
+  table.** P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6
+  remain.
