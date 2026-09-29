@@ -20273,3 +20273,34 @@ not an inference of mine.**
   "one owner" is the requirement. The CLI keeps its `INVALID` ledger append and its cleanup semantics; only the second seal goes.
 - **State:** HEAD `37c63ce1` plus this checkpoint; no source changed yet for item 3; no stack, no hardware, nothing deleted,
   nothing pushed.
+
+## CP-1242 — The schema's contract, read exactly, against the driver's `_seal`
+
+- **The schema's own declarations:**
+  ```python
+  BATCH_KIND = "task8_calibration_batch"
+  BATCH_STATUSES = ("CLOSED", "INVALID")
+  _BATCH_REQUIRED = frozenset({"schema_version","kind","status","identity","files","anchors","batch_sha256"})
+  _BATCH_KEYS = _BATCH_REQUIRED | {"cleanup", "contamination"}
+  class MeasurementIdentity:  def require(document) -> dict      # raises MEASUREMENT_IDENTITY_INVALID
+  def write_closed_json(path, document) -> Path                   # the schema's own atomic writer
+  ```
+- **And the driver's `_seal`, read in full, against that contract - every one of Astra's four defects is visible:**
+  | schema requirement | driver today |
+  | --- | --- |
+  | keys ⊆ `_BATCH_KEYS` | writes an **`index`** key, which is **outside** the allowed set - a `BATCH_INVALID` on its own |
+  | `batch_sha256` present | **absent** |
+  | `identity` passing `MeasurementIdentity.require` (ten segments) | four members only: `source_commit`, `config_sha256`, `source_provenance_sha256`, `measurement_plan_sha256` |
+  | the descriptor among `files` | `runtime-descriptor.json` is written by `run` but **never indexed** |
+  | `anchors` in the schema's shape | the driver's own list shape |
+  It also hand-rolls its own atomic write (`O_EXCL` + `fsync` + `os.link`) instead of the schema's `write_closed_json`, which is the same job done twice.
+- **The fix is now fully specified, and it is a rewrite of one method toward the schema rather than a patch:** build the document from
+  `_BATCH_KEYS`, take `identity` from the schema's own identity machinery built from the **contract plus the context**, index the
+  descriptor alongside the anchor payloads, shape `anchors` as the schema expects, and write it with `write_closed_json`. **Then delete
+  the CLI's second seal (`close_measurement_batch`, CP-1241), keeping its `INVALID` ledger semantics and cleanup.** The RED stays as
+  specified at CP-1240: real driver output → `validate_closed_batch` → aggregator, no `rglob`, no hand-built batch.
+- **What still needs one small read before the rewrite:** the ten member names `MeasurementIdentity.require` demands (lines 35-56) and
+  what `write_closed_json` does about `batch_sha256`. **Both are in the file I have already located; guessing them would repeat the
+  mistake this batch has already paid for four times.**
+- **State:** HEAD `5fe2ea8e` plus this checkpoint; no source changed yet for item 3; no stack, no hardware, nothing deleted,
+  nothing pushed.
