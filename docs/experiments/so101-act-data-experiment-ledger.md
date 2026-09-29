@@ -11781,3 +11781,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** no runtime started, no package gate, no evidence deleted, no push, no hardware; formal accepted
   0/0/0; `collection_*` NOT_PROVISIONED. `runtime-task8l-gen3` remains retained and ineligible; no new generation
   has been allocated.
+
+## CP-880 — Contract v2 binding extended and green (20 passed); candidate document still blocked
+
+- **`act/task8_measurement_contract.py` extended, additively:** new `SCHEMA_VERSION_V2 = 2`, the ten-member
+  `IDENTITIES_V2`, `require_v2_identity()` (git SHA for `source_commit`, 64-hex for the other nine members),
+  the v2 template/bound key sets, and a version branch in `bind_measurement_contract` that also **loads the
+  template before validating the identity** so the version is known first. `load_measurement_contract` now
+  accepts the v2 bound key set at version 2 while the v1 path keeps version 1 - the existing v1 behaviour is
+  untouched.
+- **Verified:** `test_act_task8_measurement_contract.py` + `test_act_task8_calibration_aggregator.py` together
+  report **20 passed, rc=0** (`beh-task1-green3.log`), so the extension neither broke v1 nor the aggregator.
+- **Also complete this stretch:** `config/act/task8-calibration-search-policy-v1.json` authored and bound to
+  production sources by digest (`search.py 1d9ea14e…`, `head_search_binding.py 6e19cb8c…`,
+  `ros_search.py 7ab4d8fa…`, `task8-live-anchors.yaml 91bbecbf…` - the last matching the anchors digest already
+  bound in the measurement identities), marked `SCAFFOLD_PENDING_APPROVED_VALUES`.
+- **Task 1 remaining:** (a) `task8-calibration-search-candidate-v1.json` - **blocked by CP-879**, because neither
+  the approved design nor the plan enumerates its 17 search configuration values and the only concrete numbers in
+  the tree are a teleop test fixture; (b) the contract-schema update for v2; (c) the Step 4 commit with the
+  plan's exact `git add` list.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED; `runtime-task8l-gen3` retained and ineligible.
