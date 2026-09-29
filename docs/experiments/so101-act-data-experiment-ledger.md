@@ -13252,3 +13252,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7 substantially complete with the artifact lifecycle proven end to
   end; Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED; gen3 retained and ineligible, gen4 reserved for Task 10.
+
+## CP-943 — Teleop chain fixtures read; the full-chain test's design is fixed
+
+- **Read `_prepared` in `test_task8_case_execution.py`** (the helper the remaining chain test should build on
+  rather than reinvent): it builds a **real** live manifest through `build_task8_live_manifest` with all three anchors
+  and their digests, writes it with `write_new_manifest`, computes its sha256, creates the stack and child roots,
+  constructs the campaign context, and returns `(spec, owner, journal, events)` with a fake owner whose
+  `run_pick_place` is defined at line 66 and whose lifecycle appends to `events` (`start`, `execute`, `finish`). It
+  also already supports `start_fails`, `cleanup_fails` and `omit_child_receipt`, so the failure paths are reachable
+  from the same fixture.
+- **The full-chain test's design, therefore, is:** build a fake **port** that owns a real `LiveEvidenceWindow` over a
+  real `Task8LiveEvidenceRecorder` in a temp evidence root, expose it as `owner.worker.live_evidence_window`, run the
+  **real** `run_pick_place_case(spec, case_id, owner, journal_path)`, and assert the chain end to end: the journal row
+  is published with the artifact's path and sha256 (read back byte-exact), and the window is left **invalid-sealed with
+  reason `OWNER_RETIRE`** by the owner's retirement path - which is exactly the insertion carried uncommitted in the
+  user's `pick_place_case_owner.py`, so the test proves that insertion works through the real call chain rather than
+  in isolation.
+- **Why this is recorded rather than written now:** the test needs `owner.worker` to expose the window, and the
+  existing fake owner is inside a **user-dirty** test module. The honest options are either to extend that fixture
+  (a user-dirty file, changes left uncommitted) or to build a small local owner double inside my own test file - and
+  choosing between them is exactly the kind of decision worth taking deliberately rather than at the end of a long
+  round. The design above is complete enough that either choice is mechanical.
+- **State:** the plan's Task 7 Step-4 command passes at **51 passed**; all Task 7 increments are green; three files
+  carry my additive changes uncommitted inside the user's dirty set; Tasks 8-10 untouched; no runtime, no package
+  gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
