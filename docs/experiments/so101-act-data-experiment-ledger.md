@@ -13476,3 +13476,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
   set 244); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
   gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-953 — OwnerKey signature read; the full-chain fixture is fully specified, construction is the next step
+
+- **`OwnerKey` is a frozen dataclass in `src/so101_teleop/so101_teleop/unified/contracts.py:53`** with five fields:
+  `pid: int`, `pgid: int`, `started_ticks: int`, `argv_sha256: str`, `environment_sha256: str`. The retirement
+  receipt checks the first four (`leader_pid`, `pgid`, `started_ticks`, `argv_sha256`) and ignores
+  `environment_sha256`, so a fixture can construct owner keys directly and write receipts that match them.
+- **With that, every prerequisite for the full-chain test is known** - nothing about it is guessed:
+  | Piece | Specification |
+  | --- | --- |
+  | `spec` | `kind == "task8_full"`, `payload["evidence_root"]` matching the context, `payload["children"]` with exactly one dict for `ActChildLaunch(**item)` whose `campaign_id`/`execution_generation` match the context (CP-949) |
+  | `workload_service` double | returns a context with `workload_kind == "task8_full"`, `worker_count == 1`, `evidence_root`, `campaign_id`, `execution_generation` (CP-949) |
+  | `child_owner` double | `start(context, launches, artifacts=...)` returning one port with `.launch == child` and `.client.owner` an `OwnerKey`; `stop_owned()` (CP-949, CP-951) |
+  | `stack_factory` double | returns a stack with `launch.evidence_root`, `.owner` (an `OwnerKey`) and `.process`; `stop()` (CP-949, CP-951) |
+  | `worker` | the real port, carrying the recorder and window, with `cancel(...)` returning `{"stopped_confirmed": True}` and `run_pick_place(request)` returning a result whose `live_evidence_artifact` reads back (CP-951) |
+  | receipts | `root/cleanup-receipt.json` written for both the child and stack roots per CP-952, with the child root having **no** socket or ready files present |
+  | assertions | the journal row carries the artifact's path and digest, and the window is left `INVALID` with reason `OWNER_RETIRE` |
+- **Why the reconnaissance was worth nine rounds of reading before writing:** the owner validates collaborator
+  *identity* (campaign, generation, owner key) and *proof files* on disk, so a fixture built from intuition would have
+  failed at a scope check - and, as CP-948 established, one that skipped the real owner would have passed while
+  proving nothing. The construction itself is now mechanical.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
+  set 244); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
+  gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
