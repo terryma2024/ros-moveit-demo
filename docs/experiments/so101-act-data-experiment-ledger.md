@@ -25249,3 +25249,18 @@ picture in both directions.**
 - **Next:** add the admitted field, plumb it to the boundary as the support distance is plumbed, write CLOSE's execution (a `'gripper'` trajectory to that value) and let
   the runner judge the resulting document through the phase-aware `sequence_facts("CLOSE", ...)` that already checks the bilateral-grasp predicate.
 - **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1515 — The case admits its gripper target, and the plumbing follows the support-distance precedent
+
+- **`65 passed`** across the worker-port, child-driven, ros-child, IPC and case-execution files.
+- **`_PickPlacePayload.gripper_closed_rad` (`gt=0`)** joins the case's admitted values, carried through `ActWorkerPort`'s request keys and payload, handed to the port by the child
+  through a **dedicated one-shot `bind_case_targets(...)`** that **refuses by name** when the value is missing or non-positive. **The port keeps the two bindings separate on purpose:
+  the evidence attachment carries evidence parameters; the case targets carry the motion a phase needs - both one-shot, so a case cannot have its targets rebound mid-flight.**
+- **And the honest reason it exists is in the ledger:** CLOSE needed a value that means "closed", the repository admits none, and **inventing it was the one thing not to do.** The gap is
+  now a named refusal instead of a silent assumption.
+- **One process note, because it cost two runs:** my first scripted pass over the test files replaced `support_distance_max_m=` **anywhere**, including a call's keyword argument, and
+  produced a syntax error that `ast.parse` caught before the write. The second pass matched only **dict entries** and the payload call's own keyword line. **The rule from CP-1496 held:
+  every scripted edit either asserts its anchor or is narrow enough to be obviously right - and the parse guard is what stopped the damage.**
+- **Next:** CLOSE's execution in the boundary - a `'gripper'` trajectory to this admitted value, dispatched through the broker, with the phase-aware `sequence_facts("CLOSE", ...)`
+  establishing the document for the runner to judge.
+- **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
