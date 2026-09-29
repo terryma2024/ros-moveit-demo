@@ -32717,3 +32717,44 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   that follows is specified down to the value that must be computed rather than asserted.** P1-1 through P1-4 CLOSED. The
   demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
   unchanged, so they are not re-stated.**
+
+## CP-1868 — The registration's real checklist: FOUR proofs, each with four members, plus two conditions
+
+- **`VisibleApproachExpertRoute` reads four proofs off the observation and checks them together:**
+  ```python
+  physical  = observed.stationary_physics_proof
+  reference = observed.stationary_reference_proof
+  owner     = observed.local_owner_goal_proof
+  native    = observed.native_controller_ingress_proof
+  proofs = (physical, reference, owner, native)
+  if (any(type(proof) is not dict
+          or proof.get("selected_source_sha256") != source["observation_sha256"]
+          or proof.get("stop_confirmed_wall_s") != stop
+          or proof.get("command_authority") is not False
+          or proof.get("eligible_for_collection") is not False
+          for proof in proofs)
+          or physical.get("physics_step_fence") != observed.physics_step_fence
+          or physical.get("controller_interval_proof_required") is not True
+          or … the scene's qpos/qvel agree with the physical proof …):
+      raise ValueError("scope")
+  ```
+  **so the four proofs share four members** - `selected_source_sha256` equal to the frozen source's own hash,
+  `stop_confirmed_wall_s` equal to the stop instant, and **`command_authority`/`eligible_for_collection` both `False`** -
+  **and the physical one carries two more** (`physics_step_fence` equal to the observation's, and
+  `controller_interval_proof_required is True`) **plus agreement with the scene's own `qpos`/`qvel`.**
+- **And this is the deepest requirement of the drive, stated plainly:** the earlier gaps were members and values
+  (CP-1851's neck, CP-1863's `hazard_reason`); **this one is four interlocking documents whose common members must agree
+  with the frozen source AND with each other AND with the physics the scene reports** - **and the pattern for all four
+  already exists in `test_act_visible_approach_expert_route.py`, which builds `physical`, `references` and `owner` as
+  local helpers and then attaches them with `dataclasses.replace`.**
+- **Two honest notes for whoever continues this:**
+  1. **`command_authority: False` and `eligible_for_collection: False` appear in every proof by construction** - the same
+     *"inspect without authority"* rule the screen carries (CP-1817) - **so these documents are evidence, never permits,
+     and a fixture that set them `True` would be refused, correctly**;
+  2. **`selected_source_sha256` ties every proof to the frozen source's `observation_sha256`**, so the proofs cannot be
+     pre-built and then attached: **they must be built from the same `freeze_selected_search_source(...)` result the
+     registration itself computes** (CP-1866's builder takes `selected` for exactly that reason).
+- **State:** **P1-5 in progress: the registration's checklist is read in full - four proofs, their common and private
+  members, and the two coherence conditions - and the construction pattern exists in the suite that already builds
+  three of the four.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
+  re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
