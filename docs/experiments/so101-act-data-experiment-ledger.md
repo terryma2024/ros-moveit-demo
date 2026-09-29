@@ -26800,3 +26800,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   visible** - `-V` instead of `--output-on-failure`, so a passing test's output is kept. **The lesson is the batch's oldest one: when a check reports nothing, check what it is capable of reporting.**
 - **State:** item 5 **verified, diagnosed and now equipped with a proven mechanism**; its full re-run is the next action on that item, on its own fresh scratch. Item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7
   untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1606 — The real 8-worker gate runs, and it immediately exposes an isolation defect in MY IPC base
+
+- **The parallelism is no longer in doubt:** the re-run with the proven mechanism captured **99 `created: 8/8 workers` banners** in one log - one per CTest-registered pytest process - **so the teleop leg now genuinely runs eight workers**, which is
+  what item 5 was about. **Proofs saved:** the tempdir equality assertion, the IPC base with `mode 700`, the resolved `PYTEST_ADDOPTS`, the banners, and the JUnit path (written at the end).
+- **And it fails, for a reason that is mine and is named exactly:**
+  ```
+  INTERNALERROR> FileExistsError: [Errno 17] File exists: '/tmp/s101-v3-ipc-943257/gw0'
+  INTERNALERROR> FileExistsError: [Errno 17] File exists: '/tmp/s101-v3-ipc-943257/gw1'
+  ```
+  **xdist gives each of its workers an IPC directory named `gw<N>` under the socket base**, and **one `SO101_IPC_SOCKET_BASE` is shared by all thirty CTest-launched pytest processes**, so the second process to reach `gw0` collides and pytest
+  aborts with `INTERNALERROR`. **This is the resource-isolation class the skill names explicitly** - "fixed ports, sockets, ROS domains, temporary directories, process cleanup or other shared-resource conflicts: fix the isolation and re-run the same
+  parallel gate" - **and it is exactly the defect a serial run cannot show.**
+- **So the review's item 5 was right for a second reason I had not anticipated:** my serial numbers not only failed to demonstrate the parallel gate, **they hid a real shared-resource defect that the gate now surfaces.** The fix belongs in the
+  **socket-base usage** (each pytest process - or each test - must derive its own directory rather than sharing one base), not in the gate's parallelism, and the same 8-worker gate must be re-run afterwards.
+- **State:** item 5 **verified, diagnosed, mechanised and now red for a named, fixable isolation reason**. Item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal,
+  worktree or stack; no hardware; no live stack; P2 live not started.
