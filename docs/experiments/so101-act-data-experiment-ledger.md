@@ -23279,3 +23279,19 @@ not an inference of mine.**
   completed `search`.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1405 — THE SCOPE CHECK PASSES: thirty rounds of contract-hunting are behind this fixture
+
+- **The proof is the error's name changing:** the refusal is now **`contact hazard`**, which is the **next** check in the port (CP-1391's read:
+  `if sources.contacts.safe() is not True or contact_hazard(contact, sources.contact_pairs.for_phase("SEARCH"))`). **`physical readback scope` no
+  longer fires at all**, which means every condition I chased - the real `SimulationEvidence`, the real `ObjectState` with its integer `body_id`,
+  the seven keys, the exact key sets, the receipt's epoch, the live receipts, the non-frozen stamps, and the contact ports living on the *reset's*
+  sources rather than on the queue double - is now satisfied **by production's own standards**.
+- **Its definition is printed above**, and the failure is my `contact` document: I filled it to the production key set but with placeholder zeros,
+  and the hazard rule reads real fields. **The next read is that function; the fix is a contact document that reports what a substituted boundary
+  honestly has - no contact - rather than zeros standing in for evidence.**
+- **And the honest note about the last stretch:** the single condition that mattered was one `isinstance` line my own truncated reads had hidden
+  (CP-1403); everything after it has been the constructor naming its fields one at a time, which is the fastest way this fixture has moved all
+  item. **Fourteen fields, three types and one order fix - all of it named by production, none of it guessed.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
