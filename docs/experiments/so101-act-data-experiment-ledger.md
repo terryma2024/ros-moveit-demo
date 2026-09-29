@@ -16777,3 +16777,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   it - not forcing ten members through as I tried and reverted in CP-1080.
 - **Suite unchanged at 26 passed / 1 failed** (`beh-r681.log`), scratch `<R>/scratch/r681.<n>` with `TMPDIR` verified
   through the exact test interpreter. No regression, one named step of progress.
+
+## CP-1082 — The aggregator migration is closed: 27 passed, and HEAD is no longer red for it
+
+- **The last step was the "one schema" fix the review asked for, found by reading the binder rather than forcing it:**
+  `bind_measurement_contract` already has a **v2 path** - for a v2 template it calls `require_v2_identity(identities)` -
+  and a **v1 path** for the narrower identity. The measure test bound a **v1** template with the narrow identity while
+  handing the CLI a **ten-member** file, so the bound contract and the file could never agree. Binding from the v2
+  template with the ten members makes both sides one schema by construction.
+- **The whole migration, measured at every step:**
+  | step | result |
+  | --- | --- |
+  | where it started (CP-1076) | 12 failed / 3 passed |
+  | ten-member identity at the seal in the fixture | 10 / 5 |
+  | naming fissure closed in the entry (CP-1078) | 5 failed / 22 passed |
+  | canonical batch keys in hand-built documents (CP-1079) | 1 / 26 |
+  | **closed (this commit)** | **0 failed / 27 passed** |
+- **GREEN: 27 passed, rc=0**, scratch `<R>/scratch/r682.<n>` with `TMPDIR` verified through the exact test interpreter;
+  log `beh-r682.log`. **HEAD is no longer red for `test/test_act_task8_calibration_aggregator.py`** - the red suite
+  CP-1076 had to disclose is closed, and the debt it represented (my committed strict seal invalidating legacy fixtures)
+  is paid.
+- **Still open inside Boundary IV:** the validator checks `batch_sha256`'s format but does not recompute the document's
+  self-digest (CP-1079), and the boundary's remaining substance - the anchor x phase x source closed raw index, the real
+  measured values never written as PASS, the four canonical documents and a real 28-field TASK8_READY, render-twice byte
+  comparison with a single publish, on-disk readback, then `require_gate(report, "task8_live")` and
+  `validate_head_search_binding()` - is untouched so far.
