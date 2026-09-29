@@ -28736,3 +28736,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Which sets the work order for the next rounds, honestly and without narrowing anything:** finish P1-4's granularity in the **port** (a grid sample on every readback the phase performs, so the grid's sequence and the source clock are the same object), then return to this file, whose remaining halves are already specified - feed the same case root to `validate_case_journals`, the same artifact to `aggregate_task8_calibration`, read the seven facts from the sealed index, and derive the four negatives by corrupting **this** baseline rather than by building a new row.
 - **What this file already proves, and it is worth keeping:** `run_pick_place_case` accepts a **full** case whose worker is the **production runner** and whose owner is the only substitution - i.e. the join is reachable with one seam, as CP-1716 argued, and the production `PickPlaceRunner` result satisfies its `_require_result` and `_require_live_evidence_readback` rules.
 - **State:** **P1-4 granularity and P1-5's chain are one item, now with a work order (port first, then the join)**; the RED at `test_act_task8_full_case_chain.py` stays committed as the teleop side's failing boundary; the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1718 — The grid's sequence is FIXED and the case seals; what is left is the fixture's own arithmetic
+
+- **The probe, and it is the first clean one in this whole migration:**
+  ```
+  GRID t=1.5  delta=None   phase=SEARCH
+  GRID t=1.6  delta=0.1    phase=APPROACH
+  GRID t=1.7  delta=0.1    phase=CLOSE
+  GRID t=1.8  delta=0.1    phase=MICRO_LIFT
+  GRID t=1.9  delta=0.1    phase=TRANSPORT
+  GRID t=2.0  delta=0.1    phase=ALIGN
+  GRID t=2.1  delta=0.1    phase=RELEASE
+  GRID t=2.2  delta=0.1    phase=RADIAL_RETREAT
+  GRID t=2.3  delta=0.1    phase=RADIAL_RETREAT
+  GRID t=2.4  delta=0.1    phase=FINAL_CHECK
+  sealed fine
+  ```
+  **Ten samples, exactly one period apart, one per phase - including RADIAL_RETREAT twice, which is why the nine phases are ten samples - and the case SEALS.** The change that bought it is one line in the port: **the observation the phase was entered with is the FIRST instant's readback**, so the port no longer takes a readback that no sample carries. **That is CP-1702's "every readback is a sample" expressed as "no readback without a sample", which is the same statement from the other side.**
+- **And the suite still fails, for a reason the single-case probe cannot show:** the fixture's clock is **module-level state**, so a case inherited the previous test's clock. The reset is now in place (`_reset_case_clock`, called per case) - and the first attempt at it produced `KeyError: 'count'` (clearing a dict and then reading a key), which the suite caught immediately. **With the reset in, the remaining failures are at `pick_place_search_port.py:806`, i.e. `TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution` again** - the prefix window/axis/snapshot arithmetic that was tuned against the *old*, unreset clock.
+- **So the next step is the same rule applied once more, and it is now cheap:** with the sequence reset per case, the fixture's **prefix origin, time axis and snapshot times** must all be derived from that same sequence (they already read it - CP-1700/1704 fixed two of the three) instead of from values that assumed a shared, never-reset clock.
+- **State:** **P1-4's grid sequence is green in a single case and the case seals; the fixture's per-case arithmetic is the last of it, with the suite's failure now at the APPROACH path rather than the grid**; P1-5's joined chain waits behind it as recorded (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.

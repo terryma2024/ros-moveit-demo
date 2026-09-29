@@ -437,7 +437,72 @@ class PickPlaceSearchPhasePort:
             return observed
         return dataclasses.replace(observed, physical_readback=current(request))
 
-    def _grid_sample(self, phase: str, observed, evidence: dict) -> dict:
+    # --- P1-4: the frozen grid inside a phase, plus the edges ------------------------------------------------
+    def _phase_instants(self, phase: str, observed, evidence: dict) -> list:
+        """The frozen-grid instants for this phase, from the phase's OWN readback.
+
+        The verdict's third finding was that samples happened at phase completion - one per phase - rather than
+        continuously at the frozen 10 Hz. A phase that reports its own search iterations has one instant per
+        iteration, which are the run's real sampled moments; every other phase has the single instant its readback
+        carries. **The port owns this clock**, so the cadence is a property of the acquisition rather than of a
+        fixture that rewrites timestamps.
+        """
+
+        window = self._live_evidence_window
+        period = getattr(window, "period_s", 0.1) or 0.1
+        # the base instant is the readback's own clock: the phase document carries the FACTS (`physics_step`,
+        # `holding_state`, ...) while `sim_time_s` belongs to the physical readback - the key list says so (CP-1686)
+        readback = getattr(observed, "physical_readback", None) or {}
+        observation = readback.get("observation") if isinstance(readback, dict) else None
+        base = (observation or {}).get("sim_time_s") if isinstance(observation, dict) else None
+        if not isinstance(base, (int, float)) or isinstance(base, bool):
+            return [None]
+        # and the phase's OWN sampled instants are its search iterations, which the port already validated
+        iterations = (getattr(observed, "search_result", None) or {}).get("iterations")
+        count = len(iterations) if isinstance(iterations, list) and iterations else 1
+        return [base + index * period for index in range(count)]
+
+    @staticmethod
+    def _contact_signature(evidence: dict) -> tuple:
+        """What the contact observation says, as one comparable value - the CONTACT edge's subject."""
+
+        return tuple(bool(evidence.get(name)) for name in
+                     ("bilateral_contact", "no_fingertip_contact", "contact_observation_valid"))
+
+    def _emit_phase_samples(self, phase: str, observed, evidence: dict) -> None:
+        """Record the phase's grid samples at the frozen period, and its edges as ADDITIONS.
+
+        `event` samples never stand in for a grid point (the window's own rule), so an edge is recorded beside its
+        grid instant: the first instant of a phase is a COMMAND, RELEASE is the release edge, and a changed contact
+        signature is a CONTACT edge.
+        """
+
+        window = self._live_evidence_window
+        previous = getattr(self, "_last_contact_signature", None)
+        signature = self._contact_signature(evidence)
+        for index, moment in enumerate(self._phase_instants(phase, observed, evidence)):
+            # the sample's own time is the READBACK's, not a value this layer computes: the frozen grid's period is a
+            # property of the source clock ("continuously at 10 Hz"), so one sequence serves both the grid's rule and
+            # the acquisition. `_phase_instants` decides HOW MANY samples the phase has; the clock says WHEN each was.
+            # every readback is a sample (P1-4 piece 4): the observation the phase was ENTERED with is the first
+            # instant's, so taking another one for it would be a readback no sample carries - and a source clock that
+            # advances for it opens the frozen grid's gap. The remaining instants take their own readbacks, one each.
+            current = observed if index == 0 else self._current_observation(observed, self._request)
+            sample = self._grid_sample(phase, current, evidence, instant=moment)
+            window.add_grid(sample)
+            if index == 0:
+                reason = "command"
+            elif phase == "RELEASE":
+                reason = "release"
+            elif previous is not None and signature != previous:
+                reason = "contact"
+            else:
+                reason = None
+            if reason is not None:
+                window.add_event(sample, reason=reason)
+        self._last_contact_signature = signature
+
+    def _grid_sample(self, phase: str, observed, evidence: dict, instant: float = None) -> dict:
         """One canonical grid sample, derived from this phase's own readback - or a named refusal.
 
         Astra re-review #3, finding 3: this method used to report `None`, so an attached window was never fed in
@@ -469,7 +534,12 @@ class PickPlaceSearchPhasePort:
                 raise PickPlaceSearchPortError(f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: phase:{name}")
         # the capture's own identity travels into the file names: a constant name per source let a later phase
         # overwrite an earlier phase's evidence while the earlier sample kept its digest (CP-1600/1601)
+        # P1-4: the capture carries the INSTANT as well as the phase and the step. A phase now has one sample per
+        # instant it reports, and the step is the same for all of them - so without the instant, N samples would name
+        # one capture, the O_EXCL write would collide, and "every sample names its own raw record" would stop holding.
         capture = f"{phase}-{int(evidence['physics_step']):07d}"
+        if instant is not None:
+            capture = f"{capture}-{int(round(float(instant) * 1_000_000)):012d}"
         raw_records = self._write_raw_records(observed, root, capture=capture)
         fields = canonical(raw, support_distance_max_m=threshold, raw_records=raw_records)
         if not isinstance(fields, dict):
@@ -600,8 +670,7 @@ class PickPlaceSearchPhasePort:
                 # EVERY sample is built from the boundary's current readback, through one helper: the grid's clock must
                 # step exactly one period per sample, and mixing a cached observation with fresh ones produced deltas
                 # that were neither (TASK8_LIVE_EVIDENCE_GRID_GAP).
-                self._live_evidence_window.add_grid(
-                    self._grid_sample(phase, self._current_observation(observed, request), evidence))
+                self._emit_phase_samples(phase, self._current_observation(observed, request), evidence)
             return evidence
         except PickPlaceSearchPortError:
             # this port's own refusal already names the missing piece (P1-3's FIELDS_REQUIRED); wrapping it into
@@ -652,9 +721,7 @@ class PickPlaceSearchPhasePort:
                     "TASK8_PHASE_NOT_PROVISIONED: RADIAL_RETREAT: boundary.current_readback")
             # the SEARCH observation supplies the search result and the frames the sample also needs; only its READBACK
             # is replaced, with a copy - mutating the cached one would corrupt what later phases read
-            self._live_evidence_window.add_grid(
-                self._grid_sample("RADIAL_RETREAT",
-                                  self._current_observation(self._validated_search_observation, request), checked))
+            self._emit_phase_samples("RADIAL_RETREAT", self._current_observation(self._validated_search_observation, request), checked)
         return checked
 
     def set_down(self, request, *args, **kwargs):
@@ -748,8 +815,7 @@ class PickPlaceSearchPhasePort:
             # APPROACH has its own path and therefore its own feed, for the same reason as the generic one: the
             # window must SEE every phase before it can seal, and this branch was the last one not feeding it
             if self._live_evidence_window is not None:
-                self._live_evidence_window.add_grid(
-                    self._grid_sample(phase, self._current_observation(observed, request), checked))
+                self._emit_phase_samples(phase, self._current_observation(observed, request), checked)
             return checked
 
         execute = getattr(self.boundary, "sequence_phase", None)
@@ -779,8 +845,7 @@ class PickPlaceSearchPhasePort:
         # the eight sequence phases executed, verified and were never sampled, so the seal could never complete. This is
         # CP-1467's finding again, one layer down - a component that was wired up and then not fed.
         if self._live_evidence_window is not None:
-            self._live_evidence_window.add_grid(
-                self._grid_sample(phase, self._current_observation(observed, request), checked))
+            self._emit_phase_samples(phase, self._current_observation(observed, request), checked)
         return checked
 
     #: The runner increments its release epoch INSIDE the RELEASE iteration, BEFORE it verifies that phase's document -
