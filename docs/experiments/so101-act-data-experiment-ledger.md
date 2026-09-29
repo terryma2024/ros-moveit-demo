@@ -30516,3 +30516,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the phase path and the target follow from the run's own case. **Task-list statuses are unchanged, so they are not
   re-stated.** P1-2 and P1-3 CLOSED; P1-1 second half GREEN; the demo RED's clean re-measurement, P1-4, P1-5, P1-6 and
   the final gate remain.
+
+## CP-1799 — P1-1's first half, second value: the frames the detector reads are now the model's own renders
+
+- **`ModelFrameSource` added to `task8_bottom_io.py`:** `__call__(request)` renders the camera the request names (or the
+  one it was built with) from the model's current pose and returns the image; `pose(joints_rad)` moves the arm for the
+  next render; `close()` and the context manager exist **because CP-1798 found that this host's EGL destructor raises**,
+  so a caller that owns one should close it rather than let it be collected at interpreter exit. The renderer is created
+  once and reused, since each `mujoco.Renderer` allocates a GL context.
+- **Evidence: `8 passed` in the module's own file**, and the assertions are the ones that make it a fix rather than a
+  rename:
+  1. the frame is a real `(480, 640, 3)` `uint8` image with `std > 1.0` - **a blank buffer is not a frame the model
+     rendered**;
+  2. **head and wrist cameras produce different images**, which is what proves the requested name was honoured rather
+     than a default silently used;
+  3. an unknown camera is refused by name **both at construction and per request**;
+  4. **posing the arm changes what the wrist camera sees** - a gripper-mounted camera follows the joints, so the frames
+     are a function of the run.
+- **What the seam did instead, for the same call:** `frame_source(_request)` returned `object()` and wrote a marker to a
+  file. **That is the difference P1-1 is about**: the detector now reads a frame the simulator produced.
+- **State:** **P1-1's first half has three of its values settled with evidence** - occluder geometry (CP-1797), the camera
+  frames (this checkpoint), and the detector factory (already real, CP-1796). **The client, the phase path and the target
+  follow from the run's own case**, which is where the next work goes. **Task-list statuses are unchanged, so they are
+  not re-stated.** P1-2 and P1-3 CLOSED; P1-1 second half GREEN; the demo RED's clean re-measurement, P1-4, P1-5, P1-6
+  and the final gate remain.
