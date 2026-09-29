@@ -64,15 +64,142 @@ class PhaseCameraMatrixEvaluator:
         self.occluders = tuple(document.get("occluders", ()))
 
     def __call__(self, phase, index):
+        # the observation names the geometry the matrix was evaluated against, so the row proves WHICH camera and
+        # which admitted matrix produced it rather than echoing a configured occluder set (Astra re-review #3, finding 1)
+        camera = self.document.get("camera", {})
         return {"phase": phase, "frame_index": index, "row_count": len(self.occluders),
-                "occluders": list(self.occluders)}
+                "occluders": list(self.occluders),
+                "camera": {"frame_id": camera.get("frame_id"), "width_px": camera.get("width_px"),
+                           "height_px": camera.get("height_px")},
+                "matrix_sha256": self.document.get("matrix_sha256")}
 
 
-def _monotonic_clock():
-    return {"now": time.monotonic}
+class _MonotonicClock:
+    """The production clock the driver calls: one method, monotonic, no mapping dressed up as a clock.
+
+    The previous `_monotonic_clock()` returned `{"now": time.monotonic}`, which the driver's `self.clock.monotonic()`
+    cannot use - so the composition could not run a measurement at all (Astra re-review #3, finding 1).
+    """
+
+    def monotonic(self) -> float:
+        return time.monotonic()
 
 
-def build_real_providers(*, context, descriptor, controller_settings=None, binding=None,
+def _monotonic_clock() -> _MonotonicClock:
+    return _MonotonicClock()
+
+
+class Task8StackAdapter:
+    """The driver's stack protocol over ONE low-level MuJoCo/ROS client.
+
+    The review's finding was that the composition handed the driver a `PersistentTaskStack()` that implements none of
+    `launch / close / cleanup / readback / run_search / camera_info / tf / probe`. This adapter is the missing layer: it
+    owns no policy - the composition's rules stay in the composition - and it turns the driver's calls into the
+    client's calls, returning the client's own values so a measurement carries real readback rather than constants.
+    """
+
+    def __init__(self, client) -> None:
+        if client is None:
+            raise ProductionCompositionError("PRODUCTION_IO_CLIENT_REQUIRED")
+        self.client = client
+
+    def launch(self, anchor):
+        return self.client.launch(anchor)
+
+    def close(self, anchor):
+        return self.client.close(anchor)
+
+    def cleanup(self, anchor, generation):
+        return self.client.cleanup(anchor, generation)
+
+    def readback(self, anchor):
+        return self.client.readback(anchor)
+
+    def run_search(self, anchor, request):
+        return self.client.run_search(anchor, request)
+
+    def camera_info(self, anchor):
+        return self.client.camera_info(anchor)
+
+    def tf(self, anchor):
+        return self.client.tf(anchor)
+
+    def probe(self, anchor, command):
+        return self.client.probe(anchor, command)
+
+
+class MeasurementControllerAdapter:
+    """The callable controller the measurement driver uses, over the admitted head-search state machine.
+
+    `HeadSearchController` is a state machine (`reset / tick / advance_deadline / fail`), and the driver calls
+    `self.controller({"anchor": ..., "sample": ...})` once per recorded sample and stores the returned document. Astra
+    re-review #3, finding 1: the composition handed the driver the bare state machine, which is not callable, so the
+    success path sealed INVALID with "'HeadSearchController' object is not callable".
+
+    This adapter is that missing layer. It asks the low-level client for the anchor's current frame and neck feedback,
+    stamps them with this measurement's identity and receive time, ticks the REAL state machine once, issues the
+    resulting command through the same client, and returns the controller's own document as the ack.
+    """
+
+    def __init__(self, controller, *, client, clock, session_id: str, attempt_id: str) -> None:
+        for name, value in (("client", client), ("clock", clock)):
+            if value is None:
+                raise ProductionCompositionError(f"PRODUCTION_CONTROLLER_ADAPTER_REQUIRED: {name}")
+        for name, value in (("session_id", session_id), ("attempt_id", attempt_id)):
+            if not isinstance(value, str) or not value:
+                raise ProductionCompositionError(f"PRODUCTION_CONTROLLER_ADAPTER_REQUIRED: {name}")
+        self.controller = controller
+        self.client = client
+        self.clock = clock
+        self.session_id = session_id
+        self.attempt_id = attempt_id
+
+    def _stamp(self, document: dict) -> dict:
+        # the state machine refuses a frame or feedback that does not name this case, and treats an old receive
+        # time as stale input, so the stamp is applied here rather than trusted to the client
+        return {**document, "session_id": self.session_id, "attempt_id": self.attempt_id,
+                "received_wall_s": self.clock.monotonic()}
+
+    def __call__(self, sample: dict) -> dict:
+        anchor = sample["anchor"]
+        frame = self._stamp(self.client.frame(anchor))
+        feedback = self._stamp(self.client.neck_feedback(anchor))
+        command = self.controller.tick(frame, feedback, self.clock.monotonic())
+        self.client.command(anchor, dict(command))
+        return {"anchor": anchor, "sample": sample["sample"], "command": dict(command),
+                "status": command.get("status")}
+
+
+def _admitted_controller_config(*, context, descriptor):
+    """The controller's 18-field config, from the admitted calibration and this measurement's identity.
+
+    Astra re-review #3, finding 1: the composition used to leave `controller=None` unless a `controller_settings`
+    argument was supplied - and nothing in the tree ever supplied it, so the production path had no controller at
+    all. The config's one real source is `HeadSearchBinding.search_config`, which assembles it from the admitted
+    calibration and validates it by constructing the controller; a missing calibration or identity fails closed by
+    name rather than being papered over.
+    """
+
+    from .head_search_binding import validate_head_search_binding
+
+    calibration = getattr(context, "calibration_report", None)
+    if not isinstance(calibration, dict):
+        raise ProductionCompositionError("PRODUCTION_CALIBRATION_REPORT_REQUIRED")
+    admitted = validate_head_search_binding(descriptor, calibration)
+    identity = {}
+    for name in ("session_id", "attempt_id"):
+        value = getattr(context, name, None)
+        if not isinstance(value, str) or not value:
+            raise ProductionCompositionError(f"PRODUCTION_MEASUREMENT_IDENTITY_REQUIRED: {name}")
+        identity[name] = value
+    start = getattr(context, "search_start_rad", None)
+    if type(start) not in (int, float):
+        raise ProductionCompositionError("PRODUCTION_MEASUREMENT_IDENTITY_REQUIRED: search_start_rad")
+    return admitted.search_config(session_id=identity["session_id"], attempt_id=identity["attempt_id"],
+                                  search_start_rad=float(start))
+
+
+def build_real_providers(*, context, descriptor, binding=None, io_client=None,
                          yolo_detector_factory=None, controller_factory=None) -> dict:
     """Build the five production collaborators from the admitted context and the frozen descriptor.
 
@@ -102,17 +229,25 @@ def build_real_providers(*, context, descriptor, controller_settings=None, bindi
     # the sanctioned external-I/O seam here - exactly the parameter `build_detector` itself exposes
     built = (build_detector(options) if yolo_detector_factory is None
              else build_detector(options, yolo_detector_factory=yolo_detector_factory))
-    if controller_settings is not None:
-        # the controller is settings-driven: the admission entry derives them from the admitted calibration report
-        # (the child's own helper) and hands them in, so the library reads no environment of its own
-        controller = (HeadSearchController(controller_settings) if controller_factory is None
-                      else controller_factory(controller_settings))
+    # never None, and never a second source: the config is built from the admitted calibration and this
+    # measurement's identity, and any missing piece raises a named refusal (Astra re-review #3, finding 1)
+    config = _admitted_controller_config(context=context, descriptor=descriptor)
+    if controller_factory is not None:
+        controller = controller_factory(config)
     else:
-        controller = None
+        # the driver needs a CALLABLE, and a bare state machine is not one: the adapter supplies that shape and
+        # needs the same low-level client the stack uses
+        if io_client is None:
+            raise ProductionCompositionError("PRODUCTION_CONTROLLER_ADAPTER_REQUIRED: io_client")
+        controller = MeasurementControllerAdapter(
+            HeadSearchController(config), client=io_client, clock=_monotonic_clock(),
+            session_id=getattr(context, "session_id"), attempt_id=getattr(context, "attempt_id"))
     return {
         "detector": built.detector,
         "controller": controller,
-        "stack": PersistentTaskStack(),          # constructed only; the composition never starts it here
+        # the stack is the adapter over the one low-level client when one is supplied; without a client the
+        # persistent stack is still built, but the adapter is what implements the protocol the driver calls
+        "stack": Task8StackAdapter(io_client) if io_client is not None else PersistentTaskStack(),
         "clock": _monotonic_clock(),
         "phase_camera": PhaseCameraMatrixEvaluator(load_phase_camera_matrix()),
     }

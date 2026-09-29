@@ -186,17 +186,20 @@ def test_the_formal_entry_composes_real_providers_without_any_seam(tmp_path, mon
     assert "PRODUCTION_PROVIDER_SEAM_INVALID" not in message, message
 
 
-def test_real_production_providers_are_built_from_the_admitted_descriptor(tmp_path):
-    """The positive half of P1-1: the composition builds the real collaborators from the descriptor alone.
+def test_real_production_providers_are_built_from_the_admitted_context(tmp_path):
+    """P1-1, restated to the contract that actually matters: the providers must be DRIVEABLE.
 
-    A weights file the test writes makes the production detector factory produce a real detector from the descriptor's
-    admitted CUDA configuration, and the other four collaborators come from their own production classes. The stack is
-    constructed but never started, so no stack runs.
+    The first revision of this test asserted types and keys - a `PersistentTaskStack`, a phase camera that is
+    callable - and handed the controller its settings through a `controller_settings` argument that no production
+    caller ever passed. Astra re-review #3, finding 1 called that out, and this test now asserts what the driver
+    needs instead: a named refusal when the admitted context is incomplete, and, when it is complete, a provider set
+    whose stack implements the driver's protocol and whose controller is callable.
     """
 
-    from so101_demo.act.search import HeadSearchController
-    from so101_demo.act.task8_production_composition import PhaseCameraMatrixEvaluator, build_real_providers
-    from so101_demo.runtime.task_stack import PersistentTaskStack
+    from so101_demo.act.task8_production_composition import (
+        MeasurementControllerAdapter, PhaseCameraMatrixEvaluator, ProductionCompositionError,
+        Task8StackAdapter, build_real_providers,
+    )
 
     weights = tmp_path / "best.pt"
     weights.write_bytes(b"p11-weights")
@@ -204,32 +207,60 @@ def test_real_production_providers_are_built_from_the_admitted_descriptor(tmp_pa
     descriptor["head_search"]["detector"]["weights_path"] = str(weights)
     descriptor["head_search"]["detector"]["weights_sha256"] = hashlib.sha256(weights.read_bytes()).hexdigest()
 
-    class _Context:
-        runtime_descriptor = descriptor
-
     class _FakeYolo:
         cold_start_latency_ms = 12.5          # the production factory reads this from the detector it wraps
 
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
-    seen_settings = {}
+    class _Client:
+        """Only the external I/O: everything else below is the production construction path."""
 
-    class _Recorder:
-        def __init__(self, settings):
-            seen_settings.update(settings or {})
+        def launch(self, anchor): return {"session_id": "s", "reset_epoch": 1, "attempt_id": "a"}
+        def close(self, anchor): return True
+        def cleanup(self, anchor, generation): return {"status": "CONFIRMED"}
+        def readback(self, anchor): return {"session_id": "s", "reset_epoch": 1, "attempt_id": "a"}
+        def run_search(self, anchor, request): return {"iterations": [{"index": 0}]}
+        def camera_info(self, anchor): return {"frame_id": "f"}
+        def tf(self, anchor): return {"base->f": {}}
+        def probe(self, anchor, command): return {"contacts": []}
+        def frame(self, anchor): return {"frame_id": "head_camera_frame", "sim_time_s": 1.0, "detections": []}
+        def neck_feedback(self, anchor):
+            return {"neck_yaw_rad": 0.0, "neck_velocity_rad_s": 0.0, "sim_time_s": 1.0, "safe_observe": True}
+        def command(self, anchor, command): return {"accepted": True}
 
-    settings = {"max_fine_corrections": 2, "search_start_rad": 0.0, "vertical_bounds_px": 480,
-                "attempt_id": "a", "session_id": "s", "frame_id": "f", "ray_origin_frame_id": "f"}
-    providers = build_real_providers(context=_Context(), descriptor=descriptor,
-                                     controller_settings=settings,
-                                     yolo_detector_factory=_FakeYolo, controller_factory=_Recorder)
-    assert seen_settings == settings, "the controller is built from exactly the settings handed in"
-    assert isinstance(providers["stack"], PersistentTaskStack)
-    assert isinstance(providers["phase_camera"], PhaseCameraMatrixEvaluator)
+    class _Context:
+        runtime_descriptor = descriptor
+
+    # the descriptor alone is NOT enough any more: the controller's config has one source, the admitted calibration
+    with pytest.raises(ProductionCompositionError, match="PRODUCTION_CALIBRATION_REPORT_REQUIRED"):
+        build_real_providers(context=_Context(), descriptor=descriptor, io_client=_Client(),
+                             yolo_detector_factory=_FakeYolo)
+
+    from test_act_head_search_binding import _inputs
+
+    runtime, calibration, _weights, _sample = _inputs(tmp_path)
+
+    class _Admitted:
+        runtime_descriptor = runtime
+        calibration_report = calibration
+        session_id = "session-1"
+        attempt_id = "attempt-1"
+        search_start_rad = 0.0
+
+    providers = build_real_providers(context=_Admitted(), descriptor=runtime, io_client=_Client(),
+                                     yolo_detector_factory=_FakeYolo)
+
     assert providers["detector"].kwargs["requested_device"] == "cuda", "the descriptor's device reaches the detector"
     assert providers["detector"].kwargs["allow_cpu_fallback"] is False, "and its CUDA policy"
+    assert isinstance(providers["phase_camera"], PhaseCameraMatrixEvaluator)
     assert callable(providers["phase_camera"])
+    # the two that used to be missing entirely: a stack with the driver's protocol, and a CALLABLE controller
+    assert isinstance(providers["stack"], Task8StackAdapter)
+    for name in ("launch", "close", "cleanup", "readback", "run_search", "camera_info", "tf", "probe"):
+        assert callable(getattr(providers["stack"], name)), f"the stack implements {name}"
+    assert isinstance(providers["controller"], MeasurementControllerAdapter)
+    assert callable(providers["controller"]), "the driver calls the controller per sample"
 
 
 def test_the_shared_rule_enforces_the_production_head_search_contents(tmp_path):
