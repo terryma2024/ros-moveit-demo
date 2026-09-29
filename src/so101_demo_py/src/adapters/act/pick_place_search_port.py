@@ -166,8 +166,9 @@ class PickPlaceSearchPhasePort:
             "release_epoch": request["release_epoch"],
         }
         window = self._live_evidence_window
-        if window is not None:
-            # seal the window first: a window that cannot be sealed must not leave a sealed recorder behind
+        if window is not None and not getattr(window, "_sealed", False):
+            # seal the window first: a window that cannot be sealed must not leave a sealed recorder behind.
+            # A window that already sealed itself on reaching FINAL_CHECK is left as it is, so a second call is safe.
             window.seal()
         return recorder.seal(identity)
 
