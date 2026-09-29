@@ -493,7 +493,10 @@ def test_capture_evidence_fields_compose_a_canonical_sample(recorder):
                 "source_received_wall_s": canonical["source_received_monotonic_s"]}
     adapter = object.__new__(PickPlacePhysicalReadback)
     fields = adapter.capture_evidence_fields(captured, support_distance_max_m=0.005,
-                                             raw_records=canonical["raw_records"])
+                                             raw_records=canonical["raw_records"],
+                                             # the end-effector position is MuJoCo output: the caller holding the model supplies it, and the
+                                             # recorder refuses a frame without it rather than recording one that never had it
+                                             end_effector_position_m=[0.0, 0.0, 0.1])
     assert type(fields["physics_step"]) is int and fields["sim_time_s"] >= 0
     built = build_live_evidence_sample(
         identity={"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
