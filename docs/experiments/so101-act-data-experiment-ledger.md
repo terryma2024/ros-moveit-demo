@@ -28893,3 +28893,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | `test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period` | the cadence is checked on the **grid** records - which is exactly what `validate_evidence_grid(samples, period_s=…, tolerance_s=…)` exists to do |
 - **And a note for the next review, because it is a design observation rather than a test one:** the sealed index cannot currently tell its reader how many of its entries are grid points. **The window refuses gaps and regressions among them, so the information exists while recording and is lost at sealing** - a reader (a reviewer, an aggregator, a future qualification gate) has to re-derive it from the records. **Recording a count (or a kind) in the index would make the artifact self-describing**; that is a candidate for the packet rather than a change to make unilaterally now.
 - **State:** **P1-4: three remaining failures explained and their restatement specified in terms of what the artifact actually carries**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1726 — Making the index self-describing is a CONTRACT change, so it goes to the packet and the tests use what exists
+
+- **The experiment, and its result:** adding `grid_count`/`event_count` to the sealed index (the window knows both while recording - `_grid_count`, `_event_count` - and sealing currently loses them) **changed a closed contract**, and the suites said so immediately:
+  ```
+  9 failed, 37 passed
+     test_sealed_artifact_is_closed_and_lists_every_sample ... (and eight more)
+  ```
+  **The index's key set is closed on purpose** - a test asserts it exactly - so adding a field is **not a test fix, it is an artifact change.** **Reverted**, and recorded here as a **proposal for the packet** rather than made unilaterally: *the sealed index cannot tell its reader how many of its entries are grid points, and the recorder knew.*
+- **And the three assertions can be restated with what the artifact DOES carry, which the measurements already show:**
+  | assertion | restated as |
+  | --- | --- |
+  | `test_every_sample_names_its_own_raw_sources` | the probe shows **one grid sample per phase, each naming its own capture** (`SEARCH-…`, `APPROACH-…`, … `FINAL_CHECK-…`), so the rule is **per PHASE**: the case's phases each get their own raw record, and the twenty entries include ten edge additions that share them by design |
+  | `test_the_index_chains_to_complete_canonical_records` | `sample_count == len(samples)` **and** the count is the case's own (ten grid + ten events), not the literal 10 |
+  | `test_the_indexed_phases_…` | the cadence is checked on the grid entries via `validate_evidence_grid`, which is the function that exists for exactly that |
+- **State:** **P1-4: the artifact's contract is untouched, the three restatements are specified against measured values, and one packet proposal is recorded**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.

@@ -497,6 +497,9 @@ class LiveEvidenceWindow:
         self._phases_seen = []
         self._grid_count = 0
         self._event_count = 0
+        #: P1-4: which edge each event is - "command", "release" or "contact". A count alone cannot say whether the
+        #: evidence carries the moment the gripper was told to open, so the reason travels with the event.
+        self._event_reasons = []
 
     @property
     def grid_count(self) -> int:
@@ -505,6 +508,16 @@ class LiveEvidenceWindow:
     @property
     def event_count(self) -> int:
         return self._event_count
+
+    @property
+    def event_reasons(self) -> tuple:
+        return tuple(self._event_reasons)
+
+    @property
+    def period_s(self) -> float:
+        """The frozen grid period the case records at - the port reads it to sample at the same cadence."""
+
+        return self._period_s
 
     @property
     def identity(self) -> dict:
@@ -564,9 +577,9 @@ class LiveEvidenceWindow:
         self._note_phase(phase)
         self._recorder.append(sample)
 
-    def add_event(self, sample: dict) -> None:
+    def add_event(self, sample: dict, reason: str = None) -> None:
         self._require_bound()
-        """Append an edge sample; it never counts as a grid point."""
+        """Append an edge sample; it never counts as a grid point, and it says WHICH edge it is."""
 
         if self._sealed:
             raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_SEALED")
@@ -574,7 +587,10 @@ class LiveEvidenceWindow:
             raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
         if not isinstance(sample, dict) or not _finite(sample.get("sim_time_s")):
             raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        if reason is not None and reason not in ("command", "release", "contact"):
+            raise ValueError(f"TASK8_LIVE_EVIDENCE_EVENT_REASON_INVALID: {reason}")
         self._event_count += 1
+        self._event_reasons.append(reason)
         self._note_phase(sample.get("phase"))
         self._recorder.append(sample)
 
