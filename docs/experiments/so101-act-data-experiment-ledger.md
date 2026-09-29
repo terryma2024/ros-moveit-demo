@@ -29601,3 +29601,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The correction, append-only, because the ledger is a record and not a working draft:** the **second** occurrence (line 24779) is the entry that sits in its chronological place among the following 275 entries, and the **first** (line 24761) is the stray copy. **Both stay in the file**; this entry is what tells a future reader which one to cite. **No line was deleted and no heading renumbered**, so every existing cross-reference from earlier checkpoints still resolves to the text it named.
 - **And the check's own first reading was wrong in a way worth recording:** my initial block comparison reported the second copy as **627603 characters** long, because I split on `## CP-1487` headings only and therefore ran that block to the end of the file. **The defect was real; the size I first attributed to it was an artefact of my own splitter.** That is the same family as the rest of this ledger - a pattern match is not an identity - and it is why the entry above states the line numbers instead of a length.
 - **State:** **the ledger's numbering has exactly one duplicate, now documented; everything else is continuous in file order, and the newest entry is this one.** The review is still the owner's to launch; no controlled source change since the freeze; the goal stays active.
+
+## CP-1764 — Self-review, third pass: the dirty-tree count in the packet was stale by this work's own commit
+
+- **What the pass checked:** the packet's statement about the owner's tree - *"27 modified, 13 untracked at the freeze"* - against `git status --short`.
+  ```
+  packet said:  27 modified, 13 untracked
+  actual now:   26 modified, 13 untracked
+  ```
+- **And the cause is not a mystery, it is my own freeze:** the inventory at CP-1743 listed 27 modified **and one of them was this work's P1-4 RED file** (`test/test_act_task8_live_epoch_and_edges.py` - the state the eleven-suite green run was measured on), which the freeze then **committed**. **So the number the packet repeated described the tree one commit before the freeze, while the packet said "at the freeze".**
+- **The claim now reads as a fact a reader can check, with the movement explained:**
+  *"the inventory taken for the freeze listed **27 modified and 13 untracked**; one of the 27 was this work's own P1-4 RED file …, which was committed as part of the freeze - so **the frozen tree carries 26 modified and 13 untracked, and every one of them is the owner's**."*
+- **Which is also the sentence that matters for the reviewer's safety question:** the point of the claim was never the number, it was **that none of the dirty tree is this work's** - and after the freeze **that is true of all 26 and all 13**, whereas before it, one file was mine.
+- **Costs paid:** packet now **12473 bytes, `36e40131ee52469c`**; index row re-synced; freeze rewritten and read back (**six entries, all reproducing**); audit again green.
+- **Three self-review passes, three findings, all fixed before the reviewer saw them:** a stale audit count (CP-1761), three figures that were true of a set but read as if of a file (CP-1762), and this one - **a number that was true one commit earlier than the sentence said it was.**
+- **State:** **frozen, indexed, audited; the review still the owner's to launch.** No controlled source change since the freeze; the goal stays active.
