@@ -19400,3 +19400,16 @@ not an inference of mine.**
   which is what turned `FileNotFoundError` into this assertion.
 - **State:** HEAD `36bae0ad`; staged 0; the RED is **uncommitted while it is red**, per the owner's standing instruction for new
   tests; scratch `s801/tmp` and both gate run roots retained as deletion candidates; no push, no stack, no hardware.
+
+## CP-1204 — The A/B settles it: shortening the runner's layout is not enough, the module's socket base is the fix
+
+- **Two measurements, one variable, and the answer is unambiguous:**
+  | `TMPDIR` length | `test_controller_reservation_client.py` |
+  | --- | --- |
+  | 68 chars | **17 passed** |
+  | **88 chars** (the *shortened* runner layout) | **16 failed / 1 passed** |
+  | ~80 chars (the original runner layout) | 8+ failures |
+  So the module needs `TMPDIR` at roughly **68 characters or fewer**, while this task's evidence root is **63 by itself**. **No per-run, per-process layout can fit inside that budget** - which retires CP-1203's option 1 as a sufficient fix and leaves option 2 as the only one that works.
+- **What was still worth doing and is kept:** the runner's scratch layout is now **88** characters instead of 102 (`<root>/s/<4hex>/tmp`), with the shortening justified in the code - the four-hex id only needs to disambiguate within one run root, and `physical_name` already carries the process identity in the same hash input. That is a real improvement and it is committed; it is simply **not sufficient on its own**, and I would rather record that than imply the gate is fixed.
+- **So the remaining defect is in the module's own socket handling, not in any module's logic:** its sockets must not be bound beneath `TMPDIR` at all - the runner already exports `SO101_IPC_SOCKET_BASE` pointing at a short `/tmp` path, so the honest fix is for that fixture to bind under that base (or another short, non-`TMPDIR` root), which is a **test-side change with its own RED**: the module must pass at an 88-character `TMPDIR` and at the real gate's layout.
+- **State:** HEAD `20071b4b`; staged 0; my budget RED is still **uncommitted while red** (its 33-character reserve was my estimate, and the real requirement is what this table measures); run roots `scratch/g794`, `scratch/g798w1`, `scratch/g802` and `s799/tmp`, `s800/tmp`, `s801/tmp`, `s802/tmp` retained as deletion candidates; no push, no stack, no hardware.
