@@ -16556,3 +16556,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary II remaining, each needing its own RED:** live search and the fixed non-contact arm probe; and CameraInfo/TF
   raw rows per anchor. Both are heavier than the four pieces landed so far because they depend on what the *stack*
   exposes, and the stack's composition is the launch entry's job (Boundary II's remaining structural item).
+
+## CP-1071 — Boundary II, fifth piece: the fixed non-contact arm probe
+
+- **RED on both halves:** no probe ran at all (`one probe per anchor - assert 0 == 3`), and a stack reporting a touch
+  during the probe still sealed **CLOSED**.
+- **The fix:** each anchor runs one **fixed** probe command (`PROBE_COMMAND`, identical across anchors) before the
+  geometry samples; its report is written as a `probe.json` row carrying the command, the contact count and the contacts
+  themselves, and a non-empty contact list raises **`MEASUREMENT_PROBE_CONTACT: <anchor>`**, which the failure path turns
+  into an INVALID seal naming the anchor that touched. A stack without a probe surface is refused as
+  **`MEASUREMENT_PROBE_REQUIRED`**, so the probe cannot be silently skipped.
+- **The doubles had to grow again - six of them - and one had to be put back:** a script completed the probe and readback
+  surfaces on every stack double (nested classes included), which is the same "contract got stricter" signal as CP-1067/69;
+  but `test_a_stack_without_readback_is_refused_by_name` needs a stack that **cannot** report a readback, so the added
+  method there was removed again. A test whose premise is a missing surface must keep that surface missing.
+- **GREEN: 15 passed, rc=0**, scratch `<R>/scratch/r672f.<n>` with `TMPDIR` verified through the exact test interpreter;
+  RED `beh-r672-red.log`, intermediate `beh-r672-green*.log` (6 failed, then 3, then 1 as the doubles caught up), final
+  `beh-r672-green5.log`.
+- **Boundary II remaining, precisely:** the **live search** through the port (the detector/controller calls per geometry
+  sample approximate it but are not the search path), and **CameraInfo/TF raw rows** per anchor. Both depend on what the
+  stack exposes, so the composition surface has to be defined deliberately rather than inferred.
