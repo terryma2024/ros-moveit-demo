@@ -23455,3 +23455,18 @@ not an inference of mine.**
   tripped.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1416 — The sample is FLAT and its key set is exact; my nested call is short of keys
+
+- **Read (`task8_live_evidence.py:79-100`):** `append` requires `type(sample) is dict` and **`set(sample) == set(_SAMPLE_KEYS)` exactly**,
+  then the case/session/attempt identities equal to the recorder's own, `reset_epoch`/`release_epoch`/`physics_step` as non-negative ints, a
+  finite `sim_time_s`, a non-empty `phase` string, every `_BOOLEANS` key a real bool, and **`contact_observation_valid` and `wrist_frame_valid`
+  both True** (anything else is treated as evidence loss, not occlusion), then finiteness of the support distance and the rest.
+- **So the refusal is a key-set mismatch, and its cause is my call:** I passed the suite's `frame=`/`contact=` dictionaries and a subset of the
+  measurements, while `build_live_evidence_sample` flattens those into a **flat** sample whose key set must match the recorder's own
+  `_SAMPLE_KEYS`. **Any argument the builder needs that I did not pass is a missing key, and `set(sample) != _SAMPLE_KEYS` is the error.**
+- **Therefore the next read is `build_live_evidence_sample`'s signature** - the same "the file tells me the shape" move that has carried this
+  item since CP-1403 - and the next write passes every argument it lists. **That is the last piece of the recorder step; the assertions that read
+  these samples back are what remain of P1-5.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
