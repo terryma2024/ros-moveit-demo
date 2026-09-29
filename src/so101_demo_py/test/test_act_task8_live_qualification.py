@@ -862,3 +862,19 @@ def test_support_distance_needs_the_exact_pair_in_every_pre_open_frame():
     with pytest.raises(ValueError, match="SUPPORT_FRAMES_NOT_CONSECUTIVE"):
         support_distance_from_frames([good[0], good[1], frame(1.35, good[2]["contacts"])],
                                      cup_collision_geom="cup_a_bottom_collision")
+
+
+def test_longest_contiguous_span_ends_at_a_break_and_can_refuse_one():
+    from so101_demo.act.task8_live_qualification import longest_contiguous_span_s
+
+    frames = [{"phase": "RELEASE", "source_stamp": stamp, "ok": ok}
+              for stamp, ok in ((0.0, True), (0.1, True), (0.2, True), (0.3, False), (0.4, True), (0.5, True))]
+    # the longest run of stable frames is 0.0..0.2, i.e. a 0.2 s span; the tail contributes only 0.1 s
+    assert longest_contiguous_span_s(frames, predicate=lambda f: f["ok"], phase="RELEASE") == pytest.approx(0.2)
+    with pytest.raises(ValueError, match="SPAN_FRAMES_REQUIRED"):
+        longest_contiguous_span_s(frames, predicate=lambda f: f["ok"], phase="FINAL_CHECK")
+    gapped = [{"phase": "RELEASE", "source_stamp": 0.0, "ok": True},
+              {"phase": "RELEASE", "source_stamp": 0.25, "ok": True}]
+    assert longest_contiguous_span_s(gapped, predicate=lambda f: f["ok"], phase="RELEASE") == 0.0
+    with pytest.raises(ValueError, match="SPAN_FRAME_BREAK"):
+        longest_contiguous_span_s(gapped, predicate=lambda f: f["ok"], phase="RELEASE", strict_breaks=True)
