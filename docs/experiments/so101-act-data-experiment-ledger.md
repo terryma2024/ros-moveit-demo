@@ -11699,3 +11699,19 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   together at Step 4 with the plan's exact `git add` list.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-876 — Task 1 transcription worksheet left for the next window
+
+- **Deliberate stop, not a stall:** the last two RED failures need the v2 contract transcribed from the approved
+  design's own tables, and I do not have the room left in this window to read sections 4.1/4.2/5/6 in full and
+  emit 28 entries with seven metadata fields each. Rather than paraphrase them - which is exactly what the
+  independent review rejected - I recorded a **worksheet** naming the precise design line ranges to read:
+  `handoffs/20260929-measurement-protocol-v2-approved/task1-transcription-worksheet.md` (section 3.1 lines 73-94,
+  4.1 lines 170-186, 4.2 lines 187-212, 5 lines 213-267, 6 from 268), together with what each must produce and
+  the standing constraint that the search candidate is not a calibration result and must not be back-fitted.
+- **State unchanged and verified:** focused test **2 failed, 7 passed**; the failures are the two v2-document
+  tests; `act/task8_measurement_schema.py`, the phase-camera matrix (approved occluders, marked
+  `SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION`), the corrected test harness and the two approved documents all remain
+  uncommitted by design, to go in together at Step 4 with the plan's exact `git add` list.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
