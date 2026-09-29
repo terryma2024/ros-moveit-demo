@@ -13739,3 +13739,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries held to the end:** no runtime started, no package gate run, nothing pushed, no evidence deleted, no
   hardware touched; the user's files preserved apart from the CP-861 one-token typo fix whose original bytes are in
   `user-file-backups/`; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-963 — Task 8: the by-value merge layer is green (27 passed)
+
+- **Implemented `build_qualified_measurements(ready_measurements, live_runs, contract)`** in
+  `act/task8_live_qualification.py`: it **deep-copies** the ready measurements so the `TASK8_READY` document keeps its
+  own contents and digest, refuses a ready report that already carries a live-only field
+  (`LIVE_FIELD_ALREADY_PRESENT`, which would also mean the input was not the 28-field document), and adds **exactly**
+  the five entries from `derive_live_measurements` with their units - so the additions inherit the plan's extrema
+  directions and, where a run supplies its own frames, the raw support-distance rule.
+- **Verified: 27 passed, rc=0** (`beh-task8-green3.log`), including a test that asserts the ready mapping is
+  byte-identical before and after the merge (the "never mutate in place" requirement) and that the result has exactly
+  33 fields.
+- **Task 8 remaining, and now only one piece:** wire this merge plus a readback and `require_qualified(report)` into
+  the existing `build_task8_qualified_report(task8_ready_report, preparation_receipt, campaign_result, case_root,
+  output)`, which already reads the ready report read-only, validates the bundle, manifest, campaign summary and case
+  journals, writes atomically via a `.partial` file and `os.replace`, and builds `document = dict(ready)` with
+  `checks` set to `release="PASS"`, `retreat="PASS"`. What it still needs is to collect the **five sealed FULL runs**
+  from `case_root` and pass them through this merge, then read the written document back and call
+  `require_qualified(report)` - with the remaining unknown being the layout of the per-case live-evidence artifacts
+  under `case_root`, which `validate_case_journals` already knows how to check.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, plan's Step-4 command 53); Task 8's derivation and
+  merge layers green at 27; Tasks 9-10 untouched; one approval outstanding (the 17 candidate search values, three
+  `neck_start_rad` starts and the candidate safe interval); the goal's budget is now 756 rounds and it is re-armed; no
+  runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
