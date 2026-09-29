@@ -178,6 +178,15 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     from so101_demo.act.task8_measurement_schema import validate_closed_batch
 
     indexes = [validate_closed_batch(Path(root)) for root in batch_roots]
+    # section 4.2's readback: the descriptor the measurement ran under is read from the sealed, indexed evidence - never
+    # from a context object and never by globbing - so the published sample can only carry what the seal vouches for
+    descriptor_blocks = []
+    for index in indexes:
+        if "runtime-descriptor.json" in index.files:
+            descriptor_blocks.append(json.loads(index.path("runtime-descriptor.json").read_bytes()))
+    if len({json.dumps(block, sort_keys=True) for block in descriptor_blocks}) > 1:
+        raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+    sealed_descriptor = descriptor_blocks[0] if descriptor_blocks else None
 
     output_root = Path(output_root)
     roots = tuple(Path(root) for root in batch_roots)
@@ -259,7 +268,12 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
         # the runtime descriptor the measurement was taken under is passed through when the batch recorded it, and
         # never invented here: the binding compares it against the runtime asking for the report, so a fabricated one
         # would let a report claim a configuration nobody measured under
-        if isinstance(readings.get("head_search"), dict):
+        # the sealed descriptor wins; a batch that claims a different one in its payload is refused rather than published
+        if sealed_descriptor is not None:
+            if isinstance(readings.get("head_search"), dict) and readings["head_search"] != sealed_descriptor:
+                raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+            sample_document["head_search"] = sealed_descriptor["head_search"]
+        elif isinstance(readings.get("head_search"), dict):
             sample_document["head_search"] = readings["head_search"]
         sample = _write(output_root / "head-search-qualification.json", sample_document)
     # the support fields have their own approved closed sample, so they are published with their own citation rather
