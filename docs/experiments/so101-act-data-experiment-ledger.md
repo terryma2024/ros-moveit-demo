@@ -21578,3 +21578,18 @@ not an inference of mine.**
 - **Nothing was deleted, moved or compressed** - the inventory is a read-only measurement, which is the point: the decision to remove any
   of it belongs to the owner, and the numbers make that decision cheap.
 - **State:** HEAD `997d71da` plus this checkpoint; no live stack, no hardware; nothing deleted, nothing pushed.
+
+## CP-1306 — Scratch broken down by age, so a cleanup decision can be targeted rather than blunt
+
+- **Measured read-only:** 2954 scratch trees under the evidence root - **1496 older than a day**, 661 newer, **336 from the last six hours** -
+  and the trees are **individually small** (a sampled one is 88 KB), so the 291 GB sits in a minority of them plus the 9.6 GB of gate
+  artefacts. **That is the useful shape of the fact: a targeted `du`-ranked list is what a cleanup needs, not "delete everything".**
+- **Nothing was deleted, moved or compressed**, and I will not delete without the owner's explicit word - the rules say so, and the
+  numbers now make the decision cheap:
+  | candidate | age profile | size |
+  | --- | --- | --- |
+  | scratch trees from this session's runs | last 6 h, 336 trees | individually small; the tail is where the weight is |
+  | scratch trees older than a day | 1496 trees | the bulk by count |
+  | gate logs and JUnit artefacts (1412 files) | this session | **9.6 GB** |
+  | short IPC bases under `/tmp` | this session | 1.5 MB, 98 directories |
+- **State:** HEAD `52c8874b` plus this checkpoint; every gate result stands; no live stack, no hardware; nothing deleted, nothing pushed.
