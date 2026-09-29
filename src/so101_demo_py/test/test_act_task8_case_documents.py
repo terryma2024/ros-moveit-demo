@@ -145,7 +145,7 @@ def test_a_controller_that_did_not_stop_is_refused_and_a_preflight_without_a_set
 
 def test_a_retreat_segment_steps_from_the_current_tool_pose_along_the_runtimes_axis():
     boundary, calls, _capture, request = _case(released=True)
-    document = boundary.run_retreat_segment("vertical", 0.06, request, motion_template=_template(),
+    document = boundary.run_retreat_segment(request, direction="vertical", distance_m=0.06, motion_template=_template(),
                                            motion_duration_s=0.4, support_distance_max_m=0.02)
 
     assert [call[0] for call in calls] == ["ik", "dispatch", "wait"], calls
@@ -161,7 +161,7 @@ def test_each_retreat_seam_refuses_by_name():
                              ({"with_axis": False}, "run_retreat_segment: retreat_axis")):
         boundary, _calls, _capture, request = _case(**kwargs)
         with pytest.raises(PickPlaceSearchBoundaryError, match=expected):
-            boundary.run_retreat_segment("radial", 0.01, request, motion_template=_template(),
+            boundary.run_retreat_segment(request, direction="radial", distance_m=0.01, motion_template=_template(),
                                          motion_duration_s=0.4, support_distance_max_m=0.02)
 
     boundary, _calls, _capture, request = _case(with_stop=False)

@@ -444,9 +444,14 @@ class PickPlaceSearchBoundary:
                 "cup_supported": bool(aggregates["bilateral_contact"]) or aggregates["cup_supported"],
                 "fresh": True, "planning_attached": self.planning_attached(request)}
 
-    def run_retreat_segment(self, direction, distance_m, request, *, motion_template, motion_duration_s,
+    def run_retreat_segment(self, request, *, direction, distance_m, motion_template, motion_duration_s,
                             support_distance_max_m):
         """One retreat step from the CURRENT tool pose along an admitted direction - three seams, each named.
+
+        The request comes first and the direction and distance are KEYWORDS, like every other capability the port
+        delegates: the earlier signature took them positionally before the request, so a keyword call from the port
+        collided with the positional request ("got multiple values for argument") - a production defect the probe found.
+
 
         The runner asks for two segments ("radial" 0.01 m, "vertical" 0.06 m), and neither the meaning of a direction
         name nor the tool's current pose can be read from the interface snapshot. Both are therefore seams this method
