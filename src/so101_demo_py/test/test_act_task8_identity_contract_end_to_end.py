@@ -77,8 +77,11 @@ def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_pa
     from so101_demo.act.task8_measurement_schema import load_contract_v2
 
     contract_v2 = load_contract_v2()
+    # "pending" means the THRESHOLD comes from a config document that has not been approved yet - the same
+    # discriminator the aggregator uses, because `threshold_source` is free text: the contract says `"config"`,
+    # `"bound calibration-search config"`, and for the camera `"模型 FOV + tolerance"`, which is a source that exists.
     pending = [field for field, entry in contract_v2["measurements"].items()
-               if entry.get("configured_limit") is None]
+               if "config" in (entry.get("threshold_source") or "").lower()]
     assert pending, "the candidate config's search values are still pending approval"
     assert all(verdicts.get(field) == "UNMEASURED" for field in pending if field in verdicts), (
         "an unapproved threshold must not produce a pass: "
