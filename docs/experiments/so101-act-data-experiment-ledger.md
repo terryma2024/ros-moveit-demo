@@ -24861,3 +24861,21 @@ picture in both directions.**
   document, plus the negative half - a phase document that violates its own predicate (e.g. CLOSE without `bilateral_contact`) must be refused by name rather than accepted.
   **The fixture supplies the substituted I/O only** (the expert route's motion and the readback), exactly as it now does for SEARCH.
 - **State:** P1-1..P1-3 green and committed; P1-4 stage 1 committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1491 — The sequence-phase path is wired and judged by the runner; the boundary execution is what remains
+
+- **`31 passed`** for the port's own file (`experiments/gate8-p14/approach.log`), covering:
+  1. **one path for the eight sequence phases**: the boundary executes and reports its facts, the port stamps scope and refuses incompleteness **by name**
+     (`TASK8_PHASE_EVIDENCE_INVALID: <phase>: gate|keys|intervention|holding unknown|step`);
+  2. **the judge is the runner's own verifier**, driven offline in the test (`_scope` is a `staticmethod`, `_EVIDENCE_KEYS` a class attribute) - so a
+     document passes only if a real run would have accepted it, instead of the test restating the runner's rules;
+  3. **a mirror test** asserting the port's key set **equals** `PickPlaceRunner._EVIDENCE_KEYS`, so the two cannot drift quietly;
+  4. **the negative half**: a false gate and a missing key are refused by name before the runner ever sees them;
+  5. **and the "not provisioned" cases keep their meaning** - a boundary without `sequence_phase` still refuses `TASK8_PHASE_NOT_PROVISIONED: <phase>`, so
+     "not built yet" and "built and passing" remain different things.
+- **What this proves and what it does not, stated plainly:** the **port-side** path and the judge wiring are proven for all eight phases. **The production
+  boundary execution is not** - the tests' boundary reports substituted facts, and the real one has to actually execute each phase (for APPROACH: prepare
+  the expert route from the port's frozen handoff, drive it, qualify it) and gather the eight gates from real readback. **That is the next and largest piece of
+  P1-4, and it is where the review's "真实执行产生 evidence" bites.**
+- **State:** P1-1..P1-3 green and committed; P1-4 stage 1 and the sequence path committed. No new session, goal, worktree or stack; nothing pushed, nothing
+  deleted; no hardware.
