@@ -15135,3 +15135,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   artefact rather than a defect. If it collects and passes, that finding is confirmed and Task 9's demo half is clean.
 - **Not yet claimed:** whether the demo colcon gate is green or what it reports. The result is recorded when the job
   settles; nothing above is its outcome.
+
+## CP-1018 — The demo colcon gate did not run: my `--pytest-args` string was mangled
+
+- **Result: `so101_demo_py` failed in 0.43 s with exit code 4 - it never collected a single test.** Colcon's captured
+  output says it plainly: *"UsageError: ... unrecognized arguments: - -n 8 -p no:cacheprovider"*, with the inifile
+  resolved to the package's own `setup.cfg`. So pytest received my intended flags **split into the wrong tokens**
+  (a bare `-` where `-q` should have been), refused the command line, and colcon reported a package failure rather than
+  a test failure.
+- **This is a defect in how I invoked the gate, not a property of the package** - and it is the reason the demo half of
+  Task 9 is still unmeasured. The correct forms to use next are colcon's equals/space-separated variants (for example
+  `--pytest-args="-q -n 8 -p no:cacheprovider"`) or repeated single-value `--pytest-args` flags, verified by checking
+  that colcon's log reports a **collected test count** before any result is believed.
+- **It also casts a caution over CP-1016:** the teleop run used the same argument string, so its *args may have been
+  ignored or altered too*. Its headline numbers are still meaningful - it reported **113 tests with 6 failures** and the
+  same `IPC_SOCKET_PATH_TOO_LONG`/`BRIDGE_CHILD_EXITED` kinds - but **whether that run was parallel at `-n 8` is not
+  established**, so it should be re-run with verified arguments before it is treated as Task 9's teleop evidence. The
+  socket failure itself remains credible because colcon's own captured output contains the error text.
+- **The rule this re-confirms, now for a gate command rather than a source interface:** verify that the runner actually
+  ran the scope and parallelism you asked for, by reading its own report, before believing anything it concludes. The
+  session's recurring lesson - read the interface, then act - applies to tool invocations as much as to APIs, and this
+  is the second time this round that a runner's output rather than its exit code settled what happened.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's two scopes are **both still unmeasured with verified arguments** - demo never ran, teleop ran with
+  possibly-altered args - and the socket-path question (CP-1012/CP-1016) still stands pending that re-measurement; Task
+  10 blocked until the 17 search values are reviewed. No runtime, no package-gate claim, no push, no evidence deleted,
+  no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
