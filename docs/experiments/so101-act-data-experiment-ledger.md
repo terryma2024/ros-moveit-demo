@@ -12236,3 +12236,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `test_act_task8_search_binding.py` - additive only, never a rewrite - then re-run the 75-test baseline.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-900 — Task 4: the launch composition forwards the entry-bound context (75 passed)
+
+- **`src/runtime/launch_composition.py` edited, additively (a 2660-line module, so the change is two anchored
+  insertions rather than a restructure).** The calibration branch already appended `--calibration-mode` and
+  `--calibration-report` to `broker_options`, and the broker `Node(executable="act_command_broker")` is created
+  later at line 2470. The edit adds a new `act_calibration_context` launch argument and, when it is non-empty,
+  forwards `--calibration-context <path>` to the launched broker, so the entry-bound context - and therefore the
+  measurement-plan hash and the generation - reaches the process that binds them. No reservation or owner-factory
+  logic was rewritten, and the `act` production path is unchanged because an empty default simply omits the flag.
+- **Verified:** the module imports through its package (`from so101_demo.runtime import launch_composition`)
+  without starting a runtime and carries both the new declaration and the forwarded flag; the Task 4 baseline set
+  (admission, child port, control-event timeline, search binding, broker) reports **75 passed, rc=0**
+  (`beh-task4-green8.log`) *after* the edit, so the composition change broke nothing.
+- **Remaining for Task 4's nine-file commit:** the generation-carrying expectations in
+  `test_act_control_event_timeline.py` and the **user-dirty** `test_act_task8_search_binding.py` (additive only,
+  never a rewrite), then the commit with the plan's exact nine-file list.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
