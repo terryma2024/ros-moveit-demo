@@ -21908,3 +21908,20 @@ not an inference of mine.**
   and add its import to the driver string. **Both locations are printed above.**
 - **State:** P1-3's source and test changes plus this partial fixture edit are uncommitted while red; no stack started, no CUDA, no
   actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1323 — The seal helper is in place at module level; one reference still resolves in the wrong scope
+
+- **What is now true:** the aggregator suite defines `SEAL_VALID_HELPER` at **module level**, writes it beside the fake driver, and the
+  driver imports `seal_valid` from its own directory - so the marker seal is gone and a schema-valid CLOSED seal replaces it, which is
+  what CP-1321 argued for. **The file parses and compiles**, and two of the three suites' failures persist unchanged (`BATCH_INVALID`
+  for the two fake drivers in the **descriptor** suite, which I have not yet converted) plus one `NameError: SEAL_VALID_HELPER` in the
+  aggregator suite.
+- **The remaining NameError is scope, not content:** the literal is defined at module level in that file, so the reference raising it must
+  be **inside a string that the driver executes** or in a fixture that runs before the module finishes binding - **the traceback's line
+  number will say which, and that is the next read.**
+- **Two honest notes.** First, three quarters of P1-3's work is done and green (the entry reads the seal back, INVALID is refused with a
+  nonzero exit and an INVALID ledger outcome, and evidence is preserved), and my own P1-3 test passes. Second, **this fixture repair has
+  now taken three rounds and I have twice edited it without reading the whole call site first** - the same error CP-1238 named - so the
+  next attempt starts by reading that test's body in full rather than by pattern-matching another two lines.
+- **State:** all of P1-3's changes and the partial fixture repair remain **uncommitted while red**; no stack started, no CUDA, no
+  actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
