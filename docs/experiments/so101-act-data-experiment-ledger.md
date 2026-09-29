@@ -23361,3 +23361,26 @@ not an inference of mine.**
   like when it works.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1411 — The neck check's requirements, read: four small fields, not a hunt
+
+- **Read (`pick_place_search_port.py:298-305`), and it is finite:**
+  ```python
+  sweep = self.boundary.neck_sweep_checker
+  qpos = scene["qpos"]                       # the SCENE document must carry a qpos array
+  neck = finite(qpos[sweep.neck_qpos])       # neck_qpos is an INDEX, and the neck yaw is read there
+  tolerance = finite(sources.readback.joint_tolerance)   # and the readback carries the tolerance
+  if (tolerance <= 0 or abs(neck - result["neck_yaw_rad"]) > tolerance
+          or sweep.check(qpos, current_rad=neck, target_rad=neck,
+                         duration_s=sweep.step_s) is not True):
+      raise ValueError("neck path")
+  ```
+  **So the fixture needs exactly four things, all named:** a `qpos` array inside the scene document, `neck_qpos` as an **integer index** (my list
+  was wrong, and the earlier `0.0` was closer), a positive **`joint_tolerance`** on the readback namespace, and a `check(...)` that returns a real
+  **`True`** with a `step_s` attribute. The lock's `neck_yaw_rad` is 0.1, so the tolerance must exceed that against a zero neck.
+- **And the `supported` flag below it is satisfied by an empty `other_object_contacts`** - `any(...)` over nothing is False, which the return
+  document reports honestly as "not supported" rather than fabricating a table contact.
+- **So the next edit is four lines in the doubles**, all of them names the production code just printed. **The evidence path is already fully
+  satisfied; this is the last collaborator before the port returns.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
