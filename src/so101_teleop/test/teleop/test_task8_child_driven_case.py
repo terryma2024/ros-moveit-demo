@@ -435,7 +435,11 @@ class _ChildSources(_Sources):
                         "simulation_step": world.simulation_step,
                         "simulation_time_s": world.simulation_time_s,
                         "paused": False,
-                        "model_sha256": self._model_sha256, "qpos": [0.0] * 8}
+                        # P1-5/CP-1871: the `{key: 0 for key in SCENE_KEYS}` fill leaves EVERY key as the int 0, and
+                        # only `qpos` was overridden - so `qvel` stayed an int where four production readers validate
+                        # `vector(scene["qvel"], model.nv)` and `SceneState.validate` refuses it at ingestion
+                        # (`scene_state.py:64`). Both vectors are given the same length the fixture's scene uses.
+                        "model_sha256": self._model_sha256, "qpos": [0.0] * 8, "qvel": [0.0] * 8}
         row["contact"] = {**{key: () for key in FRAME_KEYS},
                           "simulation_session_id": self._session_id,
                           "reset_epoch": self._reset_epoch,
