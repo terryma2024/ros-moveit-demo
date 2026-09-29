@@ -24740,3 +24740,20 @@ picture in both directions.**
   papered over, and each fix went to the layer that owned the missing data.** The ledger records the whole sequence, so the P1-3 change set can be reviewed as
   a chain of named findings rather than a single opaque edit.
 - **No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.**
+
+## CP-1486 — One more real gap closed (`scene` clock was 0), and a faster diagnostic chosen for the rest
+
+- **The value, printed by the refusal rather than guessed:** `READBACK_CAPTURE_INVALID: scene clock int=0` - the fixture's scene filled every `SCENE_KEYS` member with
+  `0` and never overrode the two monotonic bounds, so the derivation's receipt for the physics sources was 1970. **The fixture now supplies real monotonic
+  nanoseconds** (`time.monotonic_ns()`, begin one millisecond earlier) - legitimate substitution, because the fixture stands in for the simulator's clock.
+  **The refusal message was widened to name the value it refused, which is what turned a third blind round into one line of output** - a lesson worth keeping.
+- **Two write-time guards earned their keep again:** an insertion placed inside a dict literal and another with wrong indentation were both caught by
+  `ast.parse` before `write_text`, so the file was never left broken (the second attempt's `SyntaxError` line is in the round's log).
+- **Honest assessment of pace:** the fixture migration has taken several rounds because **each run exposes one more genuine interface disagreement in the
+  production chain** - `SOURCE_MISSING` (four-stream audit vs seven-source vocabulary), `READBACK_END_EFFECTOR_REQUIRED`, the unowned wrist flags,
+  `READBACK_CAPTURE_INVALID` (the scene clock). **None is wasted work and every fix went to the owning layer, but one-gap-per-run is a slow loop.**
+- **So the next round changes method rather than repeating it:** a **standalone probe** will drive the fixture's boundary and port directly and print the
+  **full chained exception with messages in one pass**, so the remaining gaps surface together instead of one per run. **No production rule will be relaxed to
+  shorten that list; the probe only changes how fast the list is read.**
+- **State:** the child fixture is still **5 failed, 2 passed, 1 xfailed**; P1-1 and P1-2 remain green and committed; the P1-3 change set is uncommitted by
+  design. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
