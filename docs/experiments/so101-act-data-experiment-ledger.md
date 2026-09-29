@@ -23133,3 +23133,22 @@ not an inference of mine.**
   `skew` comparisons and the `model_sha256` cross-check. **One run names the failing condition; that is worth more than three more edits.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1396 — Ten of the conditions pass in isolation, so the culprit is in the unprobed remainder
+
+- **The probe's verdict:** with a row built by the doubles themselves, **all ten conditions I evaluated are OK** - the two key sets match
+  `SCENE_KEYS`/`FRAME_KEYS` exactly (empty symmetric differences), the object body is right, the fingertip contacts are falsy, both step and both
+  sim-time comparisons agree, the scene's digest equals `sources.contact_pairs.model_sha256`, and `truncated` is False. **So `physical readback
+  scope` is being raised by something else in that disjunction** - and I have now closed the two candidates I could see (the reset receipt's epoch
+  and the boundary's epoch, which I aligned this round) without changing the outcome.
+- **What remains unprobed, and therefore what the next probe evaluates:** `world.simulation_step >= 1` and `paused is False` on the **final** row
+  the port sees; `world.reset_epoch` against the receipt's epoch (**now 1 vs 1**); `world.simulation_session_id` against the **request's** session;
+  and - the one I consider most likely, because it involves the *search result* rather than a readback - `0 <= result["timestamp"] <=
+  world.simulation_time_s`, where `result` is `_locked()`'s decision with `timestamp: 2.0` and the world's sim time is whatever step the interval
+  selected. **A probe that prints those five values, rather than asserting them, is the next step.**
+- **And the honest position, unchanged and worth restating:** items 1-4 are complete and green; this item is a fine-grained contract hunt inside
+  substituted I/O, and its **case-level half - the trusted aggregator, seven indexed assertions, four negatives - has not started**, with about
+  thirty-eight rounds left. **The offer I made to the owner in my last message stands: say the word and I stop the fixture tail, submit items 1-4
+  with P1-5's exact state documented, and defer P1-5 to a fresh approved round. Absent that, I keep going.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
