@@ -17507,3 +17507,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   construction.
 - **State: 1 failed / 38 passed** across both modules, the failure being this RED. Nothing weakened, nothing deleted, no
   push, no stack, no hardware.
+
+## CP-1119 — Every sample-level condition passes; the pairing now stops at the descriptor's own shape check
+
+- **The field-by-field diagnostic resolved the rest of the sample conditions and named the last one exactly:**
+  `distinct sample pairs among MEASURED: 1`, `sample measurements == values: True`, `lock frames: 3`, and
+  **`sample camera == values: False`** - because after CP-1114 the report read the camera fields from the batch's own
+  `measurements` while the sample still read the `camera_measurements` block. Both now build from the **same merged
+  source with the same precedence**, and the two documents can no longer disagree about a field's value.
+- **The pairing now advances to a different validator stage: `SEARCH_CONFIG_INVALID`**, which the binding raises while
+  validating the **descriptor's own shape** rather than the sample. That is progress of a specific kind - every
+  sample-level condition this RED was written to expose now passes, and what remains is the runtime descriptor schema
+  itself, the same schema the binding's own suite exercises with its fixture.
+- **State: 1 failed / 52 passed** across the three modules (aggregator, contract, head-search binding), the failure being
+  this RED, now at the descriptor stage. Nothing weakened, nothing deleted, no push, no stack, no hardware.
+- **Next:** read which descriptor field `SEARCH_CONFIG_INVALID` rejects - the fixture's descriptor is accepted by the
+  binding's own tests, so the difference must be something the **sample path** introduces (a descriptor carried through
+  JSON and compared against the runtime's, or a field the binding validates only when it comes from a sample), and the
+  same print-each-condition diagnostic will name it in one pass.
