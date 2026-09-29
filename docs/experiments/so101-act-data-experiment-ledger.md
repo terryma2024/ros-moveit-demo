@@ -26154,3 +26154,22 @@ picture in both directions.**
 - **What the next round writes, and it is bounded:** one test file beside the projection test, reusing `validation_seal_fixture` and the journal chain above, with the three scenarios and their
   named refusals - and, where a scenario turns out to have **no** check to refuse it, that is a finding to record rather than a test to weaken.
 - **State:** P1-1..P1-4 complete and committed; the focused set green; no new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1570 — What the projection suite already covers, and the exact gaps the three P2 scenarios fill
+
+- **The projection test file is 1047 lines and already refuses a long list of mutations** - a tampered worker result, a missing durable point document, a binding the journal does not reference, a point document
+  leased for another point or another attempt, a truncated lease, another evidence digest, a retry vocabulary under the wrong kind, and a coordinator layout without a sealed reference. **So P2 is not a blank page
+  either, and the honest question is which of the review's three scenarios those tests already answer.**
+- **Reading the list against the three scenarios:**
+  1. **corrupted seal** - *partly covered*: `test_tampered_worker_failure_result_refuses_projection` tampers a **result document**. **What is not covered is corruption of the SEALED WORKSPACE itself** - the sealed bytes
+     whose digest the journal committed - which is the scenario's actual subject;
+  2. **cleanup contamination** - **no test**: nothing leaves an extra file inside a sealed workspace and requires the projection to refuse it. **If no check exists for that, the round that writes the test finds
+     out, and the finding is recorded rather than the test weakened** (CP-1569's rule);
+  3. **foreign identity** - *adjacent but not it*: the existing cases swap a **point document**'s point/attempt/outcome; **none compares the TEN identities** (`source_commit`, `config_sha256`,
+     `source_provenance_sha256`, `runtime_config_sha256`, `anchors_sha256`, `contact_policy_fingerprint`, `act_profile_sha256`, `measurement_contract_sha256`, `phase_camera_matrix_sha256`,
+     `driver_source_sha256`) **field by field between the seal and the case being projected.**
+- **And the CLI half of P2 is untouched by all of it:** the review asks for a **non-zero exit** and a **ledger row that says INVALID**, which lives at the `expert_validation/main.py` surface and in the store's
+  projection state - **so the scenarios need driving from the CLI, not only from the projection function.**
+- **So the next round's deliverable is one file with three tests plus the exit-code assertions, and the reconnaissance above is what makes it mechanical:** seal an attempt, then (1) rewrite a sealed file's bytes,
+  (2) add a file to the sealed workspace, (3) project it under an identity differing in one of the ten fields - each must refuse **by name**, exit non-zero and leave a ledger row that says INVALID.
+- **State:** P1-1..P1-4 complete and committed; the focused set green; no new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
