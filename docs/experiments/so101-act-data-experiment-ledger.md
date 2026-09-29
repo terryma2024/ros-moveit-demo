@@ -25579,3 +25579,19 @@ picture in both directions.**
 - **Next, in order:** drive the runner's **SEARCH** phase through the real port (its documents are stamped against the case scope the port binds, so it comes first), then the other eight phases one at a time,
   then the seal, the journal and the seven indexed assertions with their four negatives.
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1535 — The runner drives the real port through SEARCH, and says so in its own result
+
+- **`3 passed`**, and the runner's result is the evidence: **`status: PASSED`, `completed_phases: ['SEARCH']`, `stopped_confirmed: True`** - and **`formal_episode_eligible: False`**.
+- **That last field is the one worth pointing at.** The run has a **substituted runtime**, so it is **not** a formal episode, and **the runner says so in its own
+  output rather than leaving it to whoever reads the log.** A milestone that reported `PASSED` without that distinction would be the kind of claim this batch exists to
+  prevent - and it is the difference between "the code path works" and "the task was performed".
+- **One rule the runner enforced on the first attempt, before any phase ran:** a **phase-prefix case must be a `FULL_RESTART`** - a prefix may not be run against a stack that
+  someone else's case left in an unknown state. **That is the same "no second stack, no unknown state" discipline the owner's constraints impose, enforced by the runner itself rather than by convention.**
+- **And the shape that made it cheap:** the SEARCH port fixture already builds a working port against a substituted boundary, so this test **put the production runner on top
+  of it** instead of building a third double. **The lesson from CP-1508 keeps paying: borrow the fixture that already drives the real object.**
+- **Next:** the other eight phases through the same run, which needs the boundary double to serve the sequence documents (its sources need `capture`, the contact pairs and the
+  readback skew the validators compare against) and to carry the runtime seams - the planning scene, the controller stop, the tool pose, the retreat axis and the IK solver.
+  **Then the seal, the journal and the seven indexed assertions with their four negatives.**
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed, and SEARCH now proven through the runner. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
