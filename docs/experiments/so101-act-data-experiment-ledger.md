@@ -13865,3 +13865,38 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   with a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and
   the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-968 — CORRECTION: the design's own definitions for the live fields, and drift in my implementation
+
+- **Read the approved design's live-field table instead of relying on my reading of the samples, and it corrects me
+  on two counts.** Verbatim (design lines 458-461):
+  - `grasp_occlusion_window_s`: "CLOSE 到 RELEASE 的 10 Hz live 时间线中，合法 gripper occlusion 的最长连续 source-stamp
+    区间；断帧、非允许 owner 或 phase 越界使该 run FAIL" - the **longest contiguous source-stamp interval** of legitimate
+    gripper occlusion between CLOSE and RELEASE, with a frame break, a non-allowed owner or a phase violation failing
+    that run; across five runs the **maximum**, bounded above by the configured limit;
+  - `release_stable_s`: "RELEASE 后首次满足 cup pose/velocity/contact 稳定谓词起，到首次破坏或 phase 结束的最长连续
+    source-stamp 时长" - from the **first** moment after RELEASE at which the cup pose/velocity/contact stability
+    predicate holds, to the **first break** or the end of the phase; across five runs the **minimum**, bounded below;
+  - `retreat_distance_m`: "RADIAL_RETREAT 中 gripper 相对已放置 cup 的径向位移，首次同时满足 clearance/contact/pose
+    稳定时的 readback 值" - in RADIAL_RETREAT, the gripper's **radial displacement relative to the already-placed cup**,
+    taken at the **first readback** that simultaneously satisfies clearance, contact and pose stability, with every run
+    required to produce such a qualifying readback; across five runs the **minimum**, bounded below.
+- **So my `retreat_distance_m` from CP-967 is not the design's rule.** I implemented the displacement between the
+  first and last RADIAL_RETREAT sample of a run; the plan requires the **radial displacement relative to the placed
+  cup at the first qualifying readback**, where "qualifying" means clearance, contact and pose stability hold together.
+  `cup_position_m` is available in the samples, but **clearance is not a sample key**, so the qualifying predicate needs
+  the raw records - the same layer the occlusion window needs. The function's docstring and my ledger entry claim a
+  rule the design does not state, so it is recorded here as **provisional and to be corrected**, not as done.
+- **`placement_stable_s` is also not literally in the design's list** - the fifth field the design names is
+  `placement_stable_s`? The table's rows read `grasp_occlusion_window_s`, `release_stable_s`, `retreat_distance_m` and
+  (line 264) `placement_stable_s`, so the name is right, but its row's semantics must be quoted the same way before the
+  implementation is trusted; the same applies to `cup_support_distance_m`'s row.
+- **What this changes about the next steps:** before any further implementation of the five values, transcribe each
+  field's design row verbatim into the ledger (as done for the three above) and write the implementation to that text.
+  Two of the five now have authoritative wording recorded; the remaining two rows need the same treatment, and
+  `retreat_distance_m` needs its implementation and docstring corrected to the radial-relative-to-cup rule once the
+  clearance predicate's source is known.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation and merge
+  green at 29 with this correction outstanding; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one
+  approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval);
+  no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
