@@ -22500,3 +22500,14 @@ not an inference of mine.**
   next missing field itself if this one is wrong - the same way it named the previous five.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1356 — Gate six supplied: a real observation and a real scene receipt
+
+- **Built from the two classes read rather than guessed:** `SceneCommandReceipt(backend="substituted", phase="search", success=True,
+  failure_code=None, evidence={})`, whose own `__post_init__` requires non-empty backend and phase and **`success` XOR `failure_code`**, and
+  `PickPlaceSearchObservation(search_result=..., physical_readback=..., planning_scene=<that receipt>)` with the five physical proofs left
+  `None` - **because a substituted boundary cannot honestly produce them.**
+- **The run's remaining failure is again wrapped, and the inner line is printed above** for the next read; the pattern has not changed, so the
+  next round reads it and supplies gate seven the same way.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
