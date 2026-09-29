@@ -28265,3 +28265,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **So piece 4 is not a tidy-up, it is the remaining blocker, exactly as CP-1684 predicted:** the fixture must run on **one monotonically increasing source clock and rewrite no timestamps** (removing `_stamped_add_grid` and the `index % 40` wrap). **Then uniqueness of instants - and therefore of captures - follows from the source, and the cadence assertion stops being satisfied by a rewrite.**
 - **And that also explains the remaining stale expectations rather than contradicting them:** `_grid_count == 1`, `sample_count == 10` and the cadence test all describe a case whose samples were one-per-phase with a rewritten clock; **restating them belongs with piece 4, in the same change**, because both sides are statements about the same clock.
 - **State:** **P1-4 pieces 1-3 working (the capture collision fixed), piece 4 outstanding and blocking, four expectations to restate with it**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1689 — Piece 4's first pass: the direction is right and the fixture needs a second one, in three named categories
+
+- **What landed, and each part is what the verdict asks for:**
+  | change | why |
+  | --- | --- |
+  | `_wide_prefix` declares **600 targets** on the contract's own grid (`origin + delay + interval*(i+1)`, the `PREFIX_SAMPLE_BUDGET` maximum) | the window is `0.1 + 1.2 = 1.3 s`, **wide enough to contain the case** - so the capture clock can be monotonic instead of wrapped to fit |
+  | the capture clock is **one monotonic sequence**: `simulation_time_s + 0.1 * (1 + index)` | "one monotonically increasing source clock", and the frozen period is now the step it advances by |
+  | the `add_grid` wrapper (`_stamped_add_grid`) is **deleted** | "must not rewrite recorder/window input timestamps" - the port samples at the frozen period itself, so nothing here is rewritten |
+- **And the first run is `12 failed, 76 passed`, in three categories, each of which is a place the fixture still assumed the old clock:**
+  ```
+  10 x  TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution...   the APPROACH phase's evidence rule against the new stamps
+   1 x  AssertionError: assert 2 == 1                          the stale `_grid_count == 1` expectation
+   1 x  TASK8_LIVE_EVIDENCE_GRID_GAP                            the grid's "exactly one period apart" rule across phases
+  ```
+- **The third one is the informative failure**, and it says what the fixture's clock still has to be: the grid requires **consecutive samples exactly one period apart**, and my capture clock advances by the period **per call** while the number of calls per phase is the phase's *own* instant count. So a phase's instants and the next phase's first instant must be **one period apart in the same sequence** - which is a statement about how the fixture's readback advances, not about the port.
+- **So piece 4 is a fixture-cadence change with three known consumers** (the APPROACH evidence rule, the cross-phase grid rule, and the expectations that counted samples), **and the direction is the verdict's own**: a monotonic source clock and no rewriting. **Nothing is reverted; the second pass is the next step.**
+- **State:** **P1-4 pieces 1-3 working; piece 4 in progress with three named categories to close**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
