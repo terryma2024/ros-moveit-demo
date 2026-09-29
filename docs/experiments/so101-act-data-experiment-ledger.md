@@ -29919,3 +29919,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1 second half GREEN; P1-3 three of four requirements implemented with the fourth RED; the fixtures
   owed are named; the owner's tree preserved (32 modified / 13 untracked, the six-file difference being my
   `horizontal_fov_rad` lines) and uncommitted.** The goal remains paused pending the TUI's resume.
+
+## CP-1778 — The `BATCH_ANCHOR_MISSING` is the SHOULD-BE failure, and the design forbids the shortcut
+
+- **Traced to its source, and it is not a fixture gap:** the composition builds the evaluator with
+  `load_phase_camera_matrix()` - **the SHIPPED config file** - and that file is still
+  `phases: []` / `SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION` with **no `camera` block at all**. My new
+  `PHASE_CAMERA_INTRINSICS_REQUIRED` therefore fires during the first phase, the driver records the phase as failed, and
+  the batch ends with no anchor rows → `BATCH_ANCHOR_MISSING`.
+  **So the formal entry refusing to seal is the correct consequence of the evaluator no longer inventing intrinsics** -
+  not a regression to paper over, and not something a fixture can supply, because what is missing is the **shipped
+  matrix** itself.
+- **And the design says the shortcut is forbidden, in its own words:** *"不能从 XML 常量直接抄值后声称完成测量"* - the
+  phase-camera geometry must come from **raw `/head_camera/camera_info` and TF samples** (≥10 consecutive post-reset
+  samples per anchor, same reset epoch, strictly increasing source stamps), cross-checked against the frozen
+  MuJoCo/URDF sources at fixed tolerances (K per element ≤1e-6 px, translation ≤1e-6 m, rotation ≤1e-6 rad, FOV
+  ≤1e-6 rad). **`horizontal_fov_rad` itself is defined as `atan(cx/fx) + atan((W-cx)/fx)` per frame, reported as the
+  minimum over valid frames** - a formula over samples, not a constant.
+- **Which makes P1-3's remaining requirement a runtime task rather than a transcription:** completing and freezing
+  `task8-phase-camera-matrix-v1.json` needs **a headless MuJoCo runtime that actually samples CameraInfo and TF** -
+  the same "MuJoCo headless runtime / approved integration boundary" the verdict names in its execution order. **It
+  cannot be finished by editing the JSON**, and doing so would be exactly the substitution the design refuses.
+- **So the owed work is now ordered by dependency rather than by choice:**
+  1. **the headless MuJoCo sampling path** that produces per-anchor CameraInfo/TF at the admitted cadence;
+  2. **the frozen matrix** built from those samples (phases filled, `camera` block real, status frozen), with the
+     loader refusing a scaffold;
+  3. **then** the two owed fixtures, whose inputs exist by then;
+  4. **then** a clean re-measurement of the demo fix, with code no longer moving.
+- **State:** **P1-1 second half GREEN; P1-3's evaluator contracts implemented (intrinsics required, `in_frame` bounded,
+  occluders fail closed) with the matrix RED and now known to need a runtime; the formal entry's refusal is correct
+  behaviour, recorded as such.** No new controlled change this round.
