@@ -14928,3 +14928,32 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   than forced.
 - **What this unblocks:** the Task 8 production caller (contract at CP-993) and then Task 9's single full gate; Task 10
   stays blocked until the 17 search values are independently designed and reviewed.
+
+## CP-1010 — The Task 8 caller's address, and the gate's parallelism requirement
+
+- **Found the driver's insertion point in the real chain rather than guessing an address:**
+  `ros_child.py:505` already binds the startup receipt through `self._pick_place_port.bind_startup_receipt(...)`, and
+  `ros_child.py:512-525` constructs `PickPlaceRunner(_FencedPickPlacePort(self._pick_place_port, self._act_cancelled)).run`.
+  The approved plan's Task 7 steps 3-4 put the recorder between exactly those two - provision it through the owner and
+  the child startup receipt, then bind it before the runner runs - so the driver's home is that gap, not a new module.
+- **The seam's own contract, read from the port:** `bind_startup_receipt(receipt)` refuses anything whose
+  `schema_version` is not the integer `1`, whose `session_id` differs from the boundary's reset sources, or whose
+  `stack_owner`/`child_owner` are not non-empty mappings, and it refuses a second binding or a binding after `_begun`
+  (`TASK8_STARTUP_PROOF_INVALID`). So the recorder is provisioned **once, before** the port begins, alongside a receipt
+  the port already validates - which is also why the receipt's `schema_version == 1` is consistent with the report
+  decision at CP-1004 rather than in tension with it.
+- **Loaded the project's mandatory `so101-dev` skill before continuing task actions, and it changes one thing about the
+  remaining gates:** the full pytest gate for each module must run under **`pytest-xdist` with
+  `min(8, logical CPU count)` workers** (`-n 8` when more than eight logical CPUs), with the CPU count, worker count,
+  actual scope, exit code, JUnit and skip count recorded - "directed or serial runs are only for localisation and do not
+  count as a full pass". My focused serial runs in this session are exactly that: localisation evidence, not gate
+  evidence. **Task 9's xdist gate must therefore run both packages at `-n min(8, nproc)`**, on fresh verified NVMe
+  scratch with `TMPDIR`/`TMP`/`TEMP` checked through the exact test interpreter, and must not shrink the collection
+  scope.
+- **Also re-confirmed by the skill and consistent with everything this session did:** one registered evidence root per
+  task; user changes are never overwritten or cleaned; no evidence deletion without explicit authorisation; no second
+  stack started unknowingly. All hold.
+- **State:** owner decisions 1-4 implemented and committed (CP-1004, CP-1005, CP-1007, CP-1008, CP-1009); the Task 8
+  caller's address and seam contract are now recorded; Task 9's gate requirements are pinned; Task 10 stays blocked
+  until the 17 search values are independently designed and reviewed. No runtime, no package gate, no push, no evidence
+  deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
