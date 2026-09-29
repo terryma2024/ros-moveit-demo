@@ -30436,3 +30436,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1 second half GREEN; P1-2 CLOSED; P1-3 CLOSED.** Remaining: **P1-1's first half** (the default real
   bottom-I/O composition, whose geometry sources P1-3 now supplies), **P1-4**, **P1-5**, **P1-6**, the demo RED's clean
   re-measurement, the final freeze gate and the re-review packet.
+
+## CP-1796 — P1-1's first half, read from the seam itself: six substitutions and their production counterparts
+
+- **The seam module (`test_act_task8_formal_measurement_entry.py`'s `BOTTOM_IO_MODULE`) names exactly what the formal
+  entry's default path is missing, and it is more than the three inputs CP-1772 scoped:**
+  | the seam substitutes | its own words | the production counterpart the default path needs |
+  | --- | --- | --- |
+  | `client()` | *"The repo's OWN canned client, reused rather than re-imitated"* → `CannedMujocoClient`, **which lives in the test suite** | a real MuJoCo/ROS client (the one `pick_place_child_port`'s wiring uses) |
+  | `frame_source(request)` | returns `object()` and records the call | the real camera frames for the detector to read |
+  | `phase_path(phase)` | 11 samples at the admitted 2 ms, joints keyed by phase | the run's own trajectory for that phase |
+  | `target()` | the cup: `{"class_id": "plastic_cup", "position_m": [0.10, 0.10, 0.02], "radius_m": 0.03}` | the case's own target |
+  | `occluder_geometry()` | geometry for every occluder the matrix names | the model's own geom poses |
+  | `yolo_detector_factory` | the detector model | **already real**: `build_real_providers` imports `build_detector` and uses the descriptor's admitted CUDA block |
+- **And the seam's own docstring records why this matters:** *"My first stand-in answered every call with `True`/`{}`,
+  captured no anchors, and sealed a batch the schema legitimately refuses"* - **the same shape of mistake I made in
+  CP-1784 with an empty `DetectionBatch`.** The substitution that is faithful to the boundary is the one that produces
+  what the boundary produces.
+- **Which also says what P1-1's first half is, concretely: a production provider builder for those six values**, sourced
+  from the model and the case rather than from a test module. **Two of them the headless model can supply directly and
+  are the natural first pair** - `occluder_geometry` from the model's geoms, and the camera frames the detector reads -
+  **after which the client, the phase path and the target follow from the case the run is executing.**
+- **State:** **P1-1's first half is scoped to six named substitutions with named production counterparts, and the
+  faithful-substitution rule is recorded from the seam's own history.** P1-1 second half GREEN, P1-2 and P1-3 CLOSED;
+  the demo RED's clean re-measurement, P1-4, P1-5, P1-6 and the final gate remain.
