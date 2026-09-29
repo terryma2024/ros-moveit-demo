@@ -13639,3 +13639,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   8-10 remain; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
   candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED; gen3 retained and ineligible, gen4 reserved for Task 10.
+
+## CP-959 — Task 8 RED established: the five live-only fields
+
+- **Tests appended to `test/test_act_task8_live_qualification.py`** (a clean, plan-named *Modify* target) covering the
+  plan's Steps 1 and 2:
+  - the **five live-only fields** and their extrema direction across five runs - occlusion **max**, support distance
+    **max**, release-stable **min**, retreat-distance **min**, placement-stable **min** - asserted from a five-run
+    fixture whose values are chosen so each direction is unambiguous;
+  - refusals: fewer than five runs (`FIVE_RUNS_REQUIRED`), a mixed contact-policy fingerprint, a mixed phase-camera
+    matrix and a mixed session (`IDENTITY_MISMATCH`), and a run whose support distance arrives as a **summary without
+    its sealed sample path/hash** (`SEALED_SAMPLE_REQUIRED`).
+- **RED run:** `python -m pytest -q -p no:cacheprovider test/test_act_task8_live_qualification.py` -> **exit code 1,
+  elapsed 1 s**, result **6 failed, 19 passed** (`beh-task8-red.log`), the failures being
+  `ImportError: cannot import name 'derive_live_measurements'` - exactly the boundary the plan predicts. The 19 passes
+  are the module's existing tests, whose behaviour the implementation must preserve.
+- **Interface fixed by the plan and encoded in the tests:** `derive_live_measurements(full_runs, contract) -> Mapping`,
+  with the run mapping carrying `run_index`, `session_id`, `contact_policy_fingerprint`,
+  `phase_camera_matrix_sha256`, the five field values and the sealed `sample_path`/`sample_sha256`; the remaining
+  rules (three consecutive 10 Hz samples immediately before first open in the same release epoch, exact
+  `bottom_collision`/`table_collision` contact, stable pose/velocity and `max(0, d_signed)`) are the plan's and belong
+  with the implementation.
+- **State:** Tasks 1-7 complete and green (Step-4 command 53, broader set 244, chain file 16); Task 8 RED established;
+  Tasks 9-10 untouched; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
+  candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED; gen3 retained and ineligible, gen4 reserved for Task 10.
