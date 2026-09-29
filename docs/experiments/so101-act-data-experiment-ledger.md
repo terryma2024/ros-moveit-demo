@@ -33872,3 +33872,58 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | **same + `mkdir -m 0700` + `--return-code-on-test-failure`** | **5956 tests, 0 errors, 0 failures, 163 skipped, rc=0** | **GREEN** |
 - **And the count reconciles with the direct run rather than contradicting it:** 5956 collected = the 5793 passed + 163 skipped the direct runs reported, **so the package gate covers exactly the same corpus and now runs through the mechanism the verdict requires.**
 - **State:** **P1-6 in progress: serial CTest, the full-module teleop gate and the demo package gate are green; the configure/build + generated-CTest verification is running.** **Task-list statuses: P1-6 in_progress, six pending, none completed.**
+
+## CP-1908 — The full-module teleop gate over `test/` (not `test/teleop/`) is green
+
+- **The scope the verdict corrected, run as an xdist gate over the whole module:**
+  ```
+  cd src/so101_teleop
+  $VENV/bin/python -m pytest -q -p no:cacheprovider -n 8 test/
+      1272 passed, 43 skipped, 9 warnings in 40.23 s          rc=0
+  scratch     = R/scratch/t3/tmp            (tempdir VERIFIED)
+  socket base = /data/work/so101-evidence/act-data/ipc-t3   (41 bytes, mode 0700)
+  log         = R/scratch/t3/run/pytest-full-module.log
+  ```
+  **1272 passes where the earlier "1109" covered only `test/teleop/`** - so the verdict's reading was right, and the
+  scope now includes `test/backends/`, `test/e2e/` and the module root.
+- **And the reason the narrower run had failed is now a named fact rather than a workaround:** under xdist, conftest gives
+  each worker `SO101_IPC_SOCKET_BASE/<worker>-<pid>`, and the bridge adds `/so101bridge-<8>/normal.sock`; the CHILD enforces
+  **103** bytes (`child_runtime.py:332`). A socket base inside the run root is too long for that arithmetic, **so the base
+  lives at the evidence-family level (`/data/work/so101-evidence/act-data/ipc-<run>`, 41 bytes) while the fsync scratch
+  stays exactly at `R/scratch/<unique-run>/tmp`** - both rules satisfied, no `/tmp`, no tmpfs, no threshold relaxed.
+- **State:** **P1-6's four requirements are green (this entry, CP-1906, CP-1907, CP-1909).** **Task-list statuses:
+  P1-6 completed, the other six pending or in progress, none renamed.**
+
+## CP-1909 — Generated CTest verified entry by entry, and P1-6 is closed
+
+- **`colcon build --cmake-force-configure` rc=0**, and the regenerated list was then parsed and checked against the source
+  tree rather than counted:
+  ```
+  entries parsed:                    117
+  with a project .py:                117
+  missing on disk:                   0
+  interpreters used:                 {'…/test-venv/bin/python'}      (the MuJoCo-capable interpreter)
+  entries naming the deleted chain:  0
+  first: test_backend_profiles          -> src/so101_teleop/test/backends/test_profiles.py
+  last : test_unified_teleop_route_binding -> src/so101_teleop/test/teleop/test_unified_teleop_route_binding.py
+  ctest -N: Total Tests: 117
+  ```
+  **so the generated CTest matches the source tree: every registered name resolves to a file that exists, none names the
+  chain that was deleted, and the interpreter in every entry is the task's test interpreter.**
+- **P1-6, in the verdict's four parts:**
+  | requirement | result |
+  | --- | --- |
+  | reconfigure/build + verify generated CTest | `--cmake-force-configure` rc=0; 117/117 verified as above |
+  | teleop full-module xdist over `test/` (not `test/teleop/`) | **1272 passed, 43 skipped, rc=0** (CP-1908) |
+  | demo package gate with a MuJoCo-capable interpreter, not direct pytest | **`colcon test`: 5956 tests, 0 errors, 0 failures, 163 skipped, rc=0** (CP-1907) |
+  | serial CTest all green | **117/117, ctest rc=0** (CP-1906) |
+- **And the environment those gates require is now written down once, because every failure in this span was an
+  environment fact rather than a test:**
+  ```
+  TMPDIR/TMP/TEMP        = R/scratch/<unique-run>/tmp          (tempfile.gettempdir() verified inside it)
+  SO101_IPC_SOCKET_BASE  = /data/work/so101-evidence/act-data/ipc-<run>   (mode 0700, 41 bytes)
+  interpreter            = R/test-venv/bin/python               (colcon itself run under it, with a shim dir of
+                                                                 colcon* symlinks so pytest/pydantic stay the venv's)
+  ```
+- **State:** **P1-1 … P1-6: P1-6 CLOSED here; P1-1 is next and the remaining five stay open.** **Task-list statuses are the
+  only change made to the list.**
