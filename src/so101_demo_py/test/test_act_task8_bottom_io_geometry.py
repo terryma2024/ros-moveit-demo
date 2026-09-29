@@ -126,3 +126,48 @@ def test_posing_the_arm_changes_what_the_wrist_camera_sees():
         source.pose([0.4, -0.3, 0.2, 0.0, 0.5, 0.0, 0.3])
         posed = source({})
         assert not np.array_equal(at_rest, posed), "a gripper-mounted camera must follow the joints"
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# the target: the cup's own pose and size, from the model (it is a FREE body, so its pose is a property of the run)
+# ----------------------------------------------------------------------------------------------------------------------
+
+def test_the_target_is_the_cups_own_pose_and_size():
+    import mujoco
+
+    from so101_demo.act.task8_bottom_io import target_from_model
+
+    model = mujoco.MjModel.from_xml_path(str(_scene()))
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "plastic_cup")
+
+    target = target_from_model(_scene())
+    assert target["class_id"] == "plastic_cup", "the whitelisted class the detector queries with"
+    assert target["position_m"] == pytest.approx([float(v) for v in data.xpos[body_id]], abs=1e-12)
+    extents = [float(v) for i in range(model.ngeom) if model.geom_bodyid[i] == body_id
+               for v in model.geom_size[i]]
+    assert extents, "the cup body has geoms in this scene"
+    assert target["radius_m"] == pytest.approx(max(extents))
+    # and it is NOT the seam's invented constant
+    assert target["position_m"] != pytest.approx([0.10, 0.10, 0.02], abs=1e-3)
+    assert target["radius_m"] != pytest.approx(0.03, abs=1e-6)
+
+
+def test_moving_the_free_cup_moves_the_target():
+    """A free body's pose is the run's, so the target must follow it - not be a constant."""
+
+    from so101_demo.act.task8_bottom_io import target_from_model
+
+    at_rest = target_from_model(_scene())
+    displaced = target_from_model(_scene(), joints_rad=[0.0] * 7 + [0.05, 0.0, 0.0])
+    assert displaced["position_m"] != pytest.approx(at_rest["position_m"], abs=1e-9), (
+        "the free joint's qpos must move the target; the scene's free joints follow the arm's seven")
+
+
+def test_a_missing_target_body_is_refused_by_name():
+    from so101_demo.act.task8_bottom_io import target_from_model
+
+    with pytest.raises(BottomIOError) as error:
+        target_from_model(_scene(), body="no_such_cup_body")
+    assert "TARGET_BODY_MISSING" in str(error.value)
