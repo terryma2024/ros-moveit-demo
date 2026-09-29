@@ -16541,3 +16541,18 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `beh-r670-green3.log`.
 - **Boundary II remaining, each needing its own RED:** live search and the fixed non-contact arm probe; CameraInfo/TF raw
   rows per anchor; and explicit per-anchor **FULL_RESTART** semantics.
+
+## CP-1070 — Boundary II, fourth piece: the lifecycle is named on every row
+
+- **RED:** `KeyError: 'lifecycle'` - no raw row said which lifecycle it was measured under, so a reader could not
+  distinguish a FULL_RESTART measurement from one taken across a reused stack. **The other half of the test passed
+  immediately**, which is a fact worth keeping: the launch/close sequence is already
+  `[(launch, default), (close, default), (launch, left), (close, left), (launch, forward), (close, forward)]` - one
+  launch and one close per anchor, never overlapping.
+- **The fix:** a module `LIFECYCLE = "FULL_RESTART"` stamped in `_write_record`, the single place every raw row passes
+  through, and carried into the index entry too - so a row cannot be written without naming the restart it belongs to.
+- **GREEN: 13 passed, rc=0**, scratch `<R>/scratch/r671b.<n>` with `TMPDIR` verified through the exact test interpreter;
+  RED `beh-r671-red.log`, GREEN `beh-r671-green.log`.
+- **Boundary II remaining, each needing its own RED:** live search and the fixed non-contact arm probe; and CameraInfo/TF
+  raw rows per anchor. Both are heavier than the four pieces landed so far because they depend on what the *stack*
+  exposes, and the stack's composition is the launch entry's job (Boundary II's remaining structural item).
