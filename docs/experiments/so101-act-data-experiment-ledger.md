@@ -14210,3 +14210,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate
   safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-980 — The collection layer is in: five sealed full runs, with explicit extractors (33 passed)
+
+- **Implemented `collect_live_runs(rows, *, identities, extractors)`:** it takes the rows produced by
+  `validate_case_journals`, selects those carrying a `live_evidence_artifact`, refuses anything other than **five**
+  (`FIVE_FULL_RUNS_REQUIRED`), and for each requires a **readable regular non-symlink file whose sha256 matches the
+  sealed digest** (`SEALED_SAMPLE_REQUIRED`, `SEALED_SAMPLE_DIGEST_MISMATCH`) - so a run that cannot be read back byte
+  for byte is refused rather than derived from. It returns the run mappings `derive_live_measurements` consumes:
+  `run_index`, the artifact's own `session_id`, the bundle's contact-policy fingerprint and phase-camera matrix, the
+  sealed `sample_path`/`sample_sha256`, and the five values.
+- **The five values come from caller-supplied extractors**, and that is the honest design rather than an oversight:
+  three of the design's rules read the **raw records** rather than the sample keys, so an extractor per field keeps
+  that evidence requirement visible at the call site. A field with no extractor raises `LIVE_EXTRACTOR_REQUIRED`, so a
+  missing rule can never be silently reported as zero - which is the failure mode this whole protocol exists to
+  prevent.
+- **Verified: 33 passed, rc=0** (`beh-task8-green18.log`), covering the five-run selection, the digest refusal, the
+  missing-extractor refusal and the fewer-than-five refusal.
+- **Remaining in Task 8, and it is now a single welding step plus the extractors:** write the extractors that read the
+  raw contact and wrist records (the occlusion predicate with its approved-owner check, the release and placement
+  stability predicates, the retreat qualifier and the support pair's frames), then call `collect_live_runs` ->
+  `derive_live_measurements` -> `build_qualified_measurements` inside `build_task8_qualified_report`, read the written
+  document back and call `require_qualified(report)`.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation and
+  collection layers green at 33; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval
+  outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no
+  runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
