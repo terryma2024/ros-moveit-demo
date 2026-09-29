@@ -27126,3 +27126,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   proof must be required (CP-1620), so they test the entry rather than a decision that has not been made.
 - **And one assertion was mine to fix twice, which is worth the line:** the foreign-identity case first demanded a *particular refusing layer*, the schema's validator refused it instead, and the case now asserts what the review asked for - **refused, and INVALID** - because which layer catches it is an implementation detail, not the requirement.
 - **State:** item 4's CLI half is green and committed with **all five scenarios**; only its **cleanup-proof scope** awaits CP-1620. Item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed and independently confirmed; item 3 unstarted; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1625 — Item 3, first point verified and fixed: the canonical sample is a key SET, not a count
+
+- **The review's sentence:** *"the test checks `len(record) == 24`, not the claimed exact canonical key set."* **Read against the code, it is correct and the weakness is real:** the recorder refuses any sample whose keys differ from
+  `_SAMPLE_KEYS` (`task8_live_evidence.py:20,84`), while `len(record) == 24` is satisfied by a record with one key swapped for another.
+- **Fixed in `test_act_task8_sealed_artifact.py`:** the assertion now compares `set(record)` against the **production** `_SAMPLE_KEYS` and, on failure, **names the missing and the unexpected keys**. **`4 passed`.**
+- **The remaining two points of item 3 are larger and are named here so they are not lost:**
+  1. *"the fixture replaces evidence timestamps"* - the sealed artifact's cadence comes from a fixture that rewrites timestamps, so it does not establish **source-record** cadence; that needs the **production qualification path**;
+  2. *"the 'foreign identity' and 'edited record' negatives merely catch test-local `AssertionError`"* - the four negatives must **break the full published chain** through production qualification refusal, not by failing an assertion **I**
+     wrote.
+  Both are the same piece of work: **prove the full case -> journal -> trusted aggregator chain through production qualification, with the seven CP-1488 meanings and four negatives that the chain itself refuses** - which is item 3 proper, and it is
+  unstarted.
+- **State:** item 3's first point closed; items 5 and 6 closed and independently confirmed; item 4's CLI half green with all five scenarios, its cleanup scope awaiting CP-1620; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
