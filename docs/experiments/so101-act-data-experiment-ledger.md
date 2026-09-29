@@ -18830,3 +18830,28 @@ not an inference of mine.**
   production recorder, window and seal rather than a stub - the seam stays where item 4 puts it: external I/O only.
 - **With that, the seven assertions follow in the same test**, and the untracked RED is committed only once they are green.
 - **State:** goal active (revision 51, cap 1000); HEAD `bd052b8b`; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1179 — The two seals, their order, and the identity keys: item 4's implementation is fully specified
+
+- **Read from the port itself, which is the reference implementation my fake must follow rather than invent:**
+  ```python
+  window = self._live_evidence_window
+  if window is not None and not getattr(window, "_sealed", False):
+      window.seal()                       # the window first: a window that cannot seal must not leave a sealed recorder
+  published = getattr(recorder, "_sealed", None)
+  if published is not None:               # a completed chain returns the artifact it already published - idempotent
+      return {"path": str(published), "sha256": sha256(published bytes), "schema_version": EVIDENCE_SCHEMA_VERSION}
+  return recorder.seal(identity)          # identity = case_id, session_id, attempt_id, reset_epoch, release_epoch
+  ```
+  `LiveEvidenceWindow.seal()` takes **no arguments** and refuses an unopened window
+  (`TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN`); `Task8LiveEvidenceRecorder.seal(identity)` takes exactly those five keys and
+  refuses a second seal (`TASK8_LIVE_EVIDENCE_ALREADY_SEALED`), publishing the canonical index as the artifact's only commit
+  point.
+- **Two ordering rules I would otherwise have got wrong, both stated in the port's own comments:** seal the **window before
+  the recorder**, so a window that cannot be sealed leaves no sealed recorder behind; and treat a recorder that already
+  sealed as **success**, so the call is idempotent rather than a second-seal error on a completed chain.
+- **So the next round is pure transcription, with no design left in it:** my plain-class fake port gains
+  `bind_live_evidence(window)` (store it), row feeding from CP-1176's recipe inside `run_phase`/`run_retreat_segment`, and
+  `seal_live_evidence(request)` following the three steps above - then the runner completes, the artifact is real, and the
+  seven assertions can be written against it.
+- **State:** goal active (revision 51, cap 1000); HEAD `6c802da2`; staged 0; no full suite, no push, no stack, no hardware.
