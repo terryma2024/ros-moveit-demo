@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import copy
 import math
 
@@ -170,6 +172,16 @@ class PickPlaceSearchPhasePort:
             # seal the window first: a window that cannot be sealed must not leave a sealed recorder behind.
             # A window that already sealed itself on reaching FINAL_CHECK is left as it is, so a second call is safe.
             window.seal()
+        # the recorder seals itself when the chain completes (its `_sealed` holds the published index path), so a
+        # completed chain must return that artifact instead of sealing again - seal_live_evidence is idempotent
+        published = getattr(recorder, "_sealed", None)
+        if published is not None:
+            from pathlib import Path as _Path
+
+            from so101_demo.act.task8_live_evidence import SCHEMA_VERSION as _EVIDENCE_SCHEMA
+            return {"path": str(published),
+                    "sha256": hashlib.sha256(_Path(published).read_bytes()).hexdigest(),
+                    "schema_version": _EVIDENCE_SCHEMA}
         return recorder.seal(identity)
 
     def _search_evidence(self, observed: PickPlaceSearchObservation,
