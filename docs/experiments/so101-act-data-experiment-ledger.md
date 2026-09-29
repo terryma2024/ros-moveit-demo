@@ -25098,3 +25098,17 @@ picture in both directions.**
   `prefix_executor` rather than an `executor.run(...)` abstraction, and the gate half should delegate to the validator, which refuses by name until it exists. **That keeps
   the chain real, the missing piece named, and no value invented anywhere.**
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1505 — `execute_approach` runs the broker's own chain; only the facts validator is left
+
+- **`chain.log`**: the port, goals-builder and path-screen files stay green after the rewrite.
+- **The chain is production calls, and each was named by reading rather than guessed:** the trusted source (`broker._prefix_source_port(ticket)`) produces the source document;
+  **`issue_prefix_source(ticket, prefix, source, source_kind="EXPERT_ROUTE", source_artifact_sha256, contact_policy_fingerprint)`** - the kind from `SOURCE_KINDS`, the two digests
+  from the preparation - returns the receipt; the broker's **own** `prefix_executor` approves (`approve_with_source`) and submits (`submit`), and the **wait is delegated to the
+  executor's `wait_for`** instead of a polling policy I would have had to invent; the held row is the robot's state from the capture and the header stamp is the capture's sim time,
+  so **a stale prefix is refused by the goals builder rather than executed**; then `screen.inspect` and `PathProver.prove`.
+- **And the gate half is deliberately not this method's:** `approach_facts(snapshot, request)` **refuses by name** until it is written, because a gate is a conclusion reached from
+  readback (CP-1504). **That refusal is the honest placeholder - an unearned document cannot pass through it.**
+- **So APPROACH's remaining work is exactly one method:** `approach_facts`, mirroring `_search_evidence` - validate the snapshot and readback for APPROACH's phase (the eight gates,
+  the holding/contact facts, the scope), and refuse by name when anything is absent. **Then APPROACH is end to end and the pattern is set for the seven phases after it.**
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
