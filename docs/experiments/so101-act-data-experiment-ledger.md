@@ -22115,3 +22115,27 @@ not an inference of mine.**
   expected **around** the call rather than by weakening anything.
 - **State:** committed with seven suites green; build copies synced; no stack started, no CUDA, no actuators, no hardware; cleanup
   untouched; nothing deleted, nothing pushed.
+
+## CP-1335 — P1-4's mismatch, read exactly: the payload carries the INNER block, the seal carries the WHOLE document
+
+- **The defect, verbatim from the code** (`task8_calibration_aggregator.py:276`):
+  ```python
+  if isinstance(readings.get("head_search"), dict) and readings["head_search"] != sealed_descriptor:
+      raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+  ```
+  and **three lines later** the same function assigns `sample_document["head_search"] = sealed_descriptor["head_search"]` - i.e. the
+  author already knew the two layers: the payload's `head_search` is the **inner** block (`{schema_version, detector, camera, motion}`),
+  while `sealed_descriptor` is the **whole** `{schema_version, head_search}` document. **Comparing them with `!=` therefore refuses an
+  identical payload**, which is precisely the reviewer's "a normal equal payload can therefore fail".
+- **Why the existing coverage missed it:** the test's own payloads build `head_search` from the *whole* descriptor object (the helper at
+  line 641 wraps an inner block in `{"schema_version": 1, "head_search": ...}` before sealing), so the two sides happened to be the same
+  layer **in the test** and only in the test. **A production `measurements.json` carries the inner block**, so the real path fails where
+  the test passes - the same shape of gap as P1-2's fixtures.
+- **The GREEN's two parts, now certain:** compare at one layer (`readings["head_search"]` against `sealed_descriptor["head_search"]`), and
+  **validate every sealed descriptor with the complete shared validator** (`validate_head_search_shape`), which is the reused rule P1-2
+  just strengthened.
+- **The RED, exactly:** a multi-root aggregation whose payloads carry the **inner** block while the sealed descriptors are the full
+  documents. Today it raises `CALIBRATION_IDENTITY_MISMATCH`; after the fix it passes, and a payload carrying a **different** inner block
+  still raises.
+- **State:** nothing changed yet in this round's source; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing
+  deleted, nothing pushed.
