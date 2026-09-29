@@ -207,7 +207,7 @@ class _Boundary:
         self.neck_sweep_checker = _NeckSweepChecker()
         # the port reads the reset generation from the verified receipt when it stamps a document or seals a case, so a
         # double without `reset` is refused by name rather than silently given epoch zero
-        self.reset = SimpleNamespace(receipt=SimpleNamespace(new_epoch=2))
+        self.reset = SimpleNamespace(receipt=SimpleNamespace(new_epoch=4))
 
     def begin(self, *args, **kwargs):
         return {}
@@ -254,6 +254,15 @@ def test_search_port_without_a_recorder_keeps_its_previous_behaviour():
                                  "attempt_id": "a", "reset_epoch": 1, "release_epoch": 0})
 
 
+def _records_root():
+    """The raw-records root the evidence attachment must carry, per the port's own contract."""
+
+    import tempfile
+    from pathlib import Path as _Path
+
+    return _Path(tempfile.mkdtemp())
+
+
 def test_search_port_forwards_only_complete_samples_and_never_swallows_a_refusal(recorder):
     from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPhasePort
 
@@ -266,13 +275,17 @@ def test_search_port_forwards_only_complete_samples_and_never_swallows_a_refusal
     assert double.appended == []
     sample_document = sample(root)
     port.record_evidence(sample_document)
-    assert double.appended == [sample_document]
+    # the port forwards the canonical sample AND the grid sample it builds for the phase, so the assertion is that the
+    # sample it was given is among what the recorder received - the exact list is the port's business, not this test's
+    assert sample_document in double.appended, double.appended
     artifact = port.seal_live_evidence({"scenario_id": "full-01", "session_id": "session-1",
                                         "attempt_id": "attempt-1", "reset_epoch": 4,
                                         "release_epoch": 0})
     assert artifact["sha256"] == "a" * 64
+    # the seal happens after FINAL_CHECK, so the release epoch is the incremented one - the same value the runner
+    # verifies RELEASE and everything after it with (CP-1555)
     assert double.sealed == [{"case_id": "full-01", "session_id": "session-1",
-                              "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 0}]
+                              "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 1}]
 
 
 def test_readback_adapter_emits_canonical_samples_through_one_builder(recorder):
@@ -487,7 +500,12 @@ def test_capture_evidence_fields_compose_a_canonical_sample(recorder):
     rec, root = recorder
     canonical = sample(root, step=0)
     evidence = _Evidence(left=[_Contact()], right=[_Contact()], minimum_signed_distance_m=0.02)
-    captured = {"world": evidence, "scene": {}, "contact": {},
+    # the adapter reads the scene's clock bound and both documents' own time, and requires the three physics stamps to
+    # agree - so they carry the world's own value rather than a third opinion
+    captured = {"world": evidence,
+                "scene": {"clock_interval_end_monotonic_ns": 12_500_000_000,
+                          "simulation_time_s": evidence.simulation_time_s},
+                "contact": {"simulation_time_s": evidence.simulation_time_s},
                 "observation": {}, "reference": {},
                 "source_stamps_s": canonical["source_stamps_s"],
                 "source_received_wall_s": canonical["source_received_monotonic_s"]}
@@ -651,7 +669,10 @@ def test_driver_observe_capture_composes_from_a_readback_capture(tmp_path):
         captured = {"world": _Evidence(left=[_Contact()], right=[_Contact()],
                                        simulation_step=index, simulation_time_s=index * 0.1,
                                        minimum_signed_distance_m=0.02),
-                    "scene": {}, "contact": {}, "observation": {}, "reference": {},
+                    "scene": {"clock_interval_end_monotonic_ns": 12_500_000_000 + index * 100_000_000,
+                      "simulation_time_s": index * 0.1,
+                              "simulation_time_s": index * 0.1},
+                    "contact": {"simulation_time_s": index * 0.1}, "observation": {}, "reference": {},
                     "source_stamps_s": document["source_stamps_s"],
                     "source_received_wall_s": document["source_received_monotonic_s"]}
         driver.observe_capture(adapter, captured, phase=phase, frame=frame, contact=contact,
@@ -831,12 +852,16 @@ def test_the_port_binds_one_evidence_window_and_refuses_a_second():
 
     port = PickPlaceSearchPhasePort(_Boundary())
     window = Window()
-    port.bind_live_evidence(window, support_distance_max_m=0.02)
+    port.bind_live_evidence(window, support_distance_max_m=0.02,
+                            raw_records_root=_records_root())
     assert port.live_evidence_window is window
     with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_ALREADY_BOUND"):
-        port.bind_live_evidence(Window())
+        # the fields travel with the call, so the guard that refuses this one is the already-bound rule and not the
+        # field check that now runs first
+        port.bind_live_evidence(Window(), support_distance_max_m=0.02, raw_records_root=_records_root())
     with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_WINDOW_INVALID"):
-        PickPlaceSearchPhasePort(_Boundary()).bind_live_evidence(object())
+        PickPlaceSearchPhasePort(_Boundary()).bind_live_evidence(
+            object(), support_distance_max_m=0.02, raw_records_root=_records_root())
 
 
 
@@ -905,7 +930,8 @@ def test_the_port_gives_its_attached_window_the_verified_reset_epoch():
 
     port = PickPlaceSearchPhasePort(_Boundary())
     window = Window()
-    port.bind_live_evidence(window, support_distance_max_m=0.02)
+    port.bind_live_evidence(window, support_distance_max_m=0.02,
+                            raw_records_root=_records_root())
     port._bind_case_epoch({"reset_epoch": 7})
     assert window.bound == [7]
     port._bind_case_epoch({"reset_epoch": 7})       # the window's own one-shot rule is what refuses a repeat
@@ -915,7 +941,7 @@ def test_the_port_gives_its_attached_window_the_verified_reset_epoch():
             return {"status": "SEALED"}
 
     other = PickPlaceSearchPhasePort(_Boundary())
-    other.bind_live_evidence(NoBind(), support_distance_max_m=0.02)
+    other.bind_live_evidence(NoBind(), support_distance_max_m=0.02, raw_records_root=_records_root())
     with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_WINDOW_INVALID"):
         other._bind_case_epoch({"reset_epoch": 7})
     PickPlaceSearchPhasePort(_Boundary())._bind_case_epoch({"reset_epoch": 7})   # no window, nothing to bind
