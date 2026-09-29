@@ -286,6 +286,11 @@ class PickPlaceSearchPhasePort:
             "reset_epoch": self.boundary.reset.receipt.new_epoch,
             "release_epoch": self._release_epoch_for("FINAL_CHECK"),
         }
+        # A caller that states the case's epochs must be RIGHT: ignoring a claim about identity is worse than refusing
+        # it, so a request that names them and disagrees with the case is refused by name rather than sealed over.
+        for name in ("reset_epoch", "release_epoch"):
+            if name in request and request[name] is not None and request[name] != identity[name]:
+                raise ValueError(f"TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: {name}")
         window = self._live_evidence_window
         if window is not None and not getattr(window, "_sealed", False):
             # seal the window first: a window that cannot be sealed must not leave a sealed recorder behind.

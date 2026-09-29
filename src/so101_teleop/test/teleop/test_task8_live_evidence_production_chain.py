@@ -136,6 +136,10 @@ def _port_with(recorder, window):
     port = object.__new__(PickPlaceSearchPhasePort)
     port._evidence_recorder = recorder
     port._live_evidence_window = window
+    # The seal's identity comes from the CASE, so the boundary it reads is part of what this double must provide: the
+    # reset generation from the verified receipt, which is where the port reads it (the runner's request carries none).
+    from types import SimpleNamespace
+    port.boundary = SimpleNamespace(reset=SimpleNamespace(receipt=SimpleNamespace(new_epoch=4)))
     return port
 
 
@@ -157,7 +161,7 @@ def test_the_port_seals_its_window_together_with_the_recorder(tmp_path):
     recorder, window = _sealed_chain(tmp_path)
     port = _port_with(recorder, window)
     artifact = port.seal_live_evidence({"scenario_id": "full-01", "session_id": "session-1",
-                                        "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 7})
+                                        "attempt_id": "attempt-1"})
     assert set(artifact) == {"path", "sha256", "schema_version"}
     target = Path(artifact["path"])
     assert hashlib.sha256(target.read_bytes()).hexdigest() == artifact["sha256"]
