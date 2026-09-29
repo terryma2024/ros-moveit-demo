@@ -26509,3 +26509,22 @@ pick the flattering number.**
 - **Packet: 30602 -> 31516 bytes, sha256 begins `c368a504bd4b2976`.** The earlier hash recorded in CP-1588 is therefore superseded, and the evidence index's revision-batch-3 section will be corrected with the final hash once the
   compliant legs pass.
 - **State:** demo re-run in flight on its own fresh scratch; teleop and CTest waiting their turn on their own scratches; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware; goal active.
+
+## CP-1591 — The corrected boundary's FIRST leg: demo green on its own fresh scratch
+
+- **The record, exactly as the leg printed it:**
+  ```
+  tempdir assertion OK: <root>/scratch/final-boundary-v2-demo-20260929-204837/tmp
+  5731 passed, 163 skipped, 4 warnings in 228.17s (0:03:48)
+  demo_rc=0 elapsed_s=228 scratch=<root>/scratch/final-boundary-v2-demo-20260929-204837/tmp
+  ```
+  **Command:** `…/test-venv/bin/python -m pytest -q -p no:cacheprovider test -n 8 --junit-xml=<root>/experiments/final-boundary-v2/demo-junit.xml -rs --tb=line`,
+  run from `src/so101_demo_py` with `TMPDIR`/`TMP`/`TEMP` set to the leg's **own, previously nonexistent** scratch and `tempfile.gettempdir()` asserted **equal** to it by the same interpreter that ran the tests.
+  **Benchmark suite excluded** (the ordinary `test/` gate). Log: `experiments/final-boundary-v2/demo.log`; JUnit: `experiments/final-boundary-v2/demo-junit.xml`.
+- **And this leg is the one that earned its keep:** its first attempt failed with `1 failed, 5730 passed` - `TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: release_epoch` - which was **not** scratch contamination but the
+  **CP-1583 contract working**: the run tested code newer than the retracted run, and a test still asserted a release epoch of `0` for a case that ends after FINAL_CHECK. Fixed and committed (`7f88220b`), then re-run **on a
+  second fresh scratch** (`…-204837`), which is the run quoted above. **The failed attempt's log is retained as `demo-invalid-identity-mismatch.log`.**
+- **Scratch classification (deletion candidates, NOT deleted):** `scratch/final-boundary-v2-demo-20260929-204350` (the failed first attempt), `scratch/final-boundary-v2-demo-20260929-204837` (this green run), plus the teleop and CTest
+  scratches created for their legs and the **retracted** `scratch/final-boundary-20260929-201359`. **All retained.**
+- **State:** demo leg compliant-green; **teleop leg running on its own scratch** with its own assertion and the new 0700 IPC base printed; CTest leg waiting its turn; nothing deleted, nothing pushed; no new session, goal,
+  worktree or stack; no hardware; goal active.
