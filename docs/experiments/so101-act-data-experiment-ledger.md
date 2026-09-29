@@ -29243,3 +29243,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ```
   **An independent check on the way:** the verdict file's digest `f7443b35919dcd85…` is **what this ledger recorded when the verdict was first read**, so the freeze confirms both the file and the earlier reading.
 - **State:** **P1-1 … P1-5 and P2 all complete. What remains is the code freeze and ONE complete integration boundary on a NEW run root** (fresh NVMe scratch per leg with TMPDIR/TMP/TEMP verified by that interpreter, MuJoCo-only, CUDA/no CPU fallback, W2 then exact-W8/40, no W4/W6, serial CTest), **then the packet and a further independent GPT-6 Astra / High review**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1743 — Code freeze: every controlled edit is committed, and the rest is the owner's work, listed and untouched
+
+- **The freeze inventory (`git status --short` at CP-1742's head):**
+  ```
+  27 modified tracked files, 13 untracked
+  ```
+  and the check that matters for a freeze - **are the files this work edited clean?** Nine of the ten were; **one was not:**
+  ```
+  clean   src/so101_demo_py/src/adapters/act/pick_place_search_port.py
+  clean   src/so101_demo_py/src/act/task8_live_evidence.py
+  clean   src/so101_demo_py/src/act/task8_measurement_contract.py
+  clean   src/so101_demo_py/src/act/task8_calibration_aggregator.py
+  clean   src/so101_demo_py/src/act/task8_measurement_driver.py
+  clean   src/so101_demo_py/test/test_act_task8_nine_phase_case.py
+  clean   src/so101_demo_py/test/test_act_task8_sealed_artifact.py
+  clean   src/so101_demo_py/test/test_act_task8_full_case_joined_chain.py
+  clean   src/so101_teleop/test/teleop/test_act_task8_full_case_chain.py
+  DIRTY   src/so101_demo_py/test/test_act_task8_live_epoch_and_edges.py      <- 87 insertions, uncommitted
+  ```
+  **The dirty one is the P1-4 RED's own `_bound_port` helper** - the state the eleven-suite green run (151 passed, CP-1729) was actually measured on - **so it is now committed**, and the freeze head moves with it.
+- **And the other 26 modified and 13 untracked files are NOT this work's: they are the owner's existing dirty tree, and they stay exactly as they are** - not staged, not reverted, not cleaned, not moved. The list (for the record, abridged by directory): `so101_demo_py/src/act/{contracts,pick_place_runner,pick_place_validation_campaign}.py`, the adapter set `{broker_execution,pick_place_reset,pick_place_search_binding,pick_place_sources,ros_broker}.py`, the C++ pair `controller_goal_admission.hpp` and `broker_owned_trajectory_controller.cpp`, `so101_teleop/unified/{pick_place_case_execution,pick_place_case_owner,pick_place_full_restart_campaign}.py`, `tools/so101_pytest_gate.py`, thirteen test files, and thirteen untracked files including the held-cup transfer profile/schedule, the approach path screen and its source binding, and four of their tests.
+- **So the freeze state is:** **every controlled source change of P1-1 … P1-5 and P2 is committed; the owner's dirty/untracked work is preserved in place and enumerated above.** The integration boundary runs on this state, with the next controlled change being none - **the boundary itself is the next step, on a NEW run root.**
+- **State:** **code frozen at the commit this entry records; ONE complete integration boundary next** (new run root, fresh NVMe scratch per leg with TMPDIR/TMP/TEMP verified by that interpreter and fail-closed, MuJoCo-only, CUDA/no CPU fallback, W2 then exact-W8/40, no W4/W6, serial CTest), **then the packet and a further independent review**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
