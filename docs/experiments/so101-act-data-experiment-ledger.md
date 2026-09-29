@@ -29047,3 +29047,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the case-side reader already exists and is already exercised:** `validate_case_journals` lives in `so101_demo.act.task8_live_qualification` - the teleop suite calls it *"the aggregator's own reader: it walks the campaign's case ids"* over a real case root, and the live prefix chain test translates rows with `case_row_to_journal_row` before handing them over. **So the second half's shape is: the joined chain's case root → that reader → the qualification aggregation Task 8P4 owns.**
 - **Which also corrects my own framing in CP-1732, and the correction is worth its line:** I described "the tree is missing the bridge" as if the calibration aggregator were the only consumer. **It is not - it is one of two, with different inputs, and the finding's sentence points at the other one.** A grep for the verdict's *terms* ("live journals") inside the module found the answer; a search for the verdict's *shape* ("aggregator") had hidden it.
 - **State:** **P1-5: first half passing; second half's destination is `task8_live_qualification` (Task 8P4's reader and aggregation), with the calibration-batch aggregator as a separate, already-tested consumer**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1734 — The verdict's own sentence, read verbatim: FOUR facts, and Task 8P4's aggregation needs five runs
+
+- **From the verdict file itself (`task8-astra-rereview4-verdict.md:57-59`):**
+  ```
+  - Its seven assertions do not establish the requested command event, adjacent support rows, two retirement
+    receipts, and complete journal. The cadence negative constructs a new row rather ...
+  Required completion: within approved Task 8P3/P4 scope and at external-I/O seams, execute at least one actual
+    full case whose production code emits artifact, receipts, and journal and who[se ...]
+  ```
+  **So the four facts the seven assertions fail to establish are named: the requested COMMAND EVENT, ADJACENT SUPPORT ROWS, TWO RETIREMENT RECEIPTS, and a COMPLETE JOURNAL.** Each of them is a property of the one case this work now runs:
+  | the fact | where it lives in the joined case |
+  | --- | --- |
+  | the requested command event | the artifact's edge additions - `add_event(sample, reason)` with `"command"` among the reasons (which is why P1-4 put the reason there) |
+  | adjacent support rows | the artifact's grid samples - the support decision recorded sample by sample |
+  | two retirement receipts | the journal row's `stack_receipt_sha256` / `child_receipt_sha256` **and** both receipt paths |
+  | a complete journal | `completed_phases` covering the runner's whole list |
+- **And a boundary worth stating so the work does not drift:** Task 8P4's `derive_live_measurements(full_runs, contract)` **requires exactly five sealed independent FULL runs** (`FIVE_RUNS_REQUIRED`) - so **the five-run aggregation is a campaign-level operation, not a single case's.** P1-5's sentence asks for **one** case that emits and is **consumed**; the single-case consumer that exists is `validate_case_journals` (the reader the qualification layer uses), and the four facts above are readable from that one case's artifact and journal. **The five-run path remains a Task 8P4 concern and is not to be simulated here with fixtures.**
+- **State:** **P1-5's second half is now specified as: the joined case → `validate_case_journals` → assert the four named facts from the case's own artifact and journal; then the four negatives by corrupting that same baseline**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
