@@ -224,6 +224,14 @@ def physics_clock_domain(*, session_id, nq, nv, settings, clock_ns=None):
 
     if not isinstance(session_id, str) or not session_id:
         raise ValueError("BOUND_AUTHORITY_SESSION_REQUIRED")
+    # P1-5: `clock_ns` defaults to None here, and None was forwarded explicitly to constructors whose own default is
+    # `time.monotonic_ns` - so the default could never take effect and a caller that omitted the argument (which is what
+    # `ros_child.py` does when it builds the ACT child) got PHYSICS_CLOCK_CONFIG_INVALID instead of a domain. Restoring
+    # the default rather than inventing a clock: this is the same function the constructors themselves would have used.
+    if clock_ns is None:
+        import time as _time
+
+        clock_ns = _time.monotonic_ns
     if type(nq) is not int or type(nv) is not int or nq <= 0 or nv <= 0:
         raise ValueError("BOUND_AUTHORITY_MODEL_INVALID")
     try:
