@@ -22452,3 +22452,13 @@ not an inference of mine.**
   assertions and the four negatives.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1353 — The inner cause is named, and it is another production contract: a reset proof
+
+- **The `--tb=long` run surfaced what the wrapper hid:** `ValueError: reset proof`, raised at
+  **`src/so101_demo_py/src/adapters/act/pick_place_search_port.py:152`** - inside the production port's own `begin`. **So the fixture's bare
+  `SimpleNamespace` reset is not a proof, and the production port refuses it.**
+- **That is gate five, and it is the same story as the previous four:** the production code names the contract; the fixture supplies it; no
+  check is relaxed. **The next read is the fifteen lines around 152**, which will say exactly which fields the reset proof must carry.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
