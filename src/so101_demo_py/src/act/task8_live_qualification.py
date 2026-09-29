@@ -516,3 +516,30 @@ def make_raw_reader(artifact_path) -> callable:
         return json.loads(payload)
 
     return read
+
+
+def live_extractors(*, occluded, release_stable, placement_stable, retreat_qualifying,
+                    cup_collision_geom: str, support_frames=None) -> dict:
+    """Bind each rule to the predicate (or frame builder) that supplies its raw evidence.
+
+    Every one of the five live-only rules needs evidence that is not in the sample keys, so each is passed in here
+    rather than inferred: `occluded` must accept only CLOSE..RELEASE frames whose occluder owner is one of the
+    approved group-0 visual geoms, `release_stable` and `placement_stable` carry the design's stability conditions,
+    `retreat_qualifying` carries clearance/contact/pose, and `cup_collision_geom` names the case cup's bottom collision
+    geom (`cup_a_bottom_collision` for `plastic_cup`, `cup_b_collision` for `plastic_cup_b`). `support_frames`, when
+    given, turns a sample list into the pre-open frames the support rule reads; without it the samples themselves are
+    used, which is only correct when they already carry the contact evidence.
+    """
+
+    if not cup_collision_geom:
+        raise ValueError("CUP_COLLISION_GEOM_REQUIRED: the support rule needs the cup's bottom collision geom")
+    frames_from = support_frames or (lambda samples: samples)
+    return {
+        "grasp_occlusion_window_s": lambda samples, document: grasp_occlusion_window_s(samples, occluded=occluded),
+        "support_distance_m": lambda samples, document: support_distance_from_frames(
+            frames_from(samples), cup_collision_geom=cup_collision_geom),
+        "release_stable_s": lambda samples, document: release_stable_s(samples, stable=release_stable),
+        "retreat_distance_m": lambda samples, document: retreat_distance_m(
+            samples, qualifying=retreat_qualifying),
+        "placement_stable_s": lambda samples, document: placement_stable_s(samples, stable=placement_stable),
+    }

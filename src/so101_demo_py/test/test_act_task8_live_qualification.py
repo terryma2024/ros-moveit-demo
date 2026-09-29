@@ -1022,3 +1022,39 @@ def test_the_raw_reader_resolves_only_indexed_records_with_matching_digests(tmp_
         reader({"raw_records": {"contact": {"relative_path": "raw/absent.json", "sha256": "a" * 64}}}, "contact")
     with pytest.raises(ValueError, match="RAW_RECORD_DIGEST_MISMATCH"):
         reader({"raw_records": {"contact": {"relative_path": "raw/contact.json", "sha256": "b" * 64}}}, "contact")
+
+
+def test_live_extractors_bind_each_rule_to_its_supplied_evidence():
+    from so101_demo.act.task8_live_qualification import LIVE_ONLY_FIELDS, live_extractors
+
+    extractors = live_extractors(occluded=lambda f: f.get("occluded") is True,
+                                release_stable=lambda f: f.get("steady") is True,
+                                placement_stable=lambda f: f.get("settled") is True,
+                                retreat_qualifying=lambda f: f.get("clear") is True,
+                                cup_collision_geom="cup_a_bottom_collision")
+    assert set(extractors) == set(LIVE_ONLY_FIELDS)
+
+    samples = [{"phase": "CLOSE", "source_stamp": 0.0, "occluded": True},
+               {"phase": "CLOSE", "source_stamp": 0.1, "occluded": True},
+               {"phase": "RELEASE", "source_stamp": 0.2, "steady": True},
+               {"phase": "RELEASE", "source_stamp": 0.3, "steady": True},
+               {"phase": "FINAL_CHECK", "source_stamp": 0.4, "settled": True},
+               {"phase": "FINAL_CHECK", "source_stamp": 0.5, "settled": True},
+               # the retreat starts at the cup and moves away, so the qualifying frame is the later one
+               {"phase": "RADIAL_RETREAT", "source_stamp": 0.6, "clear": False,
+                "cup_position_m": [0.0, 0.0, 0.1], "end_effector_position_m": [0.0, 0.0, 0.1]},
+               {"phase": "RADIAL_RETREAT", "source_stamp": 0.7, "clear": True,
+                "cup_position_m": [0.0, 0.0, 0.1], "end_effector_position_m": [0.03, 0.04, 0.1]}]
+    assert extractors["grasp_occlusion_window_s"](samples, {}) == pytest.approx(0.1)
+    assert extractors["release_stable_s"](samples, {}) == pytest.approx(0.1)
+    assert extractors["placement_stable_s"](samples, {}) == pytest.approx(0.1)
+    # the retreat value is read at the first qualifying frame, i.e. 0.05 m from the cup at 0.6 s
+    assert extractors["retreat_distance_m"](samples, {}) == pytest.approx(0.05)
+    # the support rule refuses before the contact check when its three pre-open frames are absent, which is the
+    # correct order: no window, no distance
+    with pytest.raises(ValueError, match="SUPPORT_FRAMES_REQUIRED"):
+        extractors["support_distance_m"](samples, {})
+    with pytest.raises(ValueError, match="CUP_COLLISION_GEOM_REQUIRED"):
+        live_extractors(occluded=lambda f: True, release_stable=lambda f: True,
+                        placement_stable=lambda f: True, retreat_qualifying=lambda f: True,
+                        cup_collision_geom="")
