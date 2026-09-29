@@ -294,11 +294,16 @@ class PickPlaceSearchBoundary:
         if phase == "CLOSE" and (facts["bilateral_contact"] is not True
                                  or facts["no_fingertip_contact"] is not False):
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: no bilateral grasp")
-        if phase in ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK"):
-            # these need the release epoch's own evidence and the place target's tolerances, neither of which this
-            # validator is given yet: reporting `released` from the aggregates alone would be a weaker claim than the
-            # runner's predicate asks for, so the phase refuses by name until it can be established properly
-            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}: release evidence")
+        if phase in ("RELEASE", "RADIAL_RETREAT"):
+            # the release phases' facts are all in the aggregates: nothing is pinching the cup, it is supported, and
+            # the holding state is EMPTY - which is what `released` means, established rather than asserted
+            if (facts["released"] is not True or facts["cup_supported"] is not True
+                    or facts["holding_state"] != "EMPTY"):
+                raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: the cup is not released")
+        if phase == "FINAL_CHECK":
+            # FINAL_CHECK additionally needs the place target's tolerances, which this validator is not given yet, so
+            # it refuses by name rather than reporting a weaker stability claim (CP-1523)
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: FINAL_CHECK: place tolerances")
         if phase in ("MICRO_LIFT", "TRANSPORT", "ALIGN"):
             # the lifted phases must show the cup held clear of the table, which is what their flags mean and what the
             # runner's predicates require - a necessary condition, mirrored from it so a contradiction fails here
@@ -328,7 +333,73 @@ class PickPlaceSearchBoundary:
             return self._motion_facts(phase, request, motion_template=motion_template,
                                       motion_duration_s=motion_duration_s,
                                       support_distance_max_m=support_distance_max_m)
+        if phase == "RELEASE":
+            # RELEASE opens the gripper; RADIAL_RETREAT is a MOTION phase (it moves the arm to the retreat target)
+            # whose FACTS are the released ones, so it stays in the motion route and its flags are established there
+            return self._release_facts(phase, request, motion_duration_s=motion_duration_s,
+                                       support_distance_max_m=support_distance_max_m)
+        if phase == "FINAL_CHECK":
+            # FINAL_CHECK dispatches nothing: it reads the settled readback and establishes the placement's stability,
+            # which needs the place target's tolerances - so it reaches the validator, which refuses by name for now
+            if support_distance_max_m is None:
+                raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: support_distance_max_m")
+            return self.sequence_facts(phase, self.reset.sources.capture(request["attempt_id"]), request,
+                                       support_distance_max_m=support_distance_max_m)
         raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
+
+    def _gripper_open_rad(self):
+        """The gripper's open position, read from the MODEL's own joint range - the one admitted source for it.
+
+        Nothing about "open" is a preference: the simulated joint has a range, and the limit in the opening direction is
+        that range's own value. A boundary without the model refuses by name rather than picking a number.
+        """
+
+        screen = getattr(self, "approach_screen", None)
+        checker = getattr(screen, "path_checker", None)
+        model = getattr(checker, "model", None)
+        if model is None:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: RELEASE: gripper model")
+        from so101_demo.act.joints import ARM_JOINTS
+
+        try:
+            import mujoco
+            joint = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, ARM_JOINTS[5])
+            low, high = (float(value) for value in model.jnt_range[joint])
+        except Exception as error:                      # the model refuses to name the joint
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: RELEASE: gripper range") from error
+        return high if abs(high) >= abs(low) else low
+
+    def _release_facts(self, phase, request, *, motion_duration_s, support_distance_max_m):
+        """Open the gripper to the model's own limit and establish the phase's facts from the readback after it."""
+
+        if motion_duration_s is None:
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}: motion_duration_s")
+        broker = self.reset.broker
+        dispatch = getattr(broker, "dispatch", None)
+        if not callable(dispatch):
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}: broker.dispatch")
+        wait = getattr(getattr(broker, "driver", None), "wait", None)
+        if not callable(wait):
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}: driver.wait")
+        from so101_demo.act.joints import ARM_JOINTS
+
+        open_rad = self._gripper_open_rad()
+        before = self.reset.sources.capture(request["attempt_id"])
+        observation = before.get("observation")
+        if not isinstance(observation, dict) or not isinstance(observation.get("state"), (list, tuple)) \
+                or len(observation["state"]) != 8:
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: observation")
+        goal = {"joint_names": ARM_JOINTS[5:],
+                "header_stamp_s": finite(observation["sim_time_s"]),
+                "time_from_start_s": (0.0, finite(motion_duration_s)),
+                "positions": ((finite(observation["state"][5]),), (finite(open_rad),))}
+        ticket = broker.ownership.ticket(self.reset.act_context["lease_token"], "act",
+                                         request["session_id"], request["attempt_id"])
+        wait(dispatch(ticket, "gripper", goal))
+        after = self.reset.sources.capture(request["attempt_id"])
+        if support_distance_max_m is None:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: support_distance_max_m")
+        return self.sequence_facts(phase, after, request, support_distance_max_m=support_distance_max_m)
 
     def _motion_facts(self, phase, request, *, motion_template, motion_duration_s, support_distance_max_m):
         """Aim a phase at its admitted motion target and establish its facts from the readback.
