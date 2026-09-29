@@ -28200,3 +28200,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And piece 4 follows from it rather than being independent:** the fixture's `_stamped_add_grid` wrapper and its `index % 40` source-time wrap exist **because** the port has no continuous sampling to produce a cadence - so they can only be removed once piece 3 makes the cadence real. **That is why CP-1652 recorded the cadence claim as unprovable here, and why it is provable once this lands.**
 - **The RED's assertions stay as they are** (`grid_count` grows with the phase's duration, `event_count >= 1`, and an edge says why); what changed is the understanding of what satisfies them.
 - **State:** **P1-4 claims 1-2 green and committed; claim 3 verified and now correctly SCOPED** (continuous in-phase sampling plus edges, not two extra calls); the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1685 — Piece 3's mechanism is in the port; what remains is where a phase's instants come from
+
+- **Implemented this round, at the source-acquisition layer:**
+  | piece | state |
+  | --- | --- |
+  | the window exposes its frozen `period_s` and records **why** each event happened (`add_event(sample, reason=...)`, `event_reasons`, and a named refusal for a reason outside `command`/`release`/`contact`) | **in** |
+  | `_phase_instants(phase, evidence)` - the phase's grid instants from **its own readback**, one per search iteration, the port owning the clock | **in** |
+  | `_emit_phase_samples(...)` - a grid sample **per instant** at the frozen period, plus the edges as ADDITIONS: the first instant is a `command`, `RELEASE` is the `release` edge, and a changed contact signature is a `contact` edge | **in** |
+  | all **four** `add_grid(...)` call sites converted to it | **in** (4 converted, 5 references = 4 calls + the definition) |
+- **And the round's measured state, honestly:** the RED's edge halves are in place but the grid-count assertion still fails, because **the instants have to come from a field the port's validated search evidence actually carries** - my fixture put `search_result` into the boundary's `canonical_evidence`, while the port feeds the **validated** evidence returned by `_search_evidence(...)`, whose field set is its own. **Reading that field set is the next step; the mechanism that consumes it is already written.**
+- **Two existing expectations are now known to be stale and are the next corrections rather than surprises:**
+  1. `test_act_task8_search_port.py:327` asserts `window._grid_count == 1` after a phase - **"exactly one sample per phase" is precisely what the finding removed**;
+  2. and the suite's `TASK8_LIVE_EVIDENCE_GRID_GAP` shows the fixture's clock does not advance by the frozen period **across phases** - **which is piece 4, and it is now blocking rather than optional.**
+- **State:** **P1-4 pieces 1-2 green and committed; piece 3's mechanism implemented, its instants' source and two stale expectations outstanding; piece 4 now blocking**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
