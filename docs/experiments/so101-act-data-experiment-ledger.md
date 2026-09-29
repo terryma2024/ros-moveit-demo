@@ -27486,3 +27486,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Why this is the right kind of work and not a chore to resent:** the finding was *"the cleanup proof must be enforced"*, and **enforcement is exactly what makes a corpus of seals declare whether they cleaned up.** The fixtures were sealing `CLOSED` batches **without saying so** - which is the state the
   finding was about.
 - **State:** CP-1620 in the tree and red for fixture completion; CP-1612 and CP-1635 not started (they are next, in that order); goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1646 — CP-1620's fixture completion: 34 failures down to 5, and the five that remain are the honest kind
+
+- **Two sealing helpers carried the whole 24:** `_sealed_batch`'s document and `batch_factory`'s `close_measurement_batch` call now supply a `cleanup` proof, and the count went **34 → 18 → 5**:
+  ```
+  before this round :  34 failed / 49 passed   (24 x BATCH_CLEANUP_PROOF_REQUIRED)
+  after _sealed_batch:  18 failed / 65 passed   (12 x BATCH_CLEANUP_PROOF_REQUIRED)
+  after batch_factory:   5 failed / 78 passed   (0 x BATCH_CLEANUP_PROOF_REQUIRED)
+  ```
+  **So the enforcement cost two fixture completions, not twenty-five** - the earlier "25+ places" figure counted **failing tests**, while the places that needed editing were the **helpers behind them**. **That is worth recording as a measuring lesson: a blast
+  radius counted in failing tests overstates the work when the tests share a fixture.**
+- **And the five that remain are the category I predicted:** all in `test_act_task8_measurement_contract.py`, all `AssertionError: Regex pattern did not match` - **tests that assert a refusal NAME which the new rule now shadows**, because their fixtures seal a `CLOSED` batch
+  without a cleanup proof and the rule fires first. **The honest completion is to give those fixtures their proof so their original refusal fires again** - not to relax the rule and not to change the expected name to the new one.
+- **One thing noticed and deliberately not "fixed":** `batch_factory` also sets `identity["measurement_contract_sha256"] = contract["contract_sha256"]` - **the same field mix-up CP-1641 removed from the aggregator's seal helper.** It is **not** caught here because this path seals through
+  `close_measurement_batch` rather than through the entry's identity comparison. **Whether it is wrong in this context is a separate question from whether the entry should catch it**, and it is recorded rather than changed in passing.
+- **State:** CP-1620 in the tree, five fixture completions from green; CP-1612 and CP-1635 not started; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
