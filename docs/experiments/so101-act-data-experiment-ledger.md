@@ -14130,3 +14130,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three
   `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted,
   no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-977 — Divergence 3 corrected: the retreat rule is now the design's radial displacement (31 passed)
+
+- **`retreat_distance_m` rewritten to the design's row** ("RADIAL_RETREAT 中 gripper 相对已放置 cup 的径向位移，首次同时满足
+  clearance/contact/pose 稳定时的 readback 值"): it now measures how far the end effector's **horizontal distance from the
+  placed cup** has grown by the **first** RADIAL_RETREAT frame whose clearance, contact and pose predicates all hold -
+  rather than the total displacement between the first and last retreat frame, which is what CP-967 had written and
+  CP-969 flagged. A run with no such qualifying readback is refused
+  (`RETREAT_QUALIFYING_READBACK_REQUIRED`), matching the row's "每次必须出现 qualifying readback".
+- **The predicate is supplied by the caller**, because clearance, contact and pose stability are read from the raw
+  records rather than from the sample keys - so the rule is stated once and its evidence source stays explicit.
+- **A second defect of mine found and fixed by running:** my test expected `RETREAT_SAMPLES_REQUIRED` for a run with a
+  single frame, but the refusal is for a run with **no** retreat frame at all; a single qualifying frame legitimately
+  reports zero displacement, and the test now asserts both.
+- **Verified: 31 passed, rc=0** (`beh-task8-green10.log`).
+- **Remaining in Task 8:** correct `placement_stable_s` to the longest contiguous source-stamp duration over pose,
+  linear/angular velocity, table support and forbidden contact (the span helper from CP-976 now carries the
+  structure); implement `release_stable_s` and `grasp_occlusion_window_s` through that helper with their predicates;
+  then wire `collect_live_runs` from the validated rows into `build_task8_qualified_report` with the readback and
+  `require_qualified(report)`.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge, corrected field name, support-distance pair rule, span helper and corrected retreat rule green at
+  31; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate
+  search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push,
+  no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
