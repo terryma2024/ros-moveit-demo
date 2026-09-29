@@ -17604,3 +17604,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   | 6. no full suite; continue Boundary IV | honoured throughout |
 - **Evidence:** no full suite was run; nothing weakened, `REQUIRED_CHECKS` untouched, nothing deleted, no push, no
   stack, no hardware.
+
+## CP-1124 — The fourth canonical document was written but never returned, found by counting
+
+- **Item 4 reapplied to the v2 path, and it found a real defect rather than confirming a characterization:** the
+  determinism assertions passed (both renders byte-identical, no extra file), and the **count** assertion failed -
+  `the four canonical documents, saw ['aggregation_receipt', 'calibration_report', 'head_search_qualification']`. The
+  **support closed sample** was being written to disk but **not returned in the aggregation's outputs**, so a caller could
+  not see the document its own report cites. It is now published as `task8_ready_support`.
+- **GREEN: 55 passed, rc=0** across the aggregator, contract and head-search binding modules, scratch
+  `<R>/scratch/r731.<n>` with `TMPDIR` verified through the exact test interpreter; logs `beh-r730.log` (the finding) and
+  `beh-r731.log` (green).
+- **Where Boundary IV stands now:** the index half is complete (entry validation, canonical shape, self-digest, symlink,
+  contamination, anchor and phase coverage, source-time monotonicity, cross-root identity); the publishing half produces
+  the contract's 28 fields with approved closed-sample citations and disk-verified readback, passes
+  `require_gate(report, "task8_live")`, binds to the runtime descriptor it was measured under (and refuses a mismatched
+  one), renders deterministically, and publishes all four canonical documents.
+- **What remains for the boundary, named rather than implied:** the four documents' own **content** review against the
+  plan's definitions (`task8-ready-calibration.json`'s shape beyond the 28 fields it carries today), the **live driver
+  wiring** that would record the descriptor and the evidence at measurement time (CP-1117's hand-off, which needs the
+  authorised runtime rather than a fixture), and then Boundary V's production-chain test. Nothing weakened, nothing
+  deleted, no push, no stack, no hardware.
