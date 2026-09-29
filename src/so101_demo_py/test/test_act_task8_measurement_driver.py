@@ -20,6 +20,9 @@ INDEX_ROW_KEYS = {"source_stamp", "receive_monotonic_s", "session_id", "reset_ep
 class FakeStack:
     """Records launch/close order and can be told to fail on a given anchor."""
 
+    def run_search(self, anchor, request):
+        return {"iterations": [{"yaw_rad": 0.0}], "terminated": "COARSE_STEP_LIMIT"}
+
     def __init__(self, *, fail_on=None):
         self.launched, self.closed, self.cleanups = [], [], []
         self.fail_on = fail_on
@@ -156,6 +159,9 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
     phases: list[tuple[str, str]] = []
 
     class Stack:
+        def run_search(self, anchor, request):
+            return {"iterations": [{"yaw_rad": 0.0}], "terminated": "COARSE_STEP_LIMIT"}
+
         def __init__(self):
             self.launched, self.closed, self.cleaned = [], [], []
 
@@ -230,6 +236,9 @@ def test_a_failed_anchor_keeps_a_cleanup_receipt_in_the_sealed_batch(tmp_path):
     cleaned = []
 
     class Stack:
+        def run_search(self, anchor, request):
+            return {"iterations": [{"yaw_rad": 0.0}], "terminated": "COARSE_STEP_LIMIT"}
+
         def camera_info(self, anchor):
             return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
 
@@ -277,6 +286,9 @@ def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
     from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
 
     class Stack:
+        def run_search(self, anchor, request):
+            return {"iterations": [{"yaw_rad": 0.0}], "terminated": "COARSE_STEP_LIMIT"}
+
         def camera_info(self, anchor):
             return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
 
@@ -318,6 +330,9 @@ def test_rows_carry_the_stack_readback_rather_than_a_synthesized_identity(tmp_pa
     from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
 
     class Stack:
+        def run_search(self, anchor, request):
+            return {"iterations": [{"yaw_rad": 0.0}], "terminated": "COARSE_STEP_LIMIT"}
+
         def probe(self, anchor, command):
             return {"contacts": []}
 
@@ -359,6 +374,9 @@ def test_a_stack_without_readback_is_refused_by_name(tmp_path):
     from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
 
     class Stack:
+        def run_search(self, anchor, request):
+            return {"iterations": [{"yaw_rad": 0.0}], "terminated": "COARSE_STEP_LIMIT"}
+
         def probe(self, anchor, command):
             return {"contacts": []}
 
@@ -399,6 +417,9 @@ def test_every_anchor_is_an_independent_full_restart(tmp_path):
     events: list[tuple[str, str]] = []
 
     class Stack:
+        def run_search(self, anchor, request):
+            return {"iterations": [{"yaw_rad": 0.0}], "terminated": "COARSE_STEP_LIMIT"}
+
         def probe(self, anchor, command):
             return {"contacts": []}
 
@@ -456,6 +477,9 @@ def _probe_driver(stack, clock=None):
 class _ProbeStack:
     """A stack that reports contacts for the probe; ``hits`` decides whether the probe touched anything."""
 
+    def run_search(self, anchor, request):
+        return {"iterations": [{"yaw_rad": 0.0}], "terminated": "COARSE_STEP_LIMIT"}
+
     def __init__(self, hits):
         self.hits = hits
         self.probes = []
@@ -507,6 +531,9 @@ def test_a_probe_that_touches_anything_fails_the_anchor_by_name(tmp_path):
 class _CameraStack:
     """A stack that reports the camera intrinsics and the head/wrist transforms it actually used."""
 
+    def run_search(self, anchor, request):
+        return {"iterations": [{"yaw_rad": 0.0}], "terminated": "COARSE_STEP_LIMIT"}
+
     def __init__(self, camera=True):
         self.camera = camera
 
@@ -556,3 +583,34 @@ def test_a_stack_that_cannot_report_camera_evidence_fails_closed_by_name(tmp_pat
     document = json.loads(Path(sealed).read_text())
     assert document["status"] == "INVALID"
     assert "MEASUREMENT_CAMERA_REQUIRED" in json.dumps(document)
+
+
+class _SearchStack(_CameraStack):
+    """A stack that also exposes the live search path the measurement is supposed to exercise."""
+
+    def __init__(self, search=True):
+        super().__init__()
+        self.search = search
+        self.requests = []
+
+    def run_search(self, anchor, request):
+        if not self.search:
+            raise AttributeError("no search surface")
+        self.requests.append((anchor, dict(request)))
+        return {"iterations": [{"yaw_rad": 0.0}, {"yaw_rad": 0.05}], "terminated": "COARSE_STEP_LIMIT"}
+
+
+def test_each_anchor_runs_the_live_search_and_keeps_its_raw_iterations(tmp_path):
+    stack = _SearchStack()
+    batch = tmp_path / "batch"
+    sealed = _probe_driver(stack).run(_measurement_context(tmp_path), batch)
+    assert json.loads(Path(sealed).read_text())["status"] == "CLOSED"
+    assert [anchor for anchor, _ in stack.requests] == ["default", "left", "forward"]
+    row = json.loads((batch / "anchors/default/search.json").read_text())
+    assert len(row["iterations"]) == 2 and row["terminated"] == "COARSE_STEP_LIMIT"
+    assert row["lifecycle"] == "FULL_RESTART"
+
+
+def test_a_stack_that_cannot_search_fails_closed_by_name(tmp_path):
+    sealed = _probe_driver(_SearchStack(search=False)).run(_measurement_context(tmp_path), tmp_path / "batch")
+    assert "MEASUREMENT_SEARCH_REQUIRED" in json.dumps(json.loads(Path(sealed).read_text()))

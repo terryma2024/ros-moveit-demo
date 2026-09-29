@@ -24,6 +24,8 @@ LIFECYCLE = "FULL_RESTART"
 # one fixed probe, identical for every anchor, that must not touch anything: it exercises the arm's clearance before the
 # geometry samples are taken, and a touch fails that anchor rather than being averaged into the batch
 PROBE_COMMAND = {"joint_positions_rad": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "duration_s": 0.2, "profile": "fixed"}
+# the same search request for every anchor and every generation, so the anchors are comparable
+SEARCH_REQUEST = {"mode": "COARSE_THEN_FINE", "period_s": 0.002, "max_iterations": 64}
 FORBIDDEN_OUTPUT_TOKENS = ("PASS", "FAIL", "qualified", "visible", "target_in_view", "contact_ok", "_ok")
 
 
@@ -123,6 +125,23 @@ class Task8MujocoMeasurementDriver:
                                 "attempt_id": identity["attempt_id"], "physics_step": index,
                                 "period_s": PRIVATE_REPLAY_PERIOD_S, "phase": phase,
                                 "observation": observation})
+
+        # the live search: the measurement's whole point is what the search did against the real scene, so its raw
+        # iterations belong in the batch or the anchor fails by name
+        search = getattr(self.stack, "run_search", None)
+        if not callable(search):
+            raise ValueError(f"MEASUREMENT_SEARCH_REQUIRED: {anchor}: the stack cannot run the live search")
+        try:
+            found = search(anchor, dict(SEARCH_REQUEST))
+        except Exception as error:
+            raise ValueError(f"MEASUREMENT_SEARCH_REQUIRED: {anchor}: {type(error).__name__}") from error
+        if type(found) is not dict or not isinstance(found.get("iterations"), list) or not found["iterations"]:
+            raise ValueError(f"MEASUREMENT_SEARCH_REQUIRED: {anchor}: the search reported no iterations")
+        stamp = self.clock.monotonic()
+        self._write_record(root, anchor, "search",
+                           {"source_stamp": stamp, "receive_monotonic_s": self.clock.monotonic(),
+                            "session_id": identity["session_id"], "reset_epoch": identity["reset_epoch"],
+                            "attempt_id": identity["attempt_id"], "physics_step": -3, **found})
 
         # the camera evidence the measurement claims must be in the batch as raw rows: the intrinsics the camera
         # actually reported and the transforms actually used, or the anchor fails by name
