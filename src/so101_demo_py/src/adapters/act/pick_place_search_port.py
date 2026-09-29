@@ -295,7 +295,9 @@ class PickPlaceSearchPhasePort:
         if window is not None and not getattr(window, "_sealed", False):
             # seal the window first: a window that cannot be sealed must not leave a sealed recorder behind.
             # A window that already sealed itself on reaching FINAL_CHECK is left as it is, so a second call is safe.
-            window.seal()
+            # P1-4: the window seals with THIS identity - the one the case ends in - and refuses a disagreement rather
+            # than publishing an artifact whose identity is the epoch the case started in.
+            window.seal(identity)
         # the recorder seals itself when the chain completes (its `_sealed` holds the published index path), so a
         # completed chain must return that artifact instead of sealing again - seal_live_evidence is idempotent
         published = getattr(recorder, "_sealed", None)
@@ -475,9 +477,12 @@ class PickPlaceSearchPhasePort:
 
         request = self._request
         # the port keeps the request as a dict, and the phase document's own key names are the ones to use here
+        # P1-4: the epoch comes from the port's OWN rule for THIS phase, not from a literal. The port already states
+        # which phases follow the release (`_RELEASE_EPOCH_AFTER`); stamping 0 everywhere made the samples disagree
+        # with the identity the seal computes, and only the two being wrong together kept that invisible.
         identity = {"case_id": request["scenario_id"], "session_id": request["session_id"],
                     "attempt_id": request["attempt_id"], "reset_epoch": self.boundary.reset.receipt.new_epoch,
-                    "release_epoch": 0}
+                    "release_epoch": self._release_epoch_for(phase)}
         try:
             found = observed.search_result.get("found")
             if found is not True:
