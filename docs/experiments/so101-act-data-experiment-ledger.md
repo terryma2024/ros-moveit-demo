@@ -13015,3 +13015,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   window; anchors at `pick_place_search_port.py` lines 23/35/172/219/231/275); Tasks 8-10 untouched; no runtime, no
   package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained
   and ineligible, gen4 reserved for Task 10.
+
+## CP-933 — The port window attachment landed green (70 passed), and the earlier 13 failures are explained
+
+- **Re-applied the port edit now that the runner is restored, and it is clean:** `pick_place_search_port.py` accepts
+  `live_evidence_window=None` beside `evidence_recorder`, stores it, and `seal_live_evidence` seals the **window
+  before the recorder** so a window that cannot be sealed never leaves a sealed recorder behind. No grid sample is
+  synthesised in this increment - the per-observation feed from the port's own readback is the next step.
+- **Verified: 70 passed, rc=0** across `test_act_task8.py`, `test_act_task8_live_evidence.py` and
+  `test_act_task8_live_qualification.py` (`beh-task7-port7.log`).
+- **This also settles the earlier confusion with evidence:** the 13 failures I saw when I first tried this edit
+  persisted *after* I reverted it, which means they were never caused by the port change at all - they were the
+  displaced runner changes from CP-930, whose symptom was
+  `PickPlaceRunner._verify_phase() takes 6 positional arguments but 7 were given`. Reverting a correct edit on the
+  strength of a misattributed failure cost a round; attributing a failure before acting on it is the cheaper habit.
+- **Safety note:** the port file is **clean** (not user-dirty), so staging and committing it cannot capture anyone
+  else's work - which is exactly the rule adopted in CP-930/CP-932.
+- **Remaining Task 7 work:** (1) feed the window one grid sample per observation inside `run_phase` from the
+  observation's own `sim_time_s` and the evidence's `physics_step`, so the first SEARCH observation opens it;
+  (2) `PickPlaceCaseOwner._retire`, invalid-seal before the child retirement step; (3) `pick_place_case_execution.py`,
+  read the artifact back before the journal row; (4) the production-chain test.
+- **State:** Tasks 1-6 committed and green; Task 7's module green; the port attachment green; the user's six in-flight
+  files intact; Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware;
+  formal 0/0/0; `collection_*` NOT_PROVISIONED.
