@@ -28347,3 +28347,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And what already stands, independent of the fixture:** the production side of P1-4 is **in and committed** - the epoch derives from the phase (CP-1679), the terminal epoch has one name and the seals **compare** it
   (CP-1680), the port samples one grid point per instant and records the edges with their reasons (CP-1685/1687), and the capture name carries the instant (CP-1688). **The remaining work is the fixture's own clock migration, which the verdict requires for exactly this reason: fixtures must not rewrite timestamps.**
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration six causes deep and not yet green**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1694 — The probe located it: the refresh works, the window passes, and the receipt is the next link
+
+- **The probe, at the moment the boundary builds the goals - before and after removing the stale registration:**
+  ```
+  before:  origin=1.3   first_target=1.402  header=1.7   window_ok=False
+  after:   origin=1.65  first_target=1.752  header=1.7   window_ok=True
+  ```
+  **The cause was a second registration line overwriting the first**: `_case_capture.prefix = prefix` (the NARROW prefix) ran after `_case_capture.prefix = route._prefix` (the widened one the route executes against), so the refresh updated a dict no route ever executes against. **Removing it fixed the window, and the failure stayed under the same wrapper name - which is exactly why the probe was the right next step rather than a seventh patch.**
+- **And the cause behind the same wrapper has moved one link:**
+  ```
+  cause[0]: ValueError PATH_SOURCE_RECEIPT_INVALID
+  ```
+  **The receipt must be signed against the prefix the boundary actually receives** - and the fixture signs it **once, early**, so a prefix that now moves afterwards no longer matches the signature. **That is CP-1692's conclusion arriving by name instead of by argument.**
+- **Which names the circularity honestly, and it is the fixture's to resolve:** the APPROACH header must fall inside the prefix's ~0.102 s window, **and** the receipt must name the prefix that is executed - so either the prefix stays put **and** the header stays inside its window (the old wrap, which the verdict forbids), or the prefix is issued **with** the plan and the receipt is signed **then**. **Production does the second; the fixture still does the first.**
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration has its window green and its receipt signing outstanding**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
