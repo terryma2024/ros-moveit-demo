@@ -19843,3 +19843,24 @@ not an inference of mine.**
   here. **Decision (c) was left alone**: no child fixture was added, and the owner/child choice goes to the reviewer.
 - **State:** HEAD `f18bf602` plus the `setup.cfg` commit and this checkpoint; staged 0; all five earlier colcon failures, this
   gate's logs, both xdist artefacts and every scratch and IPC base retained as deletion candidates; no push, no stack, no hardware.
+
+## CP-1222 — Final review packet written and read back; this stretch stops at the Astra boundary
+
+- **Packet:** `handoffs/20260930-task7-onward/task8-implementation-review-packet-final.md`, **6239 bytes**, sha256
+  `601ec2a15329acf241138a86c928ef6ca0520ee334a76ec3af9438dffa449d3d` - written and **read back** from disk. It supersedes v2 and
+  carries: my two self-corrections; item 1's option (b) with the approved design's §4.2/§6; item 2's chain; item 3's four cases
+  labelled honestly (three are pins, not fixes); item 4's seven artefacts and their sources; item 5's **two green gates** with
+  every condition, plus the five earlier colcon collection failures kept as the RED trail; the child-step scope question left
+  **explicitly to the reviewer** with the reason it was not implemented; and a "what is not claimed" section.
+- **Evidence index:** `experiments/task9-package-gate-evidence-index.md` lists every gate artefact, RED/GREEN log and JUnit file
+  from this stretch with path, size and sha256 prefix, plus the three review packets and the scratch/IPC deletion candidates.
+  Written so a reviewer can verify the claims above without trusting this ledger's prose.
+- **Both gates, final:** ordinary scope under `pytest-xdist` **5638 passed / 0 failed / 163 skipped** (CP-1211); package/`colcon`
+  pytest-xdist gate **5801 tests, 0 errors, 0 failures, 163 skipped, rc=0, 107 s** (CP-1221) after the authorised one-line
+  `pythonpath = ../..`. **Item 5 is complete.**
+- **Stopping here deliberately, at the boundary the owner set:** the next act is the **independent GPT-6 Astra / High
+  implementation re-review**, which is not mine to run - and per the repository's task-model table it must be Astra/High rather
+  than any substitute. If that model is unavailable, that limitation should be reported rather than worked around.
+- **Preserved:** every failure log (five colcon collection failures, the two RED runs), both gates' artefacts, all three review
+  packets, and every scratch tree and IPC base - all classified as **deletion candidates**, none deleted; nothing pushed; no
+  MuJoCo stack; no hardware.
