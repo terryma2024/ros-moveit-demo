@@ -23348,3 +23348,16 @@ not an inference of mine.**
   **Its rule is printed above for the next edit**, which by this round's evidence will be another named-field fix rather than a hunt.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1410 — THE ENTIRE EVIDENCE PATH PASSES; the refusal is now the neck-sweep check
+
+- **The milestone, stated plainly: `physical readback scope`, `contact hazard`, `RGB scope`, `RGB source skew` and `controller reference` all pass
+  now.** The port's validation of a production-shaped readback is satisfied end to end - the real `SimulationEvidence`, the real `ObjectState`, all
+  seven readback keys, the exact scene/contact/observation/reference shapes, the four RGB stamps within skew, the empty-but-honest contact frame
+  with a `frozenset` of allowed pairs, and the controller reference's three six-element vectors.
+- **And the refusal has moved into the port's neck-sweep step**, which is a plain `AttributeError`/`TypeError` on my substituted
+  `_NeckSweepChecker` - the last collaborator in this path. **Its use is printed above**, so the next edit is a named-field fix like the last
+  several. **The fixture changed one line per round for eight rounds and the error kept advancing; that is what "the constructor names it" looks
+  like when it works.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
