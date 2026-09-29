@@ -29127,3 +29127,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   1. **FACT 1 (the requested command event) is not derivable from the sealed artifact**: `_SAMPLE_KEYS` is closed at 24 keys with no event reason, while the window knows it (`event_reasons`). **Same gap as the index not knowing its own grid count** (CP-1725/1726) → **one proposal: let the sealed evidence describe its own edges.**
   2. **`validate_case_journals` is a CAMPAIGN rule** (all fifteen rows under one root at once) and is not exercised here; the single-case pair of row rules is what a case's own qualification requires.
 - **State:** **P1-5 complete; P1-4 complete; P1-1/2/3 complete. P2 remains, then the code freeze and ONE integration boundary on a new run root, then the packet and a further independent review**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1738 — P2: the two mismatching index lines are corrected, and the auditor is narrower than the reviewer's
+
+- **The artefact P2 names, found by the digest the verdict quotes:**
+  ```
+  handoffs/20260930-task7-onward/task8-astra-rereview-packet.md      36042 bytes   sha256 df220deebfd05e56...
+  ```
+  i.e. **exactly the 36042 bytes and digest the verdict recorded** - so the packet itself is the file the reviewer saw, and the stale rows are in the **evidence index**: `experiments/task9-package-gate-evidence-index.md` (203 lines, 17580 bytes), whose format is
+  ```
+  | artefact | path | size | sha256(16) |
+  ```
+- **The correction, append-only (the previous values stay in this record rather than being overwritten):**
+  ```
+  line 130:  | `handoffs/.../task8-astra-rereview-packet.md` | 31987 | `fe029a4e34c90b75` |
+          -> | `handoffs/.../task8-astra-rereview-packet.md` | 36042 | `df220deebfd05e56` |
+  line 159:  same row, same correction
+  ```
+  **Verified before writing:** the packet measures 36042 bytes and hashes to `df220deebfd05e56` at the moment of the edit, so both cells now state what the file is.
+- **And the whole-index audit, first run and honest about its own reach:**
+  ```
+  references parsed: 19
+  mismatches: 0
+  ```
+  **Zero mismatches over 19 references - while the verdict says its parser yielded 46.** The index's rows come in four widths (15 four-field, 35 five-field, 33 six-field, 5 seven-field), so **my auditor reads only one of the shapes**: the next step is to widen it to every row that carries a path with a size and a digest, then re-run until the count matches the reviewer's 46 and the mismatch count stays at zero.
+- **Still to correct, and it is the verdict's own sentence:** the packet's line 340 says *"117 xunit files, **1311 cases**, 0 failures, 43 skipped"* while the canonical `Test.xml` decodes to **1272 passed + 43 skipped = 1315 pytest cases**, and `1432 = 1315 pytest cases + 117 CTest entries` **is not** evidence of cross-run accumulation. **That correction, and the freeze/read-back of the canonical evidence copy, follow the widened audit.**
+- **State:** **P2 in progress: two of two known-stale rows corrected and verified; the audit widened next, then the counts**; P1-1 … P1-5 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
