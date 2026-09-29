@@ -25029,3 +25029,20 @@ picture in both directions.**
 - **Nothing about APPROACH is now unknown**: the port prepares and qualifies, the boundary inspects and proves, and the seam issues and dispatches. **Next round writes
   the seam with the goals' construction and the times taken from what `dispatch` reports, then the seam's own refusal tests.**
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1501 — The execution seam already exists in production: it is the broker's own prefix executor
+
+- **What I expected to write turned out to be wired already**, and this is the kind of finding that changes a plan rather than adding to it:
+  - `adapters/act/broker_execution.py:87` has **`approve_with_source(self, ticket, prefix, receipt)`** - the production prefix executor's entry point, and
+    `command_broker.py:737` is exactly where the broker calls it;
+  - `cli/act_command_broker.py:168` **assigns it**: `broker.prefix_executor = BrokerPairedExecution(broker, ...)`;
+  - and `CommandBroker.__init__` keeps `self.prefix_executor` plus `self._pair_goals` (`:67`), i.e. the executor holds the goals it dispatched.
+- **So APPROACH's remaining work is WIRING, not building:** `execute_approach` should take the trusted source, register the prefix through `issue_prefix_source` (which returns the
+  `PrefixSourceReceipt` the prover needs), hand that receipt to the **broker's own** `prefix_executor.approve_with_source(ticket, prefix, receipt)` to drive the pair, and read the
+  goals and times the executor already keeps - then inspect and prove with the machinery from CP-1499. **One adapter around an existing component, not a new subsystem.**
+- **Why this matters to the plan, stated plainly:** the last three rounds were spent mapping a seam I assumed had to be built. **The map was still the right work - it produced the goals
+  contract, the receipt shape and the prover's identity sources - but the conclusion changes: APPROACH is closer than the sequence of checkpoints implied, and the same is likely true of
+  the remaining seven phases**, because this repository has already built phase machinery that nothing has driven yet (the pattern this whole batch keeps finding).
+- **Next:** read `BrokerPairedExecution.approve_with_source` and what it keeps (goals, positions, times, snapshot), then write the adapter inside `execute_approach` that uses it, plus
+  the boundary-level test with substituted physics - and APPROACH is end to end.
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
