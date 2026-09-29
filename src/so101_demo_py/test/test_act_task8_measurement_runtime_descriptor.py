@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_act_task8_calibration_aggregator import TEMPLATE_V2, _cli_identities   # noqa: E402
@@ -107,3 +108,34 @@ def test_the_cli_composes_the_production_driver_without_the_injected_test_seam(t
     assert recorded.exists(), "the composition must build its providers"
     assert "PRODUCTION_DRIVER_WIRING_PENDING" not in str(caught.value)
     assert "PRODUCTION_PROVIDERS_UNAVAILABLE" not in str(caught.value)
+
+
+def _descriptor_with(mutate):
+    document = _descriptor()
+    mutate(document)
+    return document
+
+
+def test_a_descriptor_whose_head_search_payload_is_not_the_production_shape_is_refused(tmp_path):
+    """Astra item 2: the shared rule must apply the *full* production shape, not only the device policy.
+
+    Each mutation below is accepted by the current weak rule (closed top-level keys plus CUDA policy) and must be
+    refused once the rule reuses the production head-search validator: an unknown field, a malformed camera block and
+    a malformed motion block are all shape errors, and shape errors are how a descriptor stops describing what was
+    actually measured.
+    """
+
+    # the shape rule owns the closed document structure: an unknown field and a malformed block are its business. A
+    # camera block whose *keys* are wrong is the deeper binding check's business, not this rule's, so it is not asserted
+    # here - that path is covered by the binding suite (and asserting it here would make this test pass for the wrong
+    # reason or fail for one, which is exactly what CP-1231 recorded)
+    cases = {
+        "extra field": lambda d: d["head_search"].update({"unexpected_field": 1}),
+        "bad motion": lambda d: d["head_search"].update({"motion": "not-a-motion-block"}),
+        "extra top-level field": lambda d: d.update({"unexpected_top": 1}),
+    }
+    for name, mutate in cases.items():
+        document = _descriptor_with(mutate)
+        with pytest.raises(ValueError) as caught:
+            require_runtime_descriptor(document)
+        assert "MEASUREMENT_RUNTIME_DESCRIPTOR" in str(caught.value) or "HEAD_SEARCH" in str(caught.value), name
