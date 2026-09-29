@@ -719,7 +719,12 @@ def _v2_sample(**overrides):
                  "source_received_monotonic_s": {name: 0.0 for name in refs},
                  "raw_records": dict(refs), "holding_state": "EMPTY",
                  "frame": {"wrist_frame_valid": True, "wrist_target_visible": True},
-                 "contact": {"observation_valid": True}, "measurements": {}}
+                 # the builder requires these exact shapes, read from its own validation
+                 "contact": {"observation_valid": True, "bilateral_contact": False,
+                             "no_fingertip_contact": False, "cup_supported": True,
+                             "released": False, "placement_stable": False},
+                 "measurements": {"cup_support_distance_m": 0.01, "end_effector_position_m": [0.0, 0.0, 0.1],
+                                  "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]}}
     arguments.update(overrides)
     return build_live_evidence_sample(**arguments)
 
