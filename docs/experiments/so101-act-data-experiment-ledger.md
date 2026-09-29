@@ -19256,3 +19256,22 @@ not an inference of mine.**
   rules say to take deliberately - it is long, its output matters, and my remaining context in this stretch is not enough to
   read its result and act on it honestly. **Starting a long run I cannot review would be worse than naming it precisely for the
   next stretch**, which is what this checkpoint does.
+
+## CP-1197 — The revised Task 9 gate ran and failed closed on shard-06; where to read why
+
+- **First attempt refused to start, and the refusal was informative:** `SO101_PYTEST_GATE_ERROR: AF_UNIX process scratch
+  path exceeds the 107-byte payload limit: 111 bytes`. The run id contributed most of it, so the fix was a **short run id** -
+  `--run-id g794` with `--process-id-chars 4` and `SO101_IPC_SOCKET_BASE=/tmp/s101-g794` - which started cleanly. **That is the
+  same class of problem CP-1055 called "irreducible path length": it is not irreducible, it is the sum of the evidence root,
+  the scratch path and the run id, and each of the three can be shortened.** Recorded because CP-1055's conclusion was
+  superseded by the owner and this is the concrete confirmation of why.
+- **Second attempt ran the real gate: 121 seconds, then `SO101_PYTEST_GATE_ERROR: pytest process failed closed: shard-06:
+  exit=1`.** So the revised Task 9 gate is **RED**: at least one shard has a failing test. That is the honest result of the
+  owner's item 5 and it is now recorded as such, not as a pass.
+- **What I did not manage to read before running out of context in this stretch: which tests.** The gate log
+  (`experiments/gate6-batch3-py-gate/g794.log`) records the shard-level failure but not the failing test ids, and my attempt to
+  find the shard log with a `find` over the whole evidence root was still running when I stopped it - the root is large and
+  that was the wrong tool. **The next step is one `ls` in the run's own directory** (the shard logs are written beside the run,
+  not scattered), then a `grep FAILED` in the shard-06 log.
+- **State:** HEAD `b4e413b6`; staged 0; **no commit was made while the gate ran** (the CP-1030 rule); the gate's own scratch
+  `scratch/r807.8601` and the run's log are retained as deletion candidates, not deleted; no push, no stack, no hardware.
