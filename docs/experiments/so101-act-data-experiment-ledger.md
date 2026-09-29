@@ -16637,3 +16637,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Boundary I complete; Boundary II code-complete against doubles with its composition item open and waiting for
   an authorised runtime; Boundary III's 15 configured inputs deferred by the owner to its own boundary; **next is Boundary
   IV's RED**. No runtime started, no session/worktree/stack created, no push, no evidence deleted, no hardware.
+
+## CP-1075 — Boundary IV's first piece: the entry must validate first, and the module was already red
+
+- **Clean RED:** a sentinel test proves whether the aggregator's unique entry reaches the strict closed-batch validator.
+  It failed with `assert [] == [PosixPath('.../batch')]` - the entry **never** called `validate_closed_batch`, so it could
+  publish canonical documents from a batch that was never validated as closed. (The first draft of the test failed on an
+  incidental `FileNotFoundError` instead, so it was rewritten to assert the *call* rather than an error type - the agreed
+  rule is that only the expected break counts.) Logs: `beh-r675-red.log`, `beh-r675-red2.log`, scratch
+  `<R>/scratch/r675b.<n>` with `TMPDIR` verified through the exact test interpreter.
+- **The fix is correct and currently reverted on purpose:** inserting
+  `indexes = [validate_closed_batch(Path(root)) for root in batch_roots]` at the head of
+  `aggregate_task8_calibration` makes the entry validate before it loads or publishes. With it, the module's suite went
+  from **12 failed / 3 passed** to **11 failed / 4 passed** - one more test passing - and the 11 that still fail do so on
+  **`MEASUREMENT_CONTRACT_IDENTITY_INVALID` / `MEASUREMENT_BATCH_IDENTITY_INVALID`**, i.e. their fixtures carry the
+  **older, weaker batch shape** the strict validator is designed to refuse.
+- **A pre-existing failure set discovered, and it is not mine:** with my edit removed, the module's suite is still
+  **12 failed / 3 passed**, and `git diff` against HEAD for that file shows **0 added / 0 removed lines** - the file is
+  **byte-identical to HEAD**, with **no residue of my edit** and no user work displaced. So those twelve failures exist at
+  HEAD, before this boundary touched anything: the aggregator's tests are already red, and Boundary IV's fixture
+  migration is simultaneously a **repair**.
+- **What the next step must therefore do, in one commit so the suite cannot be left red:** land the validation-first
+  change **together with** the migration of that module's fixtures to the v2 closed-batch shape (ten-member identity,
+  `batch.json` with its own digest, the index the validator returns) - and only then re-run, expecting the RED to pass
+  and the eleven to go green.
+- **State:** Boundary I complete; Boundary II code-complete against doubles, composition item waiting for an authorised
+  runtime; Boundary IV in progress with its first RED proven and its fix prepared; **the aggregator module's
+  pre-existing failures now recorded rather than attributed to this work**.
