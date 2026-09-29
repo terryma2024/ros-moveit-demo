@@ -27233,3 +27233,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **So item 3 closes as VERIFIED, with the honest note that two of its three review points were real defects in MY tests (the key set, the negatives) and the third was a real overstatement (the cadence).** **What was never true was my framing that the chain was "unstarted": it existed, was production-driven, and had never been read against the
   review's words.** **`38 passed` for the qualification suite and `42 passed` for the live-evidence suite, both on fresh scratches.**
 - **State:** item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); **item 3 verified complete**; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1631 — P1-1's composition contract test PASSES, and the review's remaining claim is a layer question
+
+- **The test the batch already had for P1-1 runs green:**
+  ```
+  test_act_task8_production_composition_contract.py   ->  2 passed   (fresh scratch)
+  ```
+  It drives the **real** composition - `build_production_measurement_driver` with **no injected providers**, substituting **only the lowest-level MuJoCo/ROS client through one `io_client` argument** - and asserts that the batch seals
+  **`CLOSED` with every anchor `COLLECTED`**, that the client's own values travel through the stack adapter (`launch`, `cleanup` with the context's generation, a `search` call), and that a client which refuses is refused. **CP-1472 recorded its RED as
+  `TypeError: build_real_providers() got an unexpected keyword argument 'io_client'`; that seam now exists (`io_client=None`, `task8_production_composition.py:202`) and the test is GREEN.**
+- **So P1-1's "the production composition still cannot run" is answered**, and what remains of the review's item 1 is its **specific** sentence: *"The formal CLI constructs a context without the calibration report and measurement identity fields required by the contract."*
+  **Verified against the code (CP-1599) and now located by layer:**
+  - **the calibration report is a MANIFEST field** (`pick_place_validation_manifest.build_pick_place_validation_manifest(..., calibration_report_path=..., calibration_report_sha256=...)`) and appears in the **validation manifest** and the **collection config** - **not** in the measurement context;
+  - **the measurement identity is the contract's ten members** (`IDENTITIES_V2`), which the CLI reads from the `--identities` document and passes to `require_v2_identity` and to the driver **as its own argument**.
+  **So the honest question is whether the contract requires those two through the CONTEXT, or whether the review's sentence conflates the manifest/identity layers with the context layer** - and that is settled by reading what consumes a context, not by adding two fields because a sentence mentions them.
+- **The check that settles it, named for the next round:** find every consumer of `CalibrationMeasurementContext`'s fields and ask whether any of them needs a calibration report or a measurement identity **that it cannot get from the manifest or the identity mapping it already has**. **If none does, the review's item 1 is answered by
+  the composition contract test above plus this layer analysis; if one does, that consumer names the field to add.**
+- **State:** item 1 **composition verified green, one layer question open**; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
