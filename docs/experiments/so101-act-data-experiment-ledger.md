@@ -30212,3 +30212,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   rather than being swallowed.
 - **State:** **P1-2: evidence side nearly done, limit side needs the descriptor's config values carried to the driver.**
   P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
+
+## CP-1788 — The limits' own source is found, and P1-2's route is now complete on both sides
+
+- **The contract says `threshold_source: "config"`, and the config is a real production document:**
+  `src/so101_demo_py/config/act/task8-calibration-search-candidate-v1.json` - it declares the bbox/detector thresholds
+  the formulas compare against (`min_bbox_aspect`, `center_deadband_px`, `min_area_px2`, `vertical_bounds_px`,
+  `tracking_iou`, `min_confidence`, …), which is why the contract carries `None` for them and names their origin
+  instead. The descriptor's own `head_search` block carries the **camera** side (`width_px`, `height_px`,
+  `horizontal_fov_rad`, `frame_id`, `ray_origin_frame_id`) and the motion tolerances - **so the two halves of the
+  limits come from two documents, and both are production config, not test data.**
+- **Which closes the route P1-2 needs, end to end:**
+  | what the aggregator reads | where the driver gets it |
+  | --- | --- |
+  | `measurements[field]` - a bbox list, a document (`DOCUMENT_EVIDENCE_FIELDS`), or a structured list | the real `DetectionBatch`'s candidates (already emitted at write time) |
+  | `configured[field]` | the calibration-search candidate config's thresholds, plus the descriptor's camera block for the FOV-derived field |
+  | the field names themselves | the contract, now plumbed to the driver |
+  **and every element of that table is a production document or a production value - nothing invented in the driver.**
+- **What remains for P1-2, stated as the two edits it is:** load the candidate config in the composition (the same way
+  the descriptor and the contract are loaded), carry its thresholds to the driver beside the contract, and emit
+  `configured` from them instead of passing `entry["configured_limit"]` through - **then the RED's assertions (a report,
+  recomputed field verdicts, at least one non-`UNMEASURED` field, documents on disk) have something to be true about.**
+- **State:** **P1-2: both sides of the join are now mapped to their production sources; the two edits are named.**
+  P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
