@@ -23993,3 +23993,17 @@ not an inference of mine.**
   CP-1445 stands for the review: a prefix case carries no sealed artifact by production rule, so the seven assertions the review listed are satisfied
   only in the row-shaped subset until later phases are provisioned.**
 - **State:** committed with both tests green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1448 — The published row reaches the trusted path, and the first negative is proven
+
+- **`2 passed`.** The prefix row that production published is now handed to the trusted translator
+  **`case_row_to_journal_row(row, identities=..., manifest_document_sha256=...)`** - the same rule the aggregator applies - and its output is asserted
+  field by field: the case id and mode survive; **every supplied bundle identity is carried** (`source_provenance_sha256`, `runtime_config_sha256`,
+  `contact_policy_fingerprint`); the manifest document digest is carried; **the producer's receipt digests survive under the journal's own names**
+  (`child_receipt_sha256` -> `child_retirement_receipt_sha256`, likewise stack); and the prefix rule's **zero live-evidence digest** is preserved.
+- **And the first of the four negatives is proven, not asserted in prose:** a row that lost `child_receipt_sha256` is **refused with
+  `TASK8_CASE_ROW_INVALID`** by the trusted translator rather than accepted loosely. **That is the review's "tamper preventing qualification" negative in the
+  shape this repository's trusted path enforces.**
+- **Remaining, precisely:** feed the journal row into the **aggregator** and assert its verdict (the trusted aggregator is the next piece); the other three
+  negatives in their applicable forms (**missing row**, **wrong epoch**, **missing receipt**); then the single integration boundary; then the packet.
+- **State:** committed with both tests green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
