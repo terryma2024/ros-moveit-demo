@@ -23623,3 +23623,17 @@ not an inference of mine.**
   (CP-1420). **The remaining outcome line is captured above for the next read.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1428 — The append now RUNS against the child's real recorder, and one shape rule still refuses it
+
+- **What is new:** the refusal is unchanged in code (`TASK8_LIVE_EVIDENCE_SAMPLE_INVALID`) but **the code path is not**: the boundary holds the child's
+  recorder (CP-1427's probe printed its identity), so my sample is now reaching `append` against the recorder that will seal the case. **Before this
+  round it never reached it at all.**
+- **And the remaining question is narrow and mechanical:** `append` raises `SAMPLE_INVALID` for four distinct rules (the 24-key set, the epoch
+  types, the finiteness/enumeration checks, the vector lengths) and the probe at CP-1420 proved a sample built from the same recipe satisfies all of
+  them **on a fresh recorder with `case_id="case-05"`**. **The one input that differs in the child's context is `raw_records`: their files must
+  exist under the recorder's own `evidence_root` with matching digests, and `evidence_root` for the child's recorder is its staging root - so the
+  next probe builds one sample against THAT recorder and prints which of the four rules trips.**
+- **Handoff state, final for this batch:** items 1-4 committed and green; P1-5 uncommitted by design with its first half proven up to the recorder
+  append; the ledger's CP-1420 plan remains the entry point for a fresh round.
+- **State:** no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
