@@ -66,9 +66,12 @@ def seal_valid(root, contract):
     for index, phase in enumerate(phases, start=1):
         row = root / "anchors" / "default" / f"phase-{phase}.json"
         row.write_bytes(json.dumps({"phase": phase, "source_stamp": index}).encode())
-    identity = {name: "a" * 64 for name in IDENTITIES_V2}
-    identity["source_commit"] = "a" * 40
-    identity["measurement_contract_sha256"] = contract["contract_sha256"]
+    # the seal's identity must be the identity the ENTRY admitted, which is the bound contract's own: the entry now
+    # compares the seal's complete identity against it (CP-1621/1639), and an invented one is refused by name
+    # NOT `contract["contract_sha256"]`: that is the BOUND DOCUMENT's self-digest, while this member is the identity's
+    # own digest of the measurement contract. Overriding it with the wrong field made the seal's identity disagree with
+    # the one the entry admitted in exactly one member - which the entry now refuses by name (CP-1621/1640)
+    identity = dict(contract["identities"])
     # the closure must be exact: index every regular file except the batch record itself
     files = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
              for path in sorted(root.rglob("*"))
