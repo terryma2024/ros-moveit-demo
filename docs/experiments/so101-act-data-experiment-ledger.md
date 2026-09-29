@@ -14859,3 +14859,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   topology recorded; the Task 8 production caller and Task 9's gate follow the reconciliation; Task 10 stays blocked
   until the 17 search values are independently designed and reviewed. No runtime, no package gate, no push, no evidence
   deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1007 — Decision 4, file 1 of 3: the execution module's hunks are reconciled and mine are committed
+
+- **Method, chosen because the file's first hunk interleaves my helper with the owner's failed-start fencing:** the
+  index content was **constructed against HEAD** - HEAD plus exactly my two additions (the
+  `_require_live_evidence_readback` helper and its call site inside `run_pick_place_case`) - rather than staged with
+  `git add <file>`, which would have captured their block. The working tree was copied outside the repository first
+  (`handoffs/pick_place_case_execution.worktree-backup.py`) and restored byte-for-byte afterwards.
+- **Verified both directions before committing:**
+  - index vs HEAD: *"1 file changed, 23 insertions(+)"* with **0** of their lines (`retire_failed_start`,
+    `except BaseException`) present in the index;
+  - working tree vs index: their two lines still present and **unstaged** - their in-flight work is preserved, not
+    overwritten, not stashed, and not selected as a whole file;
+  - the index content is coherent on its own: my call site references a function that the same staged content defines,
+    and it depends on nothing from their block.
+- **Committed: `63b2a1f0`** (`feat(act): require a byte-exact live-evidence readback before the journal row`), and the
+  file still reports ` M` afterwards - exactly the intended end state of a hunk-level reconciliation: my work
+  committed, theirs untouched and still theirs.
+- **Verified: 16 passed, rc=0** (`beh-r599f.log`) for the teleop case-execution and production-chain suites, which run
+  against the working tree carrying both sides.
+- **Honest limitation recorded:** those suites exercise the *working tree*, not the staged content in isolation; the
+  staged content was instead checked by construction (my two references present, theirs absent) and by compiling the
+  restored file. When the owner commits their side, the merged file is what the Task 9 gate will exercise.
+- **Next:** file 2 of 3, `test/teleop/test_task8_case_execution.py`, where my hunks are the real-sealed-artifact
+  fixture change and the negative case; then file 3, the interleaved `pick_place_case_owner.py`.
