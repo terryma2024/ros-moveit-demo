@@ -517,7 +517,7 @@ def _valid_evidence(contract):
     return evidence, configured
 
 
-def _v2_batch(root, contract, descriptor=None):
+def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=False):
     """A batch that is schema-true for v2: valid raw evidence in the indexed records and the 28 published entries."""
 
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
@@ -558,12 +558,21 @@ def _v2_batch(root, contract, descriptor=None):
                        "camera_measurements": {name: {"value": 1.0, "unit": "px"} for name in (
                            "head_intrinsics_px", "head_translation_m", "head_rpy_rad", "yaw_zero_bearing_rad")},
                        "observed_lock_frames": {anchor: 3 for anchor in ("default", "left", "forward")},
-                       **({"head_search": descriptor} if descriptor is not None else {})})
+                       **({"head_search": descriptor}
+                          if (descriptor is not None and not descriptor_as_index_file) else {})})
     # one seal, carrying the valid raw evidence the comparators read and the identity the bound contract expects
+    index_descriptor = None
+    if descriptor is not None and descriptor_as_index_file:
+        # the descriptor the driver seals into the batch root: indexed evidence, not a block inside measurements.json
+        descriptor_file = root / "runtime-descriptor.json"
+        descriptor_file.parent.mkdir(parents=True, exist_ok=True)
+        descriptor_file.write_text(json.dumps(descriptor, sort_keys=True))
+        import hashlib as _hashlib
+        index_descriptor = {"runtime-descriptor.json": _hashlib.sha256(descriptor_file.read_bytes()).hexdigest()}
     published = root / "measurements.json"
-    _sealed_batch(root, {"measurements": evidence, "configured": configured}, identities,
-                  extra_files={"measurements.json": __import__("hashlib").sha256(
-                      published.read_bytes()).hexdigest()})
+    extra = {"measurements.json": __import__("hashlib").sha256(published.read_bytes()).hexdigest()}
+    extra.update(index_descriptor or {})
+    _sealed_batch(root, {"measurements": evidence, "configured": configured}, identities, extra_files=extra)
     return root
 
 
@@ -677,3 +686,29 @@ def test_the_aggregation_publishes_exactly_the_canonical_document_names(tmp_path
     aggregate_task8_calibration((batch,), contract, out)
     written = sorted(path.name for path in Path(out).rglob("*") if path.is_file())
     assert written == sorted(DOCUMENTS), f"published {written}"
+
+
+
+def test_the_aggregator_reads_the_descriptor_back_from_the_closed_index(tmp_path):
+    """Boundary IV item 2's readback: the descriptor travels in the sealed batch, so the report is bound to it from the
+    index rather than from whatever a context object happened to hold."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    descriptor = {"schema_version": 1, "head_search": {
+        "schema_version": 1,
+        "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "a" * 64,
+                     "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda",
+                     "allow_cpu_fallback": False, "torch_threads": 4, "torch_interop_threads": 2,
+                     "torch_version": "2.0", "ultralytics_version": "8.0"},
+        "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
+                   "width_px": 640, "height_px": 480},
+        "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}}
+    batch = _v2_batch(tmp_path / "batch", contract, descriptor=descriptor, descriptor_as_index_file=True)
+    outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
+    sample = json.loads(Path(outputs["head_search_qualification"]).read_text())
+    assert sample.get("head_search") == descriptor["head_search"], \
+        "the sample carries the descriptor the closed index holds"
