@@ -712,3 +712,55 @@ def test_the_aggregator_reads_the_descriptor_back_from_the_closed_index(tmp_path
     sample = json.loads(Path(outputs["head_search_qualification"]).read_text())
     assert sample.get("head_search") == descriptor["head_search"], \
         "the sample carries the descriptor the closed index holds"
+
+
+def _descriptor(model_id="plastic-cup"):
+    return {"schema_version": 1, "head_search": {
+        "schema_version": 1,
+        "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "a" * 64,
+                     "model_id": model_id, "image_size_px": 640, "requested_device": "cuda",
+                     "allow_cpu_fallback": False, "torch_threads": 4, "torch_interop_threads": 2,
+                     "torch_version": "2.0", "ultralytics_version": "8.0"},
+        "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
+                   "width_px": 640, "height_px": 480},
+        "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}}
+
+
+def test_a_batch_whose_payload_claims_a_different_descriptor_is_refused(tmp_path):
+    """Item 3: the sealed descriptor wins, and a payload claiming another one is refused rather than published."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    sealed = _descriptor("plastic-cup")
+    batch = _v2_batch(tmp_path / "batch", contract, descriptor=sealed, descriptor_as_index_file=True)
+    # the payload now claims a different model than the sealed descriptor records
+    payload = json.loads((batch / "measurements.json").read_text())
+    payload["head_search"] = _descriptor("another-cup")["head_search"]
+    (batch / "measurements.json").write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="CALIBRATION_IDENTITY_MISMATCH|BATCH_CLOSURE_INVALID"):
+        aggregate_task8_calibration((batch,), contract, tmp_path / "out")
+
+
+def test_a_batch_that_does_not_index_the_descriptor_cannot_bind(tmp_path):
+    """Item 3: no sealed descriptor means nothing to bind to, so the report cannot satisfy the runtime binding."""
+
+    import sys
+
+    from so101_demo.act.head_search_binding import validate_head_search_binding
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_act_head_search_binding import _inputs
+
+    runtime = _inputs(tmp_path)[0]
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _v2_batch(tmp_path / "batch", contract)          # no descriptor anywhere in the batch
+    report = json.loads(Path(aggregate_task8_calibration(
+        (batch,), contract, tmp_path / "out")["calibration_report"]).read_text())
+    with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
+        validate_head_search_binding(runtime, report)
