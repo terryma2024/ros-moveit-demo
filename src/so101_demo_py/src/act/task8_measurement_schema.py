@@ -213,6 +213,21 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
             if not any(entry.endswith(f"-{name}.json") for entry in rows):
                 raise ValueError("BATCH_PHASE_MISSING")
 
+    # and it closes over source time: phase rows are read in phase order and their stamps must not go backwards, which
+    # is the only way a reversal can be seen from an index of digests. Rows without a stamp prove nothing and are
+    # skipped rather than silently passing as ordered.
+    for anchor in anchors:
+        ordered = sorted(entry for entry in indexed if entry.startswith(f"anchors/{anchor}/") and "/phase-" in entry)
+        stamps = []
+        for entry in ordered:
+            row = _load(root / entry, "BATCH_INVALID")
+            stamp = row.get("source_stamp")
+            if isinstance(stamp, bool) or not isinstance(stamp, (int, float)):
+                continue
+            stamps.append(float(stamp))
+        if any(later < earlier for earlier, later in zip(stamps, stamps[1:])):
+            raise ValueError("BATCH_TIME_REVERSED")
+
     for relative, digest in files.items():
         if _SHA256.fullmatch(str(digest)) is None or found[relative] != digest:
             raise ValueError("BATCH_CLOSURE_INVALID")

@@ -468,3 +468,36 @@ def test_a_driver_batch_that_misses_a_phase_for_an_anchor_is_refused(tmp_path):
 
     with pytest.raises(ValueError, match="BATCH_PHASE_MISSING"):
         validate_closed_batch(root)
+
+
+def test_a_driver_batch_whose_phase_stamps_go_backwards_is_refused(tmp_path):
+    """Boundary IV: the index closes over source time, so a phase row stamped before its predecessor is refused."""
+
+    import hashlib as _hashlib
+
+    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+
+    phases = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE",
+              "RADIAL_RETREAT", "FINAL_CHECK")
+    root = tmp_path / "batch"
+    files = {}
+    for anchor in ("default", "left", "forward"):
+        (root / "anchors" / anchor).mkdir(parents=True)
+        for index, phase in enumerate(phases):
+            stamp = float(index) * 0.002
+            if anchor == "left" and index == 4:
+                stamp = 0.001                      # TRANSPORT stamped before the phases that preceded it
+            written = write_closed_json(root / "anchors" / anchor / f"phase-{index:02d}-{phase.lower()}.json",
+                                        {"phase": phase, "index": index, "source_stamp": stamp,
+                                         "receive_monotonic_s": stamp})
+            files[f"anchors/{anchor}/{written.name}"] = _hashlib.sha256(written.read_bytes()).hexdigest()
+    identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
+    identity["source_commit"] = "b" * 40
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                "anchors": ["default", "left", "forward"], "identity": identity, "files": files}
+    document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
+    write_closed_json(root / "batch.json", document)
+
+    with pytest.raises(ValueError, match="BATCH_TIME_REVERSED"):
+        validate_closed_batch(root)
