@@ -122,10 +122,7 @@ def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED",
     # Astra item 4: every sealed batch indexes its runtime descriptor, so the fixture writes one before sealing -
     # descriptor=False builds the bare root that the aggregator must refuse
     if descriptor:
-        _write(root / "runtime-descriptor.json", {"schema_version": 1, "head_search": {
-            "schema_version": 1,
-            "detector": {"requested_device": "cuda", "allow_cpu_fallback": False},
-            "camera": {}, "motion": {}}})
+        _write(root / "runtime-descriptor.json", {"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False}, "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame", "width_px": 640, "height_px": 480}, "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}})
     # the batch is sealed by the production entry point, which records every raw file hash
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
 
@@ -326,9 +323,7 @@ def _sealed_batch(root, payload, identities=None, extra_files=None,
     # Astra item 4: this builder seals a batch the aggregator will read, so it indexes a descriptor like production -
     # descriptor_indexed=False is how a test deliberately builds the bare root the rule must refuse
     if descriptor is None:
-        descriptor = {"schema_version": 1, "head_search": {"schema_version": 1,
-                      "detector": {"requested_device": "cuda", "allow_cpu_fallback": False},
-                      "camera": {}, "motion": {}}}
+        descriptor = {"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False}, "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame", "width_px": 640, "height_px": 480}, "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}}
     if "head_search" not in descriptor:      # callers may hand in the inner block; the sealed document is the document
         descriptor = {"schema_version": 1, "head_search": descriptor}
     descriptor_path = Path(root) / "runtime-descriptor.json"
@@ -587,9 +582,7 @@ def _valid_evidence(contract):
 
 def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=True):
     if descriptor is None:                      # production always seals a descriptor, so the fixture does too
-            descriptor = {"schema_version": 1, "head_search": {"schema_version": 1,
-                          "detector": {"requested_device": "cuda", "allow_cpu_fallback": False},
-                          "camera": {}, "motion": {}}}
+            descriptor = {"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False}, "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame", "width_px": 640, "height_px": 480}, "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}}
     # Astra item 4: a sealed batch always indexes its descriptor, so the fixture's default matches production;
     # the False case is still available for tests that deliberately build a bare root
     """A batch that is schema-true for v2: valid raw evidence in the indexed records and the 28 published entries."""
@@ -864,3 +857,96 @@ def test_identical_sealed_descriptors_across_roots_pass_and_reach_the_sample(tmp
     sample = json.loads((tmp_path / "out" / "head-search-qualification.json").read_text())
     assert sample["head_search"]["detector"]["allow_cpu_fallback"] is False, \
         "the published sample carries the sealed descriptor's block"
+
+
+def _complete_inner_block(*, device="cuda"):
+    """The production inner head-search block, complete enough for the shared validator."""
+
+    return {"schema_version": 1,
+            "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt",
+                         "weights_sha256": "a" * 64, "model_id": "plastic-cup",
+                         "image_size_px": 640, "requested_device": device,
+                         "allow_cpu_fallback": False},
+            "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
+                       "width_px": 640, "height_px": 480},
+            "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01,
+                       "neck_goal_duration_s": 0.5}}
+
+
+def _build_payload_root(root, seed, block):
+    """A root whose measurements.json carries the inner head-search block, written once, never rewritten."""
+
+    from pathlib import Path as _Path
+
+    from so101_demo.act.task8_measurement_schema import write_closed_json
+
+    root = _Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    document = json.loads((_Path(seed) / "measurements.json").read_text())
+    document["head_search"] = block
+    write_closed_json(root / "measurements.json", document)
+    return root
+
+
+def _index_of(root):
+    """Every regular file under a seeded root except the batch record, so a re-seal keeps its closure."""
+
+    import hashlib
+    from pathlib import Path as _Path
+
+    root = _Path(root)
+    return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob("*"))
+            if path.is_file() and path.name != "batch.json"}
+
+
+def test_a_payload_carrying_the_inner_head_search_block_matches_the_sealed_descriptor(tmp_path):
+    """Astra re-review P1-4: the payload records the INNER block while the seal is the WHOLE document.
+
+    A production ``measurements.json`` puts the head-search block at the inner layer, and the sealed
+    ``runtime-descriptor.json`` is ``{schema_version, head_search}``. Comparing the two directly refuses an
+    equal payload - which is the defect this RED reproduces.
+    """
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2, bind_measurement_contract
+    from so101_demo.act.task8_measurement_schema import write_closed_json
+
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    inner = _complete_inner_block()
+    evidence, configured = _valid_evidence(contract)
+    identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+    identities["measurement_contract_sha256"] = contract["contract_sha256"]
+    # a seeded root provides a schema-true measurements.json to lift; the payload root itself is written ONCE
+    seed = _v2_batch(tmp_path / "seed", contract, descriptor=inner)
+    batch = _build_payload_root(tmp_path / "batch", seed, inner)
+    _sealed_batch(batch, {"measurements": evidence, "configured": configured}, identities,
+                  extra_files=_index_of(batch), descriptor=inner)
+
+    outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
+    sample = json.loads((tmp_path / "out" / "head-search-qualification.json").read_text())
+    assert sample["head_search"] == inner, "the published block is the sealed one, at the inner layer"
+
+
+def test_a_payload_carrying_a_different_inner_block_is_refused(tmp_path):
+    """The negative direction of P1-4: a payload claiming another configuration must still be refused."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2, bind_measurement_contract
+    from so101_demo.act.task8_measurement_schema import write_closed_json
+
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    inner = _complete_inner_block()
+    other = _complete_inner_block(device="cpu")
+    evidence, configured = _valid_evidence(contract)
+    identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+    identities["measurement_contract_sha256"] = contract["contract_sha256"]
+    seed = _v2_batch(tmp_path / "seed", contract, descriptor=inner)
+    batch = _build_payload_root(tmp_path / "batch", seed, other)   # the payload claims a DIFFERENT block
+    _sealed_batch(batch, {"measurements": evidence, "configured": configured}, identities,
+                  extra_files=_index_of(batch), descriptor=inner)
+
+    with pytest.raises(ValueError, match="CALIBRATION_IDENTITY_MISMATCH"):
+        aggregate_task8_calibration((batch,), contract, tmp_path / "out")
