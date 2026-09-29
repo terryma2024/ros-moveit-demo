@@ -170,6 +170,16 @@ def test_aggregation_is_deterministic_and_tamper_evident(tmp_path, contract):
     assert not list((tmp_path / "three").glob("*TASK8_READY*"))
 
 
+def _cli_identities():
+    """The ten-member identity the measurement CLI requires, distinct per member so a mix-up is visible."""
+
+    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+
+    identities = {name: format(index + 1, "02x") * 32 for index, name in enumerate(IDENTITIES_V2)}
+    identities["source_commit"] = "0" * 40
+    return identities
+
+
 def _identities():
     return {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
             "anchors_sha256": "c" * 64, "contact_policy_fingerprint": "d" * 64,
@@ -211,7 +221,8 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
     from so101_demo.cli import act_measure_task8_calibration as measure
 
     identities = tmp_path / "identities.json"
-    identities.write_text(json.dumps(_identities()))
+    # two fixtures on purpose: the binder wants the members its template binds, the CLI wants the ten-member identity
+    identities.write_text(json.dumps(_cli_identities()))
     bound = bind_measurement_contract(TEMPLATE, _identities(), tmp_path / "bound.json")
     ledger = tmp_path / "ledger.md"
     driver_module = tmp_path / "driver.py"
