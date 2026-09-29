@@ -12547,3 +12547,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7 remains in progress and its focused suite is red at a WIP commit that says so; Tasks 1-6 are
   committed and green; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-913 — Task 7 WIP: the window opens at SEARCH; three failures remain, each diagnosed
+
+- **Changed `add_grid`'s open gate:** it previously set `_opened = True` only when
+  `phase == "CLOSE"`, so the SEARCH phase the approved plan requires could never open the window. It now opens on
+  **any phase in `REQUIRED_PHASES`** - the tuple guarantees the phase *set*, while the runner's entry point at
+  SEARCH is wiring (step 3) - and the docstring says exactly that, including that a phase outside the tuple cannot
+  open the window at all. Also added the audit-camera refusal: a `task_camera*` key in `raw_records` raises
+  `TASK_CAMERA_NOT_AN_OBSERVATION`, since the Task camera is audit-only and never an ACT observation source.
+- **Suite movement:** **5 failed / 32 passed -> 3 failed / 34 passed** (`beh-task7-green2.log`).
+- **The three that remain, diagnosed rather than lumped together:**
+  1. `test_window_opens_at_close_and_enforces_the_frozen_grid` - this test **encodes the old contract** (it asserts
+     that a non-CLOSE first phase is refused). It is in a plan-named *Modify* target, so the correct action is to
+     update it to the v2 tuple and the SEARCH entry point, not to weaken the gate back.
+  2. `test_case_driver_reaches_the_window_and_seals_into_the_case_directory` - the case-driver path still drives the
+     window through the old phase sequence, so it needs the same move to SEARCH as the wiring step.
+  3. `test_every_ten_hz_row_cites_its_raw_records_and_identity` - **my own test**, failing with
+     `TASK8_LIVE_EVIDENCE_IDENTITY_INVALID` because I guessed the builder's identity requirements. The fix is to
+     read the builder's identity rule and write the fixture to it - the same lesson as CP-910, and the reason this
+     test is not being "fixed" by loosening the builder.
+- **State:** Task 7 in progress at an explicit WIP commit whose message states the suite is red; Tasks 1-6 committed
+  and green; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
