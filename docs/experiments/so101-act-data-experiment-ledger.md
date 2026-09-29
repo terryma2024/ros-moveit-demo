@@ -14760,3 +14760,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries held for the whole session:** no runtime started, no package gate run, nothing pushed, no evidence
   deleted, no hardware touched; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED;
   gen3 retained and ineligible with gen4 reserved for Task 10.
+
+## CP-1003 — Regression sweep after the final edit rounds: 264 focused tests green
+
+- **Ran the full focused set this session has touched, in both packages, from a fresh verified NVMe scratch with
+  bytecode writing disabled:**
+  - **demo package: 217 passed, rc=0** (`beh-r597a.log`) - the Task 8 runner, live evidence, live qualification, search
+    port, phase camera, deterministic render, measurement contract and formulas;
+  - **teleop package: 47 passed, rc=0** (`beh-r597b.log`) - case execution (carrying my uncommitted fixture update), the
+    production-chain test and campaign admission.
+- **Why the sweep mattered after these rounds:** the last several edits changed shared ground - the derivation's
+  preference for collected values over the frames path, the identity-key resolution, the collection layer's move to the
+  validated row contract, the occlusion rule's phase range, and a test-module deduplication - so a regression could have
+  surfaced anywhere in the set rather than only where the edit was made. It did not: every suite is green together.
+- **State:** Tasks 1-7 module work complete and green; Task 8's code side complete and green; the three decisions
+  recorded at CP-1002 still await their owners (the report version conflict, the search candidate values, and the
+  in-flight chain files whose commit would unblock the driver); Tasks 9-10 untouched; the goal is armed with a
+  756-round budget; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED; gen3 retained and ineligible with gen4 reserved for Task 10.
