@@ -21112,3 +21112,23 @@ not an inference of mine.**
   and it currently stops at the policy check with the exact code `ACT_POLICY_BINDING_INVALID`.
 - **State:** the test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing deleted,
   nothing pushed.
+
+## CP-1282 — The disabled-proposal contract, condition by condition
+
+- **Read from `contact_calibration.verify_disabled_proposal` (line 454):**
+  ```python
+  if item["status"] != "DISABLED":                                  raise ValueError("proposal is not disabled")
+  if item["policy_fingerprint"] != policy_fingerprint(item["payload"]):
+                                                                    raise ValueError("proposal payload fingerprint mismatch")
+  if item["source_evidence_sha256"] != item["payload"]["source_evidence_sha256"]:
+                                                                    raise ValueError("proposal evidence hash mismatch")
+  ```
+  so a valid proposal is a small document whose **fingerprint is computed from its own payload** and whose **evidence hash is repeated
+  inside that payload** - three conditions that are satisfiable **without** running the analysis pipeline, provided the payload itself
+  needs nothing more and `verify_activation` is equally light.
+- **The remaining read is small and known:** `contact_policy.verify_activation(payload, receipt)` at line 115, plus whatever follows
+  line 470 in `verify_disabled_proposal` (the excerpt stopped at the third condition, and the function may check a fourth). **Two
+  greps, then the minimal pair is written and item 5 either passes or names the next condition** - which, given the pattern of the last
+  five failures, is a perfectly good way to finish this.
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
+  deleted, nothing pushed.
