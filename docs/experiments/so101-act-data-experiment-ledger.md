@@ -29855,3 +29855,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   3. `test_the_formal_entrys_replay_rows_carry_a_measured_observation` fails because **the formal entry's own matrix fixture** does not yet carry what the evaluator now requires.
 - **State:** **P1-3 has three of its four requirements implemented and the fourth (the frozen matrix) explicitly RED.**
   P1-1's second half is GREEN. The demo RED's rate stands at `demo4=0`, `demo5=0`, `demo6` in flight.
+
+## CP-1776 — A mis-commit swept up the owner's work, and it was corrected byte-for-byte
+
+- **What happened:** the commit for CP-1775 was staged with `git add src/so101_demo_py/test/` - **a whole directory** -
+  so it carried **24 files**, and 21 of them were the owner's pre-existing uncommitted work (`test_act_contracts.py`,
+  `test_act_physics.py`, `test_act_task8_readback.py`, the held-cup transfer pair, the approach path screen and source
+  binding, and others that were in the dirty tree at the freeze). **The instruction is that the owner's dirty work is
+  preserved and not committed by this session**, so leaving it in a checkpoint commit was wrong regardless of the
+  commit's other content.
+- **The correction, and the proof that nothing was lost:**
+  ```
+  every file the commit touched was snapshotted by sha256 BEFORE anything moved   (24/24)
+  git reset --soft HEAD~1        -> the index kept all 24, the working tree untouched
+  git reset                      -> everything unstaged
+  git add <the three files that are mine alone>   (ledger, task8_production_composition.py,
+                                                   test_act_task8_phase_camera_measurement.py)
+  re-hashed every snapshotted file AFTER the correction
+  -> "working-tree bytes changed by the correction: none"
+  ```
+  **The corrected commit `eae304f2` contains exactly three files**, and the owner's 21 are uncommitted modifications
+  again - **the same bytes they had before the mistake.**
+- **And one honest consequence is recorded rather than hidden:** of the six fixtures my P1-3 change touched (adding
+  the `horizontal_fov_rad` field the evaluator now requires), some were already the owner's dirty files. **Their
+  working-tree content therefore holds the owner's uncommitted work AND my one-line addition**, and they remain
+  uncommitted so that the owner's changes are never authored by this session. The `git status` count moved from
+  **26 modified at the freeze to 32** - the difference is those fixture lines.
+- **The lesson, in this ledger's own idiom:** `git add <directory>` is a glob, **a glob is not a list**, and a commit
+  message describing one change does not constrain what was staged. **The check that catches it is `--name-only`
+  before the commit**, not the message after it.
+- **State:** **P1-3 has three of four requirements implemented and the fourth (the frozen matrix) explicitly RED;
+  P1-1's second half GREEN; the owner's tree preserved and uncommitted.** The demo RED's rate: `demo4=0`, `demo5=0`,
+  `demo6` = $(grep -oE 'demo_rc=[0-9]' "$NEW"/demo6.log 2>/dev/null | tail -1 || echo 'in flight').
