@@ -11399,3 +11399,35 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed yet, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
   no ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-866 — Task 8L generation 3, Step 1 provenance built on the corrected registry
+
+- **New run subroot, old one kept:** `runtime-task8l-gen3/` under the same registered evidence root, with
+  `provenance/ measurement/ report/ bundle/ live/ w1/ w2/ w8/ logs/`. `runtime-task8l-gen2/` is untouched and its
+  provenance remains on record as the invalidated generation.
+- **Three steps, all rc=0** (`provenance/run_step1.sh`):
+  1. isolated colcon install of `so101_demo_py`, `so101_teleop`, `so101_mujoco_support` into
+     `gen3/install-copy` **without** `--symlink-install`, so every role file is a real copy;
+  2. build receipts for the three compiled roles written by `tools/so101_build_receipt.py` from their real
+     inputs - compiler and linker read from `CMakeCache.txt`, sources and headers from the worktree and the
+     submodule, dependencies resolved through `Path.resolve()` so no key is a symlink;
+  3. `act_build_task8_source_provenance --source-root <worktree> --install-overlay gen3/install-copy
+     --dependency-overlay <dependency root> --output gen3/provenance/source-provenance.json`.
+- **The document now describes what the runtime actually loads - ten roles with explicit ownership:**
+  `mujoco_ros2_control_plugin` is **compiled / dependency** (the correction ruling 1 demanded, visible in the
+  document itself), `simulation_evidence_plugin` and `broker_owned_controller_plugin` are **compiled / worktree**,
+  `command_broker`, `task8_runner`, `teleop_child`, `teleop_case_owner` and `controller_config` are
+  **verbatim_install / worktree**, and `ros_runtime` and `model_weights` are **external_runtime** with no overlay.
+- **Document sha256:** `59b67aaa1363cb5329f7513c955454315cc4c5b960230e940586eb21a7e58e59`
+  (`gen3/provenance/source-provenance.json`). Logs: `gen3/logs/{install-copy-build,receipts,provenance}.log`;
+  fresh verified scratch `scratch-gen3.miwj`.
+- **Next, ruling 2's ordering, strictly:** build this run's five-key `measurement-identities.json` from
+  production rules - the source-provenance file SHA256 above, the runtime-config raw-file SHA256, the anchors
+  raw-file SHA256, the approved and consistent contact policy fingerprint from activation/policy, and
+  `installed_calibration_identity()`'s config SHA256 - then bind the contract with the existing production
+  `bind_measurement_contract()` through the exact installed interpreter (saving command, interpreter and
+  input/output hashes, and building **no** second binding implementation), then run the fresh MuJoCo measurement,
+  aggregate offline to a new `TASK8_READY` report, run artifact preparation, and finish with live and `QUALIFIED`.
+- **Boundaries:** no runtime composed yet, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
+  no ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
