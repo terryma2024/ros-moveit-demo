@@ -25279,3 +25279,20 @@ picture in both directions.**
   APPROACH was held to.**
 - **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed; CLOSE implemented, test pending. No new session, goal, worktree or stack; nothing pushed, nothing deleted;
   no hardware.
+
+## CP-1517 — CLOSE's test is one validation rule away, and the rule is the repository protecting its own evidence
+
+- **Where it stands (`experiments/gate8-p14/ct3.log`):** the CLOSE boundary test is written - the goal is asserted field by field, the wait is asserted, and the document is handed to
+  `PickPlaceRunner._verify_phase` - and two of its three cases already behave. What remains are **two validation rules of `SimulationEvidence` itself**, both of which are the repository
+  refusing a fixture that does not describe a real world:
+  1. **"contact object identity must match object_state"** - the world's contact evidence must name the same object the `object_state` does, so my bilateral grasp has to be built against the
+     fixture's own object rather than a string I chose;
+  2. **"zero-contact aggregates must be zero"** - with no contacts, `minimum_signed_distance_m` and `maximum_normal_force_n` must both be zero, so the non-bilateral case must zero the
+     distance as well.
+- **Two class-name collisions cost a run each, and both are worth recording:** `ContactEvidence` exists **twice** - in `ports/evidence.py` (collision1/collision2/position_m/normal) and in
+  `core/simulation/types.py` (body/geom ids, position_world, signed_distance_m) - and **the simulation type is the one `SimulationEvidence` validates against.** The error was
+  `TypeError: contact arrays must contain ContactEvidence`, which is exactly what a duplicated name produces: a correct-looking object of the wrong class.
+- **And that is the honest summary of this round:** the CLOSE execution is committed and green; its boundary test is written and blocked on two fixture facts that the repository insists on.
+  **Next round reads those two rules and finishes it** - the same way APPROACH's test finished once the snapshot's owner was identified.
+- **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed; CLOSE implemented and its test uncommitted while red. No new session, goal, worktree or stack; nothing
+  pushed, nothing deleted; no hardware.
