@@ -33396,3 +33396,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the boundary's `execute_approach` and handing the child its driver rather than a broker.** P1-1 through P1-4 CLOSED.
   The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
   unchanged, so they are not re-stated.**
+
+## CP-1891 — The boundary's production methods are adopted, and APPROACH now runs production code
+
+- **The change, and why it is the faithful one rather than another stand-in:**
+  ```python
+  # test_task8_child_driven_case.py
+  from so101_demo.adapters.act.pick_place_search_boundary import PickPlaceSearchBoundary as _ProductionBoundary
+
+  for _name in dir(_ProductionBoundary):
+      if _name.startswith("__") or _name in _Boundary.__dict__:
+          continue
+      _attribute = getattr(_ProductionBoundary, _name)
+      if callable(_attribute):
+          setattr(_Boundary, _name, _attribute)
+  ```
+  **the harness substitutes I/O (sources, scene, driver) and the boundary's LOGIC is the production boundary's** - a
+  method the harness defines itself wins, everything else is the real one. **`execute_approach` is then the production
+  method**: screen → `issue_prefix_source` → `prefix_executor.approve_with_source` → `submit` → `wait_for` → the proof
+  snapshot → `reset.sources.capture` → `build_approach_goals` → `screen.inspect` → `PathProver(...).prove(...)` →
+  `sequence_facts(...)`, **exactly the chain its own docstring describes.**
+- **And the refusal moved from "the fixture has no such method" to "the fixture's data lacks a field":**
+  ```
+  before: PickPlaceSearchPortError: TASK8_PHASE_NOT_PROVISIONED: APPROACH: execute_approach
+  after:  PickPlaceSearchPortError: TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:observation
+  ```
+  **so the adopted method ran, dispatched nothing it could not prove, and the live-evidence layer refused the captured
+  raw record for a named missing field group (`raw:observation`).**
+- **This is the fourth time this drive has found its next step already written in the repository** (gate-6 fixtures,
+  CP-1827; the sources' suite, CP-1842; the driver double, CP-1860; **the production boundary itself**), **and the first
+  time the finding removed a fixture rather than adding one:** the harness had been hand-writing boundary behaviour that
+  the production class already implements.
+- **State:** **P1-5 in progress: APPROACH executes through the PRODUCTION boundary methods, and the live-evidence layer's
+  `raw:observation` requirement is the next named gap.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement,
+  P1-6, the final freeze gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not
+  re-stated.**
