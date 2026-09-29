@@ -26865,3 +26865,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Under the owner's item 7, the honest classification of this change:** registering a test module touches the **build configuration**, so the build is refreshed and the gate re-measured - **but no production source, runtime config, policy value or
   artifact identity changes**, so no Task8L/bundle/live/QUALIFIED result is invalidated by it. **If the rebuild were to change any installed artifact of the measurement path, that statement would have to be revisited.**
 - **State:** chain running; item 5 closes when the re-run is green; item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1610 — The JUnit path has the same shared-resource conflict as the socket base, and colcon already solves it
+
+- **The observation that led here:** the re-run's `--junit-xml=experiments/final-boundary-v3/teleop-junit2.xml` has produced **no file** while the gate runs - and the reason is the defect class CP-1606 taught, one layer over:
+  **`PYTEST_ADDOPTS` is inherited by every one of the package's registered pytest processes, so all of them are told to write the SAME JUnit path** - they would overwrite each other, and the file is only one test module's result even when it appears.
+- **And the repository already had the right answer, which the earlier listing in CP-1581 showed and I did not connect:** `colcon test` keeps **one xunit file per registered test** under
+  `build/so101_teleop/test_results/so101_teleop/<test-name>.xunit.xml`. **That is the per-test JUnit evidence the owner's item 5 asks for** - not a single aggregated path invented in the gate script.
+- **So the gate's proof design is corrected rather than patched:** keep `PYTEST_ADDOPTS="-n 8 -p no:cacheprovider"` (**drop `--junit-xml`** - it collides), prove the parallelism with the `created: 8/8 workers` banners captured by
+  `--ctest-args -V`, and cite **colcon's own per-test xunit files** (plus `colcon test-result`'s summary) as the JUnit evidence, with their count and paths recorded. **The lesson repeats: when the same value is handed to many processes, ask whether it is a resource or a
+  parameter.**
+- **State:** the chain (register -> rebuild -> re-run) is still in its wait phase with the previous gate at 97 banners and its single known failure (the registration guard); item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still
+  paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
