@@ -218,11 +218,11 @@ def build_task8_qualified_report(task8_ready_report: Path, preparation_receipt: 
 # the value is derived from the three consecutive 10 Hz samples immediately preceding it and reported as
 # `max(0, d_signed)` - never from a summary.
 
-LIVE_ONLY_FIELDS = ("grasp_occlusion_window_s", "cup_support_distance_m", "release_stable_s",
+LIVE_ONLY_FIELDS = ("grasp_occlusion_window_s", "support_distance_m", "release_stable_s",
                     "retreat_distance_m", "placement_stable_s")
-LIVE_EXTREMA = {"grasp_occlusion_window_s": max, "cup_support_distance_m": max,
+LIVE_EXTREMA = {"grasp_occlusion_window_s": max, "support_distance_m": max,
                 "release_stable_s": min, "retreat_distance_m": min, "placement_stable_s": min}
-LIVE_UNITS = {"grasp_occlusion_window_s": "s", "cup_support_distance_m": "m", "release_stable_s": "s",
+LIVE_UNITS = {"grasp_occlusion_window_s": "s", "support_distance_m": "m", "release_stable_s": "s",
               "retreat_distance_m": "m", "placement_stable_s": "s"}
 _IDENTITY_KEYS = ("session_id", "contact_policy_fingerprint", "phase_camera_matrix_sha256")
 
@@ -269,7 +269,7 @@ def derive_live_measurements(full_runs, contract) -> dict:
     derived = {}
     for field in LIVE_ONLY_FIELDS:
         extrema = LIVE_EXTREMA[field]
-        if field == "cup_support_distance_m":
+        if field == "support_distance_m":
             values = [_support_from_frames(run) for run in runs]
         else:
             values = [float(run[field]) for run in runs]
