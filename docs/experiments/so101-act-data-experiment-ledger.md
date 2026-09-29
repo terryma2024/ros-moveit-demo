@@ -29464,3 +29464,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and indexed, and the review request prepared - awaiting the owner's launch of the independent reviewer**; boundary
   unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy**; nothing pushed, deleted
   or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1756 — Re-frozen after the index changed, and the demo leg cross-checked against its own JUnit
+
+- **Why a re-freeze was needed and not optional:** appending the packet-5 row changed the **index** itself, so the digest in the freeze file was stale by construction. The freeze was rewritten and read back - **five entries, all reproduced:**
+  ```
+  OK     10876 598f8887f62d194d  task8-astra-rereview5-packet.md
+  OK      8604 f7443b35919dcd85  task8-astra-rereview4-verdict.md
+  OK     18675 f9cd386d1bfee19b  task9-package-gate-evidence-index.md     <- was a13c35bf78605720 before the append
+  OK    662025 eb1130b8b7f8420e  Test.xml (canonical, v4)
+  OK      2868 b671908bc4010f2a  BOUNDARY.md (v5)
+  ```
+  **The index's digest moving is the honest part of this entry:** a freeze names values, and the moment the artefact changes the freeze must be rewritten and re-read - **which is exactly the discipline P2 asked for, applied to itself.**
+- **And the demo leg cross-checked two independent ways:**
+  ```
+  demo.log:    5764 passed, 163 skipped, rc 0
+  demo-junit:  tests=5927 failures=0 errors=0 skipped=163  (5927 - 163 = 5764)
+  ```
+  **The log and the JUnit agree**, which is the same check the teleop leg got from its 117 xunit files (1315 cases, 43 skipped) and the CTest leg from its 117/117.
+- **State:** **every finding closed with evidence; the boundary green on the new run root; the packet written, indexed and frozen; the index audit at 50 rows and zero mismatches; the review request prepared.** What remains is **not mine to execute**: the independent reviewer is an external model the repository's task rules require for review tasks.
