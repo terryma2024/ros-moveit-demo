@@ -24896,3 +24896,18 @@ picture in both directions.**
   reachable.
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress (stage 1, sequence path, handoff). No new session, goal, worktree or stack; nothing pushed, nothing
   deleted; no hardware.
+
+## CP-1493 — APPROACH works through the port, judged by the runner
+
+- **`32 passed`** (`experiments/gate8-p14/approach8.log`): the port **prepares** the expert route from the frozen SEARCH handoff, with the owner ticket and active
+  policy fingerprint **derived from the same boundary state SEARCH's evidence uses**; the boundary **executes** and returns `{proof, current_snapshot, facts}`;
+  the port **qualifies** through `VisibleApproachExpertRoute.qualify` and assembles the document under **one shared rule** for every sequence phase; and the
+  **runner's `_verify_phase` accepts it** - driven offline in the test rather than restated there.
+- **Fail-closed at every missing piece, by name:** `APPROACH: search evidence` (no SEARCH first), `APPROACH: expert_route` (no route), `APPROACH:
+  execute_approach` (no boundary capability), plus `APPROACH: execution` and `execution result` for a malformed answer.
+- **And APPROACH left the parametrized "unprovisioned phases" list deliberately**, exactly as CP-1489 promised, while the generic sequence-path tests moved
+  to **CLOSE** - which still uses that path, so both paths stay covered by tests that mean what they say.
+- **What remains for P1-4, precisely:** the **boundary** side of each phase - for APPROACH, driving the motion and producing the `PathProof` and
+  `current_snapshot` from real machinery (the tests substitute them), and the same for the seven phases after it; then the nine-phase case reaching
+  FINAL_CHECK, the seal, the full-case journal, and the seven indexed assertions with their four negatives.
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
