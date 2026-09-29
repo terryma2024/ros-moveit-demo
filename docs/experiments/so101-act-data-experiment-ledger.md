@@ -27594,3 +27594,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   case ended with the incremented epoch. **Whether that holds depends on what the substituted port's reset/boundary reports**, which is the same distinction CP-1626 drew about cadence: a demo-level fixture can only assert what its substitution produces. **The next step is to
   read that fixture's epoch handling rather than to weaken the assertion.**
 - **State:** the v4 boundary is still **not valid** - the demo leg must be re-run once the tree is green; item 7 continues; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1652 — The epoch fixture cannot be "made faithful" by editing its number, and why
+
+- **Reading it produced a fact that changes what the right fix is:** the fixture's port reports a **CONSTANT** release epoch (`boundary.begin` returns `release_epoch: 0`, and its window identity says the same), while the **production** port derives one **per phase**
+  (`_RELEASE_EPOCH_AFTER = ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")`, *"zero up to and including RELEASE, one afterwards"*) **and the runner verifies each phase's document against that rule.**
+- **So raising the fixture's number is not a more faithful fixture - it is a broken one:** setting it to `1` everywhere made the runner refuse the early phases' documents and **8 tests failed**, including
+  `test_the_runner_runs_the_whole_case_and_reports_which_phases_completed`. **A substitution cannot be made to exercise a rule it does not implement by changing the value it returns.**
+- **Both fixture edits were therefore reverted**, and the assertion in `test_act_task8_sealed_raw_sources` now states what this substitution can establish - **one consistent epoch between the samples and the identity that seals them** - with the reason written into the test:
+  *"a phase-dependent epoch here would fail the runner's own check rather than be more faithful"*. **The span-between-epochs shape is pinned by `test_act_task8_release_epoch_boundary`, which is the test built for it (CP-1648).**
+- **And this is CP-1626's distinction arriving on a third subject in three rounds** - cadence, the key set, and now the release epoch: **a demo-level fixture can only assert what its substitution produces, and a test that names that boundary is worth more than one that pretends to cross
+  it.**
+- **State:** the v4 boundary still awaits a green demo leg; item 7 continues; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
