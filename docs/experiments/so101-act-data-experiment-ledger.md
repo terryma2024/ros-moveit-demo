@@ -23216,3 +23216,20 @@ not an inference of mine.**
   item that a counter or a print beat an inference.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1401 — The epoches now agree, so that inconsistency was real but not the cause; the last comparison is the lock's timestamp
+
+- **Probe, verbatim:**
+  ```
+  [probe] world session/epoch: session-item5 2
+  [probe] receipt epoch (what the port compares against): 2
+  [probe] row vs receipt equal: True
+  ```
+  **So the epoch drift is fixed and it was not the scope refusal.** Every other condition in that disjunction now evaluates true on the very readback
+  the port validates: the seven keys, the two exact key sets, the body, the empty fingertip contacts, `paused`/`truncated` false, session, epoch,
+  the step and sim-time agreements, the digest cross-check, `contacts.safe()`.
+- **Which leaves exactly one comparison I have not printed:** the port's `0 <= result["timestamp"] <= world.simulation_time_s`, where `result` is the
+  **search result** the segment validated (`_locked()`, `timestamp: 2.0`) and the world's sim time on the selected row is **2.256**. On paper that
+  passes - **but "on paper" is what has cost this item three rounds already, so the next probe prints both numbers rather than concluding.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
