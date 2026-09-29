@@ -488,7 +488,7 @@ class PickPlaceSearchPhasePort:
             # instant's, so taking another one for it would be a readback no sample carries - and a source clock that
             # advances for it opens the frozen grid's gap. The remaining instants take their own readbacks, one each.
             current = observed if index == 0 else self._current_observation(observed, self._request)
-            sample = self._grid_sample(phase, current, evidence, instant=moment)
+            sample = self._grid_sample(phase, current, evidence, instant=moment, position=index)
             window.add_grid(sample)
             if index == 0:
                 reason = "command"
@@ -502,7 +502,8 @@ class PickPlaceSearchPhasePort:
                 window.add_event(sample, reason=reason)
         self._last_contact_signature = signature
 
-    def _grid_sample(self, phase: str, observed, evidence: dict, instant: float = None) -> dict:
+    def _grid_sample(self, phase: str, observed, evidence: dict, instant: float = None,
+                     position: int = None) -> dict:
         """One canonical grid sample, derived from this phase's own readback - or a named refusal.
 
         Astra re-review #3, finding 3: this method used to report `None`, so an attached window was never fed in
@@ -540,6 +541,11 @@ class PickPlaceSearchPhasePort:
         capture = f"{phase}-{int(evidence['physics_step']):07d}"
         if instant is not None:
             capture = f"{capture}-{int(round(float(instant) * 1_000_000)):012d}"
+        # and the sample's own POSITION: a phase can emit more than one sample (RADIAL_RETREAT has two segments), and
+        # those samples agree on the phase, the physics step and - measured, CP-1723 - their instant, so without the
+        # position "each sample names its own raw record" is true per phase and false per sample.
+        if position is not None:
+            capture = f"{capture}-{int(position):03d}"
         raw_records = self._write_raw_records(observed, root, capture=capture)
         fields = canonical(raw, support_distance_max_m=threshold, raw_records=raw_records)
         if not isinstance(fields, dict):

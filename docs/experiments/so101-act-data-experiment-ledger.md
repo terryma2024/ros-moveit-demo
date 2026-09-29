@@ -28854,3 +28854,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | "the retreat is two segments of one phase" | **the port's clock**: one period per sample, which is what the grid now enforces and what the probe showed |
 - **So the two open edits are one line of production naming plus two restated assertions, and both are now measured rather than assumed.** The production half of P1-4 named the instant (CP-1688); the sample's *position* is the piece that name still lacks.
 - **State:** **P1-4: grid green, sealing green, APPROACH mechanism closed, and the last three failures measured with their numbers**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1724 — The index's 20 entries are 10 grid samples plus 10 EVENT entries, and the design says so
+
+- **The probe (on `_grid_sample`) and the index, side by side:**
+  ```
+  SAMPLE phase=SEARCH          pos=0 inst=1.5  file=SEARCH-0000004-000001500000-000-arm.json
+  SAMPLE phase=APPROACH        pos=0 inst=1.6  file=APPROACH-0000006-000001600000-000-arm.json
+  ... one per phase, every name unique, position suffix live ...
+  SAMPLE phase=FINAL_CHECK     pos=0 inst=2.4  file=FINAL_CHECK-0000031-000002400000-000-arm.json
+  samples in index: 20
+  ```
+  **Ten grid samples - each with its own capture - and an index of twenty.** So the extra ten are not duplicates of the grid; they are a **different kind of entry**, and the code says which: `LiveEvidenceWindow.seal` writes `"samples": [dict(entry) for entry in self._entries]`, and the window's own docstring states the rule -
+  *"Grid samples must advance on the frozen period (gaps, duplicates and regressions are refused); **event samples are recorded as additions and can never stand in for a grid point**."*
+- **Which makes both remaining assertions exactly measurable and exactly restatable:**
+  | assertion | why it now fails | restated as |
+  | --- | --- | --- |
+  | `test_every_sample_names_its_own_raw_sources:56` | it walks **every** entry, and event entries legitimately name the grid sample's capture | **per KIND**: each GRID sample names its own raw record; events are additions and share the phase's capture by design |
+  | `test_the_index_chains_to_complete_canonical_records:69` | it expects **10** entries ("nine phases, two retreat segments") | **the case's own instants plus its events**: ten grid samples and ten event entries, which is what the design records |
+- **And the third failure follows from the same fact:** `test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period:109` asserts *"the retreat is two segments of one phase"* against a list that now includes events, so it must read the **grid** entries when it checks the cadence - which is also what `validate_evidence_grid` is for (`validate_evidence_grid(samples, period_s=…, tolerance_s=…)`, i.e. the grid is the thing with a period).
+- **State:** **P1-4: grid green, sealing green, APPROACH mechanism closed, and the three remaining failures are now explained by one structural fact (grid entries vs event entries) with the design's own sentence as the authority**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
