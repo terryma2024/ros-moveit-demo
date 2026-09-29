@@ -14706,3 +14706,33 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search
   values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no
   evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1001 — The approved sources require the gate but do not settle the version, so the conflict is real
+
+- **Searched both approved documents for the report's schema version rather than deciding it myself, and neither
+  settles it:**
+  - the design's ready-report key list (line 248) is
+    `schema_version/kind/status/source_commit/config_sha256/source_provenance_sha256/measurements` - it names the key
+    but **not its value**;
+  - the design requires the Task 8P4 report to pass `require_qualified(report)` **and** a production readback
+    (line 467), and the plan repeats it ("write a new report, then perform readback and **call
+    `require_qualified(report)`**", line 372, and "any report that has not passed `require_qualified()`" must be
+    rejected, line 368);
+  - neither document mentions `schema_version: 1` or `2` anywhere in this context, while the gate hard-requires **1**
+    and the repository's own ready fixture writes **2** (CP-1000).
+- **So the conflict is genuine and unresolved by the approved sources**, and the two candidate resolutions both change
+  something a reviewer should see:
+  1. **the qualified report is written with `schema_version: 1`** - treating the gate's schema as the report contract,
+     which makes the plan's `require_qualified` step satisfiable and is a change to the report the Task 8 path
+     publishes; or
+  2. **the gate accepts the v2 report** - extending `require_qualified` to recognise the version-2 document that also
+     carries `kind`, which changes a production validator used well beyond Task 8.
+- **Why I am not choosing:** the first edits a published artefact's declared version; the second loosens a production
+  gate. Both are exactly the class of unilateral change this session has refused throughout, and the plan's own
+  completion criterion (line 444) puts the implementation review between here and "complete" - so the question belongs
+  in front of that review rather than in a commit.
+- **State:** Tasks 1-7 module work complete and green; Task 8's code side complete and green at 52 focused tests with
+  three recorded open items - this version conflict, a licence-qualified fixture, and the driver (contract at CP-993);
+  Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search
+  values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
