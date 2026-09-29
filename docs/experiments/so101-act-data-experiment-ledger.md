@@ -34028,3 +34028,44 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   remains is wiring the client into `build_real_providers`' formal path plus the real `phase_path`/trajectory, and then an
   actual run of `build_production_measurement_driver` with the seam unset, recorded with input, output, exit code and log.**
   **Task-list statuses unchanged: P1-1 in_progress, P1-6 completed, five pending.**
+
+## CP-1913 — The real client is wired into the formal path, and the formal path has a PRE-EXISTING RED
+
+- **Wiring (the verdict's "接通正式 builder 的真实 io_client"), in `build_real_providers`:**
+  ```python
+  if io_client is None:
+      if not session_id or not attempt_id:
+          raise ProductionCompositionError("PRODUCTION_IO_CLIENT_IDENTITY_REQUIRED: session_id/attempt_id")
+      from so101_demo.act.task8_measurement_client import MujocoMeasurementClient
+      io_client = MujocoMeasurementClient(scene_path=<share>/assets/mujoco/act/scene.xml,
+                                          session_id=str(session_id), attempt_id=str(attempt_id),
+                                          manifest=getattr(context, "route_manifest", None))
+  ```
+  **so the formal entry (which passes no client) now reaches the controller adapter and `Task8StackAdapter` with a real
+  client over the real model, and an entry that supplies no identity is refused by name instead of building an
+  identity-less client.** A supplied client or a named seam still wins, so no test substitution is overridden.
+- **A/B for the three failures I saw, run to attribute them rather than assume:** with the wiring,
+  `test_act_task8_production_composition_contract.py` + `test_act_task8_measurement_runtime_descriptor.py` gave
+  **3 failed** (`test_the_real_composition_drives_every_anchor_and_seals_a_closed_batch`,
+  `test_a_launch_refusal_seals_an_invalid_batch_carrying_that_code`,
+  `test_real_production_providers_are_built_from_the_admitted_context`); **with my file reverted locally and rebuilt, the
+  same two files gave the same 3 failures.** **So they are PRE-EXISTING, not mine** - and the local revert was undone
+  immediately from a copy (`/tmp/p11-composition-with-wiring.py`), then rebuilt.
+- **What they fail on, and why it matters for P1-1's run requirement:**
+  ```
+  E   ValueError: PHASE_CAMERA_MATRIX_INVALID
+  ```
+  while **`load_phase_camera_matrix()` itself succeeds** (9 phases, each with the three anchors - checked directly). So the
+  refusal is raised in the composition's own construction of `PhaseCameraMatrixEvaluator`, **before the detector is ever
+  built** - i.e. the formal path currently cannot construct its providers at all, and that (not the detector weights) is
+  the first thing a real run would hit.
+- **And the search for the run's other inputs, exhausted as instructed:**
+  | needed by the entry | found |
+  | --- | --- |
+  | detector weights (`yolo_weights_path`, `yolo_weights_sha256`) | **none anywhere in the worktree or under `/data/work/so101-evidence`** (`find` depth ≤5 worktree, ≤6 evidence; the only `.pt` is torch's own test fixture) |
+  | an admitted runtime descriptor / measurement contract / context document | **not present under the evidence root**; the approved producers are the CLIs `act_prepare_task8_live*.py`, `act_build_task8_source_provenance.py`, `act_build_task8_calibration_report.py` and the entry `act_measure_task8_calibration.py` (which requires `--contract`, `--identities`, `--context`) |
+  | the real phase path | the admitted task-6 manifest's `target_positions` (9 rows per segment, `_SEGMENT_ROWS = 9`, rows are joint configurations) - **so a real per-phase provider is constructible from admitted documents, and that is the next edit** |
+- **State:** **P1-1 in progress: frame contract GREEN (CP-1910), production client GREEN (CP-1912), client wired (this
+  entry); next are the phase-path provider from the admitted rows, then the pre-existing `PHASE_CAMERA_MATRIX_INVALID` on
+  the formal path, then the entry documents and weights.** **Task-list statuses unchanged: P1-1 in_progress, P1-6
+  completed, five pending.**

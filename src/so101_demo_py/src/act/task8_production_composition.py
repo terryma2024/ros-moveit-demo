@@ -531,6 +531,28 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
         occluder_geometry = occluder_geometry or seam.get("occluder_geometry")
 
 
+    # P1-1: the formal entry reaches here with nothing in the environment, and the two facts about the RUN that the
+    # model cannot supply are a transport to the stack and the trajectory being executed. The transport is the
+    # production client over the real MuJoCo scene (it starts no child, so a measurement is not a second stack), and
+    # the trajectory comes from the admitted phase path below. Neither is stood in for and neither is invented.
+    if io_client is None:
+        if not session_id or not attempt_id:
+            raise ProductionCompositionError("PRODUCTION_IO_CLIENT_IDENTITY_REQUIRED: session_id/attempt_id")
+        from so101_demo.act.task8_measurement_client import MujocoMeasurementClient
+
+        try:
+            from ament_index_python.packages import get_package_share_directory
+
+            client_scene = Path(get_package_share_directory("so101_demo_py")) / "assets/mujoco/act/scene.xml"
+            io_client = MujocoMeasurementClient(scene_path=client_scene, session_id=str(session_id),
+                                                attempt_id=str(attempt_id),
+                                                manifest=getattr(context, "route_manifest", None))
+        except ProductionCompositionError:
+            raise
+        except Exception as error:
+            raise ProductionCompositionError(
+                f"PRODUCTION_IO_CLIENT_UNAVAILABLE: {type(error).__name__}: {error}") from error
+
     from so101_demo.act.search import HeadSearchController
     from so101_demo.act.task8_measurement_schema import load_phase_camera_matrix
     from so101_demo.adapters.perception.detector_factory import DetectorFactoryOptions, build_detector
