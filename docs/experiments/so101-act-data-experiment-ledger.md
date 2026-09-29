@@ -22665,3 +22665,17 @@ not an inference of mine.**
   remaining refusal is a production contract about the substituted I/O, not about my fixture's shape vocabulary.**
 - **State:** step 1's and this structural change remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no
   hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1366 — The production segment runs, and the last mismatch is the sources' identity
+
+- **Progress visible in the diff itself:** the adapter's decision now carries this case's attempt (`_locked()` adjusted with
+  `attempt_id=request["attempt_id"]`, built from the shared builder rather than copied), and the refusal moved from the decision to the
+  **evidence**: the differ reads `- attempt-1` / `+ attempt-item5`, so something the `_Sources` double produces still carries the **segment
+  suite's own fixture identity** while the request carries the child case's.
+- **The fix is an adapter, not a fork:** `_Sources.capture(attempt_id, *, after_step)` **receives** the attempt id, so a small local subclass can
+  override `capture` to stamp the received id onto the raw readback it returns - **using the shared builder for everything else.** That keeps
+  CP-1364's "imported, not forked" rule intact while letting the segment-suite doubles serve a second case.
+- **And this is the last layer of the substitution:** the segment has already produced an observation (the port accepted its type and began
+  validating the evidence), so what remains is identity plumbing inside the doubles, not new evidence construction.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
