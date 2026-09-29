@@ -19341,3 +19341,23 @@ not an inference of mine.**
      long scratch and then with a shorter one, to see whether the path length is the cause.
 - **State:** HEAD `4992d7c9`; staged 0; run roots `scratch/g794` (8 workers) and `scratch/g798w1` (1 worker, also failed,
   reported as `shard-01` - so the shard label is not the worker index) both retained; no push, no stack, no hardware.
+
+## CP-1201 — Confirmed: the red gate is a scratch-path-length artefact, proven by a clean A/B
+
+- **The A/B, one variable:**
+  | scratch under the same evidence root | TMPDIR length | result |
+  | --- | --- | --- |
+  | the gate's own `scratch/r806.10573/tmp` | ~80 chars | **red** - `shard-06: exit=1`, eight+ failures in `test_controller_reservation_client.py` |
+  | `s799/tmp` | **68 chars** | **17 passed, rc=0** |
+  So the module is **fine** and the gate's red is caused by the **path length of the scratch the gate itself chooses**. Nothing in that module is broken, and nothing I changed this stretch touches controller reservation.
+- **Why this matters beyond one shard:**
+  1. the "revised Task 9 package/xdist gate" cannot pass at the evidence root this task uses **with the gate's current scratch layout**, because the socket-bearing tests exceed the AF_UNIX payload limit - which is the same 107-byte limit the runner refused on at CP-1197 before it even started;
+  2. it is the **CP-1055 class** the owner superseded, now with a measurement rather than an inference: the path is not irreducible, and the runner is the thing that can reduce it;
+  3. and it means the gate is currently **unusable as the formal package gate** at this evidence root, which is exactly what the owner's "修订 Task 9 正式 package/xdist gate" asks to fix.
+- **The fix direction, named for the RED that should follow:** shorten the layout the runner creates - `create_process_layout` builds
+  `root/scratch/<12-hex>/tmp`, and the evidence root itself is 63 characters before any of that. A shorter scratch base (for
+  instance a one-letter directory level) plus the existing `--process-id-chars` control would bring it inside the limit, and the
+  runner already has a `validate_process_path_budget` that can assert the result rather than discovering it at socket-bind time.
+  **That is a runner change with its own RED/GREEN, not a workaround to paper over in a test.**
+- **State:** HEAD `b542091a`; staged 0; both gate run roots and the short-TMPDIR log retained as deletion candidates; no push,
+  no stack, no hardware.
