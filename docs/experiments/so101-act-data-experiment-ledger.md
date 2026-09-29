@@ -29015,3 +29015,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | the seven facts | the sealed index the aggregator writes, read back |
   | the four negatives | the same chain with the baseline **corrupted**, not a row built beside it |
 - **State:** **P1-5's first half passes on the production path and its second half's shape is now read rather than assumed**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1732 — The missing piece is a production BRIDGE, not a test: a case's artifact+receipts+journal never becomes a batch
+
+- **Read from the driver's own seal owner (`task8_measurement_driver.py:229-254`):**
+  ```
+  document = {"schema_version": 1, "kind": BATCH_KIND, "status": status,
+              "cleanup": cleanup, "contamination": contamination,
+              "identity": self.identity, "anchors": anchor_names,
+              "files": {row["payload_path"]: row["payload_sha256"] for row in self._files}}
+  document["batch_sha256"] = sha256(_canonical(document))
+  return write_closed_json(root / "batch.json", document)
+  ```
+  **The batch lists the DRIVER's own files** (`runtime-descriptor.json`, `index.json`, its per-anchor records) - i.e. **a batch is one acquisition by the measurement driver**, and the aggregator's input is that.
+- **And the joined chain produces a different artifact for a different consumer:** the production `PickPlaceRunner` seals the **live-evidence index** (samples + edges + identity), `run_pick_place_case` publishes the **journal row** with **both retirement receipts**. **Both are production, both are real, and nothing in the tree turns one into the other.**
+- **Which is what the verdict is actually pointing at, in its own words:** *"at least one ACTUAL full case whose production code emits artifact + receipts + journal **and whose real aggregator consumes them**"*. **Today the aggregator consumes a sealed batch, and a case's artifact/receipts/journal are not a batch** - so the requirement cannot be met by a test that merely calls both halves in sequence; **the tree is missing the bridge** (or the aggregator is missing the path by which a case's evidence reaches it).
+- **This is therefore a SCOPE question rather than a coding question, and it is the owner's:** either
+  1. **a production bridge** is added - *case (artifact + receipts + journal) → sealed batch* - with its own contract, keys and refusal names; or
+  2. the verdict's sentence is read as satisfied by **the campaign layer** that already exists (the teleop campaign and the trusted translator, `case_row_to_journal_row`, which the live prefix chain test exercises end to end), **and the aggregation of a full case's evidence is a Task 8L/qualification concern** rather than Task 8P3/P4 scope.
+- **What is NOT in question, and is recorded as done:** the case half is real and passing (CP-1730: production runner seals, production entry publishes, one substitution), the aggregator half is real and tested (its own suite, plus the closed-batch validation), **and the missing link is named above rather than patched by a fixture.**
+- **State:** **P1-5's first half complete and passing; its second half is blocked on a scope decision (bridge vs. campaign-layer reading), which is put to the owner rather than decided unilaterally**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
