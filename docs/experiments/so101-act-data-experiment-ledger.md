@@ -22873,3 +22873,18 @@ not an inference of mine.**
   suite's own capture passes, and stamp this case's identity on top.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1381 — The double is a ROW QUEUE, and its rows are built with arguments I never passed
+
+- **Read of the suite's own `_Sources.capture` (its lines 75-84):** it holds a queue of **pre-built rows** (`self.rows`), pops one per call,
+  raises `PickPlaceReadbackError("SOURCE_STEP_NOT_ADVANCED")` when the queue is **empty** - which is the error `_next` catches and retries on -
+  and asserts each row's step is ahead of `after_step`. **So the double's contract is a prepared sequence of readbacks, and a test prepares
+  exactly as many as its scenario needs.** My override bypassed the queue and synthesised one row shape for every call, **which is why `_next`
+  keeps retrying: my synthesised readback is rejected by the geometry helper, and my version never raises the "not advanced" error that would
+  make the segment give up in a defined way.**
+- **And the probe's own numbers agree:** `search calls: 1` with **612,500+ captures** - the one search call is the child's first, and every
+  subsequent capture comes from the segment's `_next` spin.
+- **So the last read is the suite's own `_raw(...)` call sites (printed above)**: whichever arguments its scenarios pass are the ones the geometry
+  helper accepts. **Then `_ChildSources` builds its rows the same way - shared builder, this case's identity - and the spin stops.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
