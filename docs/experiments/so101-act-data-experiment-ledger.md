@@ -24285,3 +24285,21 @@ not an inference of mine.**
   keeps running - and it very nearly did (the build copy was a real file until the CP-1450 rebuild). **This is the check that distinguishes "the source
   says so" from "the code that ran says so".**
 - **State:** evidence file written under the registered root; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1466 — The batch's claims classified against the root-cause threshold, with its residual confounds named
+
+**Written after reading the skill's `debug-evidence` reference, which allows "root cause confirmed" only when (1) a competing hypothesis is excluded by
+independent evidence, (2) the same reproduction fails with the variable present and passes once it is fixed, (3) the change appears first at the expected
+boundary, and (4) no alternative explanation remains (duplicate stacks, stale binaries, stale pictures).** Applying that to this batch's claims:
+
+| claim | class | evidence that carries it | residual |
+| --- | --- | --- | --- |
+| **the SEARCH port handed the recorder a 3-key document while `append` requires the canonical 24 keys, so every attached-window SEARCH raised `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID`** | **CONFIRMED** | source-level: `_grid_sample`'s return vs `_SAMPLE_KEYS` (24); RED retained (`p15-inner5.log`); the same fixture passes after the fix (7 passed); the artifact under test was proven to carry the fix (CP-1464); the failure surfaces **at the port->recorder boundary**, which is the expected one | **the original RED log coincided with the fixture's own recording**, so isolation came from the source reading plus the later clean run - not from that log alone |
+| **an INVALID sealed batch could never be validated** (the schema's key set excluded the `error_code` the driver writes) | **CONFIRMED** | the readback of a sealed INVALID batch is what the ledger had recorded as VALID-with-exit-0; the key set is in source; after the fix the test that asserts the readback passes and the loosened rule is scoped to non-CLOSED status only | none found |
+| **the calibration aggregator compared the head-search block against the whole sealed descriptor** | **CONFIRMED** | P1-4's tests reproduce the refusal and pass after the one-layer comparison, with the shared validator and closure-exact helper | none found |
+| **a prefix (SEARCH) case carries no sealed artifact, and a prefix-only campaign cannot qualify** | **CONFIRMED (by rule)** | the publisher's own row construction (`or {}` + zero digest), the comment in source, and `validate_campaign_summary`'s refusals asserted in the focused file | none - this is a definition, not an observation |
+| **a full case cannot be performed in this repository today** | **CONFIRMED (by rule)** | three independent places: the port docstring, the child-port builder, and `pick_place_runner.py:209-235` | none - but it is a statement about provisioning, not about physics |
+| **the batch's gates are green** | **OBSERVED** | demo package gate rc=0 (5651 passed / 163 skipped); teleop package gate rc=0, 225.0s; `colcon test-result` 7241 tests, 0 failures, 206 skipped; CTest 116 tests with the two new ones passing | the **post-boundary one-test deltas** recorded at CP-1455/CP-1460 are not re-rolled into the gate |
+| **nothing here is live-robot or live-simulator evidence** | **OBSERVED** | no stack was started in this batch at all: `ROS_DOMAIN_ID` and `GZ_PARTITION` unset, zero MuJoCo/ROS processes at the checks | the physical phases remain **HYPOTHESIS-only** territory and are explicitly not claimed |
+- **What this classification is for:** it tells a reviewer exactly which sentences in the packet are **enforced by code**, which are **observed from a run**, and which are
+  **statements about provisioning** - and it names the one confound this batch has (the first RED log's coincidence), instead of leaving a reviewer to find it.
