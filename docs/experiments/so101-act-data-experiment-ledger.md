@@ -30313,3 +30313,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **`HEAD_SEARCH_CONFIG_INVALID` is a name I have not seen in this work**, and it is not obviously traceable to any of the three edits above - so rather than guess, the honest state is: **these tests were green in the eleven-suite run (151 passed, CP-1729), they are red now, and the next round reads that refusal's source before changing anything else.**
 - **And the RED itself still fails**, so the round's intended outcome was not reached either; the two facts are recorded together rather than the wider break being hidden behind "the RED is closer".
 - **State:** **P1-2 in progress with three targeted fixes in and an unidentified wider break; nothing is being committed as green.** P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
+
+## CP-1792 — The 20-failure break was my own key-set edit, and the shape work needs a measured table
+
+- **`HEAD_SEARCH_CONFIG_INVALID` located, and it was mine:** `head_search_binding.py:140` requires the descriptor's
+  camera block to be **exactly** `{frame_id, ray_origin_frame_id, width_px, height_px}` -
+  ```python
+  if (type(camera) is not dict or set(camera) != {"frame_id", "ray_origin_frame_id", "width_px", "height_px"} or …
+  ```
+  and **my CP-1779 bulk edit had added `"horizontal_fov_rad": 1.0` to six descriptor-shaped fixtures** (the
+  `"height_px": 480` regex matched descriptors as well as matrices). Reverted in all six; **kept only in
+  `test_act_task8_phase_camera_measurement.py`, where the block is a MATRIX camera, not a descriptor.**
+  ```
+  before the revert:  20 failed, 35 passed      (over driver / identity-contract / aggregator)
+  after the revert:    1 failed, 66 passed      (over five files)
+  ```
+  **The lesson is the same one CP-1776 recorded in a different medium:** a regex is not a list either - **a bulk edit
+  whose pattern matches a shape in two different documents edits both.**
+- **And the RED's refusal now moves for the reason the design predicted:** with the guard keyed correctly, the error is
+  ```
+  task8_measurement_formulas.py:462: TypeError: list indices must be integers or slices
+  ```
+  **another field whose evidence is a document rather than a list.** The guard itself is right now:
+  `threshold_source` is free text (`"config"`, `"bound calibration-search config"`, `"模型 FOV + tolerance"`), so the
+  disposition keys on **whether the threshold comes from a config document** - which is pending by definition - rather
+  than on string equality.
+- **So the shape work needs to stop being one field per round.** The sustainable form is the one CP-1786 sketched and
+  this round makes concrete: **a declared shape table in the formulas module, MEASURED rather than guessed** - for each
+  field, exercise its formula against a list payload and against a document payload and record which it accepts, with
+  that behavioural test as the table's authority. **Then the driver consults the table once, and the remaining fields
+  arrive as a batch instead of as a sequence of `TypeError`s.**
+- **State:** **P1-2's chain runs to the aggregator and steps through the formulas; the regression I introduced is fixed
+  and recorded; the measured shape table is the next edit.** P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix
+  awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.

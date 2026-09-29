@@ -384,7 +384,12 @@ def derive_field_verdicts(roots, contract: dict) -> dict:
                     # a field with no raw record is explicitly UNMEASURED - never a silent pass
                     verdicts[field] = "UNMEASURED"
                     continue
-                if (contract[section][field].get("threshold_source") == "config"
+                # `threshold_source` is free text, not a controlled vocabulary: the contract says `"config"`,
+                # `"bound calibration-search config"`, and for the camera `"模型 FOV + tolerance"`. A threshold that
+                # comes from a CONFIG document is the one that is pending approval (CP-1789); one sourced from the
+                # model is not, and must still be measured.
+                threshold_source = contract[section][field].get("threshold_source") or ""
+                if ("config" in threshold_source.lower()
                         and field not in (raw.get("configured") or {})):
                     # P1-2 (rereview 5), owner's disposition: a field whose THRESHOLD is not approved is UNMEASURED
                     # too. The search values in `task8-calibration-search-candidate-v1.json` are
