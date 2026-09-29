@@ -18785,3 +18785,27 @@ not an inference of mine.**
   and the seven artefacts - SEARCH rows, the release open event, three adjacent 10 Hz support rows in one epoch, FINAL_CHECK,
   the sealed artifact read back, the confirmed retirement and the journal path and hash - become assertable.
 - **State:** goal active (revision 51, cap 1000); HEAD `8825a166`; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1177 — `LIVE_EVIDENCE_SEAL_UNAVAILABLE` decoded: the runner asks the **port** to seal, and my fake has no such method
+
+- **One read of `pick_place_runner.py:232-244` and the last unknown in Boundary V's RED is gone:**
+  ```python
+  # only a full case that reached FINAL_CHECK may seal its live evidence
+  sealer = getattr(self.port, "seal_live_evidence", None)
+  if not callable(sealer):
+      raise PickPlaceError("LIVE_EVIDENCE_SEAL_UNAVAILABLE")
+  ```
+  So my fake port carried the case through every phase, both release contracts and both retreat segments - and then the
+  runner asked it for `seal_live_evidence` and found nothing. **The refusal was correct behaviour, not a missing fixture.**
+  Also note what the lines above it encode: a `phase_prefix` run is *never* an episode and must return
+  `"live_evidence_artifact": None`, so only a full case reaching FINAL_CHECK seals - a distinction worth asserting rather
+  than skipping.
+- **The two ways to satisfy it, and the one I will take:** (a) implement a stub `seal_live_evidence` that returns a plausible
+  artifact - fast, and legitimate at a seam, but it would prove nothing about the window; or (b) give the port a **real**
+  `LiveEvidenceWindow` plus its `Task8LiveEvidenceRecorder`, fed by my `run_phase`/`run_retreat_segment` rows using CP-1176's
+  recipe, and implement `seal_live_evidence` by driving the real seal that the existing chain test already exercises. **(b)**,
+  because the owner's item 4 asks for the real `CaseEvidenceDriver`/window seal, and a stub would be decoration.
+- **With (b), the seven assertions become available in the same test:** SEARCH rows, the release open event, three adjacent
+  10 Hz support rows in one epoch, FINAL_CHECK, the sealed artifact read back, the confirmed retirement and the journal path
+  and hash - and the untracked RED gets committed only once all of that is green, per the owner's instruction.
+- **State:** goal active (revision 51, cap 1000); HEAD `a6f06676`; staged 0; no full suite, no push, no stack, no hardware.
