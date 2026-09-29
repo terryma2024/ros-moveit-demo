@@ -114,7 +114,7 @@ class _ContactPairs:
         return self._pairs_by_phase.get(phase, frozenset())
 
 
-def _mount_approach_screen(port, authority, *, live_manifest, session_id) -> None:
+def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker=None) -> None:
     """Mount the screen AND expose the boundary structure the port's own admission reads.
 
     `begin` reads `boundary.reset.manifest` - the frozen case list and `contact_policy_fingerprint` - and compares that
@@ -137,7 +137,9 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id) -> Non
     sources = SimpleNamespace(contact_pairs=contact_pairs, session_id=session_id,
                               capture=lambda *args, **kwargs: {"rows": list(getattr(boundary, "rows", []))})
     # `begin` also reads `reset.broker` (search_port.py:220), the command surface beside the sources
-    broker = getattr(boundary, "broker", None) or getattr(port, "broker", None) or SimpleNamespace()
+    # the PRODUCTION broker when the caller has it: `begin` asks `isinstance(reset.broker._prefix_source_port,
+    # TrustedVisibleApproachSourcePort)`, and that answer must come from the composition root (CP-1833)
+    broker = broker or getattr(boundary, "broker", None) or getattr(port, "broker", None) or SimpleNamespace()
     boundary.reset = SimpleNamespace(manifest=live_manifest, sources=sources, broker=broker)
     boundary.contact_pairs = contact_pairs
     if not callable(getattr(boundary, "capture", None)):
@@ -209,12 +211,31 @@ def test_the_joined_chain_carries_the_sealed_artifact_a_full_case_produces(tmp_p
     # must carry THIS case's ids, because the production factory is built per request), the checker whose hash the
     # screen's sources must be bound to, and the production expert-route class. Nothing here is invented: CP-1819.
     authority = _approach_authority(session_id="session-298", attempt_id="full-01")
+
+    # and the PRODUCTION broker, with only the external I/O substituted (CP-1833/1834/1835): the model and the settings
+    # are derived exactly as the child derives them, the driver is the ROS seam, and the broker is the composition root's.
+    import mujoco
+
+    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPhasePort  # noqa: F401  (port type)
+    from so101_teleop.unified.ros_child import bound_act_source_settings
+    from test_act_campaign_admission import _calibration
+    from test_task8_child_driven_case import FakeBroker
+
+    share = Path(__import__("ament_index_python.packages", fromlist=["x"]).get_package_share_directory(
+        "so101_demo_py"))
+    model = mujoco.MjModel.from_xml_path(str(share / "assets/mujoco/act/scene.xml"))
+    report_path, _report_sha = _calibration(evidence, status="TASK8_READY")
+    settings = bound_act_source_settings(json.loads(Path(report_path).read_bytes()),
+                                         timestep_s=float(model.opt.timestep))
+    broker, _servers = _production_broker(session_id="session-298", driver=FakeBroker(),
+                                          settings=settings, model=model)
+
     child, phase_request, port = _prepare_child_case(
         evidence, monkeypatch, case_id="full-01", session_id="session-298",
-        attempt_id="full-01", campaign_id="case-298",
+        attempt_id="full-01", campaign_id="case-298", broker=broker,
         expert_route_factory=authority["factory"], route_motion=authority["motion"])
     live_manifest = json.loads(Path(spec.payload["manifest_path"]).read_bytes())
-    _mount_approach_screen(port, authority, live_manifest=live_manifest, session_id="session-298")
+    _mount_approach_screen(port, authority, live_manifest=live_manifest, session_id="session-298", broker=broker)
 
     # the fixture builds a PHASE request; a full case is the same request with the full-case operation and no
     # `stop_after` - which is the rule the worker port itself applies (`bridge.py:266`: `mode == "full" and

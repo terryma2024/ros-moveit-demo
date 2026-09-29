@@ -31723,3 +31723,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress; the faithful branch's inputs are fully sourced and the six steps are mechanical.** P1-1
   through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1836 — An ordering constraint the wiring exposed, and the small extraction it implies
+
+- **The run failed on the report's own requirement, and reading it revealed a dependency order the six steps did not
+  spell out:**
+  ```
+  test_act_task8_full_case_chain.py:227  TypeError: _calibration() missing 1 required keyword-only argument: 'head_search'
+  def _calibration(tmp_path, *, status, head_search):            # test_act_campaign_admission.py:100
+  ```
+  **`head_search` is a substantial descriptor block built inside the child-driven harness's `_binding`** - the detector
+  block (a real `best.pt` the validator hashes, `requested_device: "cuda"`, `allow_cpu_fallback: False`, the torch
+  versions) and the camera block - **so it is a fixture value my module cannot reach before calling `_prepare_child_case`,
+  which builds it internally.**
+- **And that matters because the dependencies run the other way round:**
+  ```
+  report  = _calibration(evidence, status="TASK8_READY", head_search=…)      # needs head_search
+  settings = bound_act_source_settings(report, timestep_s=model.opt.timestep)   # needs the report
+  broker  = _production_broker(…, settings=settings, …)                     # needs settings
+  child   = _prepare_child_case(…, broker=broker, …)                        # needs the broker
+  ```
+  **so the report must be built BEFORE `_prepare_child_case`, while the `head_search` block it needs is built INSIDE
+  it.** The six steps were right in content and incomplete in order.
+- **Which makes the next edit a small extraction rather than a copy:** the harness's `head_search` block becomes a
+  module-level helper (the same move `_prepare_child_case` itself already is - a helper "parameterised for reuse", in its
+  own docstring's words), **and both callers use it: the binding, as it does now, and the full-case module, before it
+  builds the broker.** Copying the block into the module instead would put a second copy of a hashed-weights descriptor
+  in the suite, **which is exactly the drift the harness's own helper exists to prevent.**
+- **State:** **P1-5 in progress; the content of the wiring is settled and one ordering constraint is now recorded with the
+  extraction it needs.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
+  re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
