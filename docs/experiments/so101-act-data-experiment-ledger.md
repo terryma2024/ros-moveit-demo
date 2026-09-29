@@ -27606,3 +27606,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And this is CP-1626's distinction arriving on a third subject in three rounds** - cadence, the key set, and now the release epoch: **a demo-level fixture can only assert what its substitution produces, and a test that names that boundary is worth more than one that pretends to cross
   it.**
 - **State:** the v4 boundary still awaits a green demo leg; item 7 continues; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1653 — The demo leg's remaining failures are my SCRIPT's, and the cause is a variable's expansion time
+
+- **Where the v4 demo leg stands:**
+  ```
+  run #1 (demo-scratch)  : 4 failed, 5744 passed   -> two of the four were this batch's changes, fixed
+  run #2 (demo-scratch2) : 16 failed, 5732 passed  -> the same reservation-client family, all IPC-base refusals
+  run #3 (demo-scratch3) : 16 failed, 5732 passed  -> unchanged, and the script's own report said `demo_rc=0`
+  ```
+- **And the two findings from those runs are worth separating, because only one of them is about the tests:**
+  1. **`test_controller_reservation_client` refuses the IPC base by name** - `SO101_IPC_SOCKET_BASE_INVALID` (15 cases) and one `FileNotFoundError` on a socket path. **The suite requires the base to exist and be private**; the **teleop** script creates it (`mkdir -m 0700 -p $IPC`) and the **demo** script did not.
+  2. **and the demo script's `demo_rc=0` is not a verdict** - it reported zero while pytest reported sixteen failures, **which is CP-1611's lesson (`rc` is not a verdict) arriving in my own tooling.**
+- **The root cause is the one this batch keeps meeting, this time in a shell script:** the scripts were written with an **unquoted heredoc**, so `$$` and other variables were **expanded at write time, not at run time** - which produced a base path the `mkdir` line and the test's environment did not agree on. **A value whose expansion time is not controlled is a resource, not a parameter** (CP-1589's
+  family).
+- **The fix, named rather than half-applied:** rewrite all three leg scripts with a **quoted heredoc** (`<<'SH'`) so nothing expands when the file is written, and have each script compute its own scratch and IPC base at run time, print them, and **fail closed if the base is missing or not private**.
+  **The v4 boundary is NOT valid and is not reported as valid** - runs #1-#3 are evidence of the diagnosis, not a boundary result.
+- **State:** item 7 continues; the three leg scripts are being rewritten; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
