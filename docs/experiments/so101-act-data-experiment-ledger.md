@@ -14074,3 +14074,33 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe
   interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-975 — The support-distance rule now reads the exact collision pair (30 passed)
+
+- **Implemented `support_distance_from_frames(frames, *, cup_collision_geom, table_collision_geom="table_collision")`**
+  to the design's row: the caller **names the cup's bottom collision geom** rather than the code assuming one, and a
+  missing name is refused (`CUP_COLLISION_GEOM_REQUIRED`). From the three consecutive 10 Hz pre-open frames of the same
+  release epoch it requires a real contact for the **exact pair** in every one of them (`SUPPORT_CONTACT_REQUIRED` when
+  the pair is absent, so a passing distance can never substitute for support contact), takes
+  `max(0, signed_distance_m)` per frame - flooring a negative signed distance at zero - and reports the **maximum of
+  the three**, which is then the run's value for the five-run maximum.
+- **The old vacuous check is gone:** `_support_from_frames` no longer tests an `active_contacts` key no production path
+  supplies; it now delegates to the pair rule, requiring the run to name its cup's collision geom
+  (`CUP_COLLISION_GEOM_REQUIRED`) when it carries its own frames.
+- **The trap from CP-974 is covered by a test rather than only by prose:** the fixture proves that an a-cup run
+  (`cup_a_bottom_collision`) and a b-cup run (`cup_b_collision`, the b cup's single collision geom) each resolve their
+  own pair, and that naming a geom the frames do not carry fails the run instead of silently passing.
+- **One fixture defect of mine found by running:** my first version mixed the a-cup and b-cup geoms inside one run's
+  three frames, and the implementation correctly refused it - the fixture was wrong, not the rule.
+- **Verified: 30 passed, rc=0** (`beh-task8-green7.log`).
+- **Remaining in Task 8:** correct `retreat_distance_m` to the radial-relative-to-placed-cup rule at the first
+  qualifying readback; correct `placement_stable_s` to the longest contiguous source-stamp duration over pose,
+  linear/angular velocity, table support and forbidden contact; implement `grasp_occlusion_window_s` over the
+  CLOSE->RELEASE wrist records with the owner and phase checks; implement `release_stable_s` to its own row; then wire
+  `collect_live_runs` (rows -> artifacts -> these rules) into `build_task8_qualified_report` with the readback and
+  `require_qualified(report)`.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge, corrected field name and the support-distance pair rule green at 30; Tasks 9-10 untouched; the goal is
+  armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad`
+  starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware;
+  formal 0/0/0; `collection_*` NOT_PROVISIONED.
