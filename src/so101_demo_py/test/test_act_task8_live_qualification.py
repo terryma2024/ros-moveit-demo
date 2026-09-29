@@ -808,14 +808,23 @@ def _sample_row(phase, sim_time, *, position=(0.0, 0.0, 0.1), stable=True):
             "placement_stable": stable}
 
 
-def test_retreat_distance_is_the_end_effector_displacement_over_the_retreat():
+def test_retreat_distance_is_radial_from_the_cup_at_the_first_qualifying_readback():
     from so101_demo.act.task8_live_qualification import retreat_distance_m
 
-    samples = [_sample_row("RADIAL_RETREAT", 0.0, position=(0.0, 0.0, 0.1)),
-               _sample_row("RADIAL_RETREAT", 0.1, position=(0.03, 0.04, 0.1))]
-    assert retreat_distance_m(samples) == pytest.approx(0.05)
+    def frame(stamp, effector, *, clearing=False):
+        return {"phase": "RADIAL_RETREAT", "source_stamp": stamp, "cup_position_m": [0.0, 0.0, 0.1],
+                "end_effector_position_m": list(effector), "clearing": clearing}
+
+    frames = [frame(0.0, (0.0, 0.0, 0.1)), frame(0.1, (0.03, 0.04, 0.1), clearing=True),
+              frame(0.2, (0.06, 0.08, 0.1))]
+    # the radial distance grows from 0 to 0.05 at the first qualifying readback, not to 0.10 at the last
+    assert retreat_distance_m(frames, qualifying=lambda f: f["clearing"]) == pytest.approx(0.05)
+    with pytest.raises(ValueError, match="RETREAT_QUALIFYING_READBACK_REQUIRED"):
+        retreat_distance_m(frames, qualifying=lambda f: False)
+    # the refusal is for a run with no retreat frame at all; a single qualifying frame legitimately reports zero
     with pytest.raises(ValueError, match="RETREAT_SAMPLES_REQUIRED"):
-        retreat_distance_m([_sample_row("RADIAL_RETREAT", 0.0)])
+        retreat_distance_m([], qualifying=lambda f: True)
+    assert retreat_distance_m([frame(0.0, (0.0, 0.0, 0.1))], qualifying=lambda f: True) == pytest.approx(0.0)
 
 
 def test_placement_stability_span_requires_every_final_check_sample_to_be_stable():
