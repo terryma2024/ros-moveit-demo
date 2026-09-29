@@ -25188,3 +25188,20 @@ picture in both directions.**
   the test should pass - after which the boundary chain is proven and **APPROACH is end to end**.
 - **State:** the boundary chain test is **uncommitted** while red, together with the `time_axis` fix and the snapshot-ownership fix in `execute_approach`. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1511 — APPROACH is end to end, and the two corrections it forced were both "ask the owner"
+
+- **`47 passed`** across the chain test, the port, the goals builder, the path screen and the child port (`experiments/gate8-p14/final6.log`).
+- **The chain test drives the REAL `execute_approach`** unbound on a stub `self`, with the **real screen** - a real MuJoCo model, a real SEARCH readback - so what is substituted is the
+  broker/executor calls and nothing else. It asserts the method's own order (register, approve, submit, wait, take the proof snapshot, inspect, take the time axis, establish the facts), that
+  the **production prover** computed the proof over that snapshot, that the readback is what is returned, and that the admitted support distance reaches the facts validator; **four missing
+  pieces each refuse by name**.
+- **Two production corrections, both forced by running, both the same lesson:**
+  1. **the time axis belongs to the case**, not to `monotonic()` - `bridge <= observation < start < first target` - and now comes from the executor's `time_axis(ticket, goal_id)`, refusing by
+     name when absent;
+  2. **the proof's snapshot belongs to the paired execution** (its snapshot port), not to the readback: the readback carries the robot's state for the goals and the phase facts, while the
+     prover hashes the snapshot the checker is run against. **Four consecutive `KeyError`s were the evidence.**
+- **Where P1-4 stands:** APPROACH - the phase that sets the pattern - is complete (port prepares and qualifies, boundary issues, approves, submits, waits, snapshots, inspects, proves and
+  establishes the facts, and the runner's verifier judges the document). **Remaining: the seven phases after it, the nine-phase case reaching FINAL_CHECK, the seal, the full-case journal, and
+  the seven indexed assertions with their four negatives.** Each of those phases now has a template rather than a blank page.
+- **State:** P1-1..P1-3 green and committed; APPROACH committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
