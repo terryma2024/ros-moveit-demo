@@ -18596,3 +18596,20 @@ not an inference of mine.**
   weights/model/device/CUDA policy change, controlled config hash change, unindexed descriptor) and item 4's Boundary V
   mechanical part.
 - **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1168 — RED proven: the driver seals a batch that records no descriptor
+
+- **The RED runs the real driver against its existing fakes** (`FakeStack`, `_driver`, `_measurement_context`), sets
+  `context.runtime_descriptor` to a descriptor the shared rule accepts, runs the case, and then searches **every** sealed
+  JSON document for a `head_search` block: `assert []` - **the batch records none**. No fixture error, no import error; the
+  driver ran, the batch sealed, and the descriptor is simply absent.
+- **Why asserting over the whole sealed tree rather than one known path:** the checkpoint before this one established that I
+  should not assume which file the driver would use, and §4.2 requires the descriptor to be **indexed with the batch**, not
+  merely written somewhere. Searching the sealed documents tests the requirement rather than an implementation detail, and
+  the GREEN may satisfy it wherever it belongs.
+- **The GREEN, next round:** the driver registers the descriptor - canonical payload, its source path and its sha256 - in the
+  batch **before** sealing, so the closed index covers it exactly as it covers the measured rows; then the aggregator reads
+  it back **from the strict closed index** (never from the context's path, per §6) and passes it to
+  `validate_head_search_binding(runtime, report)`. Only when that readback test is green is item 2 done.
+- **State:** goal active (revision 51, cap 1000); RED log `beh-r774-red.log`; the 19 pre-existing driver tests are untouched
+  and were green at CP-1167; no full suite, no push, no stack, no hardware.
