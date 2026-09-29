@@ -73,7 +73,8 @@ def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED",
             "max_fine_corrections", "max_fine_total_rad", "min_confidence", "tracking_iou",
             "min_bbox_aspect", "center_deadband_px", "vertical_bounds_px", "min_area_px2",
             "max_age_s", "max_skew_s", "lock_valid_neck_rad", "submit_lead_s",
-            "stop_velocity_rad_s", "stop_latency_s")},
+            "stop_velocity_rad_s", "stop_latency_s")
+            + tuple(sorted(contract.get("support", {})))},     # a real batch carries the support fields too
         "camera_measurements": {name: {"value": 1.0, "unit": "px"} for name in (
             "head_intrinsics_px", "head_translation_m", "head_rpy_rad",
             "yaw_zero_bearing_rad")},
@@ -257,7 +258,7 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
 
 # --- protocol v2 seam: verdicts from raw evidence, all roots, no labels -------------------------------------
 
-def _sealed_batch(root, payload, identities=None):
+def _sealed_batch(root, payload, identities=None, extra_files=None):
     from so101_demo.act.task8_measurement_schema import write_closed_json
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
     import hashlib
@@ -266,6 +267,7 @@ def _sealed_batch(root, payload, identities=None):
 
     raw = write_closed_json(Path(root) / "raw" / "records.json", payload)
     files = {"raw/records.json": hashlib.sha256(raw.read_bytes()).hexdigest()}
+    files.update(extra_files or {})
     # the batch declares three anchors, so it must evidence them: the aggregator's per-anchor sync file is the
     # convention it consumes, and indexing what it wrote keeps the fixture schema-true by construction
     for anchor in ("default", "left", "forward"):
@@ -411,3 +413,115 @@ def test_rendering_the_same_immutable_batch_twice_is_byte_identical_and_publishe
     assert rerender == snapshot, "a second render of the same immutable batch is byte-identical"
     assert sorted(str(path.relative_to(out)) for path in Path(out).rglob("*") if path.is_file()) == listing, \
         "publishing once leaves no extra or duplicated file behind"
+
+
+def test_every_cited_sample_reads_back_from_disk_with_its_recorded_hash(tmp_path, contract):
+    """Boundary IV: a report's sample citations must resolve on disk to bytes the recorded hash vouches for."""
+
+    import hashlib as _hashlib
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    # a v2 bound contract, because only it carries the support section the seven remaining fields come from
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = batch_factory(tmp_path, contract)
+    outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
+    document = json.loads(Path(outputs["calibration_report"]).read_text())
+    measurements = document["measurements"]
+    assert len(measurements) == 28, f"a ready report carries the contract's 28 fields, saw {len(measurements)}"
+
+    for name, entry in measurements.items():
+        sample = Path(entry["sample_path"])
+        assert sample.is_absolute() and not sample.is_symlink() and sample.is_file(), f"{name}: {sample}"
+        assert _hashlib.sha256(sample.read_bytes()).hexdigest() == entry["sample_sha256"], f"{name} digest"
+
+
+def test_a_v2_batch_yields_a_report_that_passes_the_task8_live_gate(tmp_path):
+    """Boundary IV's publishing half: the 28-field TASK8_READY must satisfy require_gate(report, "task8_live").
+
+    The gate wants the five PICK_PLACE_READY_CHECKS to PASS, release and retreat to be UNMEASURED, and every field of
+    every ready check to be present - 28 fields - each cited to its approved closed sample.
+    """
+
+    from so101_demo.act.calibration import require_gate
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _v2_batch(tmp_path / "batch", contract)
+    outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
+    report = json.loads(Path(outputs["calibration_report"]).read_text())
+
+    require_gate(report, "task8_live")
+    assert report["status"] == "TASK8_READY"
+    assert len(report["measurements"]) == 28
+    assert report["checks"]["release"] == "UNMEASURED"
+    assert report["checks"]["retreat"] == "UNMEASURED"
+
+
+def _valid_evidence(contract):
+    """Raw evidence that satisfies every comparator, taken from the formulas suite's own cases where it has them."""
+
+    import math
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_act_task8_measurement_formulas import FIELD_CASES
+
+    evidence = {field: valid["measurements"][field] for field, (valid, *_rest) in FIELD_CASES.items()}
+    configured = {field: valid["configured"][field] for field, (valid, *_rest) in FIELD_CASES.items()}
+    fovy = 1.0
+    fx = (480 / 2) / math.tan(fovy / 2)
+    frame = {"width": 640, "height": 480, "K": [fx, fx, 320.0, 240.0], "fovy_rad": fovy}
+    fill = {
+        "head_intrinsics_px": ({"frames": [frame], "tolerance_px": 1.0}, 1.0),
+        "wrist_intrinsics_px": ({"frames": [frame], "tolerance_px": 1.0}, 1.0),
+        "head_translation_m": ({"samples": [[0.0, 0.0, 0.0]], "expected": [0.0, 0.0, 0.0],
+                                "tolerance_m": 0.01}, 0.01),
+        "wrist_translation_m": ({"samples": [[0.0, 0.0, 0.0]], "expected": [0.0, 0.0, 0.0],
+                                 "tolerance_m": 0.01}, 0.01),
+        "head_rpy_rad": ({"quaternions": [[0.0, 0.0, 0.0, 1.0]]}, 0.01),
+        "wrist_rpy_rad": ({"quaternions": [[0.0, 0.0, 0.0, 1.0]]}, 0.01),
+        # a tilted forward axis: the identity rotation's is degenerate and refused by design
+        "yaw_zero_bearing_rad": ({"rotations": [[0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0]],
+                                  "expected": 0.0, "tolerance_rad": 0.01}, 0.01),
+        "lock_valid_neck_rad": ({"bounds_rad": [-2.0, 2.0], "anchor_starts_rad": [0.0],
+                                 "unsafe_intervals_rad": [], "shrink_rad": 0.1}, [-2.0, 2.0]),
+        "velocity_limit_rad_s": ({"samples": [{"dt_s": 0.01, "dq_rad": [0.0] * 6}]}, [1.0] * 6),
+        "acceleration_limit_rad_s2": ({"samples": [{"dt_s": 0.01, "dq_rad": [0.0] * 6}]}, [1.0] * 6),
+        "path_step_s": ([0.0, 0.002, 0.004, 0.006], 0.01),
+        "path_clearance_m": ({"rows": [{"signed_distance_m": 0.05}]}, 0.01),
+    }
+    for field, (payload, limit) in fill.items():
+        evidence.setdefault(field, payload)
+        configured.setdefault(field, limit)
+    return evidence, configured
+
+
+def _v2_batch(root, contract):
+    """A batch that is schema-true for v2: valid raw evidence in the indexed records and the 28 published entries."""
+
+    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+    from so101_demo.act.task8_measurement_schema import write_closed_json
+
+    root = Path(root)
+    evidence, configured = _valid_evidence(contract)
+    identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+    identities["measurement_contract_sha256"] = contract["contract_sha256"]
+    # the published entries are written before the seal, because the seal indexes every file it closes over
+    measurements = {name: {"value": 1.0, "unit": entry.get("unit", "count")}
+                    for name, entry in {**contract["measurements"], **contract["support"]}.items()}
+    write_closed_json(root / "measurements.json",
+                      {"measurements": measurements,
+                       "camera_measurements": {name: {"value": 1.0, "unit": "px"} for name in (
+                           "head_intrinsics_px", "head_translation_m", "head_rpy_rad", "yaw_zero_bearing_rad")},
+                       "observed_lock_frames": {anchor: 3 for anchor in ("default", "left", "forward")}})
+    # one seal, carrying the valid raw evidence the comparators read and the identity the bound contract expects
+    published = root / "measurements.json"
+    _sealed_batch(root, {"measurements": evidence, "configured": configured}, identities,
+                  extra_files={"measurements.json": __import__("hashlib").sha256(
+                      published.read_bytes()).hexdigest()})
+    return root
