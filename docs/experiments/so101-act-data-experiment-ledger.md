@@ -18020,3 +18020,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** no full suite, nothing weakened, nothing deleted (my own uncommitted scratch file removed, no user file
   touched), no push, no stack, no hardware. Next round: write the fake port and the test in
   `src/so101_teleop/test/teleop/`, alongside the case-execution tests, per the spec in CP-1139/1140/1141.
+
+## CP-1143 — The teleop test environment confirmed: names, home and a green baseline
+
+- **The three facts CP-1142 needed, read from the tests that already live there:**
+  | fact | value |
+  | --- | --- |
+  | the runner's module | **`so101_demo.act.task8`** - `from so101_demo.act.task8 import Task8Runner` (my earlier guess `task8_runner` was wrong by one name) |
+  | Boundary V's existing home | **`src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py`** - written earlier in this task, alongside `test_task8_case_execution.py`, `test_task8_case_owner.py`, `test_task8_child_startup.py` and `test_task8_full_restart_campaign.py` |
+  | how the suite is driven | pytest from that directory with the three overlays sourced, as the run below did |
+- **Baseline measured: 16 passed** for the production-chain and case-execution files together (`beh-r746.log`), scratch
+  `<R>/scratch/r746.<n>` with `TMPDIR` verified through the exact test interpreter, one warning and no failures. So the
+  environment, the import names and the fixtures all work before I add a line to them - which is what CP-1142's mistake
+  taught me to establish first.
+- **Next round, mechanical:** extend `test_task8_live_evidence_production_chain.py` with the fake port from CP-1141's table
+  (`begin`, `run_phase`, `run_retreat_segment`, `set_down`, `release_preflight`, `detach_moveit` → `True`,
+  `planning_attached` → `False`, `safe_stop`, plus `bind_startup_receipt` and `bind_live_evidence` from CP-1140), drive the
+  case, and assert the seven artefacts - SEARCH rows from the real path, the release open event, three adjacent 10 Hz
+  support rows in one epoch, FINAL_CHECK, the sealed artifact read back, the confirmed retirement, and the journal path and
+  hash.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  remain open and independent of this piece.
