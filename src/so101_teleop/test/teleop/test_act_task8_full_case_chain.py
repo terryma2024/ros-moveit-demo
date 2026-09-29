@@ -114,7 +114,7 @@ class _ContactPairs:
         return self._pairs_by_phase.get(phase, frozenset())
 
 
-def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker=None) -> None:
+def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker=None, settings=None) -> None:
     """Mount the screen AND expose the boundary structure the port's own admission reads.
 
     `begin` reads `boundary.reset.manifest` - the frozen case list and `contact_policy_fingerprint` - and compares that
@@ -146,6 +146,13 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     # beside it rather than the double being rewritten
     if not hasattr(sources, "session_id"):
         sources.session_id = getattr(sources, "_session_id", session_id)
+    # and the one member this port path reads off `readback`: `_search_evidence` asks for `readback.max_skew`, a single
+    # number - which production's `PickPlaceRosEvidence` carries and which here is the MEASURED skew the calibration
+    # report admitted (`bound_act_source_settings` returns it as `max_source_skew_s`), not a number chosen to pass.
+    if not hasattr(sources, "readback"):
+        if settings is None or "max_source_skew_s" not in settings:
+            raise AssertionError("the sources' readback needs the admitted max_source_skew_s")
+        sources.readback = SimpleNamespace(max_skew=float(settings["max_source_skew_s"]))
     if not callable(getattr(sources, "capture", None)):
         sources.capture = lambda *args, **kwargs: {"rows": list(getattr(boundary, "rows", []))}
     # `begin` also reads `reset.broker` (search_port.py:220), the command surface beside the sources
@@ -258,7 +265,8 @@ def test_the_joined_chain_carries_the_sealed_artifact_a_full_case_produces(tmp_p
         attempt_id="full-01", campaign_id="case-298", broker=broker,
         expert_route_factory=authority["factory"], route_motion=authority["motion"])
     live_manifest = json.loads(Path(spec.payload["manifest_path"]).read_bytes())
-    _mount_approach_screen(port, authority, live_manifest=live_manifest, session_id="session-298", broker=broker)
+    _mount_approach_screen(port, authority, live_manifest=live_manifest, session_id="session-298",
+                           broker=broker, settings=settings)
 
     # the fixture builds a PHASE request; a full case is the same request with the full-case operation and no
     # `stop_after` - which is the rule the worker port itself applies (`bridge.py:266`: `mode == "full" and
