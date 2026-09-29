@@ -25851,3 +25851,11 @@ picture in both directions.**
   candidate, which my double does not yet satisfy. **That is the last named blocker, and the next action is to read that line of `begin` and provide exactly what it reads.**
 - **State:** P1-1..P1-3 green and committed; every production fix committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed,
   nothing deleted; no hardware.
+
+### CP-1551a — Correction to the line above: the retreat fix is NOT committed yet
+
+- **The focused set returned `52 passed, 2 failed` after the signature change, so the guard withheld the commit** - correct behaviour, and the ledger line above overstates the state.
+- **The two failures are the test call sites that still use the old argument order** (`test_act_task8_case_documents.py`'s retreat tests pass `("vertical", 0.06, request, ...)`), so the fix is
+  **in the working tree, green in principle, and uncommitted until those call sites are updated.**
+- **The next round's first action is therefore small and exact:** update those two call sites to `run_retreat_segment(request, direction=..., distance_m=...)`, re-run the focused set, and commit the
+  signature fix with them.
