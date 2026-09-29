@@ -21439,3 +21439,20 @@ not an inference of mine.**
   fixture for the policy payload.
 - **State:** the child-driven test file is still **uncommitted while red**; items 1-4 complete and committed; nothing deleted, nothing
   pushed.
+
+## CP-1298 — The child now RUNS the case; the last gate is the journal's case-id rule
+
+- **The request model is satisfied and the case executes.** The remaining refusal is
+  **`TASK8_JOURNAL_CASE_ID_INVALID`**, raised while the case writes its journal - i.e. the fixture reached the point where a real case
+  produces real evidence, which is exactly what item 5 exists to demonstrate.
+- **The fields that had to be right, each read from the model rather than guessed:**
+  `command_id`, `service_epoch`, `runtime_id`, `service_token`, a **dict** payload (`.model_dump()`), the act identity block, an **int**
+  `execution_generation`, a **`DispatchTokenModel`** token carrying `operation_id`/`child_id`/`runtime_id`/`execution_generation`/
+  `deadline_ns`/`revocation_revision`, `token.child_id == worker_id`, and **one shared `deadline_ns`** for the request and its token
+  (`IPC_DEADLINE_MISMATCH` before that).
+- **Two of this round's stumbles were mine and worth recording:** an auto-fill script of mine added a duplicate keyword and then a dedupe
+  pass removed the *token's* `runtime_id` and `execution_generation` instead of the duplicate - both caught by `ast.parse` before writing,
+  and both fixed by reading the block and rewriting the exact lines.
+- **Next:** the journal's case-id rule (its raise site is printed above), then item 5 should be green.
+- **State:** the child-driven test file remains **uncommitted while red**; items 1-4 complete and committed; no live stack, no stepping,
+  no CUDA, no hardware; nothing deleted, nothing pushed.
