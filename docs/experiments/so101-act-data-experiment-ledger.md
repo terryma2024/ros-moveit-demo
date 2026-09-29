@@ -16522,3 +16522,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary II remaining, each needing its own RED:** live search and the fixed non-contact arm probe; CameraInfo/TF raw
   rows; real session/reset/attempt readback instead of synthesized identities; and explicit per-anchor **FULL_RESTART**
   semantics.
+
+## CP-1069 — Boundary II, third piece: real identity readback, fail-closed by name
+
+- **RED on both halves:** rows carried a **synthesized** identity (`generation-1-default` for the session, and the
+  anchor's ordinal as its reset epoch) rather than anything the stack witnessed; and a stack with no readback surface at
+  all still sealed **CLOSED**, so a batch could be published under an identity no simulation had produced.
+- **The fix:** `_read_identity(anchor)` reads `{"session_id", "reset_epoch", "attempt_id"}` from the stack for each anchor
+  and raises **`MEASUREMENT_READBACK_REQUIRED`** when the surface is missing, is not a mapping, or is incomplete - which
+  the existing failure path turns into an INVALID seal carrying that name, so the refusal is attributed rather than
+  silent. The anchor key is kept on the identity for the records.
+- **The doubles then had to grow the same surface, and that is the signal worth recording:** the shared `FakeStack` and
+  one of my own test stacks gained `readback`, and nothing else changed to make the suite pass. Every piece of Boundary II
+  so far has had this shape - the phase camera, the clock, the stack readback - which is what it looks like when the only
+  thing faked is external I/O and the production contract is the one getting stricter.
+- **GREEN: 12 passed, rc=0**, scratch `<R>/scratch/r670d.<n>` with `TMPDIR` verified through the exact test interpreter;
+  RED `beh-r670-red.log`, intermediate `beh-r670-green*.log` (5 failed, then 1, as the doubles caught up), final
+  `beh-r670-green3.log`.
+- **Boundary II remaining, each needing its own RED:** live search and the fixed non-contact arm probe; CameraInfo/TF raw
+  rows per anchor; and explicit per-anchor **FULL_RESTART** semantics.
