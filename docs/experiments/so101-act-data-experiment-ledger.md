@@ -19041,3 +19041,23 @@ not an inference of mine.**
   without ROS, **that is a finding about the production seam worth reporting rather than a reason to reach for
   `object.__new__`.**
 - **State:** goal active (revision 51, cap 1000); HEAD `242b4550`; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1188 — The constructor is injectable, so a compliant child test is possible without `object.__new__`
+
+- **Read `RclpyActionDriver.__init__` (line 167) and the owner's prohibition costs nothing here:**
+  ```python
+  def __init__(self, *, broker=None, owner=None, stop_timeout_s=None, accept_timeout_s=None,
+               pick_place_port=None, task8_port=None, act_hashes=None, startup_proof_consumer=None) -> None:
+  ```
+  It performs **no ROS initialisation** - `_node`, `_executor` and `_thread` are set to `None` and left for `_start_ros_broker`
+  - and it takes **exactly the three things my Boundary V test needs as arguments**: `pick_place_port` (my fake),
+  `act_hashes` (the bound digests the case checks) and `startup_proof_consumer` (the seam CP-1139 found). It even validates the
+  combinations itself (`ACT_PICK_PLACE_PORT_AMBIGUOUS`, `TASK8_STARTUP_CONSUMER_INVALID`, `ROS_DRIVER_TIMEOUT_INVALID`).
+  **So `object.__new__` is not needed for the child after all** - the shortcut in the existing test is a convenience, not a
+  necessity, which is the strongest possible answer to CP-1187's question.
+- **The one thing left to find, and it is one grep:** how `_act_artifacts` is meant to be bound. The constructor sets it to
+  `None` and the child's `_run_pick_place` reads it to build the `CaseEvidenceDriver` window, so something must set it in
+  production - a binder method, or the provisioner `_start_ros_broker`/`maybe_provision_pick_place_port` path that the existing
+  test also drives. Setting it by hand would be the "hand-filled state" item 4 forbids, so the next round reads for the proper
+  binder rather than assigning it.
+- **State:** goal active (revision 51, cap 1000); HEAD `c9fce481`; staged 0; no full suite, no push, no stack, no hardware.
