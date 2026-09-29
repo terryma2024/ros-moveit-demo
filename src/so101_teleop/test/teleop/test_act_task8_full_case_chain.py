@@ -140,7 +140,16 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     # the PRODUCTION broker when the caller has it: `begin` asks `isinstance(reset.broker._prefix_source_port,
     # TrustedVisibleApproachSourcePort)`, and that answer must come from the composition root (CP-1833)
     broker = broker or getattr(boundary, "broker", None) or getattr(port, "broker", None) or SimpleNamespace()
-    boundary.reset = SimpleNamespace(manifest=live_manifest, sources=sources, broker=broker)
+    # ADD to the boundary's own reset rather than replacing it: the harness's `_Boundary.begin` writes
+    # `self.reset.receipt.new_epoch`, so a fresh SimpleNamespace would destroy a member the boundary already had - the
+    # same mistake as substituting a boundary and removing what it produces, in miniature.
+    reset = getattr(boundary, "reset", None)
+    if reset is None:
+        reset = SimpleNamespace()
+        boundary.reset = reset
+    reset.manifest = live_manifest
+    reset.sources = sources
+    reset.broker = broker
     boundary.contact_pairs = contact_pairs
     if not callable(getattr(boundary, "capture", None)):
         boundary.capture = sources.capture

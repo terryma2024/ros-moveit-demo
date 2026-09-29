@@ -31849,3 +31849,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   remaining gap is a fixture member the harness's own boundary reads.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1840 — The case is running PHASES now, and the next member is `sources.readback`
+
+- **The drive is inside the runner's phase machinery:**
+  ```
+  pick_place_search_port.py:662 in run_phase
+  pick_place_search_port.py:334 in _search_evidence
+      AttributeError: 'types.SimpleNamespace' object has no attribute 'readback'
+  ros_child.py:559 -> pick_place_runner.py:226 run          # 226, not 193 - the runner is past its prologue
+  ```
+  **`begin` is fully satisfied** - the trusted source port, the startup receipt, the manifest and the fingerprint
+  admission all passed **because the production composition root supplied them** - **and the runner has entered
+  `run_phase`**, where `_search_evidence` reads `sources.readback`.
+- **And the reset fix recorded in CP-1839 has a lesson that applies to the sources too, which is worth stating before the
+  next edit rather than after it:** I replaced `boundary.reset` with a fresh `SimpleNamespace` and destroyed the
+  `receipt` the boundary's own `begin` writes; the fix was to **add** the three members instead. **The sources object is
+  now accumulating members the same way** (`contact_pairs`, `session_id`, `capture`, and now `readback`) - **and if the
+  harness's boundary already owns a sources object with those members, the honest move is the same one: add to it, or
+  pass it through, rather than building a namespace that grows one refusal at a time.**
+- **Which is the pattern of this whole drive, now in its smallest form:** every gap has been the production code naming
+  a collaborator or a member it needs, and every fix has been to supply it **from where production supplies it** - the
+  broker from `build_bound_act_broker`, the screen from the admitted document, the reset from the boundary's own object.
+  **The next edit applies that rule once more.**
+- **State:** **P1-5 in progress: the drive reaches phase execution, the authority is production's, and the remaining gaps
+  are members the harness's own objects should carry rather than namespaces built beside them.** P1-1 through P1-4
+  CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
+  statuses are unchanged, so they are not re-stated.**
