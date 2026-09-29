@@ -239,7 +239,9 @@ def _case_window(tmp_path, *, case_id):
     window = LiveEvidenceWindow(
         recorder,
         identity={"case_id": case_id, "session_id": SESSION, "attempt_id": ATTEMPT,
-                  "reset_epoch": 2, "release_epoch": 0},
+                  # P1-4: the identity is the epoch the case ENDS in. The samples span 0 (before RELEASE) and 1
+                  # (after it), which the recorder's rule allows; the identity is the terminal one.
+                  "reset_epoch": 2, "release_epoch": 1},
         period_s=0.1, tolerance_s=0.01)
     return recorder, window
 

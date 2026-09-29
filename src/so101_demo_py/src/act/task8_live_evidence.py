@@ -459,6 +459,12 @@ def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
             "cup_orientation_xyzw": orientation}
 
 
+#: The epoch a case ENDS in once it has passed its release. The release CREATES the epoch, so a case that has run to
+#: FINAL_CHECK seals with this one, and the port's `_release_epoch_for("FINAL_CHECK")` computes the same value - named
+#: here once so the window's identity and the port's seal cannot drift apart (rereview4 P1-4).
+FINAL_RELEASE_EPOCH = 1
+
+
 class LiveEvidenceWindow:
     """The SEARCH..FINAL_CHECK evidence window: a frozen 10 Hz grid plus edge events.
 
@@ -586,15 +592,28 @@ class LiveEvidenceWindow:
         return {"status": "INVALID", "reason": reason,
                 "grid_count": self.grid_count, "event_count": self.event_count}
 
-    def seal(self) -> dict:
+    def seal(self, identity: dict = None) -> dict:
+        """Seal through the recorder, with the identity the CASE ends in.
+
+        P1-4: the window used to seal with the identity it was CONSTRUCTED with - the epoch the case started in - while
+        the port seals with the epoch the case ends in. Nothing compared them, so the two could disagree silently. A
+        caller that knows the terminal identity passes it; the window REFUSES a disagreement rather than sealing over
+        it, and keeps its own identity for the callers that have nothing better (a prefix case never passes its
+        release, so its terminal epoch really is the initial one).
+        """
+
         self._require_bound()
         if not self._opened:
             raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
         missing = [phase for phase in self.REQUIRED_PHASES if phase not in self._phases_seen]
         if missing:
             raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_INCOMPLETE")
+        chosen = dict(self._identity) if identity is None else dict(identity)
+        for name in ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch"):
+            if chosen.get(name) != self._identity.get(name):
+                raise ValueError(f"TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: {name}")
         self._sealed = True
-        return self._recorder.seal(self._identity)
+        return self._recorder.seal(chosen)
 
     def _note_phase(self, phase) -> None:
         if phase in self.REQUIRED_PHASES and phase not in self._phases_seen:
@@ -605,7 +624,7 @@ class CaseEvidenceDriver:
     """Drive one case's evidence window from readback fields into its private staging directory."""
 
     def __init__(self, *, case_id: str, staging_root, session_id: str, attempt_id: str,
-                 reset_epoch=None, release_epoch: int = 0, period_s: float = 0.1,
+                 reset_epoch=None, release_epoch: int = FINAL_RELEASE_EPOCH, period_s: float = 0.1,
                  tolerance_s: float = 0.01, recorder_factory=None) -> None:
         staging_root = Path(staging_root)
         if not staging_root.is_absolute() or ".." in staging_root.parts \
@@ -651,8 +670,8 @@ class CaseEvidenceDriver:
         else:
             self._window.add_grid(document)
 
-    def seal(self) -> dict:
-        return self._window.seal()
+    def seal(self, identity: dict = None) -> dict:
+        return self._window.seal(identity)
     def observe_capture(self, adapter, captured, *, phase: str, frame: dict, contact: dict,
                         measurements: dict, raw_records: dict, support_distance_max_m: float,
                         event: bool = False) -> None:

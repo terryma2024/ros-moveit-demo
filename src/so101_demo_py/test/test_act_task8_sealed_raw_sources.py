@@ -85,5 +85,12 @@ def test_the_sealed_identity_carries_the_epoch_the_case_ended_with(tmp_path):
     assert epochs[-1] == index["identity"]["release_epoch"], (
         f"the last sample carries {epochs[-1]} while the identity says {index['identity']['release_epoch']}")
     assert set(epochs) <= {0, index["identity"]["release_epoch"]}, sorted(set(epochs))
-    assert index["identity"]["release_epoch"] >= 1, (
-        "a case that ends after FINAL_CHECK has passed its release, so the epoch cannot still be 0")
+    # CP-1652 bounded this assertion because the fixture's port reported a CONSTANT epoch; P1-4 fixed the port, so the
+    # substitution can now express the real rule and this asserts it: the entries are NON-DECREASING, they span the
+    # release (0 before it, 1 after), and the identity is the epoch the case ENDED in.
+    assert epochs == sorted(epochs), f"the release epochs must not go backwards: {epochs}"
+    assert set(epochs) == {0, 1}, (
+        f"a case that runs RELEASE, RADIAL_RETREAT and FINAL_CHECK spans both epochs; this one carries "
+        f"{sorted(set(epochs))}")
+    assert epochs[-1] == index["identity"]["release_epoch"] == 1, (
+        f"the case ends in epoch 1 and the identity says {index['identity']['release_epoch']}")

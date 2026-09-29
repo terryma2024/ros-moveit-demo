@@ -77,8 +77,11 @@ def test_the_index_chains_to_complete_canonical_records(tmp_path):
     records = _records(index, path)
     for record in records:                                                                  # 4
         assert (record["case_id"], record["session_id"], record["attempt_id"]) == (SCENARIO, SESSION, ATTEMPT)
-        assert (record["reset_epoch"], record["release_epoch"]) == (index["identity"]["reset_epoch"],
-                                                                   index["identity"]["release_epoch"])
+        # P1-4: a case's records SPAN the release - epoch 0 before it and 1 after - while the index's identity is the
+        # epoch the case ENDED in. Checking every record against the identity would assert the very thing the finding
+        # removed, so a record carries an epoch PAIR that the index's own samples carry.
+        assert (record["reset_epoch"], record["release_epoch"]) in {
+            (entry["reset_epoch"], entry["release_epoch"]) for entry in index["samples"]}, record
         # the canonical sample is a KEY SET, not a count: the recorder itself refuses any other set, and a 24-key
         # record with one key swapped would satisfy a length check while failing the contract (the review's point)
         from so101_demo.act.task8_live_evidence import _SAMPLE_KEYS
