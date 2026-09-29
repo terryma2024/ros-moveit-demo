@@ -29628,3 +29628,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And this pass found nothing to fix**, which is the useful signal: **the first four passes each found a stale or misleading claim** (a count that moved, three figures that read as a file when they were a set, a number one commit out of date, a cited log that named no files), **and the fifth found none.** The self-review has converged - further passes would cost edits to a frozen packet and buy nothing.
 - **Nothing was changed this round, so nothing needed re-freezing:** the packet remains **13172 bytes, `b3ed841ba4a9bee6`**; the index remains 52 rows with 0 mismatches; the freeze remains six entries, all reproducing. **A verification that changes nothing is evidence, and it stays evidence precisely because it changed nothing.**
 - **State:** **everything frozen, indexed, audited and now re-measured; the only remaining step is the independent review, which is the owner's to launch.** No controlled source change since the freeze; the goal stays active.
+
+## CP-1767 — The review request is written as a launchable artefact, not left inside the packet's last section
+
+- **Why a separate file when the packet already ends with a "Requested review" section:** the previous round's request
+  (`task8-astra-rereview4-request.md`) was a standalone document, and the owner launches the reviewer from one - so
+  the same shape is used here. **`handoffs/20260930-task7-onward/task8-astra-rereview5-request.md`** now states the
+  reviewer required, the inputs with their digests, the verdict wanted, **what to test rather than take on trust**
+  (with the commands), and **what this session is not claiming**.
+- **What it asks the reviewer to check, in seven numbered items:** each of P1-1 … P1-5 by running its file on the
+  frozen HEAD; **that P1-5's four negatives are mutations of the passing baseline rather than rows built beside it**;
+  the epoch rule as the owner specified it; the boundary's three legs with their scratches, counts and the
+  **234 × "8 workers"** record; **what the boundary found** (the load-sensitive revoke test re-run at the same
+  parallelism, the unregistered module, the literal count, the literal epoch); P2's decoded counts and the 52/0 audit;
+  and **the two proposals as the only open technical questions** - whether the sealed evidence should be able to
+  describe its own edges and grid count, and whether a full case's aggregation should be reachable per case.
+- **And it repeats the limitations verbatim rather than paraphrasing them:** no live stack/simulator/CUDA/hardware
+  (with the honest note that the logs' silence is weak evidence of absence), the counts as a sum, 0/0/0 training
+  counters, a test-suite boundary is not a release, Task 10 / 8L / P2-live / bundle / live / QUALIFIED not entered,
+  and the owner's 26 + 13 preserved in place.
+- **Costs paid:** the request is **$size bytes, `$digest`**; a row was appended to the index and an entry added to the
+  freeze, which was then rewritten and read back - **seven entries, all reproducing**.
+- **State:** **everything is frozen, indexed, audited, and now launchable: the next action is the owner's.** No
+  controlled source change since the freeze; the goal stays active.
