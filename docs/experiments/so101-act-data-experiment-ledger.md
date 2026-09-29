@@ -23708,3 +23708,24 @@ not an inference of mine.**
 - **And the state paragraphs are the ones this batch has held throughout:** no live stack, no MuJoCo run, no CUDA, no actuators, no hardware,
   nothing pushed, no evidence deleted, the ~300 GB of deletion candidates untouched, and 0/0/0 with `collection_*` NOT_PROVISIONED.
 - **State:** HEAD is this checkpoint's commit; staged 0; the revision work stands as CP-1432 verified it.
+
+## CP-1434 — Closing summary of the second revision batch (for whoever picks this up)
+
+- **What was asked:** answer the second Astra/High verdict, all five P1 items, focused RED/GREEN per item, **one** integration boundary after all five,
+  then a packet/ledger correction and another independent review.
+- **What was delivered:** **items 1-4 complete, committed and green** - `97244cfc`, `9e106c04`, `f48130c8`, `ebc17755` - each with its own RED and
+  GREEN, each verified by its own suites, and two **production defects** found and fixed in the process (the unvalidatable INVALID batch; the
+  aggregator's mismatched comparison layers). **The ledger's earlier claim that all five were complete was retracted in CP-1307 and the packet now
+  says so in its opening paragraph.** **Item 5 is not complete.**
+- **Why item 5 is not complete, in one sentence:** its production half is built and proven - the real port, the inherited production seal, the
+  production segment, the nine-phase scenario, the full readback validation and the child's bound recorder - but the case-level half the reviewer
+  asked for (the seven indexed assertions, the four negatives) needs `CaseEvidenceDriver.observe(...)` wired per readback, and then the single
+  integration boundary, and **the round budget ended first.**
+- **What is deliberately unfinished and where it lives:** P1-5's fixture changes are **uncommitted by design** in
+  `src/so101_teleop/test/teleop/test_task8_child_driven_case.py` (plus the touched test files), so a fresh round starts from `git status` and reads
+  **CP-1403 to CP-1431** for the diagnosis, **CP-1420** for the resumption plan and **CP-1431** for the exact call site.
+- **What was never done, by instruction:** no live stack, no MuJoCo run, no CUDA, no actuators, no hardware, no push, no evidence deletion, no cleanup
+  of the ~300 GB of classified deletion candidates, no Task 10, no `runtime-task8l-gen4`, no self-approval of any review.
+- **The one question that unblocks everything:** whether to submit items 1-4 now (with P1-5 documented as above) and re-approve P1-5 as its own
+  round, or to continue the tail first. **The ledger's recommendation is to submit now** - CP-1397, CP-1414, CP-1419 and CP-1428 all say the same
+  thing, and the arithmetic has only become clearer since.
