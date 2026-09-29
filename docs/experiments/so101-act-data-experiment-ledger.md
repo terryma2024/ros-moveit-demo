@@ -32524,3 +32524,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   specification, and the next edit makes the harness's driver ACT-aware in that shape.** P1-1 through P1-4 CLOSED. The
   demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
   unchanged, so they are not re-stated.**
+
+## CP-1861 — The driver's surface, and the two shapes the broker enforces on its answers
+
+- **`RosBrokerDriver` (`ros_broker.py:119`) carries ~25 methods, and the ones the ACT chain actually calls are a short
+  list:**
+  ```
+  current_epoch()                                   the trusted source port's scope check reads it (CP-1825)
+  prepare_goal(kind, goal)   -> (gid, goal_uuid)    command_broker.py:184-190
+  discard_prepared(gid)                             the failure path beside it
+  send_prepared(gid, kind, goal, goal_uuid) -> gid  command_broker.py:210
+  submit(kind, goal)         -> gid                 command_broker.py:156
+  cancel(gid), stop_all(reason), refresh_idle(), ready(kind), validate(kind, goal)
+  ```
+  **and the broker enforces two shapes on what comes back:**
+  ```python
+  gid, goal_uuid = self.driver.prepare_goal(kind, goal)
+  gid = identifier(gid)                                    # a non-empty string
+  if not isinstance(goal_uuid, str) or str(uuid.UUID(goal_uuid)) != goal_uuid:
+      raise ValueError('GOAL_UUID_INVALID')                # a CANONICAL uuid string, not merely uuid-like
+  ```
+  **so an ACT-aware double must answer with a real goal id and a canonical `uuid4()`-style string** - **and `identifier`
+  is where CP-1858's function was refused, which is how this whole path was found.**
+- **Which makes the next edit a specification rather than a guess:** `FakeBroker` gains those methods with those shapes -
+  **identifiers from the fixtures' own identities, and a canonical uuid generated per goal** - leaving every other name to
+  the existing blanket answer, **since the ACT chain only calls the short list above.**
+- **State:** **P1-5 in progress; the driver's surface and the two shape rules are read, and the ACT-aware double is
+  specified by them.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
+  re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
