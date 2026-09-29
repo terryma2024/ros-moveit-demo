@@ -17343,3 +17343,18 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State: 1 failed / 19 passed** in this module (the other publishing-half RED now passes its earlier assertions), the
   remaining failure being the gate test, blocked only on this fixture data. Nothing weakened, nothing deleted, no push, no
   stack, no hardware.
+
+## CP-1111 — Probing worked: 24 of 28 fields satisfied; the last four need their bodies read
+
+- **The one-pass probe did its job:** calling `compute_field` for all 28 with the fixture's evidence turned twelve unknowns
+  into a four-item list, and the fixture now satisfies **24 of 28**. Discovered along the way: `acceleration_limit_rad_s2`
+  samples carry `time_s` and `position_rad` (not `dt_s`/`dq_rad`), `horizontal_fov_rad` needs camera `frames` with `fx`
+  and `cx`, and `coarse_step_rad` events carry `coarse_accumulator_before` and `coarse_accumulator_after`.
+- **Where probing stopped being the right tool, said plainly:** `search_timeout_s` and `acceleration_limit_rad_s2` report
+  **INVALID** rather than raising a missing-key error, so each further probe costs a round without naming what is wrong -
+  exactly the drift my own CP-1109 note warned against. The next round should **read** `_f_search_timeout_s`,
+  `_f_acceleration_limit_rad_s2`, `_f_coarse_step_rad` and `_f_horizontal_fov_rad` and fill all four in one pass, the way
+  CP-1108/CP-1109 handled the other groups.
+- **State: 1 failed / 19 passed** in the aggregator module, the failure being the gate test, blocked only on these four
+  fields' evidence. The v2 checks dispatch, the support-sample citation and the sealed v2 fixture all stand; nothing was
+  weakened, `REQUIRED_CHECKS` is untouched, nothing was deleted, and no push, stack or hardware was involved.
