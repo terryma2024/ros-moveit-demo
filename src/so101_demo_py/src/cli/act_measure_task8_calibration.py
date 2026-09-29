@@ -39,13 +39,15 @@ def main(argv=None) -> int:
     parser.add_argument("--contract", type=Path, required=True)
     parser.add_argument("--identities", type=Path, required=True)
     parser.add_argument("--batch-root", type=Path, required=True)
-    parser.add_argument("--driver", required=True, help="module:callable that fills the batch")
+    parser.add_argument("--driver", default=None,
+                        help="test-only module:callable override; production runs use the built-in driver")
     parser.add_argument("--ledger", type=Path, required=True)
     args = parser.parse_args(argv)
 
     from so101_demo.act.task8_measurement_contract import (
         close_measurement_batch, load_measurement_contract,
     )
+    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
 
     identities = json.loads(args.identities.read_text())
     contract = load_measurement_contract(args.contract, expected_hashes=identities)
@@ -54,7 +56,23 @@ def main(argv=None) -> int:
     _append_ledger(args.ledger, "PLANNED", identity, "admission verified")
     _append_ledger(args.ledger, "RUNNING", identity, "measurement starting")
     try:
-        _load_driver(args.driver)(contract, args.batch_root)
+        if args.driver:
+            _load_driver(args.driver)(contract, args.batch_root)      # test-only injection
+        else:
+            from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+            context = CalibrationMeasurementContext(
+                generation=identities["source_commit"],
+                contract_sha256=identities["contract_sha256"],
+                measurement_plan_sha256=identities["measurement_plan_sha256"],
+                safe_interval_rad=identities["safe_interval_rad"],
+                candidate_sha256=identities["candidate_sha256"], policy_sha256=identities["policy_sha256"],
+                driver_source_sha256=identities["source_provenance_sha256"],
+                controller_generation=identities["controller_generation"],
+                broker_generation=identities["broker_generation"],
+                evidence_root=str(args.batch_root.parent),
+                resource_binding=identities["resource_binding"])
+            from so101_demo.act.task8_measurement_driver import production_driver
+            production_driver().run(context, args.batch_root)
     except BaseException as error:
         _append_ledger(args.ledger, "INVALID", identity, f"driver failed: {type(error).__name__}")
         raise
