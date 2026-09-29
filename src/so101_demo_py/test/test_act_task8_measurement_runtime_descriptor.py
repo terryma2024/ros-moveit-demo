@@ -235,7 +235,8 @@ def test_real_production_providers_are_built_from_the_admitted_context(tmp_path)
     # the descriptor alone is NOT enough any more: the controller's config has one source, the admitted calibration
     with pytest.raises(ProductionCompositionError, match="PRODUCTION_CALIBRATION_REPORT_REQUIRED"):
         build_real_providers(context=_Context(), descriptor=descriptor, io_client=_Client(),
-                             yolo_detector_factory=_FakeYolo)
+                             yolo_detector_factory=_FakeYolo,
+                             session_id="session-1", attempt_id="attempt-1", search_start_rad=0.0)
 
     from test_act_head_search_binding import _inputs
 
@@ -248,8 +249,10 @@ def test_real_production_providers_are_built_from_the_admitted_context(tmp_path)
         attempt_id = "attempt-1"
         search_start_rad = 0.0
 
+    # the per-run values are ARGUMENTS (CP-1635): the driver supplies them, so this test stands in for the driver
     providers = build_real_providers(context=_Admitted(), descriptor=runtime, io_client=_Client(),
-                                     yolo_detector_factory=_FakeYolo)
+                                     yolo_detector_factory=_FakeYolo,
+                                     session_id="session-1", attempt_id="attempt-1", search_start_rad=0.0)
 
     assert providers["detector"].kwargs["requested_device"] == "cuda", "the descriptor's device reaches the detector"
     assert providers["detector"].kwargs["allow_cpu_fallback"] is False, "and its CUDA policy"
@@ -324,7 +327,7 @@ def _invalid_sealing_driver(tmp_path):
         "                                       'final_check')), start=1):\n"
         "        (kept.parent / f'phase-{phase}.json').write_bytes(\n"
         "            json.dumps({'phase': phase, 'source_stamp': index}).encode())\n"
-        "    identity = {name: 'a' * 64 for name in IDENTITIES_V2}\n"
+        "    identity = dict(contract['identities'])\n"
         "    identity['source_commit'] = 'a' * 40\n"
         "    identity['measurement_contract_sha256'] = contract['contract_sha256']\n"
         "    files = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()\n"
