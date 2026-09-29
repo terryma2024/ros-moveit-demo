@@ -17951,3 +17951,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   (authoritative descriptor document; one authorised live stack for the recording half) remain open and independent of this
   piece.
+
+## CP-1140 — The fake port's contract, read from the child
+
+- **What the child requires of the object at the I/O seam, in order (lines 504-536):**
+  1. a callable `bind_startup_receipt(receipt)` - **required**, and any exception it raises becomes
+     `ACT_TASK8_PORT_INVALID`, so the fake must accept the real receipt the startup consumer returns;
+  2. an optionally callable `bind_live_evidence(window)` - the child reads it with `getattr`, and when both it and
+     `_act_artifacts` are present it constructs `CaseEvidenceDriver(case_id=payload["scenario_id"],
+     staging_root=artifacts.evidence_root, session_id=request.session_id, attempt_id=request.attempt_id)` and attaches
+     `evidence.window`. For Boundary V this is the piece that matters: **the case's evidence window is created by the real
+     child code**, which is what makes "SEARCH rows from the real path" a meaningful assertion rather than a stub;
+  3. everything `PickPlaceRunner` then does through the port, driven by a `task` dict the child builds with
+     `lifecycle: FULL_RESTART`, the scenario/session/attempt identities and the deadline.
+- **So the fixture is fully specified except for one read:** the runner's own use of the port (the methods `PickPlaceRunner`
+  calls and the shape it expects back), which is the last thing to read before writing the fake. Everything else - the
+  hashes, the deadline, the single-startup rule, the receipt consumer, the evidence driver - is already known from
+  CP-1139 and this checkpoint.
+- **Pacing note, recorded so the next rounds stay honest:** my remaining context in this session is nearly exhausted, and
+  each of these checkpoints is deliberately one read or one fix. The next round reads the runner's port usage; the round
+  after writes the fixture and the seven assertions. If the session ends before that, the ledger carries the complete spec
+  and no work is lost.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  remain open and independent.
