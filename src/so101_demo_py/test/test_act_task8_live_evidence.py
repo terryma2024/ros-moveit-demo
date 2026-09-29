@@ -878,3 +878,37 @@ def test_the_reset_epoch_binds_once_and_reaches_the_identity(recorder):
     other.invalidate("OWNER_RETIRE")
     with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_BOUND_TOO_LATE"):
         other.bind_reset_epoch(9)
+
+
+def test_the_port_gives_its_attached_window_the_verified_reset_epoch():
+    """The epoch only exists once the reset receipt is verified, so the port passes it on and refuses a window that cannot take it."""
+
+    from so101_demo.adapters.act.pick_place_search_port import (PickPlaceSearchPhasePort,
+                                                               PickPlaceSearchPortError)
+
+    class Window:
+        def __init__(self):
+            self.bound = []
+
+        def seal(self):
+            return {"status": "SEALED"}
+
+        def bind_reset_epoch(self, epoch):
+            self.bound.append(epoch)
+
+    port = PickPlaceSearchPhasePort(_Boundary())
+    window = Window()
+    port.bind_live_evidence(window)
+    port._bind_case_epoch({"reset_epoch": 7})
+    assert window.bound == [7]
+    port._bind_case_epoch({"reset_epoch": 7})       # the window's own one-shot rule is what refuses a repeat
+
+    class NoBind:
+        def seal(self):
+            return {"status": "SEALED"}
+
+    other = PickPlaceSearchPhasePort(_Boundary())
+    other.bind_live_evidence(NoBind())
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_WINDOW_INVALID"):
+        other._bind_case_epoch({"reset_epoch": 7})
+    PickPlaceSearchPhasePort(_Boundary())._bind_case_epoch({"reset_epoch": 7})   # no window, nothing to bind
