@@ -30836,3 +30836,42 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5's capability gap is test-side and its target is named; the aggregator join (CP-1808's second half)
   follows.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
   remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1810 — Both inputs a full case needs have production sources, and one of them is the manifest itself
+
+- **The production child port's builder says what a full case requires** (`pick_place_child_port.py`):
+  ```python
+  def build_pick_place_child_search_port(*, node, model, contact_pairs, manifest, report, sources,
+                                         route_motion: dict | None = None, …)
+  …
+  def expert_route_factory(request):                     # line 147
+      candidate = SelectedApproachCandidate(scene_path=scene, plugin_path=…, source_profile_path=…,
+                                            candidate_profile_path=…, session_id=…, attempt_id=…, …)
+      return VisibleApproachExpertRoute(candidate, policy_fingerprint=manifest["contact_policy_fingerprint"])
+  port = PickPlaceSearchPhasePort(boundary, expert_route_factory=expert_route_factory)
+  if route_motion is not None:                           # and APPROACH's screen needs the ADMITTED route motion
+      checker = factory(check_timeout_s=route_motion["submit_lead_s"], model_path=route_motion["model_path"], …,
+                        path_step_s=route_motion["path_step_s"], path_clearance_m=route_motion["path_clearance_m"],
+                        velocity_limit_rad_s=…, acceleration_limit_rad_s2=…)
+  ```
+  with its own comment: *"A SEARCH-only caller therefore gets no screen and `execute_approach` refuses by name; a full
+  case must pass the admitted document, **which is the only source for those values**."*
+- **And the admitted document has a production derivation that takes the manifest the case is already frozen in:**
+  ```
+  adapters/act/calibration_motion.py:61      def route_motion_configuration(manifest):
+  adapters/act/calibration_motion.py:166     … route_motion_configuration(manifest) if self.route_mode else …
+  cli/act_command_broker.py:91/95            from … import route_motion_configuration
+  runtime/launch_composition.py:2401/2405    diagnostic=route_motion_configuration(route)
+  ```
+  **So neither input has to be invented by the harness:** the expert route comes from the same construction the
+  production child port performs - `SelectedApproachCandidate` over the three admitted config files plus
+  `VisibleApproachExpertRoute` - **and the route motion comes from `route_motion_configuration(manifest)`, a production
+  function whose argument is the manifest `run_pick_place_case` already read in its preflight.**
+- **Which closes the question CP-1808 raised:** P1-5's capability is not blocked on an admitted document that does not
+  exist, and not on a trajectory nobody can produce. **It is blocked on the harness passing two values it can obtain
+  from production functions it already has in hand** - and, per CP-1809, on doing so through the production child port's
+  own wiring rather than a SEARCH-only subclass.
+- **State:** **P1-5's capability gap is fully specified with production sources for both inputs; the wiring is next, then
+  the aggregator join, then the xfail and the duplicate chain are removed in the same change.** P1-1 through P1-4
+  CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
+  statuses are unchanged, so they are not re-stated.**
