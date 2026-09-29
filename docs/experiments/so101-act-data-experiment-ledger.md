@@ -21283,3 +21283,16 @@ not an inference of mine.**
   before reading more.**
 - **State:** the fixture is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing deleted, nothing
   pushed.
+
+## CP-1290 — Item 5's fixture is walking the production checks in order, one named condition at a time
+
+- **The sequence this round, each a real production refusal and each fixed by one line or one reuse:**
+  | refusal | cause | fix |
+  | --- | --- | --- |
+  | `ACT_ARTIFACT_BINDING_INVALID` (from the **child**, not the binder - the traceback showed the comparison in the child's constructor) | the child compares its bound hashes with the binding's, and I had left it to derive them from unset environment names | pass `act_hashes` built from `binding.hashes`, and use the same dict for the payload's hash fields |
+  | `HEAD_SEARCH_CONFIG_INVALID` | my `runtime_config.json` was a four-key stub, while the production validator checks the **whole** head-search document | wrote the real shape - detector with weights/model/version fields, camera and motion with theirs |
+  | `HEAD_SEARCH_WEIGHTS_INVALID` | the validator **hashes the weights file**, which did not exist | the fixture writes real weights bytes and their digest |
+  | `CALIBRATION_SOURCE_PROVENANCE_MISSING` | my calibration report was `{"status": "TASK8_READY"}` | reuse the admission suite's `_calibration(...)` builder |
+  | `ACT_ARTIFACT_INVALID` | the binder could not read the report as a JSON dict - so what `_calibration` returned or wrote is not what the binding expects | **next step: print what that helper produces** |
+- **The important reading is not the list but its shape:** every refusal is a **production check** with its own name, in the order the production code performs them, and each fix has been smaller than the one before. **The fixture is being accepted by real code one gate at a time, which is exactly what Astra asked for and what a fake-heavy test could never show.**
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed (item 4 at 30 passed, item 3 at 89, item 2 at 88, item 1 at 3); no stack, no hardware, nothing deleted, nothing pushed.
