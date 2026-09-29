@@ -16919,3 +16919,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Evidence:** scratch `<R>/scratch/r688.<n>` with `TMPDIR` verified through the exact test interpreter; log
   `beh-r688.log`; RED `beh-r687-red.log`; the reverted wrong rule `beh-r687-green.log`; restored baseline
   `beh-r687-restored.log`.
+
+## CP-1090 — The six-fixture migration, itemised so it can be done in one pass
+
+- **The failures are six, in two files, and they share one cause: a batch that declares three anchors while evidencing
+  one (or none).** Itemised, with what each needs:
+  | test | file | what it must do |
+  | --- | --- | --- |
+  | `test_closed_batch_accepts_an_indexed_batch_and_rejects_closure_violations` | contract | index one file per declared anchor (or declare the single anchor it evidences) |
+  | `test_a_batch_whose_self_digest_does_not_match_its_document_is_refused` | contract | same: the sealed batch it builds must evidence all three anchors before it tampers with the digest |
+  | `test_a_batch_records_its_cleanup_and_a_contaminated_one_is_refused` | contract | same: `build()` must evidence all three anchors, for both the clean and the contaminated document |
+  | `test_derived_verdicts_come_from_raw_evidence_across_every_root` | aggregator | `_sealed_batch` must evidence the anchors it declares |
+  | `test_a_batch_offering_labels_instead_of_raw_evidence_is_refused` | aggregator | same helper |
+  | `test_derived_checks_fold_members_across_roots_and_propagate_unmeasured` | aggregator | same helper |
+- **The two shapes of fix, and which is honest where:** the contract tests build batches by hand and can simply write one
+  small per-anchor file each and index it, or declare a single anchor if that is what they mean; `_sealed_batch` is shared
+  by several aggregator tests and should write one per-anchor evidence file per declared anchor, indexed, so the fixture
+  becomes schema-true by construction - the same "make the fixture true rather than weaken the rule" choice CP-1082 made
+  for the identity migration.
+- **State, unchanged from CP-1089 and repeated so it cannot be missed: HEAD is red for these six tests (6 failed / 25
+  passed)**, the rule causing it is the one the review asks for, and the migration above is the honest way to close it.
+  No rule was weakened to make a fixture pass, and none will be.
