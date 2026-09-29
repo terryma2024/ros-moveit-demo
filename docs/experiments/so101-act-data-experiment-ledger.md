@@ -14805,3 +14805,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `config/act/task8-live-anchors.yaml` (default `0.1 rad`, `left 0.0`, `forward 0.0`) and record the approved bootstrap
   envelope `[-2*pi, 2*pi]` on the search candidate - with `lock_valid_neck_rad` still to be measured by the approved
   full-path sweep and every other provisional value left fail-closed.
+
+## CP-1005 — Owner decisions 2 and 3 implemented: anchors bound, bootstrap envelope recorded
+
+- **The three anchor starts are now bound to the approved source rather than transcribed:** the candidate document reads
+  `config/act/task8-live-anchors.yaml` and carries `default = 0.1 rad`, `left = 0.0`, `forward = 0.0` **with that
+  file's sha256 recorded**, so a later change to the anchors cannot silently diverge from the candidate. This matches
+  the file exactly (it also carries the three `cup_start_m` values and `measurement_experiment: EXP-115`).
+- **`[-2*pi, 2*pi]` is recorded as what the owner approved it to be - a `BOOTSTRAP_ENVELOPE`, not a measurement.** The
+  document now states its meaning in full: it is the outer bound on the calibration search **command** only, and the
+  actual `lock_valid_neck_rad` must be measured by the approved full-path MuJoCo sweep (a 0.002 rad closed grid over
+  that envelope checking all three anchors' protected contact/clearance, bisected to 1e-5 rad at state changes,
+  selecting the unique safe connected component that contains 0 and all three starts while shrinking its endpoints
+  1e-5 rad toward safety) and **must never be back-fitted from observations or taken from a test fixture**.
+- **Fail-closed preserved:** all **17** search configuration values remain `null` with `requires_approved_value: true`,
+  and the document's status now reads `ANCHORS_AND_ENVELOPE_APPROVED_SEARCH_VALUES_PENDING` with a note saying exactly
+  what is approved and what is not - so no reader can mistake the envelope for a measured interval or the anchors for
+  the reviewed search values.
+- **Verified: 61 passed, rc=0** (`beh-r600.log`) across the measurement-contract, live-qualification and Task 8 runner
+  suites.
+- **Remaining under the approved decisions:** decision 4 - hunk-level semantic reconciliation of the five in-flight
+  chain files and their tests, staging only my hunks - after which the Task 8 production caller and Task 9's single
+  full gate can proceed. Task 10 stays blocked until the search values are reviewed.
