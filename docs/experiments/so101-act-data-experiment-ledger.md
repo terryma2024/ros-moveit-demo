@@ -21769,3 +21769,21 @@ not an inference of mine.**
   fault is one collaborator's argument type.
 - **State:** P1-1's tests are uncommitted while the pair is red; ledger current; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1315 — The controller is fed by the calibration report, not by the descriptor, and the composition needs the binding
+
+- **Read from `HeadSearchController.__init__`:** it takes a **flat settings mapping** and validates it key by key -
+  `identifier(config[key])`, `finite(config[key], nonnegative=key != "search_start_rad")`,
+  `integer(config["max_fine_corrections"], minimum=1)` - so the descriptor's `{schema_version, detector, camera, motion}` block is
+  **not** its configuration, which is exactly why the previous attempt raised `ContractError: FIELDS_INVALID`.
+- **And the repository already shows where those settings come from:** the child derives them with
+  **`bound_act_source_settings(report, timestep_s=...)`** from the **calibration report** (`ros_child.py:233`), i.e. from the admitted
+  artifacts rather than from the runtime descriptor. **So the composition needs the same admitted-artifact access the child has** - the
+  binding loaded from the environment by `ActArtifactBinding.verify_environment` - to configure the controller for real.
+- **That is a clarification of P1-1, not a new requirement:** "consume the admitted context and frozen descriptor" is satisfied by the
+  **detector** (which is descriptor-driven) while the **controller** is settings-driven from the admitted report; the composition must
+  read both, and both arrive through the same admission. The next write therefore adds the artifact binding to
+  `build_real_providers` (loaded the same way the child loads it, never monkeypatched) and derives the controller's settings from the
+  report exactly as the child does.
+- **State:** P1-1's tests uncommitted while the pair is red; ledger current; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
