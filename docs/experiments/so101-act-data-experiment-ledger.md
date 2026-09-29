@@ -28982,3 +28982,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Two fixture facts the campaign taught, and both are its own checks rather than mine:** the context must carry `worker_count == 1` with `worker.context` pointing **back** at the same object, and it must carry the frozen manifest's **`_HASH_FIELDS`** (`source_sha256`, `runtime_config_sha256`, `collection_config_sha256`, `contact_policy_fingerprint`) - **literals of my own were refused with `TASK8_MANIFEST_BINDING_INVALID`, which is the campaign binding the context to the manifest as it should.**
 - **What is left of P1-5, and each is an extension of this same passing test:** feed the same case root to `validate_case_journals`; feed the same sealed artifact to the **real** `aggregate_task8_calibration`; read the **seven facts** from the sealed index; and derive the **four negatives** by corrupting *this* baseline - including the cadence negative, which CP-1711 recorded as building a new row rather than mutating the successful chain.
 - **State:** **P1-5's core requirement is met and passing on the production path; the aggregator join, the seven facts and the four negatives remain**; the teleop-side RED stays committed as its own failing boundary; the task list carries P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1731 — The second half's shape is read: the driver builds the batch, the aggregator demands its descriptor
+
+- **What the aggregator actually consumes, read from its first lines:**
+  ```
+  aggregate_task8_calibration(batch_roots, contract, output_root)
+      indexes = [validate_closed_batch(Path(root)) for root in batch_roots]
+      ... if "runtime-descriptor.json" not in index.files:
+              raise ValueError("CALIBRATION_DESCRIPTOR_MISSING")
+  ```
+  **Sealed BATCHES, not a case's artifact** - each root validated closed, each carrying a sealed, indexed
+  `runtime-descriptor.json` (*"the descriptor the measurement ran under is read from the sealed, indexed evidence - never
+  from a context object and never by globbing"*). **So the join P1-5 still needs is one layer above the case.**
+- **And that layer is production, and it is the code P1-1 worked on:** `task8_measurement_driver.py`
+  ```
+  :43   def __init__(self, *, stack, clock, detector, controller, phase_camera, identity)
+  :56   def run(self, context, output_root) -> Path
+  :64       (root / "runtime-descriptor.json").write_bytes(payload)      <- exactly the file the aggregator demands
+  :229  def _seal(self, root, context, anchors, *, status, error_code, ...)
+  :232      from so101_demo.act.task8_measurement_schema import BATCH_KIND, write_closed_json
+  :246      document = {"schema_version": 1, "kind": BATCH_KIND, "status": status, ...}
+  :256  def production_driver(**overrides)
+  ```
+  **The production composition that builds a closed batch is the measurement driver, and its `production_driver(**overrides)` is the seam P1-1 already exercised.**
+- **Which makes P1-5's remaining work a chain of production calls rather than new code:**
+  | step | production element |
+  | --- | --- |
+  | the case | the joined chain's `_sealed_case` (already passing, CP-1730) |
+  | a sealed batch carrying the descriptor | the measurement **driver** (`run`) |
+  | the qualification sample, report and receipt | the **aggregator** (`aggregate_task8_calibration`) |
+  | the seven facts | the sealed index the aggregator writes, read back |
+  | the four negatives | the same chain with the baseline **corrupted**, not a row built beside it |
+- **State:** **P1-5's first half passes on the production path and its second half's shape is now read rather than assumed**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
