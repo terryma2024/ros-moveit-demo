@@ -24662,3 +24662,24 @@ picture in both directions.**
   to be finished.**
 - **State:** P1-1 and P1-2 green and committed; P1-3's port half green and committed; the child fixture is the open item. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1482 — P1-3's three production wirings landed; the fixture migration is the remaining work
+
+- **Landed this round (uncommitted while the fixture is mid-migration, per this batch's rule):**
+  1. **`PickPlaceSearchBoundary.canonical_evidence(captured, *, support_distance_max_m, raw_records)`** - the boundary now **keeps the readback adapter its own
+     `search` built** and derives the canonical fields through `capture_evidence_fields`, so **the fields stay where their owner is**; an absent adapter or a
+     refused derivation raises `PickPlaceSearchBoundaryError` by name rather than approximating anything;
+  2. **the case's support threshold is part of the admitted case definition**: `_PickPlacePayload.support_distance_max_m: float = Field(gt=0)` - a schema-level
+     requirement, because the evidence that says "the cup is supported" is derived from it and **an invented default would be a measurement nobody admitted**;
+  3. **the child hands both to the attachment**: `attach(evidence.window, support_distance_max_m=request.payload["support_distance_max_m"],
+     raw_records_root=artifacts.evidence_root)` - the root is the same evidence root the recorder's staging lives under, which is what makes the raw records
+     indexable.
+- **And the fixture is now the only thing in the way** (`experiments/gate8-p13/child-wired.log`): `test/teleop/test_task8_child_driven_case.py` reports
+  **5 failed, 2 passed, 1 xfailed** because (a) its payload construction predates the new required field, (b) its boundary has no `canonical_evidence`, and
+  (c) its `record_phases` stand-in must be **deleted** - the port feeds the window now - together with the CP-1471 strict-xfail marker.
+- **The order for the next round is fixed, and it is all fixture work:** build the payload with the admitted threshold, give the fixture's boundary a
+  `canonical_evidence` that returns the fields the port expects, **delete `record_phases` and the xfail marker**, and rewrite the case-execution/indexed-evidence
+  tests to assert **the samples the port recorded** rather than the fixture's own. **The payload change is deliberately not softened to keep old fixtures green** -
+  a required admitted value is the point.
+- **State:** P1-1 and P1-2 green and committed; P1-3's production side landed but uncommitted; the fixture is the open item. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
