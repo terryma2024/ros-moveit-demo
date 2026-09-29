@@ -19228,3 +19228,31 @@ not an inference of mine.**
   (`_run_pick_place`) rather than the runner, given that the child's own artifacts are *loaded* rather than injected (CP-1189)
   and the owner/child boundary already has green tests. That decision does not block anything else on the list.
 - **State:** goal active (revision 51, cap 1000); HEAD `285e45c7`; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1196 — Handoff checkpoint: items 1-4 complete, next is the revised Task 9 gate, and my context for this stretch is spent
+
+- **The owner's list, as of this checkpoint:**
+  | item | state |
+  | --- | --- |
+  | 1 - descriptor ownership = option (b), the immutable runtime config | ✅ recorded with the approved design's own citations (CP-1158) and implemented (CP-1162) |
+  | 2 - the same parsed descriptor through context/driver/readback | ✅ complete: context carries it (CP-1167), the driver seals it (CP-1169), the aggregator reads it back from the strict closed index and refuses disagreements (CP-1171) |
+  | 3 - focused negative set | ✅ complete: opaque digest refused (CP-1173), descriptor disagreement refused and unindexed descriptor unbindable (CP-1172), changed controlled input refused (CP-1174) |
+  | 4 - Boundary V's mechanical part | ✅ all seven artefacts green and sourced (CP-1185, CP-1193, CP-1195), test committed only once green |
+  | 5 - no live stack; then the revised Task 9 package/xdist gate and the Astra re-review | ⏳ **next** - no live stack has been started, as instructed |
+  | 6 - low-frequency targeted tests only, preserve everything | ✅ honoured throughout: no full suite, nothing deleted, nothing pushed, no hardware |
+- **The next executable step, named exactly, so it does not depend on this session:**
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python tools/so101_pytest_gate.py`
+  with `--evidence-root /data/work/so101-evidence/act-data/20260924-fbc25063-resume --run-id <fresh-id> --workers 8
+  --python <that same interpreter> --process-id-chars 4 --allow-dirty`, from the worktree root, with a fresh NVMe scratch and
+  `TMPDIR` verified through the exact interpreter - the invocation CP-1059 recorded as official, and **not** the doubled
+  `--evidence-root $R/gate-r650` form that made CP-1055's "irreducible path" conclusion invalid.
+- **One decision still with the owner, and it blocks nothing:** whether item 4 additionally wants a fixture driving the
+  **child** (`_run_pick_place`) rather than the runner, given that the child *loads* its artifacts rather than having them
+  injected (CP-1189) and the owner/child boundary already has green tests.
+- **State of the tree:** HEAD `c24a332f`; staged 0; 30 modified + 13 untracked, the owner's work untouched apart from my
+  hunk-staged additive changes; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED; the 17
+  provisional values still `null` with `requires_approved_value: true`; no push, no stack, no hardware, nothing deleted.
+- **Why I am stopping here rather than launching the gate:** a full package/xdist gate is exactly the kind of run this task's
+  rules say to take deliberately - it is long, its output matters, and my remaining context in this stretch is not enough to
+  read its result and act on it honestly. **Starting a long run I cannot review would be worse than naming it precisely for the
+  next stretch**, which is what this checkpoint does.
