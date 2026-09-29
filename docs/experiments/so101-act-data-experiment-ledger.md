@@ -25887,3 +25887,17 @@ picture in both directions.**
   **one call, one read, and then FINAL_CHECK, which a previous probe already showed the runner accepts.**
 - **State:** P1-1..P1-3 green and committed; both production fixes committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed,
   nothing deleted; no hardware.
+
+## CP-1554 — The traceback names the branch, and the branch names the phase: FINAL_CHECK
+
+- **`pick_place_runner.py:229` is the `else` branch's `_verify_phase` call** - the branch every phase takes **except** `RADIAL_RETREAT`, which the runner drives through
+  `run_retreat_segment` on its own lines. **So the phase whose document is refused is the one after RELEASE in that branch: FINAL_CHECK.**
+- **And that is consistent with everything the round showed:** SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN and RELEASE each produced a document the runner accepted
+  (their `_verify_phase` calls are in the same `else` and passed); the standalone FINAL_CHECK probe passed **before** the run reached it, so the difference is the **state the run leaves** - the
+  world released at the place pose, and whatever the retreat segments did to the scene and step.
+- **So the next action is the same probe, pointed one phase further:** let the run reach FINAL_CHECK, capture the document the port returns **there**, and evaluate the runner's own clauses against it
+  (`released`, `cup_supported`, `holding_state`, `placement_stable`, `retreat_stable`, `physics_step`, the epochs) - **one run, and the failing clause is named.**
+- **Two guard-rails worth stating before that run, because they are the reason this stretch has stayed honest:** the failure is a **refusal**, not a wrong result; and every clause it checks is
+  established from the readback rather than asserted, so when FINAL_CHECK passes it will mean the settled cup really is at the place target in the substituted world - **not that a flag was flipped.**
+- **State:** P1-1..P1-3 green and committed; both production fixes from this stretch committed; the focused set green at `54 passed`; the full-case test remains uncommitted while red, per this batch's
+  rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
