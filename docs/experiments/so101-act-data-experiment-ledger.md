@@ -31683,3 +31683,43 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress; the production broker is buildable from the module and six wiring steps remain, each with
   its source already identified.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and
   the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1835 — The report's builder and the settings' bounds: the last input is sourced
+
+- **`bound_act_source_settings(report, *, timestep_s)` is strict and reads measured calibration only:**
+  ```python
+  gate = "formal_collection" if report.get("status") == "QUALIFIED" else "pick_place_validation"
+  require_gate(report, gate)
+  measured = report["measurements"]
+  age   = float(measured["max_age_s"]["value"]);      skew  = float(measured["max_skew_s"]["value"])
+  speed = float(measured["stop_velocity_rad_s"]["value"]);  timestep = float(timestep_s)
+  if (… or not 0 < age <= 10 or not 0 < skew <= age or not 0 <= speed < 1
+         or not 0 < timestep <= 0.01 or timestep * 1.5 >= age):
+      raise ValueError("CALIBRATION_REQUIRED")
+  return {"stop_velocity_rad_s": speed, "max_wall_age_s": age, "max_source_skew_s": skew,
+          "max_sim_gap_s": timestep * 1.5, "joint_tolerance_rad": 0.002,
+          "cup_pose_tolerance_m": 1e-8, "cup_orientation_tolerance": 1e-6}
+  ```
+  **so the settings are derived, not chosen** - and the model's own `timestep` (the ACT scene's **0.002**, CP-1779)
+  satisfies `timestep * 1.5 < age` for any admitted age above 3 ms.
+- **And the report's builder is already in the suite's hands** - the child-driven harness builds it for its binding:
+  ```python
+  # test_task8_child_driven_case.py:44-46, :115-119
+  from test_act_campaign_admission import _calibration, _canonical, _write_policy
+  report_path, _report_sha256 = _calibration(evidence, status="TASK8_READY", head_search=head_search)
+  ```
+  **so the full-case module can build the same report the same way rather than inventing its measurements** - which is
+  what the strict validation is there to force.
+- **Which closes the sourcing of every input of the faithful branch.** The six wiring steps of CP-1834 now have no
+  unknowns left:
+  | step | source |
+  | --- | --- |
+  | 1. the model | `mujoco.MjModel.from_xml_path(scene)` over the ACT scene |
+  | 2. `settings` | `_calibration(evidence, status="TASK8_READY", head_search=…)` → `bound_act_source_settings(report, timestep_s=model.opt.timestep)` |
+  | 3. the driver | the object the harness calls `FakeBroker()`, which CP-1833 established **is** the driver |
+  | 4. the broker | `_production_broker(session_id=…, driver=…, settings=…, model=…)` (CP-1834) |
+  | 5. the child | `_prepare_child_case(..., broker=broker)` (CP-1831) |
+  | 6. the port's reset | `reset.broker = broker` in the mount (CP-1823), so `begin`'s `isinstance` passes through production |
+- **State:** **P1-5 in progress; the faithful branch's inputs are fully sourced and the six steps are mechanical.** P1-1
+  through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**
