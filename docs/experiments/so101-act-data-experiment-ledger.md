@@ -17525,3 +17525,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   binding's own tests, so the difference must be something the **sample path** introduces (a descriptor carried through
   JSON and compared against the runtime's, or a field the binding validates only when it comes from a sample), and the
   same print-each-condition diagnostic will name it in one pass.
+
+## CP-1120 — The pairing now reaches the search-config layer, and the code names its own home
+
+- **Located rather than guessed:** `SEARCH_CONFIG_INVALID` is raised at
+  **`src/so101_demo_py/src/act/search.py:33`**, not by the binding validator (whose own codes are
+  `HEAD_SEARCH_CONFIG_INVALID`, `HEAD_SEARCH_WEIGHTS_INVALID`, `HEAD_SEARCH_SAMPLE_MISMATCH`, …). So the integration RED
+  is no longer stopping inside the binding at all - it passes the binding's descriptor, weights, provenance and sample
+  conditions and **enters the search-configuration layer**, which validates a configuration document of its own.
+- **What that means for item 5, precisely:** the chain the review asks for is runtime → report → sample → **search
+  config**, and the last link is a fourth document the binding path reaches but my fixture has never supplied. The
+  question for the next round is narrow and readable: what does `search.py:33` compare, and is the search configuration
+  expected to arrive through the runtime descriptor, the bound contract, or the batch - the same question CP-1117 asked
+  about the descriptor, one layer further along.
+- **State: 1 failed / 52 passed** across the three modules, the failure being this RED at the search-config stage. Every
+  stage before it passes: the gate, the readback, the binding's descriptor schema, its weights digest, its provenance and
+  every sample-level condition. Nothing weakened, nothing deleted, no push, no stack, no hardware.
+- **Honest note on pace:** my remaining context in this session is nearly exhausted, so the next rounds should be surgical
+  - one read of `search.py` around line 33, one fixture addition for whichever document it wants, then the negative
+  direction (a mismatched pairing refused) which is the last thing item 5 asks for.
