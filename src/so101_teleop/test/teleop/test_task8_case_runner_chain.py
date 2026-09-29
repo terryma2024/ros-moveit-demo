@@ -177,6 +177,21 @@ def test_the_runner_sequences_a_case_through_every_phase_in_order(tmp_path):
             covered.append("RADIAL_RETREAT")
     order = [phase for phase in Task8Runner.PHASES if phase in covered]
     assert order == [phase for phase in Task8Runner.PHASES], f"every phase, in order, saw {covered}"
+
+    # the sealed artifact reads back from disk, its digest matches, and it covers the case's own phases
+    import json as _json
+
+    artifact = result["live_evidence_artifact"]
+    assert set(artifact) == {"path", "sha256", "schema_version"}, artifact
+    sealed_bytes = Path(artifact["path"]).read_bytes()
+    assert hashlib.sha256(sealed_bytes).hexdigest() == artifact["sha256"], "the digest matches the sealed bytes"
+    sealed = _json.loads(sealed_bytes)
+    assert sealed["sample_count"] > 0, "the sealed evidence holds the case's rows"
+    phases = {entry["phase"] for entry in sealed["samples"]}
+    assert "SEARCH" in phases and "FINAL_CHECK" in phases, f"rows for the case's first and last phase, saw {sorted(phases)}"
+    # a full case is an episode and confirms its stop; the release was opened and closed in order
+    assert result["formal_episode_eligible"] is True and result["stopped_confirmed"] is True, result
+    assert "safe_stop" in port.calls, "the case confirmed its stop"
     assert isinstance(result, dict), "a completed case reports its result"
 
 
