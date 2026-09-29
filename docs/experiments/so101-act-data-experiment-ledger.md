@@ -25421,3 +25421,20 @@ picture in both directions.**
 - **Where P1-4 stands:** **eight of nine phases proven**; FINAL_CHECK next; then the nine-phase case reaching the end, the seal, the full-case journal, and the seven indexed assertions with their four
   negatives. **P2 and the final integration boundary follow that**, and the review request comes after all five findings - as the owner's instruction says.
 - **State:** P1-1..P1-3 green and committed; eight phases committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1525 — All nine phases are implemented and proven by the runner's own verifier
+
+- **`7 passed`**: a cup settled where it was put is accepted; a cup moved by 0.05 m is refused with the measured offsets named.
+- **FINAL_CHECK's stability is a comparison, not a flag:** the settled cup's pose against the place target, where the place's **CUP** pose is the place TCP pose with the grasp transform undone - **the
+  same computation the policy suite's own place-validation test exercises** (`test_pose_inverse_recovers_parent_pose_for_place_validation`) - compared with the policy's own `position_tolerance_m`
+  and `scene_orientation_tolerance_rad`, and the orientation distance taken as `2*acos|dot|`. **A refusal names the offsets**, so the log says how far the cup moved rather than only that it did.
+- **And `retreat_stable` claims only what the readback can support** (released, supported, where it was put): the arm's own clearance is not in the snapshot, **so the limitation is documented rather than
+  papered over** with a TCP comparison the evidence does not carry.
+- **P1-4's phase scoreboard is now 9/9: SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, RADIAL_RETREAT, FINAL_CHECK** - each implemented in the boundary, each establishing its own
+  facts from the readback, and each judged by `PickPlaceRunner._verify_phase` in a focused test.
+- **What remains in P1-4, precisely, and it is now integration rather than phases:**
+  1. **the port's handoff does not yet carry `motion_template`/`motion_duration_s`**, so through the port the motion phases (MICRO_LIFT onward) **refuse by name** - fail-closed, but not wired. **Where the
+     template comes from in production is the same design question CP-1519 raised** (the case payload versus the pick policy), and it now blocks the end-to-end case rather than one phase;
+  2. the **nine-phase case reaching FINAL_CHECK** through the port, with the seal and the trusted aggregator;
+  3. the **seven indexed assertions** read from records and the **four negatives** that break the chain.
+- **State:** P1-1..P1-3 green and committed; all nine phases committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
