@@ -14475,3 +14475,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three
   `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted,
   no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-991 — Hard evidence for the remaining dependency: `observe_capture` has no production caller yet
+
+- **Searched for the production caller of `observe_capture` and there is none:** the only call in the whole tree is in
+  `test/test_act_task8_live_evidence.py`, and `support_distance_max_m` appears in production only in
+  `pick_place_readback.py` (the adapter's own signature and its `derive_frame_aggregates` call) - never passed by a
+  driver. So the layer that would supply real `raw_records` to the recorder **does not exist yet**: it is precisely the
+  wiring the approved plan's Task 7 steps 3-4 describe (provision the recorder through the real `PickPlaceCaseOwner`
+  and child startup receipt, bind it in `ros_child._run_pick_place()` before `PickPlaceRunner`, open at SEARCH, seal
+  after FINAL_CHECK), which this session recorded as carried in the user's in-flight, dirty chain (CP-919, CP-949,
+  CP-951).
+- **That converts the open item from "an unknown record shape" into "a dependency that does not exist yet", which is
+  a different and more honest statement.** The two facts the production extractors need (`pair_key` and the wrist
+  record's occlusion fields) are choices the missing driver will make; until it exists there is nothing to read them
+  from, and inventing them would have produced extractors bound to a shape no production code ever emits - the exact
+  silent-mismatch class this session has caught repeatedly.
+- **The dependency chain, stated once and for all:**
+  1. the driver/child wiring (plan Task 7 steps 3-4) must exist and supply `raw_records` per capture;
+  2. then the two record-shape facts are readable from it;
+  3. then `record_live_extractors` (shape recorded in CP-989) binds the five predicates;
+  4. then the 33-field path can be driven end to end and Task 8 closes;
+  5. and only then does Task 9's single full gate have something complete to gate.
+- **State:** Tasks 1-7's module work complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's code side
+  complete and green at 50; the remaining Task 7-8 wiring sits in the user's dirty chain and is the prerequisite for
+  the rest; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate
+  search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push,
+  no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
