@@ -23295,3 +23295,18 @@ not an inference of mine.**
   item. **Fourteen fields, three types and one order fix - all of it named by production, none of it guessed.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1406 — Anchor missed again, so the ledger states the pattern; and the contact rule is now exact
+
+- **The miss:** I wrote the contact fix against `row["contact"]["simulation_time_s"] = ...`, which no longer exists - CP-1395's rewrite replaced that
+  block with a single dictionary construction, so the anchor was text from two rounds ago. **That is CP-1404 and CP-1330 again, and it is now a
+  pattern rather than an accident: every edit I write from memory of the file misses; every edit I write by line number or by searching for a
+  string I can see lands.** The grep above prints the real `row["contact"]` sites for the next attempt, and **the rule from here is to read or grep
+  the target line in the same call that edits it.**
+- **And the substantive state is the best it has been in this item:** **the port's `physical readback scope` check passes** - the real
+  `SimulationEvidence`, the real `ObjectState`, the sixteenth field, the stamp ordering, the contact ports on the reset's sources, the epoch
+  alignment, the live receipts, the seven keys and both exact key sets are all satisfied by production's own standards. **The single remaining
+  refusal is `contact hazard`, and its rule is read: the frame must carry `CONTACT_KEYS` with genuinely empty evidence arrays and
+  `evidence_loss`/`truncated` as real booleans - a frame of zeros pretending to be measurements is what reports a hazard.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
