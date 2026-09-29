@@ -15909,3 +15909,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   child side is now down to reading one class definition to find how a reset epoch is witnessed; Task 9's single failing
   module awaits the (b1)/(b2) choice (CP-1035); Task 10 blocked until the 17 search values are reviewed. No runtime, no
   formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1045 — The epoch accessor found, and an ordering caveat that would have produced wrong samples
+
+- **`pick_place_reset.py:235` answers CP-1044 exactly:** the reset boundary's `begin(request)` returns
+  `{"reset_epoch": receipt.new_epoch, "release_epoch": 0, ...}`, and the same epoch is also held on the sources object
+  (`self.sources.reset_epoch`, compared against `receipt.new_epoch` at `:203`). Since the child port factory is already
+  given `sources=driver._act_sources` (CP-1037), **`driver._act_sources.reset_epoch` is the accessor** - no new plumbing.
+- **But the ordering matters, and reading it surfaced a way this could have been written wrong yet looked right:**
+  `reset_epoch` is produced by `begin()` **during SEARCH**, while the child would bind the driver at `ros_child.py:505`,
+  *before* `PickPlaceRunner` runs. Binding there means reading the epoch **before the reset that the case performs** -
+  a stale value from a previous reset, or zero - and every sample the driver then records would carry the wrong identity
+  while looking perfectly well-formed. That is the silent-mismatch class this ledger has caught repeatedly, and it is
+  exactly the kind of defect that a green test would not surface.
+- **The design question this leaves, stated precisely:** either the driver is constructed with the epoch it will observe
+  (i.e. bound after the reset, or given a mutable/late-bound epoch), or the identity's `reset_epoch` is filled from the
+  first witnessed evidence rather than at construction. The approved plan's wording - bind the recorder before the runner
+  runs - is about **where the recorder is attached**, not about freezing the epoch at that instant, so the two can be
+  reconciled; but the reconciliation is a design decision, not a typing exercise, and it is the last thing standing
+  between the recorded plan and the three-line write.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller's port side is committed and tested, its
+  child side now has every identifier and accessor identified plus one ordering decision to make deliberately; Task 9's
+  single failing module awaits the (b1)/(b2) choice (CP-1035); Task 10 blocked until the 17 search values are reviewed.
+  No runtime, no formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*`
+  NOT_PROVISIONED.
