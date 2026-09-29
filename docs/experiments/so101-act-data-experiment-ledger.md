@@ -27725,3 +27725,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   reviewer. **The packet is ready for it.**
 - **State:** **items 1-8 all have their outcomes recorded**; the boundary is green; the re-review is the single outstanding step and it is the owner's to arrange; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or
   stack; no hardware; no live stack; P2 live not started.
+
+## CP-1660 — The re-review is requested, and this session says plainly that it cannot run it
+
+- **The owner approved arranging the independent re-review. The request is written and registered:**
+  ```
+  handoffs/20260930-task7-onward/task8-astra-rereview4-request.md     4977 bytes, sha256 begins 2ba8e6fdaa1f4087
+  ```
+  It states the **reviewer required** (GPT-6 Astra / High per AGENTS.md, read-only), **the four inputs** (the packet, this index, the ledger, the worktree at `d4567850`, and the boundary evidence), **the verdict wanted**
+  (`APPROVED` / `CHANGES_REQUIRED`, each finding naming its artefact), **four things to test rather than trust** (the three decisions' code, the boundary claim itself, the eight items, and whether the identity comparison can be satisfied without being meaningful), and
+  **the four places this batch believes it is weakest** - the fixture-imposed cadence, the constant-epoch fixture, the fourth copy of the field mix-up deliberately left in `batch_factory`, and the teleop case count that is *explained* rather than *reproduced*.
+- **And the limitation is recorded rather than worked around:** this session **cannot run that review**. Its subagents execute the same model it does, and AGENTS.md forbids silently substituting another model or switching to a lower-capability one. **So the packet is ready, the request is explicit, and the review itself belongs to the owner** - which is also why no
+  self-approval appears anywhere in this batch.
+- **State:** items 1-8 have their outcomes recorded; the boundary is green; the request is registered and audited; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
