@@ -30572,3 +30572,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1's first half is two values from complete, and each landed with a test that asserts the model's answer
   rather than the seam's.** P1-2 and P1-3 CLOSED; P1-1 second half GREEN; the demo RED's clean re-measurement, P1-4,
   P1-5, P1-6 and the final gate remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1801 — The six bottom values split in two, and only one half can be built from the model
+
+- **Built from the model (four, three of them now written with evidence):**
+  | value | source | state |
+  | --- | --- | --- |
+  | `occluder_geometry` | the admitted occluders' own geoms | **done**, CP-1797 |
+  | `frame_source` | the model's own headless renders | **done**, CP-1799 |
+  | `target` | the cup body's own pose and size | **done**, CP-1800 |
+  | `yolo_detector_factory` | the descriptor's admitted CUDA block | already real |
+- **And the other two are RUN facts, not model facts:**
+  | value | why the model cannot supply it |
+  | --- | --- |
+  | `io_client` | it is the transport to the executing child - `pick_place_search_port`'s own wiring owns it, and there is nothing about the scene XML that implies which client is connected |
+  | `phase_path(phase)` | it is the trajectory the run is executing. The model can report where the arm IS; only the run knows where it is going. The seam's substitute - `joints[6] = {"SEARCH": 0.0, "APPROACH": 0.1}.get(phase, 0.2)` - is a two-value neck ramp invented to fill the argument |
+- **Which settles the shape of `build_real_providers`' default path, and it is not "build everything":** the composition
+  builds the three model-derived values itself from the model the run names, takes the detector from the descriptor as it
+  already does, **and requires the run to supply the client and the phase path - failing closed by name when it has
+  not**, rather than reaching for a seam. That is exactly the distinction the verdict draws when it says external I/O may
+  be substituted but the chain may not: **the model-derived values are the composition's own work, and the run-derived
+  two are the boundary.**
+- **State:** **P1-1's first half has three of its four buildable values written with tests that assert the model's answer,
+  and the two that must come from the run are identified as a boundary rather than a gap.** The wiring edit is next: the
+  composition builds what it can and refuses by name for what it cannot. P1-2 and P1-3 CLOSED; P1-1 second half GREEN;
+  the demo RED's clean re-measurement, P1-4, P1-5, P1-6 and the final gate remain. **Task-list statuses are unchanged, so
+  they are not re-stated.**
