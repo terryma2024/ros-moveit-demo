@@ -23429,3 +23429,29 @@ not an inference of mine.**
   tight, and I am saying so before it becomes a surprise rather than after.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1415 — The sample builder, spelled out so the next round writes rather than re-derives it
+
+- **The suite's own recipe (CP-1359's read), which the fixture mirrors with this case's identity:**
+  ```python
+  build_live_evidence_sample(
+      identity={"case_id": case_id, "session_id": session_id, "attempt_id": attempt_id,
+                "reset_epoch": reset_epoch, "release_epoch": release_epoch},      # THIS case's, from the request
+      phase=phase, physics_step=step, sim_time_s=sim_time,
+      source_stamps_s={name: sim_time for name in READBACK_SOURCES},
+      source_received_monotonic_s={name: sim_time for name in READBACK_SOURCES},
+      raw_records=_raw_records(root, sim_time),          # real files with real digests, under the child's root
+      holding_state="HOLDING",
+      frame={"wrist_frame_valid": True, "wrist_target_visible": True},
+      contact={"observation_valid": True, "bilateral_contact": True, "no_fingertip_contact": False,
+               "cup_supported": True, "released": False, "placement_stable": False},
+      measurements={"cup_support_distance_m": 0.01, "end_effector_position_m": [0.0, 0.0, 0.1],
+                    "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
+  ```
+  with `_raw_records` writing one real JSON file per source under the recorder's own evidence root (its `window._recorder.evidence_root`,
+  which the child supplies), **so the digests the journal later checks are of files that exist.**
+- **Where it goes:** each readback the boundary hands to the segment is recorded through `recorder.append(sample)` using **this case's**
+  identity - the same "shared builder, local identity" move, and the reason the recorder's `IDENTITY_MISMATCH` guard will be satisfied rather than
+  tripped.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
