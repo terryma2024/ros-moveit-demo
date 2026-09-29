@@ -19713,3 +19713,31 @@ not an inference of mine.**
   - and it is the last thing between this task and its first green package gate.
 - **State:** HEAD `0a38cd31` plus this checkpoint; staged 0; all four colcon logs, the per-package log, the xdist artefacts,
   every scratch and IPC base retained as deletion candidates; no push, no MuJoCo stack, no hardware.
+
+## CP-1217 — Fifth attempt: `PYTEST_ADDOPTS -o pythonpath` did not reach pytest; the package gate needs a config change
+
+- **Attempt 5, and it settles the mechanism:** with `PYTEST_ADDOPTS="-o pythonpath=<worktree root>"` and the venv-interpreter
+  colcon invocation, the package still fails with the same `ModuleNotFoundError: No module named 'tools'`
+  (`log/latest_test/so101_demo_py/stdout_stderr.log`). So colcon does not pass `PYTEST_ADDOPTS` through to its pytest run either
+  - the runner owns that environment as much as it owns `PYTHONPATH` (CP-1214) - and **no environment variable available to me
+  can put the repository root on that test run's `sys.path`.**
+- **Five attempts, in one table, because the sequence is the finding:**
+  | # | variation | outcome |
+  | --- | --- | --- |
+  | 1 | plain `colcon test` | `No module named 'mujoco'` |
+  | 2 | `PYTHONPATH` → venv site-packages | overwritten by colcon's recorded env, same error |
+  | 3 | venv first on `PATH` | no effect - colcon uses `sys.executable` |
+  | **4** | **venv as the interpreter** (`python -c "from colcon_core.command import main; main()"`) | **mujoco resolved**; real error exposed: `No module named 'tools'` |
+  | 5 | + `PYTEST_ADDOPTS -o pythonpath=<root>` | not passed through; same `tools` error |
+  **So the package gate is now blocked by exactly one thing - the package's test run cannot import `tools/` from the repository
+  root - and that is a property of how the package invokes pytest, not of any test's logic and not of my changes.**
+- **The two real routes, both in the owner's files, so neither is mine to take silently:**
+  1. a **repository-level** `pythonpath` setting for that package's pytest configuration (`pytest.ini`/`setup.cfg`/`pyproject.toml`
+     with `pythonpath = .`), which is what pytest's own ini option is for; or
+  2. changing those tests' imports so they do not depend on the repository root being on `sys.path`.
+  Route 1 is small, standard, and is what the early finding in this task ("`tools/` lives at repo root") was pointing at all along.
+- **What remains true and unaffected:** the ordinary scope passes **5638 tests with 0 failures under pytest-xdist** (CP-1211), the
+  authorised fixture fix is RED→GREEN (CP-1210), and the package gate's blocker is a collection path issue in the `colcon` runner
+  rather than a defect in the code under test. **I have stopped rather than trying a sixth variation of the same workaround.**
+- **State:** HEAD `6788a81c` plus this checkpoint; staged 0; all five colcon logs, the per-package logs, both xdist artefacts and
+  every scratch and IPC base retained as deletion candidates; no push, no MuJoCo stack, no hardware.
