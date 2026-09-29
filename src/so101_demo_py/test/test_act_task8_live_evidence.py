@@ -591,7 +591,7 @@ def test_case_driver_reaches_the_window_and_seals_into_the_case_directory(tmp_pa
                     "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]}
     # a grid sample before CLOSE is refused, exactly as the window requires
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN"):
-        driver.observe(fields, phase="MICRO_LIFT", frame=frame, contact=contact,
+        driver.observe(fields, phase="IDLE", frame=frame, contact=contact,
                        measurements=measurements)
     # CLOSE is the first GRID point (that is what opens the window); an edge event is an addition
     for index, phase in enumerate(LiveEvidenceWindow.REQUIRED_PHASES):
