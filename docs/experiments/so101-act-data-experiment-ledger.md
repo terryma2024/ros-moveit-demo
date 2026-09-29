@@ -20304,3 +20304,33 @@ not an inference of mine.**
   mistake this batch has already paid for four times.**
 - **State:** HEAD `5fe2ea8e` plus this checkpoint; no source changed yet for item 3; no stack, no hardware, nothing deleted,
   nothing pushed.
+
+## CP-1243 — The ten-member identity, the schema's writer, and the design that follows
+
+- **Read exactly, both blocks:**
+  ```python
+  MeasurementIdentity.MEMBERS = ("source_commit", "config_sha256", "source_provenance_sha256",
+      "runtime_config_sha256", "anchors_sha256", "contact_policy_fingerprint", "act_profile_sha256",
+      "measurement_contract_sha256", "phase_camera_matrix_sha256", "driver_source_sha256")
+  # require(): the key set must be EXACTLY these ten (sorted compare), source_commit matches a pattern,
+  # and the other nine must each be a 64-hex sha256 - else MEASUREMENT_IDENTITY_INVALID
+  def write_closed_json(path, document) -> Path:
+      # canonical JSON, atomic via mkstemp + os.link, and an existing target is NEVER overwritten
+      # (raises CLOSED_JSON_EXISTS)
+  ```
+- **The design this forces, and it is smaller than the defect list suggested:** the driver's `_seal` cannot invent an identity,
+  because four of the ten members are contract-derived and the driver has no contract. **But the CLI already holds a full
+  `MeasurementIdentity`** - it imports `require_v2_identity` and passes an identity document to its own seal call - **so the identity
+  travels with the measurement instead of being recomputed**: CLI → composition → driver, and `_seal` uses it verbatim. That keeps
+  one authority for the identity, which is the same principle as item 2's descriptor and item 3's single seal owner.
+- **The rewrite of `_seal`, specified completely so the next round writes it rather than discovering it:**
+  1. document keys drawn from `_BATCH_REQUIRED` (+ optional `cleanup`/`contamination`) - **the stray `index` key goes**;
+  2. `identity` = the passed-in document, validated by `MeasurementIdentity.require`;
+  3. `files` = the anchor payloads **plus `runtime-descriptor.json`**, so the descriptor is in the hash index;
+  4. `anchors` in the schema's shape;
+  5. `batch_sha256` present - computed from the canonical document **before** the field is added, or taken from the schema's own
+     helper if one exists (a five-line read of `validate_closed_batch`'s body will confirm which, and I will not guess);
+  6. written with `write_closed_json`, so the hand-rolled `O_EXCL`/`fsync`/`os.link` block goes;
+  7. the CLI's `close_measurement_batch` call is deleted (CP-1241), its `INVALID` ledger append and cleanup kept.
+- **State:** HEAD `7b6c20d7` plus this checkpoint; no source changed yet for item 3; no stack, no hardware, nothing deleted,
+  nothing pushed.
