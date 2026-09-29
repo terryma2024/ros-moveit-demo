@@ -12275,3 +12275,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   downstream receipts can cite.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-902 — Task 5 committed (production MuJoCo measurement driver)
+
+- **Committed `feat(act): add production mujoco task8 measurement driver`** (`6f7de039`) with three files -
+  `act/task8_measurement_driver.py`, `cli/act_measure_task8_calibration.py`, its test module - guard
+  `staged=3 check_rc=0`. `setup.py` needs no change because the `act_measure_task8_calibration` entry already
+  exists; the commit message records that deviation.
+- **Verified:** **24 passed, rc=0** (`beh-task5-green3.log`): anchors execute default -> left -> forward each with its
+  own FULL_RESTART session/reset/attempt (three distinct identities); a failure at `left` stops the later anchors,
+  closes only the completed one, runs cleanup exactly once with generation `g1`, and seals `INVALID` with an error
+  code and **no report**; the writer itself refuses a verdict or label leak
+  (`VERDICT_LEAK_IN_RAW_RECORD`), and a recursive scan of every written JSON confirms none of `PASS`, `FAIL`,
+  `qualified`, `visible`, `target_in_view`, `contact_ok` or `*_ok` appears; every index row carries all ten
+  provenance fields with a real payload file and a 64-hex digest; the CLI defaults to the production driver with
+  `--driver` as a test-only override.
+- **A defect of mine caught and fixed before the commit:** the CLI first called
+  `Task8MujocoMeasurementDriver.run(context, batch_root)` - the unbound method with the context as `self`, which
+  would have raised `TypeError` in any real run. It now goes through a `production_driver(**overrides)` factory
+  that **fails closed** with `PRODUCTION_DRIVER_WIRING_PENDING` naming the first missing dependency. Noted because
+  the source-level CLI assertion could not have caught it, so the real stack wiring in Task 9 needs a behavioural
+  check rather than a presence check.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
