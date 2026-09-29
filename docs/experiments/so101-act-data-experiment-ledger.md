@@ -34110,3 +34110,41 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1 in progress: frame contract GREEN, production client GREEN and wired, and now the formal path's own
   loader defect is fixed; remaining are the real phase-path provider and an actual run of
   `build_production_measurement_driver(providers=None)` with the seam unset.** **Task-list statuses unchanged.**
+
+## CP-1915 — What the formal run has and has not, after exhausting the approved sources
+
+- **The admitted documents that exist and are readable from the installed tree (verified after CP-1914):**
+  ```
+  install/so101_demo_py/share/so101_demo_py/config/act/
+      task8-calibration-measurement-contract-v2.json     <- the entry's --contract
+      task8-phase-camera-matrix-v1.json                  <- 9 phases, status FROZEN
+      task8-calibration-search-candidate-v1.json         <- candidate_sha256
+      task8-calibration-search-policy-v1.json            <- policy_sha256
+      task8-live-anchors.yaml                            <- the three anchors, with cup_start_m and neck_start_rad
+      … schemas for the contract, live evidence, provenance and preparation receipts
+  ```
+  **and `task8-live-anchors.yaml` is the real per-anchor input a phase path must be built for:**
+  ```
+  default: cup_start_m [0.02, -0.28, 0.165]  neck_start_rad 0.1
+  left:    cup_start_m [-0.08, -0.28, 0.165] neck_start_rad 0.0
+  forward: cup_start_m [0.02, -0.36, 0.165]  neck_start_rad 0.0
+  ```
+  while the **joint rows** of the nine-phase path are the admitted task-6 manifest's `target_positions`
+  (`_SEGMENT_ROWS = 9`, each row a joint configuration) - **so the phase-path provider is constructible from documents
+  that exist, and that is the next edit.**
+- **What the run still requires, and the evidence that it is not on this machine:**
+  | required | state |
+  | --- | --- |
+  | runtime descriptor document | **not present**; produced by the approved preparation entries (`act_prepare_task8_live.py`, `act_prepare_task8_live_artifacts.py`) |
+  | source-provenance / identity document | **not present**; produced by `act_build_task8_source_provenance.py` |
+  | the detector weights the descriptor must name (`weights_path`, `weights_sha256`, `model_id`, `image_size_px` - read at `task8_production_composition.py:564-570`) | **no file anywhere** in the worktree (depth ≤5) or under `/data/work/so101-evidence` (depth ≤6); **and no admitted config even names a weights path** (`grep weights_path` over `config/act` and `src/so101_demo_py/config`: no hits) |
+- **So the honest reading of the run requirement at this point:** the composition itself now builds with real construction
+  (client wired, loader fixed, 12 tests green), and the entry needs two documents and one external artifact that are
+  **produced elsewhere**: the descriptor/identity come from approved CLIs whose own inputs (preparation receipt,
+  provenance) are absent, and the descriptor's weights are absent from the machine. **That is a precise external
+  dependency rather than a code gap - and it is recorded as such, not worked around: nothing was mocked, no threshold was
+  relaxed, and no identity was fabricated to make a run appear.**
+- **State:** **P1-1 in progress. Done: frame contract RED→GREEN (CP-1910), production client + tests (CP-1912), client
+  wired into the formal path (CP-1913), the formal path's own loader defect fixed RED→GREEN (CP-1914). Remaining: the
+  real phase-path provider from the admitted rows/anchors, then the run itself once the descriptor/identity/weights exist.**
+  **Task-list statuses unchanged: P1-1 in_progress, P1-6 completed, five pending.**
