@@ -390,8 +390,11 @@ def test_an_approach_phase_produces_evidence_the_runner_accepts():
     port, _events = fixture()
     seen = []
 
-    def sequence_phase(phase, request):
+    handoff_seen = {}
+
+    def sequence_phase(phase, request, **handoff):
         seen.append(phase)
+        handoff_seen.update(handoff)
         return _sequence_facts(20 + len(seen))
 
     port.boundary.sequence_phase = sequence_phase
@@ -401,6 +404,8 @@ def test_an_approach_phase_produces_evidence_the_runner_accepts():
     approach = port.run_phase("APPROACH", request())
 
     assert seen == ["APPROACH"], "the boundary executed exactly the phase asked for"
+    # the boundary receives the SEARCH evidence this port validated and froze, which is what APPROACH prepares from
+    assert set(handoff_seen) == {"observed", "selected_source"}, sorted(handoff_seen)
     assert approach["phase"] == "APPROACH"
     assert approach["session_id"] == SESSION and approach["attempt_id"] == ATTEMPT
     assert approach["reset_epoch"] == 2 and approach["release_epoch"] == 0
