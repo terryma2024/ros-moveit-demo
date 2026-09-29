@@ -17462,3 +17462,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   mismatched pairing - must still be refused.
 - **State: 1 failed / 20 passed** in the aggregator module, that failure being this RED; the gate and readback tests stay
   green. Nothing weakened, nothing deleted, no push, no stack, no hardware.
+
+## CP-1117 — Nothing in the tree writes the runtime descriptor the binding requires, and that is the review's integration gap
+
+- **Searched rather than assumed:** across `src/act/`, the only references to a `"head_search"` key are inside
+  `head_search_binding.py` itself (its validation and its sample comparison) plus one comment in the formulas module.
+  **No writer produces it** - not the aggregator, not the measurement driver, not the schema or the contract binder.
+- **So the chain has a real missing link, and it is exactly the class the review named:** `validate_head_search_binding`
+  requires `sample["head_search"] == descriptor`, where `descriptor` is the **runtime** head-search descriptor
+  (detector weights and digests, camera frames, motion tolerances) handed in by the caller. Something must **record that
+  descriptor into the calibration sample at the moment the measurement is taken**, so that a later runtime can prove it is
+  the same configuration the report was measured under. Today the sample has no such block, so a report can be
+  `TASK8_READY` and gate-passing yet **unbindable** - my CP-1116 RED proves it by construction.
+- **Where it belongs, stated as a boundary rather than a patch:** the descriptor is a property of the **measurement
+  run**, not of the aggregation, so the natural writer is the **measurement driver** sealing the batch (its
+  `measurements.json`, beside `observed_lock_frames`) - and that change needs the same treatment as every other piece of
+  Boundary IV: a RED asserting a sealed batch carries the descriptor it was measured under, the writer wired to the actual
+  runtime configuration, and the aggregator folding it into the published sample unchanged. Doing it in the aggregator
+  alone would let a report claim a descriptor nobody measured under, which is the failure this binding exists to prevent.
+- **This is also the concrete content of the review's Task 5-7 finding** (the user's Correction 3: the Task 1 contract was
+  never integrated into the Task 5/6/7 production path). The descriptor is the missing hand-off between the runtime that
+  measures and the report that is bound to it - so I am recording it here as a boundary-level item rather than quietly
+  inventing a source for it.
+- **State: 1 failed / 20 passed** in the aggregator module, that failure being the CP-1116 RED, which now has a precise
+  explanation and a named owner in the design rather than a guessed fix. Nothing weakened, nothing deleted, no push, no
+  stack, no hardware.
