@@ -25314,3 +25314,30 @@ picture in both directions.**
   seal, the full-case journal and the seven indexed assertions with their four negatives. **And the aggregate/CLOSE tension above is a design question the six remaining phases will hit again** -
   it may need the owner's or the reviewer's judgement rather than another fixture.
 - **State:** P1-1..P1-3 green and committed; APPROACH and CLOSE committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1519 — The remaining phases do NOT need new schema: the admitted motion policy already exists
+
+- **A search for "where does a lift height come from" found the answer, and it changes the shape of the remaining work:**
+  `core/dynamic_pick_policy.py` already validates and admits a **complete pick-and-place motion policy**, field by field, and **every remaining phase has its value in it**:
+
+  | admitted policy field | the phase it serves |
+  | --- | --- |
+  | `pregrasp_world_z_clearance_m` | APPROACH (already end to end) |
+  | `cup_to_tcp_grasp` (a `Pose7`) | the grasp reference CLOSE aims at |
+  | `micro_lift_world_z_clearance_m` | **MICRO_LIFT** |
+  | `lift_world_z_clearance_m` | **TRANSPORT** |
+  | `place_tcp_world` (`Pose7`) + `place_approach_world_z_clearance_m` | **ALIGN** |
+  | `retreat_world_z_clearance_m` | **RADIAL_RETREAT** |
+  | `workspace_bounds_m`, `position_tolerance_m`, `scene_position_tolerance_m`, `scene_orientation_tolerance_rad` | the checks every phase's evidence must satisfy |
+  | `maximum_source_age_s`, `maximum_future_skew_s` | the staleness and clock rules the validators apply |
+
+- **What this means, stated plainly:** I had been treating the seven phases as a chain of *unknowns* to be discovered one at a time, and two of the last three rounds went into admitting values
+  (`gripper_closed_rad`, `close_duration_s`) that **a validated policy document may already govern**. **The remaining phases are WIRING against an admitted policy - not schema design** - and
+  that is a materially shorter path than the pace note in CP-1513 assumed.
+- **And it raises a question I should not answer alone:** the two values I added to the case payload were added because **my search had not yet found this policy**. They are wired, tested and
+  fail-closed, so nothing is unsafe - **but the reviewer should decide whether the case payload or the pick policy is the right home**, and I will not silently move them now and invalidate the
+  tests that cover them. **This goes in the review packet as a design question, with both candidates named.**
+- **Next:** take MICRO_LIFT's target from `micro_lift_world_z_clearance_m` (through the policy document the case already admits), dispatch the arm goal that lifts the cup clear of the table,
+  establish the facts with the phase-aware validator - which **for MICRO_LIFT and everything after it agrees with the aggregates** (HOLDING means held and unsupported, and by then the cup is
+  off the table), leaving CLOSE's tension (CP-1518) as the one open semantic question.
+- **State:** P1-1..P1-3 green and committed; SEARCH, APPROACH and CLOSE committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
