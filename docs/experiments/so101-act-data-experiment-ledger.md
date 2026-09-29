@@ -12785,3 +12785,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7 module complete and green (37 module / 76 focused set); Tasks 1-6 committed and green; Tasks 8-10
   untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-923 — Task 7 reconnaissance complete: all four in-flight files read, one seam still to locate
+
+- **Read the last of the user's in-flight files.** `pick_place_child_port.py`'s 42 added lines are about the
+  **approach-route activation**: `build_pick_place_child_search_port` gains `policy_proposal_path` and
+  `policy_receipt_path`, validated only together and only as absolute, `..`-free, existing files
+  (`PICK_PLACE_APPROACH_ROUTE_ACTIVATION_INVALID`); it then builds a `route_factory(request)` that selects the case
+  by `scenario_id` (`PICK_PLACE_APPROACH_ROUTE_CASE_INVALID` if not exactly one matches) and dispatches to
+  `build_full_manifest` for the `default` anchor or `build_alt_manifest` for the others, using the visible-approach
+  and contact-transition profiles plus `config/act/task8-live-anchors.yaml`, and passes `route_factory` into the port
+  it constructs.
+- **Reconnaissance summary, so the remaining work needs no more discovery:**
+  | File read | What the user's in-flight work does | What my Task 7 edit adds there |
+  | --- | --- | --- |
+  | `pick_place_case_execution.py` (9) | fences a failed `owner.start` via `retire_failed_start` | artifact readback before the journal row |
+  | `pick_place_case_owner.py` (28) | adds `retire_failed_start`, extracts `_retire`, child-before-stack order | window close/invalid-seal before the child retirement step |
+  | `pick_place_runner.py` (46) | `physics_step` monotonicity through `_verify_phase`, new `set_down` port method and its key set | window open at SEARCH, grid samples per verified phase, seal after FINAL_CHECK |
+  | `pick_place_child_port.py` (42) | approach-route activation (proposal/receipt, route factory), `route_factory` passed to the port | recorder reachable from the child startup receipt, and the `set_down`/artifact side of the execution port |
+- **The one seam still to locate:** this module builds the **search** port, while `set_down` belongs to the runner's
+  `PickPlaceExecutionPort`. Before editing, I need to see which module constructs that execution port (the runner's
+  `port=` argument path) so the `set_down` evidence and the artifact return land in the right file rather than being
+  added to the search port by mistake.
+- **Discipline:** across four rounds of reading, **no production file outside my own Task 7 module has been
+  modified** - the user's six in-flight files remain byte-for-byte untouched, verified each round.
+- **State:** Task 7 module complete and green (37 module / 76 focused set); Tasks 1-6 committed and green; Tasks 8-10
+  untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
