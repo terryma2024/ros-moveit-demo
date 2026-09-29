@@ -11531,3 +11531,37 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-870 — Negative evidence: no generation has ever sealed a measurement batch
+
+- **Searched the whole evidence root for the artefacts Task 8L Step 2 would leave, and found none:**
+  no `batch.json`, no `*calibration*batch*` directory, no `calibration-report*.json`, and no raw measurement
+  files (`execution.json` or anchors files) anywhere at depth 5. So the calibration measurement has **never been
+  performed** in any generation of this task on this machine, and no `TASK8_READY` report has ever been produced
+  from one - which is consistent with the plan's rule that earlier `QUALIFIED` artefacts are invalid and must not
+  be reused.
+- **Consequence for the driver question:** the measurement procedure does not merely lack a production module in
+  `src/` (CP-868); it has no precedent anywhere in this project's evidence. Implementing it therefore means
+  authoring the twenty-one physical procedures the frozen contract names - deadband in pixels, coarse step in
+  radians, horizontal FOV, lock-valid neck angle, evidence ages and skews, fine-correction budgets, area and
+  aspect thresholds, confidence, search timeout, stop latency and velocity, submit lead, tracking IoU, vertical
+  bounds, plus head intrinsics, rpy, translation and yaw-zero bearing - for three anchors (`default`, `left`,
+  `forward`).
+- **Why I will not author them on my own initiative:** each of those numbers is a measurement of the physical
+  rig, and choosing how to measure it decides what the qualification certifies. That is a plan-level design
+  choice, not an implementation detail, and writing it silently would put `QUALIFIED` on my procedure rather than
+  the approved one. The plan's own tests pin only the *shape* (`fill(contract, root)` writing raw files, sealed
+  by `close_measurement_batch`), not the measurement method.
+- **Everything else for Step 2 is ready and frozen:** the bound contract
+  (`gen3/measurement/measurement-contract.json`, `contract_sha256 b7c293ca…`), the five-key identities
+  (`gen3/measurement/measurement-identities.json`, sha256 `c11408f8…`), the generation-3 provenance on the
+  corrected registry, and the aggregation CLI which needs no driver. Whichever way the driver question is
+  answered, none of that has to be redone, and the ledger/batch machinery will record `VALID` or `INVALID`
+  honestly either way.
+- **The question, unchanged and now sharpened:** name an existing production driver implementing
+  `fill(contract, root)`, or authorise writing one as a controlled source change - in which case I need to know
+  whether its measurement procedures come from a plan section (which one) or should be drafted for review before
+  any run.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
