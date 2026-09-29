@@ -61,6 +61,14 @@ def main(argv=None) -> int:
     _append_ledger(args.ledger, "PLANNED", ledger_identity, "admission verified")
     _append_ledger(args.ledger, "RUNNING", ledger_identity, "measurement starting")
     try:
+        # section 4.2: a supplied runtime descriptor is parsed and its CUDA policy enforced before either branch -
+        # the driver injection used by tests must not be a way around the rule
+        if args.context is not None:
+            from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
+
+            _document = json.loads(args.context.read_text())
+            if "runtime_descriptor" in _document:
+                require_runtime_descriptor(_document["runtime_descriptor"])
         if args.driver:
             _load_driver(args.driver)(contract, args.batch_root)      # test-only injection
         else:
@@ -68,12 +76,6 @@ def main(argv=None) -> int:
             if args.context is None:
                 raise ValueError("MEASUREMENT_CONTEXT_REQUIRED")
             context = json.loads(args.context.read_text())
-            # section 4.2: the parsed descriptor travels in the context, and its CUDA policy is enforced here,
-            # before any branch - a driver-based run must not bypass it
-            from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
-
-            if "runtime_descriptor" in context:
-                require_runtime_descriptor(context["runtime_descriptor"])
             from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
             context = CalibrationMeasurementContext(
                 generation=context["generation"],
