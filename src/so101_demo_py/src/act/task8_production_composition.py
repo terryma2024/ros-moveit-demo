@@ -493,9 +493,29 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
     phase camera from the admitted phase-camera matrix.
     """
 
-    # P1-1: the two BOTTOM boundaries may be stood in for - and only those two. Everything else (the stack when a
-    # client is supplied, the clock, the controller adapter, the phase camera) is still this composition's own work,
-    # which the whole-provider seam could never show because it replaced all five at once.
+    # P1-1 (rereview 5): the formal entry with nothing set in the environment must be able to produce its own bottom
+    # I/O. Three of the six are facts about the MODEL the run names - where the occluders are, what the camera sees,
+    # where the cup is - and the composition builds those itself. The other two are facts about the RUN - the transport
+    # to the child, and the trajectory being executed - and the model cannot supply them: it can report where the arm
+    # IS, but only the run knows where it is going. Those two are REQUIRED and refused by name rather than stood in for.
+    if any(value is None for value in (frame_source, target, occluder_geometry)):
+        from so101_demo.act.task8_bottom_io import (ModelFrameSource, occluder_geometry_from_model,
+                                                    target_from_model)
+
+        try:
+            from ament_index_python.packages import get_package_share_directory
+
+            scene = Path(get_package_share_directory("so101_demo_py")) / "assets/mujoco/act/scene.xml"
+            frame_source = frame_source or ModelFrameSource(scene)
+            target = target or target_from_model(scene)
+            occluder_geometry = occluder_geometry or occluder_geometry_from_model(scene)
+        except Exception as error:                  # no scene, no share dir: fall back to the seam if one is named
+            if not os.environ.get(BOTTOM_IO_SEAM_ENV):
+                raise ProductionCompositionError(
+                    f"PRODUCTION_BOTTOM_IO_UNAVAILABLE: {type(error).__name__}: {error}") from error
+
+    # and the seam remains available for a test that stands in for the boundary it names - checked only for the values
+    # still missing, so a run-supplied client or phase path is never overridden by it
     if any(value is None for value in (io_client, yolo_detector_factory, frame_source,
                                        phase_path, target, occluder_geometry)):
         seam = _bottom_io_from_seam()
