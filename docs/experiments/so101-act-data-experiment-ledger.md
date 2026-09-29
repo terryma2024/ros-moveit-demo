@@ -22154,3 +22154,23 @@ not an inference of mine.**
   `validate_head_search_shape`.
 - **State:** nothing changed in the source this round; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing
   deleted, nothing pushed.
+
+## CP-1337 — The existing positive passes only because its payload OMITS the block, and the RED's recipe is now exact
+
+- **Read from the positive test** (`test_the_published_report_binds_to_a_runtime_head_search_descriptor`):
+  ```python
+  batch = _v2_batch(tmp_path / "batch", contract, descriptor=runtime["head_search"])
+  outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
+  ```
+  and `_v2_batch` seals `{"measurements": evidence, "configured": configured}` - **no `head_search` key in the payload at all**, while
+  `descriptor=runtime["head_search"]` (the inner block) makes the **indexed** file the full document. **So the production comparison at
+  `:276` never even runs in that test** (`readings.get("head_search")` is absent), which is exactly the reviewer's "existing positive
+  multi-root coverage **omits the payload descriptor** and misses this bug".
+- **The RED's recipe is therefore the same construction with the payload carrying the block**, i.e. seal a root whose payload is
+  `{"measurements": ..., "configured": ..., "head_search": <inner block>}` **and** whose `descriptor=` is that same inner block, so the
+  sealed `runtime-descriptor.json` is the full document. **The two sides are then equal in substance and unequal in layer - and the code
+  raises `CALIBRATION_IDENTITY_MISMATCH`.**
+- **And that also explains the fixture's constraint from CP-1336:** `_v2_batch` cannot express this, so the RED uses `_sealed_batch`
+  directly with the payload the caller controls.
+- **State:** nothing changed in the source this round; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing
+  deleted, nothing pushed.
