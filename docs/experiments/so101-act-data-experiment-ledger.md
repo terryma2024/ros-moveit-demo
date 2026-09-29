@@ -25901,3 +25901,16 @@ picture in both directions.**
   established from the readback rather than asserted, so when FINAL_CHECK passes it will mean the settled cup really is at the place target in the substituted world - **not that a flag was flipped.**
 - **State:** P1-1..P1-3 green and committed; both production fixes from this stretch committed; the focused set green at `54 passed`; the full-case test remains uncommitted while red, per this batch's
   rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1555 — All nine phases verify; the seal needs the case's own identity, not the runner's request
+
+- **The milestone, and it is the one this whole batch has been walking towards:** with the release epoch corrected, **every one of the nine phases passes the runner's own verifier inside the full-case run** -
+  the trace shows `verify ok` for SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, the two retreat segments and FINAL_CHECK, in order, against **one substituted runtime**.
+- **The epoch was the last phase-level error, and reading the loop rather than assuming its order is what fixed it:** the runner increments `release_epoch` **inside the RELEASE iteration, before it
+  verifies that phase's document** - so RELEASE's own document already carries the epoch it creates. **My earlier note said "zero up to and including RELEASE"; the trace proved otherwise in one line.**
+- **The run now stops at the seal: `LIVE_EVIDENCE_SEAL_UNAVAILABLE`, and behind it `KeyError: 'reset_epoch'`** - the recorder is attached now (it goes in at construction, while the window is bound
+  afterwards through `bind_live_evidence`), and the seal's **identity is read from the runner's request**, which by the runner's own schema carries `mode`, `stop_after`, `lifecycle`, `scenario_id`, the two ids
+  and the deadline - **and no epochs.** **So the seal must take its identity from the case state the port already holds (`reset.receipt.new_epoch` and its own release epoch), not from the caller's request.** That is the
+  next correction, and it is the same shape as every other one in this stretch: name where the value really comes from.
+- **State:** P1-1..P1-3 green and committed; every production fix committed except the release-epoch correction and the recorder attachment, which are in the tree with the focused set green; the full-case test
+  remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
