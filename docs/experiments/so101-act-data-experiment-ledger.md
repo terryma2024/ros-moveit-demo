@@ -18855,3 +18855,22 @@ not an inference of mine.**
   `seal_live_evidence(request)` following the three steps above - then the runner completes, the artifact is real, and the
   seven assertions can be written against it.
 - **State:** goal active (revision 51, cap 1000); HEAD `6c802da2`; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1180 — The seal path is reached; the window refuses my grid with `TASK8_LIVE_EVIDENCE_GRID_GAP`
+
+- **Transcribed the three port methods from CP-1179 into my plain-class fake** - no `object.__new__`, no hand-filled
+  `_ready`, no direct `finish`, so the owner's item-4 prohibition holds - and the case now runs to the point where the runner
+  asks for the seal:
+  | iteration | error | what it taught |
+  | --- | --- | --- |
+  | 1 | `AttributeError: 'FakePort' object has no attribute 'reset_epoch'` | the fake must **store** the epochs its `begin` returns, and the test must hand it the real recorder |
+  | 2 | `TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH` | the recorder, window and request must agree on the case identity (`full-01`), which is the evidence layer doing its job |
+  | 3-4 | **`TASK8_LIVE_EVIDENCE_GRID_GAP`** | the window refuses my row grid: one row per phase at `step * PERIOD_S` is not the 10 Hz continuity it requires, and adding the retreat's rows did not change it |
+- **So the remaining unknown is one rule, and it is the window's own:** what `add_grid` accepts as a continuous 10 Hz grid -
+  whether it wants several rows **inside** each phase rather than one at its boundary, or a specific starting stamp. **That is
+  the next single read** (`LiveEvidenceWindow.add_grid` and whatever it calls to check continuity), and CP-1176's recipe is
+  where the answer will go.
+- **The test stays untracked and failing, exactly as the owner instructed:** it is committed only once it is green. Nothing in
+  the tracked tree is red - the teleop suites around it were 40 passed at CP-1155 and none of them collects this file.
+- **State:** goal active (revision 51, cap 1000); HEAD `f3eff7bf`; staged 0; logs `beh-r783.log` … `beh-r786.log`; no full suite,
+  no push, no stack, no hardware.
