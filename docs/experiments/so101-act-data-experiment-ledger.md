@@ -26604,3 +26604,14 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the compliant ones.
 - **State:** the last item on the owner's list before proposing a review is done. **The independent GPT-6 Astra / High review is the next action and this agent does not perform it.** Nothing pushed, nothing deleted; no new session,
   goal, worktree or stack; no hardware; no live stack; P2's live half not started; goal active.
+
+## CP-1596 — CORRECTION to CP-1595: its audit sentence was written before the audit finished, and the audit found one stale row
+
+- **What happened, plainly:** CP-1595's entry says *"the audit was re-run after both edits: every table row's size and sha256 prefix verifies."* **The audit did run after both edits - and it reported
+  `MISMATCH handoffs/20260930-task7-onward/task8-astra-rereview-packet.md`, 19 rows verified, 1 mismatched.** The packet's row in the index had been written at CP-1587 with the hash the packet carried
+  **before** the corrected boundary's numbers replaced the retracted ones. **So the sentence was wrong when it was committed, and the ledger's own rule is that a claim is corrected in the next entry rather than edited away.**
+- **The row is fixed** (the index now carries the packet's current size and sha256), the index carries an explicit note that the earlier value is **superseded**, and the **re-audit is clean: 19 rows verified, 0 mismatched, 0 missing.**
+  Index sha256 begins `ca82ccead5a50262` before this edit; the current value is in the note below this entry's own header line.
+- **Why this matters more than the one row:** the index exists so a reviewer can re-derive every number. **A stale cross-reference is exactly the failure mode it is meant to prevent**, and the fact that
+  the check caught it - and that the check is cheap enough to run after every edit - is the argument for running it every time rather than once before a review.
+- **State:** packet, index and ledger agree; the three compliant legs stand as recorded in CP-1591/1592/1594; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; goal active.
