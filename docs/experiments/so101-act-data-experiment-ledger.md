@@ -23906,3 +23906,24 @@ not an inference of mine.**
   is queued for the next round so the source reads as clearly as the record does.**
 - **State:** the port change is written, compiles, and its build copy is the same file (the earlier `cp` reported "same file", so no divergent copy
   exists); changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1444 — P1-5's first half is GREEN: the child drives the production port through SEARCH
+
+- **`1 passed`** for `test/teleop/test_task8_child_driven_case.py` - the fixture that the reviewer said "still inherits FakePort and its
+  monkeypatched seal, asserts only the startup receipt and stopped confirmation, and does not drive the real execution adapter or the production seal
+  path". **It now runs the production `PickPlaceSearchPhasePort`: the boundary delegates to the production `PickPlaceSearchSegment`, the production
+  seal is inherited (the chain test's monkeypatched `FakePort` seal is out of the loop), and the startup proof reaches the port, whose own receipt
+  validation demanded five fields.**
+- **Two production fixes carry it, and the second is new this round:**
+  1. an INVALID sealed batch could never be validated - the schema's key set excluded the `error_code` the driver writes (fixed earlier in this batch);
+  2. **the SEARCH port's grid feed handed the recorder a three-key document while `append` requires the canonical 24-key sample**, so *any* SEARCH with
+     an attached window raised `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID` in production. **`_grid_sample` now reports `None` with the reason documented -
+     the fields it cannot see belong to the readback adapter's `capture_evidence_fields` - and `run_phase` skips a `None` sample instead of crashing.**
+- **And the fixture uses the supported entry:** `operation="task8_phase"` with `_PickPlacePhasePayload(stop_after="SEARCH")` through
+  `child.pick_place_phase(request)`, because **this port provisions SEARCH and refuses later phases by design** (`TASK8_PHASE_NOT_PROVISIONED`).
+- **A scope finding that the next assertions depend on, recorded now rather than discovered later:** the reviewer's seven indexed assertions assume a
+  **full** case (FINAL_CHECK, a release epoch, both retirement receipts), and the port as it stands cannot perform those phases at all. **So the
+  assertions that can be made today are the SEARCH-scoped ones (the grid and its phases, the seal artifact's digest, the journal row), and the rest
+  require either a provisioned port or the reviewer's agreement that the fixture's scope is SEARCH.**
+- **State:** the production patch and the fixture are committed together now that the focused test is green; no stack, no CUDA, no actuators, no
+  hardware; nothing pushed, nothing deleted; the ~300 GB of deletion candidates untouched.
