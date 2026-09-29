@@ -188,6 +188,19 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
     found = _regular_files(root)
     if set(found) != set(files):
         raise ValueError("BATCH_CLOSURE_INVALID")
+    # the index closes over the anchors the batch declares, and the tree has two conventions for evidencing one: the
+    # driver writes anchors/<anchor>/... and the aggregator consumes fov|search|sync/<anchor>.json. Either counts as
+    # coverage; neither alone may be assumed.
+    anchors = recorded["anchors"]
+    if not isinstance(anchors, (list, tuple)) or not anchors:
+        raise ValueError("BATCH_INVALID")
+    indexed = {str(relative) for relative in files}
+    for anchor in anchors:
+        directory = f"anchors/{anchor}/"
+        per_topic = {f"fov/{anchor}.json", f"search/{anchor}.json", f"sync/{anchor}.json"}
+        if not any(entry.startswith(directory) for entry in indexed) and not (per_topic & indexed):
+            raise ValueError("BATCH_ANCHOR_MISSING")
+
     for relative, digest in files.items():
         if _SHA256.fullmatch(str(digest)) is None or found[relative] != digest:
             raise ValueError("BATCH_CLOSURE_INVALID")
