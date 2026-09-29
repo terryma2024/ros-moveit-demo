@@ -21494,3 +21494,25 @@ not an inference of mine.**
   never faked one.**
 - **State:** the child-driven test file remains **uncommitted while red**; items 1-4 complete and committed; no live stack, no stepping,
   no CUDA, no hardware; nothing deleted, nothing pushed.
+
+## CP-1301 — Astra item 5 is GREEN: the child-driven production-chain fixture passes
+
+- **`1 passed, rc=0`** (`experiments/gate6-batch3-py-gate/rev5-zn.log`). **All five of Astra's items are now complete.**
+- **What the test does, in Astra's terms:** it drives the **production entry** (`RclpyActionDriver.pick_place_full`) with the real
+  `IpcRequest` model, the real artifact loader (`ActArtifactBinding.verify_environment` from the environment the binder itself writes),
+  the real `PickPlaceRunner` and the real `CaseEvidenceDriver` - replacing **only** ROS/process I/O (a fake broker) and extending the
+  chain test's port **in this file** rather than forking it.
+- **The owner's route (a) is implemented exactly:** the fixture compiles `assets/mujoco/act/scene.xml` once for validation - no
+  `mj_step`, no stack, no CUDA, no actuators, no hardware - and puts the real `model_sha256(model)`, the scene's bytes digest,
+  `mujoco.__version__` and `allowed_other_contact_bodies == ["table"]` into the policy payload, which is precisely what
+  `load_installed_phase_contact_allowlist` checks against the same compiled model. **The production loading entry is untouched and the
+  in-process allowlist loader was never monkeypatched.**
+- **The gates it had to pass, in the order production enforces them** - every one of them a production check, none faked: the artifact
+  binding's shape and digests · the production head-search validator over the runtime config and calibration report · the policy
+  validator and the envelope hash · the compiled-scene contact policy · the IPC request model (identity, token, worker, deadline) ·
+  the startup receipt and its binding · the journal's case id · the window's epoch binding · the sample identity · and the seal, whose
+  recorder comes from the window the child attached.
+- **State:** committed with its test green, per the owner's rule; items 1-5 complete; **next is the integration boundary the owner
+  specified** - a fresh registered NVMe scratch with `TMPDIR`/`TMP`/`TEMP` verified through the exact interpreter, a fresh real 0700
+  short IPC base, `workers = min(8, CPU)`, one ordinary `so101_demo_py` and one ordinary `so101_teleop` pytest-xdist/package gate with
+  the benchmark excluded - **and no early full gates**; no live stack, no hardware, nothing deleted, nothing pushed.
