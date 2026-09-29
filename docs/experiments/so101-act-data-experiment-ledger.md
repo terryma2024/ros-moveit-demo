@@ -20759,3 +20759,32 @@ not an inference of mine.**
   entry returns - since the assertions must be built from the returned dict and the sealed records it points at.
 - **State:** HEAD `1e8b387d` plus this checkpoint; items 1-4 complete; item 5 not started; no stack, no hardware, nothing deleted,
   nothing pushed.
+
+## CP-1265 — Item 5's recon is complete: the runner hand-off, the stop rule, and the two entry points
+
+- **The runner is invoked through a fence, and the entry's success is gated on two stops:**
+  ```python
+  result = await asyncio.to_thread(
+      PickPlaceRunner(_FencedPickPlacePort(self._pick_place_port, self._act_cancelled)), task)
+  ...
+  if await self.stop_act("TASK8_COMPLETED") is not True:
+      raise MutationError("ACT_TASK8_STOP_NOT_CONFIRMED")
+  if result.get("stopped_confirmed") is not True:
+      raise MutationError("ACT_TASK8_STOP_NOT_CONFIRMED")
+  return result
+  ```
+  Three consequences for the fixture, none of them optional: the port is **wrapped in `_FencedPickPlacePort`** (so the fake must satisfy
+  the runner contract through the fence), **`stop_act` must return the literal `True`** or the entry refuses after the case has already
+  run, and the returned dict must carry `stopped_confirmed is True`.
+- **And the entry points the test should call are `pick_place_full(request)` / `pick_place_phase(request)`**, which check
+  `request.operation == "task8_full"` / `"task8_phase"` respectively and then call `_run_pick_place` with the mode - which is better
+  than calling the private method directly, because it exercises the operation guard too. **Both are `async`**, so the test drives them
+  with `asyncio.run(...)` rather than adding a plugin dependency.
+- **So item 5's fixture is now fully specified, and every piece came from reading rather than guessing:** a child built with the port,
+  a startup consumer, the bound hash set, an artifacts object carrying `evidence_root`, and an owner that lets `stop_act` confirm; a
+  request whose payload carries the same hashes as `_act_hashes` plus `scenario_id`, with `operation="task8_full"`, `session_id`,
+  `attempt_id` and a future `deadline_ns`; then `asyncio.run(child.pick_place_full(request))`, with the assertions read from the
+  returned dict **and the sealed, indexed records** - the gripper-open command event, three adjacent rows in one release epoch,
+  SEARCH and FINAL_CHECK, both retirement receipts, and the journal hash.
+- **State:** HEAD `c9286fd7` plus this checkpoint; items 1-4 complete; item 5's recon complete and its fixture unwritten; no stack, no
+  hardware, nothing deleted, nothing pushed.
