@@ -22690,3 +22690,16 @@ not an inference of mine.**
   reads the **comparison**, not the symptom - which is the difference between the last several rounds and the ones before them.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1368 — The source gate passes; the run is deeper than it has ever been
+
+- **What the captured context made obvious, and what it cost me to learn:** the shared `_Sources` double **asserts its own fixture attempt id** at its
+  line 76 (`assert attempt_id == "attempt-1"`), so it **cannot serve a second case** - calling `super().capture(...)` from a subclass was never
+  going to work. **The fix keeps the reuse rule and drops the assertion: `_ChildSources.capture` builds the readback with the same shared
+  `_raw(after_step + 1)` builder and stamps this case's session, reset epoch and `truncated=False`.** Shared evidence construction, local
+  identity - which is the honest version of "imported, not forked".
+- **And the run moved past it:** the assertion failure is gone, the source step advanced, the production segment produced its readback, and the
+  remaining failure is again the wrapped `MutationError: ACT_TASK8_FAILED` from `ros_child.py:545`. **The next read is the `--tb=long` inner
+  cause, which for the first time is beyond the evidence-validation layer.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
