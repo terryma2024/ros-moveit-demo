@@ -24568,3 +24568,35 @@ picture in both directions.**
   anchors failed - the file's exact whitespace is not something to guess at.
 - **State:** committed. P1-2 done; next is P1-3 (SEARCH evidence must not silently be `None`, route (a)). No new session, goal, worktree or stack; nothing
   pushed, nothing deleted; no hardware.
+
+## CP-1478 — P1-3's route (a) frozen: what the segment already carries, and the two inputs that have no source yet
+
+**Read before writing anything, because route (a)'s shape depends on what is already in flight.**
+
+- **The port already receives the captured readback.** `pick_place_search_port.py:220` and `:332` read `raw = observed.physical_readback`, and
+  `PickPlaceSearchObservation` (`pick_place_search_segment.py:24-33`) carries `physical_readback: dict` upward with the phase result. **So "let the SEARCH segment
+  deliver the captured readback" is half-done already**: what is missing is the **canonical derivation** and its two arguments.
+- **`capture_evidence_fields` is a METHOD of the readback adapter** (`pick_place_readback.py:400-423`), and the segment holds that adapter (`self.adapter`), while the port
+  holds only the window and the recorder. **That is why the port cannot derive the fields itself and why the old `_grid_sample` returned a three-key stub.**
+- **And two inputs have NO production source at all** (both greps return only the definitions and tests):
+  | input | who needs it | what exists today |
+  | --- | --- | --- |
+  | `support_distance_max_m` | `capture_evidence_fields`, `derive_frame_aggregates` | **nothing supplies it.** `TaskGeometry` (`core/task_geometry.py:80-86`) carries only `frame_id` and `objects` - no support threshold |
+  | `raw_records` | the same call, and the recorder's own validation | **nothing produces them in production** - they are `{source: {relative_path, sha256}}` files under the recorder's evidence root |
+
+**The design that follows, and its reasons:**
+1. **the segment exposes one documented method** - `canonical_evidence(captured, *, support_distance_max_m, raw_records)` - which calls **its own adapter's
+   `capture_evidence_fields`**. **Field ownership stays in the real readback adapter**, exactly as the review requires, and the port never needs the adapter object;
+2. **the threshold gets a real owner:** it travels with the **live-evidence attachment** (`bind_live_evidence(..., support_distance_max_m=...)`), because it is a policy value
+   belonging to the same admission path the case identity comes from - not an invented default. A missing threshold is a **named refusal**, not a fallback;
+3. **the raw records get a real producer:** the port writes each source document from `observed.physical_readback` under the recorder's evidence root and hashes it, which is
+   what "raw records" means to the recorder - the thing that indexes them;
+4. **the port builds the canonical 24-key sample** with the production `build_live_evidence_sample` from those fields plus the phase document's `holding_state`, `frame`,
+   `contact` and `measurements`, and hands it to `add_grid`; **a missing segment method, threshold or field set raises `TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED`** - the review's
+   "缺 builder/字段必须 INVALID，不能跳过", never a silent `None`;
+5. **and the fixture's pre-filled nine-phase path is deleted**, together with the strict-xfail marker that recorded the hole (CP-1471): once the port feeds the window itself, that test
+   must XPASS, strict turns it into a failure, and the marker's own words say the fix's author must then assert the samples instead.
+- **Honest note on the review's wording:** it names `CaseEvidenceDriver.observe_capture` as the generator. **This design calls the very functions that method calls**
+  (`capture_evidence_fields` then `build_live_evidence_sample`) from the components that hold the data, because the driver object is unreachable from the phase loop
+  (CP-1467/1470). **The ledger says that plainly rather than implying the driver was involved.**
+- **State:** no code changed this round; P1-1 and P1-2 remain green and committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
