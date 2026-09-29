@@ -18809,3 +18809,24 @@ not an inference of mine.**
   10 Hz support rows in one epoch, FINAL_CHECK, the sealed artifact read back, the confirmed retirement and the journal path
   and hash - and the untracked RED gets committed only once all of that is green, per the owner's instruction.
 - **State:** goal active (revision 51, cap 1000); HEAD `a6f06676`; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1178 — (b) is one method and one recorder, and the owner's ban on `object.__new__` decides how
+
+- **The seal's contract, read:** `PickPlaceSearchPhasePort.seal_live_evidence(request)` requires an attached
+  `self._evidence_recorder` with a callable `seal`, builds the identity from
+  `request["scenario_id"|"session_id"|"attempt_id"|"reset_epoch"|"release_epoch"]`, and returns
+  `{"path", "sha256", "schema_version"}` - the existing chain test calls it exactly that way and then reads the artifact back
+  from disk.
+- **The choice this forces, and the owner's instruction settles it:** the existing test builds its port with
+  `object.__new__(PickPlaceSearchPhasePort)`, and **item 4 forbids that** ("no `object.__new__`, no hand-filled `_ready`, no
+  direct `finish`"). The real constructor is `PickPlaceSearchPhasePort(boundary, *, expert_route_factory=None,
+  evidence_recorder=None, live_evidence_window=None)`, so a properly constructed real port needs a fake **boundary** - which is
+  the external ROS/MuJoCo seam the owner explicitly allows faking - but then the phase evidence would have to come out of that
+  boundary's geometry rather than out of the validated returns my port already produces.
+- **So the compliant path, and the one I will take:** keep my **plain-class** fake port (no `object.__new__` anywhere) and give
+  it the two things the runner actually needs - `bind_live_evidence(window)` storing the window the child attaches, and
+  `seal_live_evidence(request)` that drives a **real** `Task8LiveEvidenceRecorder` and `LiveEvidenceWindow` (feed rows via
+  CP-1176's recipe, then call the recorder's own `seal`). That satisfies the owner's prohibition while still exercising the
+  production recorder, window and seal rather than a stub - the seam stays where item 4 puts it: external I/O only.
+- **With that, the seven assertions follow in the same test**, and the untracked RED is committed only once they are green.
+- **State:** goal active (revision 51, cap 1000); HEAD `bd052b8b`; staged 0; no full suite, no push, no stack, no hardware.
