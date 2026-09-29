@@ -33108,3 +33108,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `boundary.reset.broker`, and the check that answers it written down.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1882 — RESOLVED: the blanket `__getattr__` was answering my own `getattr` default
+
+- **The paradox had one explanation, and it is the kind that only printing finds:**
+  ```
+  [iddiag] args[0] is mount broker: True
+  [iddiag] args[0].driver is broker.driver: True
+  [iddiag] mount broker.driver __dict__ keys: ['_goals', '_reset_epoch', '_session_id', 'hazard_reason']
+  [iddiag] scope driver current_epoch(): True
+  ```
+  **`FakeBroker.current_epoch` does `reader = getattr(self, "epoch_reader", None)` - and `FakeBroker.__getattr__`
+  answers EVERY name it does not own with a callable.** So the lookup never reached the `None` default: it got `_call`,
+  `callable(reader)` was true, **and `reader()` returned `True`** - **the epoch the scope check compared was the blanket
+  answer, not a dict.**
+- **And the fix is one word of placement:** the attribute had been set on the `CommandBroker`
+  (`broker.epoch_reader = …`), **while the lookup happens on the DRIVER** - so it is now
+  `broker.driver.epoch_reader = lambda: {"session_id": …, "reset_epoch": boundary.reset_epoch}`.
+- **Which cleared the scope check entirely, and the registration advanced two frames:**
+  ```
+  before: trusted_visible_approach_source.py:32 in _scope   -> VISIBLE_APPROACH_SOURCE_SCOPE_CHANGED
+  after:  visible_approach_expert_route.py:132 in prepare   -> ValueError("proofs")
+          -> wrapped as VISIBLE_APPROACH_EXPERT_ROUTE_INVALID
+  ```
+  **so the seven scope conditions now hold - including the epoch - and the drive is inside the route's PREPARE, which
+  validates the proofs again from its own side.**
+- **And the lesson is worth stating as a rule for this codebase, because it will recur:** **a stand-in with a catch-all
+  `__getattr__` breaks every `getattr(obj, name, default)` in the code under test** - the default never fires, and a
+  callable appears where a value was expected. **CP-1859's `FakeBroker` and CP-1863's `hazard_reason` were the same
+  mechanism seen from two other angles.**
+- **State:** **P1-5 in progress: the SEARCH evidence, the four proofs, the native ingress and the source port's scope all
+  pass; the route's `prepare` is the next check.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6,
+  the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
