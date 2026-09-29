@@ -28133,3 +28133,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Next, in order:** (2) make the window's identity the case's terminal epoch, from the same rule the port uses, and have `seal_live_evidence` compare rather than assume agreement; (3) the frozen grid plus command/release/contact **edge** sampling at the
   source-acquisition layer (`add_event`/`add_gripper_event`, which the port never calls); (4) the fixture on **one monotonic source clock with no timestamp rewriting** - which only becomes possible once (1)-(3) hold.
 - **State:** **P1-4 in progress (piece 1 landed, pieces 2-4 open)**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1680 — P1-4 pieces 1 and 2 are green, and two stale assumptions were replaced rather than worked around
+
+- **Piece 1 - the epoch comes from the phase:** `_grid_sample` stamps `self._release_epoch_for(phase)` instead of the literal `0`. **The samples now span the release truthfully: 0 before RELEASE, 1 from it onward.**
+- **Piece 2 - the terminal epoch has ONE name and the two seals COMPARE:**
+  | change | why |
+  | --- | --- |
+  | `FINAL_RELEASE_EPOCH = 1` named in `task8_live_evidence.py` | the window's identity and the port's seal were two literals that could drift; now one value states "the epoch a case ends in" |
+  | `CaseEvidenceDriver(release_epoch=FINAL_RELEASE_EPOCH)` | the identity a case's window seals with is the epoch the case **ends in**, not the one it started in (a prefix case still passes 0 explicitly, because it never releases) |
+  | `LiveEvidenceWindow.seal(identity=None)` **compares** | a caller that knows the terminal identity passes it, and a **disagreement is refused by name** (`TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: <field>`) instead of being sealed over - the verdict's "seal and read back using the actual terminal identity" |
+  | the port passes its computed identity to `window.seal(identity)` | **one source**: the port already computes `_release_epoch_for("FINAL_CHECK")` for its own seal |
+- **And two existing assertions encoded the OLD assumption, so they were replaced - not deleted and not worked around:**
+  1. **CP-1652's bound** in `test_act_task8_sealed_raw_sources` ("this fixture's port reports one epoch") **was true only because the port was wrong**; it now asserts the real rule - non-decreasing, `{0, 1}`, and the identity equal to the epoch the case ended in. **That is the item CP-1652 recorded as unprovable in this substitution, and the substitution can express it now.**
+  2. **`test_the_index_chains_to_complete_canonical_records` asserted every raw record carries the IDENTITY's epoch pair** - i.e. it asserted the very thing the finding removed. It now requires each record's pair to be one of the index's own sample pairs: the same rule, stated per record.
+- **Evidence:** `test_act_task8_live_epoch_and_edges.py` `2 passed`; `test_act_task8_sealed_artifact.py` `4 passed`; a ten-suite neighbour run is in flight and its result is recorded when it lands.
+- **Still open in P1-4:** **piece 3** - the frozen grid plus command/release/contact **edge** sampling at the source-acquisition layer (`add_event`/`add_gripper_event`, which the port still never calls) - and **piece 4**, the fixture on one monotonically increasing source clock with no timestamp rewriting, which depends on piece 3.
+- **State:** **P1-4 in progress (pieces 1-2 green, 3-4 open)**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
