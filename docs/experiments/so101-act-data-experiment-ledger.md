@@ -32915,3 +32915,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ingestion validation, and the repair is to use the production port or to feed the stand-in real frame shapes.**
   P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1875 — The readback's scene comes from the sources' own construction
+
+- **Traced one layer further, and the chain is complete:**
+  ```python
+  adapters/act/pick_place_sources.py:74    self.readback = PickPlacePhysicalReadback(… scene=… …)
+  adapters/act/pick_place_sources.py:157   return self.readback.capture(…)
+  adapters/act/pick_place_readback.py:111  scene_frames = self.scene.recent_frames_with_receipts()
+  ```
+  **so the readback's `scene` is whatever the SOURCES were constructed with** - **in production the ROS scene subscriber,
+  and in this harness the fixture's `_Scene`** - **which the segment suite defines with `apply_task_scene` and
+  `observe_task_scene` only** (CP-1849). **Nothing in the tree constructs a `SceneState`** (the search found no
+  instantiation), **so the object answering `recent_frames_with_receipts` in the harness is not the production scene
+  state** - **and its frames carry the `int` `qvel`.**
+- **Which is as far as reading goes, and it is enough to act:** the harness must either
+  1. **give its sources a scene port that is the production one** - a `SceneState` fed through `accept(frame)` with frames
+     whose `qpos`/`qvel` are vectors of length `nq`/`nv` from the ACT model, **which is what `validate` requires**; or
+  2. **give its scene stand-in a `recent_frames_with_receipts` that returns frames of that shape** - **the same values
+     `validate` would demand, since four production readers check them again downstream.**
+- **And the evidence for which shape is right is already in the tree:** `SceneState.validate` (`scene_state.py:64`) and
+  the four `vector(scene["qvel"], model.nv)` readers (CP-1873) **agree**, so **there is no judgement to make about the
+  frame's shape - only about where to build it.**
+- **State:** **P1-5 in progress: the scene chain is read to its end, and the repair is a scene port whose frames carry
+  model-length `qpos`/`qvel` - either by using the production `SceneState` or by making the stand-in return what
+  `validate` requires.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
+  re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
