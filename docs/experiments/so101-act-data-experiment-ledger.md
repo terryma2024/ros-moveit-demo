@@ -19126,3 +19126,30 @@ not an inference of mine.**
   already established (CP-1112/CP-1113) and closes both outstanding artefacts with one more line than I had written.
 - **State:** goal active (revision 51, cap 1000); HEAD `94a41fb6`; staged 0; log `beh-r801.log`; no full suite, no push, no
   stack, no hardware.
+
+## CP-1192 — Where Boundary V stands, and one assertion that needs a calmer round than this one
+
+- **Moved the last two artefact assertions onto the rows the port records**, because CP-1191 showed the sealed index carries
+  references (`relative_path` + `sha256`) rather than values - so a release open event and a 10 Hz adjacency are asserted where
+  the case decides them, and the index-level assertions keep to what the index does carry (phases, epochs, sample count, all of
+  which are green). **The run still fails at that one assertion (line 221)**, and I am recording that rather than guessing at it
+  again: the two candidates are that `build_live_evidence_sample` normalises the contact block into a key I have not read, or
+  that my release-phase list and the recorder's own epoch bookkeeping disagree about which rows are post-release.
+- **Boundary V's artefact list, honestly scored:**
+  | artefact | state |
+  | --- | --- |
+  | SEARCH rows produced by the real path | ✅ green (sealed phases include SEARCH) |
+  | FINAL_CHECK reached | ✅ green |
+  | sealed artifact read back with matching digest | ✅ green |
+  | confirmed retirement (`safe_stop`, `stopped_confirmed`) | ✅ green |
+  | release open event | ⏳ asserted on the recorded rows, assertion not yet aligned |
+  | three adjacent 10 Hz support rows in one epoch | ⏳ same assertion |
+  | journal path and hash | ⏳ child/owner path - **decision at CP-1189 is with the owner** |
+- **A note on pace, because it is a fact and not a complaint:** this one test has taken sixteen rounds since its first import
+  error, and the last four have each moved exactly one assertion. Every one of those moves came from a print or a read, none of
+  them was wasted, and the test is committed green for the four artefacts it already proves - but the remaining two assertions
+  deserve a round where I read `build_live_evidence_sample`'s normalisation **first** rather than adjusting an assertion and
+  re-running, which is the habit that produced this checkpoint instead of a green line.
+- **State:** goal active (revision 51, cap 1000); HEAD `3f7c3bc1`; staged 0; logs `beh-r798` … `beh-r802`; the committed test is
+  green for four artefacts and red locally for the fifth and sixth, which is why the file is **not** being re-committed until it
+  passes; no full suite, no push, no stack, no hardware.
