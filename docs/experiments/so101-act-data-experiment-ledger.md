@@ -14827,3 +14827,35 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Remaining under the approved decisions:** decision 4 - hunk-level semantic reconciliation of the five in-flight
   chain files and their tests, staging only my hunks - after which the Task 8 production caller and Task 9's single
   full gate can proceed. Task 10 stays blocked until the search values are reviewed.
+
+## CP-1006 — Decision 4 started: the hunk topology of the three files I touched
+
+- **Owner decision 4 authorises hunk-level semantic reconciliation** of the five in-flight chain files and their tests:
+  keep the dirty work, merge semantics hunk by hunk, no stash, no overwrite, no whole-file ours/theirs, stage only my
+  task's hunks, read the existing diff at overlaps, targeted RED/GREEN, no duplicate definitions. This checkpoint
+  records the map that work needs, read from `git diff -U0`/`-U3` rather than assumed.
+- **`pick_place_case_owner.py` - three hunks, and the middle one INTERLEAVES with my insertion:**
+  | Hunk | Content | Owner |
+  | --- | --- | --- |
+  | `@@ -175,6 +175,24 @@` | `retire_failed_start` with its scope and owner-key checks | theirs |
+  | `@@ -187,6 +205,15 @@` | the child-retirement block **moved before the stack**, with my three lines inside it (`if not self._child_retired:` / the `getattr(self.worker, "live_evidence_window", None)` read / `window.invalidate("OWNER_RETIRE")`) | **interleaved** |
+  | `@@ -194,11 +221,6 @@` | removal of the old child-retirement block from the stack section | theirs |
+  Because the moved block and my insertion are the same hunk, staging "only my lines" cannot use `git add <file>` or a
+  whole-hunk `git apply --cached`; it needs an index patch built against **HEAD** (HEAD's child-retirement block plus my
+  window lines), which is a deliberate, verifiable operation rather than a staging shortcut.
+- **`pick_place_case_execution.py` - three hunks:** `@@ -115,0 +116,21 @@` is the user's `_publish_new` helper; my
+  `_require_live_evidence_readback` helper and the call site are the second and third hunks and are **separable** from
+  theirs.
+- **`test/teleop/test_task8_case_execution.py` - seven hunks:** the fixture changes at `-23`, `-91`, `-93` are theirs;
+  my real-sealed-artifact fixture change sits in `@@ -132,0 +139,5 @@` and `@@ -134,2 +145 @@`, and my negative case is
+  `@@ -143,0 +154,13 @@`; `@@ -161,0 +185,17 @@` is theirs. The separability of each will be checked hunk by hunk
+  before anything is staged.
+- **Order adopted for the work, cheapest-risk first:** (1) `pick_place_case_execution.py` - my two hunks are distinct;
+  (2) `test/teleop/test_task8_case_execution.py` - mine are the artifact fixture and the negative case; (3)
+  `pick_place_case_owner.py` - the interleaved hunk, where the index content must be constructed against HEAD and the
+  working tree must be verified byte-identical afterwards. Each step ends with the relevant suite run, and every
+  staged step is checked with `git diff --cached` before committing.
+- **State:** owner decisions 1-3 are implemented and committed (CP-1004, CP-1005); decision 4 is under way with the
+  topology recorded; the Task 8 production caller and Task 9's gate follow the reconciliation; Task 10 stays blocked
+  until the 17 search values are independently designed and reviewed. No runtime, no package gate, no push, no evidence
+  deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
