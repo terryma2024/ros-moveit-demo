@@ -30812,3 +30812,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the xfail and the duplicate** in the same change - not before.
 - **State:** **P1-5 in progress with its remainder named as a capability plus a join. P1-1 through P1-4 CLOSED.** The
   demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+
+## CP-1809 — The expert route P1-5 needs already exists in production; the test harness is what omits it
+
+- **Traced the refusal to its source and found the capability is production, not missing:**
+  ```
+  pick_place_child_port.py:147    def expert_route_factory(request):        <- the PRODUCTION child supplies one
+  pick_place_child_port.py:165    port = PickPlaceSearchPhasePort(boundary, expert_route_factory=expert_route_factory)
+  visible_approach_expert_route.py:29   class VisibleApproachExpertRoute   <- the real expert route
+  pick_place_search_port.py:74    def __init__(self, boundary, *, expert_route_factory=None, …)
+  ```
+  **So `PickPlaceSearchPhasePort` accepts an expert route factory, the production child port passes one, and
+  `VisibleApproachExpertRoute` is the route it builds** - while the test harness's `ChildPort` subclasses the port
+  **without a factory**, which is exactly why a full case is refused by name at APPROACH.
+- **Which reclassifies P1-5's remaining capability from "a real trajectory may not exist" to "the harness must use the
+  production child's wiring":** the refusal I recorded in CP-1808 as *"the child being honest"* is honest **about the
+  harness**, not about the production path. **The production path has what the full case needs; the test built its own
+  port and left the factory out.**
+- **And that is the same lesson this work has now met four times** - CP-1774 (the seam's empty `DetectionBatch`),
+  CP-1784 (a stand-in that finds nothing), CP-1802 (invented occluder names), and now CP-1809: **a substitution that
+  removes what the boundary produces does not test the boundary, it tests the substitution.** The full-case harness must
+  therefore take its phase provisioning **from `pick_place_child_port`'s own wiring**, not from a SEARCH-only subclass.
+- **State:** **P1-5's capability gap is test-side and its target is named; the aggregator join (CP-1808's second half)
+  follows.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
+  remain. **Task-list statuses are unchanged, so they are not re-stated.**
