@@ -16378,3 +16378,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Evidence:** commands, rc, elapsed, scratch and tempfile proof for each iteration are in
   `experiments/gate6-batch3-py-gate/beh-r663*.log`, with `TMPDIR` verified through the exact test interpreter inside
   `<R>/scratch/r663b/r663c.*`. The test file is committed with the boundary-I first piece; this iteration is unstaged.
+
+## CP-1063 — Boundary I, second piece: the runtime context has its own document (RED then GREEN)
+
+- **A correction to CP-1062 first, recorded rather than smoothed over:** there I wrote that the RED had "not yet reached
+  the intended break". Reading the traceback showed it **had**: the failure was
+  `KeyError: 'contract_sha256'` raised inside the CLI's own context construction at
+  `contract_sha256=identities["contract_sha256"]` - the CLI reading a **bound-document key out of the identity
+  mapping**, which is the masquerade this boundary is about, not an incidental error. The RED was valid when it was
+  observed; my judgement of it was what was wrong.
+- **The fix:** `main()` gains `--context`, an entry-bound runtime context document; the runtime and admission inputs
+  (`measurement_plan_sha256`, `safe_interval_rad`, `candidate_sha256`, `policy_sha256`, `controller_generation`,
+  `broker_generation`, `resource_binding`, `generation`) are read from it, while `contract_sha256` and
+  `driver_source_sha256` come from the identity members that actually name those things
+  (`measurement_contract_sha256`, `driver_source_sha256`). A missing context is refused with the named
+  **`MEASUREMENT_CONTEXT_REQUIRED`** rather than a bare `KeyError`.
+- **Note on the fixture, because it would otherwise be misleading:** the bound contract the test builds is constructed
+  from the loader's own rules (`_V2_BOUND_KEYS`, `SCHEMA_VERSION_V2`, `KIND`, `_contract_sha256`) because the
+  repository's `config/act/task8-calibration-measurement-contract-v2.json` is an **unbound template**, which
+  `load_measurement_contract` refuses by design - so it can never exercise this path. That is a fact about the config
+  file worth carrying into Boundary IV, not a shortcoming of the test.
+- **Evidence:** `pytest -q -p no:cacheprovider test/test_act_task8_measurement_contract.py` -> **rc=0, 11 passed**, 1 s,
+  scratch `<R>/scratch/r664.<n>` with `TMPDIR` verified through the exact test interpreter; RED log
+  `beh-r663-red3.log`, GREEN log `beh-r664-green.log`.
+- **Boundary I remaining:** a single seal owner - `task8_live_evidence.py` still exposes three `seal` entry points
+  (recorder, window, driver) and `close_measurement_batch` is a fourth path. That is the next piece, RED first.
