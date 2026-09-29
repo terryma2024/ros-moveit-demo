@@ -27469,3 +27469,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   3. **CP-1635 → the driver passes the per-run values into the composition** (`session_id`, `attempt_id`, `search_start_rad`), which matches where those values are produced. **The context keeps carrying them as the transport; the driver is the component that fills them.**
 - **The order the work now takes, and why it is this order:** **CP-1620 first** (it is already written, parked, and its cost is fixture completion rather than design), **then CP-1612** (one rule, one RED), **then CP-1635** (the driver's wiring, one RED) - and **only then item 7's re-run boundary**, because that boundary must measure code that has stopped changing.
 - **State:** three decisions recorded; goal active and armed; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1645 — CP-1620 is applied and localized: 34 failures in two mechanical categories
+
+- **The owner's choice is in the tree:** the parked patch is applied (the validator rule, the helper's `cleanup`/`contamination`/`error_code` keywords, the test-file completions), **and the rule was then refined in one respect that the failures taught:**
+  ```
+  before:  if status == "CLOSED" and not isinstance(recorded.get("cleanup"), dict):   raise BATCH_CLEANUP_PROOF_REQUIRED
+  after:   if status == "CLOSED" and recorded.get("cleanup") is None:                  raise BATCH_CLEANUP_PROOF_REQUIRED
+  ```
+  **A rule about PRESENCE must not smuggle in a rule about SHAPE** - the schema's `_BATCH_KEYS` already closes the document, and requiring a dict refused fixtures whose receipts are strings for a reason that was never the finding. **The refinement took the failures from 35 to 34; the rest are genuine fixture gaps.**
+- **And the remaining 34 are two mechanical categories, measured rather than described:**
+  | count | failure | what it needs |
+  | --- | --- | --- |
+  | **24** | `BATCH_CLEANUP_PROOF_REQUIRED` in the aggregator suite | the sealing documents its helpers build must **carry a `cleanup` value** |
+  | **5** | `Regex pattern did not match` in `test_act_task8_measurement_contract.py` | tests asserting a refusal **name** that the new rule now shadows - and the honest completion is to give those fixtures their cleanup proof **so the original refusal fires again**, not to change the expected name |
+- **Why this is the right kind of work and not a chore to resent:** the finding was *"the cleanup proof must be enforced"*, and **enforcement is exactly what makes a corpus of seals declare whether they cleaned up.** The fixtures were sealing `CLOSED` batches **without saying so** - which is the state the
+  finding was about.
+- **State:** CP-1620 in the tree and red for fixture completion; CP-1612 and CP-1635 not started (they are next, in that order); goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
