@@ -18632,3 +18632,24 @@ not an inference of mine.**
   in the batch's `measurements.json` into the published sample; the readback test must prove it finds the descriptor the
   **index** carries, which is a different source from the one CP-1114 used.
 - **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1170 — RED proven: the aggregator ignores the descriptor its closed index carries
+
+- **The RED isolates exactly the source CP-1169 flagged:** the fixture seals a batch whose **index** lists
+  `runtime-descriptor.json` (the file the driver writes) while `measurements.json` deliberately carries **no** `head_search`
+  block. Aggregating it publishes
+  ```
+  AssertionError: the sample carries the descriptor the closed index holds
+  assert None == {'camera': {...}, 'detector': {...}, 'motion': {...}}
+  ```
+  - so the descriptor is present in the sealed evidence, the index vouches for it, and the aggregator **never looks at it**.
+- **Why this is a different test from CP-1114's:** that one proved the aggregator folds a `head_search` block found in
+  `measurements.json`; this one proves it reads the descriptor **from the index**, which is the source §4.2's readback
+  requirement is actually about - the evidence the seal covers rather than a field someone could add to a payload.
+- **The GREEN, next round:** the aggregator reads `runtime-descriptor.json` through the **strict closed index** (never by
+  globbing, never from a context path), uses its parsed document as the sample's `head_search`, and then
+  `validate_head_search_binding(runtime, report)` closes the loop - after which item 2 is done and item 3's negative set
+  (opaque-only digest, descriptor mismatch, weights/model/device/CUDA policy change, controlled config hash change, unindexed
+  descriptor) can be written against a boundary that is real in both directions.
+- **State:** goal active (revision 51, cap 1000); RED log `beh-r776-red.log`; the other 25 tests in that module were green
+  before this test was added; no full suite, no push, no stack, no hardware.
