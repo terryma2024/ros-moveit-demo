@@ -24879,3 +24879,20 @@ picture in both directions.**
   P1-4, and it is where the review's "真实执行产生 evidence" bites.**
 - **State:** P1-1..P1-3 green and committed; P1-4 stage 1 and the sequence path committed. No new session, goal, worktree or stack; nothing pushed, nothing
   deleted; no hardware.
+
+## CP-1492 — The handoff is explicit now, and the boundary's remaining contract is read from the code
+
+- **`31 passed`** (`experiments/gate8-p14/handoff.log`) after the port began passing the frozen SEARCH handoff into the sequence call:
+  `sequence_phase(phase, request, *, observed=..., selected_source=...)`, with `selected_source` frozen at the readback's own `max_skew`. **The test asserts both arrive**, so
+  a boundary implementation cannot silently receive nothing and "succeed".
+- **And the boundary's remaining contract is now read, not guessed** - `VisibleApproachExpertRoute.qualify(prepared, proof, *, current_snapshot)` accepts only:
+  - a `prepared` document of kind `VISIBLE_APPROACH_EXPERT_PREPARATION` with `command_authority`/`eligible_for_collection` **False**, matching
+    `source_artifact_sha256` and `policy_fingerprint`, and a self-consistent `preparation_sha256`;
+  - a **`PathProof`** whose `status == "SAFE"`, whose `sample_count == manifest["expected_samples"]`, and whose `first_violation is None`;
+  - and `current_snapshot`, against which the prefix and source are re-checked.
+- **So the production APPROACH boundary must: prepare the route from the handoff (with the broker's owner ticket and the active policy fingerprint), drive the motion
+  through the broker (the substituted I/O in tests), obtain the `PathProof` from `PickPlaceApproachPathScreen.inspect(goals, prefix)`, qualify, and then gather the
+  eight gates from real readback.** Each of those pieces exists in the repository; wiring them is the next step, and it is the last one before a full case is
+  reachable.
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress (stage 1, sequence path, handoff). No new session, goal, worktree or stack; nothing pushed, nothing
+  deleted; no hardware.
