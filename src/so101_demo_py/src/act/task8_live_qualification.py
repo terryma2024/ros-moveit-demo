@@ -276,3 +276,26 @@ def derive_live_measurements(full_runs, contract) -> dict:
         derived[field] = {"value": extrema(values), "unit": LIVE_UNITS[field],
                           "runs": [run["run_index"] for run in runs]}
     return derived
+
+
+def build_qualified_measurements(ready_measurements: dict, live_runs, contract) -> dict:
+    """Copy the ready measurements **by value** and add exactly the five live-only entries.
+
+    The ready report is never mutated: the caller gets a new mapping, so the `TASK8_READY` document it came from
+    keeps its own contents and digest. The five additions come from `derive_live_measurements`, so they carry the
+    plan's extrema directions and, where a run supplies its own frames, the raw support-distance rule.
+    """
+
+    import copy
+
+    if type(ready_measurements) is not dict or not ready_measurements:
+        raise ValueError("READY_MEASUREMENTS_REQUIRED")
+    merged = copy.deepcopy(ready_measurements)
+    derived = derive_live_measurements(live_runs, contract)
+    overlap = set(derived) & set(merged)
+    if overlap:
+        # a live-only field must not already be present, or the ready report was not the 28-field document
+        raise ValueError(f"LIVE_FIELD_ALREADY_PRESENT: {sorted(overlap)[0]}")
+    for field in LIVE_ONLY_FIELDS:
+        merged[field] = {"value": derived[field]["value"], "unit": derived[field]["unit"]}
+    return merged
