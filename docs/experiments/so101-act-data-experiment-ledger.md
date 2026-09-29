@@ -12897,3 +12897,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7 module complete and green; the runner is untouched by me; the user's six in-flight files are
   byte-for-byte as they were; Tasks 1-6 committed and green; Tasks 8-10 untouched; no runtime, no package gate, no
   push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-928 — Handoff reconciled with the corrected Task 7 design
+
+- **Appended a CORRECTION section to `handoffs/20260930-task7-onward/HANDOFF.md`** because its earlier text still said
+  the runner opens the window - the superseded design. The correction states the verified facts (the port owns the
+  recorder; `seal_live_evidence` already exists and the runner already calls it; real provenance and sim time live in
+  the port's `physical_readback`; the runner tracks only `physics_step`), explains why the runner-based attempt was
+  reverted with the exact identity mismatch as evidence, and gives the corrected four-step edit order followed by the
+  unchanged production-chain test.
+- **Why this mattered enough to spend a checkpoint on:** a handoff that contradicts the corrected design would send
+  the next session to implement the version that was already tried and withdrawn - and the withdrawal reason (window
+  and seal disagreeing about the case identity) is not discoverable from the code alone once both halves look
+  plausible in isolation.
+- **State:** Task 7's module green (37 / 76) and its wiring design corrected and recorded; the user's six in-flight
+  files byte-for-byte untouched; Tasks 1-6 committed and green; Tasks 8-10 untouched; no runtime, no package gate, no
+  push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained and ineligible,
+  gen4 reserved for Task 10.
