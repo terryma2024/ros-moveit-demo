@@ -22826,3 +22826,19 @@ not an inference of mine.**
   `marker["session_id"] == request["session_id"]`, `marker["reset_epoch"] == reset_epoch`, `type(marker["marked_physics_step"]) is int` with
   `>= 1`, and `marker["command_authority"] is False` - **and the suite's double returns its own fixture's session, which is why my case is
   refused.** The fix is two lines in `_ChildSources`: a `physics_fence` lambda carrying this case's identity and a real marked step.
+
+## CP-1378 — The fence gate PASSES, and the run now ends on the request's own deadline
+
+- **The marker fix worked:** the run no longer refuses at `PHYSICS_STEP_FENCE_INVALID` - it now ends on **`SEARCH_DEADLINE_EXPIRED`**
+  (`PickPlaceSearchError` from the segment, wrapped by the port and the child), **after 60.7 seconds**, which is exactly the request's own
+  `deadline_ns` (`time.monotonic_ns() + 60s`). **So the substitution is now past every identity and proof gate and is failing on the search
+  loop's own progress: it never locks.**
+- **What that tells me before any further read:** the loop is running (not hung) and consuming real wall time, and its exit depends on the
+  adapter returning a lock decision - the suite's `_Adapter` pops decisions from a `deque`, so my single injected decision is consumed on the
+  first tick. **The next read is the loop's exit path together with `_post_stop_interval`'s step requirement**, and the honest guess to verify
+  first is that my `capture` advancing exactly one step per call cannot satisfy the post-stop interval's 50-step wait while the adapter has run
+  out of decisions.
+- **And a fixture lesson worth keeping:** the 60-second runtime is itself a signal - a substituted boundary with a real clock will happily burn a
+  real deadline, so the fixture's request deadline is a knob I should shorten when iterating rather than waiting a minute per probe.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
