@@ -155,6 +155,10 @@ def test_closed_batch_accepts_an_indexed_batch_and_rejects_closure_violations(tm
     batch = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
              "anchors": ["default", "left", "forward"], "batch_sha256": "0" * 64,
              "identity": identity, "files": {str(raw.relative_to(root)): hashlib.sha256(raw.read_bytes()).hexdigest()}}
+    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+
+    batch.pop("batch_sha256")
+    batch["batch_sha256"] = hashlib.sha256(_seal_canonical(batch)).hexdigest()
     write_closed_json(root / "batch.json", batch)
 
     validated = validate_closed_batch(root)
@@ -302,3 +306,30 @@ def test_the_cli_is_the_only_batch_seal_owner(tmp_path, monkeypatch):
         main(["--contract", str(contract_path), "--identities", str(identities_path),
               "--batch-root", str(other_root), "--ledger", str(tmp_path / "ledger-two.md"),
               "--driver", "sealing_driver:run"])
+
+
+def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_path):
+    """Boundary IV: the validator verifies the seal's self-digest, not merely its shape.
+
+    A batch document carries ``batch_sha256`` computed over itself, which is what makes its identity and status
+    uneditable after the fact - so a document whose digest was replaced must be refused, not merely checked for looking
+    like a sha256.
+    """
+
+    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, close_measurement_batch,
+                                                          require_v2_identity)
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+
+    identities = {name: "a" * 64 for name in IDENTITIES_V2}
+    identities["source_commit"] = "0" * 40
+    root = tmp_path / "batch"
+    root.mkdir()
+    (root / "raw.json").write_text('{"row": 1}')
+    sealed = Path(close_measurement_batch(root, require_v2_identity(identities)))
+    assert validate_closed_batch(root) is not None, "an untouched sealed batch validates"
+
+    document = json.loads(sealed.read_text())
+    document["batch_sha256"] = "0" * 64
+    sealed.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="BATCH_INVALID"):
+        validate_closed_batch(root)
