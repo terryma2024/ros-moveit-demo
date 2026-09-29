@@ -113,6 +113,27 @@ def _publish_new(path: Path, row: dict) -> None:
         os.unlink(staging)
 
 
+def _require_live_evidence_readback(artifact, case: dict) -> None:
+    """A full case must hand back a sealed artifact that reads back exactly; a prefix must hand back none."""
+
+    import hashlib
+
+    if case["mode"] != "full":
+        if artifact is not None:
+            raise ValueError("TASK8_LIVE_EVIDENCE_UNEXPECTED")
+        return
+    if type(artifact) is not dict:
+        raise ValueError("TASK8_LIVE_EVIDENCE_READBACK_MISSING")
+    path = artifact.get("path")
+    if not isinstance(path, str) or not path:
+        raise ValueError("TASK8_LIVE_EVIDENCE_READBACK_MISSING")
+    target = Path(path)
+    if target.is_symlink() or not target.is_file():
+        raise ValueError("TASK8_LIVE_EVIDENCE_READBACK_MISSING")
+    if hashlib.sha256(target.read_bytes()).hexdigest() != artifact.get("sha256"):
+        raise ValueError("TASK8_LIVE_EVIDENCE_READBACK_MISMATCH")
+
+
 async def run_pick_place_case(spec, case_id: str, owner, journal_path: Path) -> dict:
     """Never publish a case PASS until its child, stack and graph are gone."""
     journal_path = Path(journal_path)
@@ -133,6 +154,8 @@ async def run_pick_place_case(spec, case_id: str, owner, journal_path: Path) -> 
         }
         result = await worker.run_pick_place(request)
         _require_result(result, case)
+        # the journal row may only be published after the sealed artifact reads back byte for byte
+        _require_live_evidence_readback(result["live_evidence_artifact"], case)
     finally:
         # On any uncertain execution outcome, retirement still has to stop the
         # physical controllers. A failed finish keeps the owner admission fenced.
