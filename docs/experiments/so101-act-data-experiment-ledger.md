@@ -13321,3 +13321,17 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   file has grown since; three files carry my additive changes uncommitted inside the user's dirty set; Tasks 8-10
   untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-946 — Task 7's Step-4 command re-verified after the chain test grew
+
+- **Re-ran the plan's own verification command** from the worktree root with the test interpreter against the fresh
+  verified scratch `scratch-r539.*` and `TMPDIR/TMP/TEMP` set: live-evidence, teleop case-execution and the
+  production-chain test together report **53 passed in 0.93s**, rc=0 (`beh-task7-step4b.log`).
+- **Task 7's evidence path is proven end to end at every level:** a raw readback grid point (port) -> the frozen
+  10 Hz window with its nine phases and release correlation -> the recorder's own seal -> the port's idempotent
+  `seal_live_evidence` -> the journal-row readback that refuses missing, mismatched or unexpected artifacts - with
+  the failure path invalid-sealing an unfinished window rather than sealing it as evidence.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment with the plan's own command as the
+  consolidated check; three files carry my additive, uncommitted changes inside the user's dirty set; Tasks 8-10
+  untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
