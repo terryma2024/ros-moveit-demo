@@ -22962,3 +22962,18 @@ not an inference of mine.**
   correct about a fixture that lied.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1386 — Two marker constraints, and I have been bouncing between them; line 191 decides
+
+- **The run's own history in one place:** a **fixed** marker (`54`) made the interval's cursor jump and refused every queued step
+  (`after_step=54`, `head_step=3`); a marker of **`_step + 1`** tracked the newest readback and therefore **could never be passed**, so the
+  interval consumed the whole queue twice (129 rows, then 136 pops); and a marker **frozen at `_step`** is refused by the later check at
+  **line 191**, which is the frame the traceback has been naming all along and which I have not yet read - I read its neighbours at 196 instead.
+- **So the next round reads 185-195, not another guess.** What is already established is that the correct marker is a value that is **ahead of the
+  stop cursor and does not move afterwards** - the production fence's own behaviour, since it answers once per stop and the interval then advances
+  physics past it. **The exact relationship is in those eleven lines.**
+- **And the honest accounting:** this search path has now taken about twenty rounds, of which at least four were my inferences rather than the
+  file's own answer, and the two counters I added have each paid for themselves in a single run. **The remaining item is unchanged and the goal
+  stays active.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
