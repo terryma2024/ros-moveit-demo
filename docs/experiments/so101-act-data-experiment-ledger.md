@@ -30752,3 +30752,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-4 is CLOSED: RED confirmed (CP-1804), GREEN (CP-1805) and now a production-boundary trace with the
   runner driving its own seal and the document read back.** P1-1, P1-2 and P1-3 CLOSED. Remaining: the demo RED's clean
   re-measurement, P1-5, P1-6, the final freeze gate and the re-review packet.
+
+## CP-1807 — P1-5's anatomy: the function that must run, and what the existing tests put in its way
+
+- **`run_pick_place_case(spec, case_id, owner, journal_path) -> dict`** (`pick_place_case_execution.py:137`), read in
+  order, and every step is a production obligation rather than a fixture:
+  ```python
+  manifest, case, manifest_path = _preflight(spec, case_id, journal_path)
+  context, worker = await owner.start(spec)                 # the REAL owner starts the child and the stack
+  campaign = PickPlaceValidationCampaign(manifest_path, context, worker, journal_path)
+  if case not in campaign.planned_cases(deadline_ns=spec.deadline_ns):
+      raise ValueError("TASK8_CASE_NOT_FROZEN")             # the case must be one the manifest froze
+  result = await worker.run_pick_place(request)             # the run itself
+  _require_result(result, case)
+  _require_live_evidence_readback(result["live_evidence_artifact"], case)   # sealed artifact reads back byte for byte
+  await owner.finish(attempt_id=case_id)                    # retirement still stops the controllers on failure
+  … if not (owner._stack_retired and owner._child_retired and owner._final_clear):
+      raise ValueError("TASK8_CASE_RETIREMENT_UNCONFIRMED")
+  ```
+  **So the chain the verdict asks for has a single entry point that already enforces the hard parts**: the case is frozen
+  in the manifest, the artifact reads back byte for byte before a journal row may exist, and **a case cannot be called
+  PASS until its child, stack and graph are gone.**
+- **And what the existing child-driven test substitutes, which is where the verdict's complaint lands:**
+  `test_task8_child_driven_case.py` builds `ChildPort(PickPlaceSearchPhasePort)` - **a subclass** - beside
+  `FakeBroker`, `_ChildSources(_Sources)` and `_fixture_canonical_evidence(...)`. So the child→port PLUMBING is real,
+  **but the broker, the sources and the canonical evidence are the test's own**, and `run_pick_place_case` itself is what
+  the verdict says was never exercised end to end.
+- **So P1-5's work is now specific rather than open-ended:** drive **`run_pick_place_case`** itself with the production
+  owner and the ACT child port, then take the artifacts that run produces - its sealed live evidence and its journal row
+  - through `PickPlaceValidationCampaign` → the journal → **`aggregate_task8_calibration`**, the ACTUAL aggregator that
+  P1-2 made reachable. **And every negative must come from corrupting that same successful chain**, not from a
+  pre-made artifact, a fake owner, a fixture receipt, or a translator/validator-only run.
+- **State:** **P1-5 in progress; its entry point, its obligations and its substitutable-looking-but-required pieces are
+  named. P1-1 through P1-4 are CLOSED.** The demo RED's clean re-measurement, P1-6, the final gate and the re-review
+  packet remain.
