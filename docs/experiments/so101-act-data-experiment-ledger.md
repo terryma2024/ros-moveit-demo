@@ -17377,3 +17377,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Evidence:** scratch `<R>/scratch/r708.<n>` with `TMPDIR` verified through the exact test interpreter; logs
   `beh-r707.log` (36/2) and `beh-r708.log` (37/1). No full suite was run, per the owner's instruction; nothing weakened,
   `REQUIRED_CHECKS` untouched, nothing deleted, no push, no stack, no hardware.
+
+## CP-1113 — The report is the contract's 28 fields in their declared shapes, and one validator complaint is left
+
+- **The declared shape lives in `calibration.REQUIRED_MEASUREMENTS`**, not in the v2 contract entries: each name maps to
+  `(unit, size)`, and `_validate_measurements` enforces the unit, a scalar for size 1, a vector otherwise, an integer for
+  `count` units, and a value in `(0, 1]` for `min_confidence` and `tracking_iou`. The fixture now builds the published
+  entries **from that table** rather than as uniform scalars - and, because the table carries **33** names while the ready
+  report is the contract's **28**, it filters out the live-only five, which is exactly the READY-versus-QUALIFIED split the
+  user described.
+- **Measured: 37 passed / 1 failed** across both modules, and the **readback test passes** asserting all 28 fields with
+  disk-verified sample path and hash - so the report now carries the right field set, in the right units, in the right
+  shapes, each cited to its own group's approved closed sample.
+- **The remaining failure is the gate test, failing inside `require_gate` with `VECTOR_INVALID`.** Since the report's own
+  validation now passes the unit and shape checks in the readback test, the next step is to identify **which** field the
+  gate's own `_validate_measurements(complete=False)` rejects - the fastest honest way is to validate the 28 entries one at
+  a time and let the failing name print itself, rather than reading more code and guessing.
+- **Evidence:** scratch `<R>/scratch/r711.<n>` with `TMPDIR` verified through the exact test interpreter; logs
+  `beh-r710.log` (36/2, before the 33-field fix) and `beh-r711.log` (37/1). No full suite was run, per the owner's
+  instruction; nothing weakened, `REQUIRED_CHECKS` is untouched, nothing deleted, no push, no stack, no hardware.
