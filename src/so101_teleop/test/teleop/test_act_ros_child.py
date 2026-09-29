@@ -47,6 +47,8 @@ def request(*, worker_id="w00", generation=3, operation="task8_phase"):
         "support_distance_max_m": 0.02,   # the admitted support distance (P1-3)
         "gripper_closed_rad": 0.5,
         "close_duration_s": 0.5,
+        "pick_policy": "/home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a/src/so101_demo_py/config/policies/dynamic_cup_pick/v1",
+        "motion_duration_s": 0.5,
          "runtime_config_sha256": "b" * 64, "contact_policy_fingerprint": "c" * 64,
          "stack_owner": {"pid": 12345, "pgid": 12345, "started_ticks": 101,
                          "argv_sha256": "1" * 64, "environment_sha256": "2" * 64}}

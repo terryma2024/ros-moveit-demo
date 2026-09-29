@@ -272,6 +272,9 @@ class ActWorkerPort:
             "support_distance_max_m",
             # the case's admitted gripper target travels with the request for the same reason (CP-1514)
             "gripper_closed_rad", "close_duration_s",
+            # the admitted policy the case runs under, and the duration its motions take: both travel with the request
+            # because the payload schema requires them and the motion phases resolve against the policy (CP-1525)
+            "pick_policy", "motion_duration_s",
         })
         session_id, attempt_id, deadline_ns = self._base(request, fields=fields)
         if request["contact_policy_fingerprint"] != self.context.contact_policy_fingerprint:
@@ -290,6 +293,8 @@ class ActWorkerPort:
             "support_distance_max_m": request["support_distance_max_m"],
             "gripper_closed_rad": request["gripper_closed_rad"],
             "close_duration_s": request["close_duration_s"],
+            "pick_policy": request["pick_policy"],
+            "motion_duration_s": request["motion_duration_s"],
             "manifest_sha256": self.context.manifest_sha256,
             "runtime_config_sha256": self.context.runtime_config_sha256,
             "contact_policy_fingerprint": self.context.contact_policy_fingerprint,
