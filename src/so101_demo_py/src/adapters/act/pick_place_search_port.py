@@ -567,16 +567,49 @@ class PickPlaceSearchPhasePort:
         `_verify_phase` remains the only judge of the per-phase semantics.
         """
 
+        # the phase runs on the SEARCH evidence this port validated and froze: APPROACH prepares its expert route from
+        # exactly those two documents, and both the owner ticket and the active policy fingerprint come from the same
+        # boundary state the SEARCH evidence used (reset.broker.ownership.ticket / sources.contact_pairs.fingerprint)
+        if self._validated_search_observation is None:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}: search evidence")
+        observed = self.validated_search_observation()
+        selected_source = self.selected_prefix_source(
+            max_skew_s=finite(self.boundary.reset.sources.readback.max_skew))
+
+        if phase == "APPROACH":
+            # APPROACH is the one phase whose preparation belongs to this port: it holds the expert route the SEARCH
+            # begin built, while the motion and the proof belong to the boundary
+            route = self._expert_route
+            if route is None:
+                raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: expert_route")
+            reset = self.boundary.reset
+            prepared = route.prepare(
+                observed, selected_source=selected_source,
+                owner_ticket=reset.broker.ownership.ticket(
+                    reset.act_context["lease_token"], "act",
+                    request["session_id"], request["attempt_id"]),
+                active_policy_fingerprint=reset.sources.contact_pairs.fingerprint)
+            execute = getattr(self.boundary, "execute_approach", None)
+            if not callable(execute):
+                raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: execute_approach")
+            try:
+                result = execute(prepared, request)
+            except PickPlaceSearchPortError:
+                raise
+            except Exception as error:
+                raise PickPlaceSearchPortError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution") from error
+            if type(result) is not dict or set(result) != {"proof", "current_snapshot", "facts"}:
+                raise PickPlaceSearchPortError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution result")
+            route.qualify(prepared, result["proof"], current_snapshot=result["current_snapshot"])
+            facts = result["facts"]
+            document = {"phase": phase, "session_id": request["session_id"], "attempt_id": request["attempt_id"],
+                        "reset_epoch": self.boundary.reset.receipt.new_epoch, "release_epoch": 0, **facts}
+            return self._checked_sequence_document(phase, document)
+
         execute = getattr(self.boundary, "sequence_phase", None)
         if not callable(execute):
             raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
-        # the phase runs on the SEARCH evidence this port validated and froze: APPROACH prepares its expert route from
-        # exactly those two documents, so they travel with the call instead of the boundary reaching back for them
-        handoff = {}
-        if self._validated_search_observation is not None:
-            handoff["observed"] = self.validated_search_observation()
-            handoff["selected_source"] = self.selected_prefix_source(
-                max_skew_s=finite(self.boundary.reset.sources.readback.max_skew))
+        handoff = {"observed": observed, "selected_source": selected_source}
         try:
             facts = execute(phase, request, **handoff)
         except PickPlaceSearchPortError:
@@ -587,6 +620,11 @@ class PickPlaceSearchPhasePort:
             raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: not a mapping")
         document = {"phase": phase, "session_id": request["session_id"], "attempt_id": request["attempt_id"],
                     "reset_epoch": self.boundary.reset.receipt.new_epoch, "release_epoch": 0, **facts}
+        return self._checked_sequence_document(phase, document)
+
+    def _checked_sequence_document(self, phase: str, document: dict) -> dict:
+        """One closed rule for every sequence phase's document, used by both preparation paths."""
+
         if set(document) != _PHASE_EVIDENCE_KEYS:
             raise PickPlaceSearchPortError(
                 f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: keys {sorted(set(_PHASE_EVIDENCE_KEYS) ^ set(document))}")
