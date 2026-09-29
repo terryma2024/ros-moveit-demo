@@ -20195,3 +20195,23 @@ not an inference of mine.**
   my insertion disturbed. **84 tests pass**, including every suite that exercises the required argument end to end.
 - **State:** the source change is intact and uncommitted while red; the three test files are on disk **unparsed-safe** (verified
   above); no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1238 — Third mechanical rewrite, third safe abort: the method is wrong for this file, so it changes
+
+- **Same outcome, same guard:** my `partition`-based reconstruction produced a `SyntaxError`, `ast.parse` ran before `write_text`, and
+  the file was left untouched - so the suites still report the same **4 failed / 84 passed**. **`ast.parse` before `write_text` has now
+  saved the tree three times in five rounds; that ordering is the reason these mistakes cost a round instead of a file.**
+- **The honest reading of the pattern:** three mechanical text rewrites of the same test file have failed (line deletion left parens
+  unbalanced; `partition` reconstruction mangled a `def` boundary; the earlier sweep inserted duplicate keywords). **Pattern-matching over
+  Python source keeps losing to the fact that I have never actually read the lines I am rewriting.** The next attempt therefore stops
+  guessing: **read the four failing sites verbatim, then edit exactly those lines**, one small `edit` per site, and re-run.
+- **The four sites, named precisely so the next round does not re-derive them:**
+  1. `test_act_task8_measurement_runtime_descriptor.py::test_the_context_requires_a_runtime_descriptor` - my sweep supplied a descriptor
+     to the one test whose whole purpose is to omit it; the literal must come out of **that** call and stay everywhere else;
+  2/3. `test_act_task8_calibration_admission.py` - two **duplicate-keyword** `TypeError`s, i.e. a construction carrying the descriptor
+     twice, both inside that file's helper/call window;
+  4. the same file's `RESOURCE_BINDING_REQUIRED` expectation, whose order my insertion disturbed.
+- **What stands, unaffected:** `runtime_descriptor` is required and enforced in the working tree; the RED for that was proven at
+  CP-1235; the extracted shape validator is committed and shared (CP-1230); item 1 is committed and re-verified (CP-1234).
+- **State:** HEAD `d8bc31fc` plus this checkpoint; all three test files parse; nothing committed while red; no stack, no hardware,
+  nothing deleted, nothing pushed.
