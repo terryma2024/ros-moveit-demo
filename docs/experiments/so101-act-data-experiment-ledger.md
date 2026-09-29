@@ -31876,3 +31876,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   are members the harness's own objects should carry rather than namespaces built beside them.** P1-1 through P1-4
   CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1841 — The members come from a base class, and the drive is deep in the phase machinery
+
+- **The refusal returned to `readback`, now on the right object:**
+  ```
+  pick_place_search_port.py:662 run_phase -> :334 _search_evidence
+      AttributeError: '_ChildSources' object has no attribute 'readback'
+  ```
+  **so `_ChildSources` (which CP-1829 showed is `class _ChildSources(_Sources)`) does not establish the members its base
+  carries when it is constructed bare.** The boundary's own `search` never hits that because it hands its sources to
+  `_segment(...)`, **which sets them up** - so the honest construction is the one the boundary uses, not a bare
+  constructor plus members added one refusal at a time.
+- **And the two edits before it are the same lesson in the same file, now recorded as a rule for the next attempt:**
+  | edit | what it taught |
+  | --- | --- |
+  | `boundary.reset` - replaced with a fresh namespace, destroying the `receipt` the boundary writes | **add to the boundary's object; do not replace it** |
+  | `reset.sources` - built as a namespace beside the boundary's own kind | **use the same KIND the boundary builds, then add** |
+  | `session_id` - the double keeps `_session_id`, the production port reads the public name | **add the public alias beside the private one** |
+  | `readback` - a member of the segment suite's `_Sources`, not of the bare `_ChildSources` | **construct the way the boundary constructs, or let its setup run** |
+  **In every case the fix has been to supply a member from where production supplies it, and never to loosen the check
+  that asked for it.**
+- **State:** **P1-5 in progress: the drive runs phases and the remaining work is to construct `reset.sources` the way the
+  boundary constructs its own - with the segment suite's setup - rather than assembling a double member by member.**
+  P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**
