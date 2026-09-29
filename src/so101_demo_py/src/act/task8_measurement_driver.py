@@ -15,6 +15,10 @@ import os
 from pathlib import Path
 
 ANCHORS = ("default", "left", "forward")
+# the nine phases of the design's coverage matrix, taken from the window that enforces them rather than retyped
+_PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE",
+           "RADIAL_RETREAT", "FINAL_CHECK")
+PRIVATE_REPLAY_PERIOD_S = 0.002
 FORBIDDEN_OUTPUT_TOKENS = ("PASS", "FAIL", "qualified", "visible", "target_in_view", "contact_ok", "_ok")
 
 
@@ -65,6 +69,18 @@ class Task8MujocoMeasurementDriver:
 
     def _acquire(self, root: Path, anchor: str, identity: dict, ordinal: int) -> None:
         """Record ten geometry samples and one raw frame per phase - all provenance, no judgement."""
+
+        # the private replay first: nine phases at the 2 ms cadence, evaluated by the real phase camera, so a run
+        # cannot reach a sealed batch without the coverage its contract's phase matrix depends on
+        for index, phase in enumerate(_PHASES):
+            stamp = self.clock.monotonic()
+            observation = self.phase_camera(phase, index)
+            self._write_record(root, anchor, f"phase-{index:02d}-{phase.lower()}",
+                               {"source_stamp": stamp, "receive_monotonic_s": self.clock.monotonic(),
+                                "session_id": identity["session_id"], "reset_epoch": identity["reset_epoch"],
+                                "attempt_id": identity["attempt_id"], "physics_step": index,
+                                "period_s": PRIVATE_REPLAY_PERIOD_S, "phase": phase,
+                                "observation": observation})
 
         for sample in range(10):
             stamp = self.clock.monotonic()
