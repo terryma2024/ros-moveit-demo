@@ -15868,3 +15868,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   child side is one unread argument away from being writable; Task 9's single failing module awaits the (b1)/(b2) choice
   (CP-1035); Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no
   evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1043 — `reset_epoch` is simulation evidence, so it is read from the reset boundary, not the request
+
+- **Followed the last unknown and it is a different kind of thing from the other three identifiers:** `reset_epoch`
+  lives in `core/grasp_outcome.py` as a field of the simulation sample/evidence (`reset_epoch: int`, validated alongside
+  `publisher_sequence`, and required to match an `expected_reset_epoch` in three separate consistency checks) and in
+  `core/contact_policy.py` as part of the contact-policy document. It is therefore **owned by the simulation evidence**,
+  not by the case request.
+- **What that means for the child-side bind, in one line:** `case_id`, `session_id` and `attempt_id` come from the
+  request (CP-1042), while `reset_epoch` must come from wherever the child already witnesses the reset - the reset
+  connection/boundary it holds (`driver._act_reset_connection`, which the port factory is already given) or the first
+  piece of simulation evidence after that reset. **Reading that boundary's API is the last read before the write.**
+- **The shape of the remaining work has not changed, only its precision:** one read (the reset boundary's accessor),
+  then three lines in `_run_pick_place` at `:505` - construct `CaseEvidenceDriver(case_id=request.payload["scenario_id"],
+  staging_root=driver._act_artifacts.evidence_root, session_id=request.session_id, attempt_id=request.attempt_id,
+  reset_epoch=<from that boundary>)` and call `bind_live_evidence(driver.window)` - then a focused run of the child's
+  tests, staged alone as a hunk-level addition because the file carries the owner's in-flight work.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller is one read from completion on the child
+  side, with its port side already committed and tested; Task 9's single failing module awaits the (b1)/(b2) choice
+  (CP-1035); Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
