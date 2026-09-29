@@ -16994,3 +16994,17 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary IV's index work now stands at:** entry validates first, canonical shape, self-digest, symlink, contamination,
   anchor coverage, phase coverage, contract-vs-bound. **Still open:** identity agreement across roots beyond provenance,
   time reversal (needs stamps in the index), and the publishing half.
+
+## CP-1094 — Time reversal refused, again with no fixture breakage
+
+- **RED, clean:** a batch whose `left` anchor had **TRANSPORT stamped before the phases that preceded it** validated -
+  `Failed: DID NOT RAISE` - because the index holds digests and the closure check never looks at time.
+- **The rule:** driver-shaped phase rows are read **in phase order** and their `source_stamp` must not go backwards, else
+  **`BATCH_TIME_REVERSED`**. A row **without** a stamp proves nothing about order and is **skipped rather than passing as
+  ordered** - the distinction matters, because skipping is an honest "no evidence" while accepting would be a false claim.
+  Scoped to the driver's convention like CP-1093, so no fixture migrated.
+- **GREEN: 33 passed, rc=0** (`beh-r691-green.log`), scratch `<R>/scratch/r691b.<n>` with `TMPDIR` verified through the
+  exact test interpreter; RED `beh-r691-red.log`.
+- **Index work now:** entry validates first, canonical shape, self-digest, symlink, contamination, anchor coverage, phase
+  coverage, source-time monotonicity, contract-vs-bound. **Still open:** identity agreement across roots beyond
+  provenance, and the whole publishing half.
