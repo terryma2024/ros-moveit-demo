@@ -29734,3 +29734,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   only way a load-dependent test can be shown fixed.
 - **State:** **the demo RED is fixed and its rate is being measured; P1-1 … P1-6 follow, each as a focused RED→GREEN
   with its production boundary.** No other controlled change has been made.
+
+## CP-1771 — P1-1 second half GREEN: the real `DetectionBatch` is translated into a closed document
+
+- **The RED, written against the real types and run before the fix:**
+  ```
+  2 failed
+    test_the_adapters_result_is_a_closed_serializable_document    -> the driver's own canonicalizer raised
+    test_an_object_the_composition_does_not_understand_is_refused_by_name -> DID NOT RAISE
+  ```
+  Two fixture corrections were needed first, and both were the real types teaching their own contract: the real
+  `DetectionCandidate` requires a **boolean** mask (`ValueError: mask dtype must be boolean`), and `RuntimeDevice` is a
+  **`Literal["cuda", "mps", "cpu"]`, not an enum** (`detection.py:13`).
+- **The fix, in `task8_production_composition.py`:** the adapter translates instead of returning `detect()` unchanged -
+  a `_serializable_detection(result)` that accepts a real `DetectionBatch`, emits a **closed** document (the batch's
+  model/weights/device/latency/image size, and per candidate: identity, class, confidence, bbox, stamp, frame id,
+  image size, segmentation quality, **and the mask as `mask_shape` + `mask_sha256`** - the array cannot travel, but
+  what a reader can verify can), and **refuses anything else by name**: `PRODUCTION_DETECTION_RESULT_UNSUPPORTED: <type>`.
+- **GREEN, and it is the RED's own file:** `2 passed`.
+- **State:** **P1-1's second half is closed with a RED→GREEN on the real interface; its first half - the default real
+  bottom-I/O composition, so the formal entry does not depend on `SO101_TASK8_BOTTOM_IO_SEAM` - is next**, followed by
+  P1-2 … P1-6. The demo RED's fix is committed and its rate is being measured (before: 2 failures in 3 full-gate runs).

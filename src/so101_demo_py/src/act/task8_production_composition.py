@@ -90,7 +90,61 @@ class MeasurementDetectorAdapter:
 
         # the same whitelisted class the production ACT detector queries with (`adapters/act/detector.py:141`):
         # DetectionQuery validates its class_id against {cup, plastic_cup}, so the model id is NOT a class id
-        return self.detector.detect(frame, DetectionQuery(class_id=self.class_id or "plastic_cup"))
+        result = self.detector.detect(frame, DetectionQuery(class_id=self.class_id or "plastic_cup"))
+        return _serializable_detection(result)
+
+
+def _serializable_detection(result):
+    """Translate the detector's REAL return type into a closed document the driver can canonicalize.
+
+    P1-1 (rereview 5): the adapter used to return ``detect()`` unchanged. The production type is
+    ``core/detection.DetectionBatch`` - a dataclass whose candidates carry ``mask: numpy.ndarray`` - while the driver
+    embeds this value in a record it canonicalizes with ``json.dumps``. Tests passed dictionaries, so the mismatch was
+    invisible. The translation is explicit and CLOSED: fixed keys, no numpy, and a mask reduced to the two things a
+    reader can verify without the array (its shape and its digest). Anything this composition does not understand is
+    refused by name rather than stored and choked on later.
+    """
+
+    import hashlib
+
+    from so101_demo.core.detection import DetectionBatch
+
+    if not isinstance(result, DetectionBatch):
+        raise ProductionCompositionError(
+            f"PRODUCTION_DETECTION_RESULT_UNSUPPORTED: {type(result).__name__}")
+
+    def candidate_document(candidate):
+        mask = getattr(candidate, "mask", None)
+        mask_shape = [int(value) for value in getattr(mask, "shape", ())]
+        payload = getattr(mask, "tobytes", None)
+        mask_sha256 = hashlib.sha256(payload()).hexdigest() if callable(payload) else hashlib.sha256(
+            str(mask_shape).encode()).hexdigest()
+        document = {
+            "instance_id": candidate.instance_id,
+            "class_id": candidate.class_id,
+            "confidence": float(candidate.confidence),
+            "bbox_xyxy": [float(value) for value in candidate.bbox_xyxy],
+            "source_stamp_ns": int(candidate.source_stamp_ns),
+            "source_frame_id": candidate.source_frame_id,
+            "image_width": int(candidate.image_width),
+            "image_height": int(candidate.image_height),
+            "segmentation_quality": (None if candidate.segmentation_quality is None
+                                     else float(candidate.segmentation_quality)),
+            "mask_shape": mask_shape,
+            "mask_sha256": mask_sha256,
+        }
+        return document
+
+    device = getattr(result.runtime_device, "value", result.runtime_device)
+    return {
+        "model_id": result.model_id,
+        "weights_sha256": result.weights_sha256,
+        "runtime_device": device,
+        "inference_latency_ms": float(result.inference_latency_ms),
+        "image_width": int(result.image_width),
+        "image_height": int(result.image_height),
+        "candidates": [candidate_document(candidate) for candidate in result.candidates],
+    }
 
 
 def _providers_from_seam():
