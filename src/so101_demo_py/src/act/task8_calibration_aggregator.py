@@ -227,6 +227,8 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
         if document is not None:
             readings = document
             break
+    published = {**readings.get("camera_measurements", {}), **readings.get("measurements", {})} \
+        if readings is not None else {}
     ready = all(checks[name] == "PASS" for name in _CHECKS)
     sample = None
     if readings is not None:
@@ -245,9 +247,10 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
             "status": "PASS" if ready else "FAIL",
             "measurements": {name: _bare(readings["measurements"][name]) for name in sorted(_MEASURED)
                              if name in readings["measurements"]},
-            "camera_measurements": {name: _bare(readings["camera_measurements"][name])
-                                    for name in sorted(_CAMERA_MEASURED)
-                                    if name in readings["camera_measurements"]},
+            # the same precedence the report uses: the batch's own measurements win over the camera block, so the two
+            # documents cannot disagree about a camera field's value
+            "camera_measurements": {name: _bare(published[name]) for name in sorted(_CAMERA_MEASURED)
+                                    if name in published},
             "observed_lock_frames": _lock_frames(readings.get("observed_lock_frames", {})),
             "source_commit": next(iter(batches))[1]["source_commit"],
             "config_sha256": next(iter(batches))[1]["config_sha256"],
