@@ -32373,3 +32373,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the broker's own whitelist, and the remaining refusal is a non-empty-string check whose call site is the next thing to
   find.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
   remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1856 — The acquire path's whole vocabulary, and why the next step is instrumentation again
+
+- **Read end to end, `acquire` can only refuse in three ways, and none of them matches what is happening:**
+  ```python
+  # command_broker.py handle(), acquire branch
+  if self._fault_reason: raise PermissionError(self._fault_reason)
+  if self.ownership.state != 'IDLE': raise PermissionError('CONTROL_BUSY')
+  if not self._driver_stopped():
+      self.ownership.revoke('CONTROL_NOT_STOPPED'); self._stop_if_revoked()
+      raise PermissionError('CONTROL_NOT_STOPPED')
+  token = self.ownership.acquire(*scope[1:])            # scope = (lease_token, owner, session_id, attempt_id)
+  ticket = self.ownership.ticket(token, *scope[1:])
+
+  # act/ownership.py
+  def acquire(self, owner, session_id, attempt_id):
+      if owner not in OWNERS: raise ValueError('OWNER_INVALID')
+      identity = (owner, identifier(session_id), identifier(attempt_id))
+      with self._lock:
+          self._expire()
+          if self._state != 'IDLE' or self._lease is not None: raise PermissionError('CONTROL_BUSY')
+  ```
+  **so the branch offers `OWNER_INVALID`, `ID_INVALID`, `CONTROL_BUSY`, `CONTROL_NOT_STOPPED` - and my call passes
+  `owner="act"` (in `OWNERS`), `session_id="session-298"`, `attempt_id="full-01"`, all non-empty strings.** `ID_INVALID`
+  therefore most likely comes from the **admission block's** `for key in ('request_id','session_id','attempt_id'):
+  identifier(request[key])` - **over a field whose value I have not actually printed** - rather than from `Ownership`.
+- **Which makes the next step the same instrumented read that has settled three earlier questions** (CP-1845 confirmed,
+  CP-1848 refuted, CP-1851 resolved on one value): **print the request the connection builds and find the field that is
+  not a non-empty string**, instead of permuting plausible values and accepting whichever one stops refusing. **The
+  distinction matters because a value changed to silence a check is a value nobody can explain afterwards**, and this
+  ledger has to be able to explain every one of them.
+- **State:** **P1-5 in progress; the acquire path's complete refusal vocabulary is known, the arguments are valid on
+  inspection, and the next step is to print the request rather than to guess at it.** P1-1 through P1-4 CLOSED. The demo
+  RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so
+  they are not re-stated.**
