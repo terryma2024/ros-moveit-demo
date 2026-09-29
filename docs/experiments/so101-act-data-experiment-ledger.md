@@ -32815,3 +32815,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   remaining error is my own line's assumption about the scene document's `qpos`/`qvel` shape.** P1-1 through P1-4 CLOSED.
   The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
   unchanged, so they are not re-stated.**
+
+## CP-1871 — The scene document's `qvel` is an `int`, where a vector is required
+
+- **The probe answered in one line:**
+  ```
+  [probe] scene type=dict qpos=list qvel=int
+  [probe] scene keys=['clock_interval_begin_monotonic_ns', 'clock_interval_end_monotonic_ns', 'model_sha256',
+                      'paused', 'qpos', 'qvel', 'reset_epoch', 'simulation_session_id', 'simulation_step', …]
+  ```
+  **so `qpos` is a list and `qvel` is an `int`** - **and the physical proof the expert route checks carries
+  `model_qpos`/`model_qvel` that must agree with this scene** (CP-1868), while the template writes
+  `tuple(observed.physical_readback["scene"]["qvel"])` (CP-1867). **So the malformed member is the fixture's, not my
+  construction's** - my line assumed the vector the production code requires, and the document is the one that is wrong.
+- **Which is the same class as the run of fixtures this drive has corrected, and it is worth naming the pattern once more
+  because it keeps being right:** `neck_yaw_rad = 0.1` where every other suite said `0.0` (CP-1851),
+  `native_ingress_window_sha256 = "c" * 64` as a placeholder (CP-1867), and now `qvel` as an int. **Each fixture is
+  internally consistent for the suite it was written for, and each becomes wrong only when the whole chain runs.**
+- **So the next edit is on the scene's producer** - wherever the readback's scene document is assembled from the
+  sources' rows - **giving `qvel` the vector its own readers require, rather than loosening my construction to accept an
+  int.**
+- **State:** **P1-5 in progress: the four proofs attach, the native-ingress requirement passes, and the remaining defect is
+  a malformed `qvel` in the fixture's scene document.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement,
+  P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
