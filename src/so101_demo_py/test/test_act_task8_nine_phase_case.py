@@ -172,7 +172,8 @@ class _Route(VisibleApproachExpertRoute):
     def __init__(self, prefix):
         self._prefix = prefix
 
-    def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint):
+    def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint,
+                    require_fresh: bool = True):
         return {"kind": "VISIBLE_APPROACH_EXPERT_PREPARATION", "prefix": self._prefix,
                 "selected_source": selected_source, "owner_ticket": owner_ticket,
                 "source_artifact_sha256": "ac" * 32, "policy_fingerprint": "ad" * 32,

@@ -516,7 +516,8 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document(tmp_pat
                     "contact_scope_sha256": "c" * 64, "checker_sha256": "k" * 64,
                     "expected_samples": 701}
 
-        def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint):
+        def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint,
+                    require_fresh: bool = True):
             calls.append(("prepare", owner_ticket, active_policy_fingerprint))
             return {"kind": "VISIBLE_APPROACH_EXPERT_PREPARATION", "prefix": [1]}
 
@@ -591,7 +592,8 @@ def test_approach_refuses_by_name_when_the_route_or_the_execution_is_missing():
                     "contact_scope_sha256": "c" * 64, "checker_sha256": "k" * 64,
                     "expected_samples": 701}
 
-        def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint):
+        def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint,
+                    require_fresh: bool = True):
             return {"kind": "VISIBLE_APPROACH_EXPERT_PREPARATION", "prefix": [1]}
 
         def qualify(self, prepared, proof, *, current_snapshot):

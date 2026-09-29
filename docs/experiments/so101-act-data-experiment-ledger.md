@@ -33431,3 +33431,39 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `raw:observation` requirement is the next named gap.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement,
   P1-6, the final freeze gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not
   re-stated.**
+
+## CP-1892 — The full-case chain EXISTS and PASSES: `test_act_task8_full_case_joined_chain.py`
+
+- **Found in the tree, by reading the xfail's own reason - and it is the requirement P1-5 was written for:**
+  ```
+  src/so101_demo_py/test/test_act_task8_full_case_joined_chain.py   16087 bytes, three tests
+  "The requirement it was written to prove - one actual full case whose PRODUCTION code emits artifact, receipts and
+   journal and whose real reader consumes them - is met and passing in
+   `so101_demo_py/test/test_act_task8_full_case_joined_chain.py`, where a full-case port exists."
+  ```
+  **and after two fixes it passes:**
+  ```
+  3 passed in 28.64s
+    test_the_production_runner_seals_and_the_production_entry_publishes_its_row
+    test_the_qualification_reader_accepts_this_case_and_its_four_facts_hold
+    test_four_negatives_are_derived_by_corrupting_this_baseline
+  ```
+  **which is P1-5's requirement in its own words:** the production runner seals, the production entry publishes its row,
+  the real qualification reader consumes it, **and the four negatives are produced by CORRUPTING that successful chain**
+  rather than by building separate failures.
+- **And the only thing standing between it and green was my own option-2 change:** the three `_Route` doubles in
+  `test_act_task8_search_port.py` (two) and `test_act_task8_nine_phase_case.py` (one) mirror the production signature
+  `prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint)`, **so adding a parameter to the
+  production method made every double stale** - `TypeError: _Route.prepare() got an unexpected keyword argument
+  'require_fresh'`. **They now carry it with the production default**, which is what a double mirroring a production API
+  must do.
+- **Two lessons, both recorded rather than acted on silently:**
+  1. **a production signature change reaches every double that mirrors it** - and the suite that catches that is the one
+     driving the production call, not the one testing the double;
+  2. **this is the fifth time the repository already contained the thing this drive was about to build** (gate-6 fixtures
+     CP-1827; the sources' suite CP-1842; the driver double CP-1860; the production boundary CP-1891; **now the full-case
+     chain itself**) - **and the xfail's own reason said so, in the tree, for as long as it has been there.**
+- **State:** **P1-5's core requirement is MET by a passing production suite, with its four corruption negatives; the
+  duplicate chain in the teleop harness exists only to be deleted (its strict xfail says exactly that), and the remaining
+  P1-5 work is the packet's own evidence framing.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6,
+  the final freeze gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
