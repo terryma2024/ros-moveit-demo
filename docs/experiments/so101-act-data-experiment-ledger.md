@@ -16326,3 +16326,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   "10 shards / 5759 collected / 0 failures / 0 errors / 163 skipped" statement with `worker_count=8` explicitly not
   xdist, and the retraction of Task 5/6/7/9 completeness as a basis for progress); no fix has been written yet, and no
   test has been modified to accommodate anything.
+
+## CP-1061 — Boundary I, first piece: the seal now demands the contract's identity (RED then GREEN)
+
+- **RED, at the intended interface, not at collection:** a new test in `test_act_task8_measurement_contract.py`
+  asserted that `close_measurement_batch(root, {"source_provenance_sha256", "contract_sha256"})` is refused. It failed
+  with **`Failed: DID NOT RAISE <class 'ValueError'>`** - the seal accepted a two-key mapping where the contract defines
+  `IDENTITIES_V2` as ten members. Command, scratch and proof recorded:
+  `pytest -q -p no:cacheprovider test/test_act_task8_measurement_contract.py -k closing_a_batch_refuses` ->
+  **rc=1**, 1 failed in 0.03 s, `TMPDIR` verified through the exact test interpreter inside
+  `<R>/scratch/r662b.<n>/tmp`. (The first attempt returned rc=5 with everything deselected - a bad `-k` of mine - and
+  that was **not** counted as RED.)
+- **The fissure was real and inside one function.** After the identity check passed, `close_measurement_batch` still
+  required `("source_provenance_sha256", "contract_sha256")`, but the contract's own member is
+  **`measurement_contract_sha256`**; `contract_sha256` belongs to the *bound document* (`_V2_BOUND_KEYS`). So the
+  identity schema and the batch seal disagreed on a name, which is exactly the review's "eliminate the
+  `contract_sha256`/`measurement_contract_sha256` naming break".
+- **The minimal fix:** the seal now validates the identity through `require_v2_identity` (refusing anything that is not
+  the ten-member identity) and names the two members a batch must be able to cite correctly -
+  `source_provenance_sha256` and **`measurement_contract_sha256`**. The CLI seals with the validated ten-member identity
+  and keeps its own two-field ledger line, so the ledger format is unchanged while the sealed artefact is now
+  schema-true.
+- **One pre-existing test encoded the weaker rule and was updated deliberately, not silently:**
+  `test_batch_close_is_one_way_and_identity_bound` used a five-key ad-hoc identity; it now builds a valid
+  `IDENTITIES_V2` fixture and keeps its original assertions (the seal is a real file, a second close is refused, the
+  document's identity equals the identity, status CLOSED).
+- **GREEN: 10 passed, rc=0** (`beh-r662-green3.log`), scratch `<R>/scratch/r662e.<n>`, tempfile proof inside it.
+- **Boundary I remains open on two more pieces:** the runtime/admission parameters
+  (`measurement_plan_sha256`, `safe_interval_rad`, `candidate_sha256`, `policy_sha256`, `controller_generation`,
+  `broker_generation`, `resource_binding`) still ride **inside** the identity mapping the CLI reads, and
+  `task8_live_evidence.py` still has three `seal` entry points. Boundary III's 15 configured inputs are **not** needed
+  for these and are not being used to block them.
