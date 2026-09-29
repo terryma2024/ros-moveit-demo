@@ -28463,3 +28463,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **The snapshot the checker is run against must carry the SAME two times the request's axis was built from** - and the fixture's `_proof_snapshot` still writes the literals `"controller_start_time_s": 1.32` and `"controller_bridge": {"time_s": 1.30, ...}`. **Two hardcoded times for quantities that now belong to the run: the same defect as the prefix's fixed origin (CP-1679's family), one layer further in.**
 - **And the fix is the same shape as the last one, which is why the chain is converging rather than growing:** the snapshot must be built from the **same plan the executor reports the axis from** - one object, one pair of times - instead of a third copy of the same numbers.
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: prefix window green, time axis green, snapshot times the last link**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1701 — The APPROACH chain is CLOSED: the failure has left that path entirely
+
+- **The cause after the snapshot fix:**
+  ```
+  top: ValueError TASK8_LIVE_EVIDENCE_GRID_GAP
+  ```
+  **No longer `TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution`** - so the APPROACH phase now **executes to completion**, and the case proceeds to the live-evidence grid. **Ten links, every one found by reading a cause:**
+  | # | link |
+  | --- | --- |
+  | 1 | `PREFIX_INVALID` - the widened window had 600 times and one positions row |
+  | 2 | `APPROACH_HEADER_STAMP_INVALID` - the contract's ~0.102 s window |
+  | 3-4 | the prefix travels in a **signed receipt**, issued from the prefix it is given |
+  | 5-6 | the refresh targeted the narrow prefix, then the wrong dict |
+  | 7-8 | `PATH_TIME_AXIS_INVALID` - the executor's axis was two literals, then a **duplicated** prefix object |
+  | 9 | `PATH_SOURCE_TIME_CHANGED` - the snapshot's two times were literals too |
+  | 10 | **and the path now clears.** |
+- **What remains is the piece-4 core rather than another symptom:** `TASK8_LIVE_EVIDENCE_GRID_GAP` is the frozen grid's own rule - **consecutive samples exactly one period apart** - meeting a port that computes a phase's instants from that phase's **first** readback while the fixture's clock advances **per call**. **Two clocks that must be one sequence**, which is the last thing this migration was for.
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: window, axis and snapshot all green, the grid cadence the last piece**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
