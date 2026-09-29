@@ -23182,3 +23182,18 @@ not an inference of mine.**
   the next action is that one-line epoch confirmation.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1399 — Every condition I can reproduce passes, so the failing input must be a row I am not reproducing
+
+- **The analysis, in one place:** after this round's alignment the epoches genuinely agree (the boundary's `reset_epoch` is 1, its receipt's
+  `new_epoch` is 1, and every row stamps that same value), the key sets match exactly, the digest cross-check holds, the body and fingertips are
+  right, `paused`/`truncated` are False, both step and sim-time comparisons agree, and the timestamp range holds for every row the interval can
+  select (sim times run from 2.004 upward against a lock timestamp of 2.0). **So each condition, evaluated on a row I build myself, is true - and the
+  port still refuses with `physical readback scope`.**
+- **The only remaining explanations, and they are testable rather than mystical:** either the port validates a row that **differs from the ones my
+  probe builds** (the interval's selection path calls `capture` with a cursor that came from `max(cursor, marker)` and from the previous world, so
+  the exact row it keeps is not the one I reproduced), or one of the fields I have not compared - `world.reset_epoch` at that specific row - is not
+  what I think. **The next instrument prints the row INSIDE the boundary's own `search`, at the moment it is returned to the segment**, which is the
+  one place where the row the port sees is the row I can see.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
