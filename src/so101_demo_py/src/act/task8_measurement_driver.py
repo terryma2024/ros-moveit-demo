@@ -19,6 +19,8 @@ ANCHORS = ("default", "left", "forward")
 _PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE",
            "RADIAL_RETREAT", "FINAL_CHECK")
 PRIVATE_REPLAY_PERIOD_S = 0.002
+# every anchor is measured under its own full restart of the stack, so every raw row says which lifecycle it belongs to
+LIFECYCLE = "FULL_RESTART"
 FORBIDDEN_OUTPUT_TOKENS = ("PASS", "FAIL", "qualified", "visible", "target_in_view", "contact_ok", "_ok")
 
 
@@ -130,6 +132,8 @@ class Task8MujocoMeasurementDriver:
             self._write_record(root, anchor, f"geometry-{sample:02d}", record)
 
     def _write_record(self, root: Path, anchor: str, name: str, record: dict) -> None:
+        # one place stamps the lifecycle, so no row can be written without naming the restart it was measured under
+        record = {**record, "lifecycle": LIFECYCLE}
         payload = _canonical(record)
         text = payload.decode()
         for token in FORBIDDEN_OUTPUT_TOKENS:
@@ -140,6 +144,7 @@ class Task8MujocoMeasurementDriver:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(payload)
         self._files.append({"source_stamp": record["source_stamp"],
+                            "lifecycle": record["lifecycle"],
                             "receive_monotonic_s": record["receive_monotonic_s"],
                             "session_id": record["session_id"], "reset_epoch": record["reset_epoch"],
                             "attempt_id": record["attempt_id"], "physics_step": record["physics_step"],

@@ -329,3 +329,43 @@ def test_a_stack_without_readback_is_refused_by_name(tmp_path):
     document = json.loads(Path(sealed).read_text())
     assert document["status"] == "INVALID"
     assert "READBACK" in json.dumps(document), "a stack that cannot report its identity fails closed by name"
+
+
+def test_every_anchor_is_an_independent_full_restart(tmp_path):
+    """Boundary II: default, left and forward are three separate FULL_RESTART lifecycles, never overlapping."""
+
+    from so101_demo.act.task8_measurement_driver import ANCHORS, Task8MujocoMeasurementDriver
+
+    events: list[tuple[str, str]] = []
+
+    class Stack:
+        def readback(self, anchor):
+            return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
+
+        def launch(self, anchor):
+            events.append(("launch", anchor))
+
+        def close(self, anchor):
+            events.append(("close", anchor))
+
+        def cleanup(self, anchor, generation):
+            events.append(("cleanup", anchor))
+            return {"cleaned": anchor}
+
+    class Clock:
+        def monotonic(self):
+            return 0.0
+
+    driver = Task8MujocoMeasurementDriver(
+        stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
+        controller=lambda command: {"accepted": True},
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+    batch = tmp_path / "batch"
+    sealed = driver.run(_measurement_context(tmp_path), batch)
+    document = json.loads(Path(sealed).read_text())
+    assert document["status"] == "CLOSED"
+
+    lifecycle = [entry for entry in events if entry[0] in ("launch", "close")]
+    assert lifecycle == [(action, anchor) for anchor in ANCHORS for action in ("launch", "close")], lifecycle
+    row = json.loads((batch / "anchors/default/geometry-00.json").read_text())
+    assert row["lifecycle"] == "FULL_RESTART", "every row names the lifecycle it was measured under"
