@@ -16616,3 +16616,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `controller` and `phase_camera` - so the **composition of real adapters** remains the structural item, and it is the one
   part of Boundary II that cannot be finished or verified without the launch entry and, for a real measurement, a live
   stack.
+
+## CP-1074 — Boundary II's last item needs a live stack, so the approved order moves to Boundary IV
+
+- **What is left in Boundary II is exactly one thing, and it is not code I can finish or verify alone:** the
+  **launch-entry composition of real adapters**. `production_driver()` refuses loudly
+  (`PRODUCTION_DRIVER_WIRING_PENDING`) until something supplies a real `stack`, `clock`, `detector`, `controller` and
+  `phase_camera`, and the driver's behaviour against doubles is all that can be exercised today. Building those adapters
+  means a **live MuJoCo/ROS stack**, which the owner's own instructions reserve: single stack, CUDA with no CPU fallback,
+  and any resource pressure means stopping and sealing rather than downgrading. Nothing about it is blocked by Boundary
+  III's 15 values, but it *is* blocked by the absence of an authorised runtime.
+- **So I am not stalling on it and not inventing a composition spec.** The approved order is I, II, III, IV, V, VI, VII,
+  and **IV (the aggregator) and V (the production-chain test) need no live stack**: they are the strict closed-batch
+  entry, the anchor × phase × source raw index, the canonical documents and the real 28-field TASK8_READY, and the chain
+  test that must call `run_pick_place_case`, the owner, the child, `PickPlaceRunner` and the journal for real with only
+  external I/O faked. Those are the next boundaries, in order.
+- **What I will not do:** write a composition with guessed adapter shapes, wire a fake "real" stack into production code,
+  or claim Boundary II is verified when it has only ever run against doubles. The ledger says doubles; the review should
+  read it that way.
+- **State:** Boundary I complete; Boundary II code-complete against doubles with its composition item open and waiting for
+  an authorised runtime; Boundary III's 15 configured inputs deferred by the owner to its own boundary; **next is Boundary
+  IV's RED**. No runtime started, no session/worktree/stack created, no push, no evidence deleted, no hardware.
