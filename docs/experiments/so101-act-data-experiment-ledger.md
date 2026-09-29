@@ -17874,3 +17874,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `finish` call.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The next round writes that
   test against the helpers this checkpoint names.
+
+## CP-1137 — The full-case test's call shape, read from the routing test that already works
+
+- **The seam, exactly as the green test uses it:**
+  ```python
+  spec, context = prepared(tmp_path)
+  journal = tmp_path / "task8-live" / "cases.jsonl"
+  journal.parent.mkdir()
+  asyncio.run(cli.run_admitted_campaign(spec, <lifecycle>, journal))
+  ```
+  with `prepared`, `Worker` (line 39) and `Lifecycle` (line 61) in `test_act_task8_live_cli.py`.
+- **The one difference Boundary V's test must make, and it is the whole point:** the routing test installs
+  `_records(monkeypatch)` to **spy on and replace** the production campaign and case entries, which is right for proving
+  *routing*. Boundary V must let the **real** entries run and fake only the external I/O boundary, then assert the case's own
+  artefacts - SEARCH rows, the release open event, three adjacent 10 Hz support rows in one epoch, FINAL_CHECK, the sealed
+  artifact read back, the confirmed retirement, and the journal path and hash.
+- **What to read before writing it:** `Worker` and `Lifecycle`'s real bodies (lines 39-76 of `test_act_task8_live_cli.py`) to
+  learn exactly which I/O they already fake, and whether the production per-case entry can complete against them - because if
+  it cannot, the honest finding is a **missing seam** in the production code, not a test that needs more monkeypatching.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  (authoritative descriptor document; one authorised live stack for the recording half) remain open and independent of this
+  piece.
