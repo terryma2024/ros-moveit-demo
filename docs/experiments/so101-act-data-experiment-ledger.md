@@ -24775,3 +24775,23 @@ picture in both directions.**
 - **Fixture:** the nine-phase stand-in is **deleted**, the strict-xfail marker is **gone**, and the indexed-evidence test asserts **the port's own sample**.
 - **State:** committed. **P1-1, P1-2 and P1-3 are green.** Next is **P1-4** (the nine phases and the full case). No new session, goal, worktree or stack;
   nothing pushed, nothing deleted; no hardware.
+
+## CP-1487 — P1-3 is GREEN: the real chain records SEARCH evidence, and the fixture stopped hiding it
+
+- **Evidence:** `experiments/gate8-p13/` - the RED (`red-1.log`), the fixture going green (`child-green.log`), the wide teleop set
+  **`100 passed`** across the eight affected files (`regress-fix3.log`) and the demo set **`197 passed`** across the ten affected files
+  (`regress-demo.log`).
+- **Production:** one module-level `capture_evidence_fields`; `PickPlaceSearchBoundary.canonical_evidence(...)`; the port writes the seven sources'
+  raw records under the **recorder's own root** and builds the canonical **24-key** sample with the production builder; **every missing piece raises
+  `TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: <what>`**, the port's refusals survive `run_phase`'s wrap, and **`run_phase` has no skip path left**. The
+  admitted support distance is part of the case definition (`_PickPlacePayload.support_distance_max_m`, `gt=0`), carried through `ActWorkerPort`'s
+  request keys and payload, and handed to the attachment by the child together with the recorder's root.
+- **The feed exposed four genuine interface gaps, each fixed where it lived** rather than worked around: the recorder's **seven-source** vocabulary
+  against the synchronizer's **four-stream** audit; a required end-effector position with **no provider**; the wrist frame/target flags with **no owner**;
+  and a `scene` clock of **0**. **These are the findings the review asked for by insisting the fixture stop standing in for production - and none was
+  visible before something actually fed the window.**
+- **Fixture:** the nine-phase stand-in is **deleted**, the strict-xfail marker is **gone**, and the indexed-evidence test asserts **the port's own sample**.
+- **One guard earned its keep again:** the first commit attempt was refused by `git diff --cached --check` for a trailing blank line at EOF, so the
+  whitespace never entered history.
+- **State:** committed. **P1-1, P1-2 and P1-3 are green.** Next is **P1-4** (the nine phases and the full case). No new session, goal, worktree or stack;
+  nothing pushed, nothing deleted; no hardware.
