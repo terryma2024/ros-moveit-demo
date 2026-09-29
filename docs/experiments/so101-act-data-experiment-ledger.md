@@ -15704,3 +15704,35 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   gate's tmp depth vs the module's deliberate shared-root semantics, CP-1035) and awaits the owner's (b1)/(b2) choice;
   Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no evidence
   deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1037 — The seam already exists: the child port factory takes the same root the driver needs
+
+- **Read both the child's provisioning path and the factory it calls, and the two facts CP-1036 left open are answered:**
+  - the port is built **once per child** by `maybe_provision_pick_place_port(driver)` (`ros_child.py:83`) through
+    **`build_pick_place_child_search_port(*, node, model, contact_pairs, manifest, report, sources, command_broker,
+    connection, cancelled, binding, evidence_root: Path, campaign_id, worker_id, generation, scene_node_factory, …)`**
+    (`src/adapters/act/pick_place_child_port.py:29`), and the result is assigned to `self._pick_place_port` (`:186`);
+  - **the factory already receives `evidence_root: Path` and validates it exactly as `CaseEvidenceDriver` validates its
+    `staging_root`** - absolute, no `..`, an existing directory, not a symlink. So the directory the driver needs and the
+    directory the port already has are **the same root**, and CP-1036's "which directory plays `staging_root`" is
+    answered by the code rather than by a decision.
+- **Therefore the Task 8 caller's remaining work is threading one parameter, not composing a component:**
+  1. `build_pick_place_child_search_port` gains `live_evidence_window=None` (and, if a recorder is preferred,
+     `evidence_recorder=None`) and forwards it to the port it constructs - the port's constructor already accepts and
+     validates both (`pick_place_search_port.py:25-34`);
+  2. `maybe_provision_pick_place_port` constructs `CaseEvidenceDriver(case_id=…, staging_root=<that same evidence_root>,
+     session_id=…, attempt_id=…, reset_epoch=…)` and passes `driver.window`;
+  3. the case seals after FINAL_CHECK; failure paths are already covered (child invalid-seal plus
+     `PickPlaceCaseOwner._retire`, `cf1fedaa`).
+- **Two details still to read at the call site rather than assume:** which identifier plays the driver's `case_id` (the
+  factory's `campaign_id` is validated against the same `_CHILD_ID` pattern, so they are plausibly the same value, but
+  "plausibly" is not "verified") and where a real case's `reset_epoch`/`session_id`/`attempt_id` are available in the
+  child at provisioning time. Both are single greps away, and both are exactly the kind of thing this session has
+  wrongly guessed seven times - so they get read before they get written.
+- **What this changes:** the Task 8 caller has gone from "write a driver" to "thread two parameters and construct one
+  existing class at a place that already receives the root it needs". That is a small, reviewable change in a file that is
+  not currently carrying uncommitted work, with the risky part (the user's chain files) untouched.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller is now a parameter-threading change with
+  its seam identified; Task 9's single failing module awaits the owner's (b1)/(b2) choice (CP-1035); Task 10 blocked
+  until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no evidence deleted, no hardware;
+  formal 0/0/0; `collection_*` NOT_PROVISIONED.
