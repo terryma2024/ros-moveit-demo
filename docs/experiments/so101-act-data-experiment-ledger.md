@@ -18964,3 +18964,27 @@ not an inference of mine.**
   confirmed retirement, and the journal path and hash - plus routing the same port through `ros_child._run_pick_place`
   (`_pick_place_port`, `_startup_proof_consumer`) so the child supplies the window rather than the test.
 - **State:** goal active (revision 51, cap 1000); HEAD at this commit; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1185 — Four of Boundary V's seven artefacts asserted, all green on the first run
+
+- **Added to the green test, and honest about what they are:** the sealed artifact is read **back from disk** with a
+  matching digest, its `sample_count` is positive, its rows cover **SEARCH** and **FINAL_CHECK**, the case reports
+  `formal_episode_eligible` and `stopped_confirmed`, and the stop went through the port's `safe_stop`. **All four passed on
+  the first run** - so they are pins on the run CP-1184 made real, not fixes, and the ledger says so rather than dressing them
+  as RED→GREEN work.
+  | artefact (plan's list) | state |
+  | --- | --- |
+  | SEARCH rows from the real path | ✅ asserted (rows carry the phase) |
+  | FINAL_CHECK reached | ✅ asserted |
+  | sealed artifact read back | ✅ asserted, digest verified |
+  | confirmed retirement | ✅ asserted (`safe_stop`, `stopped_confirmed`) |
+  | release open event | ⏳ |
+  | three adjacent 10 Hz support rows in one epoch | ⏳ |
+  | journal path and hash | ⏳ - belongs to the child/owner path |
+- **Why the remaining three are separate rather than quick:** the release open event and the 10 Hz support rows are properties
+  of the **evidence rows' own shape** (the `contact`/`frame` blocks and the grid's epoch), which `_sample` currently fills with
+  one fixed set - so asserting them honestly means modelling the release in those rows, not adding an assertion that happens to
+  pass. The journal belongs to the **child/owner** path, which is the next structural step: routing this same port through
+  `ros_child._run_pick_place`.
+- **State:** goal active (revision 51, cap 1000); HEAD `964f9712`; staged 0; log `beh-r797.log`; no full suite, no push, no
+  stack, no hardware.
