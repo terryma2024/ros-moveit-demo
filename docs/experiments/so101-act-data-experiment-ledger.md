@@ -16403,3 +16403,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `beh-r663-red3.log`, GREEN log `beh-r664-green.log`.
 - **Boundary I remaining:** a single seal owner - `task8_live_evidence.py` still exposes three `seal` entry points
   (recorder, window, driver) and `close_measurement_batch` is a fourth path. That is the next piece, RED first.
+
+## CP-1064 — Boundary I, third piece: the ownership rule is already evidenced; my behavioural test is stuck on a fixture
+
+- **What the production side already shows, read rather than assumed:** `close_measurement_batch` is a one-way seal with
+  a **named** refusal - `os.link` onto an existing `batch.json` raises `FileExistsError` and is converted to
+  `ValueError("MEASUREMENT_BATCH_ALREADY_CLOSED")` (`task8_measurement_contract.py:207-211`) - and the CLI closes the
+  batch exactly once, after the driver returns. So the mechanical half of "one seal owner" holds today, and the earlier
+  review point ("do not let the driver seal and then the CLI seal again") is satisfied by that rule rather than only by
+  convention.
+- **What remains is the clarity the review asked for, not a behavioural defect I have observed:** three `seal` entry
+  points exist in `task8_live_evidence.py` (recorder, window, driver) and they seal the **live-evidence artefact**, not
+  the batch - so the ambiguity is about which artefact each owns, and no test pins that today.
+- **My attempt to pin it behaviourally is stuck on a fixture error, and I am recording that rather than dressing it up:**
+  `test_the_cli_is_the_only_batch_seal_owner` drives the CLI with fake driver modules and currently fails with
+  `TypeError: 'PosixPath' object is not subscriptable` raised inside **argparse** (`argparse.py:2285`), reached from
+  `.../build/so101_demo_py/so101_demo/cli/act_measure_task8_calibration.py:48`. Two candidate causes, neither yet
+  established: the CLI module the test exercises resolves to a **build-tree copy** rather than my edited source, and/or an
+  argument reaching `parse_args` is a `Path` rather than a string. Fixing that is a fixture read, not a production fix.
+- **A correction to my own first attempt, also worth keeping:** my first fake driver treated the CLI's first argument as
+  a path (`Path(contract)`), but the CLI hands the driver the **bound contract document** (a dict) - so the fixture now
+  reads `contract['identities']`. That was my error, and it is exactly the class of mistake this ledger keeps recording.
+- **Evidence:** `beh-r665.log` and `beh-r665b.log`, rc=1 each, scratch `<R>/scratch/r665.*` and `r665b.*` with `TMPDIR`
+  verified through the exact test interpreter; 11 of 12 tests in the module pass, the twelfth being my in-progress fixture.
+  **No production code was changed for this piece**, and none of the earlier Boundary I fixes regressed.
