@@ -26437,3 +26437,19 @@ pick the flattering number.**
 ### State
 - **All five of Astra's P1 items and P2's testable half are committed; the boundary is green; the packet and evidence index are NOT yet updated, and no review has been requested.**
 - Nothing deleted, nothing pushed; the owner's dirty files untouched; no new session, goal, worktree or stack; no hardware, no live stack, no CUDA, no actuators.
+
+## CP-1587 — The packet and the evidence index now carry this batch, with hashes
+
+- **`task8-astra-rereview-packet.md` grew from 24896 to 30544 bytes** (sha256 begins `c3cd4e4cdb0623df`) with **Addendum 3**, which:
+  - states the item table (P1-1..P1-4 complete and committed; **P2's testable half complete, live half blocked on the owner**);
+  - opens by **crediting Addendum 2's own prediction**, because the work followed it: the window had to be fed through `CaseEvidenceDriver.observe_capture`, **and the boundary then found that very method dropping the
+    end-effector** - which is the strongest possible form of "the review's read was right";
+  - carries the boundary's three legs with this run's numbers, the literal scratch path and the interpreter's tempdir check;
+  - records **all three findings** (the driver's end-effector, this batch's own seal identity, and the gate scripts' missing IPC base);
+  - keeps the **`ctest -j 8` vs serial nuance** in the packet rather than the ledger alone;
+  - and repeats the caveat that matters most: **`formal_episode_eligible: True` on a substituted runtime, so the flag is not evidence that a task was performed.**
+- **And the evidence index grew from 11549 to ~13536 bytes** (sha256 begins `039744cf06831b14`) with a **revision batch 3** section: the commit list, an artefact table with **bytes and sha256 prefixes** for the packet, both demo
+  logs, the demo JUnit, both teleop logs, the `colcon test-result` output, all three CTest runs' logs, the live-evidence/driver/chain logs and the P2 scenario log; the boundary parameters; the three results; and the **measured
+  retention** (3415 scratch trees / 1611 older than a day, 495 experiment directories, 87 files - **all retained, nothing deleted, moved or compressed**).
+- **State:** packet and index updated; ledger current through this entry; **the next action is the independent GPT-6 Astra / High review, which this agent may not perform or pre-empt.** Nothing pushed, nothing deleted; no new
+  session, goal, worktree or stack; no hardware.
