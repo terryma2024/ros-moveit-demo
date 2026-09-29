@@ -27787,3 +27787,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **That is worth one line because of how often this batch has met it:** a number beside another number that disagree is a **check available for free**, and CP-1613's row contained one. **The batch's habit of reading the artefact rather than the summary is what eventually
   caught it - three checkpoints later, and only because a re-run made the discrepancy impossible to ignore.**
 - **State:** the correction is recorded, corroborated from the original row, and discoverable in place; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1664 — The fourth "copy" is not a copy: the same expression is wrong in a seal and right in `batch_factory`
+
+- **CP-1646 recorded `batch_factory`'s `identity["measurement_contract_sha256"] = contract["contract_sha256"]` as a fourth copy of the field mix-up and deliberately left it alone. Reading the consumer settles it - and it is not a copy:**
+  ```
+  task8_calibration_aggregator.py:203-207
+      contract_sha256 = contract["contract_sha256"]
+      for batch, identity in batches:
+          # the identity names the contract it was measured under as measurement_contract_sha256; contract_sha256 is
+          # the bound document's own key, and reading the wrong one made every batch look foreign
+          if identity.get("measurement_contract_sha256") != contract_sha256:
+              raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+  ```
+  **The aggregator compares that member against the BOUND DOCUMENT's key, deliberately**, and its comment even records a past bug from reading the other one. **So the expression is exactly what that path requires** - while in a
+  **seal** helper the same line made the seal's identity disagree with the one the entry admitted, which is what `MEASUREMENT_SEAL_IDENTITY_MISMATCH` refused three times.
+- **Two paths, two different questions:** a **seal** must carry the identity the entry **admitted** (whose member is the identity's own digest of the contract); a **batch being aggregated** must satisfy the aggregator's comparison against the **bound document**. **Same expression, opposite correctness - and CP-1646's decision to
+  leave it alone was right, now with the reason rather than the instinct.**
+- **And the review request's third weak point is rewritten from a question into that distinction**, because the useful thing for a reviewer is not *"should this line change?"* but *"are these two paths asking different questions, or has one been made to agree with the other by accident?"* - the second would be a real defect hiding
+  behind a correct-looking line.
+- **State:** the request (5411 bytes as of CP-1661, re-stamped with this edit) and its index row carry the corrected weak point; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
