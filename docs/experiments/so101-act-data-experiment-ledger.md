@@ -16664,3 +16664,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Boundary I complete; Boundary II code-complete against doubles, composition item waiting for an authorised
   runtime; Boundary IV in progress with its first RED proven and its fix prepared; **the aggregator module's
   pre-existing failures now recorded rather than attributed to this work**.
+
+## CP-1076 — Boundary IV's first piece landed; the aggregator module is mid-migration and HEAD is red for it
+
+- **Correction to CP-1075, which I got wrong and am fixing here rather than leaving:** I wrote that the module's twelve
+  failures "exist at HEAD, before this boundary touched anything". The traceback shows they come from the module's own
+  `batch_factory` sealing with an **ad-hoc partial identity**, which **my committed CP-1061 strict seal refuses** - so
+  those failures are **mine**, introduced by Boundary I's first piece, and not pre-existing. The distinction matters
+  because it changes who has to fix them and what the review should expect.
+- **What this round landed:** the aggregator's unique entry now calls `validate_closed_batch` for every batch root before
+  it loads or publishes anything (the sentinel RED now passes), and `batch_factory` seals with the contract's
+  **ten-member identity** - `source_provenance_sha256` preserved as the parametrised field, the contract digest now under
+  its real name `measurement_contract_sha256`.
+- **Where the module stands: 10 failed / 5 passed**, down from **12 failed / 3 passed**. The failure shape changed with it:
+  the remaining errors are now **`BATCH_INVALID`** from the strict validator - the fixtures' **batch documents** still
+  predate the v2 closed-batch schema - plus one test expecting `CALIBRATION_IDENTITY_MISMATCH` that validation now
+  rejects earlier, which is a behaviour change to assert deliberately rather than to paper over.
+- **Stated plainly for the review: HEAD is currently red for `test/test_act_task8_calibration_aggregator.py`** - 10
+  failures - because my committed strict seal (CP-1061) invalidated that module's legacy fixtures and the migration is
+  unfinished. This commit reduces the breakage and moves it forward; it does not close it. Finishing means migrating
+  those fixtures' batch documents to the v2 closed-batch shape (the identity is done; the document is not) and
+  re-asserting the identity-mismatch test against where the refusal now happens.
+- **Evidence:** scratch `<R>/scratch/r676.<n>` with `TMPDIR` verified through the exact test interpreter; logs
+  `beh-r675-restored.log` (12 failed, before), `beh-r676-green.log` (10 failed, after).
