@@ -26557,3 +26557,34 @@ pick the flattering number.**
 - **Why it matters now:** the **compliant CTest leg wrote `Testing/20260929-1252`** - a directory that did not exist before this boundary, distinct from the retracted `20260929-1223`. **So the leg's result is separable from
   the retracted one by directory name, which is exactly the property the replacement boundary needed**, and the record below can cite it without ambiguity.
 - **State:** CTest running on its own scratch; demo and teleop legs green on theirs; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware; goal active.
+
+## CP-1594 — THE CORRECTED FINAL INTEGRATION BOUNDARY IS COMPLETE: three legs, three fresh scratches, all green
+
+### The per-leg record the correction required - scratch, assertion, command, rc, counts, elapsed
+
+| leg | its own fresh scratch | assertion output | command | rc | counts | elapsed |
+| --- | --- | --- | --- | --- | --- | --- |
+| **demo** | `scratch/final-boundary-v2-demo-20260929-204837/tmp` | `tempdir assertion OK: <that dir>` | `pytest -q -p no:cacheprovider test -n 8 --junit-xml=experiments/final-boundary-v2/demo-junit.xml -rs --tb=line` from `src/so101_demo_py` | **0** | **5731 passed, 163 skipped** | **228 s** |
+| **teleop** | `scratch/final-boundary-v2-teleop-20260929-204350/tmp` | `tempdir assertion OK: <that dir> ; ipc base: /tmp/s101-finalv2-ipc-863999` | `colcon test --packages-select so101_teleop --event-handlers console_direct+ --pytest-args "-q -p no:cacheprovider -n 8 --junit-xml=…"` | **0** | **1430 tests, 0 errors, 0 failures, 43 skipped** | **217 s** |
+| **CTest** | `scratch/final-boundary-v2-ctest-20260929-204350/tmp` | `tempdir assertion OK: <that dir> ; ipc base: /tmp/s101-finalv2-ipc-863999` | `ctest --output-on-failure` (serial, **no `-j`**) in `build/so101_teleop` | **0** | **100% tests passed, 0 tests failed out of 116** | **216 s** |
+
+**Every scratch above did not exist before this boundary**, each leg's `TMPDIR`/`TMP`/`TEMP` pointed at its own, and each leg **asserted `tempfile.gettempdir()` equal to it** with the interpreter that ran the tests - printed
+before anything ran, and `exit 97` on mismatch. **The benchmark suite was excluded from the demo gate** (ordinary `test/` scope). **CTest's result lives in a directory that did not exist before this boundary**:
+`build/so101_teleop/Testing/20260929-1252` (UTC name = 20:52-20:56 local, CP-1593), distinct from the retracted `20260929-1223`. **IPC base `/tmp/s101-finalv2-ipc-863999`, mode 700**, created for this boundary.
+
+### What this replaces, and what it does not touch
+
+- **Replaces:** the retracted CP-1579/CP-1584/CP-1585/CP-1586 numbers and the "boundary green" claim they carried. **This entry is the boundary's citable result.**
+- **Does not touch:** the boundary's findings - the driver's unforwarded end-effector (CP-1577), this batch's seal identity and its new refusal of a disagreeing caller (CP-1582/1583), the gate scripts' missing IPC base (CP-1583) -
+  and the `ctest -j 8` observation, which stands as an observation about parallelism and is not the approved gate (CP-1585).
+- **And one correction the compliant demo leg produced on its own:** its first attempt failed with `TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: release_epoch` because it tested **newer** code than the retracted run; fixed in
+  `7f88220b` and re-run on a second fresh scratch (CP-1591).
+
+### Scratch classification - deletion candidates, NOT deleted
+
+`scratch/final-boundary-v2-demo-20260929-204350` (failed first attempt) · `…-v2-demo-20260929-204837` (green demo) · `…-v2-teleop-20260929-204350` (green teleop) · `…-v2-ctest-20260929-204350` (green CTest) ·
+**and the retracted `scratch/final-boundary-20260929-201359`**, retained with every log, JUnit file and CTest `Testing/` directory. **Nothing deleted, moved or compressed.**
+
+### State
+- **The three legs are compliant-green. The next actions are the ones the owner ordered after this point:** re-update **packet / evidence index / hash**, and **only then** propose the independent GPT-6 Astra / High review.
+- Nothing pushed; no new session, goal, worktree or stack; no live stack, no CUDA, no actuators, no hardware; **P2's live half not started**; goal active.
