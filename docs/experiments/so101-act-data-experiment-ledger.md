@@ -30991,3 +30991,43 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5's integration is confirmed feasible with its hazards named; the construction itself is next.**
   P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1814 — Attempting the real integration found a production defect: the full-case checker cannot be built
+
+- **The probe did what it was for, and it failed at the production call site rather than at my harness:**
+  ```
+  route_motion_configuration -> model_sha256=3c876e7bbf879dbf…  model_path=scene.xml  submit_lead_s=0.05
+  MujocoPathProcess(...)
+      File "…/adapters/act/physics.py", line 240, in __init__
+          local = MujocoPathChecker(**configuration)
+      TypeError: MujocoPathChecker.__init__() missing 1 required keyword-only argument: 'allowed_pairs_by_phase'
+  ```
+  and the two signatures say the same thing:
+  ```python
+  physics.py:34    def __init__(self, model_path, *, protected_roots, cup_joint, gripper_body, path_step_s,
+                              path_clearance_m, velocity_limit_rad_s, acceleration_limit_rad_s2,
+                              allowed_pairs_by_phase, max_samples=50000)      # required, keyword-only, NO default
+  pick_place_child_port.py:175-181   factory(check_timeout_s=…, start_timeout_s=2.0, model_path=…,
+                                             protected_roots=("base",), cup_joint=…, gripper_body=…,
+                                             path_step_s=…, path_clearance_m=…, velocity_limit_rad_s=…,
+                                             acceleration_limit_rad_s2=…)   # ← allowed_pairs_by_phase absent
+  ```
+  **So `build_pick_place_child_search_port(..., route_motion=…)` cannot build its checker at all** - the production
+  full-case path raises `TypeError` the moment a caller supplies the admitted route motion. **Every other supplier of
+  `allowed_pairs_by_phase` is a calibration-motion config (`calibration_motion.py:108/134/184`).**
+- **Which reframes P1-5 rather than merely obstructing it:** CP-1808 recorded that a full case is refused at APPROACH
+  because the harness provisions SEARCH only; CP-1809 and CP-1810 found the production wiring and its inputs; and now
+  **the production wiring itself is incomplete** - so the full case was never driven end to end **because the path that
+  would drive it is broken at its own construction site**, not because a test declined to try. **That is exactly the
+  class of finding the verdict's "run the real chain" demand exists to surface.**
+- **And the fix is not a parameter to guess at:** `route_motion_configuration` returns `allowed_pairs=frozenset()` - a
+  SINGLE set - while the checker wants **per phase**. So the honest repair needs the per-phase pairs' own admitted
+  source, which is the question the next step must answer from the route document rather than invent: **the builder must
+  pass a per-phase mapping whose provenance is the admitted motion, exactly as it does for the other nine values.**
+- **One thing the probe confirmed positively:** `MujocoPathChecker` also refuses a MuJoCo version it was not compiled
+  against (`{'linux': '3.12.0', 'darwin': '3.4.0'}`), **and this host runs 3.12.0** (CP-1798) - so that check would pass
+  here, and the environment is not the obstacle.
+- **State:** **P1-5 in progress, now with a production defect named and its repair's requirement stated: the full-case
+  checker needs `allowed_pairs_by_phase` from an admitted source, not from invention.** P1-1 through P1-4 CLOSED. The
+  demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
+  unchanged, so they are not re-stated.**
