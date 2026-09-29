@@ -21456,3 +21456,24 @@ not an inference of mine.**
 - **Next:** the journal's case-id rule (its raise site is printed above), then item 5 should be green.
 - **State:** the child-driven test file remains **uncommitted while red**; items 1-4 complete and committed; no live stack, no stepping,
   no CUDA, no hardware; nothing deleted, nothing pushed.
+
+## CP-1299 — The last gate is the sample identity, and it is a small override away
+
+- **The rule, read from `task8_live_evidence.py:86`:**
+  ```python
+  if (sample["case_id"] != self.case_id or sample["session_id"] != self.session_id
+          or sample["attempt_id"] != self.attempt_id):
+      raise ValueError("TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH")
+  ```
+  **the samples the port appends must carry the case identity the child's recorder was built with** - `scenario_id`, `session_id`,
+  `attempt_id` from the request. The chain test's port was written for its own fixture identity (`full-01` / `session-1` / `attempt-1`),
+  so in this fixture its rows name a different case than the recorder - and the production recorder refuses them, correctly.
+- **The fix is one override in my `ChildPort`:** build rows with this case's identity (the port already receives the runner's request, which
+  carries `session_id` and `attempt_id`, and the case id comes from the payload's `scenario_id`), leaving the chain test's port untouched.
+  **That is the same "extend in my own file" pattern the repository itself uses for its port methods.**
+- **Two gates before it were cleared with the same care:** `TASK8_JOURNAL_CASE_ID_INVALID` because the journal's `_CASE_ID` is
+  `r"[a-z]+-[0-9]{2}\Z"` (my `case-item5` could never match; `case-05` does), and `TASK8_RESET_EPOCH_UNBOUND` /
+  `TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH` around the window's epoch binding, which the port now performs with exactly the value its rows
+  carry rather than a fallback.
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no live stack, no stepping, no
+  CUDA, no hardware; nothing deleted, nothing pushed.
