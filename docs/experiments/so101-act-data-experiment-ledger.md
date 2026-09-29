@@ -20916,3 +20916,20 @@ not an inference of mine.**
   the file that grep found. **Then the fixture is written, with the port imported from the chain test rather than re-declared.**
 - **State:** HEAD `1258e241` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1272 — The request is a frozen, closed pydantic model - which fixes how the fixture must build it
+
+- **`IpcRequest`** (`src/so101_teleop/so101_teleop/unified/ipc.py:108`) is `BaseModel` with `model_config = ConfigDict(extra="forbid",
+  frozen=True)`, a `version: Literal[1]` and an `operation: Literal[...]` allowlist; the remaining field names are printed above, and
+  `task8_full` / `task8_phase` are the operations this fixture needs.
+- **Two consequences the fixture must respect, and both are the kind of thing a hand-built dict would get wrong:**
+  1. **`extra="forbid"`** - a request carrying any field the model does not declare is refused, so the fixture builds the real model
+     rather than a namespace that merely has the right attributes;
+  2. **`frozen=True`** - the request cannot be patched after construction, so the payload and the deadlines are decided **before** the
+     entry is called, which is also how the production dispatcher works.
+- **That closes the last unknown.** Every design question item 5 had - the entry, its eight preconditions, the fence, the two stops, the
+  async entry points, the production artifact-loading entry, the binder's contract and now the request model - has been answered by
+  reading, and the fixture is the next thing written. **Reuse: the chain test's `FakePort` (which already implements every method the
+  runner reaches for, including `bind_startup_receipt`) and its sealed-record readback helpers.**
+- **State:** HEAD `c55e3a4f` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
+  nothing deleted, nothing pushed.
