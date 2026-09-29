@@ -32231,3 +32231,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress: the port accepts a full case's SEARCH evidence, and the drive is past the check that has
   occupied it since CP-1843.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
   re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1852 — The expert-route registration's four requirements, three of them already satisfied
+
+- **Past the phase evidence, `run_phase` registers the expert route, and the block names everything it needs:**
+  ```python
+  if self._expert_route is not None:
+      reset = self.boundary.reset
+      context = reset.act_context                                            # (1) act_context, with a lease_token
+      ticket = reset.broker.ownership.ticket(context["lease_token"], "act",
+                                             request["session_id"], request["attempt_id"])   # (2) a real ticket
+      reset.broker._prefix_source_port.register(
+          reset.broker, self, self._expert_route, ticket,
+          active_policy_fingerprint=reset.sources.contact_pairs.fingerprint) # (3) register, (4) the fingerprint
+  ```
+  | requirement | state |
+  | --- | --- |
+  | `reset.broker.ownership` | **satisfied** - the broker I built through `build_bound_act_broker` carries the `Ownership()` the construction passed |
+  | `reset.broker._prefix_source_port` | **satisfied** - installed by the production composition root (CP-1833), which is why `begin`'s `isinstance` passed |
+  | `reset.sources.contact_pairs.fingerprint` | **satisfied** - the live manifest's `contact_policy_fingerprint`, matched against the route's own manifest fingerprint at admission (CP-1824) |
+  | **`reset.act_context["lease_token"]`** | **the remaining one** |
+- **And the remaining one is not a fixture value to invent, which is why it is recorded rather than filled in:** a lease
+  token is what the **owner** grants - `ownership.ticket(lease_token, "act", session, attempt)` mints a scoped ticket from
+  it, and `_prefix_source_port.register(...)` **validates that ticket against the driver's epoch, the simulation session,
+  the armed generation and the stopped state** (CP-1825's `_scope`). **So an invented token would be refused by the
+  registrar for exactly the right reason** - and the honest source is the owner that `run_pick_place_case` drove, which in
+  this harness is `_prepared`'s `_Owner`.
+- **Which makes the next question a specific one about the harness rather than a general one about the drive:** does
+  `_Owner` (or the child's `start`) mint and publish an `act_context` with a `lease_token` - **and if it does, where does
+  it put it, since the port reads it off `boundary.reset`?** If the production owner publishes it through the startup
+  path the boundary already follows, this is a member to carry; **if no owner in this harness mints one, that is a
+  genuine gap to name rather than to paper over with a fabricated token.**
+- **State:** **P1-5 in progress: the phase evidence passes, the expert route is being registered, and of the registration's
+  four requirements only `act_context["lease_token"]` is missing - with its honest source identified as the owner.**
+  P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**
