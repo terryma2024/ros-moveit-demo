@@ -25452,3 +25452,24 @@ picture in both directions.**
   immediately; an edit to the other is live only after a build.** I spent a round reading the wrong code path because of it - `inspect.getsource` on the loaded module is the check that settles it.
 - **State:** P1-1..P1-3 green and committed; all nine phases committed; the policy wiring is uncommitted while these five tests are red. No new session, goal, worktree or stack; nothing pushed,
   nothing deleted; no hardware.
+
+## CP-1527 — A real dependency, found by wiring: the repository has no QUALIFIED policy, so the case cannot load one
+
+- **Where it stands (`experiments/gate8-p14/var4.log`: 78 passed, 5 failed):** the wiring is correct - the case names its policy, the child calls the production
+  `load_dynamic_policy_variant(share_dir, backend="mujoco", policy_id=…, version=…)`, and the port and boundary carry the template. **The five remaining failures are the loader refusing the only policy tree
+  this worktree has:**
+  **`DYNAMIC_POLICY_INVALID: manifest fields differ; missing=['execution_allowed_backends', …]`** - and reading the installed tree shows why: the variant tree is
+  `install/so101_demo_py/share/so101_demo_py/config/policies/<id>/v1/{manifest,gazebo,mujoco,real_stub}.yaml` with a manifest whose keys are `schema_version, policy_id, version, variants`
+  - **no qualification or execution fields.** **The loader requires them, and they are produced by the qualification pipeline (Task 10), which this batch is explicitly forbidden to touch.**
+- **So the nine-phase case cannot run end to end until an ADMITTED, QUALIFIED policy exists** - **not because of anything in this batch's code, but because the only policy documents in the tree have not been
+  through qualification.** The refusal is correct behaviour: loading an unqualified policy and calling its numbers admitted would be exactly the silent assumption this batch exists to prevent.
+- **Everything around it is done and green:** all nine phases are implemented in the boundary and each is judged by `PickPlaceRunner._verify_phase` in a focused test (9/9, CP-1525); the case payload, bridge,
+  child, port and boundary all carry the policy reference; **the port-level end-to-end case is the only thing waiting, and it waits on a policy.**
+- **The precise question for the owner, and it is a decision rather than a bug:** **which admitted policy should a nine-phase case run under - do we (a) qualify one through the Task 10 pipeline (which is out of
+  this batch's scope and would touch a subsystem the owner froze), (b) allow the loader to accept the unqualified `mujoco.yaml` variant for offline/contract cases only (which weakens a rule the repository
+  deliberately enforces), or (c) have this batch's port-level case take its template from a test fixture and mark the production path as waiting on qualification, so the remaining P1-4 work (seal, journal,
+  assertions, negatives) can proceed and the dependency is recorded rather than worked around?**
+- **Meanwhile this batch continues with work that does not need a live policy: the seal, the full-case journal, the seven indexed assertions with their four negatives, and P2's CLI close-out.** The
+  goal stays active; this is a recorded dependency with a question, not a stop.
+- **State:** P1-1..P1-3 green and committed; all nine phases committed; the policy wiring is uncommitted while these five tests are red. No new session, goal, worktree or stack; nothing pushed, nothing deleted;
+  no hardware.
