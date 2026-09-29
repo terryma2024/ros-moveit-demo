@@ -11735,3 +11735,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   harness showing **2 failed, 7 passed**, with both failures being the absent v2 contract document.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-878 — Task 1 draft skeleton complete; the semantic mapping is the last step
+
+- **Produced `handoffs/20260929-measurement-protocol-v2-approved/contract-source/v2-draft.json`** (11,376
+  bytes): 21 `measurements` and 7 `support` entries, every `unit` taken from `calibration.REQUIRED_MEASUREMENTS`
+  (and all 28 names verified present there), with the design's cells preserved verbatim under
+  `_verbatim:<original column header>` keys so no cell was paraphrased.
+- **The draft is explicitly marked `_status: DRAFT_PENDING_SEMANTIC_MAPPING`** and carries a note that
+  `source_kind`, `comparator`, `formula_id`, window, `threshold_source` and `failure_code` still require the
+  design's semantics to be mapped deliberately, and that it must not be used as the frozen contract. It stays in
+  the evidence root, never at the repository path.
+- **Ready for the final Task 1 step:** `task1-inventory.md` (names, units, ten identity members, five approved
+  occluders), the five verbatim design sections, `field-rows.json` (all 28 rows machine-readable) and this draft.
+- **Verified state:** focused test **2 failed, 7 passed**, both failures being the absent
+  `config/act/task8-calibration-measurement-contract-v2.json`; `act/task8_measurement_schema.py` and the
+  phase-camera matrix remain uncommitted by design, to go in together at Step 4 with the plan's exact
+  `git add` list.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
