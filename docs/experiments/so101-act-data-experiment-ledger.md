@@ -13613,3 +13613,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   rebuild in a new generation subroot; one approval outstanding (the 17 candidate search values, three
   `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted,
   no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-958 — Task 7 closed; Task 8's specification recorded as the next work item
+
+- **Task 7 is complete and green** (CP-957): every increment committed except the three files deliberately carried
+  uncommitted inside the user's dirty set, and the retirement path proven through the real owner.
+- **Task 8 read from the approved plan and recorded here so the next round starts without re-reading:** it modifies
+  `src/so101_demo_py/src/act/task8_live_qualification.py` and its test module - **both clean** in git, so no user work
+  is in the way - and produces `derive_live_measurements(full_runs, contract) -> Mapping` plus
+  `build_task8_qualified_report(...)` returning an **immutable 33-field** report, consuming five sealed independent
+  FULL roots produced by Task 7 together with the 28-field ready report.
+- **The five live-only fields and their extrema direction across five runs:** occlusion **max**, support-distance
+  **max**, release-stable **min**, retreat-distance **min**, placement-stable **min**.
+- **The support-distance rule in full:** it must use the **three consecutive 10 Hz samples immediately before the
+  first open in the same release epoch**, require the exact `bottom_collision`/`table_collision` active contact and a
+  stable pose/velocity, and report `max(0, d_signed)`.
+- **The plan's own steps:** (1) five-field RED tests covering those extrema directions; (2) qualification rejection
+  tests - missing live fields, mixed identity/policy/matrix, a summary without a sealed sample path/hash, an allowed
+  distance without real contact, discontinuous frame stamps, or a report that has not passed `require_qualified()`;
+  (3) implement immutable report generation - copy the 28 ready measurements **by value**, add exactly five derived
+  entries, recompute checks, write a new report, read it back and call `require_qualified(report)`, **never mutating
+  the ready report in place**; (4) commit the two files with
+  `feat(act): derive task8 live qualification measurements`.
+- **State:** Tasks 1-7 complete and green (plan's Step-4 command 53, broader focused set 244, chain file 16); Tasks
+  8-10 remain; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
+  candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED; gen3 retained and ineligible, gen4 reserved for Task 10.
