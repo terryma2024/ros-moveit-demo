@@ -18289,3 +18289,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   and authorisation for one live stack (no hardware) for the recording half of that chain.
 - **Not claimed:** Boundary V is not finished, no live stack has been run in this stretch, no full xdist gate has been run in
   this stretch, and no new measurement values exist.
+
+## CP-1155 — Final integrity check green on both sides, and the open RED classified rather than committed
+
+- **Ran both sides one last time, targeted as instructed, each with a fresh NVMe scratch:**
+  | side | modules | result |
+  | --- | --- | --- |
+  | aggregator side | aggregator, contract, head-search binding, calibration render, calibration | **79 passed**, rc=0 |
+  | teleop side | production chain, case execution, case owner, full restart campaign | **40 passed**, rc=0 |
+  Logs `beh-r762.log` and `beh-r762b.log`, scratch `<R>/scratch/r762.<n>` with `TMPDIR` verified through the exact test
+  interpreter. So every suite this boundary touched is green, and the two hand-written suites that would break first if the
+  publishing half were wrong both pass.
+- **My Boundary V test is deliberately NOT committed:** `src/so101_teleop/test/teleop/test_task8_case_runner_chain.py` is
+  untracked and **fails by design** at `LIVE_EVIDENCE_SEAL_UNAVAILABLE`, which is the runner refusing to complete a case
+  whose live evidence was never sealed. Committing it would leave the teleop test directory red for a reason that is real but
+  unfinished, so it stays untracked with its exact state recorded here and in CP-1153. **No gate collects it**, and the 40
+  passing teleop tests above exclude it by name.
+- **The objective is not complete and the goal is left active.** Boundaries I-IV are as itemised in CP-1154, Boundary V is
+  part-way with its next step named, and two owner decisions are outstanding (the authoritative descriptor document; one
+  authorised live stack, no hardware, for the recording half). **Nothing is marked done that is not.**
+- **Evidence and retention:** all logs under
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/gate6-batch3-py-gate/`, scratch under the same
+  root's `scratch/` (`r615…r762`), the re-review packet at `handoffs/20260930-task7-onward/task8-boundary-iv-rereview-packet.md`
+  (5333 bytes, sha256 `65bd4ca5…`). **Nothing deleted, nothing pushed, no stack started, no hardware touched.**
