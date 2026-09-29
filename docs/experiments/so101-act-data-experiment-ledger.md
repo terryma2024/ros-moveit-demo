@@ -31784,3 +31784,43 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress; the helper exists and its caller is unchanged, so the six-step wiring's last piece is to
   use it.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
   remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1838 — A second production defect, found the same way: `physics_clock_domain` passes `clock_ns=None`
+
+- **The chain now reaches the domain, and the domain refuses:**
+  ```
+  test_act_task8_full_case_chain.py:232 -> :181 _production_broker
+      broker_authority_wiring.py:236 in physics_clock_domain
+      physics_clock_history.py:52 in __init__
+          raise ValueError("PHYSICS_CLOCK_CONFIG_INVALID")
+  ```
+  **and the cause is one line in the production composition helper:**
+  ```python
+  # physics_clock_history.py
+  def __init__(self, session_id, *, nq, nv, max_age_s, max_source_step_gap_ns, max_silence_s=None,
+               first_chunk_timeout_s=None, incarnation=None, clock_ns=time.monotonic_ns):
+      if not isinstance(session_id, str) or not session_id or not callable(clock_ns):
+          raise ValueError("PHYSICS_CLOCK_CONFIG_INVALID")     # <- None is not callable
+
+  # broker_authority_wiring.py
+  def physics_clock_domain(*, session_id, nq, nv, settings, clock_ns=None):     # <- default None
+      history = PhysicsClockHistory(session_id=session_id, nq=nq, nv=nv, max_age_s=max_age_s,
+                                    max_source_step_gap_ns=int(max_sim_gap_s * 1e9),
+                                    clock_ns=clock_ns)                          # <- forwards None explicitly
+  ```
+  **`PhysicsClockHistory`'s own default is `time.monotonic_ns`, which is callable - but `physics_clock_domain`'s
+  default is `None`, and it forwards it explicitly, so the parameter's default can never take effect.** A caller that
+  omits `clock_ns` - **which is exactly what `ros_child.py` does when it builds the ACT child** - therefore gets
+  `PHYSICS_CLOCK_CONFIG_INVALID` instead of a domain.
+- **Which makes this the second defect of the same shape as CP-1814**, and both were found by the same method: **by
+  running the real chain rather than reasoning about it.** CP-1814 was a required argument the call site did not pass;
+  this is an optional argument the call site passes as `None` over a callable default. **Neither is visible from either
+  file alone** - each is a disagreement between two files that a reader of one would not suspect.
+- **And the fix is one conditional, in the same place:** pass `clock_ns` only when it is not `None`, or default it to
+  `time.monotonic_ns` in `physics_clock_domain` - **after which a caller that omits it gets the history's own default
+  rather than a refusal.** The harness needs no change for this; **the defect is production's, and the harness found it
+  by using the production constructor instead of a double.**
+- **State:** **P1-5 in progress: the drive's wiring is complete enough to reach the domain, and the domain's construction
+  has a defect to fix - recorded, with its cause and its one-line repair.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**

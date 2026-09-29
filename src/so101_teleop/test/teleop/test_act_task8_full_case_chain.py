@@ -219,12 +219,14 @@ def test_the_joined_chain_carries_the_sealed_artifact_a_full_case_produces(tmp_p
     from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPhasePort  # noqa: F401  (port type)
     from so101_teleop.unified.ros_child import bound_act_source_settings
     from test_act_campaign_admission import _calibration
-    from test_task8_child_driven_case import FakeBroker
+    from test_task8_child_driven_case import FakeBroker, _head_search
 
     share = Path(__import__("ament_index_python.packages", fromlist=["x"]).get_package_share_directory(
         "so101_demo_py"))
     model = mujoco.MjModel.from_xml_path(str(share / "assets/mujoco/act/scene.xml"))
-    report_path, _report_sha = _calibration(evidence, status="TASK8_READY")
+    # the SAME head-search block the binding uses, from the one copy both callers share (CP-1837) - the report's
+    # provenance check compares it with the runtime config's, so a second copy would be a second thing to keep in step
+    report_path, _report_sha = _calibration(evidence, status="TASK8_READY", head_search=_head_search(evidence))
     settings = bound_act_source_settings(json.loads(Path(report_path).read_bytes()),
                                          timestep_s=float(model.opt.timestep))
     broker, _servers = _production_broker(session_id="session-298", driver=FakeBroker(),
