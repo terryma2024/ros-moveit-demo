@@ -714,3 +714,63 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
                                           manifest_document_sha256=manifest["manifest_document_sha256"])
     require_case_row_matches_bundle(journal_row, identities=identities,
                                     manifest_document_sha256=manifest["manifest_document_sha256"])
+
+
+# --- protocol v2 additions (Task 8): the five live-only fields ---------------------------------------------
+
+LIVE_FIELDS = ("grasp_occlusion_window_s", "cup_support_distance_m", "release_stable_s",
+               "retreat_distance_m", "placement_stable_s")
+
+
+def _live_run(index, *, occlusion=0.5, support=0.01, release=1.0, retreat=0.06, placement=1.0,
+              session="session-1", policy="d" * 64, matrix="e" * 64):
+    return {"run_index": index, "session_id": session, "contact_policy_fingerprint": policy,
+            "phase_camera_matrix_sha256": matrix,
+            "grasp_occlusion_window_s": occlusion, "cup_support_distance_m": support,
+            "release_stable_s": release, "retreat_distance_m": retreat,
+            "placement_stable_s": placement,
+            "sample_path": f"runs/{index}/live.json", "sample_sha256": "f" * 64}
+
+
+def test_the_five_live_fields_take_the_documented_extrema_across_five_runs():
+    from so101_demo.act.task8_live_qualification import derive_live_measurements
+
+    runs = [_live_run(0, occlusion=0.30, support=0.02, release=1.5, retreat=0.08, placement=2.0),
+            _live_run(1, occlusion=0.55, support=0.05, release=0.9, retreat=0.05, placement=1.2),
+            _live_run(2, occlusion=0.40, support=0.01, release=1.1, retreat=0.09, placement=1.8),
+            _live_run(3, occlusion=0.10, support=0.03, release=1.3, retreat=0.04, placement=2.4),
+            _live_run(4, occlusion=0.25, support=0.04, release=1.0, retreat=0.07, placement=1.5)]
+    derived = derive_live_measurements(runs, {})
+    assert set(derived) == set(LIVE_FIELDS)
+    # occlusion and support distance take the maximum; the three stability/distance fields take the minimum
+    assert derived["grasp_occlusion_window_s"]["value"] == pytest.approx(0.55)
+    assert derived["cup_support_distance_m"]["value"] == pytest.approx(0.05)
+    assert derived["release_stable_s"]["value"] == pytest.approx(0.9)
+    assert derived["retreat_distance_m"]["value"] == pytest.approx(0.04)
+    assert derived["placement_stable_s"]["value"] == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("runs,reason", [
+    ([_live_run(0), _live_run(1), _live_run(2), _live_run(3)], "FIVE_RUNS_REQUIRED"),
+    ([_live_run(0), _live_run(1, policy="c" * 64), _live_run(2), _live_run(3), _live_run(4)],
+     "IDENTITY_MISMATCH"),
+    ([_live_run(0), _live_run(1, matrix="c" * 64), _live_run(2), _live_run(3), _live_run(4)],
+     "IDENTITY_MISMATCH"),
+    ([_live_run(0), _live_run(1, session="other"), _live_run(2), _live_run(3), _live_run(4)],
+     "IDENTITY_MISMATCH"),
+])
+def test_derivation_refuses_fewer_than_five_runs_or_a_mixed_identity(runs, reason):
+    from so101_demo.act.task8_live_qualification import derive_live_measurements
+
+    with pytest.raises(ValueError, match=reason):
+        derive_live_measurements(runs, {})
+
+
+def test_a_summary_without_a_sealed_sample_is_refused():
+    from so101_demo.act.task8_live_qualification import derive_live_measurements
+
+    runs = [_live_run(index) for index in range(5)]
+    runs[2] = {key: value for key, value in runs[2].items() if key != "sample_sha256"}
+    runs[2]["summary"] = "support distance measured"
+    with pytest.raises(ValueError, match="SEALED_SAMPLE_REQUIRED"):
+        derive_live_measurements(runs, {})
