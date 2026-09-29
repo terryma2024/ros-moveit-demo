@@ -16149,3 +16149,38 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   cases with 18 failures confined to the controller-reservation socket budget; Task 10 blocked until the 17 provisional
   search values are independently designed and Astra-reviewed. No push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1055 — The socket-budget arithmetic, and why this module cannot fit inside this gate
+
+- **Measured the paths rather than reasoning about them, and the numbers decide the question.** The client module builds
+  its socket as `Path(TMPDIR).parents[2] / "ipc" / "res-XXXX" / "pYYYY.sock"`:
+  | context | `parents[2]` | characters | socket path | fits 107? |
+  | --- | --- | --- | --- | --- |
+  | standalone run | the registered evidence root | 64 | ~93 | **yes** - it passes 17/17 |
+  | inside the gate | `<evidence-root>/gate-r650/scratch/r650/<physical>` | ~89 | ~118 | **no** - `bind` fails, thread dies, `ready.wait(1)` is false |
+  So decision A produced exactly the structure the module wants (`parents[2]` is the process's own root) and the
+  **length** of that root is now the only obstacle.
+- **The length is irreducible under the constraints the owner set.** The evidence root is 64 characters and is fixed by
+  the evidence policy (and by the migration rule, which forbids rewriting recorded paths); the tool's own nesting
+  contributes `scratch/<run-id>/<physical>`; the per-process root must remain an **independent shard/task root**, which
+  is what forbids the one arrangement that would fit - putting `TMPDIR` at `<run-root>/scratch/<id>/tmp` so that
+  `parents[2]` is the run root's parent (~72 characters). Sharing it would make the shards non-private, which is the
+  property decision A was required to preserve.
+- **Two honest options, and the choice is a policy one:**
+  1. **accept and document** (`b2`): record that `test_controller_reservation_client` and
+     `test_controller_reservation_provision` cannot pass inside the gate while the evidence root is this long, and treat
+     their standalone results (17 passed at the documented depth) as their evidence. Nothing in this task's code is
+     involved, and the failure is a path-length budget, not a behaviour.
+  2. **keep the private root but shorten what precedes it**: the tool could place the shard roots one level higher - e.g.
+     under `<evidence-root>/scratch/<run-id>-<physical>` instead of `<evidence-root>/scratch/<run-id>/<physical>` - which
+     saves one separator and one directory level (~5 characters). That is not enough on its own: the arithmetic above
+     needs roughly 11 characters, so this option only works combined with a shorter run id or a shorter evidence root,
+     and the evidence root is the part that cannot move.
+- **What the gate result already establishes, independent of this module:** 5759 cases executed, **nine of eleven shards
+  fully green**, with correct provenance and no interference from the owner's 43 uncommitted paths - so the Task 9 gate
+  is measured, and its remaining failures are one path-length budget confined to two shards of the controller
+  reservation family, none of them this task's code.
+- **State:** decision A implemented (gate suite 42 passed; single module 17 passed standalone); decision B complete
+  (CP-1051/1052/1053, 79 + 6 + 38 focused tests); Task 9 measured as above; Task 10 blocked until the 17 provisional
+  search values are independently designed and Astra-reviewed. No push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
