@@ -15672,3 +15672,35 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   (CP-1013); Task 9's single failing module is now understood *correctly* - its requirement is the documented scratch
   depth, which the gate's own tmp layout does not reproduce; Task 10 blocked until the 17 search values are reviewed.
   No formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1036 — The Task 8 caller already exists: `CaseEvidenceDriver`, and the wiring is three lines
+
+- **Read the constructors instead of planning a new component, and the missing caller is already written:**
+  `task8_live_evidence.py:559` defines **`CaseEvidenceDriver`**, *"Drive one case's evidence window from readback
+  fields into its private staging directory."* Its API is exactly what the child needs:
+  - `CaseEvidenceDriver(*, case_id, staging_root, session_id, attempt_id, reset_epoch, release_epoch=0, period_s=0.1,
+    tolerance_s=0.01, recorder_factory=None)` - it validates that `staging_root` is absolute, free of `..`, an existing
+    non-symlink directory, creates `case_root = staging_root / case_id`, builds the
+    `Task8LiveEvidenceRecorder(case_id=…, evidence_root=case_root, session_id=…, attempt_id=…)` and wraps it in a
+    `LiveEvidenceWindow` with the case identity;
+  - `.window` exposes that window;
+  - `.observe(fields, *, phase, frame, contact, measurements, event=False)` composes each canonical sample through
+    `build_live_evidence_sample` and routes it to grid or event.
+- **So the Task 8 production caller is a binding, exactly as CP-1013 predicted, and it is three steps:**
+  1. where the case identity, session, attempt, reset epoch and the case staging root are known, construct
+     `CaseEvidenceDriver(...)`;
+  2. hand `driver.window` to the port as `live_evidence_window=` (the port already validates that a window exposes
+     `seal`, records every validated phase in `_grid_sample`, and seals on demand - no second loop, no new sampler);
+  3. seal after FINAL_CHECK; the failure paths are already covered - the child invalid-seals, and
+     `PickPlaceCaseOwner._retire` invalid-seals idempotently before the child is retired (committed at `cf1fedaa`).
+- **What remains genuinely unknown and must be read at the call site, not invented:** which directory plays
+  `staging_root` for a real case (it must exist before the driver is constructed and must be the same root the case row's
+  `live_evidence_path` later points into), and whether the port is constructed per case (so the window can be passed at
+  construction) or provisioned once and rebound. Those two facts live in `ros_child.py`'s
+  `maybe_provision_pick_place_port`/port-assignment path (`:83`, `:318`) and in the owner, and reading them is the next
+  action - the same rule this session has applied to every interface it touched.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller is no longer "to be written" but "to be
+  bound", with its exact API and its three steps recorded; Task 9's single failing module is understood correctly (the
+  gate's tmp depth vs the module's deliberate shared-root semantics, CP-1035) and awaits the owner's (b1)/(b2) choice;
+  Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no evidence
+  deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
