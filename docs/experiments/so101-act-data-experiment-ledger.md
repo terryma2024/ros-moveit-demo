@@ -22060,3 +22060,18 @@ not an inference of mine.**
      assertion becomes "the entry refuses a driver that did not seal"**.
 - **State:** P1-3's changes (entry + schema) and the fixture work remain uncommitted while these two are red; no stack started, no CUDA, no
   actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1332 — One failure left, at a named line, with two candidates and one print to choose between them
+
+- **The contract test is now green** (its driver seals nothing and the test asserts the entry's refusal by name), so the suites stand at
+  **28 passed / 1 failed**, and the single failure is my item-1 test: the formal CLI, no seam, `BATCH_INVALID` raised at
+  **`task8_measurement_schema.py:191`** - the **key-set check** whose current text is printed above.
+- **That narrows it to two candidates, and a print decides:** either the `seal_valid` helper wrote a document whose key set is not exactly
+  `_BATCH_REQUIRED | {cleanup, contamination}` (a `status`/`error_code` interaction with my relaxation), **or** the driver's own sealing
+  never ran and the `batch.json` on disk came from somewhere else with the wrong keys. **One `-s` run that prints the sealed document's
+  keys settles it**, and that is cheaper than any further reasoning about which.
+- **Where P1-3 stands overall:** its production change (seal readback, refusal of a non-CLOSED terminal status, INVALID ledger outcome,
+  nonzero exit, evidence preserved) **and the schema defect fix** are done, and **all of P1-3's own tests plus the contract suite pass**;
+  this last failure is the descriptor suite's driver, which is also the "valid success" case the reviewer asked for.
+- **State:** P1-3's changes and the fixture work remain uncommitted while this one test is red; no stack started, no CUDA, no actuators, no
+  hardware; cleanup untouched; nothing deleted, nothing pushed.
