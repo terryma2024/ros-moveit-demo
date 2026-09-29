@@ -22174,3 +22174,19 @@ not an inference of mine.**
   directly with the payload the caller controls.
 - **State:** nothing changed in the source this round; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing
   deleted, nothing pushed.
+
+## CP-1338 — P1-4's GREEN is in and its two tests are the only failures left (87 passed)
+
+- **The GREEN, applied:** the aggregator now compares the payload's claim against the **validated inner block**
+  (`validate_head_search_shape(sealed_descriptor)`), so both sides are at one layer **and** every sealed descriptor passes the same complete
+  production rule P1-2 strengthened. Build copy synced.
+- **The three minimal fixture descriptors were completed** (the same strengthening pattern as P1-2 and P1-3), which took the suite from
+  **18 failures to 1**, and then a **second comparison site** surfaced: `aggregator.py:208` checks
+  `identity["measurement_contract_sha256"] == contract["contract_sha256"]`, which my hand-built identity did not satisfy - **so my new tests
+  now name the contract, and the failure moved again.**
+- **Where it stands: `87 passed, 2 failed`, and both failures are my two new P1-4 tests.** Their next failure is one read away (the two
+  `E ` lines), and the honest note is that **each fix so far has revealed the next layer of the same fixture - which is what a real
+  production-shaped fixture costs.** No production behaviour was weakened at any step: the only production edits are the one-layer
+  comparison plus the shared validation, both of which the reviewer asked for by name.
+- **State:** P1-4's source and test changes uncommitted while its two tests are red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
