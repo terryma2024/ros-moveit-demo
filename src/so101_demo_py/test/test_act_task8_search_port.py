@@ -333,14 +333,24 @@ def test_an_attachment_without_the_support_threshold_is_refused_by_name(tmp_path
 
 # --- P1-4: the unprovisioned sequence refuses BY NAME, one phase at a time -----------------------------------
 
-@pytest.mark.parametrize("method", ["run_retreat_segment"])
-def test_the_unprovisioned_protocol_methods_refuse_by_name(method):
-    """The runner calls five more methods than SEARCH implements, and each must fail closed with its own name."""
+@pytest.mark.parametrize("method", ["set_down", "release_preflight", "run_retreat_segment",
+                                      "detach_moveit", "planning_attached"])
+def test_the_protocol_methods_delegate_and_fail_closed_without_a_capable_boundary(method):
+    """Every one of the runner's extra methods now DELEGATES to the boundary, and refuses by name without it.
+
+    These five used to refuse unconditionally; they are implemented now (each in its own test file), and what remains
+    this file's business is the fail-closed rule: no capability on the boundary, no document - with the missing piece
+    named rather than a half-built answer returned.
+    """
 
     port, _events = fixture()
-    with pytest.raises(PickPlaceSearchPortError, match=f"TASK8_PHASE_NOT_PROVISIONED: {method}"):
-        getattr(port, method)({"session_id": SESSION, "attempt_id": ATTEMPT})
-
+    request = {"session_id": SESSION, "attempt_id": ATTEMPT}
+    arguments = ("radial", 0.01, request) if method == "run_retreat_segment" else (request,)
+    # each refusal names the piece that is missing - the boundary's capability, the case's admitted support distance,
+    # or a seam the capability itself requires - so nothing half-built is returned under any of these names
+    with pytest.raises(PickPlaceSearchPortError,
+                       match=f"boundary.{method}|support_distance_max_m|motion_template|motion_duration_s"):
+        getattr(port, method)(*arguments)
 
 @pytest.mark.parametrize("phase", ["CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN",
                                    "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK"])

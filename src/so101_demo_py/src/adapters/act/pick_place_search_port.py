@@ -575,8 +575,13 @@ class PickPlaceSearchPhasePort:
         return self._boundary_capability("release_preflight", request,
                                          support_distance_max_m=self._support_distance())
 
-    def run_retreat_segment(self, *args, **kwargs):
-        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment")
+    def run_retreat_segment(self, direction, distance_m, request, *args, **kwargs):
+        # the direction and the distance travel as KEYWORDS: the capability's own signature orders them after the
+        # request, and a positional call here would silently swap two arguments of the same shape
+        return self._boundary_capability("run_retreat_segment", request, direction=direction, distance_m=distance_m,
+                                         support_distance_max_m=self._support_distance(),
+                                         motion_template=getattr(self, "_motion_template", None),
+                                         motion_duration_s=getattr(self, "_motion_duration_s", None))
 
     def set_down(self, request, *args, **kwargs):
         return self._boundary_capability("set_down", request, support_distance_max_m=self._support_distance())
