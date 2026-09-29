@@ -32081,3 +32081,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   readback's calibrated members from `settings` - `joint_tolerance` and `cup_position_tolerance` first.** P1-1 through
   P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1847 — The neck check's three conditions, and the fixture's neck index against the scene's
+
+- **The refusal is now the neck check (`pick_place_search_port.py:392-402`), and it tests three things:**
+  ```python
+  sweep = self.boundary.neck_sweep_checker
+  qpos = scene["qpos"]
+  neck = finite(qpos[sweep.neck_qpos])
+  tolerance = finite(sources.readback.joint_tolerance)          # 0.002, supplied from the report
+  if (tolerance <= 0
+          or abs(neck - result["neck_yaw_rad"]) > tolerance
+          or sweep.check(qpos, current_rad=neck, target_rad=neck, duration_s=sweep.step_s) is not True):
+      raise ValueError("neck path")
+  ```
+  **so the scene's `qpos[sweep.neck_qpos]` must agree with the search result's `neck_yaw_rad` within the admitted joint
+  tolerance, and the sweep checker must approve.** The harness's checker answers `True` and the tolerance is positive,
+  **which leaves the index**: the fixture sets
+  ```python
+  class _NeckSweepChecker:
+      def __init__(self):
+          self.neck_qpos = 0          # "an INDEX into the scene's qpos, which is how production reads it"
+  ```
+  **while the ACT scene's neck is joint index 6** - the value this work established independently when it wrote the
+  phase-camera evaluator's `NECK_JOINT_INDEX = 6` (CP-1779/CP-1780), because the head camera is mounted on that joint.
+  **So the fixture reads qpos[0], an arm joint, where the scene's neck actually lives at qpos[6], and the comparison
+  against `neck_yaw_rad` cannot hold.**
+- **Which is a fixture value that predates the scene it is read against**, and the honest repair is to take the index from
+  the model rather than to assert `0`: **a fixture that hardcodes an index into a document it does not own is the same
+  class of mistake as CP-1802's invented occluder names** - it works until the document it describes is the real one.
+- **State:** **P1-5 in progress: `run_phase` -> `_search_evidence` now clears the schema, the receipt, the scope, the
+  planning scene, the readback members and the tolerances, and the neck index is the next value to correct - from the
+  model, not from a constant.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and
+  the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**

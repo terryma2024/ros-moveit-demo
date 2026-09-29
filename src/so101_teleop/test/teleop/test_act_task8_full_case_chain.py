@@ -155,9 +155,17 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     # number - which production's `PickPlaceRosEvidence` carries and which here is the MEASURED skew the calibration
     # report admitted (`bound_act_source_settings` returns it as `max_source_skew_s`), not a number chosen to pass.
     if not hasattr(sources, "readback"):
-        if settings is None or "max_source_skew_s" not in settings:
-            raise AssertionError("the sources' readback needs the admitted max_source_skew_s")
-        sources.readback = SimpleNamespace(max_skew=float(settings["max_source_skew_s"]))
+        # every number here is CALIBRATED data the admitted report supplied (`bound_act_source_settings`), not a
+        # protocol re-implemented: `max_skew` (search_port.py:334/778), `joint_tolerance` (:398), and the cup
+        # tolerances the production expert-route factory reads off the same readback
+        required = ("max_source_skew_s", "joint_tolerance_rad", "cup_pose_tolerance_m", "cup_orientation_tolerance")
+        if settings is None or any(key not in settings for key in required):
+            raise AssertionError(f"the sources' readback needs the admitted {required}")
+        sources.readback = SimpleNamespace(
+            max_skew=float(settings["max_source_skew_s"]),
+            joint_tolerance=float(settings["joint_tolerance_rad"]),
+            cup_position_tolerance=float(settings["cup_pose_tolerance_m"]),
+            cup_orientation_tolerance=float(settings["cup_orientation_tolerance"]))
     if not callable(getattr(sources, "capture", None)):
         sources.capture = lambda *args, **kwargs: {"rows": list(getattr(boundary, "rows", []))}
     # `begin` also reads `reset.broker` (search_port.py:220), the command surface beside the sources
