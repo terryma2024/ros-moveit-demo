@@ -29437,3 +29437,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   1. **the packet update** - the review packet must state what the verdict asked for and what answered it: P1-1 … P1-5 (each with its RED, its GREEN and its checkpoint), P2 (the counts decoded from the canonical XML, the four corrected index rows, the freeze/read-back, the 50/0 audit), and the boundary (three legs, rc 0, with its record). **Two items belong in it as proposals rather than as silent gaps:** the sealed evidence cannot describe its own edges or its grid count (`_SAMPLE_KEYS` closed at 24 keys; the index reporting `sample_count` only), and **FACT 1 - the requested command event - is therefore not derivable from the artefact today**;
   2. **the further independent review** - an independent GPT-6 Astra / High pass over this packet. **The task model rules require that reviewer for review tasks, and it is an external model: I cannot invoke it from here, so the request is prepared and the review itself is the owner's to launch.**
 - **State:** **P1-1 … P1-5 and P2 complete; the integration boundary complete and green; the packet update and the review request are the last two items**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1755 — The packet for the next independent review is written, and the index describes it
+
+- **Artefact:** `handoffs/20260930-task7-onward/task8-astra-rereview5-packet.md`, **10876 bytes, sha256 `598f8887f62d194d`** -
+  and now a row in the evidence index, appended rather than inserted.
+- **What it contains, in the shape the verdict itself uses** - *what was required → what answered it → the evidence
+  and checkpoints*:
+  | section | answers |
+  | --- | --- |
+  | P1-1 | the formal entry builds a real context and driver (commit `14f01a87`, `79 passed`) |
+  | P1-2 | seal vs aggregator identity: one rule, with the hash-fixed-point argument (commit `c6fc1411`, `204 passed`) |
+  | P1-3 | the phase-camera evaluator measures per sample (commit `00262128`, `65 passed`) |
+  | P1-4 | epoch from the phase, terminal identity compared at the seal, per-instant sampling with reasons, capture naming the instant and the position; one monotonic fixture clock with no rewriting (`151 passed`, eleven suites) |
+  | P1-5 | the joined chain, three cases and four mutated negatives; the teleop RED retired as **strict xfail** pointing at it |
+  | P2 | counts decoded from the canonical XML (**117 / 1272+43=1315 / 0 failed**), four index rows corrected, freeze/read-back, **audit 50 rows 0 mismatches** |
+  | boundary | three legs rc 0 on the new root, with what it found and fixed |
+  | **two proposals** | the sealed evidence cannot describe its own edges or grid count (so **FACT 1 is not derivable today**), and `validate_case_journals`'s campaign-wide semantics as a scope question |
+  | **not claimed** | no live stack/simulator/CUDA/hardware; counts are a sum; 0/0/0 training counters; **a test-suite boundary is not a release**; the owner's dirty tree preserved; Task 10/8L/P2-live/bundle/live/QUALIFIED not entered |
+- **And the review itself is an external model, which I cannot invoke from here:** the packet's last section states
+  the request - an independent **GPT-6 Astra / High** pass over whether each finding is closed by the artefacts
+  named, whether three legs are sufficient evidence for the frozen commit, and whether the two proposals are the
+  right disposition. **Per the repository's task-model rules that reviewer is required for review tasks, and it is
+  the owner's to launch.**
+- **State:** **P1-1 … P1-5 and P2 complete, the integration boundary green on the new run root, the packet written
+  and indexed, and the review request prepared - awaiting the owner's launch of the independent reviewer**; boundary
+  unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy**; nothing pushed, deleted
+  or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
