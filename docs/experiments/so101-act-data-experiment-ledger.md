@@ -28363,3 +28363,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **The receipt must be signed against the prefix the boundary actually receives** - and the fixture signs it **once, early**, so a prefix that now moves afterwards no longer matches the signature. **That is CP-1692's conclusion arriving by name instead of by argument.**
 - **Which names the circularity honestly, and it is the fixture's to resolve:** the APPROACH header must fall inside the prefix's ~0.102 s window, **and** the receipt must name the prefix that is executed - so either the prefix stays put **and** the header stays inside its window (the old wrap, which the verdict forbids), or the prefix is issued **with** the plan and the receipt is signed **then**. **Production does the second; the fixture still does the first.**
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration has its window green and its receipt signing outstanding**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1695 — `PATH_SOURCE_RECEIPT_INVALID` is a METHOD with four clauses, and my probe missed because it looked for a function
+
+- **Where the verdict comes from, read rather than wrapped:**
+  ```
+  path_proof.py:91  def require_source_freshness(self, *, now_wall_s, max_observation_age_s,
+                                                   max_prefix_age_s, jitter_s):
+      receipt = self.source_receipt
+      ...
+      received = receipt.source_received_wall_s
+      if (observation_limit <= 0 or prefix_limit <= 0
+              or tuple(key for key, _ in received) != SOURCE_KEYS
+              or any(value > receipt.prefix_issued_wall_s for _, value in received)
+              or not receipt.prefix_issued_wall_s <= now):
+          raise ValueError('PATH_SOURCE_RECEIPT_INVALID')
+  ```
+  **Four clauses: the two limits are positive, the receipt's received-stamps are the seven `SOURCE_KEYS` in order, none was received AFTER the prefix was issued, and the issue time is not in the future.**
+- **And my probe printed nothing because it searched `path_proof`'s module functions for the verdict string - while the rule is a METHOD on the receipt's owner.** That is the same mistake in a new place: **a name found in a file is not a name at the level you assume**, exactly as `hasattr(cls, "__call__")` was not a class's own interface (CP-1669) and a length was not a key set (CP-1625).
+- **What has already been established about this link, so the next probe is narrow:** the fixture **does** issue its receipt with the **refreshed** prefix (probe: `RECEIPT origin=1.65 id=...`, issued **once**), so the prefix half is right; **the four clauses above are what remain to be read**, by patching the **class** rather than the module.
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: window green, receipt clause unidentified**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
