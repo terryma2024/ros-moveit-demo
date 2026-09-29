@@ -13965,3 +13965,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   is armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad`
   starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware;
   formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-971 — The collision-pair evidence source located: `measure_task_scene_geometry`
+
+- **Searched the production path for the exact collision pairs the design's rules depend on, and found it:**
+  - `src/adapters/perception/mujoco_scene_geometry.py` defines `TaskGeometryPair` (which carries
+    `signed_distance_m`), `TaskSceneGeometry` (whose `pairs` a penetration check walks) and the producer
+    `measure_task_scene_geometry(...)`; `_CUP_WALL_STEMS` and the string `("cup_a_bottom_collision",)` supply the pair
+    names, which is where the design's `bottom_collision`/`table_collision` identifiers come from.
+  - The only other occurrences of `bottom_collision` in the source are **my own** `_support_from_frames` in
+    `task8_live_qualification.py`, which asserts a `{"bottom_collision", "table_collision"} <= set(contacts)` against
+    an `active_contacts` list **the sample does not carry** - so my check is currently vacuous in the sense that no
+    production path supplies that key, and it must read the pair evidence from this module's pairs instead.
+- **The chain is therefore complete from design rule to evidence source:** the design requires, per frame, the signed
+  shortest distance of the MuJoCo **exact** pair plus that pair's **active contact**; MuJoCo exposes it through
+  `measure_task_scene_geometry`'s `TaskGeometryPair.signed_distance_m` and the pair set; the port's readback is the
+  place that must carry those values into the sealed raw records, which is what Task 7's recorder indexes.
+- **So the remaining Task 8 work has one prerequisite before the three raw-dependent rules can be written honestly:**
+  confirm (or make) the port's readback include the exact pair distances, then implement from them the occlusion
+  window, the `support_distance_m` contact proof, the retreat rule's clearance predicate and the placement rule's
+  table-support/forbidden-contact predicates - and correct the two provisional functions (divergences 2 and 3 from
+  CP-969) against that evidence rather than against the sample booleans.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge and corrected field name are green at 29, with two functions marked provisional and their evidence
+  source now named; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17
+  candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate,
+  no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
