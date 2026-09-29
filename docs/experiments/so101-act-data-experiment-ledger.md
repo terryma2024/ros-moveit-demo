@@ -21859,3 +21859,21 @@ not an inference of mine.**
   green while a sibling suite is red, and the owner's rule is to commit only when green.
 - **State:** P1-2's source and test changes uncommitted while red; three of four affected fixtures green; no stack started, no CUDA, no
   actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1320 — Astra re-review P1-2 is GREEN: one complete validator, descriptor preserved end to end
+
+- **`93 passed, rc=0`** across the descriptor, binding, admission, bundle, driver and contract suites
+  (`p12-green5.log`).
+- **Against the reviewer's four findings:**
+  | finding | state |
+  | --- | --- |
+  | the inner `head_search.schema_version == 1` rejection was lost at `head_search_binding.py:109-115` | **restored**, in the shared shape rule |
+  | validation accepted empty or malformed detector/camera/motion and missing weights/version fields | **refused now**: detector backend/weights path+digest/model id/image size/device/CPU-fallback, camera frame+pixel fields, motion tolerance/duration fields |
+  | the new tests removed bad-camera assertions | a bad-camera negative is back in the shape test, and the camera-key case is also covered where it belongs |
+  | `to_dict()` dropped the descriptor; the CLI read the context twice | `to_dict()` carries it (round-trip positive asserts the rebuilt context equals the original) and the CLI parses **once** |
+  **One validator, reused by both paths** - the extraction is now complete rather than partial, which is precisely the reviewer's "extract/reuse one complete production validator".
+- **And every affected fixture was strengthened, never the rule weakened:** the admission suite's helper, the driver suite's three
+  descriptor literals, and the descriptor suite's round trip - **the same completion applied three times**, which is also the honest
+  reason P1-2 took several rounds.
+- **State:** committed with all six suites green; build copies synced for the three changed source files; no stack started, no CUDA, no
+  actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
