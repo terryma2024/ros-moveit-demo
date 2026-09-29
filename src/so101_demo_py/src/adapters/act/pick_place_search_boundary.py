@@ -104,44 +104,79 @@ class PickPlaceSearchBoundary:
 
 
     def execute_approach(self, prepared, request, *, prover_identity, ticket):
-        """Execute one APPROACH prefix and return the three things the port's APPROACH path expects.
+        """Execute one APPROACH prefix through the broker and return the proof, the snapshot and the facts.
 
-        The orchestration is real - the screen inspects the executed goals and `PathProver` computes the proof over the
-        checker the screen validates against - while the two things only the ROS/motion layer can produce (the executed
-        goals with their source receipt, and the bridge times) come from the execution seam. Every missing piece refuses
-        by name.
+        The chain is made of production calls, not of an abstraction: the trusted source produces the source document,
+        `issue_prefix_source` registers the prefix and returns the receipt, the broker's OWN `prefix_executor` approves
+        and submits it, and the goals are built by the module that mirrors the screen's contract. What this method may
+        NOT do is decide the motion was safe - the screen inspects and `PathProver` proves - nor invent the phase's
+        gates, which are established by validation exactly as SEARCH's are.
         """
 
         screen = getattr(self, "approach_screen", None)
         if screen is None:
             raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: screen")
-        executor = getattr(self, "approach_executor", None)
-        if not callable(getattr(executor, "run", None)):
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: executor")
+        broker = self.reset.broker
+        executor = getattr(broker, "prefix_executor", None)
+        source_port = getattr(broker, "_prefix_source_port", None)
+        for name, piece, method in (("prefix_executor", executor, "approve_with_source"),
+                                    ("prefix_executor.submit", executor, "submit"),
+                                    ("prefix_source_port", source_port, None)):
+            if piece is None or (method is not None and not callable(getattr(piece, method, None))):
+                raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: APPROACH: {name}")
+        wait = getattr(executor, "wait_for", None)
+        if not callable(wait):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: prefix_executor.wait_for")
 
-        ran = executor.run(prepared, request)
-        required = {"goals", "receipt", "bridge_time_s", "start_time_s", "snapshot", "facts"}
-        if type(ran) is not dict or set(ran) != required:
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: executor result")
+        prefix = prepared["prefix"]
+        # the source kind is the route's own, and the two digests come from the preparation rather than from defaults
+        receipt = broker.issue_prefix_source(
+            ticket=ticket, prefix=prefix, source=source_port(ticket), source_kind="EXPERT_ROUTE",
+            source_artifact_sha256=prepared["source_artifact_sha256"],
+            contact_policy_fingerprint=prepared["policy_fingerprint"])
+        permit = executor.approve_with_source(ticket, prefix, receipt)
+        goal_id = executor.submit(ticket, prefix, permit)
+        wait(ticket, goal_id)
 
-        # the inspection authority runs on what was actually submitted, and the proof is computed over the same checker
-        inspected = screen.inspect(ran["goals"], prepared["prefix"])
+        snapshot = self.reset.sources.capture(request["attempt_id"])
+        observation = snapshot.get("observation")
+        if not isinstance(observation, dict) or not isinstance(observation.get("state"), (list, tuple)) \
+                or len(observation["state"]) != 8:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: observation")
+        from .pick_place_approach_goals import build_approach_goals
+
+        # the held row is the robot's own state at execution time, and the header stamp is the capture's sim time: the
+        # builder refuses a stamp outside the prefix's window, so a stale prefix cannot be executed and called evidence
+        goals = build_approach_goals(prefix, tuple(observation["state"][:6]),
+                                     header_stamp_s=finite(observation["sim_time_s"]))
+        inspected = screen.inspect(goals, prefix)
         if not isinstance(inspected, dict) or not inspected:
             raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: inspection")
 
         from so101_demo.act.path_proof import PathProver, RelativePathRequest
 
         path_request = RelativePathRequest.from_source_receipt(
-            prepared["prefix"], receipt=ran["receipt"], bridge_time_s=ran["bridge_time_s"],
-            start_time_s=ran["start_time_s"])
+            prefix, receipt=receipt, bridge_time_s=finite(self.reset.sources.monotonic()),
+            start_time_s=finite(self.reset.sources.monotonic()))
         proof = PathProver(screen.path_checker).prove(
-            path_request, ran["snapshot"], ticket=ticket, reset_epoch=self.reset.receipt.new_epoch,
+            path_request, snapshot, ticket=ticket, reset_epoch=self.reset.receipt.new_epoch,
             policy_fingerprint=prover_identity["policy_fingerprint"],
             profile_sha256=prover_identity["profile_sha256"],
             contact_scope_sha256=prover_identity["contact_scope_sha256"],
             checker_sha256=prover_identity["checker_sha256"],
             expected_samples=prover_identity["expected_samples"])
-        return {"proof": proof, "current_snapshot": ran["snapshot"], "facts": ran["facts"]}
+        facts = self.approach_facts(snapshot, request)
+        return {"proof": proof, "current_snapshot": snapshot, "facts": facts}
+
+    def approach_facts(self, snapshot, request):
+        """The APPROACH phase's gates and facts, established from evidence - written next, refused by name until then.
+
+        A gate is a conclusion this repository reaches from readback (CP-1504), so this method may not accept one from a
+        caller: it reads the snapshot, validates what APPROACH must validate, and only then reports the eight gates and
+        the holding/contact facts. Until it exists, APPROACH refuses here rather than passing an unearned document on.
+        """
+
+        raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: facts")
 
     def search(self, request: dict):
         if self._request is None:
