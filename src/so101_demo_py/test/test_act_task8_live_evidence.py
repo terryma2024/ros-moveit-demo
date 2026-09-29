@@ -521,7 +521,7 @@ def _window_sample(recorder_root, time_s, phase, step):
     return document
 
 
-def test_window_opens_at_close_and_enforces_the_frozen_grid(recorder):
+def test_window_opens_at_search_and_enforces_the_frozen_grid(recorder):
     from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
 
     rec, root = recorder
@@ -530,8 +530,8 @@ def test_window_opens_at_close_and_enforces_the_frozen_grid(recorder):
                 ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch")}
     window = LiveEvidenceWindow(rec, identity=identity)
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN"):
-        window.add_grid(_window_sample(root, 0.0, "MICRO_LIFT", 0))
-    window.add_grid(_window_sample(root, 0.0, "CLOSE", 0))
+        window.add_grid(_window_sample(root, 0.0, "IDLE", 0))
+    window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_GRID_GAP"):
         window.add_grid(_window_sample(root, 0.3, "MICRO_LIFT", 1))
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_GRID_REGRESSION"):
@@ -712,7 +712,8 @@ def _v2_sample(**overrides):
             "head_camera_info": "raw/head.json", "wrist_camera_info": "raw/wrist.json",
             "head_segmentation": "raw/head-seg.png", "wrist_segmentation": "raw/wrist-seg.png",
             "head_depth": "raw/head.npy", "wrist_depth": "raw/wrist.npy"}
-    arguments = {"identity": {"session_id": "s", "reset_epoch": 1, "attempt_id": "a"},
+    arguments = {"identity": {"case_id": "c", "session_id": "s", "attempt_id": "a",
+                              "reset_epoch": 1, "release_epoch": 1},
                  "phase": "SEARCH", "physics_step": 0, "sim_time_s": 0.0,
                  "source_stamps_s": {name: 0.0 for name in refs},
                  "source_received_monotonic_s": {name: 0.0 for name in refs},
