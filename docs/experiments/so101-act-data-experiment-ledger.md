@@ -26782,3 +26782,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `so101_add_pytest_test` wrapper at `CMakeLists.txt:87-95` is the place to read next, since it decides what reaches pytest).
 - **State:** item 5 verified, diagnosed, and now **known to be insufficient in two ways** (no worker proof, no JUnit); item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal,
   worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1605 — The parallel mechanism is established, and the proof is a banner rather than an inference
+
+- **One targeted command settled what three probes had left open:**
+  ```
+  PYTEST_ADDOPTS="-n 8"  ctest -R test_expert_validation_api -V
+  -> ctest rc=0
+  -> created: 8/8 workers
+  ```
+  **So `PYTEST_ADDOPTS` in the environment DOES reach the pytest that `ament_add_pytest_test` registers** (`CMakeLists.txt:87-95` passes no fixed pytest arguments, which is why it does), **and the reason my earlier probes saw nothing is
+  bookkeeping, not behaviour:** CTest stores only failing tests' output, and the direct run had `-q` in the same variable, which hides the banner. **`ctest -V` prints a passing test's output, which is what makes the proof observable.**
+- **So item 5's re-run is now defined rather than guessed:** `colcon test --packages-select so101_teleop` with **`PYTEST_ADDOPTS="-n 8 --junit-xml=<path>"`** in the environment -
+  the JUnit travels the same variable that makes the parallelism real, **which is exactly the coupling whose absence produced the missing file in the compliant-but-insufficient leg** (CP-1604) - and the proofs to keep are: **the `created: 8/8 workers` banner** (captured with `ctest -V` on one
+  test, as above), **at least one worker tag**, **the resolved argv**, **the scratch with its fail-closed `tempfile.gettempdir()` equality assertion**, and **the JUnit file itself**.
+- **And a note on method, because this is the second time it has paid:** three failed probes, each of which could have been turned into a guess about the package's build type or the plugin's behaviour, were resolved by **making the invisible
+  visible** - `-V` instead of `--output-on-failure`, so a passing test's output is kept. **The lesson is the batch's oldest one: when a check reports nothing, check what it is capable of reporting.**
+- **State:** item 5 **verified, diagnosed and now equipped with a proven mechanism**; its full re-run is the next action on that item, on its own fresh scratch. Item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7
+  untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
