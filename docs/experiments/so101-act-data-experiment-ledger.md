@@ -27187,3 +27187,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **So item 3's three review points are all handled:** the key set is asserted exactly (CP-1625), the cadence claim is **correctly scoped** and its limitation explained (CP-1626), and the negatives are **production refusals** (this entry).
   **What remains of the item is the chain itself** - the fourteen journals driven through `validate_case_journals` with both retirement receipts and the seven meanings the review listed - which CP-1627 scoped to that function and its existing fixture.
 - **State:** item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3's points handled with the chain test remaining; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1629 — Item 3's "full-chain" demand is largely MET by a pre-existing test, and reading it is what establishes that
+
+- **The review asked for** *"a formal-entry test and full-chain qualification test, replacing only external I/O"*. **`38 passed` for `test/test_act_task8_live_qualification.py` (1195 lines), and one of its tests is exactly that chain:**
+  ```
+  test_chain_reaches_a_validated_journal_row_from_real_evidence        (line 553)
+    """Real runner -> sealed artifact -> journal row -> the aggregator's own validation."""
+    receipt, _, manifest, identities = _full_fixture(tmp_path)          # a REAL v2 manifest and a complete campaign
+    driver = CaseEvidenceDriver(...)                                    # the evidence port's driver
+    result = Task8Runner(_evidence_port(driver)).run(runner_request(mode="full", stop_after=None))   # PRODUCTION runner
+    artifact = result["live_evidence_artifact"]                         # a real sealed artifact
+    ... two retirement receipts written as files (I/O)
+    row = case_row_to_journal_row(published, identities=..., manifest_document_sha256=...)   # PRODUCTION
+    require_case_row_matches_bundle(row, identities=..., manifest_document_sha256=...)       # PRODUCTION
+    assert sha256(row["live_evidence_path"] bytes) == row["live_evidence_sha256"]            # the artifact digests
+  ```
+  **What it substitutes is the evidence port (the MuJoCo boundary - external I/O) and two receipt files; what it runs is `Task8Runner`, `case_row_to_journal_row` and `require_case_row_matches_bundle`.** Other tests in the same suite add
+  `test_qualified_cli_runs_the_producer_end_to_end`, `test_run_pick_place_case_publishes_a_journal_from_the_real_runner`, the five live fields' extrema across five runs, and the derivation refusals.
+- **So the honest correction to my own framing is that this part of item 3 was "unstarted" - it was not unstarted, it was UNVERIFIED.** The tests existed; **what was missing was anybody reading them against the review's words.** That is the same lesson as CP-1626 from
+  the other direction: a check's value depends on knowing precisely what it establishes, and neither "it exists" nor "it passed" is that knowledge.
+- **And the gap that remains is narrower than a chain test, which is worth stating because it is now specific:** of the seven meanings the review listed, the chain test covers the **two retirement receipts** and the
+  **artifact/journal digests** explicitly, and **SEARCH and FINAL_CHECK** through running a full case; the measurement-level pair - **the actual open-command event** and **three adjacent support rows in the same release epoch** - are exercised by the
+  **derivation** tests (`derive_live_measurements`, `longest_contiguous_span_s`) rather than by the chain test. **The next step is to check those two against the review's wording rather than assume the derivation tests cover them.**
+- **State:** item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3's three points handled and its chain now **verified as existing** with a specific two-meaning gap to check; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
