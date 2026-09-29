@@ -17205,3 +17205,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   half is complete; this is the publishing half's remaining wiring, and it is smaller than CP-1103 implied.
 - **Evidence:** the module surface above is this round's tool output; scratch `<R>/scratch/r698.<n>` with `TMPDIR`
   verified through the exact test interpreter.
+
+## CP-1105 — The 28-to-7 grouping does not exist in the tree, and defining it is a design decision
+
+- **Read a full v2 entry rather than assuming a grouping key was there:** every field carries `comparator`,
+  `failure_code`, `failure_detail`, `formula_detail`, `formula_id`, `source_detail`, `source_kind`, `threshold_source`,
+  `unit` and `window` - and **no check, group or readiness key at all**. So the v2 contract says how each field is
+  **judged**, and says nothing about how the 28 fields roll up into the ready document's `checks`.
+- **What the ready document requires, from the validator read at CP-1004:** `checks` must have exactly the seven names
+  `fov, collision, search, synchronization, execution, release, retreat`, each `"PASS"` for `require_qualified` to accept
+  the report. That is a **v1 concept**: v1 carried `thresholds` and derived those five checks from aggregates; v2
+  deliberately moved judgement to per-field comparators and left no rollup behind.
+- **So the publishing half has a design dependency, not an implementation one:** someone has to define which of the 28
+  fields roll up into which of the seven check names - or decide that a v2 ready document expresses readiness differently
+  and adjust the validator accordingly. **I will not invent that mapping.** It is the same class of question as Boundary
+  III's approved-source requirement: the tree does not contain the answer, and a plausible-looking mapping invented here
+  would be indistinguishable from the approved one in every later artefact.
+- **What I can state precisely, so the decision is cheap:** 21 head-search fields + 7 support fields; each judged by its
+  own `comparator` with a `failure_code`; `window` and `source_kind` describe where its evidence comes from; the ready
+  document needs the seven names above all PASS; and `task8_measurement_formulas.py` already computes the per-field
+  verdicts, so once the grouping is given, the wiring is small.
+- **State:** Boundary IV's index half complete and green; the publishing half blocked on this mapping plus the seven
+  support fields reaching the report (CP-1100's RED, currently `21 == 28`). Suite 1 failed / 18 passed in that module.
