@@ -25739,3 +25739,17 @@ picture in both directions.**
   verdict on the substituted world's fidelity** - SEARCH and APPROACH accept it, CLOSE does not yet, and nothing about that is a matter of opinion.
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1545 — A stateful world carries the run through SEARCH, APPROACH and CLOSE; the set-down document is next
+
+- **The substituted world now REMEMBERS what the phases did to it** - `on_table`, `grasped`, `lifted`, `released` - and it classifies a gripper command by comparing its target against the
+  two values the case admits (the closed position, the model's own open limit), **never by magnitude.** The readback it produces changes exactly where the phases' predicates do: whether the fingers
+  touch the cup, whether the cup is still on the table (its signed distance against the case's admitted support threshold), and - once released - whether it sits at the place target the policy names.
+- **And the run now passes SEARCH, APPROACH and CLOSE inside the nine-phase case**, reaching **RELEASE**, whose first step is the runner's **set-down** document and fails with
+  **`SET_DOWN_EVIDENCE_INVALID`**. **That is the next named piece, and the next action is to read that rule rather than guess at it** - the lesson CP-1544 paid for with five edits.
+- **Three world rules were read rather than guessed this round, each one line of code:** with **no contacts** the distance and force aggregates must be exactly **zero**; with contacts the aggregate
+  must **be the contacts' own minimum**; and `HOLDING` means **held and clear of the table**, which is why the grasped cup's distance is the lifted value rather than a contact-scale number.
+- **And the CP-1518 tension is now visible in the run itself, honestly:** CLOSE's predicate requires `HOLDING` - held **and unsupported** - while a real close happens with the cup resting on the
+  table. **The world double resolves it the only self-consistent way (the grasp is modelled as clear of the table), and the question is already recorded for the reviewer; nothing here hides it.**
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
