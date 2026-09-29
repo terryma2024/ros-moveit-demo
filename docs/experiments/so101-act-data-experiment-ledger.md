@@ -26545,3 +26545,15 @@ pick the flattering number.**
   'boundary'` - a defect in **this batch's own seal identity** - and that test now passes, along with the seal's new refusal of a caller whose epochs disagree (CP-1582/1583).
 - **Three of the three legs' statuses right now:** demo `rc=0` (5731/163, own scratch, CP-1591) · **teleop `rc=0` (1430/0/0/43, own scratch, this entry)** · **CTest launched on its own scratch and running**.
 - **State:** nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware, no live stack, no CUDA, no actuators; goal active.
+
+## CP-1593 — A naming convention that had misled me, and why it matters for the boundary's bookkeeping
+
+- **CTest names its `Testing/` directories in a timezone that is not the host's local one.** Measured this round:
+  `Testing/20260929-1223` has `Test.xml` mtime **20:26:40** local, `20260929-1228` -> **20:32:20**, `20260929-1252` -> **20:56:13**. **The names run about eight hours behind the mtimes**, so the names are UTC while this host
+  logs local time.
+- **And that corrects a misreading of my own in CP-1581:** when I wrote that the four-failure CTest result came from "a 12:23 start" and might be stale, `20260929-1223` was in fact the run **I** made at **20:23 local** - the
+  `ctest -j 8` run of CP-1585. **The mixture CP-1581 detected was real** (stale `test_results/*.xunit.xml` files from `colcon` alongside it), but the reason I gave for suspecting that one directory was wrong, and the
+  directory was mine.
+- **Why it matters now:** the **compliant CTest leg wrote `Testing/20260929-1252`** - a directory that did not exist before this boundary, distinct from the retracted `20260929-1223`. **So the leg's result is separable from
+  the retracted one by directory name, which is exactly the property the replacement boundary needed**, and the record below can cite it without ambiguity.
+- **State:** CTest running on its own scratch; demo and teleop legs green on theirs; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware; goal active.
