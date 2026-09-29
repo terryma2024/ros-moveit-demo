@@ -17100,3 +17100,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   **28-field `TASK8_READY`**; **readback from disk** of the sample path and hash; then `require_gate(report,
   "task8_live")` and `validate_head_search_binding()`. Each needs its own RED, and each is a check on the aggregator's
   output rather than a change to the index, which makes them the cheapest remaining pieces of this boundary.
+
+## CP-1100 — RED, and this one is a real gap: the ready report carries 17 fields, not 28
+
+- **The readback RED failed on its first assertion, for a reason worth reading carefully:**
+  `a ready report carries the contract's 28 fields, saw 17`. Every citation it did check resolves on disk with a matching
+  hash, so the sample-path half is sound; what is missing is **eleven of the contract's fields**. The batch fixture writes
+  the **17** head-search measurements plus `camera_measurements` (four) and `observed_lock_frames`, and the aggregator
+  publishes exactly the 17 it was handed - so the four camera fields and the seven support fields never reach the report.
+- **Why this matters rather than being a fixture artefact:** the plan's ready document is a **28-field** `TASK8_READY`, and
+  Boundary IV's requirement is a *real* one. A report with 17 fields would fail the contract's completeness check
+  downstream - the same check that refused my `QUALIFIED` weld fixture at CP-994 until the field count was right.
+- **The fix direction, for the next rounds:** the aggregator must fold the batch's `camera_measurements` and its support
+  evidence into the published `measurements`, each with its **own sample citation** (the same
+  `sample_path`/`sample_sha256` discipline the 17 already follow), so the report is the contract's 28 by construction.
+  That is a real change to the publishing path, not a rule, and it needs its own RED per field group.
+- **State, disclosed as always: the suite is at 1 failed / 36 passed**, that failure being this proven RED. Everything
+  else in Boundary IV's index half remains green, and no rule was weakened to make this pass.
+- **Evidence:** scratch `<R>/scratch/r696.<n>` with `TMPDIR` verified through the exact test interpreter; log
+  `beh-r696-red.log`.
