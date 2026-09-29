@@ -21477,3 +21477,20 @@ not an inference of mine.**
   carry rather than a fallback.
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no live stack, no stepping, no
   CUDA, no hardware; nothing deleted, nothing pushed.
+
+## CP-1300 — The case runs to its seal; the last fault is the fence holding the attached window
+
+- **Progress in one line:** the identity and epochs now agree, so the child's case **executes to the point of sealing its evidence** -
+  and the remaining error is `'NoneType' object has no attribute 'seal'`, i.e. the seal path found no window.
+- **The likely mechanism, and it is a real seam rather than a fixture slip:** the child attaches the window through
+  `getattr(self._pick_place_port, "bind_live_evidence")`, and the port it holds is wrapped in
+  **`_FencedPickPlacePort(self._pick_place_port, self._act_cancelled)`**. If the fence forwards **reads** but stores **writes** on
+  itself, the window lands on the wrapper while my `ChildPort` instance still has `window = None` - so the runner's seal call, which
+  goes through the same fence, finds nothing. **The fence's own attribute handling is printed above** and is the next read; it decides
+  whether the fix is a `__setattr__` proxy expectation in production code or a small adjustment in my port.
+- **What this means for item 5's shape, and it is worth stating:** the fixture has now driven the **real** entry through request
+  validation, artifact binding, the compiled-scene contact policy, the startup receipt, the case execution and the journal - and stopped
+  at the seal, which is the last production step before the return value. **Every gate before it was a production check, and the fixture
+  never faked one.**
+- **State:** the child-driven test file remains **uncommitted while red**; items 1-4 complete and committed; no live stack, no stepping,
+  no CUDA, no hardware; nothing deleted, nothing pushed.
