@@ -22334,3 +22334,27 @@ not an inference of mine.**
   problem the reviewer says remains.
 - **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
   nothing pushed.
+
+## CP-1347 — The child attaches the window to the PORT, so the production port needs only its recorder filled
+
+- **Read at `ros_child.py:516`:** the child looks for `bind_live_evidence` **on the port** and then builds the real
+  `CaseEvidenceDriver` - so **the port is the thing that receives the child's real recorder and window**, which is exactly the hook the
+  fixture's `ChildPort` already uses (it took `self.window._recorder`). **The fixture was reaching for the right thing; it was just calling a
+  fake seal afterwards.**
+- **So step 1 is four lines, not a rewrite:**
+  ```python
+  class ChildPort(PickPlaceSearchPhasePort):          # the PRODUCTION port, not FakePort
+      def __init__(self, boundary):
+          super().__init__(boundary)                  # the boundary is the only test double
+      def bind_live_evidence(self, window):           # the child attaches its real window and recorder here
+          self._live_evidence_window = window
+          self._evidence_recorder = getattr(window, "_recorder", None)
+  ```
+  **and the inherited production `seal_live_evidence` then does the sealing** - reading the epochs from the **request**, sealing the window
+  first, refusing without a recorder. **The monkeypatched `FakePort` seal leaves the loop entirely, which is the reviewer's first complaint
+  answered by construction rather than by assertion.**
+- **What the substitute boundary must emit:** `begin`, `search`, `safe_stop` and a `neck_sweep_checker.check` - the four the production
+  constructor itself validates - with each request carrying `scenario_id`, `session_id`, `attempt_id`, `reset_epoch` and `release_epoch`,
+  because that is where the production seal now reads them from.
+- **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
+  nothing pushed.
