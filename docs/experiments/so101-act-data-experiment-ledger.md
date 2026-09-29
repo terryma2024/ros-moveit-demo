@@ -33053,3 +33053,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress: the scope check's seven conditions are now six agreements and one wrong object, and the
   next read identifies which object.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate
   and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1880 — A paradox worth recording exactly: the class has the method, the call returns `True`
+
+- **Four facts, all from the same run, and they do not fit together:**
+  ```
+  [drvdiag] type(broker.driver)=test_task8_child_driven_case.FakeBroker
+  [drvdiag] class has current_epoch: True                 <- the method IS on the class
+  [drvdiag] instance __dict__ has current_epoch: False    <- and not shadowed on the instance
+  [drvdiag] has epoch_reader: False                       <- the mount's attribute went elsewhere
+  [drvdiag] driver.current_epoch()=True                   <- yet the call returns the blanket `True`
+  ```
+  **If the class carries `current_epoch` and the instance does not shadow it, then `broker.driver.current_epoch()`
+  must run MY method** - which reads `getattr(self, "epoch_reader", None)`, finds none, and returns
+  `{"session_id": …, "reset_epoch": …}`. **It returned `True` instead, which is what `__getattr__`'s `_call` returns** -
+  **and `__getattr__` is only consulted when normal lookup FAILS.**
+- **So one of the four observations must be about a different object than the others**, and the candidates are narrow:
+  **the class the instance actually belongs to is not the file's current version** (a stale module in `build/`, which
+  this work has seen before as a symlink), **or `broker.driver` changed between the print and the scope check**, **or the
+  scope check reads a different attribute than `driver`.** **The next read is `inspect.getsource(type(broker.driver)
+  .current_epoch)` and `type(broker.driver).__module__` with its `__file__`** - **which says whether the loaded class is
+  the file that was edited.**
+- **And the stake is small but the lesson is not:** whichever of those it is, **the fix is one line - but choosing the
+  line without knowing which object is which would be guessing**, and this drive has twice been saved from that by
+  printing rather than assuming (CP-1848 refuted a plausible hypothesis; CP-1858 named a culprit no amount of reasoning
+  had produced).
+- **State:** **P1-5 in progress: six of the scope's seven conditions hold, the seventh reads a `True` that the class's own
+  method cannot return, and the next read resolves which object is which.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
