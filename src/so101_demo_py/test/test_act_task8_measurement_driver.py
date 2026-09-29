@@ -24,6 +24,9 @@ class FakeStack:
         self.launched, self.closed, self.cleanups = [], [], []
         self.fail_on = fail_on
 
+    def probe(self, anchor, command):
+        return {"contacts": []}
+
     def readback(self, anchor):
         return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
 
@@ -150,6 +153,9 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
         def __init__(self):
             self.launched, self.closed, self.cleaned = [], [], []
 
+        def probe(self, anchor, command):
+            return {"contacts": []}
+
         def readback(self, anchor):
             return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
 
@@ -212,6 +218,12 @@ def test_a_failed_anchor_keeps_a_cleanup_receipt_in_the_sealed_batch(tmp_path):
     cleaned = []
 
     class Stack:
+        def readback(self, anchor):
+            return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
+
+        def probe(self, anchor, command):
+            return {"contacts": []}
+
         def launch(self, anchor):
             pass
 
@@ -247,6 +259,12 @@ def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
     from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
 
     class Stack:
+        def readback(self, anchor):
+            return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
+
+        def probe(self, anchor, command):
+            return {"contacts": []}
+
         def launch(self, anchor):
             pass
 
@@ -276,6 +294,9 @@ def test_rows_carry_the_stack_readback_rather_than_a_synthesized_identity(tmp_pa
     from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
 
     class Stack:
+        def probe(self, anchor, command):
+            return {"contacts": []}
+
         def launch(self, anchor):
             pass
 
@@ -308,6 +329,9 @@ def test_a_stack_without_readback_is_refused_by_name(tmp_path):
     from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
 
     class Stack:
+        def probe(self, anchor, command):
+            return {"contacts": []}
+
         def launch(self, anchor):
             pass
 
@@ -339,6 +363,9 @@ def test_every_anchor_is_an_independent_full_restart(tmp_path):
     events: list[tuple[str, str]] = []
 
     class Stack:
+        def probe(self, anchor, command):
+            return {"contacts": []}
+
         def readback(self, anchor):
             return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
 
@@ -369,3 +396,61 @@ def test_every_anchor_is_an_independent_full_restart(tmp_path):
     assert lifecycle == [(action, anchor) for anchor in ANCHORS for action in ("launch", "close")], lifecycle
     row = json.loads((batch / "anchors/default/geometry-00.json").read_text())
     assert row["lifecycle"] == "FULL_RESTART", "every row names the lifecycle it was measured under"
+
+
+def _probe_driver(stack, clock=None):
+    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+
+    class Clock:
+        def monotonic(self):
+            return 0.0
+
+    return Task8MujocoMeasurementDriver(
+        stack=stack, clock=clock or Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
+        controller=lambda command: {"accepted": True},
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+
+
+class _ProbeStack:
+    """A stack that reports contacts for the probe; ``hits`` decides whether the probe touched anything."""
+
+    def __init__(self, hits):
+        self.hits = hits
+        self.probes = []
+
+    def readback(self, anchor):
+        return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
+
+    def launch(self, anchor):
+        pass
+
+    def close(self, anchor):
+        pass
+
+    def cleanup(self, anchor, generation):
+        return {"cleaned": anchor}
+
+    def probe(self, anchor, command):
+        self.probes.append((anchor, command))
+        return {"contacts": [{"geom1": "arm_link", "geom2": "cup"}] if self.hits else []}
+
+
+def test_the_fixed_arm_probe_is_recorded_and_must_not_contact_anything(tmp_path):
+    """Boundary II: a fixed non-contact arm probe runs per anchor and a touch fails that anchor by name."""
+
+    stack = _ProbeStack(hits=False)
+    batch = tmp_path / "batch"
+    sealed = _probe_driver(stack).run(_measurement_context(tmp_path), batch)
+    document = json.loads(Path(sealed).read_text())
+    assert document["status"] == "CLOSED"
+    assert len(stack.probes) == 3, "one probe per anchor"
+    probe_row = json.loads((batch / "anchors/default/probe.json").read_text())
+    assert probe_row["contact_count"] == 0 and probe_row["lifecycle"] == "FULL_RESTART"
+
+
+def test_a_probe_that_touches_anything_fails_the_anchor_by_name(tmp_path):
+    stack = _ProbeStack(hits=True)
+    sealed = _probe_driver(stack).run(_measurement_context(tmp_path), tmp_path / "batch")
+    document = json.loads(Path(sealed).read_text())
+    assert document["status"] == "INVALID"
+    assert "MEASUREMENT_PROBE_CONTACT" in json.dumps(document)

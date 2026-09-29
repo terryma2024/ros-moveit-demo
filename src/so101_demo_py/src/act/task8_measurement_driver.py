@@ -21,6 +21,9 @@ _PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "R
 PRIVATE_REPLAY_PERIOD_S = 0.002
 # every anchor is measured under its own full restart of the stack, so every raw row says which lifecycle it belongs to
 LIFECYCLE = "FULL_RESTART"
+# one fixed probe, identical for every anchor, that must not touch anything: it exercises the arm's clearance before the
+# geometry samples are taken, and a touch fails that anchor rather than being averaged into the batch
+PROBE_COMMAND = {"joint_positions_rad": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "duration_s": 0.2, "profile": "fixed"}
 FORBIDDEN_OUTPUT_TOKENS = ("PASS", "FAIL", "qualified", "visible", "target_in_view", "contact_ok", "_ok")
 
 
@@ -120,6 +123,23 @@ class Task8MujocoMeasurementDriver:
                                 "attempt_id": identity["attempt_id"], "physics_step": index,
                                 "period_s": PRIVATE_REPLAY_PERIOD_S, "phase": phase,
                                 "observation": observation})
+
+        probe = getattr(self.stack, "probe", None)
+        if not callable(probe):
+            raise ValueError("MEASUREMENT_PROBE_REQUIRED: the stack cannot run the fixed non-contact arm probe")
+        report = probe(anchor, dict(PROBE_COMMAND))
+        contacts = (report or {}).get("contacts")
+        if not isinstance(contacts, list):
+            raise ValueError("MEASUREMENT_PROBE_REQUIRED: the probe did not report its contacts")
+        stamp = self.clock.monotonic()
+        self._write_record(root, anchor, "probe",
+                           {"source_stamp": stamp, "receive_monotonic_s": self.clock.monotonic(),
+                            "session_id": identity["session_id"], "reset_epoch": identity["reset_epoch"],
+                            "attempt_id": identity["attempt_id"], "physics_step": -1,
+                            "command": dict(PROBE_COMMAND), "contact_count": len(contacts),
+                            "contacts": contacts})
+        if contacts:
+            raise ValueError(f"MEASUREMENT_PROBE_CONTACT: {anchor} touched during the fixed probe")
 
         for sample in range(10):
             stamp = self.clock.monotonic()
