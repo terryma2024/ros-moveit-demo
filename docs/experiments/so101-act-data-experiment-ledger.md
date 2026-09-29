@@ -29704,3 +29704,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **the verdict's order is being followed: task list first (done), then the demo RED's focused reproduction
   and root cause (this entry), then P1-1 … P1-6 each as a focused RED→GREEN.** The RED is being fixed on evidence and
   **not by re-running to green**; no controlled production change has been made yet.
+
+## CP-1770 — The demo RED's fix: the revoker is joined before its own signal is asserted
+
+- **The fix, and it is one line of ordering plus a diagnostic** (`src/so101_demo_py/test/test_act_exp571_behavior.py`):
+  ```python
+  worker.join(10.0)
+  # `revoked` is set BY THE REVOKER, so it may only be asserted after the revoker has been joined: ...
+  revoker.join(10.0)
+  revoke_completed_inside = observed["revoke_completed_before_owner_return"]
+  assert revoked.is_set(), (
+      "the revoker must eventually complete: "
+      f"worker_alive={worker.is_alive()} revoker_alive={revoker.is_alive()} "
+      f"revoke_completed_inside={revoke_completed_inside!r} outcome={outcome!r} entered={entered.is_set()}")
+  ```
+  **The original asserted the revoker's own event after joining only the WORKER**, so a revoker that was still blocked
+  on the claim guard - a legitimate state, and the one full-gate pressure produces - failed the test. **The fix waits
+  for the thread that sets the flag instead of shortening the wait**, which is what `AGENTS.md` asks for: fix the
+  test's design, never lower the gate.
+- **Focused evidence:** `7 passed` for that file.
+- **And the GREEN the RED itself demands, because the full demo gate is the only place it reproduced:**
+  ```
+  demo4.log:  demo_rc=0   5764 passed, 163 skipped in 131.04s   (fresh scratch demo-scratch-redfix)
+  ```
+  **One green run after two failures is not yet a rate**, so the ledger records it as one sample: **before the fix
+  2 failures in 3 full-gate runs; after the fix 1 of 1 so far**, with two more runs launched (`demo5.log`,
+  `demo6.log`, each on a fresh scratch). **That is measuring a flaky fix, not re-running to green** - the distinction
+  the owner's instruction turns on: repeating to obtain a green is forbidden, repeating to establish a rate is the
+  only way a load-dependent test can be shown fixed.
+- **State:** **the demo RED is fixed and its rate is being measured; P1-1 … P1-6 follow, each as a focused RED→GREEN
+  with its production boundary.** No other controlled change has been made.

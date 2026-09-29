@@ -63,9 +63,18 @@ def test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations()
     assert observed["owner_active"] is True
     revoker.start()
     worker.join(10.0)
-    revoke_completed_inside = observed["revoke_completed_before_owner_return"]
-    assert revoked.is_set(), "the revoker must eventually complete"
+    # `revoked` is set BY THE REVOKER, so it may only be asserted after the revoker has been joined: the revoker can
+    # legitimately block until the worker releases the claim guard, and under a full parallel gate the worker itself
+    # can take the whole first join window. Asserting the revoker's own signal before waiting for the revoker made
+    # this test load-dependent (measured: 2 failures in 3 full demo-gate runs, 0 in 12 focused runs at -n 8 and 0 in 6
+    # heavy-sibling runs at -n 8) - the fix is to wait for the thread that sets the flag, not to shorten the wait.
     revoker.join(10.0)
+    revoke_completed_inside = observed["revoke_completed_before_owner_return"]
+    assert revoked.is_set(), (
+        "the revoker must eventually complete: "
+        f"worker_alive={worker.is_alive()} revoker_alive={revoker.is_alive()} "
+        f"revoke_completed_inside={revoke_completed_inside!r} outcome={outcome!r} "
+        f"entered={entered.is_set()}")
     assert not worker.is_alive() and not revoker.is_alive(), "threads must terminate"
     assert "error" not in outcome, outcome
     assert outcome["state"] in ("ACCEPTED", "REJECTED", "UNKNOWN"), outcome
