@@ -74,6 +74,9 @@ class _PickPlacePayload(_ActPayload):
     # the support distance the case admits for "the cup is supported": part of the case definition, because the
     # evidence that says so is derived from it and an invented default would be a measurement nobody admitted
     support_distance_max_m: float = Field(gt=0)
+    # the gripper's closed position is the case's own admitted target: CLOSE must not invent it, and a case that
+    # omits it fails closed by name when CLOSE runs
+    gripper_closed_rad: float = Field(gt=0)
     manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     runtime_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     contact_policy_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")

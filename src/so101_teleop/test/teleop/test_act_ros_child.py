@@ -45,6 +45,7 @@ def request(*, worker_id="w00", generation=3, operation="task8_phase"):
         {"reason": "operator"} if operation == "cancel" else
         {"scenario_id": "scene-1", "stop_after": "MICRO_LIFT", "manifest_sha256": "a" * 64,
         "support_distance_max_m": 0.02,   # the admitted support distance (P1-3)
+        "gripper_closed_rad": 0.5,
          "runtime_config_sha256": "b" * 64, "contact_policy_fingerprint": "c" * 64,
          "stack_owner": {"pid": 12345, "pgid": 12345, "started_ticks": 101,
                          "argv_sha256": "1" * 64, "environment_sha256": "2" * 64}}

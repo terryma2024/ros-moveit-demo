@@ -107,6 +107,21 @@ class PickPlaceSearchPhasePort:
         return freeze_selected_search_source(
             self.validated_search_observation(), max_skew_s=max_skew_s)
 
+    def bind_case_targets(self, *, gripper_closed_rad=None) -> None:
+        """Bind the case's admitted motion targets once, before the port begins.
+
+        The evidence attachment carries the case's evidence parameters (the support threshold); this carries the ones
+        a phase's motion needs, and both are one-shot for the same reason: a target that could be rebound mid-case
+        would make the case's evidence describe a motion nobody admitted.
+        """
+
+        if self._begun:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_ALREADY_BOUND")
+        if (type(gripper_closed_rad) not in (int, float) or isinstance(gripper_closed_rad, bool)
+                or not finite(gripper_closed_rad) > 0):
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: gripper_closed_rad")
+        self._gripper_closed_rad = float(gripper_closed_rad)
+
     def bind_startup_receipt(self, receipt: dict) -> None:
         if (self._startup_receipt is not None or self._begun
                 or type(receipt) is not dict

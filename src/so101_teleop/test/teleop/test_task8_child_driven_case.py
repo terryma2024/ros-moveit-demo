@@ -500,6 +500,7 @@ def _prepare_child_case(tmp_path, monkeypatch, *, case_id="case-05", campaign_id
         deadline_ns=deadline_ns,
         payload=_PickPlacePhasePayload(
             support_distance_max_m=0.02,   # the admitted support distance the case's evidence is derived from
+            gripper_closed_rad=0.5,
             stop_after="SEARCH",     # the port provisions SEARCH; the child supports the prefix
             scenario_id=case_id,          # the journal's _CASE_ID is r"[a-z]+-[0-9]{2}\Z"
             manifest_sha256=digests["manifest"],
