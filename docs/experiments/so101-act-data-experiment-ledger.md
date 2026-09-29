@@ -17440,3 +17440,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Evidence:** scratch `<R>/scratch/r716.<n>` with `TMPDIR` verified through the exact test interpreter; logs
   `beh-r714.log` (binding suite, 14 passed) and `beh-r716.log` (the RED). No full suite was run, per the owner's
   instruction; nothing weakened, nothing deleted, no push, no stack, no hardware.
+
+## CP-1116 — The binding's exact conditions, read from the source rather than inferred
+
+- **What `validate_head_search_binding` requires of a report and its sample, line by line:**
+  1. every field in `_MEASURED` (the head-search set) must cite **one and the same** `(sample_path, sample_sha256)` -
+     `len(samples) != 1` is itself a mismatch;
+  2. the cited file must read back as a **regular file** whose sha256 equals the cited digest;
+  3. that sample document must be `kind == "head_search_qualification"`, `schema_version == 1`, **`status == "PASS"`**,
+     with `head_search` **equal to the runtime descriptor**, its `measurements`/`camera_measurements` equal to the
+     report's values, its `source_commit`/`config_sha256` equal to the report's, and `observed_lock_frames` an int `>= 3`;
+  4. then the measurement values themselves are re-checked (`HEAD_SEARCH_MEASUREMENT_INVALID` for the neck interval, the
+     skew/age ordering, the submit lead and the stop latency/velocity).
+- **So the integration RED's cause is now exact, and it is a production gap rather than a fixture artefact:** the
+  aggregator's head-search qualification sample carries **no `head_search` descriptor at all**, while the binding
+  demands `sample["head_search"] == descriptor`. A report can therefore pass `require_gate(report, "task8_live")` and
+  still be **unbindable** - which is precisely why the review wants both checks run.
+- **The next step is to read where a real batch records its runtime descriptor** (the batch's raw records, the driver's
+  written rows, or the contract's bound files) and have the aggregator fold it into the sample it publishes, rather than
+  inventing a key. My fixture must then supply the same descriptor it hands the runtime, and the negative direction - a
+  mismatched pairing - must still be refused.
+- **State: 1 failed / 20 passed** in the aggregator module, that failure being this RED; the gate and readback tests stay
+  green. Nothing weakened, nothing deleted, no push, no stack, no hardware.
