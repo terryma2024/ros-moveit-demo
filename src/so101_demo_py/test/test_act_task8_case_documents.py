@@ -98,6 +98,7 @@ def _case(*, stopped=True, step_delta=1, released=True, with_stop=True, with_tcp
     request = {"session_id": prefix["session_id"], "attempt_id": prefix["attempt_id"]}
     boundary.reset.broker.ownership = SimpleNamespace(
         ticket=lambda *parts: (7, "owner-key", "act", request["session_id"], request["attempt_id"]))
+    boundary._gate_facts = PickPlaceSearchBoundary._gate_facts   # a staticmethod: assigned, not bound
     for name in ("_checked_aggregates", "sequence_facts", "planning_attached", "set_down", "release_preflight",
                  "run_retreat_segment"):
         setattr(boundary, name, MethodType(getattr(PickPlaceSearchBoundary, name), boundary))
@@ -108,8 +109,12 @@ def test_set_down_establishes_its_document_and_the_preflight_must_be_fresh():
     boundary, calls, capture, request = _case()
     document = boundary.set_down(request, support_distance_max_m=0.02)
     assert calls == [("stop", None)], calls
+    # the runner's own `_SET_DOWN_KEYS`, read rather than guessed: the scope, the physical facts, the stop, and the
+    # eight gates the document must ESTABLISH rather than assert
     assert set(document) == {"session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
-                             "holding_state", "cup_supported", "bilateral_contact", "controller_stopped"}
+                             "holding_state", "cup_supported", "bilateral_contact", "controller_stopped",
+                             "controller_reference_ok", "joint_feedback_ok", "planning_attached", "contact_ok",
+                             "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok"}
     assert document["holding_state"] == "EMPTY" and document["cup_supported"] is True
     assert document["controller_stopped"] is True and document["release_epoch"] == 0
 
