@@ -22930,3 +22930,17 @@ not an inference of mine.**
   is unhappy.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1384 — The queue never empties, so the timeout is the WAIT LOOP, not the rows
+
+- **Measured, and it overturns my assumption:** `empty events: 0` and `search calls=1` - **the row queue is never exhausted**, and the segment still
+  reports `SEARCH_SOURCE_TIMEOUT`. **So `_next` is retrying inside its own wait loop while rows remain**, which means the error it is catching is
+  the one my capture raises **explicitly** (`step <= after_step`) rather than the empty-queue case - i.e. the segment's `cursor` and my queued
+  steps are not advancing in step with each other, and the retry burns `max_source_wait_s` with the rest of the queue untouched.
+- **So the next instrument is one line further in:** print the popped step and the `after_step` **on every pop** for the first few calls, not only
+  on exhaustion. **That shows the exact pair where the cursor stops advancing** - and it is the same five-second probe discipline that turned
+  three rounds of guessing into one measurement at CP-1380.
+- **Honest note on my own reasoning:** I assumed a jump-to-53 row was the problem and then that exhaustion was; both were wrong, and both were
+  cheap to disprove with a counter. **The counters are earning their keep; my inferences about this loop are not.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
