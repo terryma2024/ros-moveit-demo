@@ -15578,3 +15578,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
   (CP-1013); Task 9's diagnostic is 5754 cases with this one module failing, its cause narrowed to a `TMPDIR`-depth
   dependency with two distinguishable candidates; Task 10 blocked until the 17 search values are reviewed.
+
+## CP-1033 — Both candidates eliminated: the module fails standalone, so it is neither path length nor parallelism
+
+- **Ran the discriminating experiment CP-1032 designed, and both variants agree:** `test_controller_reservation_client.py`
+  alone gives **"16 failed, 1 passed"** with a **25-character** `TMPDIR` (0.36 s) and **"16 failed, 1 passed"** with an
+  **88-character** gate-like `TMPDIR` (13.24 s). Sixteen of seventeen cases fail either way, with no eight-shard
+  concurrency involved in the short variant at all.
+- **So both candidates are dead, and that is a result rather than a setback:** the failures are not caused by the
+  derived socket path exceeding the platform limit, and not by endpoints colliding across parallel shards. They also are
+  not caused by my scratch layout, by the evidence root, or by the gate. This module fails **standalone, in a minimal
+  environment** - which means the failure class CP-1031 saw inside the gate is the same one a plain focused run shows,
+  and Task 9's single failing module is a **pre-existing, environment-independent** condition on this branch.
+- **What follows from that, stated carefully:** the module's own `ready.wait(1)` is a real behavioural symptom and the
+  diagnosis must come from its traceback, not from the environment theories I have now eliminated. Two readings remain
+  open and are not yet distinguished: it has an unmet runtime dependency (something the test needs that this worktree's
+  environment does not provide), or it is a genuine defect on the committed branch. The next step is to read the first
+  failing case's traceback in `beh-r626-short.log` and follow it to the specific object it waits on.
+- **What this does to Task 9's picture:** the diagnostic gate stands at **5754 cases with one module failing**, and that
+  module's failure is now known to be independent of the task's own work, of the scratch rules, and of the gate's
+  parallelism - so it is either an environment gap to report or a branch defect to fix, not a Task 9 blocker in the sense
+  of something my changes introduced. The qualification is deliberate: I have not yet shown which of the two readings is
+  right, and I will not call it either until the traceback says so.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's remaining failure is narrowed to a single module whose environment theories have been eliminated by
+  a two-variant experiment; Task 10 blocked until the 17 search values are reviewed. No formal-gate claim, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
