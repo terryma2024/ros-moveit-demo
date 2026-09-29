@@ -14629,3 +14629,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three
   `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted,
   no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-998 — A real bug in my collection layer, caught by reading the fixture
+
+- **Reading the qualified-report fixture exposed an interface mismatch in my own code:**
+  `collect_live_runs` selected rows by a `live_evidence_artifact` mapping and read its `path`/`sha256`, but the row that
+  `require_case_journal_row` validates - and that the campaign fixture writes - carries **`live_evidence_path`** and
+  **`live_evidence_sha256`** instead, with a prefix row carrying empty strings. Against real data the weld would
+  therefore have found **zero** full rows and failed with `FIVE_FULL_RUNS_REQUIRED`, i.e. it would have refused a
+  perfectly valid campaign with a misleading reason.
+- **Fixed to the validated contract:** selection is by `live_evidence_path` being non-empty, the file is verified
+  against the row's own digest, and the sealed sample is reported under the row's names
+  (`sample_path`/`sample_sha256`). My test was updated the same way, so it now exercises the shape production
+  actually produces rather than the shape I had imagined.
+- **This is the seventh instance of the session's recurring lesson** - the inferred phase list, the invented CLI call,
+  the guessed builder signature, the guessed source schema, the guessed dict key, the assumed window/recorder coupling,
+  and now an assumed row field - and it is the first one found **before** it could produce a wrong result in
+  production, because the fix came from reading the fixture rather than from a failure.
+- **Verified: 51 passed, rc=0** (`beh-r592.log`) across the live-qualification and Task 8 runner suites.
+- **State:** Tasks 1-7 module work complete and green; Task 8's code side complete and green with the weld's own test
+  and the driver dependency still open; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval
+  outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no
+  runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
