@@ -14020,3 +14020,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   source identified; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17
   candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate,
   no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-973 — The contact evidence's field names are known: the support-distance rule is fully specified
+
+- **Read `ContactEvidence`** (`src/core/simulation/types.py:53`, a frozen slots dataclass) and it carries exactly what
+  the design's `support_distance_m` row needs, by name: the pair identifiers `body1_id`, `geom1_id`, `body1`, `geom1`,
+  `body2_id`, `geom2_id`, `body2`, `geom2`, then `position_world`, `normal_world`, **`signed_distance_m`** and
+  `normal_force_n`. `SimulationEvidence` alongside it carries `simulation_time_s`, `frame_id`, `publisher_sequence`,
+  `simulation_step`, `reset_epoch`, `simulation_session_id` and `paused`.
+- **So every field name in the rule is now known** - the exact pair is identified by the geom/body **names** on a
+  `ContactEvidence` entry, its active contact is the presence of that entry in the frame, and its signed distance is
+  `signed_distance_m`. Written out, the implementation is: for each of the three consecutive 10 Hz frames immediately
+  before the first gripper-open in the same release epoch, require a `ContactEvidence` whose `geom1`/`geom2` (or
+  `body1`/`body2`) are the cup-bottom and table collision geoms; take `max(0, signed_distance_m)` per frame; take the
+  maximum of the three frames as that run's value; then the maximum across the five runs - with a frame lacking the
+  pair's real contact failing the run, as the design states ("distance passing cannot substitute for support contact").
+- **This also supplies the identifiers the other corrected rules need:** the retreat rule's clearance/contact
+  predicate and the placement rule's table-support and forbidden-contact predicates can now be read as named
+  `ContactEvidence` entries rather than as booleans, so the two provisional functions (CP-969 divergences 2 and 3) can
+  be corrected against real evidence instead of inferred semantics.
+- **What remains for Task 8, precisely and in order:** (1) correct `_support_from_frames` to read `ContactEvidence`
+  names and `signed_distance_m` instead of the vacuous `active_contacts` list; (2) correct `retreat_distance_m` to the
+  radial-relative-to-placed-cup rule at the first qualifying readback; (3) correct `placement_stable_s` to the longest
+  contiguous source-stamp duration over pose, linear/angular velocity, table support and forbidden contact;
+  (4) implement `grasp_occlusion_window_s` over the CLOSE->RELEASE wrist records with the owner and phase checks; and
+  (5) implement `release_stable_s` to its own row's wording. Each has its authoritative text transcribed here and its
+  evidence source named.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge and corrected field name green at 29; Tasks 9-10 untouched; the goal is armed with a 756-round budget;
+  one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe
+  interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
