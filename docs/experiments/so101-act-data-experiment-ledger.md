@@ -17358,3 +17358,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State: 1 failed / 19 passed** in the aggregator module, the failure being the gate test, blocked only on these four
   fields' evidence. The v2 checks dispatch, the support-sample citation and the sealed v2 fixture all stand; nothing was
   weakened, `REQUIRED_CHECKS` is untouched, nothing was deleted, and no push, stack or hardware was involved.
+
+## CP-1112 — 28 of 28 comparators satisfied, readback green, and the gate test down to one validator complaint
+
+- **The last four shapes came from reading, not probing** (CP-1111's own instruction): `search_timeout_s` takes
+  per-anchor `started_monotonic_s`/`terminal_monotonic_s`, `coarse_step_rad` takes `coarse_accumulator_before`/`_after`
+  per step with a positive bounded final remainder, `horizontal_fov_rad` takes frames with `fx`, `cx`, `model_fov_rad`
+  and a tolerance, and `acceleration_limit_rad_s2` takes `time_s`/`position_rad` samples at least three deep with
+  **distinct velocities** so the observed acceleration stays inside the configured limit. **28 of 28 now report PASS.**
+- **Two production-shaped fixes as well:** the support closed sample is built from **bare values** because that is what
+  `build_support_closed_sample` accepts (`CLOSED_SAMPLE_VALUE_INVALID` otherwise), while the published report keeps its
+  unit-bearing entries and citations; and the readback test now runs against the v2 batch.
+- **Measured result: 37 passed / 1 failed** across both modules, from 36 / 2 in the previous run and from the twelve
+  failures where this migration started. The remaining failure is the gate test, and it now fails **inside the validator**
+  with `VECTOR_INVALID` - published values must match each field's declared vector shape (the limit fields are six-vectors
+  and the neck interval is a pair, among others), so the last step is to publish each field in the shape its contract
+  entry declares rather than as a uniform scalar.
+- **Evidence:** scratch `<R>/scratch/r708.<n>` with `TMPDIR` verified through the exact test interpreter; logs
+  `beh-r707.log` (36/2) and `beh-r708.log` (37/1). No full suite was run, per the owner's instruction; nothing weakened,
+  `REQUIRED_CHECKS` untouched, nothing deleted, no push, no stack, no hardware.
