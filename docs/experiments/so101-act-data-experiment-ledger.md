@@ -18351,3 +18351,41 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   reported blocked rather than merely incomplete.
 - **Nothing unsafe or unrecoverable was done:** no push, no stack started, no hardware touched, no evidence deleted, no owner
   line ever staged, and my one unfinished test file left untracked rather than committed red.
+
+## CP-1158 — DECISION (owner, approved design): option (b) — the immutable runtime config is the descriptor
+
+**This resolves the blocker I raised at CP-1131/CP-1157. It is the owner's decision, citing two approved design documents,
+not an inference of mine.**
+
+- **Authority, quoted from the approved design** `docs/superpowers/specs/2026-09-28-so101-act-task8-artifact-preparation-design.md`
+  §4.2 "Runtime config": *"沿用已经通过生产 validator 的 head-search runtime config. 闭合字段继续由
+  `validate_head_search_binding()` 定义"* - the closed fields being the YOLO segmentation backend, the weights' **absolute
+  path and SHA256**, `image_size_px=640`, requested device, CPU fallback and Torch thread counts, the Torch and Ultralytics
+  versions, `head_camera_frame` with 640x480, and the neck goal tolerance / settle velocity / goal duration. It continues:
+  preparation accepts **only** content the production validator can parse; a change of model, version or device selection
+  **requires a new runtime config and a new calibration**, and an old report may not be paired with a new config.
+- **The same section settles the CUDA question:** Task 8 live's head-search config **and** `parallel_batch_v3.yaml` must both
+  request CUDA with `allow_cpu_fallback=false`; if their device semantics disagree, **preparation refuses**. Resource shortage
+  is a human-decision blocker and must **not** be auto-recovered by switching to CPU; a candidate that allowed CPU fallback
+  must be voided and regenerated.
+- **And §6 "Admission 与运行边界" fixes the ownership and the read boundary:** `UnifiedWorkloadService.start(spec)` remains
+  the **only** resource gate, and internal components *"只接收运行需要的业务 identity、generation、deadline 和审计 hash. 它们
+  不得回到 preparation 目录重新选择文件"* - they receive identity, generation, deadline and audit hashes, and **must not
+  return to the preparation directory to re-select files**.
+- **Therefore, implemented as specified from here on:**
+  1. `--runtime-config` names an **immutable** runtime config that the **production validator fully parses**; its
+     `head_search` block **is** the runtime descriptor. No second launch descriptor is created, and preparation does not
+     stop at an opaque digest.
+  2. It is read **once** at the launch/preparation entry, refusing a symlink, extra or malformed content, and any CPU-fallback
+     or device-semantics disagreement; its **canonical bytes and SHA256 enter the bound contract/context**.
+  3. That **same parsed immutable descriptor** - not a re-constructed approximation - is passed into calibration admission,
+     the context and the production driver; the driver registers and seals the descriptor's canonical payload, path and hash
+     **with** the raw batch; the aggregator reads it back from the strict closed index and then calls
+     `validate_head_search_binding(runtime, report)`.
+  4. Components consume the context only; none of them requests resources or re-reads the preparation directory.
+- **What this retires:** my CP-1117/CP-1129/CP-1131 findings remain true as *findings* - no production descriptor was written,
+  parsed or checked - and they are now a **work list** rather than a blocker. The live-stack deferral does **not** block any
+  of it: parsing, binding, registration, sealing and readback are all code paths testable with fixtures.
+- **Still not authorised, and not to be worked around:** starting a live MuJoCo stack. Boundary V's code/component work, the
+  formal Task 9 package/xdist gate and the Astra implementation re-review come first; only after Astra APPROVED does the
+  approved Task 10 start a single MuJoCo/CUDA production measurement from a new generation.
