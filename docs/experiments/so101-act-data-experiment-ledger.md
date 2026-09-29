@@ -26268,3 +26268,19 @@ picture in both directions.**
 - **Next round is four mechanical edits and a re-run**, then the nineteen in the measurement driver's `runtime_descriptor` fixture (ledger line 21865), then the boundary again - this time with the teleop gate and CTest, and with
   numbers that belong to that run rather than to the earlier batch.
 - **State:** nothing deleted, nothing pushed; the boundary is not complete and is not claimed to be; no new session, goal, worktree or stack; no hardware.
+
+## CP-1577 — The boundary found a real defect: the driver held the end-effector and never forwarded it
+
+- **`42 passed` for `test_act_task8_live_evidence.py`, and one of those passes is a PRODUCTION fix, not a fixture one.** The final-boundary run exposed this:
+  `CaseEvidenceDriver.observe_capture` receives `measurements` - which carries `end_effector_position_m` - and did **not** pass it to `capture_evidence_fields`, which refuses a frame without it by name, on the stated
+  ground that *"a frame without it must not be recorded as if it had one."* **So every real capture through the driver would have failed with `READBACK_END_EFFECTOR_REQUIRED` while the driver held the very value the adapter
+  was asking for.** The driver now forwards it, or refuses with `TASK8_DRIVER_END_EFFECTOR_REQUIRED`.
+- **And this is the whole argument for running the full gate before claiming anything:** the focused sets were green, the nine-phase case sealed, the artifact read back from its records - **and this defect sat underneath all of
+  it**, invisible to every test that composed a capture by hand.
+- **The rest of the round was fixtures catching up, each requirement read from the code that refused it:**
+  - the **evidence attachment carries three things** (the window, the admitted support distance, the raw-records root) - so the bind sites pass all three, and the refusals that remain are the `ALREADY_BOUND` and `WINDOW_INVALID` guards;
+  - the **seal's identity carries the incremented release epoch** (`1`), the same value the runner verifies RELEASE with (CP-1555);
+  - the readback adapter reads the **scene's clock bound AND both documents' own `simulation_time_s`**, requiring the three physics stamps to agree - so both fixtures carry the world's own value rather than a third opinion;
+  - the **forwarding test asserts membership** rather than an exact list, because the port now also forwards the grid sample it builds for the phase - **which is the change this batch made on purpose.**
+- **State:** `test_act_task8_live_evidence.py` green at 42 passed; the boundary is still not complete - **19 failures remain in the measurement driver's `runtime_descriptor` fixture** (ledger line 21865) - and the teleop gate
+  and CTest have not been run for this boundary yet. Nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
