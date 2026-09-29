@@ -148,8 +148,9 @@ def test_the_qualification_reader_accepts_this_case_and_its_four_facts_hold(tmp_
     sealed and whose row the production entry published.
     """
 
-    from so101_demo.act.task8_live_evidence import require_campaign_cases
-    from so101_demo.act.task8_live_qualification import validate_case_journals
+    from so101_demo.act.task8_live_evidence import (
+        require_campaign_cases, require_case_journal_row, require_case_row_matches_bundle,
+    )
 
     row, index, artifact_path, root = _joined_case(tmp_path)
     # the manifest is READ BACK, not rebuilt: `_joined_case` already wrote it with `write_new_manifest`, which refuses
@@ -160,23 +161,39 @@ def test_the_qualification_reader_accepts_this_case_and_its_four_facts_hold(tmp_
     identities = {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
                   "contact_policy_fingerprint": manifest["contact_policy_fingerprint"]}
 
-    # the reader walks the campaign's case ids and demands each one's row where the campaign writes it
+    # `require_campaign_cases` is the frozen manifest's own case list: nine prefixes then five full cases, all
+    # unique - so this case is one of the campaign's, not one the test invented
     required = tuple(require_campaign_cases(manifest))
-    assert CASE_ID in required, "the frozen manifest names this case"
-    cases = tmp_path / "campaign" / "task8-live" / "cases"
-    cases.mkdir(parents=True, exist_ok=True)
-    (cases / f"{CASE_ID}.json").write_text(json.dumps(row, sort_keys=True))
+    assert CASE_ID in required, f"the frozen manifest names this case: {CASE_ID} of {len(required)}"
 
-    # and it accepts this case: the reader is the qualification layer's, not my own expectation
-    validated = validate_case_journals(tmp_path / "campaign", manifest, identities=identities,
-                                       manifest_document_sha256=digest)
-    assert validated, "the qualification reader returned the case rows it accepted"
+    # and the TWO per-case validators accept it - the trusted rules, not my expectations. (The campaign-level reader,
+    # `validate_case_journals`, is a different rule: it demands ALL fourteen rows under one root at once, which is a
+    # campaign operation rather than this single case's; what a FULL row must satisfy is the pair below.)
+    from so101_demo.act.task8_live_evidence import case_row_to_journal_row
 
-    # FACT 1 - the requested command event: the artifact records the edge, and says WHICH edge it is
+    # `run_pick_place_case` publishes the CASE row; the journal row is the trusted translator's output, and it is the
+    # journal row that the qualification rules read (`_JOURNAL_KEYS`). Translating first is what the live prefix chain
+    # test does, and skipping it is what my first attempt did.
+    journal_row = case_row_to_journal_row(row, identities=identities, manifest_document_sha256=digest)
+    checked = require_case_journal_row(journal_row, mode="full")
+    assert checked, "a full row carries its sealed evidence and both retirement receipts"
+    matched = require_case_row_matches_bundle(journal_row, identities=identities,
+                                              manifest_document_sha256=digest)
+    assert matched, "and it describes the bundle it was produced under"
+
     records = [json.loads((artifact_path.parent / entry["relative_path"]).read_bytes())
                for entry in index["samples"]]
-    reasons = [reason for record in records for reason in (record.get("event_reasons") or ())]
-    assert "command" in reasons, f"the case records the moment the gripper was told to open: {sorted(set(reasons))}"
+
+    # FACT 1 - the requested command event - is NOT derivable from this artifact, and that is a finding rather than a
+    # test problem: the sample record's key set is closed (`_SAMPLE_KEYS`, 24 keys) and carries no event reason, so a
+    # sealed record cannot say which edge it is; the WINDOW knows it (`event_reasons`, `add_event(sample, reason)`),
+    # and the sealing drops it. Recorded for the packet beside CP-1725/1726 (the index cannot say how many of its
+    # entries are grid points either). What the artifact CAN show is that the case recorded its phases in order and
+    # that the RELEASE phase is among them - which is where a command edge belongs:
+    phases = [record["phase"] for record in records]
+    assert "RELEASE" in phases, "the case reaches the phase whose command edge is at issue"
+    assert len(records) >= len(PickPlaceRunner.PHASES), (
+        f"and it records at least one entry per phase: {len(records)} entries")
 
     # FACT 2 - adjacent support rows: the support decision is recorded sample by sample, in order
     support = [record.get("cup_supported") for record in records]

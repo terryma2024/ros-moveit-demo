@@ -29078,3 +29078,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Two fixture facts learned on the way, both of them the fixture's own rules working:** `write_new_manifest` refuses to overwrite (`FileExistsError`), so the manifest must be **read back** rather than rebuilt; and the row's file name under `case_root/"task8-live"/"cases"` is the **campaign's** case id (`require_campaign_cases(manifest)`), not the one this test picked.
 - **The next read is one function:** `validate_case_journals` (`task8_live_qualification.py:109`) - its path rule and the ids it walks - so the row is placed where it looks, rather than the test guessing a second time.
 - **State:** **P1-5's first half passing, its second half reaching the trusted reader and refused by that reader's own name; the four facts' assertions are written but not yet reached**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1736 — The joined chain passes, and FACT 1 is recorded as what the artifact cannot carry
+
+- **The file, `2 passed`:**
+  ```
+  test_act_task8_full_case_joined_chain.py   2 passed in 19.75s
+  ```
+  1. **the chain**: the production `PickPlaceRunner` seals the artifact over the full-case port, the production
+     `run_pick_place_case` publishes the case row with both retirement receipts - **the owner is the only substitution**;
+  2. **the trusted reading**: `case_row_to_journal_row(row, identities=…, manifest_document_sha256=…)` then
+     `require_case_journal_row(journal_row, mode="full")` and `require_case_row_matches_bundle(…)` - **the three production rules, not my expectations** - plus `require_campaign_cases(manifest)`, which is where the fifteen rows' own list comes from (`prefix_count=9, full_count=5`);
+  3. **the facts the artifact can show**: the case reaches `RELEASE` and records at least one entry per phase; the
+     support decision is on **every** recorded sample (adjacent rows, not sampled apart); **two distinct** receipts,
+     each named by the row and each hashing to what the row says; and `completed_phases` equal to the runner's whole
+     list.
+- **And FACT 1 - "the requested command event" - is not derivable from this artifact, which is a finding rather than a test problem:**
+  ```
+  _SAMPLE_KEYS = ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
+                  "sim_time_s", "phase", "source_stamps_s", "source_received_monotonic_s", "raw_records",
+                  "holding_state", "wrist_frame_valid", "wrist_target_visible", "contact_observation_valid",
+                  "bilateral_contact", "no_fingertip_contact", "cup_supported", "released",
+                  "placement_stable", "cup_support_distance_m", "end_effector_position_m", "cup_position_m",
+                  "cup_orientation_xyzw")
+  ```
+  **Twenty-four keys, closed, and no event reason among them.** The window knows it (`event_reasons`, and `add_event(sample, reason)` refuses any reason outside `command|release|contact`), and **sealing drops it** - so a sealed record cannot say *which* edge it is. **That is the same gap as CP-1725/1726** (the index cannot say how many of its entries are grid points), and it belongs in the packet as one proposal rather than two: **the sealed evidence should be able to describe its own edges.**
+- **What this means for P1-5 honestly:** the verdict's sentence - one actual full case whose production code emits artifact, receipts and journal, and whose real reader consumes them - **is now met and passing on the production path**. **One of the four named facts (the command event) is not established by the artifact today**, and the reason is a closed key set rather than a missing emission.
+- **State:** **P1-5: the joined chain passes; the four negatives remain, to be derived by corrupting THIS baseline**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
