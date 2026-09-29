@@ -31753,3 +31753,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress; the content of the wiring is settled and one ordering constraint is now recorded with the
   extraction it needs.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
   re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1837 — The extraction is done, verbatim, and it changed nothing for the caller that had it
+
+- **The first attempt was wrong and the correction is worth recording, because it is a class of mistake this session has
+  made before in a different medium:** I dedented the block by four spaces on the theory that a helper's body sits one
+  level in - but **the block was ALREADY at function-body indentation**, so the dedent left the statements at column 0
+  and the continuation lines at 4/6, and `py_compile` refused it:
+  ```
+  Sorry: IndentationError: unexpected indent (test_task8_child_driven_case.py, line 78)
+  ```
+  The file was **restored from HEAD** (its CP-1811/1831 edits are committed, so nothing was lost - `0 local changes`
+  after the checkout confirms it), and the extraction was redone **verbatim**: locate the block by content rather than by
+  remembered line numbers, move it unchanged, and let the helper's own body carry it.
+  **Two guards in the second attempt that the first lacked: find by content (`weights_path = root` → `paths, hashes =
+  [], []`), and assert the motion block is inside the range before moving anything.**
+- **The result:**
+  ```python
+  def _head_search(root):            # line 54 - the block, verbatim, with its docstring and `return head_search`
+  …
+  head_search = _head_search(root)   # line 122 - `_binding` calls it exactly as it did before
+  ```
+  **and `7 passed`** across the child-driven suite, so the binding's runtime config and the calibration report's
+  provenance are unchanged - which is the whole point of extracting rather than copying.
+- **And it unblocks the ordering constraint CP-1836 found:** the full-case module can now import `_head_search` and build
+  the report **before** the broker, in the order the dependencies demand:
+  `_head_search(root)` → `_calibration(evidence, status="TASK8_READY", head_search=…)` →
+  `bound_act_source_settings(report, timestep_s=model.opt.timestep)` → `_production_broker(…)` →
+  `_prepare_child_case(broker=…)` → mount with `reset.broker = broker`.
+- **State:** **P1-5 in progress; the helper exists and its caller is unchanged, so the six-step wiring's last piece is to
+  use it.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
+  remain. **Task-list statuses are unchanged, so they are not re-stated.**
