@@ -21707,3 +21707,28 @@ not an inference of mine.**
   context**, with `SO101_TASK8_PROVIDER_SEAM` demoted to an external-I/O substitution rather than the only way in.
 - **State:** P1-1's RED uncommitted while red; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup untouched;
   nothing deleted, nothing pushed.
+
+## CP-1312 — The stack's seams and the matrix API read; and a finding: no phase-camera production component exists
+
+- **`PersistentTaskStack` is keyword-only and every process interaction is injectable:**
+  ```python
+  def __init__(self, *, popen=subprocess.Popen, killpg=os.killpg, interrupt_timeout_s=20.0,
+               terminate_timeout_s=5.0, birth_identity_probe=None, loaded_image_probe=None,
+               owner_environment=None, ...)
+  ```
+  so the composition can construct it **without a live stack**, and a test substitutes the process boundary through the same parameters
+  production uses.
+- **`load_phase_camera_matrix(path=None) -> dict`** reads `_CONFIG / "task8-phase-camera-matrix-v1.json"` and validates its occluder set
+  against `EXPECTED_OCCLUDERS` (`fixed_fingertip_pad_visual`, `gripper_visual_00/01`, `jaw_visual_00`, `moving_fingertip_pad_visual`).
+- **And the finding worth stating plainly: the phase-camera collaborator has no production implementation anywhere in the repository.**
+  The only other references treat the matrix as an **identity member** (`task8_live_qualification.py:248/496/514`), and the driver simply
+  calls `self.phase_camera(phase, index)`. **So "wire the real phase-camera production composition" means writing that evaluator**, with the
+  matrix as its input and the documented observation shape - the chain test's `{"phase", "frame_index", "row_count", ...}` - as its
+  output contract, rather than connecting something that already exists. **That is in scope for this P1 and I am not treating it as a
+  question for the owner**, but it is a larger change than "wire it up", and recording that now prevents me from presenting it later as a
+  trivial connection.
+- **The GREEN therefore has four existing components and one new one:** detector ← `build_detector` from the descriptor · controller ←
+  `HeadSearchController(descriptor["head_search"])` · stack ← `PersistentTaskStack(...)` with its seams · clock ← monotonic · **phase
+  camera ← a new matrix-driven evaluator** returning the driver's observation shape per `(phase, index)`.
+- **State:** P1-1's RED uncommitted while red; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup untouched;
+  nothing deleted, nothing pushed.
