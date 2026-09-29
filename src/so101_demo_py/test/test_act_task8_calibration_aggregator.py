@@ -122,7 +122,7 @@ def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED",
     # Astra item 4: every sealed batch indexes its runtime descriptor, so the fixture writes one before sealing -
     # descriptor=False builds the bare root that the aggregator must refuse
     if descriptor:
-        _write(root / "runtime-descriptor.json", {"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False}, "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame", "width_px": 640, "height_px": 480}, "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}})
+        _write(root / "runtime-descriptor.json", _descriptor())
     # the batch is sealed by the production entry point, which records every raw file hash
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
 
@@ -323,7 +323,7 @@ def _sealed_batch(root, payload, identities=None, extra_files=None,
     # Astra item 4: this builder seals a batch the aggregator will read, so it indexes a descriptor like production -
     # descriptor_indexed=False is how a test deliberately builds the bare root the rule must refuse
     if descriptor is None:
-        descriptor = {"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False}, "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame", "width_px": 640, "height_px": 480}, "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}}
+        descriptor = _descriptor()
     if "head_search" not in descriptor:      # callers may hand in the inner block; the sealed document is the document
         descriptor = {"schema_version": 1, "head_search": descriptor}
     descriptor_path = Path(root) / "runtime-descriptor.json"
@@ -582,7 +582,9 @@ def _valid_evidence(contract):
 
 def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=True):
     if descriptor is None:                      # production always seals a descriptor, so the fixture does too
-            descriptor = {"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False}, "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame", "width_px": 640, "height_px": 480}, "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}}
+        # the shared rule is closed over every block of the document, so the fixture reuses THIS module's own
+        # complete builder instead of a partial inline literal that only the weak rule ever accepted
+        descriptor = _descriptor()
     # Astra item 4: a sealed batch always indexes its descriptor, so the fixture's default matches production;
     # the False case is still available for tests that deliberately build a bare root
     """A batch that is schema-true for v2: valid raw evidence in the indexed records and the 28 published entries."""
@@ -866,7 +868,9 @@ def _complete_inner_block(*, device="cuda"):
             "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt",
                          "weights_sha256": "a" * 64, "model_id": "plastic-cup",
                          "image_size_px": 640, "requested_device": device,
-                         "allow_cpu_fallback": False},
+                         "allow_cpu_fallback": False,
+                           "torch_threads": 4, "torch_interop_threads": 2,
+                           "torch_version": "2.0", "ultralytics_version": "8.0"},
             "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
                        "width_px": 640, "height_px": 480},
             "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01,

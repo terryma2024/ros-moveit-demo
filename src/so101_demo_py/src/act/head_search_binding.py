@@ -113,16 +113,44 @@ def validate_head_search_shape(runtime: dict) -> dict:
     # function was extracted, and empty or incomplete blocks passed a rule the production binding refused.
     if descriptor["schema_version"] != 1:
         raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
-    required = {
-        "detector": ("backend", "weights_path", "weights_sha256", "model_id", "image_size_px",
-                     "requested_device", "allow_cpu_fallback"),
-        "camera": ("frame_id", "ray_origin_frame_id", "width_px", "height_px"),
-        "motion": ("goal_tolerance_rad", "settle_velocity_rad_s", "neck_goal_duration_s"),
-    }
-    for name, fields in required.items():
-        block = descriptor[name]
-        if type(block) is not dict or not fields or any(field not in block for field in fields):
-            raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
+    # Astra re-review #3, finding 2: presence was never enough. The same closed sets, types and value bounds the
+    # production binding enforced are enforced HERE, so the measurement entry - which consumes the parsed context
+    # document - cannot accept a descriptor the binding would refuse. Report pairing stays in the binding.
+    detector, camera, motion = (descriptor[name] for name in ("detector", "camera", "motion"))
+    if (type(detector) is not dict or set(detector) != {
+            "backend", "weights_path", "weights_sha256", "model_id", "image_size_px",
+            "requested_device", "allow_cpu_fallback", "torch_threads",
+            "torch_interop_threads", "torch_version", "ultralytics_version"} or
+            detector["backend"] != "yolo_seg" or
+            type(detector["weights_path"]) is not str or
+            type(detector["weights_sha256"]) is not str or
+            _SHA.fullmatch(detector["weights_sha256"]) is None or
+            type(detector["model_id"]) is not str or not detector["model_id"] or
+            type(detector["image_size_px"]) is not int or detector["image_size_px"] != 640 or
+            detector["requested_device"] not in ("cuda", "cpu") or
+            type(detector["allow_cpu_fallback"]) is not bool or
+            type(detector["torch_threads"]) is not int or
+            not 1 <= detector["torch_threads"] <= 64 or
+            type(detector["torch_interop_threads"]) is not int or
+            not 1 <= detector["torch_interop_threads"] <= 32 or
+            any(type(detector[name]) is not str or not detector[name] or
+                len(detector[name]) > 64 for name in (
+                    "torch_version", "ultralytics_version"))):
+        raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
+    if (type(camera) is not dict or set(camera) != {
+            "frame_id", "ray_origin_frame_id", "width_px", "height_px"} or
+            camera["frame_id"] != "head_camera_frame" or
+            camera["ray_origin_frame_id"] != "head_camera_frame" or
+            type(camera["width_px"]) is not int or camera["width_px"] != 640 or
+            type(camera["height_px"]) is not int or camera["height_px"] != 480):
+        raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
+    if (type(motion) is not dict or set(motion) != {
+            "goal_tolerance_rad", "settle_velocity_rad_s", "neck_goal_duration_s"} or
+            not all(_finite_positive(value) for value in motion.values()) or
+            motion["goal_tolerance_rad"] > 0.1 or
+            motion["settle_velocity_rad_s"] > 0.2 or
+            motion["neck_goal_duration_s"] > 5):
+        raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
     return descriptor
 
 
@@ -131,40 +159,6 @@ def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearch
     try:
         descriptor = validate_head_search_shape(runtime)
         detector, camera, motion = (descriptor[name] for name in ("detector", "camera", "motion"))
-        if (type(detector) is not dict or set(detector) != {
-                "backend", "weights_path", "weights_sha256", "model_id", "image_size_px",
-                "requested_device", "allow_cpu_fallback", "torch_threads",
-                "torch_interop_threads", "torch_version", "ultralytics_version"} or
-                detector["backend"] != "yolo_seg" or
-                type(detector["weights_path"]) is not str or
-                type(detector["weights_sha256"]) is not str or
-                _SHA.fullmatch(detector["weights_sha256"]) is None or
-                type(detector["model_id"]) is not str or not detector["model_id"] or
-                type(detector["image_size_px"]) is not int or detector["image_size_px"] != 640 or
-                detector["requested_device"] not in ("cuda", "cpu") or
-                type(detector["allow_cpu_fallback"]) is not bool or
-                type(detector["torch_threads"]) is not int or
-                not 1 <= detector["torch_threads"] <= 64 or
-                type(detector["torch_interop_threads"]) is not int or
-                not 1 <= detector["torch_interop_threads"] <= 32 or
-                any(type(detector[name]) is not str or not detector[name] or
-                    len(detector[name]) > 64 for name in (
-                        "torch_version", "ultralytics_version"))):
-            raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
-        if (type(camera) is not dict or set(camera) != {
-                "frame_id", "ray_origin_frame_id", "width_px", "height_px"} or
-                camera["frame_id"] != "head_camera_frame" or
-                camera["ray_origin_frame_id"] != "head_camera_frame" or
-                type(camera["width_px"]) is not int or camera["width_px"] != 640 or
-                type(camera["height_px"]) is not int or camera["height_px"] != 480):
-            raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
-        if (type(motion) is not dict or set(motion) != {
-                "goal_tolerance_rad", "settle_velocity_rad_s", "neck_goal_duration_s"} or
-                not all(_finite_positive(value) for value in motion.values()) or
-                motion["goal_tolerance_rad"] > 0.1 or
-                motion["settle_velocity_rad_s"] > 0.2 or
-                motion["neck_goal_duration_s"] > 5):
-            raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
     except (KeyError, TypeError) as error:
         raise ValueError("HEAD_SEARCH_CONFIG_INVALID") from error
 
