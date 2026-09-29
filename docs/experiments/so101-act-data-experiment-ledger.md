@@ -32022,3 +32022,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   cleanly, and the next question correctly re-pointed at the evidence documents.** P1-1 through P1-4 CLOSED. The demo
   RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged,
   so they are not re-stated.**
+
+## CP-1845 — Root cause CONFIRMED by elimination: the scene's `model_sha256` is the child sources' constant
+
+- **Every condition the diagnostic could print passes, and the one it could not is the cause:**
+  ```
+  [diag] world   session='session-298' epoch=2 step=53 paused=False  body='plastic_cup' truncated=False ticks=()/()
+  [diag] scene   extra=[] missing=[]  step=53 == 53  time=2.104 == 2.104  paused=False
+                 session='session-298' vs 'session-298'   epoch=2 vs 2
+                 model_sha256='eeeeee…eeee'                                  <- the child sources' constant
+  [diag] contact extra=[] missing=[]  step=53 == 53  time=2.104 == 2.104  session='session-298' epoch=2
+  [diag] result  found=True attempt='full-01' ts=2.0      (0 <= 2.0 <= 2.104)
+  [diag] sources.contact_pairs.model_sha256='3c876e7bbf879dbf…'                <- bound to the CHECKER's hash
+  ```
+  **The scope check compares `scene["model_sha256"] != sources.contact_pairs.model_sha256`** - and those two are the
+  child fixture's `"e" * 64` and the ACT model's real `3c876e7bbf879dbf…` respectively. **So the readback is refused for
+  the right reason: the scene says it was simulated from one model while the sources that measured it claim another.**
+- **And that is a coherence rule, not a formality** - it is the same rule the screen enforces at mount
+  (`sources.contact_pairs.model_sha256 == path_checker.model_sha256`, CP-1817/1818) **seen from the other end**: three
+  readers - the scene the segment produced, the sources' `contact_pairs`, and the APPROACH checker - must all name the
+  same compiled model, **and my wiring satisfied two of the three by binding the pairs to the checker's hash while
+  leaving the fixture's own constant in the scene.**
+- **So the fix is one value, and it must travel to the right place:** `_ChildSources` stamps `self._model_sha256 = "e" *
+  64` and the segment copies it into the scene, **so the real model hash has to reach `_ChildSources`** - either as a
+  constructor parameter or by the boundary setting it before `search` - **after which the scene, the pairs and the
+  checker agree, and the refusal disappears for the right reason rather than by relaxing the check.**
+- **And the diagnostic itself is recorded as a method, because it is what turned a chain of guesses into an
+  elimination:** print every sub-condition the guard tests, in the guard's own terms, and let the one that is *not*
+  printed name itself. **It was removed from the source afterwards - the file restored from a pre-diagnostic copy - so no
+  debug scaffolding is left in the suite.**
+- **State:** **P1-5 in progress with its root cause confirmed and its fix identified as a single value that must reach the
+  fixture's model hash.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
+  re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
