@@ -21026,3 +21026,25 @@ not an inference of mine.**
   write** - and the write is the last step of item 5.
 - **State:** HEAD `70b22503` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1278 — The obstacle dissolves: the port derives its recorder from the window, so it is reusable as-is
+
+- **Read:**
+  ```python
+  def bind_live_evidence(self, window):
+      self.window = window
+      self.calls.append("bind_live_evidence")
+      self.evidence_root = Path(window._recorder.evidence_root) if hasattr(window, "_recorder") ...
+  ```
+  **The chain test's port already handles the direction item 5 needs:** it does not demand a recorder up front - it reaches the one the
+  window carries. So when the **child** builds the `CaseEvidenceDriver` and attaches `evidence.window`, the port follows it. **No
+  subclass, no edit to the chain test, and CP-1277's three options collapse to the first one.**
+- **And `_identity(request)` reads the request as a mapping** (`request["session_id"]`, `request["attempt_id"]`), which is correct here
+  because the port receives the **runner's** dict - not the IPC model the child consumes. **The two request shapes that tripped me at
+  CP-1271 are each used on their own side of the boundary, and reading both is what showed it.**
+- **Item 5 is therefore unblocked and fully specified**, with nothing left to invent: real artifacts bound through the production
+  loader, the child constructed with the port and a startup consumer, the real `IpcRequest` graph with hash fields taken from the
+  binding and `stack_owner` describing the child's own owner, `asyncio.run(child.pick_place_full(request))`, then assertions over the
+  returned dict and the sealed, indexed records. **The next round writes the file.**
+- **State:** HEAD `c0c9821a` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
+  nothing deleted, nothing pushed.
