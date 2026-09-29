@@ -501,3 +501,28 @@ def test_a_driver_batch_whose_phase_stamps_go_backwards_is_refused(tmp_path):
 
     with pytest.raises(ValueError, match="BATCH_TIME_REVERSED"):
         validate_closed_batch(root)
+
+
+def test_a_changed_controlled_input_is_refused_against_the_bound_contract(tmp_path):
+    """Boundary IV item 3's fourth case: the runtime config is a controlled input, so the contract refuses a new digest.
+
+    The identity carries runtime_config_sha256, and the bound contract records the identities it was bound under - so a
+    measurement run against a changed runtime config cannot reuse the old contract.
+    """
+
+    import json as _json
+
+    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, bind_measurement_contract,
+                                                          load_measurement_contract)
+
+    template_path = (Path(__file__).resolve().parents[1]
+                     / "config/act/task8-calibration-measurement-contract-v2.json")
+    identities = {name: "a" * 64 for name in IDENTITIES_V2}
+    identities["source_commit"] = "0" * 40
+    bound_path = tmp_path / "bound.json"
+    bind_measurement_contract(template_path, identities, bound_path)   # the binder returns the document
+
+    changed = dict(identities, runtime_config_sha256="f" * 64)
+    with pytest.raises(ValueError, match="MEASUREMENT_CONTRACT_IDENTITY_MISMATCH"):
+        load_measurement_contract(bound_path, expected_hashes=changed)
+    assert load_measurement_contract(bound_path, expected_hashes=identities) is not None, "the unchanged set loads"
