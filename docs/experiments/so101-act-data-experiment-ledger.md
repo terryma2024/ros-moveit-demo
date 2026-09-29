@@ -21679,3 +21679,31 @@ not an inference of mine.**
   chain test's `lambda phase, index: {...}` as the documented observation shape.
 - **State:** P1-1's RED is uncommitted while red; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup untouched;
   nothing deleted, nothing pushed.
+
+## CP-1311 — Two of the three constructors read, and one of them is itself the external-I/O seam
+
+- **Read:**
+  ```python
+  class PersistentTaskStack:
+      def __init__(self, ..., popen: Callable = subprocess.Popen,
+                   killpg: Callable[[int, signal.Signals], None] = os.killpg,
+                   interrupt_timeout_s: float = 20.0, terminate_timeout_s: float = 5.0,
+                   birth_identity_probe: Callable[[int], int] | None = None,
+                   loaded_image_probe: Callable[[int], Sequence[Path]] | None = None, ...)
+
+  class HeadSearchController:
+      def __init__(self, config): ...
+  ```
+  **So the stack's process handling is already parameterised** - `popen`, `killpg`, the identity probe and the loaded-image probe are
+  injectable - which means a test can stand in for the **process** boundary without touching the composition's own rules, exactly the
+  seam discipline this task has been held to. And **`HeadSearchController` takes the head-search config**, i.e. the descriptor's own
+  `head_search` block, so the controller is fed by the frozen descriptor rather than by anything the entry re-reads.
+- **Still open, and it is the last one:** the stack's **leading** parameters (the command/spec it launches - my read started mid-signature)
+  and the phase camera's **real** evaluation, where the candidates are `load_phase_camera_matrix(...)` plus an adapter to the driver's
+  `(phase, index)` call shape.
+- **The GREEN's shape is therefore settled even though it is not yet written:** detector from `build_detector(options)` fed by the
+  descriptor · controller from `HeadSearchController(descriptor["head_search"])` · stack from `PersistentTaskStack(...)` with its process
+  seams injected only in tests · clock monotonic · phase camera matrix-driven - all constructed by the composition from the **admitted
+  context**, with `SO101_TASK8_PROVIDER_SEAM` demoted to an external-I/O substitution rather than the only way in.
+- **State:** P1-1's RED uncommitted while red; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup untouched;
+  nothing deleted, nothing pushed.
