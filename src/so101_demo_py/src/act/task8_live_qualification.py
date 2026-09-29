@@ -435,3 +435,51 @@ def grasp_occlusion_window_s(frames, *, occluded) -> float:
     """
 
     return longest_contiguous_span_s(frames, predicate=occluded, strict_breaks=True)
+
+
+def collect_live_runs(rows, *, identities: dict, extractors: dict) -> tuple:
+    """Read the five sealed FULL rows into the run mappings `derive_live_measurements` consumes.
+
+    Each full row must carry a `live_evidence_artifact` whose file exists, is not a symlink, and hashes to the
+    recorded digest - a run that cannot be read back byte for byte is refused rather than derived from. The five
+    values are produced by **caller-supplied extractors** (field -> callable(samples, document)), because three of the
+    design's rules read the raw records rather than the sample keys: supplying an extractor keeps that evidence
+    requirement explicit instead of hiding a substitute inside this function. An extractor that is not supplied raises
+    `LIVE_EXTRACTOR_REQUIRED`, so a missing rule can never be silently reported as zero.
+    """
+
+    import hashlib
+    import json
+
+    full = [row for row in rows if row.get("live_evidence_artifact") is not None]
+    if len(full) != 5:
+        raise ValueError(f"FIVE_FULL_RUNS_REQUIRED: found {len(full)} full runs")
+    policy = identities.get("contact_policy_fingerprint")
+    matrix = identities.get("phase_camera_matrix_sha256")
+    runs = []
+    for index, row in enumerate(full):
+        artifact = row["live_evidence_artifact"]
+        if type(artifact) is not dict or not artifact.get("path") or not artifact.get("sha256"):
+            raise ValueError("SEALED_SAMPLE_REQUIRED: a full run must name its sealed artifact")
+        target = Path(artifact["path"])
+        if target.is_symlink() or not target.is_file():
+            raise ValueError(f"SEALED_SAMPLE_REQUIRED: {target} is not a readable regular file")
+        payload = target.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != artifact["sha256"]:
+            raise ValueError(f"SEALED_SAMPLE_DIGEST_MISMATCH: {target.name}")
+        document = json.loads(payload)
+        samples = document.get("samples")
+        if not samples:
+            raise ValueError("SEALED_SAMPLE_REQUIRED: the artifact carries no samples")
+        identity = document.get("identity") or {}
+        run = {"run_index": index, "session_id": identity.get("session_id"),
+               "contact_policy_fingerprint": policy, "phase_camera_matrix_sha256": matrix,
+               "sample_path": str(target), "sample_sha256": artifact["sha256"],
+               "support_frames": [], "samples": samples}
+        for field in LIVE_ONLY_FIELDS:
+            extractor = extractors.get(field)
+            if extractor is None:
+                raise ValueError(f"LIVE_EXTRACTOR_REQUIRED: no extractor supplied for {field}")
+            run[field] = extractor(samples, document)
+        runs.append(run)
+    return tuple(runs)
