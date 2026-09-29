@@ -22317,3 +22317,20 @@ not an inference of mine.**
   item will be kept honest rather than declared.**
 - **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
   nothing pushed.
+
+## CP-1346 — P1-5's substitution, decided by what each side actually provides
+
+- **`FakePort` is richer than a port:** it carries the recorder, both epochs, the row/grid bookkeeping, the phase list, the startup receipt,
+  the window and the call log - and it exposes `bind_startup_receipt` and `bind_live_evidence`, which the **parent** side drives.
+- **The production `PickPlaceSearchPhasePort` is a thin wrapper over a boundary** whose worth is its **seal**: `seal_live_evidence` reads the
+  epochs from the **request**, seals the **window first**, and refuses without a recorder.
+- **So the honest substitution is a subclass, not a swap:** the child fixture's port extends the **production**
+  `PickPlaceSearchPhasePort` (constructing it with a substitute **boundary**, the child's **real recorder** and the **real window**) and keeps
+  only the test-side bookkeeping the parent drives - `bind_startup_receipt`, `bind_live_evidence`, the call log and the row fixtures. **The
+  seal is then inherited from production code, not re-implemented**, which is precisely the reviewer's "connect the real execution adapter
+  and production seal path … replace only ROS/MuJoCo/controller/process I/O".
+- **And the epoch discipline follows for free:** because the inherited seal reads `reset_epoch` and `release_epoch` from the **request**, the
+  substitute boundary must put them there - so the fixture can no longer assert an epoch it set on itself, which is the "old release-event"
+  problem the reviewer says remains.
+- **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
+  nothing pushed.
