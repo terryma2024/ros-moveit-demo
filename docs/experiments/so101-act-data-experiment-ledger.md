@@ -10913,3 +10913,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-849 — Build-receipt writer landed; the vendored plugin's registry path is unsatisfiable here
+
+- **Source change, TDD:** new `tools/so101_build_receipt.py` plus `test/test_so101_build_receipt.py`,
+  committed `1cfc4dd6`. The tool writes `<artifact>.build-receipt.json` beside a compiled artefact with
+  exactly the seven fields `source_provenance` demands, deriving `output_sha256` from the artefact itself, and
+  fails closed on `BUILD_RECEIPT_ARTIFACT_MISSING` (missing or symlinked artefact),
+  `BUILD_RECEIPT_FIELDS_INCOMPLETE` (any of sources/headers/cmake_arguments/compiler/linker empty) and
+  `BUILD_RECEIPT_DEPENDENCIES_INVALID` (empty or malformed dependency map). **9 focused tests passed**
+  (`beh-build-receipt.log`), including one that proves a receipt left beside a later-modified artefact no longer
+  agrees with it - the condition the verifier reports as `SOURCE_PROVENANCE_INSTALL_DIRTY`.
+- **Real receipts written for the two worktree plugins** using values read from the build rather than typed in:
+  compiler and linker from `CMakeCache.txt` (`/usr/bin/c++`, `/usr/bin/ld`), sources and headers from the
+  package, and dependency maps resolved with `ldd` and hashed (49 and 69 dependencies respectively).
+- **Provenance now fails on the last role and no build in this worktree can satisfy it:**
+  `mujoco_ros2_control_plugin` is expected at
+  `so101_mujoco_support/lib/libmujoco_ros2_control.so`, but `so101_mujoco_support/CMakeLists.txt` builds only
+  `so101_simulation_evidence_plugin` and `so101_broker_owned_trajectory_controller` - it merely *links against*
+  `mujoco_ros2_control_plugins::mujoco_ros2_control_plugins`. The library itself comes from the vendored package
+  in the dependency overlay: `i/mujoco_ros2_control/lib/libmujoco_ros2_control.so`. The registry also lists
+  `simulation_evidence_plugin.cpp` as that role's source, i.e. the same source as the first plugin role.
+- **This is a design question, not a defect to route around.** Copying the vendored `.so` into
+  `so101_mujoco_support/lib/` would fabricate an install layout that no build produced, which is exactly what
+  this check exists to catch. The honest options are: (1) the registry path is wrong and should name
+  `mujoco_ros2_control/lib/libmujoco_ros2_control.so` (a one-line correction in a controlled source file, with
+  its own RED/GREEN), or (2) the Task 8L overlay is intended to be a **merged** prefix built from all packages
+  including the submodule, in which case the isolated paths for the Python and share roles would have to change
+  too. Stopping here to ask rather than choosing for the plan.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
