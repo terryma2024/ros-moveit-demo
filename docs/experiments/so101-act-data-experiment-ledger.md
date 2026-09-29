@@ -17135,3 +17135,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `17 == 28`. Five of the eleven missing fields are accounted for and the fix for the rest is named.
 - **Evidence:** scratch `<R>/scratch/r697.<n>` with `TMPDIR` verified through the exact test interpreter; log
   `beh-r697.log`; the earlier state `beh-r696-red.log`.
+
+## CP-1102 — A second, larger finding: the aggregator's entry is written against the v1 contract
+
+- **Giving the readback test a bound v2 contract did not reach the support fields; it stopped one step earlier:**
+  `KeyError: 'thresholds'`. The v2 bound document's keys are `schema_version, kind, identities, source_hashes,
+  bound_files, measurements, support, contract_sha256` - **no `thresholds`** - while the v1 bound document carries
+  `thresholds`, `anchors` and `camera_measurements`, and `aggregate_task8_calibration` reads
+  `contract["thresholds"]` unconditionally.
+- **So this is the same class of defect as the naming fissures, one layer up:** the aggregator's entry consumes the **v1**
+  contract shape and cannot accept a **v2** one at all. Until that is resolved, the "real 28-field `TASK8_READY`" cannot be
+  produced from a v2 bound contract, because the entry cannot get past `thresholds` - and the seven support fields are
+  only defined in v2's `support` section.
+- **This changes the shape of the remaining work in Boundary IV, honestly:** it is not "teach the fixture to write seven
+  more fields", it is "make the aggregator's entry read the contract schema the rest of the protocol now uses", which
+  means either mapping v2's `measurements`/`support` metadata into the threshold lookups the v1 path performs, or teaching
+  the checks to work from the v2 shape. Both are real changes with their own RED, and neither is a one-liner - so this is
+  the boundary's next genuine piece of work rather than another fixture migration.
+- **State, disclosed: the module is at 1 failed / 18 passed**, the failure being CP-1100's proven RED, now stopping at
+  `KeyError: 'thresholds'`. The camera fold (17 → 21) from CP-1101 stands and is committed. No rule was weakened, and the
+  readback test keeps the v2 contract it now needs.
+- **Evidence:** scratch `<R>/scratch/r698.<n>` with `TMPDIR` verified through the exact test interpreter; log
+  `beh-r698.log`.
