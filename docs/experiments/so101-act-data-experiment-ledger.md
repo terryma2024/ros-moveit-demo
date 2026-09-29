@@ -18312,3 +18312,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/gate6-batch3-py-gate/`, scratch under the same
   root's `scratch/` (`r615…r762`), the re-review packet at `handoffs/20260930-task7-onward/task8-boundary-iv-rereview-packet.md`
   (5333 bytes, sha256 `65bd4ca5…`). **Nothing deleted, nothing pushed, no stack started, no hardware touched.**
+
+## CP-1156 — Ownership verified one last time: the untracked set is the owner's thirteen plus my one
+
+- **Enumerated rather than assumed, so the boundary between my work and the owner's is checked and not asserted:**
+  the **14 untracked paths** are the owner's thirteen - `docs/superpowers/plans/2026-09-27-pick-place-physical-execution.md`,
+  the three `config/mujoco/act/held_cup_transfer_*` files, `held_cup_transfer_profile.py`, `held_cup_transfer_schedule.py`,
+  the two `pick_place_approach_*` adapters, their four tests, and `test/test_act_task8_calibration_render.py` - **plus exactly
+  one of mine**: `src/so101_teleop/test/teleop/test_task8_case_runner_chain.py`, which fails by design and stays uncommitted
+  (CP-1155).
+- **Staged: 0.** The 31 tracked modifications include both the owner's pre-existing edits and my additive work, which is why
+  every one of my commits was hunk-level: the ledger's CP-1000-series entries record that no owner line was ever staged, and
+  this final check confirms nothing changed about that.
+- **Note for whoever resumes:** `test_act_task8_calibration_render.py` is **untracked and the owner's**, yet I ran it as part
+  of the 52- and 109-test verification runs. That was a read-only run of an owner file, it passed, and it is recorded here so
+  the provenance of those numbers is unambiguous.
+- **Final state of this session:** HEAD `76b95ffa` plus this checkpoint, staged 0, tree 31 modified + 14 untracked, goal
+  **active** (revision 48) with the objective **not** complete - Boundary V part-way, two owner decisions outstanding, no full
+  gate, no stack, no push, nothing deleted.
