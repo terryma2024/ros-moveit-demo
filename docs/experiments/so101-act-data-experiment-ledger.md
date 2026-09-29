@@ -27892,3 +27892,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **So the P1-1 RED has a concrete shape and a definite target:** drive `measure.main([...])` with **no `--driver`** and **no provider seam**, substitute **only** the bottom external I/O (the MuJoCo/ROS client and the model factory), and require a **sealed `CLOSED` batch** - which cannot happen today, because the CLI's context carries no
   `calibration_report` and the composition then demands an `io_client` nothing supplies, while the driver calls the real `YoloSegDetector` as if it were callable.
 - **State:** the task list carries this as its in-progress item; goal **paused/disarmed with the resume refused by policy (owner action needed)**; boundary unchanged and not re-claimed; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1669 — P1-1's RED is in place: the formal entry cannot run, and it does not even name what is missing
+
+- **`test_act_task8_formal_measurement_entry.py`, first run (`experiments/gate8-remediation/red-p11-entry.log`):**
+  ```
+  2 failed, 1 passed
+  FAILED test_the_formal_entry_seals_a_closed_batch_with_no_driver_and_no_provider_seam
+  FAILED test_the_formal_path_exposes_the_missing_context_field_by_name
+  PASSED test_the_driver_uses_the_detectors_real_interface
+  ```
+  The file drives `measure.main([...])` with **no `--driver`** and with `SO101_TASK8_PROVIDER_SEAM` **deleted**, substituting only the two bottom boundaries - the MuJoCo/ROS client and the detector model - through the seam the GREEN must
+  provide (`SO101_TASK8_BOTTOM_IO_SEAM`, `module:client,module:detector_factory`). **The seam name is this RED's declared contract for the GREEN, not an existing API** - recorded as such so the design decision is visible rather than smuggled into a test.
+- **The two failures, with their exact reasons:**
+  1. **the success test fails because the formal entry cannot run at all** - it dies inside the real detector factory
+     (`build/so101_demo_py/so101_demo/adapters/perception/detector_factory.py:89: ValueError: backend configuration has …`), i.e. **before** reaching the controller path the verdict names. **The bottom-I/O seam does not exist, so the substituted
+     client/model are never consulted.**
+  2. **and the parameter-exposure test fails for the reason P1-1 gives:** the refusal **does not name a missing parameter** - no `PRODUCTION_CALIBRATION_REPORT_REQUIRED`, no `PRODUCTION_CONTROLLER_ADAPTER_REQUIRED` - **the path dies with a raw, lower-layer
+     `ValueError` instead.** "The same path must expose missing parameters" is therefore not satisfied today **even by the refusal**, not merely by the wiring.
+- **And the third assertion passes, which pins the interface half:** `YoloSegDetector` declares **no `__call__`**
+  (`perception/yolo_seg.py:249` defines `detect(self, frame, query)`), while `task8_measurement_driver.py:197` calls `self.detector({...})` - **so the driver's call cannot work against the production detector, and the test that shows it is green on the code's side of the mismatch.**
+- **One self-correction worth keeping, because it is the fourth of its kind in this batch:** my first version of that assertion was `assert not hasattr(YoloSegDetector, "__call__")`, **which is False for every class** - the metaclass supplies `__call__`, so the attribute lookup says nothing about the class. It now tests the class's own
+  namespace (`"__call__" not in vars(YoloSegDetector)`). **A lookup is not an identity, exactly as a substring is not one (CP-1621) and a length is not a key set (CP-1625).**
+- **Next (P1-1 GREEN):** the CLI must populate the admitted context with `calibration_report` and pass `session_id`/`attempt_id`/`search_start_rad` into the entry; the composition's `MeasurementControllerAdapter` site must take them from the parameters instead of `getattr(context, …)`; the bottom-I/O seam
+  must supply `io_client` and the detector factory so the real stack/controller/camera still compose; and the driver must use the detector's real protocol.
+- **State:** the task list moves P1-1 RED to done and P1-1 GREEN to in-progress; goal **paused/disarmed with the resume refused by policy (owner action needed)**; boundary unchanged and not re-claimed; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
