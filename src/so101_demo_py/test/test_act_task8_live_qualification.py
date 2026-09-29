@@ -960,3 +960,38 @@ def test_release_stability_and_occlusion_window_use_the_span_structure():
     gapped = [close_to_release[0], {"phase": "CLOSE", "source_stamp": 0.25, "occluded": True}]
     with pytest.raises(ValueError, match="SPAN_FRAME_BREAK"):
         grasp_occlusion_window_s(gapped, occluded=lambda f: f["occluded"])
+
+
+def _sealed_artifact(tmp_path, index, *, digest_matches=True):
+    import hashlib
+    payload = json.dumps({"identity": {"case_id": f"full-{index:02d}", "session_id": "session-1"},
+                          "sample_count": 1,
+                          "samples": [{"phase": "RELEASE", "source_stamp": 0.0, "sim_time_s": 0.0}]}).encode()
+    target = tmp_path / f"full-{index:02d}.json"
+    target.write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest() if digest_matches else "0" * 64
+    return {"path": str(target), "sha256": digest, "schema_version": 1}
+
+
+def test_collect_live_runs_reads_five_sealed_full_rows_and_refuses_anything_else(tmp_path):
+    from so101_demo.act.task8_live_qualification import LIVE_ONLY_FIELDS, collect_live_runs
+
+    extractors = {field: (lambda samples, document: 0.5) for field in LIVE_ONLY_FIELDS}
+    rows = [{"live_evidence_artifact": _sealed_artifact(tmp_path, index)} for index in range(5)]
+    rows.append({"live_evidence_artifact": None})                     # the nine prefix rows carry none
+    runs = collect_live_runs(rows, identities={"contact_policy_fingerprint": "d" * 64,
+                                               "phase_camera_matrix_sha256": "e" * 64},
+                             extractors=extractors)
+    assert len(runs) == 5
+    assert all(run["contact_policy_fingerprint"] == "d" * 64 for run in runs)
+    assert runs[0]["sample_sha256"] and Path(runs[0]["sample_path"]).is_file()
+
+    # a mismatched digest, a missing extractor and fewer than five full rows are each refused
+    bad = [{"live_evidence_artifact": _sealed_artifact(tmp_path, index, digest_matches=False)}
+           for index in range(5)]
+    with pytest.raises(ValueError, match="SEALED_SAMPLE_DIGEST_MISMATCH"):
+        collect_live_runs(bad, identities={}, extractors=extractors)
+    with pytest.raises(ValueError, match="LIVE_EXTRACTOR_REQUIRED"):
+        collect_live_runs(rows, identities={}, extractors={})
+    with pytest.raises(ValueError, match="FIVE_FULL_RUNS_REQUIRED"):
+        collect_live_runs(rows[:4], identities={}, extractors=extractors)
