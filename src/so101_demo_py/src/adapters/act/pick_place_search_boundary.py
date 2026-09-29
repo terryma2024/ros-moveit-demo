@@ -103,6 +103,46 @@ class PickPlaceSearchBoundary:
             raise PickPlaceSearchBoundaryError("TASK8_EVIDENCE_FIELDS_INVALID") from error
 
 
+    def execute_approach(self, prepared, request, *, prover_identity, ticket):
+        """Execute one APPROACH prefix and return the three things the port's APPROACH path expects.
+
+        The orchestration is real - the screen inspects the executed goals and `PathProver` computes the proof over the
+        checker the screen validates against - while the two things only the ROS/motion layer can produce (the executed
+        goals with their source receipt, and the bridge times) come from the execution seam. Every missing piece refuses
+        by name.
+        """
+
+        screen = getattr(self, "approach_screen", None)
+        if screen is None:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: screen")
+        executor = getattr(self, "approach_executor", None)
+        if not callable(getattr(executor, "run", None)):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: executor")
+
+        ran = executor.run(prepared, request)
+        required = {"goals", "receipt", "bridge_time_s", "start_time_s", "snapshot", "facts"}
+        if type(ran) is not dict or set(ran) != required:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: executor result")
+
+        # the inspection authority runs on what was actually submitted, and the proof is computed over the same checker
+        inspected = screen.inspect(ran["goals"], prepared["prefix"])
+        if not isinstance(inspected, dict) or not inspected:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: inspection")
+
+        from so101_demo.act.path_proof import PathProver, RelativePathRequest
+
+        path_request = RelativePathRequest.from_source_receipt(
+            prepared["prefix"], receipt=ran["receipt"], bridge_time_s=ran["bridge_time_s"],
+            start_time_s=ran["start_time_s"])
+        proof = PathProver(screen.path_checker).prove(
+            path_request, ran["snapshot"], ticket=ticket, reset_epoch=self.reset.receipt.new_epoch,
+            policy_fingerprint=prover_identity["policy_fingerprint"],
+            profile_sha256=prover_identity["profile_sha256"],
+            contact_scope_sha256=prover_identity["contact_scope_sha256"],
+            checker_sha256=prover_identity["checker_sha256"],
+            expected_samples=prover_identity["expected_samples"])
+        return {"proof": proof, "current_snapshot": ran["snapshot"], "facts": ran["facts"]}
+
     def search(self, request: dict):
         if self._request is None:
             raise PickPlaceSearchBoundaryError("TASK8_BEGIN_REQUIRED")

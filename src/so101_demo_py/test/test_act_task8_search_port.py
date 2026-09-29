@@ -472,7 +472,10 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document():
     calls = []
 
     class _Route:
-        manifest = {"policy_fingerprint": "x"}
+        # the route's manifest owns the prover's identity values (CP-1498)
+        manifest = {"policy_fingerprint": "x", "candidate_profile_sha256": "p" * 64,
+                    "contact_scope_sha256": "c" * 64, "checker_sha256": "k" * 64,
+                    "expected_samples": 701}
 
         def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint):
             calls.append(("prepare", owner_ticket, active_policy_fingerprint))
@@ -482,8 +485,8 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document():
             calls.append(("qualify", prepared["kind"], proof, current_snapshot))
             return {"ok": True}
 
-    def execute_approach(prepared, request):
-        calls.append(("execute", prepared["kind"]))
+    def execute_approach(prepared, request, *, prover_identity, ticket):
+        calls.append(("execute", prepared["kind"], prover_identity["expected_samples"], ticket[2:]))
         return {"proof": "PROOF", "current_snapshot": {"step": 21},
                 "facts": _sequence_facts(21, holding_state="EMPTY")}
 
@@ -502,6 +505,8 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document():
     approach = port.run_phase("APPROACH", request())
 
     assert [call[0] for call in calls] == ["prepare", "execute", "qualify"], calls
+    assert calls[1][2] == 701, "the prover identity's expected_samples comes from the route's manifest"
+    assert calls[1][3] == ("act", SESSION, ATTEMPT), "and the ticket names this case"
     assert calls[0][1][2:] == ("act", SESSION, ATTEMPT), "the owner ticket names this case"
     assert calls[0][2] == "c" * 0 or isinstance(calls[0][2], str), "and the active policy fingerprint is passed"
     runner = PickPlaceRunner(port)
@@ -524,7 +529,9 @@ def test_approach_refuses_by_name_when_the_route_or_the_execution_is_missing():
         port.run_phase("APPROACH", request())
 
     class _Route:
-        manifest = {"policy_fingerprint": "x"}
+        manifest = {"policy_fingerprint": "x", "candidate_profile_sha256": "p" * 64,
+                    "contact_scope_sha256": "c" * 64, "checker_sha256": "k" * 64,
+                    "expected_samples": 701}
 
         def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint):
             return {"kind": "VISIBLE_APPROACH_EXPERT_PREPARATION", "prefix": [1]}
