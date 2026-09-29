@@ -31062,3 +31062,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   construction is proven correct in-process; the wiring into a real test file is next, followed by the aggregator join
   and the removal of the xfail and the duplicate chain.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement,
   P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1816 — The APPROACH checker is verified: the spawn handshake greets with the admitted hash
+
+- **The defect fix became a production function rather than an inline expression, so it can be tested:**
+  ```python
+  # adapters/act/pick_place_child_port.py
+  def checker_pairs_by_phase(route_motion: dict) -> dict:
+      """… The pairs are never invented here: the document's own per-phase mapping is used when it carries one, and
+      otherwise its single `allowed_pairs` is read as APPROACH's - the same shape `calibration_motion.py:174-184` uses
+      for a single-phase gate (`{'APPROACH': allowed}`)."""
+  ```
+  and the checker call site now passes `allowed_pairs_by_phase=checker_pairs_by_phase(route_motion)`.
+- **And it is verified from an importable module, which is what CP-1815 said the `spawn` handshake needs:**
+  ```
+  2 passed      test_act_task8_approach_checker_wiring.py
+  20 passed     + test_act_task8_child_port.py + test_act_task6_route_diagnostic.py      (7.43 s)
+  ```
+  with these assertions, each of them a rule the production builder itself enforces:
+  1. **the pairs come from the admitted document** - the no-contact route diagnostic yields `{"APPROACH": frozenset()}`,
+     and a document carrying its own per-phase mapping is used **verbatim** (nothing merged, nothing guessed);
+  2. **the real `MujocoPathProcess` starts and its worker is alive** - the spawn handshake that a stdin-fed probe could
+     not reach;
+  3. **`checker.model_sha256 == motion["model_sha256"]`** - *"the model the checker compiled IS the model the motion was
+     admitted against"*, which is the rule the builder enforces with `APPROACH_CHECKER_MODEL_HASH_INVALID`;
+  4. **`close()` retires the worker** rather than leaking it.
+- **So the two blockers P1-5 met are both cleared:** the harness now forwards the production expert-route factory
+  (CP-1811), the builder builds its checker (CP-1814/CP-1815), and the construction plus handshake are asserted
+  (this checkpoint). **What remains is mounting the screen and driving `run_pick_place_case` through a full case, then
+  the aggregator join.**
+- **State:** **P1-5 in progress with its checker verified end to end; P1-1 through P1-4 CLOSED.** The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
