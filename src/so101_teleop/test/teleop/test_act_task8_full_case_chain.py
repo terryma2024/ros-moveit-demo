@@ -144,6 +144,19 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     # and the dimensions its scene frames must carry, read from the checker's own compiled model (CP-1884)
     boundary.nq = int(authority["checker"].model.nq)
     boundary.nv = int(authority["checker"].model.nv)
+    # and the REAL initial state those frames must carry: the model's own `task_start` keyframe, and the cup start
+    # the approved motion document pins - both read from the documents rather than written down (CP-1886)
+    import mujoco as _mujoco
+
+    _model = authority["checker"].model
+    _key = _mujoco.mj_name2id(_model, _mujoco.mjtObj.mjOBJ_KEY, "task_start")
+    _qpos0 = _model.key_qpos[_key] if _key >= 0 else _model.qpos0
+    boundary.scene_qpos = tuple(float(value) for value in _qpos0)
+    boundary.scene_qvel = tuple(0.0 for _ in range(int(_model.nv)))
+    # `authority["manifest"]` is the ROUTE manifest the manifest-builder returned (`build_route_manifest`), and its
+    # top-level `cup_start_m` is the same value the candidate's own route document pins - while `live_manifest` here is
+    # the campaign payload, a different document (CP-1886)
+    boundary.cup_start_m = tuple(float(value) for value in authority["manifest"]["cup_start_m"])
     # P1-5/CP-1876: the boundary ALREADY builds `reset.sources` with the members its readers use, and its own comment
     # records that an earlier fix "in the wrong place did not take" because a second namespace was built beside it -
     # so this ADDS to what is already there rather than replacing it.
