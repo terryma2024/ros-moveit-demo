@@ -16761,3 +16761,19 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **What the next round must do, precisely:** split the helper, then read what `bind_measurement_contract` requires of
   `identities` (which members must match which bound-file digests) rather than guessing it - the same discipline that has
   paid off at every other boundary, and the reason this round did not simply force the ten members through.
+
+## CP-1081 — One step closer, and the remaining tension named exactly
+
+- **What the split achieved:** the identities are now two fixtures - `_cli_identities()` (the ten members
+  `require_v2_identity` enforces) for the CLI's `--identities` file, and `_identities()` (the members
+  `bind_measurement_contract` binds) for the binder. The failure moved from
+  **`MEASUREMENT_CONTRACT_IDENTITY_INVALID`** to **`MEASUREMENT_CONTRACT_IDENTITY_MISMATCH`**, i.e. the CLI now accepts
+  the identity and stops at the comparison against the bound contract.
+- **The tension, stated exactly:** `load_measurement_contract` requires `document["identities"] == expected_hashes`, so
+  the CLI's identities file must equal what the **binder embedded** - and the binder currently embeds the **narrower**
+  identity, because `_identities()` has five members. Closing this the right way is the review's "one schema" direction:
+  **the bound contract should carry the same ten-member identity the CLI and the seal require**, which means reading
+  `bind_measurement_contract`'s identity rule (which members must line up with which bound-file digests) before changing
+  it - not forcing ten members through as I tried and reverted in CP-1080.
+- **Suite unchanged at 26 passed / 1 failed** (`beh-r681.log`), scratch `<R>/scratch/r681.<n>` with `TMPDIR` verified
+  through the exact test interpreter. No regression, one named step of progress.
