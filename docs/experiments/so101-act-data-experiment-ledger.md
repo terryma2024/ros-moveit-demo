@@ -33026,3 +33026,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   needs one more instrumented read - with the patch mechanics now known.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1879 — Six of the seven scope operands agree; the seventh is `True` from the blanket `__getattr__`
+
+- **The instrumented `register` printed the whole comparison, and it is unambiguous:**
+  ```
+  [regdiag] refused: ValueError: TRUSTED_VISIBLE_APPROACH_SOURCE_INVALID
+  [regdiag]   ticket=(1, '7a126279…', 'act', 'session-298', 'full-01')
+  [regdiag]   broker.simulation_session_id='session-298'
+  [regdiag]   armed_generation=1                     == ticket[0] ✓
+  [regdiag]   driver.stopped()=True                  ✓
+  [regdiag]   driver.current_epoch()=True            <- NOT a dict
+  [regdiag]   source session/attempt/epoch='session-298'/'full-01'/2
+  ```
+  **six of the seven conditions hold** - the ticket names `act`/`session-298`/`full-01`, the broker's simulation session
+  matches, the armed generation equals the ticket's first element, the driver reports stopped, and the frozen source
+  carries the same session and attempt. **The seventh is `current_epoch()`, which returned `True`.**
+- **And `True` is the signature of a blanket answer, not of my method:** `FakeBroker.__getattr__` returns a callable for
+  any name it does not have, **and calling it returns `True`** (CP-1859). So the object the scope check asked is
+  **not the `FakeBroker` instance carrying my `current_epoch`** - **either `broker.driver` is a different object, or my
+  method is not on the class that object belongs to.** **That is the whole remaining question, and it is a question about
+  which object is which rather than about a value.**
+- **Which is why the next read is a type, not a value:** print `type(broker.driver)` and whether it has its own
+  `current_epoch` in `__dict__` or on its class - **because the fix differs completely between "point `broker.driver` at
+  the driver that has the method" and "put the method where that driver actually looks".**
+- **State:** **P1-5 in progress: the scope check's seven conditions are now six agreements and one wrong object, and the
+  next read identifies which object.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate
+  and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
