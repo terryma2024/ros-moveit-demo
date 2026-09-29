@@ -132,6 +132,13 @@ class Task8MujocoMeasurementDriver:
         for index, phase in enumerate(_PHASES):
             stamp = self.clock.monotonic()
             observation = self.phase_camera(phase, index)
+            # P1-3: a replay row is either a MEASUREMENT or a named refusal. Sealing an ABSENT observation would
+            # publish a phase path that was never sampled, which is the failure the marker was introduced to expose.
+            if not isinstance(observation, dict) or observation.get("geometry_state") != "MEASURED":
+                state = observation.get("geometry_state") if isinstance(observation, dict) else type(observation).__name__
+                raise ValueError(
+                    f"MEASUREMENT_PHASE_GEOMETRY_REQUIRED: {anchor}: the phase camera reported {state!r}; the replay "
+                    "needs the run's trajectory, camera and target geometry")
             self._write_record(root, anchor, f"phase-{index:02d}-{phase.lower()}",
                                {"source_stamp": stamp, "receive_monotonic_s": self.clock.monotonic(),
                                 "session_id": identity["session_id"], "reset_epoch": identity["reset_epoch"],

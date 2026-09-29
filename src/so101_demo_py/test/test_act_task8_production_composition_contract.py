@@ -25,6 +25,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_act_task8_measurement_runtime_descriptor import _context_document, _descriptor  # noqa: E402
 
 
+def _phase_path(phase):
+    """The phase's joint path at the admitted cadence; the neck joint pans this camera."""
+
+    joints = [0.0] * 7
+    joints[6] = {"SEARCH": 0.0, "APPROACH": 0.1}.get(phase, 0.2)
+    return {"samples": [{"t_s": index * 0.002, "joints_rad": list(joints)} for index in range(11)]}
+
+
+def _target():
+    return {"class_id": "plastic_cup", "position_m": [0.10, 0.10, 0.02], "radius_m": 0.03}
+
+
+def _occluders():
+    return {"fixed_fingertip_00": {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005}}
+
+
 class CannedMujocoClient:
     """The single substituted boundary, and the only thing these tests stand in for.
 
@@ -135,10 +151,13 @@ def _run(tmp_path, monkeypatch, client):
 
     # the per-run values are ARGUMENTS: this test stands in for the driver, so it supplies them the way the driver
     # does - a composition without them refuses by name (CP-1635)
+    # P1-3: the phase camera measures, so this test supplies the geometry a measurement has - the phase path, the
+    # target and the occluders - through the same bottom-I/O layer the client and the model factory come from
     providers = build_real_providers(context=context, descriptor=document["runtime_descriptor"],
                                      io_client=client, yolo_detector_factory=canned_detector_factory,
                                      session_id=document["session_id"], attempt_id=document["attempt_id"],
-                                     search_start_rad=document["search_start_rad"])
+                                     search_start_rad=document["search_start_rad"],
+                                     phase_path=_phase_path, target=_target, occluder_geometry=_occluders)
     # the driver requires the schema's ten-member identity document, so the test supplies one rather than a
     # single convenient hash (the same document the batch seal and the aggregator share)
     from so101_demo.act.task8_measurement_schema import MeasurementIdentity

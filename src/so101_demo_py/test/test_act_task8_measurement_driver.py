@@ -78,8 +78,9 @@ def _driver(stack):
                                         controller=lambda command: {"accepted": True},
                                         # the phase camera reports raw observation rows; a verdict here is refused by
                                         # the raw layer's own token rule, which is what the driver enforces
-                                        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index,
-                                                                           "row_count": 0}, identity=_identity())
+                                        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
+                       "samples": [{"t_s": 0.0, "joints_rad": [0.0] * 7, "bbox_px": None,
+                                    "in_frame": False, "occluded_by": []}]}, identity=_identity())
 
 
 def _context():
@@ -217,7 +218,12 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
     driver = Task8MujocoMeasurementDriver(
         stack=stack, clock=Clock(), detector=lambda request: {"anchor": request["anchor"]},
         controller=lambda request: {"ack": True},
-        phase_camera=lambda phase, sample: phases.append((phase, sample)), identity=_identity())
+        phase_camera=lambda phase, sample: (phases.append((phase, sample)) or
+                                            {"phase": phase, "frame_index": sample, "row_count": 0,
+                                             "geometry_state": "MEASURED",
+                                             "samples": [{"t_s": 0.0, "joints_rad": [0.0] * 7,
+                                                          "bbox_px": None, "in_frame": False,
+                                                          "occluded_by": []}]}), identity=_identity())
     # the real context, so only external I/O is faked; its digests are 64-hex and the binding happens at the entry
     context = CalibrationMeasurementContext(runtime_descriptor={"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False, "torch_threads": 4, "torch_interop_threads": 2, "torch_version": "2.0", "ultralytics_version": "8.0"}, "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame", "width_px": 640, "height_px": 480}, "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}},
         generation="generation-1", contract_sha256="a" * 64, measurement_plan_sha256="b" * 64,
@@ -286,7 +292,9 @@ def test_a_failed_anchor_keeps_a_cleanup_receipt_in_the_sealed_batch(tmp_path):
 
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=detector, controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
+                       "samples": [{"t_s": 0.0, "joints_rad": [0.0] * 7, "bbox_px": None,
+                                    "in_frame": False, "occluded_by": []}]}, identity=_identity())
     sealed = driver.run(_measurement_context(tmp_path), tmp_path / "batch")
     document = json.loads(Path(sealed).read_text())
 
@@ -334,7 +342,9 @@ def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
+                       "samples": [{"t_s": 0.0, "joints_rad": [0.0] * 7, "bbox_px": None,
+                                    "in_frame": False, "occluded_by": []}]}, identity=_identity())
     sealed = driver.run(_measurement_context(tmp_path), tmp_path / "batch")
     document = json.loads(Path(sealed).read_text())
     assert document["status"] == "INVALID"
@@ -378,7 +388,9 @@ def test_rows_carry_the_stack_readback_rather_than_a_synthesized_identity(tmp_pa
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
+                       "samples": [{"t_s": 0.0, "joints_rad": [0.0] * 7, "bbox_px": None,
+                                    "in_frame": False, "occluded_by": []}]}, identity=_identity())
     batch = tmp_path / "batch"
     driver.run(_measurement_context(tmp_path), batch)
     row = json.loads((batch / "anchors/default/geometry-00.json").read_text())
@@ -419,7 +431,9 @@ def test_a_stack_without_readback_is_refused_by_name(tmp_path):
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
+                       "samples": [{"t_s": 0.0, "joints_rad": [0.0] * 7, "bbox_px": None,
+                                    "in_frame": False, "occluded_by": []}]}, identity=_identity())
     sealed = driver.run(_measurement_context(tmp_path), tmp_path / "batch")
     document = json.loads(Path(sealed).read_text())
     assert document["status"] == "INVALID"
@@ -466,7 +480,9 @@ def test_every_anchor_is_an_independent_full_restart(tmp_path):
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
+                       "samples": [{"t_s": 0.0, "joints_rad": [0.0] * 7, "bbox_px": None,
+                                    "in_frame": False, "occluded_by": []}]}, identity=_identity())
     batch = tmp_path / "batch"
     sealed = driver.run(_measurement_context(tmp_path), batch)
     document = json.loads(Path(sealed).read_text())
@@ -488,7 +504,9 @@ def _probe_driver(stack, clock=None):
     return Task8MujocoMeasurementDriver(
         stack=stack, clock=clock or Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
+                       "samples": [{"t_s": 0.0, "joints_rad": [0.0] * 7, "bbox_px": None,
+                                    "in_frame": False, "occluded_by": []}]}, identity=_identity())
 
 
 class _ProbeStack:

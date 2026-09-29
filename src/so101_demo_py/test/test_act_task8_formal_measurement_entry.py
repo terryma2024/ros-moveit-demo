@@ -50,6 +50,24 @@ def client():
     return CannedMujocoClient()
 
 
+def phase_path(phase):
+    """The run's phase path at the admitted 2 ms cadence - the trajectory the replay must sample."""
+
+    joints = [0.0] * 7
+    joints[6] = {"SEARCH": 0.0, "APPROACH": 0.1}.get(phase, 0.2)
+    return {"samples": [{"t_s": index * 0.002, "joints_rad": list(joints)} for index in range(11)]}
+
+
+def target():
+    """What the camera is looking for - the cup the run's binding admits."""
+
+    return {"class_id": "plastic_cup", "position_m": [0.10, 0.10, 0.02], "radius_m": 0.03}
+
+
+def occluder_geometry():
+    return {"fixed_fingertip_00": {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005}}
+
+
 def frame_source(_request):
     RECORDED.write_text(RECORDED.read_text() + "+frame" if RECORDED.exists() else "frame")
     return object()
@@ -106,7 +124,8 @@ def _formal_run(tmp_path, monkeypatch):
     module_name = f"bottom_io_{uuid.uuid4().hex}"
     (tmp_path / f"{module_name}.py").write_text(BOTTOM_IO_MODULE)
     monkeypatch.setenv(BOTTOM_IO_ENV,
-                       f"{module_name}:client,{module_name}:detector_factory,{module_name}:frame_source")
+                       f"{module_name}:client,{module_name}:detector_factory,{module_name}:frame_source,"
+                       f"{module_name}:phase_path,{module_name}:target,{module_name}:occluder_geometry")
 
     identities_document = _cli_identities()
     identities = tmp_path / "identities.json"
