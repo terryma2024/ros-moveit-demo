@@ -21380,3 +21380,21 @@ not an inference of mine.**
   child's **pre-binding** path instead, which would be a real reduction in what it proves and therefore needs the owner's agreement.
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1295 — The compile route is ready: the real ACT scene is in the repository
+
+- **Located, read-only, while the boundary question is with the owner:**
+  ```
+  src/so101_demo_py/assets/mujoco/act/scene.xml          <- the ACT scene, and the one that names plastic_cup
+  src/so101_demo_py/assets/mujoco/scene.xml
+  src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml
+  ```
+  **So if the owner accepts compiling rather than starting MuJoCo, item 5 needs no new asset:** the fixture would compile
+  `assets/mujoco/act/scene.xml` with `MjModel.from_xml_path`, hand the loader that model and that path, pass the scene's own sha256 to
+  `verify_activation`, and build the proposal payload from the scene's policy - the three things CP-1294 showed the loader demands
+  (`compiled model`, `scene path`, `allowed_other_contact_bodies == ["table"]`, named collision geometry).
+- **And if the owner prefers the narrower scope, this is the cost, stated honestly:** the fixture would stop before the child's binding
+  step, so it could prove the entry's ordering, the request validation, the startup receipt, the port contract and the stop rule - **but
+  not that the case actually ran under a verified contact policy**, which is the part Astra's item 5 named first.
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no live stack, no hardware,
+  nothing deleted, nothing pushed.
