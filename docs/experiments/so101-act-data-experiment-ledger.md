@@ -21820,3 +21820,25 @@ not an inference of mine.**
   package boundary for a gated report.
 - **State:** P1-1's tests uncommitted while the pair is red; ledger current; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1318 — Astra re-review P1-1 is GREEN: the formal entry composes real providers
+
+- **`7 passed, rc=0`** for the whole descriptor test file (`p11-green6.log`), including the formal-entry test with no seam and the
+  positive construction test.
+- **What the GREEN delivers, against the reviewer's words** ("wire the fixed real MuJoCo/controller/detector/phase-camera production
+  composition through the only formal entry and make it consume the admitted context and frozen descriptor"):
+  | collaborator | now built from |
+  | --- | --- |
+  | detector | the production factory with `DetectorFactoryOptions` field-for-field from the descriptor's admitted block; the test asserts the descriptor's `requested_device == "cuda"` and `allow_cpu_fallback is False` reach it |
+  | controller | the settings the **admission entry** derives from the admitted calibration report (the child's own helper), passed in - the library reads no environment of its own |
+  | stack | `PersistentTaskStack()` **constructed only, never started** |
+  | clock | monotonic |
+  | phase camera | **`PhaseCameraMatrixEvaluator`** over the admitted matrix - a component that did not exist before this batch |
+  Three tiers in the entry path: explicit `providers` (tests) → `SO101_TASK8_PROVIDER_SEAM` (external-I/O substitution) → **real construction**.
+- **Two honest notes.** First, **torch is an opt-in dependency** (the repository's own `explicit_ml` marker), so the detector's
+  constructor is a legitimate external seam and the composition exposes it exactly as `build_detector` does. Second, **I wrote a broken
+  return block and `write_text` came before `ast.parse` in that one script**, so a syntax error reached the file and the build copy; I
+  repaired both, re-parsed before writing the fix, and **synced and byte-compared the build copy** - the guard order that has saved this
+  tree many times was mine to keep, and this round it was not.
+- **State:** committed with its tests green; build copy verified identical to `src/`; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
