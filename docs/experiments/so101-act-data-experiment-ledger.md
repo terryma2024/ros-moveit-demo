@@ -15284,3 +15284,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   (CP-1013); Task 9's teleop scope attributed with one failure class now mine-and-fixed (reservation root layout) and one
   genuinely environmental (child IPC socket), plus the open registration-coverage finding; the demo scope still
   unmeasured; Task 10 blocked until the 17 search values are reviewed.
+
+## CP-1023 — The demo colcon gate cannot be parallel: its interpreter has no pytest-xdist
+
+- **The exit-4 mystery is solved, and it is not my argument formatting.** Colcon's captured output now says
+  `unrecognized arguments: -n` with the inifile resolved to `src/so101_demo_py/setup.cfg`. The corrected
+  space-separated form (CP-1018) removed the token mangling, and what remains is the real cause: **`pytest-xdist` is not
+  installed in the interpreter colcon uses to run this package's tests**, so `-n 8` is rejected and the package exits 4
+  before collecting anything.
+- **Why this matters for Task 9 rather than being a footnote:** the skill requires each module's full gate under
+  `pytest-xdist` at `min(8, nproc)` workers, and this package's `colcon test` path cannot provide it. The same argument
+  string ran against `so101_teleop` and produced real results (113 module entries), so the two packages do not share the
+  same test interpreter - the teleop path has xdist and the demo path does not. Any "demo gate" run through
+  `colcon test` therefore cannot satisfy the mandated parallelism, and a green one would not be gate evidence.
+- **The standing implication, to act on next:** the demo module gate must run under an interpreter that has xdist and the
+  environment the package's tests expect. Two candidate routes: (a) run the gate with the test virtualenv directly
+  (`$R/test-venv/bin/python -m pytest -n 8 <scope>`, the shape my focused runs used, with `sys.path`/rootdir arranged so
+  the package's own imports resolve - the bare run's 8 `No module named 'tools'` collection errors and the worse
+  `PYTHONPATH` variant both show that arrangement is not automatic); or (b) make colcon use an interpreter that has
+  xdist, which changes the build environment rather than my invocation and therefore needs to be done deliberately and
+  recorded. Neither is a scope reduction, which is what the skill forbids.
+- **Also read this round, and it is actionable:** `test/test_ctest_registration.py` asserts
+  `registration_gaps(CMakeLists).unregistered == ()` - *"one module, one registration: nothing the gate would skip"* -
+  and that assertion is **failing** with "modules the package gate would never run". Since this session added new
+  teleop test modules (the Task 8 chain and case-execution suites among them), the likely cause is that those modules
+  were never registered in the package's `CMakeLists.txt`, which would mean the very gate Task 9 runs **would not run
+  them**. That is exactly the failure mode the skill's "do not shrink the collection scope" rule targets, and the fix is
+  a registration entry per module, not a test change.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's two scopes are now blocked on two concrete, non-political findings - the demo gate's interpreter
+  lacking xdist, and unregistered test modules - plus the child IPC socket path question that remains with the owner.
+  Task 10 blocked until the 17 search values are reviewed.
