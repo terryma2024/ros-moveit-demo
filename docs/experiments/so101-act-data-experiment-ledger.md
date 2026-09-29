@@ -25771,3 +25771,19 @@ picture in both directions.**
   this round *identified by reading* rather than a contract contradiction - **and the "impossible pair" I briefly believed I had found was my own conflation of two names for two different questions.**
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed (including the support-notion fix); the full-case test remains uncommitted while red, per this batch's rule.
   No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1547 — Two guards did their job; the extraction goes by hand next
+
+- **What happened, without dressing it up:** my first attempt at extracting the shared gate construction **mangled the file** - the search for the block started at the top of the file, so it
+  found the helper's own copy of the block and replaced *that* with a call to itself, leaving `sequence_facts` without its gates and the helper calling itself. **I noticed immediately because the
+  next read showed the method's body in the wrong place.**
+- **Two guards then did exactly what they exist for:**
+  1. I **restored my own minutes-old edit** (`git checkout -- <path>`) rather than trying to repair the damage by more slicing, after confirming with `git status`/`git diff` that the file's only
+     uncommitted change was that edit - **the owner's dirty work is untouched: the file was at HEAD and is back at HEAD**;
+  2. my **second** attempt failed at `ast.parse` with an `IndentationError` and therefore **wrote nothing** - the parse-before-write rule (CP-1496) catching a re-indentation bug before it became a
+     broken tree.
+- **And the round ends with a healthy baseline, which is worth stating plainly: `54 passed`** across the six focused files at the restored HEAD.
+- **The lesson for the next attempt, written down so it is not relearned:** **move the block by hand, not by re-indenting a slice.** The block is ten lines of a dict literal plus its
+  `facts.update({...})`; writing the helper's body explicitly, with the call inserted only after locating `def sequence_facts(` **and** searching from there, is both shorter and verifiable.
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the working tree is clean for this file and the full-case test remains uncommitted while red, per this
+  batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
