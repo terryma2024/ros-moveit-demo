@@ -78,7 +78,7 @@ def main(argv=None) -> int:
             # runtime and admission inputs come from their own document; the identity mapping carries identity only
             if args.context is None:
                 raise ValueError("MEASUREMENT_CONTEXT_REQUIRED")
-            context = json.loads(args.context.read_text())
+            context = _document          # parsed once above, not read from disk a second time
             from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
             context = CalibrationMeasurementContext(
                 generation=context["generation"],

@@ -222,3 +222,46 @@ def test_real_production_providers_are_built_from_the_admitted_descriptor(tmp_pa
     assert providers["detector"].kwargs["requested_device"] == "cuda", "the descriptor's device reaches the detector"
     assert providers["detector"].kwargs["allow_cpu_fallback"] is False, "and its CUDA policy"
     assert callable(providers["phase_camera"])
+
+
+def test_the_shared_rule_enforces_the_production_head_search_contents(tmp_path):
+    """Astra re-review P1-2: the shape rule must check the CONTENTS, not only the closed key sets.
+
+    The original binding rejected an inner ``head_search.schema_version`` other than 1, and the production
+    validator checks the detector's weights/version fields and the camera's and motion's own keys. The weak
+    shape rule accepted all of these - including empty camera and motion blocks - which is what this RED
+    asserts must stop.
+    """
+
+    cases = {
+        "wrong inner version": lambda d: d["head_search"].update({"schema_version": 2}),
+        "empty camera": lambda d: d["head_search"].update({"camera": {}}),
+        "empty motion": lambda d: d["head_search"].update({"motion": {}}),
+        "detector without weights": lambda d: d["head_search"]["detector"].pop("weights_sha256"),
+        "detector without model id": lambda d: d["head_search"]["detector"].pop("model_id"),
+    }
+    for name, mutate in cases.items():
+        document = _descriptor_with(mutate)
+        with pytest.raises(ValueError) as caught:
+            require_runtime_descriptor(document)
+        assert "HEAD_SEARCH" in str(caught.value) or "MEASUREMENT_RUNTIME_DESCRIPTOR" in str(caught.value), name
+
+
+def test_the_context_keeps_its_descriptor_through_a_round_trip(tmp_path):
+    """Astra re-review P1-2: to_dict must carry the descriptor, so a rebuilt context is the same admission."""
+
+    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+
+    descriptor = _descriptor()
+    context = CalibrationMeasurementContext(
+        generation="gen-round-trip", contract_sha256="a" * 64, measurement_plan_sha256="b" * 64,
+        safe_interval_rad=[0.0, 0.1], candidate_sha256="c" * 64, policy_sha256="d" * 64,
+        driver_source_sha256="e" * 64, controller_generation="ctrl-1", broker_generation="broker-1",
+        evidence_root=str(tmp_path / "ev"),
+        resource_binding={"bound_at_entry": True, "cpu_cores": 8, "gpu_device": 0},
+        runtime_descriptor=descriptor)
+
+    document = context.to_dict()
+    assert document["runtime_descriptor"] == descriptor, "the descriptor survives serialisation"
+    rebuilt = CalibrationMeasurementContext(**document)
+    assert rebuilt.runtime_descriptor == descriptor, "and a rebuilt context is the same admission"
