@@ -571,23 +571,32 @@ class PickPlaceSearchPhasePort:
     # is implemented it refuses by NAME, so an unimplemented path can never be mistaken for a completed one - which is
     # exactly what the previous behaviour (an AttributeError, or a phase that silently returned nothing) allowed.
 
-    def release_preflight(self, *args, **kwargs):
-        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: release_preflight")
+    def release_preflight(self, request, *args, **kwargs):
+        return self._boundary_capability("release_preflight", request,
+                                         support_distance_max_m=self._support_distance())
 
     def run_retreat_segment(self, *args, **kwargs):
         raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment")
 
-    def set_down(self, *args, **kwargs):
-        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: set_down")
+    def set_down(self, request, *args, **kwargs):
+        return self._boundary_capability("set_down", request, support_distance_max_m=self._support_distance())
 
-    def _boundary_capability(self, name, request, *args):
+    def _support_distance(self):
+        """The case's admitted support distance, refused by name when this port was never told it."""
+
+        value = getattr(self, "_support_distance_max_m", None)
+        if value is None:
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: support_distance_max_m")
+        return value
+
+    def _boundary_capability(self, name, request, *args, **kwargs):
         """Call a capability the boundary owns, or refuse by name - the port never re-implements one."""
 
         capability = getattr(self.boundary, name, None)
         if not callable(capability):
             raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: boundary.{name}")
         try:
-            return capability(request, *args)
+            return capability(request, *args, **kwargs)
         except PickPlaceSearchPortError:
             raise
         except Exception as error:

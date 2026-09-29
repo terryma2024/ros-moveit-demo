@@ -57,6 +57,10 @@ class PickPlaceSearchBoundary:
                 or min(waits) <= 0 or poll_interval_s > max_source_wait_s
                 or stop_timeout_s > 30):
             raise ValueError("TASK8_SEARCH_BOUNDARY_CONFIG_INVALID")
+        #: this component's own count of the releases it performed; the runner counts the same event and compares
+        self._release_epoch = 0
+        #: the physics step of the last set-down, so a preflight's freshness is ESTABLISHED rather than asserted
+        self._set_down_step = None
         self.reset, self.binding, self.geometry = reset_boundary, binding, geometry
         self.snapshot_root = snapshot_root
         self.neck_sweep_checker = neck_sweep_checker
@@ -357,6 +361,57 @@ class PickPlaceSearchBoundary:
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: premature contact")
         return facts
 
+    def set_down(self, request, *, support_distance_max_m):
+        """Stop the controller and report the set-down document the runner requires.
+
+        The facts come from the SAME validated readback every phase document uses; the one thing this component cannot
+        observe for itself is that the controller actually stopped, so that comes from a seam and is refused by name
+        when absent - a set-down document that merely assumed the stop would be the sort of unearned claim this batch
+        exists to prevent.
+        """
+
+        stop = getattr(self, "controller_stop", None)
+        if not callable(stop):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: set_down: controller_stop")
+        snapshot = self.reset.sources.capture(request["attempt_id"])
+        aggregates, world = self._checked_aggregates("RELEASE", snapshot, request,
+                                                     support_distance_max_m=support_distance_max_m)
+        if stop(request) is not True:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: set_down: controller did not stop")
+        # the release epoch is this component's own bookkeeping of the one event it performs (opening the gripper).
+        # The runner keeps its own count of the same event and COMPARES them, so a disagreement is refused rather than
+        # silently accepted - which is why a second count is tolerable here and nowhere else.
+        self._set_down_step = world.simulation_step
+        return {"session_id": request["session_id"], "attempt_id": request["attempt_id"],
+                "reset_epoch": self.reset.receipt.new_epoch, "release_epoch": self._release_epoch,
+                "physics_step": world.simulation_step,
+                "holding_state": aggregates["holding_state"],
+                "cup_supported": aggregates["cup_supported"],
+                "bilateral_contact": aggregates["bilateral_contact"],
+                "controller_stopped": True}
+
+    def release_preflight(self, request, *, support_distance_max_m):
+        """Report the preflight document, with `fresh` ESTABLISHED rather than asserted.
+
+        "Fresh" means the sample is newer than the set-down's own, which is the only meaning this component can support:
+        the preflight must not be the same readback the set-down used, or the release would be authorised by evidence
+        that predates the stop.
+        """
+
+        if getattr(self, "_set_down_step", None) is None:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: release_preflight: set_down first")
+        snapshot = self.reset.sources.capture(request["attempt_id"])
+        aggregates, world = self._checked_aggregates("RELEASE", snapshot, request,
+                                                     support_distance_max_m=support_distance_max_m)
+        if not world.simulation_step > self._set_down_step:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: release_preflight: not fresh")
+        return {"session_id": request["session_id"], "attempt_id": request["attempt_id"],
+                "reset_epoch": self.reset.receipt.new_epoch, "release_epoch": self._release_epoch,
+                "physics_step": world.simulation_step,
+                "holding_state": aggregates["holding_state"],
+                "cup_supported": aggregates["cup_supported"],
+                "fresh": True, "planning_attached": self.planning_attached(request)}
+
     def planning_attached(self, request):
         """Whether MoveIt still has the cup attached - READ from the planning scene, never assumed."""
 
@@ -467,6 +522,7 @@ class PickPlaceSearchBoundary:
         ticket = broker.ownership.ticket(self.reset.act_context["lease_token"], "act",
                                          request["session_id"], request["attempt_id"])
         wait(dispatch(ticket, "gripper", goal))
+        self._release_epoch += 1        # opening the gripper IS the release; the runner counts the same event
         after = self.reset.sources.capture(request["attempt_id"])
         if support_distance_max_m is None:
             raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: support_distance_max_m")
