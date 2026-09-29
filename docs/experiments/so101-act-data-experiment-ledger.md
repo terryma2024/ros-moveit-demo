@@ -15604,3 +15604,38 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   (CP-1013); Task 9's remaining failure is narrowed to a single module whose environment theories have been eliminated by
   a two-variant experiment; Task 10 blocked until the 17 search values are reviewed. No formal-gate claim, no push, no
   evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1034 — The exact defect: `socket_path()` indexes `parents[2]` and dies with `IndexError: 2`
+
+- **Read the traceback instead of theorising further, and the answer is a single line of test code.** Every one of the
+  sixteen failures in the standalone run is the **same exception raised in the same place**:
+  ```
+  >       path = socket_path()
+  ...
+  >           raise IndexError(idx)
+  E           IndexError: 2
+  ```
+  `test_controller_reservation_client.py:20-21` does `task_root = Path(os.environ["TMPDIR"]).parents[2]`, and
+  `pathlib` raises `IndexError` when that many parents do not exist. With a shallow `TMPDIR` such as
+  `/tmp/so101-debug-r626-tmp` there are only two parents, so the module cannot even compute a socket path.
+- **That also explains why the gate saw a different symptom from the same cause.** In the gate run the `TMPDIR` was
+  deep enough for `parents[2]` to exist - the shard's own tmp directory - so no `IndexError` was raised; instead the
+  derived "task root" was `.../gate-r623/scratch`, which is not a task root, and the module failed later at
+  `assert ready.wait(1)` because its server thread could not bring up a socket where it expected. **One root cause, two
+  symptoms, both from the same depth assumption.**
+- **What this module therefore requires, precisely:** a `TMPDIR` that is exactly three levels below a directory the
+  module will treat as its task root - the shape the repository's own documented scratch pattern produces
+  (`<task-root>/scratch/<test-run-id>/tmp`, where `parents[2]` is the task root). My gate invocation gave it
+  `<root>/gate-r623/scratch/r623/<shard>/tmp`, two levels deeper than that, and a shallow diagnostic gave it too few
+  levels to index at all. Neither is a defect in this task's code.
+- **The decision this leaves, and why I am not taking it unilaterally:** either (a) the fixture is made robust - it
+  should not depend on `parents[2]` existing, and a module-scoped temporary directory would remove the depth assumption
+  entirely - or (b) the gate is invoked so its per-process `TMPDIR` sits at the documented depth. (a) changes a test
+  that is not this task's, in a package whose tests are the owner's; (b) would mean restructuring the gate's own run
+  layout, which is also not mine to redesign. Both are small, and both deserve a conscious choice rather than a quiet
+  edit at the end of a long session.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's diagnostic is 5754 cases with one module failing, and that failure is now fully diagnosed as a
+  `TMPDIR`-depth assumption in the module's own fixture with an exact exception to cite; Task 10 blocked until the 17
+  search values are reviewed. No formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
