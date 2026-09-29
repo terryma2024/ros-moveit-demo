@@ -26361,3 +26361,15 @@ picture in both directions.**
 - **So the boundary has now earned its keep twice in one run:** it found the production defect in the demo module (the driver never forwarded the end-effector, CP-1577), and it found a second defect **in this batch's own seal identity** that
   only the teleop package could see. **Neither was visible to the focused sets, and both would have reached a reviewer.**
 - **State:** demo `rc=0` (5731/163, fresh); teleop `rc=0` **but not green** - the three classes above are outstanding; CTest in flight; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
+
+## CP-1583 — The seal's claim is now checkable, and the gate script's omission is fixed
+
+- **Two halves of one contract, both found by the boundary's teleop leg, both fixed:**
+  1. **the seal REFUSES a caller whose epochs disagree with the case** - by name (`TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: <field>`). It already took its identity from the case (the receipt's reset epoch; the epoch the
+     seal's position implies), and **ignoring a caller's claim about identity is worse than refusing it**, so the claim is now checkable rather than dropped;
+  2. **the teleop chain test's port double supplies the boundary the seal reads**, and its request **omits** the epochs the case owns instead of asserting a release epoch of `7` that no case could have. **`6 passed`.**
+- **And the gate script's own defect is fixed:** `run-teleop.sh` and `run-ctest.sh` never set `SO101_IPC_SOCKET_BASE`, so the child's socket base defaulted to the long evidence-root path and the kernel refused it
+  (`IPC_SOCKET_PATH_TOO_LONG`) - **twenty failures from two scripts, and the ledger's own recipe had said "IPC base 0700" all along.** Both scripts now set it, and the teleop gate is re-running.
+- **The lesson, stated plainly because it cost two rounds:** **the sanctioned recipe's parameters are part of the recipe.** "IPC base 0700" was written down in this ledger from the previous boundary and I re-typed the gate script
+  without it - which is exactly the failure mode the ledger exists to prevent.
+- **State:** demo `rc=0`; teleop re-running with the fix; CTest re-run pending (it showed the same four failures, three of them the IPC class); nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
