@@ -775,3 +775,29 @@ def test_a_summary_without_a_sealed_sample_is_refused():
     runs[2]["summary"] = "support distance measured"
     with pytest.raises(ValueError, match="SEALED_SAMPLE_REQUIRED"):
         derive_live_measurements(runs, {})
+
+
+def test_qualified_measurements_copy_by_value_and_add_exactly_five():
+    from so101_demo.act.task8_live_qualification import (LIVE_ONLY_FIELDS, build_qualified_measurements,
+                                                         derive_live_measurements)
+
+    ready = {f"ready_field_{index}": {"value": float(index), "unit": "rad"} for index in range(28)}
+    snapshot = json.loads(json.dumps(ready))
+    runs = [_live_run(index) for index in range(5)]
+    merged = build_qualified_measurements(ready, runs, {})
+
+    assert set(merged) - set(ready) == set(LIVE_ONLY_FIELDS), "exactly the five live-only fields are added"
+    assert len(merged) == 33
+    assert ready == snapshot, "the ready report is never mutated"
+    derived = derive_live_measurements(runs, {})
+    for field in LIVE_ONLY_FIELDS:
+        assert merged[field]["value"] == pytest.approx(derived[field]["value"])
+        assert merged[field]["unit"] == derived[field]["unit"]
+
+
+def test_a_ready_field_that_is_already_live_only_is_refused():
+    from so101_demo.act.task8_live_qualification import build_qualified_measurements
+
+    ready = {"grasp_occlusion_window_s": {"value": 0.1, "unit": "s"}}
+    with pytest.raises(ValueError, match="LIVE_FIELD_ALREADY_PRESENT"):
+        build_qualified_measurements(ready, [_live_run(index) for index in range(5)], {})
