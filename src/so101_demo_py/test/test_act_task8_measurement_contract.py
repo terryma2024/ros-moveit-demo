@@ -153,6 +153,7 @@ def test_closed_batch_accepts_an_indexed_batch_and_rejects_closure_violations(tm
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
     batch = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+             "anchors": ["default", "left", "forward"], "batch_sha256": "0" * 64,
              "identity": identity, "files": {str(raw.relative_to(root)): hashlib.sha256(raw.read_bytes()).hexdigest()}}
     write_closed_json(root / "batch.json", batch)
 
