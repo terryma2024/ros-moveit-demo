@@ -20947,3 +20947,26 @@ not an inference of mine.**
   named precondition, which is exactly what the eight-precondition list is for.
 - **State:** HEAD `a81e81e5` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1274 — The payload's fields, and why they map onto the binding by construction
+
+- **Read:**
+  ```python
+  class _PickPlacePayload(_ActPayload):
+      scenario_id: str = Field(min_length=1)
+      manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+      runtime_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+      contact_policy_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+      stack_owner: _StackOwner
+  ```
+  with `_ActPayload`'s and `_StackOwner`'s own fields printed above - the last two names item 5 needed.
+- **And these are exactly the four quantities the child checks against its binding:** at CP-1267 the constructor compared
+  `_act_hashes` with `{"manifest_sha256": digests["manifest"], "runtime_config_sha256": ..., "contact_policy_fingerprint": ...}` and
+  its neighbours. **So the fixture does not match literals anywhere: it derives the payload from `ActArtifactBinding` and the
+  precondition passes because both sides came from the same binding** - which is also what makes the test evidence about the real
+  coupling rather than about my ability to copy a hex string twice.
+- **Item 5's specification is complete, including the two nested models.** Nothing in this fixture will be guessed: the port is the
+  chain test's, the request is the real `IpcRequest` graph, the artifacts come through the real binder, the entry is
+  `pick_place_full`, and the assertions read the returned dict plus the sealed, indexed records.
+- **State:** HEAD `0a0cb336` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
+  nothing deleted, nothing pushed.
