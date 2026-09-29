@@ -12174,3 +12174,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `test_act_control_event_timeline.py` if it turns out to be user-dirty when I reach it.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-897 — Task 4 child-port baseline green (75 passed), CLI wiring boundary identified
+
+- **Ran the set the plan names for Task 4 Step 4** - the two focused files plus the existing child-port tests, and
+  the broker's own test module for good measure: `test_act_task8_calibration_admission.py`,
+  `test_act_task8_child_port.py`, `test_act_control_event_timeline.py`, `test_act_task8_search_binding.py`,
+  `test_act_command_broker.py` -> **75 passed, rc=0, elapsed 4 s** (`beh-task4-baseline.log`). This is the baseline
+  the launch-composition and CLI wiring must preserve, and it confirms my admission/binding/Ownership/broker work
+  coexists with the existing child-port enforcement.
+- **CLI boundary identified for the next edit:** `src/cli/act_command_broker.py` (205 lines, currently **clean**,
+  not user-dirty) already owns calibration admission at its entry - `--calibration-mode` with
+  `--calibration-report`, `require_qualified(report)`, and `CALIBRATION_REQUIRED` when the report is absent. The
+  remaining change is to construct the entry-bound `CalibrationMeasurementContext` there and pass it into the
+  broker/owner-factory wiring, so resource binding stays at the entry and every downstream event can carry the
+  admission generation. I deliberately did not edit the file this round: I had read only its first third, and a
+  speculative edit to a 205-line entry whose composition call I had not yet seen would risk the standing rule that
+  resource binding is entry-only and that production `owner=act` semantics stay untouched.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
