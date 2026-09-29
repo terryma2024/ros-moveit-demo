@@ -17583,3 +17583,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   direction - a mismatched pairing must still be refused - which is a small addition now that the positive path is real.
 - **Evidence:** no full suite was run, per the owner's instruction; nothing weakened, `REQUIRED_CHECKS` is untouched,
   nothing was deleted, and no push, stack or hardware was involved.
+
+## CP-1123 — Item 5 complete in both directions: 54 passed
+
+- **The negative direction is in, and it is the one that gives the requirement its teeth:** with the matching pairing
+  binding, a runtime whose **detector model id** differs - or whose **motion tolerances** differ - is refused with
+  `HEAD_SEARCH_SAMPLE_MISMATCH`, because the report cites the sample that records the descriptor it was measured under,
+  and the binding compares the runtime against **that**. So the report cannot be borrowed by a differently-configured
+  runtime, which is exactly what the review's pairing requirement is for.
+- **GREEN: 54 passed, rc=0** across the aggregator, contract and head-search binding modules, scratch
+  `<R>/scratch/r729.<n>` with `TMPDIR` verified through the exact test interpreter; log `beh-r729.log`.
+- **The owner's list, as it now stands:**
+  | item | state |
+  | --- | --- |
+  | 1. v2 per-field verdicts folded into the five readiness checks over `CHECK_MEASUREMENTS` | **done** (CP-1107, CP-1114) |
+  | 2. release/retreat stay `UNMEASURED` in the 28-field `TASK8_READY` | **done** |
+  | 3. the seven support fields published with their own approved closed-sample citations, exactly 28 fields | **done** (CP-1112, CP-1113) |
+  | 4. same-root render twice, byte compare, single publish, disk readback of sample path/hash | **done**: determinism characterized at CP-1099 and the readback asserted at CP-1112/CP-1113 |
+  | 5. targeted RED/GREEN for `require_gate(report, "task8_live")` and `validate_head_search_binding()` | **done** (CP-1114, CP-1122, CP-1123) |
+  | 6. no full suite; continue Boundary IV | honoured throughout |
+- **Evidence:** no full suite was run; nothing weakened, `REQUIRED_CHECKS` untouched, nothing deleted, no push, no
+  stack, no hardware.
