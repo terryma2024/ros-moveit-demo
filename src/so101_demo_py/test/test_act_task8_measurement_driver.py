@@ -61,6 +61,16 @@ class FakeClock:
         return self.now
 
 
+def _identity():
+    """The schema's ten-member measurement identity, as the CLI holds it and passes it to the driver."""
+
+    return {"source_commit": "0" * 40,
+            **{name: "a" * 64 for name in (
+                "config_sha256", "source_provenance_sha256", "runtime_config_sha256", "anchors_sha256",
+                "contact_policy_fingerprint", "act_profile_sha256", "measurement_contract_sha256",
+                "phase_camera_matrix_sha256", "driver_source_sha256")}}
+
+
 def _driver(stack):
     from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
 
@@ -69,7 +79,7 @@ def _driver(stack):
                                         # the phase camera reports raw observation rows; a verdict here is refused by
                                         # the raw layer's own token rule, which is what the driver enforces
                                         phase_camera=lambda phase, index: {"phase": phase, "frame_index": index,
-                                                                           "row_count": 0})
+                                                                           "row_count": 0}, identity=_identity())
 
 
 def _context():
@@ -90,7 +100,7 @@ def test_a_valid_run_executes_the_anchors_in_order_with_separate_identities(tmp_
     assert stack.closed == ANCHOR_ORDER
     batch = json.loads(path.read_bytes())
     assert batch["status"] == "CLOSED" and batch["kind"] == "task8_calibration_batch"
-    identities = {tuple(sorted(entry["identity"].items())) for entry in batch["anchors"]}
+    identities = {tuple(sorted(entry["identity"].items())) for entry in json.loads((path.parent / "index.json").read_bytes())["anchors"]}
     assert len(identities) == 3, "every anchor needs its own FULL_RESTART session/reset/attempt"
 
 
@@ -117,9 +127,11 @@ def test_no_driver_output_carries_a_verdict_or_a_label(tmp_path):
 def test_every_index_row_carries_the_required_provenance_fields(tmp_path):
     path = _driver(FakeStack()).run(_context(), tmp_path)
     batch = json.loads(path.read_bytes())
-    rows = batch["index"]
+    rows = json.loads((path.parent / "index.json").read_bytes())["files"]   # the records have an indexed home
     assert rows, "the driver must register its raw records"
-    for row in rows:
+    # the provenance fields belong to the raw-record rows; the descriptor and index.json rows are artefacts of the
+    # seal's closure rather than of an anchor capture, so the assertion is scoped to the anchors (CP-1246)
+    for row in [r for r in rows if str(r["payload_path"]).startswith("anchors/")]:
         assert INDEX_ROW_KEYS <= set(row), sorted(INDEX_ROW_KEYS - set(row))
         payload = path.parent / row["payload_path"]
         assert payload.is_file(), row["payload_path"]
@@ -200,7 +212,7 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
     driver = Task8MujocoMeasurementDriver(
         stack=stack, clock=Clock(), detector=lambda request: {"anchor": request["anchor"]},
         controller=lambda request: {"ack": True},
-        phase_camera=lambda phase, sample: phases.append((phase, sample)))
+        phase_camera=lambda phase, sample: phases.append((phase, sample)), identity=_identity())
     # the real context, so only external I/O is faked; its digests are 64-hex and the binding happens at the entry
     context = CalibrationMeasurementContext(runtime_descriptor={"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"requested_device": "cuda", "allow_cpu_fallback": False}, "camera": {}, "motion": {}}},
         generation="generation-1", contract_sha256="a" * 64, measurement_plan_sha256="b" * 64,
@@ -269,7 +281,7 @@ def test_a_failed_anchor_keeps_a_cleanup_receipt_in_the_sealed_batch(tmp_path):
 
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=detector, controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
     sealed = driver.run(_measurement_context(tmp_path), tmp_path / "batch")
     document = json.loads(Path(sealed).read_text())
 
@@ -317,7 +329,7 @@ def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
     sealed = driver.run(_measurement_context(tmp_path), tmp_path / "batch")
     document = json.loads(Path(sealed).read_text())
     assert document["status"] == "INVALID"
@@ -361,7 +373,7 @@ def test_rows_carry_the_stack_readback_rather_than_a_synthesized_identity(tmp_pa
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
     batch = tmp_path / "batch"
     driver.run(_measurement_context(tmp_path), batch)
     row = json.loads((batch / "anchors/default/geometry-00.json").read_text())
@@ -402,7 +414,7 @@ def test_a_stack_without_readback_is_refused_by_name(tmp_path):
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
     sealed = driver.run(_measurement_context(tmp_path), tmp_path / "batch")
     document = json.loads(Path(sealed).read_text())
     assert document["status"] == "INVALID"
@@ -449,7 +461,7 @@ def test_every_anchor_is_an_independent_full_restart(tmp_path):
     driver = Task8MujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
     batch = tmp_path / "batch"
     sealed = driver.run(_measurement_context(tmp_path), batch)
     document = json.loads(Path(sealed).read_text())
@@ -471,7 +483,7 @@ def _probe_driver(stack, clock=None):
     return Task8MujocoMeasurementDriver(
         stack=stack, clock=clock or Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
-        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0}, identity=_identity())
 
 
 class _ProbeStack:
@@ -649,3 +661,21 @@ def test_the_driver_registers_the_runtime_descriptor_with_the_batch_it_seals(tmp
             recorded.append((path, document["head_search"]))
     assert recorded, "the sealed batch records the descriptor it was measured under"
     assert any(descriptor == context.runtime_descriptor["head_search"] for _, descriptor in recorded)
+
+
+def test_the_drivers_own_batch_passes_the_schema_validator_and_carries_the_descriptor(tmp_path):
+    """Astra item 3: the driver's real output must satisfy the schema, with the descriptor in the hash index.
+
+    This drives the driver itself - no hand-built document, no rglob over JSON, no second seal - and then asks the
+    schema's own validator to close the batch. Today the driver writes a stray ``index`` key and no ``batch_sha256``,
+    so the validator refuses it; that is the RED.
+    """
+
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+
+    context = _measurement_context(tmp_path)
+    driver = _driver(FakeStack())
+    sealed = Path(driver.run(context, tmp_path / "batch"))
+
+    index = validate_closed_batch(sealed.parent)
+    assert "runtime-descriptor.json" in set(index.files), "the descriptor must be in the sealed hash index"

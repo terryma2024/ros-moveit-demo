@@ -40,12 +40,16 @@ def _sha256(payload: bytes) -> str:
 class Task8MujocoMeasurementDriver:
     """Orchestrates three anchor acquisitions; dependencies are injected so unit tests launch no real stack."""
 
-    def __init__(self, *, stack, clock, detector, controller, phase_camera) -> None:
+    def __init__(self, *, stack, clock, detector, controller, phase_camera, identity) -> None:
         self.stack = stack
         self.clock = clock
         self.detector = detector
         self.controller = controller
         self.phase_camera = phase_camera
+        from so101_demo.act.task8_measurement_schema import MeasurementIdentity
+
+        # Astra item 3: the identity is the schema's ten-member document, passed in rather than invented
+        self.identity = MeasurementIdentity.require(identity)
         self._files: list[dict] = []
         self._scrub_check: list[str] = []
 
@@ -56,7 +60,11 @@ class Task8MujocoMeasurementDriver:
         # to the configuration that was actually measured rather than to a path somebody could re-read and change
         descriptor = getattr(context, "runtime_descriptor", None)
         if isinstance(descriptor, dict):
-            (root / "runtime-descriptor.json").write_text(json.dumps(descriptor, sort_keys=True))
+            payload = json.dumps(descriptor, sort_keys=True).encode("utf-8")
+            (root / "runtime-descriptor.json").write_bytes(payload)
+            # Astra item 3: the descriptor is part of the sealed closure, so it is indexed like every other artefact
+            self._files.append({"payload_path": "runtime-descriptor.json",
+                                "payload_sha256": _sha256(payload), "encoding": "utf-8"})
         anchors, failure = [], None
         for ordinal, anchor in enumerate(ANCHORS):
             identity = {"anchor": anchor}
@@ -213,31 +221,29 @@ class Task8MujocoMeasurementDriver:
 
     def _seal(self, root: Path, context, anchors: list, *, status: str, error_code,
               cleanup=None, contamination=None) -> Path:
-        document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": status,
+        from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+        from so101_demo.act.task8_measurement_schema import BATCH_KIND, write_closed_json
+
+        # Astra item 3: this is the ONE seal owner, and its document is the schema's, not a private shape
+        # Astra item 3: the provenance rows are the driver's own record and cannot live in the sealed document
+        # (_BATCH_KEYS has no room for them), so they get an indexed home of their own inside the closure
+        # Astra item 3: the schema reads each sealed anchor as a NAME (f"anchors/{anchor}/"), so the names are what
+        # the document carries; the driver's richer per-anchor records live in index.json beside the provenance rows
+        anchor_names = [row["anchor"] if isinstance(row, dict) else str(row) for row in anchors]
+        provenance = _canonical({"files": self._files, "anchors": anchors})
+        provenance_path = root / "index.json"
+        provenance_path.write_bytes(provenance)
+        self._files = list(self._files) + [{"payload_path": "index.json",
+                                            "payload_sha256": _sha256(provenance), "encoding": "utf-8"}]
+
+        document = {"schema_version": 1, "kind": BATCH_KIND, "status": status,
                     "cleanup": cleanup, "contamination": contamination,
-                    "identity": {"source_commit": context.generation,
-                                 "config_sha256": context.contract_sha256,
-                                 "source_provenance_sha256": context.driver_source_sha256,
-                                 "measurement_plan_sha256": context.measurement_plan_sha256},
-                    "anchors": anchors, "index": self._files,
+                    "identity": self.identity, "anchors": anchor_names,
                     "files": {row["payload_path"]: row["payload_sha256"] for row in self._files}}
         if status == "INVALID":
             document["error_code"] = error_code
-        payload = _canonical(document)
-        target = root / "batch.json"
-        partial = root / "batch.json.partial"
-        descriptor = os.open(str(partial), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        try:
-            os.link(str(partial), str(target))
-        except FileExistsError:
-            os.unlink(str(partial))
-            raise ValueError("CALIBRATION_BATCH_EXISTS") from None
-        os.unlink(str(partial))
-        return target
+        document["batch_sha256"] = hashlib.sha256(_seal_canonical(document)).hexdigest()
+        return write_closed_json(root / "batch.json", document)
 
 
 def production_driver(**overrides):
