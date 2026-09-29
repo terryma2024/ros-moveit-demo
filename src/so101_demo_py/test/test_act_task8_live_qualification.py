@@ -213,7 +213,9 @@ def _campaign(tmp_path, manifest, identities, live_artifacts=None):
 
 
 def _ready(identities, **overrides):
-    document = {"schema_version": 2, "status": "TASK8_READY", "source_commit": "0" * 40,
+    # the TASK8_READY/QUALIFIED calibration report is fixed at schema_version 1 (owner decision), while the
+    # measurement contract it was produced under stays v2 - the two version numbers describe different documents
+    document = {"schema_version": 1, "status": "TASK8_READY", "source_commit": "0" * 40,
                 "config_sha256": "1" * 64,
                 "source_provenance_sha256": identities["source_provenance_sha256"],
                 "measurements": {},
@@ -1151,22 +1153,39 @@ def test_the_weld_publishes_a_thirty_three_field_qualified_report(tmp_path):
     # gate has something it recognises to validate
     from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
 
+    # the gate reads each entry's cited sample back, so the ready fixture writes a real file with its own digest
+    ready_sample = tmp_path / "ready-sample.json"
+    ready_payload = b'{"ready": true}'
+    ready_sample.write_bytes(ready_payload)
+    ready_digest = hashlib.sha256(ready_payload).hexdigest()
+
     ready_measurements = {}
     for name, (unit, size) in REQUIRED_MEASUREMENTS.items():
         if name in LIVE_ONLY_FIELDS:
             continue
-        ready_measurements[name] = {"value": [0.0] * size if size > 1 else 0.0, "unit": unit}
+        # the report contract wants every entry to carry its own sample citation, so the ready fixture provides one
+        # a `count` measurement must be an integer of at least one; everything else is a finite scalar or vector
+        if unit == "count":
+            value = 1                       # a count must be an integer of at least one
+        elif unit == "1":
+            value = [0.5] * size if size > 1 else 0.5    # a unitless fraction must be in (0, 1]
+        else:
+            value = [0.0] * size if size > 1 else 0.0
+        ready_measurements[name] = {"value": value, "unit": unit,
+                                    "sample_path": str(ready_sample), "sample_sha256": ready_digest}
     ready_path = tmp_path / "ready-33.json"
     ready_path.write_text(json.dumps(_ready(identities, measurements=ready_measurements)))
 
     extractors = {field: (lambda samples, document: 1.0) for field in LIVE_ONLY_FIELDS}
     output = tmp_path / "qualified-33.json"
-    # this synthetic ready report carries the contract's field names but not the rest of the production report, so the
-    # licence gate refuses it - and the weld must then leave no output behind rather than a document that looks
-    # qualified. Both halves are the property under test: the five fields are merged (33 = 28 + 5) and the gate's
-    # refusal is honoured.
-    with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
-        build_task8_qualified_report(ready_path, receipt, summary_path, case_root, output,
-                                     live_extractors=extractors, contract={})
-    assert not output.exists(), "a report the gate refuses must not be left on disk"
-    assert len(ready_measurements) + len(LIVE_ONLY_FIELDS) == 33
+    build_task8_qualified_report(ready_path, receipt, summary_path, case_root, output,
+                                 live_extractors=extractors, contract={})
+    document = json.loads(output.read_bytes())
+    assert document["status"] == "QUALIFIED"
+    assert document["schema_version"] == 1, "the published report stays at the fixed report version"
+    assert len(document["measurements"]) == 33, sorted(document["measurements"])[:4]
+    # the production readback: the document the weld published must pass the licence gate itself
+    from so101_demo.act.calibration import require_qualified
+
+    require_qualified(document)
+    assert not ready_path.read_bytes().endswith(b"33"), "the ready report is never rewritten in place"
