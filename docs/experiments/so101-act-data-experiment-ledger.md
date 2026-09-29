@@ -12866,3 +12866,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7 module complete and green (37 module / 76 focused set); Tasks 1-6 committed and green; Tasks 8-10
   untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-927 — CORRECTION: the port owns the recorder, so the window belongs in the port; my runner edit reverted
+
+- **Reading `pick_place_search_port.py:152` showed the design is simpler than my edit assumed.**
+  `seal_live_evidence(request)` already exists there and delegates to `self._evidence_recorder.seal(identity)`,
+  building the recorder identity from the request as `case_id = request["scenario_id"]`, `session_id`,
+  `attempt_id`, `reset_epoch`, `release_epoch`. The port - not the runner - already holds the recorder, and the same
+  file's `_search_evidence` shows where real provenance lives: `observed.physical_readback` with
+  `world/scene/contact/observation/reference`, `source_stamps_s` and `source_received_wall_s` receipts.
+- **Two consequences, both acted on:**
+  1. **My runner edit had a real defect.** I built the window identity with
+     `case_id = request.get("case_id") or request["attempt_id"]`, while the port seals with
+     `case_id = request["scenario_id"]` - so the window and the seal would have disagreed about the identity of the
+     very case they describe. That is exactly the kind of silent divergence the identity rules exist to prevent.
+  2. **The runner does not need to own the window at all.** Since the port owns the recorder *and* the readback with
+     real sim times and source stamps, the window belongs in the port: it can be created alongside the recorder and
+     fed from the port's own observations, which removes the sim-time problem my runner approach hit (the runner only
+     tracks `physics_step`, not sim time).
+- **Reverted my commit** (`git revert 5f0e58af`, a normal revert commit - not a history rewrite) so
+  `pick_place_runner.py` returns to exactly the user's in-flight state plus nothing of mine; verified the file now
+  contains no `window_factory` reference. The user's 46 in-flight lines were never touched by either the edit or the
+  revert.
+- **Corrected remaining plan:** (1) in `pick_place_search_port.py`, create the window alongside `_evidence_recorder`
+  and add one grid sample per observation using the readback's own sim time and stamps, opening on SEARCH; (2) keep
+  the existing success-path seal in the runner and have `seal_live_evidence` seal the window as well as the recorder;
+  (3) `PickPlaceCaseOwner._retire`, invalid-seal before the child retirement step; (4) `pick_place_case_execution.py`,
+  read the artifact back before the journal row. `ros_child.py` then needs no window wiring beyond what the user's
+  own policy-path arguments already do.
+- **State:** Task 7 module complete and green; the runner is untouched by me; the user's six in-flight files are
+  byte-for-byte as they were; Tasks 1-6 committed and green; Tasks 8-10 untouched; no runtime, no package gate, no
+  push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
