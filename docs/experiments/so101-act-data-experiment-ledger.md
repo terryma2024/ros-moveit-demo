@@ -11565,3 +11565,40 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-871 — Independent review FAIL: gen3 is not eligible for measurement; CP-870 claim withdrawn
+
+- **Verdict recorded.** An independent GPT-6 Astra/High review of the Task 8L measurement-driver gap returned
+  **FAIL**. The instruction is explicit: do **not** simply add a `fill(contract, root)` driver and run it, and do
+  **not** resume the goal. The goal stays blocked/disarmed while a measurement-protocol amendment is written (by
+  Sol) and reviewed to approval (Astra/High).
+- **The reviewer's reasons, recorded verbatim in substance because they define the amendment's scope:**
+  1. the approved design requires every field to be **recomputed from raw evidence** and to carry
+     `configured_limit`, `observed_summary` and `reported_value` with its source and formula, whereas the current
+     aggregator **trusts boolean labels** such as `target_in_view`, `qualified`, `contact_ok` and the
+     `execution *_ok` flags;
+  2. the aggregator consumes only `roots[0]` and can read files **outside the batch index**;
+  3. the measure CLI's sealed identity **lacks `source_commit` and `config_sha256`** that the aggregator requires;
+  4. the produced **sample/report shapes are incompatible** with `require_gate()` and
+     `validate_head_search_binding()`;
+  5. the production Task 8 child **requires `TASK8_READY`**, so the first calibration round's
+     **admission/bootstrap path is not closed** - and a fixture-produced `TASK8_READY` cannot stand in for live
+     qualification.
+- **The amendment to be approved freezes at least:** (1) each of the 21 fields' raw source, formula, window,
+  direction and failure criterion; (2) the complete phase-camera coverage matrix with visible-area and occlusion
+  definitions; (3) a dedicated admission/owner path for the first MuJoCo calibration round that does not bypass
+  admission with a synthetic ready report. I am **not** drafting it: the ruling assigns authorship to Sol and
+  review to Astra/High.
+- **CP-870's claim is withdrawn by this checkpoint.** I had written that "whichever way the driver question is
+  answered, none of that has to be redone". That is false: after **any** controlled source or contract change,
+  everything is rebuilt in a **new** run subroot - provenance, the five-key measurement identities, and the bound
+  contract. Generation 3 is therefore **superseded pending the amendment**, and its subroot now carries
+  `NOT_ELIGIBLE_FOR_MEASUREMENT.md` so the boundary travels with the evidence itself.
+- **Retained, not deleted:** the full package gate green on this tree (run `beh-r435b`, 5590/5590 collected,
+  0 failures) and all generation-3 evidence (provenance sha256
+  `59b67aaa1363cb5329f7513c955454315cc4c5b960230e940586eb21a7e58e59`, identities sha256
+  `c11408f8632a1a0965ff5567e72821f60b67e19f57cdb50f58b81283264f32ca`, contract sha256
+  `b7c293ca80195766b8e86167f98256f4bc4620630e7fff4111d209cbb1087f0d`). It is evidence of what was built and
+  verified, not a licence to measure.
+- **Boundaries held, per instruction:** no code was modified, no runtime was started, no evidence was deleted, no
+  push was made, no real hardware action was taken, and the goal remains **blocked/disarmed** rather than resumed.
