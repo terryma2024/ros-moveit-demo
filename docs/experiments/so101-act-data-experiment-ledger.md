@@ -19153,3 +19153,26 @@ not an inference of mine.**
 - **State:** goal active (revision 51, cap 1000); HEAD `3f7c3bc1`; staged 0; logs `beh-r798` … `beh-r802`; the committed test is
   green for four artefacts and red locally for the fifth and sixth, which is why the file is **not** being re-committed until it
   passes; no full suite, no push, no stack, no hardware.
+
+## CP-1193 — GREEN: six of Boundary V's seven artefacts, and the last one is the open decision
+
+- **Reading the builder before touching the assertion - the lesson CP-1192 wrote down - settled it in one line:**
+  `build_live_evidence_sample` **flattens** the contact block. The built sample's keys are `released`,
+  `bilateral_contact`, `cup_supported`, `no_fingertip_contact`, `holding_state`, `contact_observation_valid` (renamed from
+  `observation_valid`) and the measurement fields at the **top level** - there is **no `contact` mapping at all**. My assertion
+  had been reading a nested key that never existed, which is why four consecutive rounds each moved exactly one line.
+- **GREEN: 1 passed, rc=0** (`beh-r804.log`), and Boundary V now stands at **six of seven**:
+  | artefact | state |
+  | --- | --- |
+  | SEARCH rows produced by the real path | ✅ |
+  | FINAL_CHECK reached | ✅ |
+  | sealed artifact read back, digest verified | ✅ |
+  | confirmed retirement (`safe_stop`, `stopped_confirmed`) | ✅ |
+  | **release open event** | ✅ this checkpoint |
+  | **three adjacent 10 Hz support rows in one release epoch** | ✅ this checkpoint |
+  | journal path and hash | ⏳ child/owner path - **CP-1189's decision is with the owner** |
+- **What the committed test proves end to end:** the real `PickPlaceRunner` sequences a full case; a fake port sits at the
+  external I/O seam; the **production** recorder and window seal real evidence; the sealed artifact reads back with a matching
+  digest covering SEARCH through FINAL_CHECK; the case confirms its stop; the rows record the release and three adjacent 10 Hz
+  samples in one epoch. **No `object.__new__`, no hand-filled state, no direct `finish`.**
+- **State:** goal active (revision 51, cap 1000); HEAD at this commit; staged 0; no full suite, no push, no stack, no hardware.
