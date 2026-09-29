@@ -12427,3 +12427,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   review taught: transcribe the approved source, and cite it, rather than reconstruct it from memory.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-908 — Task 7 onward handoff written to the evidence root
+
+- **Wrote `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/handoffs/20260930-task7-onward/HANDOFF.md`**
+  so the remaining work is specified from disk rather than from a session narrative: the six landed commits with
+  their ledger checkpoints and verification results; the helper interfaces now available to Task 7+; **the raw
+  evidence shapes this work defined** (per-field evidence and configured limits, bbox/timing/stop/path/neck/
+  intrinsics shapes) with the rule that a missing configured limit is refused rather than defaulted; the Task 7
+  essentials including the corrected nine-phase tuple; the four carried-forward deviations the Task 9 review must
+  see; the open approval (the 17 candidate values, three `neck_start_rad` starts and the safe interval); and the
+  standing boundaries.
+- **Why this is the right step at this point:** Task 7 modifies ten files across the demo package and the teleop
+  production chain, and it is the first task whose interfaces span both packages. Recording the shapes and
+  deviations now means a later session - or the reviewer - can act on the approved plan without re-deriving what
+  this session learned, and the phase-list correction (CP-907) is carried forward explicitly instead of being
+  rediscovered.
+- **Verified state at this checkpoint:** Tasks 1-6 committed; the focused suites cited above are green; the working
+  tree holds only the user's 30 modified + 12 untracked files apart from the preserved one-token
+  `Pairs.fingerprint` fix; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
