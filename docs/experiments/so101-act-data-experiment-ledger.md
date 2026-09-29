@@ -33670,3 +33670,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ```
 - **State:** **P1-1 through P1-6 CLOSED; the teleop suite is being re-measured with the adapter in place.** **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1900 — The remaining twenty are an invocation mistake, and the log says which
+
+- **After the adapter fix the teleop suite went from 28 to 20 failures, and every remaining one is environmental:**
+  ```
+  20 failed, 1089 passed, 42 skipped, rc 1
+      14 x MutationError: BRIDGE_CHILD_EXITED: 1
+       6 x MutationError: IPC_SOCKET_PATH_TOO_LONG: /data/work/so101-evidence/act-data/202…
+  and grep for `require_fresh` / `kind=`: 0 hits in the whole log
+  ```
+  **so nothing in those failures touches this span's changes at all - they are the IPC socket path, and the path is long
+  because of MY command:** `SO101_IPC_SOCKET_BASE` was not set in this run, so the socket base fell back to `TMPDIR`,
+  **which this repository's rules require to be a scratch directory under the deep evidence root** - and a Unix socket
+  path has a hard length limit, which that path exceeds.
+- **Which is why the drive's own convention sets a SHORT socket base for every run** (`SO101_IPC_SOCKET_BASE=/tmp/…`, the
+  same convention the earlier green teleop gate used) - **and why this is classified rather than counted:** the tests that
+  failed spawn REAL child processes over that socket, and a child that cannot bind exits 1, which the bridge reports by
+  name.
+- **The re-run therefore uses the same environment as every other run in this drive, with the short socket base restored.**
+- **State:** **P1-1 through P1-6 CLOSED; the teleop re-run is in flight with the correct environment.** **Task-list
+  statuses are unchanged, so they are not re-stated.**
