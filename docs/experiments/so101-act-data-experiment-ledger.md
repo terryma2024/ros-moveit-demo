@@ -27330,3 +27330,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **Option 1 matches where the values are produced; option 2 matches the "binding originates at the entry" principle the resource binding already follows.** Both are defensible, which is why this is a question rather than an edit.
 - **And this qualifies CP-1634's commit honestly:** adding the four fields to the context **lets a caller populate them and is harmless**, but **it does not make the formal path runnable on its own**, because the CLI has nothing to put in two of them. **The commit stands as one step, not as item 1's fix**, and the entry that records item 1 as done will have to name which option was taken.
 - **State:** item 1 **context fields added, and now a decision required (above)**; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1636 — Item 1's second step done: the contract test proves the composition with the PRODUCTION context
+
+- **`2 passed`**, and the difference is the point: the test that proves the composition used to build its context with
+  ```
+  context = type("Context", (), document)()          # a throwaway class satisfying getattr
+  ```
+  and now builds the real object:
+  ```
+  from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+  context = CalibrationMeasurementContext(**document)
+  ```
+  **So the formal object is what the test proves** - the review's demand for "a formal-entry test … replacing only external I/O", met for the composition half.
+- **And the change immediately surfaced two things the duck type had hidden**, which is the argument for doing it: the document needed **`contract_sha256`** (one of the twelve the real type requires and a namespace does not), and the four
+  fields the controller path reads had to be **real fields rather than namespace attributes** - which is exactly CP-1634's addition, now exercised by the test that matters.
+- **What item 1 still needs, and it is a decision rather than an edit:** the **CLI half** - the context the CLI builds carries twelve fields and cannot carry the two per-run ids at all, because they are created by the measurement run
+  (`task8_measurement_driver.py:118` takes them from the anchor report). **CP-1635's two options stand:** the per-run values travel from the driver into the composition, or the entry pre-allocates the run identity at admission.
+- **State:** item 1 **context fields added and the contract test now uses them**; the CLI half awaits CP-1635. Item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all
+  five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
