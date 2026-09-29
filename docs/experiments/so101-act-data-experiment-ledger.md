@@ -20561,3 +20561,25 @@ not an inference of mine.**
   sites), and the failing names will say which of the two each test uses.
 - **State:** aggregator source + `_v2_batch` edits **uncommitted while red**; `_sealed_batch` restored to its exact prior text; build
   tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1255 — The traceback names the shared helper, and rules out the shortcut I was about to take
+
+- **One long traceback ended the static guessing** (my name-to-builder mapping said "no builder" for most failures, which was an
+  artefact of splitting the file on `\ndef ` and losing nested definitions):
+  ```
+  test_act_task8_calibration_aggregator.py:104:  ->  task8_calibration_aggregator.py:188: ValueError: CALIBRATION_DESCRIPTOR_MISSING
+  ```
+  Line 104 is inside **`_report(outputs)`**, the shared helper through which these tests reach the aggregator. So the batches are
+  built **before** `_report`, by each test's own construction - and that is where the descriptor has to appear, because that is where
+  production puts it (the driver seals it).
+- **And the shortcut is ruled out before I take it, which is the point of writing this down:** I was one step from making `_report`
+  index a descriptor into each batch root on the way through. **That would re-seal a batch, change its `batch_sha256`, and break
+  exactly the tamper-evidence and byte-identical-render tests this suite exists for** - a fixture that rewrites the thing under test.
+  The descriptor must be added **when the batch is built**, inside each construction, which is also what makes the fixture honest:
+  a real batch has one.
+- **So the next step is mechanical and now well-defined:** route the tests' inline batch construction through a small shared helper
+  that writes `runtime-descriptor.json`, indexes it, and seals once with `batch_sha256` over the contract's canonicalisation - the
+  same shape `_v2_batch` already produces - and leave `_report` alone. **Reading one test's construction (not the whole file) is what
+  the next round starts with.**
+- **State:** aggregator source + `_v2_batch` edits uncommitted while red; `_sealed_batch` at its exact prior text; suite at
+  `15 failed / 13 passed`; no stack, no hardware, nothing deleted, nothing pushed.
