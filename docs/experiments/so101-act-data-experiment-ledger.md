@@ -25491,3 +25491,19 @@ picture in both directions.**
 - **Where P1-4 stands:** **all nine phases proven (9/9)**, the case's parameters and its admitted policy fully plumbed, and the demo-side and teleop-side focused sets green. **What remains is the
   port-level end-to-end nine-phase case, the seal, the full-case journal, and the seven indexed assertions with their four negatives - then P2, the final integration boundary, and the review.**
 - **State:** P1-1..P1-3 green and committed; nine phases and the policy wiring committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1529 — The Planning Scene capabilities are in, and the detach is read back
+
+- **`45 passed`** across the planning-scene, port, motion-phase and CLOSE files.
+- **`detach_moveit` reads its own postcondition back.** It calls the seam's detach and then re-probes `is_attached`; if the scene still holds the cup it refuses by name
+  (`TASK8_PHASE_EVIDENCE_INVALID: planning scene still attached`). **The failure that matters here is the call returning while nothing changed** - and the repository's own rule is that the physical
+  release happens with no planning attachment - so "detached" is a fact to observe, not a return value to trust. `planning_attached` requires a **real bool** from the scene, so a truthy string cannot
+  stand in for an answer.
+- **The port delegates and never re-implements:** `_boundary_capability` calls the boundary's method and refuses by name when it is absent. **So there is one implementation of each capability, in the layer
+  that owns the runtime, and the port only decides whether the case may use it.**
+- **`set_down`, `release_preflight` and `run_retreat_segment` still refuse by name**, which keeps the remaining gap explicit - and the contract for each is already documented by the runner's own test double
+  (`_SET_DOWN_KEYS`, `_RELEASE_KEYS`, and the retreat segment returning the phase evidence), so the next step is implementation rather than discovery.
+- **Where P1-4 stands:** nine of nine phases proven in the boundary; the case's parameters and its admitted policy plumbed; the Planning Scene capabilities in. **Remaining: `set_down`,
+  `release_preflight`, `run_retreat_segment`, then the full nine-phase case, the seal (`seal_live_evidence`'s contract is also documented by the double), the journal and the seven indexed assertions
+  with their four negatives.**
+- **State:** P1-1..P1-3 green and committed; nine phases, the policy wiring and the Planning Scene capabilities committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
