@@ -620,3 +620,68 @@ def test_the_real_case_execution_publishes_the_journal_row_for_a_prefix_case(tmp
     with pytest.raises(ValueError, match="TASK8_CASE_ROW_INVALID"):
         case_row_to_journal_row(tampered, identities=identities,
                                 manifest_document_sha256=manifest_sha256)
+
+
+def test_the_trusted_aggregator_refuses_a_missing_and_a_tampered_case_journal(tmp_path, monkeypatch):
+    """P1-5 negatives against the TRUSTED validator, not against my own expectations.
+
+    ``validate_case_journals`` is the aggregator's own reader: it walks the campaign's case ids, demands a
+    complete journal for each at the path the campaign writes, and refuses the whole qualification on a
+    missing, foreign or incomplete journal. Two of the review's negatives live here.
+    """
+
+    import json
+    from so101_demo.act.task8_live_evidence import require_campaign_cases
+    from so101_demo.act.task8_live_qualification import validate_case_journals
+    from test_task8_case_execution import _prepared
+    from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
+
+    spec, owner, journal_path, events = _prepared(tmp_path)
+    manifest = json.loads((tmp_path / "manifest.json").read_bytes())
+    manifest_sha256 = hashlib.sha256((tmp_path / "manifest.json").read_bytes()).hexdigest()
+    identities = {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                  "contact_policy_fingerprint": manifest["contact_policy_fingerprint"]}
+    required = tuple(require_campaign_cases(manifest))
+    assert required, "the campaign names its cases"
+
+    case_root = tmp_path / "campaign"
+    cases = case_root / "task8-live" / "cases"
+    cases.mkdir(parents=True)
+
+    # negative 1 - a missing row refuses the whole qualification, by the trusted reader's own error
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_JOURNAL_MISSING"):
+        validate_case_journals(case_root, manifest, identities=identities,
+                               manifest_document_sha256=manifest_sha256)
+
+    # the real published row, placed where the campaign writes it
+    evidence = tmp_path / "child-evidence"
+    evidence.mkdir()
+    child, request, port = _prepare_child_case(
+        evidence, monkeypatch, case_id=required[0], session_id="session-298",
+        attempt_id=required[0], campaign_id="case-298")
+
+    async def run_pick_place(case_request):
+        return await child.pick_place_phase(request)
+
+    owner.worker.run_pick_place = run_pick_place
+    row = asyncio.run(run_pick_place_case(spec, required[0], owner, journal_path))
+
+    # the campaign publishes a PRODUCER row; the trusted reader wants the JOURNAL row, so the translation the
+    # trusted path provides is applied first - that is the pipeline, and the negatives live after it
+    from so101_demo.act.task8_live_evidence import case_row_to_journal_row
+    journal_row = case_row_to_journal_row(row, identities=identities,
+                                          manifest_document_sha256=manifest_sha256)
+
+    # negative 2 - a journal whose row lost a required field is refused even though the file is there
+    tampered = {key: value for key, value in journal_row.items()
+                if key != "child_retirement_receipt_sha256"}
+    (cases / f"{required[0]}.json").write_text(json.dumps(tampered, sort_keys=True))
+    with pytest.raises(ValueError, match="TASK8_"):
+        validate_case_journals(case_root, manifest, identities=identities,
+                               manifest_document_sha256=manifest_sha256)
+
+    # and the untampered row is ACCEPTED for its case: the reader moves on and stops at the NEXT missing one
+    (cases / f"{required[0]}.json").write_text(json.dumps(journal_row, sort_keys=True))
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_JOURNAL_MISSING"):
+        validate_case_journals(case_root, manifest, identities=identities,
+                               manifest_document_sha256=manifest_sha256)
