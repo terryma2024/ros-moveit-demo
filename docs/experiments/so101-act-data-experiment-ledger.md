@@ -11824,3 +11824,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   freeze verbatim. Choosing them myself would set the qualification's own limits.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-882 — Task 1 committed; candidate values remain the one open approval
+
+- **Committed with the plan's exact eight-file list** (`feat(act): freeze task8 measurement protocol v2`):
+  `act/task8_measurement_schema.py`, `act/task8_measurement_contract.py` (v2 identity/template/bound keys and
+  version branch), the v1+v2 contract schema, `task8-calibration-measurement-contract-v2.json`,
+  `task8-calibration-search-candidate-v1.json`, `task8-calibration-search-policy-v1.json`,
+  `task8-phase-camera-matrix-v1.json` and `test/test_act_task8_measurement_contract.py`; the commit message names
+  that the candidate values are still pending approval so the commit cannot be read as a completed freeze.
+- **Verified before committing:** the focused suite **9 passed** (contract) and **20 passed** together with the
+  aggregator module; a freshly bound v2 contract validates against the extended schema with **0 errors**.
+- **What is genuinely frozen:** the 21 head-search and 7 support field metadata (unit, source, formula, window,
+  comparator, threshold source, failure code), the ten-member identity and its gate, the closed-batch closure
+  rules, the v1+v2 schema, the search-policy document bound to production sources by digest, and the phase-camera
+  matrix's exact five occluder names.
+- **What is explicitly not frozen:** the 17 search configuration values, the three anchors' `neck_start_rad` and
+  the candidate safe interval - all `null` with `requires_approved_value: true` and a `status` of
+  `SKELETON_PENDING_APPROVED_VALUES`, per CP-879/CP-881. Filling them is an approval step, not an implementation
+  choice.
+- **Next:** Task 2 (`act/task8_measurement_formulas.py`, the pure 21 + 7 formulas) can proceed unblocked, because
+  the formulas are functions of raw inputs and configured limits passed in at call time - the missing values do
+  not block writing or testing them.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
