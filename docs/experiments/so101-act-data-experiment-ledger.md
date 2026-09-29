@@ -14449,3 +14449,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad`
   starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware;
   formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-990 — The chain is traced to its end: `observe_capture`'s caller decides the record shapes
+
+- **Followed `raw_records` through both hops and the question from CP-989 is answered structurally, not by a guess.**
+  The recorder's `observe_capture(adapter, captured, *, phase, frame, contact, measurements, raw_records,
+  support_distance_max_m, event=False)` states its own boundary in its docstring - *"the adapter supplies the fields
+  (its own capture shape is its business); this method only routes them"* - and it passes `raw_records` straight into
+  `adapter.capture_evidence_fields(...)`, which in turn documents that the caller's records are merely
+  "dereferenceable". So the record shapes are decided by **whoever calls `observe_capture`**, one layer above the
+  recorder, which is the driver/child path.
+- **That closes the loop opened in CP-984:** the writer of the raw records is not hidden code but a call site whose
+  inputs are `raw_records` and `support_distance_max_m`; the two facts the production extractors need (`pair_key`, and
+  the wrist record's occlusion fields) are that call site's own choices and therefore belong in its wiring, exactly as
+  CP-989 specified. Nothing is missing from the module: `make_raw_reader`, `live_extractors`, `collect_live_runs`,
+  `derive_live_measurements`, `build_qualified_measurements` and the weld in `build_task8_qualified_report` are in
+  place and green.
+- **Also worth recording from this read:** the case-row contract is visible next to `observe_capture`
+  (`_CASE_ROW_REQUIRED` = case_id, mode, status, live_evidence_path/sha256, child retirement receipt path/sha256,
+  stack retirement receipt path/sha256, ...), which is the row shape Task 8's collection layer reads through
+  `require_case_journal_row` - consistent with what CP-964 found on the validation side and with the fixture I wrote
+  for the chain test.
+- **State:** Tasks 1-7 complete and green; Task 8's code side complete and green at 50 focused tests, with the
+  remaining wiring belonging to the `observe_capture` call site rather than to the module; Tasks 9-10 untouched; the
+  goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three
+  `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted,
+  no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
