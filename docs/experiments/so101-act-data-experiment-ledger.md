@@ -20523,3 +20523,18 @@ not an inference of mine.**
   across sealed roots pass) become the suite.
 - **State:** the aggregator source change is **uncommitted while red**; the build tree has been synced for it; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1253 — Item 4's fixture catch-up is half done: 21 failures became 15, and the rest use a second builder
+
+- **Two fixture edits landed:** `_v2_batch`'s `descriptor_as_index_file` default is now **True** (a sealed batch always indexes its
+  descriptor), and a **default descriptor** is supplied when the caller passes none, because every production batch now has one.
+  **`21 failed / 7 passed` became `15 failed / 13 passed`** (`rev4-b.log` then `rev4-c.log`).
+- **The remaining 15 are all `CALIBRATION_DESCRIPTOR_MISSING`, and the counts printed above say why:** the suite has a **second batch
+  builder**, `_sealed_batch`, whose call sites do not go through the descriptor-aware path at all. The rule is right and the first
+  builder now matches production; the second one still constructs bare roots, so it has to be given the same treatment (or its callers
+  routed through `_v2_batch` where that is what they mean).
+- **Worth stating plainly, because it is the same finding as CP-1252:** these tests were building batches **the production driver could
+  not have produced** - no indexed descriptor - and the corrected aggregator refuses them by name. That is the rule working, not the
+  rule being wrong, and the fixture is what has to move.
+- **State:** the aggregator source change (every root required; the second authority deleted) and both fixture edits are **uncommitted
+  while red**; the build tree is synced for the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
