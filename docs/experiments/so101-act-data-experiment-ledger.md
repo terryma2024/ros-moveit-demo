@@ -20077,3 +20077,29 @@ not an inference of mine.**
   a print, not a refactor.
 - **State:** HEAD `eaa6bebf` plus this checkpoint; my item-2 test still held back **uncommitted while red**; the CLI/composition
   changes from item 1 are committed; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1232 — The contradiction is solved: the tests import a **build-tree copy**, not `src/`
+
+- **One print inside the test ended three rounds of guessing, and the answer is the repository's documented stale-artefact trap:**
+  ```
+  PROBE extra field | so101_demo.act.task8_artifact_bundle
+    | <worktree>/build/so101_demo_py/so101_demo/act/task8_artifact_bundle.py
+  ```
+  The suites import the module from **`build/so101_demo_py/...`**, which `PYTHONPATH` (set by the ROS overlay and colcon's own
+  environment) puts ahead of `src/`. **My edits to `src/` are therefore invisible to the tests**, which is why the extracted
+  validator raised in a probe run from `src/` and `DID NOT RAISE` in the suite. Both observations were true - of two different files.
+- **What I tried to fix it, in order, and where it stands:** `colcon build --packages-select so101_demo_py --symlink-install` finished in
+  1.5 s (rc=0) but left a **regular file** in the build tree - the existing copied tree is not converted - and a direct `cp` of the
+  four edited modules into the build tree did **not** make the case pass either. The file sizes and the `cmp` result printed above say
+  whether that copy actually landed; either way, **the honest fix is a rebuild that refreshes the build tree, not hand-copying into a
+  generated directory**, and that is what the next round does.
+- **Why this matters beyond item 2, and it is the reason this checkpoint is long:** every RED/GREEN I have run in this stretch could
+  have been measuring the build tree rather than my working copy. The four suites that report 49 passed at CP-1230 may be passing
+  against pre-change code. **Until the build tree is refreshed, no test result in this batch is evidence about the source.** That is a
+  finding about the *method*, and it is worth more than the item it was discovered on.
+- **Sequence for the next round, fixed so it is not improvised:** refresh the build tree for `so101_demo_py` from source (a real
+  rebuild, using `test-venv` as the interpreter as established at CP-1221), confirm with one print that
+  `require_runtime_descriptor.__code__.co_filename` now points inside `src/`, re-run the four suites, and only then judge item 2's RED
+  - which also means **re-verifying item 1's GREEN** (CP-1229) under the same corrected method.
+- **State:** HEAD `1341bd5e` plus this checkpoint; the probe print is still in the test file and comes out with it; no stack, no
+  hardware, nothing deleted, nothing pushed.
