@@ -541,6 +541,17 @@ def _v2_batch(root, contract, descriptor=None):
         value = 1 if unit == "count" else ([1.0] * size if size != 1 else 1.0)
         if name in ("min_confidence", "tracking_iou"):
             value = 0.5
+        if name == "lock_valid_neck_rad":
+            # the binding checks the published interval's own validity, so it must be a real one
+            value = [-3.14, 3.14]
+        if name == "coarse_step_rad":
+            # the search config requires 0 < coarse_step_rad <= horizontal_fov_rad / 2, and the published
+            # horizontal_fov_rad is 1.0, so a unit step would make the runtime configuration unconstructible
+            value = 0.1
+        if name == "vertical_bounds_px":
+            # the binding constructs a search controller from the published values, whose relation is
+            # 0 <= v0 < v1 <= 480 - the formulas suite's equal-pair evidence cannot serve as a published value
+            value = [100.0, 380.0]
         measurements[name] = {"value": value, "unit": unit}
     write_closed_json(root / "measurements.json",
                       {"measurements": measurements,
