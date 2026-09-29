@@ -12033,3 +12033,33 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   approved phase list, which is what the plan actually requires.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-891 — Task 4 RED established (bounded calibration admission and neck binding)
+
+- **Test file created:** `test/test_act_task8_calibration_admission.py`, covering the plan's authority and
+  state-machine requirements:
+  - `CALIBRATION_REQUIRED` admits **exactly one** calibration flight while the production `act` role stays
+    rejected, and a second admission of the same generation is refused;
+  - each named refusal is exercised - release, Recorder, an unknown operation, a foreign/stale generation, and the
+    production child whatever the operation;
+  - arm commands must **byte-match** `measurement_plan_sha256`, else `MEASUREMENT_PLAN_MISMATCH`;
+  - dynamic neck targets are authorized only inside the approved safe interval (`NECK_TARGET_OUTSIDE_INTERVAL`)
+    and only when independently sweep-safe (`NECK_TARGET_NOT_SWEEP_SAFE`);
+  - a caller that bypasses the binding and submits straight to the broker is refused
+    (`CALIBRATION_BINDING_REQUIRED`);
+  - the coarse accumulator advances only on a **new** target (a reissue reports `REISSUE_NO_ADVANCE`), fine
+    corrections are classified separately, the timeout starts at the first `advance_deadline`, and the first
+    target beyond the safe interval terminates as `TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL` **without submitting**.
+- **RED run:** `python -m pytest -q -p no:cacheprovider test/test_act_task8_calibration_admission.py
+  test/test_act_control_event_timeline.py test/test_act_task8_search_binding.py`, **exit code 1, elapsed 6 s**,
+  fresh verified NVMe scratch `scratch-r483.c18C`, result **12 failed, 18 passed** (`beh-task4-red.log`) - the 18
+  passes are the two existing modules the plan also modifies, so nothing is disturbed yet and their current
+  behaviour is the baseline the implementation must preserve.
+- **Next:** implement `act/task8_calibration_admission.py` and
+  `adapters/act/task8_calibration_search_binding.py`, then extend `Ownership` with the explicit `calibration` role
+  and a restricted capability set, add the broker-side enforcement (byte-matching arm probe or a command receipt
+  signed by the bound adapter, never the generic non-ACT submit path), wire the reservation and owner factory
+  through launch composition with the admission generation on every event, and keep resource binding in the CLI
+  entry passed through the context - then GREEN and the plan's nine-file commit.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
