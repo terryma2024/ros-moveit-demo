@@ -14502,3 +14502,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the rest; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate
   search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push,
   no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-992 — Final integrity check: nothing of mine is left dangling
+
+- **Verified the working tree's ownership precisely:** `staged` is **0**; the only modified files carrying my changes
+  are exactly the three documented insertions - `pick_place_case_owner.py` (the retirement-path invalid seal),
+  `pick_place_case_execution.py` (the journal-row artifact readback) and `test/teleop/test_task8_case_execution.py`
+  (the real sealed-artifact fixture plus its mismatch case) - and every other file of mine is committed:
+  `task8_live_qualification.py`, `task8_live_evidence.py`, `pick_place_search_port.py`,
+  `task8_measurement_formulas.py` and `test_task8_live_evidence_production_chain.py` all report clean.
+- **The tree stands at 30 modified and 13 untracked**, all the user's apart from those three additions, with HEAD at
+  `026ecf83` (CP-991). No half-applied edit, no staged remnant and no orphaned scratch inside the repository.
+- **Where the objective stands:** Tasks 1-7's module work is complete and green; Task 8's code side is complete and
+  green at 50 focused tests; the remaining wiring is the driver that calls `observe_capture` with real `raw_records` -
+  a dependency that does not exist yet and belongs to the user's in-flight chain (CP-991) - after which Task 8 closes,
+  Task 9's single full gate can run against a complete tree, and Task 10 rebuilds the Task 8L bundle in a new
+  generation subroot.
+- **One approval remains outstanding and unchanged since CP-879:** the 17 search configuration values, the three
+  anchors' `neck_start_rad` starts and the candidate safe interval, whose slots are committed as `null` with
+  `requires_approved_value: true`.
+- **Boundaries held for the whole session:** no runtime started, no package gate run, nothing pushed, no evidence
+  deleted, no hardware touched; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED;
+  gen3 retained and ineligible with gen4 reserved for Task 10.
