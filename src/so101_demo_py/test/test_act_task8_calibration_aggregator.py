@@ -493,6 +493,12 @@ def _valid_evidence(contract):
         "velocity_limit_rad_s": ({"samples": [{"dt_s": 0.01, "dq_rad": [0.0] * 6}]}, [1.0] * 6),
         "acceleration_limit_rad_s2": ({"samples": [{"dt_s": 0.01, "dq_rad": [0.0] * 6}]}, [1.0] * 6),
         "path_step_s": ([0.0, 0.002, 0.004, 0.006], 0.01),
+        "coarse_step_rad": ({"steps_rad": [0.05, 0.05, 0.01]}, 0.06),
+        "search_timeout_s": ({"elapsed_s": [0.5, 1.0]}, 5.0),
+        "horizontal_fov_rad": ({"model_rad": 1.0, "measured_rad": 1.0, "tolerance_rad": 0.1}, 0.1),
+        "acceleration_limit_rad_s2": ({"samples": [{"dt_s": 0.01, "dq_rad": [0.0] * 6},
+                                                   {"dt_s": 0.01, "dq_rad": [0.0] * 6},
+                                                   {"dt_s": 0.01, "dq_rad": [0.0] * 6}]}, [1.0] * 6),
         "path_clearance_m": ({"rows": [{"signed_distance_m": 0.05}]}, 0.01),
     }
     for field, (payload, limit) in fill.items():
