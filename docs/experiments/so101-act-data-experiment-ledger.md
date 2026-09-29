@@ -16224,3 +16224,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **What Task 9's pass does NOT authorise:** the 17 provisional search values remain `null` with
   `requires_approved_value: true`, pending their independent design and GPT-6 Astra/High review. **Task 10 stays
   blocked**, and a passing gate is not permission to guess a value.
+
+## CP-1057 — Stopping at the next approved boundary with the review packet produced
+
+- **Task 9 passed, and the next boundary is the one the owner reserved:** the **17 provisional calibration-search
+  values**. Rather than guess them, this round produces the packet a reviewer needs and stops.
+- **Packet:** `handoffs/20260930-task7-onward/task10-review-packet-search-values.md` - written from the candidate
+  document itself (not retyped), listing all **17** entries with their unit, size, current `null` value and
+  `requires_approved_value` flag, restating what is already approved (the three anchor starts bound by value, and the
+  `[-2*pi, 2*pi]` bootstrap envelope with the sweep-measured `lock_valid_neck_rad` semantics), and stating plainly why
+  the values cannot be transcribed from the tree: no approved source enumerates them, and the only concrete numbers
+  present model *measured* quantities that the design forbids reusing as approved inputs (CP-879, CP-881).
+- **What is asked of the reviewer:** either a pointer to an approved source to transcribe, or an upstream approval step
+  whose output is frozen into the document - after which the flags clear and Task 10's runtime and new-generation work
+  become permitted. **Task 10 remains blocked until then**, and Task 9's pass is explicitly not treated as permission.
+- **State:** decisions A and B complete; Task 8's production caller complete and hunk-staged; **Task 9 boundary gate
+  green at 5759/5759, rc=0** (CP-1056); the two invalid-invocation artefacts retained and marked (CP-1054/CP-1055
+  corrected, not rewritten); the short IPC base registered as a deletion candidate and not deleted. No push, no evidence
+  deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
