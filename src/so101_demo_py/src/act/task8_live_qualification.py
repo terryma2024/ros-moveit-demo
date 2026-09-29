@@ -299,3 +299,34 @@ def build_qualified_measurements(ready_measurements: dict, live_runs, contract) 
     for field in LIVE_ONLY_FIELDS:
         merged[field] = {"value": derived[field]["value"], "unit": derived[field]["unit"]}
     return merged
+
+
+def _span_s(samples) -> float:
+    stamps = [sample["sim_time_s"] for sample in samples]
+    if len(stamps) < 2:
+        return 0.0
+    return max(stamps) - min(stamps)
+
+
+def retreat_distance_m(samples) -> float:
+    """The displacement of the end effector across the RADIAL_RETREAT samples of one run."""
+
+    retreat = sorted((sample for sample in samples if sample.get("phase") == "RADIAL_RETREAT"),
+                     key=lambda sample: sample["sim_time_s"])
+    if len(retreat) < 2:
+        raise ValueError("RETREAT_SAMPLES_REQUIRED: two RADIAL_RETREAT samples are needed")
+    first, last = retreat[0]["end_effector_position_m"], retreat[-1]["end_effector_position_m"]
+    return sum((later - earlier) ** 2 for earlier, later in zip(first, last)) ** 0.5
+
+
+def placement_stable_s(samples) -> float:
+    """The sim-time span over which the placement is stable in the FINAL_CHECK samples of one run."""
+
+    final = sorted((sample for sample in samples if sample.get("phase") == "FINAL_CHECK"),
+                   key=lambda sample: sample["sim_time_s"])
+    stable = [sample for sample in final if sample.get("placement_stable") is True]
+    if not stable:
+        raise ValueError("PLACEMENT_STABLE_REQUIRED: no FINAL_CHECK sample reports a stable placement")
+    if len(stable) != len(final):
+        raise ValueError("PLACEMENT_NOT_STABLE_THROUGHOUT: every FINAL_CHECK sample must report stability")
+    return _span_s(stable)
