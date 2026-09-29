@@ -13718,3 +13718,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   pushed, no evidence deleted, no hardware touched; the user's files preserved apart from the CP-861 one-token typo fix
   whose original bytes are in `user-file-backups/`; the three user-dirty files carrying my additive changes remain
   uncommitted by design.
+
+## CP-962 — Closing checkpoint: delivered state, carried work and the one open decision
+
+- **Closing verification:** `so101_demo_py` **204 passed** and `so101_teleop` **47 passed**, both rc=0, from a fresh
+  verified NVMe scratch (`beh-final-demo.log`, `beh-final-teleop.log`).
+- **Delivered and committed:** Tasks 1-7 of the approved measurement-protocol v2 plan, each green at every increment
+  and each with its RED evidence, verification command and result recorded here - plus the approval checkpoint CP-872,
+  the phase-list correction CP-907, the aggregator deviations CP-906, the displaced-work incident and repair
+  CP-930/931, the operational rules CP-932, and Task 8's derivation CP-960.
+- **Carried uncommitted by design** in the user's dirty set, with the explicit instruction not to stage them whole:
+  `pick_place_case_owner.py` (verified retirement-path invalid seal), `pick_place_case_execution.py` (journal-row
+  artifact readback) and `test/teleop/test_task8_case_execution.py` (real sealed-artifact fixture plus its mismatch
+  case).
+- **Remaining:** Task 8's immutable 33-field `build_task8_qualified_report` and its rejection tests; Task 9's single
+  full `so101_demo_py` + `so101_teleop` xdist gate on fresh verified scratch followed by the independent
+  implementation review; Task 10's Task 8L rebuild in a new generation subroot with gen3 retained and ineligible.
+- **One open decision for the user:** the 17 search configuration values, the three anchors' `neck_start_rad` starts and
+  the candidate safe interval - committed as `null` with `requires_approved_value: true` (CP-879, CP-881).
+- **Boundaries held to the end:** no runtime started, no package gate run, nothing pushed, no evidence deleted, no
+  hardware touched; the user's files preserved apart from the CP-861 one-token typo fix whose original bytes are in
+  `user-file-backups/`; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED.
