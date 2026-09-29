@@ -26,6 +26,22 @@ from .visible_approach_expert_route import VisibleApproachExpertRoute
 _CHILD_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}\Z")
 
 
+def checker_pairs_by_phase(route_motion: dict) -> dict:
+    """The per-phase contact pairs the APPROACH checker is gated on, from the ADMITTED document.
+
+    `MujocoPathChecker` requires `allowed_pairs_by_phase` (physics.py:34 - keyword-only, no default), and this
+    builder's checker call did not pass it, so a caller supplying the admitted route motion got a `TypeError` instead
+    of a checker. The pairs are never invented here: the document's own per-phase mapping is used when it carries one,
+    and otherwise its single `allowed_pairs` is read as APPROACH's - the same shape `calibration_motion.py:174-184`
+    uses for a single-phase gate (`{'APPROACH': allowed}`).
+    """
+
+    pairs_by_phase = route_motion.get("allowed_pairs_by_phase")
+    if isinstance(pairs_by_phase, dict):
+        return {str(phase): frozenset(tuple(pair) for pair in pairs) for phase, pairs in pairs_by_phase.items()}
+    return {"APPROACH": frozenset(tuple(pair) for pair in (route_motion.get("allowed_pairs") or ()))}
+
+
 def build_pick_place_child_search_port(
     *, node, model, contact_pairs, manifest, report, sources,
     command_broker, connection, cancelled, binding: HeadSearchBinding,
@@ -177,10 +193,7 @@ def build_pick_place_child_search_port(
         # which is why a full case could never be driven. The pairs are the ADMITTED ones: the document's own per-phase
         # mapping when it carries one, else its single `allowed_pairs` read as APPROACH's - the same shape
         # `calibration_motion.py:174-184` uses for a single-phase gate (`{'APPROACH': allowed}`).
-        pairs_by_phase = route_motion.get("allowed_pairs_by_phase")
-        if not isinstance(pairs_by_phase, dict):
-            pairs_by_phase = {"APPROACH": frozenset(
-                tuple(pair) for pair in (route_motion.get("allowed_pairs") or ()))}
+        pairs_by_phase = checker_pairs_by_phase(route_motion)
         checker = factory(check_timeout_s=route_motion["submit_lead_s"], start_timeout_s=2.0,
                           model_path=route_motion["model_path"], protected_roots=("base",),
                           cup_joint="cup_free_joint", gripper_body="gripper",
