@@ -12812,3 +12812,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7 module complete and green (37 module / 76 focused set); Tasks 1-6 committed and green; Tasks 8-10
   untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-924 — The execution port IS the child port: every Task 7 wiring location is now known
+
+- **Located the seam CP-923 left open, and it is simpler than feared.** `set_down` is declared only on the runner's
+  `PickPlaceExecutionPort` protocol (`act/pick_place_runner.py:21`) and implemented only by test doubles; the single
+  production construction of the runner is `ros_child.py:525`:
+  `PickPlaceRunner(_FencedPickPlacePort(self._pick_place_port, self._act_cancelled)).run`, where
+  `self._pick_place_port` is the object `maybe_provision_pick_place_port` builds from
+  `build_pick_place_child_search_port`. So **one port object serves both the search binding and the runner's
+  execution protocol**, and `pick_place_child_port.py` - the file the plan names - is the correct place for the
+  `set_down` evidence and the artifact return. No separate execution-port module exists to find.
+- **Every Task 7 wiring location is therefore settled:**
+  1. `pick_place_child_port.py`: implement `set_down(request)` over the child's existing MuJoCo/controller readback and
+     return the sealed artifact, alongside the user's approach-route additions;
+  2. `pick_place_runner.py`: open the window at SEARCH, emit a grid sample per verified phase (riding the runner's own
+     monotonic `physics_step`), record the first gripper-open event, seal after FINAL_CHECK;
+  3. `ros_child.py:525`: construct/bind the recorder **before** `PickPlaceRunner(...)` is built, in the same place the
+     port is already in hand;
+  4. `pick_place_case_owner.py` `_retire`: close or invalid-seal an open window before the child retirement step, so
+     both `finish()` and `retire_failed_start()` are covered by one insertion;
+  5. `pick_place_case_execution.py`: read the returned `live_evidence_artifact` back before the journal row.
+- **Discipline:** six rounds of reconnaissance, **zero edits to the user's six in-flight files** (still 30 modified /
+  13 untracked, all theirs). The next round can begin editing with every location and ordering constraint known.
+- **State:** Task 7 module complete and green (37 module / 76 focused set); Tasks 1-6 committed and green; Tasks 8-10
+  untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
