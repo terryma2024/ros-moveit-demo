@@ -11947,3 +11947,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   to these formulas (the plan lists it as *Modify*), and its test module comes with that change.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-887 — Aggregator derivation layer added: per-field verdicts folded into the five checks (82 passed)
+
+- **`derived_checks(roots, contract)` added** to `task8_calibration_aggregator.py`: it folds the per-field verdicts
+  of **every** root into the aggregator's five checks, using the repository's own grouping
+  (`calibration.CHECK_MEASUREMENTS`) rather than a private list. A check passes only when every member field passes
+  on every root; any `FAIL`/`INVALID` member fails the check; and a member with **no raw record makes the check
+  `UNMEASURED`**, so an absent measurement can never be read as a pass.
+- **Verified:** formula module plus aggregator **82 passed, rc=0** (`beh-task2-green13.log`), including the new
+  test that asserts a partially evidenced `synchronization` check is `UNMEASURED` and that the derived check set is
+  exactly the aggregator's own five names - no extra names invented in the test.
+- **One test premise of mine corrected again, the same way as before:** I had asserted a `release` key that the
+  aggregator's `_CHECKS` does not contain; the assertion now checks the derived set equals the real five.
+- **Still to do for Task 2's completion:** `aggregate_task8_calibration` itself must call the derivation instead of
+  its labelled helpers (`_fov`, `_search`, `_collision`, `_execution`, which read `target_in_view`, `qualified`,
+  `contact_ok` and the four `*_ok` flags), and the older label-based fixtures in the aggregator's test module must
+  be updated to supply raw evidence - that swap and its fixture rewrite belong in one change, so I am not leaving
+  the suite half-migrated.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
