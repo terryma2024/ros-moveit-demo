@@ -21842,3 +21842,20 @@ not an inference of mine.**
   tree many times was mine to keep, and this round it was not.
 - **State:** committed with its tests green; build copy verified identical to `src/`; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1319 — P1-2's rule is in and two fixtures are strengthened; the driver fixture is the third
+
+- **What is done for P1-2:** the shared rule now checks **contents** - the inner `head_search.schema_version == 1` (the check that was
+  lost), the detector's `backend`/`weights_path`/`weights_sha256`/`model_id`/`image_size_px`/`requested_device`/`allow_cpu_fallback`,
+  the camera's frame and pixel fields, the motion's tolerance/duration fields - and **both** the binding and the descriptor rule call it,
+  so there is one complete validator. `CalibrationMeasurementContext.to_dict()` carries the descriptor, so a serialised-and-rebuilt
+  context is the same admission, and the CLI parses the context document **once** instead of reading the file twice.
+- **Fixtures are being strengthened rather than the rule weakened**, exactly as the reviewer required: the admission suite's helper now
+  builds a complete production descriptor (and its contexts are green), and the descriptor test file's round trip passes.
+- **And the third fixture is the same one-line remedy:** the **driver** suite's `_measurement_context` helper still builds the minimal
+  descriptor, so nineteen of its tests now fail my strengthened rule with `HEAD_SEARCH_CONFIG_INVALID`. Its `runtime_descriptor` literal
+  is printed above. **That is the next edit, and it is the same completion already applied twice.**
+- **The commit for P1-2 is deliberately held:** the source changes are correct and their own suites are green, but the batch is not
+  green while a sibling suite is red, and the owner's rule is to commit only when green.
+- **State:** P1-2's source and test changes uncommitted while red; three of four affected fixtures green; no stack started, no CUDA, no
+  actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
