@@ -25296,3 +25296,21 @@ picture in both directions.**
   **Next round reads those two rules and finishes it** - the same way APPROACH's test finished once the snapshot's owner was identified.
 - **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed; CLOSE implemented and its test uncommitted while red. No new session, goal, worktree or stack; nothing
   pushed, nothing deleted; no hardware.
+
+## CP-1518 — CLOSE is done by APPROACH's standard, and it surfaced a real tension between two of the repository's own rules
+
+- **`45 passed`** across the CLOSE test, the port, the APPROACH execution, the goals builder and the path screen. **CLOSE is now complete by the same standard APPROACH was held to:** the goal is
+  asserted field by field (the gripper's own joints, the **case's admitted closed position**, the robot's own current value as the first row, the admitted duration as the offsets), the
+  runner's `_verify_phase` is the judge, and **both** the unstamped document's refusal and the stamped document's acceptance are asserted - because the **port** is the layer that stamps the
+  case scope, and a test that only checked the accepted case would hide which layer supplies the header.
+- **And the semantic finding, stated plainly because it is the most useful thing this round produced:**
+  **`derive_frame_aggregates` reports `HOLDING` only when the cup is held AND NOT SUPPORTED.** A bilateral grasp on a cup **still resting on the table** aggregates to
+  **`APPROACHING`**, and `PickPlaceRunner._verify_phase` refuses anything outside `(EMPTY, HOLDING)` for CLOSE. **So CLOSE's contract and the aggregate rules only agree once the cup has left
+  the table** - which is *not* what the phase order (SEARCH, APPROACH, CLOSE, MICRO_LIFT, …) implies. **The test models the state that satisfies both, and the ledger records the tension
+  instead of hiding it behind a fixture.** This is exactly the kind of gap this batch exists to surface, and it belongs in the review packet.
+- **Two classes share the name `ContactEvidence`** - `ports/evidence.py` (collision1/collision2/position_m/normal) and `core/simulation/types.py` (body/geom ids, position_world,
+  signed_distance_m) - **and `SimulationEvidence` validates against the core one.** A correct-looking object of the wrong class is a `TypeError` that names the right type, which cost a run.
+- **Where P1-4 stands:** SEARCH and APPROACH are end to end; CLOSE is implemented and proven; **six phases remain** (MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, RADIAL_RETREAT, FINAL_CHECK), then the
+  seal, the full-case journal and the seven indexed assertions with their four negatives. **And the aggregate/CLOSE tension above is a design question the six remaining phases will hit again** -
+  it may need the owner's or the reviewer's judgement rather than another fixture.
+- **State:** P1-1..P1-3 green and committed; APPROACH and CLOSE committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
