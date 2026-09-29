@@ -30911,3 +30911,48 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   wiring plus the aggregator join remain, after which the xfail and the duplicate chain are removed together.** P1-1
   through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1812 — What the checker wiring actually requires, read from the production builder
+
+- **`pick_place_child_port.py:170-188`, in full:**
+  ```python
+  if route_motion is not None:
+      from .physics import MujocoPathProcess
+      from .pick_place_approach_path_screen import PickPlaceApproachPathScreen
+      factory = MujocoPathProcess if path_process_factory is None else path_process_factory
+      checker = factory(check_timeout_s=route_motion["submit_lead_s"], start_timeout_s=2.0,
+                        model_path=route_motion["model_path"], protected_roots=("base",),
+                        cup_joint="cup_free_joint", gripper_body="gripper",
+                        path_step_s=route_motion["path_step_s"], path_clearance_m=route_motion["path_clearance_m"],
+                        velocity_limit_rad_s=route_motion["velocity_limit_rad_s"],
+                        acceleration_limit_rad_s2=route_motion["acceleration_limit_rad_s2"])
+      if checker.model_sha256 != route_motion["model_sha256"]:
+          checker.close(); raise ValueError("APPROACH_CHECKER_MODEL_HASH_INVALID")
+      boundary.approach_screen = PickPlaceApproachPathScreen(
+          search_port=port, sources=sources, broker=command_broker, path_checker=checker, cancelled=cancelled)
+  ```
+  **So "wire the checker" is not a pass-through - it is a real integration with four requirements:**
+  1. **a path checker that is a PROCESS** (`MujocoPathProcess`), configured entirely from the admitted route-motion
+     document - timeouts, model path, protected roots, cup joint, gripper body, step, clearance and both limits;
+  2. **its model hash must equal the route motion's `model_sha256`**, or the builder refuses
+     (`APPROACH_CHECKER_MODEL_HASH_INVALID`) and closes it - **the checker cannot be pointed at a different model than
+     the one the motion was admitted against**;
+  3. **the screen is assembled onto `boundary.approach_screen`** from the port, the SOURCES, the command BROKER and a
+     cancellation token;
+  4. **which means the harness must supply production-compatible `sources` and `command_broker`**, not its
+     `_ChildSources`/`FakeBroker` - the screen consumes them, so a fake that cannot answer is a fake the screen cannot
+     use.
+- **And the builder's own comment states the reason this is not optional:** *"APPROACH's inspection authority is built
+  only when the caller supplies the ADMITTED route motion: the screen needs a path checker whose model hash matches the
+  sources', and the checker's configuration is not something this builder may invent."* **So the refusal my harness
+  meets at APPROACH is the production code declining to invent an inspection authority - which is the right behaviour,
+  and the reason P1-5 needs a real integration rather than a parameter.**
+- **And what makes it feasible here rather than speculative:** CP-1798 proved this host renders MuJoCo headless under
+  EGL, and `route_motion_configuration(manifest)` (CP-1810) derives the document from the manifest the case is already
+  frozen in - **so the inputs exist; what is missing is the harness's `sources`/`broker` being real enough for
+  `PickPlaceApproachPathScreen`, and time to run a path-checker process inside the suite.**
+- **State:** **P1-5's remaining work is now a named real integration - a `MujocoPathProcess` checker built from
+  `route_motion_configuration(manifest)`, a screen assembled from production `sources`/`broker`, then the aggregator
+  join, then the xfail and the duplicate chain removed together.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
