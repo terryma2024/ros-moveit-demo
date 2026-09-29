@@ -27312,3 +27312,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
      request and identities carry the two ids, the descriptor carries the search's start);
   2. **the contract test must stop duck-typing the context** (`type("Context", (), document)()` at line 112) and use the production type - **otherwise this defect can return unseen, which is how it survived the first time.**
 - **State:** item 1 **context half green, CLI half and the test's context type open**; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1635 — The four fields are not all context-shaped, so item 1 needs a decision rather than four more arguments
+
+- **Following the inputs to their sources, which is what the last step required, gives an answer that changes the shape of the fix:**
+  | field | where its value actually comes from |
+  | --- | --- |
+  | `calibration_report` | a **static input** - the manifest names it (`calibration_report_path`), and it is the admitted calibration document |
+  | `search_start_rad` | **derived from the anchors** - `pick_place_search_binding.py:59` builds the binding with `search_start_rad=targets.joints_rad[6]` |
+  | `session_id`, `attempt_id` | **created by the RUN** - `task8_measurement_driver.py:118` takes them from the anchor's own report: `identity = {"anchor": …, "session_id": report.get("session_id"), …, "attempt_id": report.get("attempt_id")}` |
+- **So two of the four do not exist when the CLI builds its context:** the session and attempt ids belong to a measurement run that has not happened yet, and the search start is derived from the anchors. **The CLI therefore cannot "pass them in" the way CP-1634 assumed, and
+  `_admitted_controller_config` reading them from the CONTEXT is the part that is shaped wrong** - not the CLI's omission.
+- **That makes item 1 a design decision with two honest options, and I will not pick one silently:**
+  1. **the per-run values travel from the driver into the composition** - `build_real_providers` (or the controller builder) takes the run's session/attempt ids and the anchors' search start **as arguments**, leaving the context to carry only what is static
+     (the calibration report and the descriptor);
+  2. **the entry pre-allocates the run identity at admission** - the CLI creates a session/attempt id and the search start before building the context, and the driver adopts them.
+  **Option 1 matches where the values are produced; option 2 matches the "binding originates at the entry" principle the resource binding already follows.** Both are defensible, which is why this is a question rather than an edit.
+- **And this qualifies CP-1634's commit honestly:** adding the four fields to the context **lets a caller populate them and is harmless**, but **it does not make the formal path runnable on its own**, because the CLI has nothing to put in two of them. **The commit stands as one step, not as item 1's fix**, and the entry that records item 1 as done will have to name which option was taken.
+- **State:** item 1 **context fields added, and now a decision required (above)**; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
