@@ -517,7 +517,7 @@ def _valid_evidence(contract):
     return evidence, configured
 
 
-def _v2_batch(root, contract):
+def _v2_batch(root, contract, descriptor=None):
     """A batch that is schema-true for v2: valid raw evidence in the indexed records and the 28 published entries."""
 
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
@@ -546,7 +546,8 @@ def _v2_batch(root, contract):
                       {"measurements": measurements,
                        "camera_measurements": {name: {"value": 1.0, "unit": "px"} for name in (
                            "head_intrinsics_px", "head_translation_m", "head_rpy_rad", "yaw_zero_bearing_rad")},
-                       "observed_lock_frames": {anchor: 3 for anchor in ("default", "left", "forward")}})
+                       "observed_lock_frames": {anchor: 3 for anchor in ("default", "left", "forward")},
+                       **({"head_search": descriptor} if descriptor is not None else {})})
     # one seal, carrying the valid raw evidence the comparators read and the identity the bound contract expects
     published = root / "measurements.json"
     _sealed_batch(root, {"measurements": evidence, "configured": configured}, identities,
@@ -568,13 +569,13 @@ def test_the_published_report_binds_to_a_runtime_head_search_descriptor(tmp_path
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_act_head_search_binding import _inputs
 
+    runtime = _inputs(tmp_path)[0]        # the binding fixture's first element is the runtime descriptor
     contract = json.loads(Path(bind_measurement_contract(
         TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
-    batch = _v2_batch(tmp_path / "batch", contract)
+    # the batch records the descriptor it was measured under, so the report can bind to this very runtime
+    batch = _v2_batch(tmp_path / "batch", contract, descriptor=runtime["head_search"])
     outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
     report = json.loads(Path(outputs["calibration_report"]).read_text())
     require_gate(report, "task8_live")
-
-    runtime = _inputs(tmp_path)[0]        # the binding fixture's first element is the runtime descriptor
     bound = validate_head_search_binding(runtime, report)
     assert bound is not None, "a TASK8_READY report binds to a matching runtime descriptor"
