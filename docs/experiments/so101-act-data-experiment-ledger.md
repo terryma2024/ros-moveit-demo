@@ -18249,3 +18249,43 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   The runner's own refusal is the proof that the assertions will be about real artefacts.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   remain open and independent.
+
+## CP-1154 — Consolidated state of the task, written because this session's continuation budget is nearly spent
+
+**Where the work stands, in one page, so nothing depends on chat.**
+
+- **Boundary I — complete.** The strict seal and the identity unification, with the aggregator module's twelve legacy failures
+  migrated to green rather than waived (CP-1076 → CP-1082).
+- **Boundary II — code-complete against doubles.** Launch-entry composition is written and tested with fakes; its remaining
+  item is composing the **real** adapters, which needs an authorised runtime.
+- **Boundary III — deferred by the owner.** The split between `configured` and `measured_bootstrap` inputs, and an approved
+  source for the 15 configured values, both wait on a decision; the 17 provisional values remain `null` with
+  `requires_approved_value: true`.
+- **Boundary IV — index half complete, publishing half complete, one chain missing.**
+  - *Index:* entry validation before publishing; one canonical batch shape shared by writer and validator; the contract
+    member the identity names; recomputed self-digest; the symlink rule pinned; the driver's keys accepted and contamination
+    disqualifying; anchor coverage over both conventions; phase coverage; source-time monotonicity; ten-member identity
+    agreement across roots.
+  - *Publishing:* the 28-field `TASK8_READY` in `REQUIRED_MEASUREMENTS`' units and shapes with per-group approved
+    closed-sample citations and disk-verified readback; `require_gate(report, "task8_live")` green; the report **binds** to a
+    runtime descriptor and **refuses** a mismatched one; render-twice byte-identical with a single publish; all four
+    canonical documents named by the definition, returned, and vouched for by the receipt.
+  - *Verification:* 55 + 87 + 52 + 109 + 53 + 57 targeted tests across the aggregator, contract, binding, render,
+    calibration, admission, bundle, manifest, formulas, driver and teleop suites - **no full gate**, per the owner.
+  - *The missing chain:* no production **runtime head-search descriptor** exists anywhere - the driver never writes one
+    (CP-1117), the preparation entry digests `--runtime-config` opaquely (CP-1131), and the binding has **no caller**
+    (CP-1129). **Owner decision required:** a new launch-path document, or the parsed `--runtime-config`.
+- **Boundary V — in progress, and further along than it looks.** The fake port now carries a case through **all nine phases**,
+  the set-down, the release preflight and both retreat segments of `PickPlaceRunner`, with the runner's own validators
+  accepting each step, and it stops only at `LIVE_EVIDENCE_SEAL_UNAVAILABLE` - because the evidence window is created by the
+  **child**, and the test currently drives the bare runner. **Next step, named:** route the same fake port through
+  `ros_child._run_pick_place` (its `_pick_place_port` and `_startup_proof_consumer` are the seams, CP-1139), then assert the
+  seven artefacts.
+- **Evidence root:** `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, with the re-review packet at
+  `handoffs/20260930-task7-onward/task8-boundary-iv-rereview-packet.md` (5333 bytes, sha256 `65bd4ca5…`). Retained runs and
+  deletion candidates are recorded at CP-1059 and the scratch series `r615…r761` under the root's `scratch/`; **nothing has
+  been deleted**.
+- **Two owner decisions, both restated above and neither blocking the other work:** the authoritative descriptor document,
+  and authorisation for one live stack (no hardware) for the recording half of that chain.
+- **Not claimed:** Boundary V is not finished, no live stack has been run in this stretch, no full xdist gate has been run in
+  this stretch, and no new measurement values exist.
