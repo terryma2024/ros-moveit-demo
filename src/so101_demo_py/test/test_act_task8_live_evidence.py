@@ -703,27 +703,39 @@ def test_the_window_requires_exactly_the_designs_nine_phases():
     assert LiveEvidenceWindow.REQUIRED_PHASES == V2_PHASES
 
 
-def test_every_ten_hz_row_carries_the_required_provenance():
+def _v2_sample(**overrides):
+    """Call the real builder with the real keyword-only interface."""
+
     from so101_demo.act.task8_live_evidence import build_live_evidence_sample
 
-    row = build_live_evidence_sample(identity={"session_id": "s", "reset_epoch": 1, "attempt_id": "a"},
-                                     phase="SEARCH", physics_step=0, monotonic_s=0.0,
-                                     head={"rgb_ref": "h.png", "camera_info_ref": "h.json",
-                                           "segmentation_ref": "hs.png", "depth_ref": "hd.npy"},
-                                     wrist={"rgb_ref": "w.png", "camera_info_ref": "w.json",
-                                            "segmentation_ref": "ws.png", "depth_ref": "wd.npy"},
-                                     receipts={"joint": {}, "tf": {}, "reference": {}, "physics": {}})
-    assert V2_ROW_KEYS <= set(row), sorted(V2_ROW_KEYS - set(row))
+    refs = {"head_rgb": "raw/head.png", "wrist_rgb": "raw/wrist.png",
+            "head_camera_info": "raw/head.json", "wrist_camera_info": "raw/wrist.json",
+            "head_segmentation": "raw/head-seg.png", "wrist_segmentation": "raw/wrist-seg.png",
+            "head_depth": "raw/head.npy", "wrist_depth": "raw/wrist.npy"}
+    arguments = {"identity": {"session_id": "s", "reset_epoch": 1, "attempt_id": "a"},
+                 "phase": "SEARCH", "physics_step": 0, "sim_time_s": 0.0,
+                 "source_stamps_s": {name: 0.0 for name in refs},
+                 "source_received_monotonic_s": {name: 0.0 for name in refs},
+                 "raw_records": dict(refs), "holding_state": "EMPTY",
+                 "frame": {"wrist_frame_valid": True, "wrist_target_visible": True},
+                 "contact": {"observation_valid": True}, "measurements": {}}
+    arguments.update(overrides)
+    return build_live_evidence_sample(**arguments)
 
 
-def test_the_task_camera_may_not_appear_in_act_observations():
-    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+def test_every_ten_hz_row_cites_its_raw_records_and_identity():
+    row = _v2_sample()
+    text = json.dumps(row, sort_keys=True)
+    for name in ("raw/head.png", "raw/wrist.png", "raw/head.json", "raw/wrist.json",
+                 "raw/head-seg.png", "raw/wrist-seg.png", "raw/head.npy", "raw/wrist.npy"):
+        assert name in text, name
+    assert row["phase"] == "SEARCH"
+    assert "task_camera" not in text, "the audit camera may not appear in ACT observations"
 
+
+def test_the_task_camera_is_not_an_observation_source():
     with pytest.raises(ValueError, match="TASK_CAMERA_NOT_AN_OBSERVATION"):
-        build_live_evidence_sample(identity={"session_id": "s", "reset_epoch": 1, "attempt_id": "a"},
-                                   phase="SEARCH", physics_step=0, monotonic_s=0.0,
-                                   head={"rgb_ref": "h.png"}, wrist={"rgb_ref": "w.png"},
-                                   receipts={}, task_camera={"rgb_ref": "t.png"})
+        _v2_sample(raw_records={"task_camera": "raw/task.png"})
 
 
 def _release_fixture(rows_suffix=0):
