@@ -800,3 +800,28 @@ def test_a_failed_run_invalid_seals_its_window_instead_of_sealing_evidence(recor
     assert window.invalidate("TASK8_ABORT") == result          # idempotent
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_INVALID_REASON_REQUIRED"):
         window.invalidate("")
+
+
+
+def test_the_port_binds_one_evidence_window_and_refuses_a_second():
+    """The bind is one-shot and refused once recording has begun, mirroring the startup receipt."""
+
+    from so101_demo.adapters.act.pick_place_search_port import (PickPlaceSearchPhasePort,
+                                                               PickPlaceSearchPortError)
+
+    class Window:
+        def __init__(self):
+            self.sealed = False
+
+        def seal(self):
+            self.sealed = True
+            return {"status": "SEALED"}
+
+    port = PickPlaceSearchPhasePort(_Boundary())
+    window = Window()
+    port.bind_live_evidence(window)
+    assert port.live_evidence_window is window
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_ALREADY_BOUND"):
+        port.bind_live_evidence(Window())
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_WINDOW_INVALID"):
+        PickPlaceSearchPhasePort(_Boundary()).bind_live_evidence(object())
