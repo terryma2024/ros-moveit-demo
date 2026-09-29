@@ -13790,3 +13790,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe
   interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-965 — The sealed artifact carries samples, not aggregates: the five values must be derived from the samples
+
+- **Read the recorder's seal output and the question from CP-964 is answered:** the artifact document holds
+  `identity`, `sample_count` and `samples` (each sample a dict) plus the schema wrapper - **there are no aggregate
+  fields**. So the five live-only values cannot be read off the artifact; they must be **derived from its samples**,
+  which is consistent with the design's own wording that every field is recomputed from raw evidence.
+- **Consequences for the wiring, now precise:**
+  1. `collect_live_runs(rows, *, identities, contract)` must read each of the five full rows' `live_evidence_artifact`
+     (verifying the digest against the sealed hash), then derive that run's five values **from its `samples`** -
+     the grasp-occlusion window from the legitimate gripper-occlusion stretch between CLOSE and RELEASE, the cup
+     support distance through the existing `_support_from_frames` rule over the three pre-open RELEASE samples, and
+     the three stability/distance fields from the RELEASE, RADIAL_RETREAT and FINAL_CHECK samples respectively;
+  2. the run mapping then carries `run_index`, the identity keys (`session_id` from the artifact's own identity, and
+     the contact-policy fingerprint and phase-camera matrix from the bundle identities) and the sealed
+     `sample_path`/`sample_sha256`, which is exactly what `derive_live_measurements` enforces;
+  3. the merge goes through `build_qualified_measurements`, the document is written, **read back** and passed to
+     `require_qualified(report)`.
+- **The next read, exactly one:** the sample keys inside the artifact - what a sample dict carries for occlusion,
+  signed distance, pose/velocity stability and phase stamps - so the derivation reads real field names instead of
+  assumed ones. That is the last unknown in Task 8.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation and merge
+  layers green at 27, with this derivation-from-samples step outstanding; Tasks 9-10 untouched; one approval
+  outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); the goal
+  is armed with a 756-round budget; no runtime, no package gate, no push, no evidence deleted, no hardware; formal
+  0/0/0; `collection_*` NOT_PROVISIONED.
