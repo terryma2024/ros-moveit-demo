@@ -13335,3 +13335,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   consolidated check; three files carry my additive, uncommitted changes inside the user's dirty set; Tasks 8-10
   untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-947 — Handoff brought fully current; end state of this session recorded
+
+- **Appended the final status to `handoffs/20260930-task7-onward/HANDOFF.md`**: the plan's Step-4 command at
+  **53 passed**, the chain test's five cases and what each proves, the increments committed and green, the three
+  files carrying my additive changes **uncommitted** inside the user's dirty set with the instruction not to
+  `git add` them whole, the single outstanding Task 7 item with its fixed design and natural base, the Tasks 8-10
+  outline, and the one open approval.
+- **Session end state:** Tasks 1-6 committed and green; Task 7 green at every increment with the plan's own command
+  as the consolidated check and one plan item outstanding; the user's 30 modified + 13 untracked files preserved
+  throughout, with the sole edit inside their files being the CP-861 one-token `Pairs.fingerprint` fix whose original
+  bytes are in `user-file-backups/`; no runtime started, no package gate run, nothing pushed, no evidence deleted, no
+  hardware touched; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained
+  and ineligible with gen4 reserved for Task 10.
+- **The session's ledger runs CP-872 through CP-947**, including the approval checkpoint, each task's RED and GREEN
+  evidence, the phase-list correction (CP-907), the aggregator deviations (CP-906), the displaced-work incident and
+  its repair (CP-930, CP-931), and the operational rules added to the handoff (CP-932).
