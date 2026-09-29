@@ -11148,3 +11148,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-858 — Correction to CP-856/857: the assembler exists; it is the preparation CLI
+
+- **Found the entry point that assembles the frozen identities.**
+  `cli/act_prepare_pick_place_validation.py` (reachable through the legacy alias `act_prepare_task8_live_artifacts`)
+  takes `--anchors --source --runtime-config --collection-config --policy-fingerprint --calibration-report
+  --output`, validates the anchors document (`schema_version == 1`, `measurement_experiment == "EXP-115"`,
+  exactly `{schema_version, measurement_experiment, anchors}`), then calls
+  `build_pick_place_validation_manifest(...)` with
+  `source_sha256=_digest_regular_file(--source)`, `runtime_config_sha256=_digest_regular_file(--runtime-config)`,
+  `collection_config_sha256=_digest_regular_file(--collection-config)`,
+  `contact_policy_fingerprint=--policy-fingerprint`, `calibration_report_path/sha256` from
+  `--calibration-report`, writes it with `write_new_manifest` and prints `manifest_document_sha256`.
+- **So the answer to CP-856's question is (a), not (b):** no new assembler has to be written. The digests are
+  computed from real input documents by this CLI, and its output manifest is the document whose
+  `manifest_document_sha256` the live-evidence journal rows require (`_JOURNAL_KEYS` in
+  `act/task8_live_evidence.py`).
+- **Two corrections now recorded against my own earlier claims:** CP-856 said no producer existed (it does), and
+  CP-857 said only the assembler was missing (the assembler exists too). What was genuinely missing was the
+  *knowledge of where these live* - both claims came from searching `src/` for the digest names rather than for
+  the CLI that computes them, which is the lesson worth keeping from this pair of checkpoints.
+- **One input is caller-supplied rather than computed:** `--policy-fingerprint` is a string argument, so the
+  contact-policy hash comes from the policy fingerprint computation upstream (`core/policy.py`'s
+  `TaskPolicyFingerprint` pair) and must be passed in, not invented here.
+- **Ordering question this raises, which is the user's:** the CLI consumes a `--calibration-report`, and that
+  report is itself produced by the measurement chain (`act_measure_task8_calibration` seals a batch, the
+  aggregator emits `TASK8_READY`). Either the generation is meant to reuse the earlier generation's calibration
+  report - which the plan's "earlier QUALIFIED is invalid" rule argues against - or the preparation manifest is
+  written *after* a fresh measurement, making the identities a post-measurement artefact and the measurement
+  contract's identity binding come from somewhere else. I am not choosing between those without the user.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
