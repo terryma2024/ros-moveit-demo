@@ -42,21 +42,27 @@ def provenance_env(tmp_path):
     source_root = tmp_path / "repo"
     overlay = tmp_path / "install"
     source_root.mkdir()
-    for logical_name, kind, source_rel, install_rel in runtime_role_specs():
+    dependency = tmp_path / "dependency"
+    for logical_name, kind, source_rel, install_rel, owning_overlay in runtime_role_specs():
         if kind == "external_runtime":
             continue
+        root = dependency if owning_overlay == "dependency" else overlay
         payload = f"# {logical_name}\n".encode()
         if kind == "compiled":
-            # two compiled roles may share one source file: never rewrite it, or an earlier
-            # receipt would declare an input hash that no longer matches
-            if not (source_root / source_rel).exists():
-                _write(source_root / source_rel, payload)
-            installed = _write(overlay / install_rel, payload + b"binary\n")
+            # a compiled role's source may be a directory (its package's source root), so plant one real file
+            source_path = source_root / source_rel
+            if source_path.suffix:
+                if not source_path.exists():
+                    _write(source_path, payload)
+            else:
+                source_path = source_path / f"{logical_name}_source.cpp"
+                _write(source_path, payload)
+            installed = _write(root / install_rel, payload + b"binary\n")
             _write(Path(str(installed) + ".build-receipt.json"),
-                   json.dumps(_receipt(installed, source_rel, source_root)).encode())
+                   json.dumps(_receipt(installed, str(source_path.relative_to(source_root)), source_root)).encode())
         else:
             _write(source_root / source_rel, payload)
-            _write(overlay / install_rel, payload)
+            _write(root / install_rel, payload)
     subprocess.run(["git", "init", "-q"], cwd=source_root, check=True)
     subprocess.run(["git", "-c", "user.email=t@example.com", "-c", "user.name=t",
                     "add", "-A"], cwd=source_root, check=True)
@@ -68,7 +74,8 @@ def provenance_env(tmp_path):
 
 
 def _document(source_root, overlay, head):
-    return build_source_provenance(source_root, overlay, calibration_identity=(head, "b" * 64))
+    return build_source_provenance(source_root, overlay, calibration_identity=(head, "b" * 64),
+                                   dependency_overlay=source_root.parent / "dependency")
 
 
 def test_provenance_rejects_changed_controlled_source(provenance_env):
@@ -77,7 +84,7 @@ def test_provenance_rejects_changed_controlled_source(provenance_env):
     controlled = source_root / runtime_role_specs()[0][2]
     controlled.write_bytes(controlled.read_bytes() + b"\n")
     with pytest.raises(ValueError, match="SOURCE_PROVENANCE_DIRTY"):
-        verify_source_provenance(document, source_root=source_root, install_overlay=overlay)
+        verify_source_provenance(document, source_root=source_root, install_overlay=overlay, dependency_overlay=source_root.parent / "dependency")
 
 
 def test_provenance_requires_every_registered_role(provenance_env):
@@ -88,10 +95,10 @@ def test_provenance_requires_every_registered_role(provenance_env):
         spec[0] for spec in runtime_role_specs())
     with pytest.raises(ValueError):
         verify_source_provenance(dict(document, runtime_roles=roles[1:]),
-                                 source_root=source_root, install_overlay=overlay)
+                                 source_root=source_root, install_overlay=overlay, dependency_overlay=source_root.parent / "dependency")
     with pytest.raises(ValueError):
         verify_source_provenance(dict(document, runtime_roles=[roles[0], *roles]),
-                                 source_root=source_root, install_overlay=overlay)
+                                 source_root=source_root, install_overlay=overlay, dependency_overlay=source_root.parent / "dependency")
 
 
 def test_provenance_rejects_verbatim_install_byte_mismatch(provenance_env):
@@ -103,7 +110,7 @@ def test_provenance_rejects_verbatim_install_byte_mismatch(provenance_env):
     installed = Path(verbatim[0]["installed_path"])
     installed.write_bytes(installed.read_bytes() + b"\n")
     with pytest.raises(ValueError):
-        verify_source_provenance(document, source_root=source_root, install_overlay=overlay)
+        verify_source_provenance(document, source_root=source_root, install_overlay=overlay, dependency_overlay=source_root.parent / "dependency")
 
 
 def test_provenance_rejects_incomplete_compiled_receipt(provenance_env):
@@ -117,13 +124,13 @@ def test_provenance_rejects_incomplete_compiled_receipt(provenance_env):
             role.pop("build_receipt_path")
             break
     with pytest.raises(ValueError):
-        verify_source_provenance(broken, source_root=source_root, install_overlay=overlay)
+        verify_source_provenance(broken, source_root=source_root, install_overlay=overlay, dependency_overlay=source_root.parent / "dependency")
     receipt = Path(compiled[0]["build_receipt_path"])
     payload = json.loads(receipt.read_bytes())
     payload["compiler"] = ""
     receipt.write_bytes(json.dumps(payload).encode())
     with pytest.raises(ValueError):
-        verify_source_provenance(document, source_root=source_root, install_overlay=overlay)
+        verify_source_provenance(document, source_root=source_root, install_overlay=overlay, dependency_overlay=source_root.parent / "dependency")
 
 
 def test_provenance_is_canonical_and_deterministic(provenance_env, tmp_path):
@@ -145,8 +152,8 @@ def test_provenance_rejects_extra_fields_and_role_shape(provenance_env):
     document = _document(source_root, overlay, head)
     with pytest.raises(ValueError):
         verify_source_provenance(dict(document, unexpected=1),
-                                 source_root=source_root, install_overlay=overlay)
+                                 source_root=source_root, install_overlay=overlay, dependency_overlay=source_root.parent / "dependency")
     broken = json.loads(json.dumps(document))
     broken["runtime_roles"][0].pop("logical_name")
     with pytest.raises(ValueError):
-        verify_source_provenance(broken, source_root=source_root, install_overlay=overlay)
+        verify_source_provenance(broken, source_root=source_root, install_overlay=overlay, dependency_overlay=source_root.parent / "dependency")
