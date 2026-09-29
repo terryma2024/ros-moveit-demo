@@ -23168,3 +23168,17 @@ not an inference of mine.**
   and absent an answer I continue, because continuing is what the current instruction says.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1398 — The corrected probe: every visible value is consistent, and one line aborted before the last unknown
+
+- **Data, from the probe:** 129 rows read (the deliberate retry skipped), final step **129**, sim time **2.256**, `paused is False`,
+  `truncated is False`, body `plastic_cup`, so the timestamp range check (`0 <= 2.0 <= 2.256`) holds as well.
+- **And it aborted one line later, on my own probe's mistake:** `_ChildSources` has no attribute `reset` - the reset lives on `_Boundary`, not on
+  the sources - so `world.reset_epoch` against `reset.receipt.new_epoch` never printed. **That comparison is the last unprobed condition in the
+  scope check, and it is one line to confirm.**
+- **The honest read of this stretch, stated once more and then not again:** the scope check has absorbed five rounds of one-line contract
+  satisfaction, every one of which was a real fixture gap that production correctly refused, and its **case-level half remains untouched with about
+  thirty-six rounds left**. **My recommendation to stop the tail and submit items 1-4 with P1-5 documented stands; absent a decision I continue, and
+  the next action is that one-line epoch confirmation.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
