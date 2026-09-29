@@ -30296,3 +30296,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-2's chain now runs end to end (report + documents + recomputed verdicts + pending fields UNMEASURED)
   with one over-broad guard left to narrow.** P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean
   re-measurement; P1-4, P1-5, P1-6 remain.
+
+## CP-1791 — Three fixes in, and a wider break whose cause is not yet identified
+
+- **What was changed this round, each for a reason read from the code:**
+  | change | why |
+  | --- | --- |
+  | `DOCUMENT_EVIDENCE_FIELDS += ("horizontal_fov_rad",)` | `_f_horizontal_fov_rad` reads `evidence["frames"]`, so it belongs to the document family, not the list family |
+  | the driver emits `measurements["horizontal_fov_rad"] = {"frames": [{fx, cx, width, accepted}]}` | the formula derives the angle per frame from `fx`, `cx` and the width - so the evidence is the camera's intrinsics, not a pre-computed number |
+  | the aggregator's guard keys on `contract[section][field].get("threshold_source") == "config"` | CP-1790: only a **config-sourced** threshold that is absent means "not approved"; the FOV field sources its threshold from the model |
+- **And the result is a wider break than the RED it was meant to close:**
+  ```
+  20 failed, 35 passed      over the identity-contract, aggregator and measurement-driver files
+      test_act_task8_measurement_driver.py::…  ValueError: HEAD_SEARCH_CONFIG_INVALID   (and 19 more)
+  ```
+  **`HEAD_SEARCH_CONFIG_INVALID` is a name I have not seen in this work**, and it is not obviously traceable to any of the three edits above - so rather than guess, the honest state is: **these tests were green in the eleven-suite run (151 passed, CP-1729), they are red now, and the next round reads that refusal's source before changing anything else.**
+- **And the RED itself still fails**, so the round's intended outcome was not reached either; the two facts are recorded together rather than the wider break being hidden behind "the RED is closer".
+- **State:** **P1-2 in progress with three targeted fixes in and an unidentified wider break; nothing is being committed as green.** P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.

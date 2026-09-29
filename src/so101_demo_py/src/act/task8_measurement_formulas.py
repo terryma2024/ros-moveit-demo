@@ -164,7 +164,7 @@ def _limit(raw: dict, field: str):
 #: list. P1-2 (rereview 5) needed this because a driver cannot present one shape for both families; the tuple is
 #: asserted against the formulas' own behaviour by `test_act_task8_measurement_formulas_shapes.py`, so it is a
 #: declaration that cannot drift from the code it describes.
-DOCUMENT_EVIDENCE_FIELDS = ("center_deadband_px",)
+DOCUMENT_EVIDENCE_FIELDS = ("center_deadband_px", "horizontal_fov_rad")   # both read `evidence[...]`, not a list
 
 
 def _evidence(raw: dict, field: str):
