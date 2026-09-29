@@ -22276,3 +22276,24 @@ not an inference of mine.**
   rows in one release epoch, SEARCH and FINAL_CHECK, both retirement receipts, and the artifact/journal digests.
 - **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
   nothing pushed.
+
+## CP-1344 — The production port is found, and its real seal differs from the fake exactly where the reviewer said
+
+- **The real implementation:** `src/so101_demo_py/src/adapters/act/pick_place_search_port.py:22`
+  **`PickPlaceSearchPhasePort`**, constructed as
+  `PickPlaceSearchPhasePort(boundary, *, expert_route_factory=None, evidence_recorder=None, live_evidence_window=None)`,
+  whose constructor validates that the boundary offers `begin`, `search`, `safe_stop` and a `neck_sweep_checker.check` - i.e. **exactly the
+  ROS/MuJoCo surface a test may replace** - and whose `seal_live_evidence(request)`:
+  1. requires an attached recorder with a callable `seal` (else `LIVE_EVIDENCE_SEAL_UNAVAILABLE`),
+  2. builds the identity from **the request's own `reset_epoch` and `release_epoch`**,
+  3. **seals the window first** - "a window that cannot be sealed must not leave a sealed recorder behind" - and then the recorder.
+- **And that is precisely where the fake differs:** the chain test's monkeypatched seal takes the two epochs from **`self.reset_epoch` /
+  `self.release_epoch`** - port attributes its own fixture set - while the production code takes them from the **request**. **That is the
+  "old release-event" problem the reviewer says remains**, and it is a real correctness difference, not a stylistic one: an epoch asserted
+  from a fixture's attribute can never catch a request that carries the wrong one.
+- **So P1-5's GREEN has a definite shape:** build the **production `PickPlaceSearchPhasePort`** with a substitute boundary (the sanctioned I/O
+  seam), the child's **real recorder** and the **real window**, drive `run_pick_place_case()`, let the real case and campaign write their
+  journal, feed that journal to the **trusted aggregator**, and assert the seven indexed items from the records - with the negatives the
+  reviewer lists (missing row, wrong epoch, missing receipt, tamper preventing qualification).
+- **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
+  nothing pushed.
