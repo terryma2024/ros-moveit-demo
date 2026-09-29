@@ -18041,3 +18041,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   hash.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   remain open and independent of this piece.
+
+## CP-1144 — The runner validates what the port returns, and the first test named the two contracts it wants
+
+- **The test is in its right home and it runs:** `src/so101_teleop/test/teleop/test_task8_case_runner_chain.py`, written
+  this round against CP-1141's port table, executes and fails on **two named contracts** rather than on an import or a
+  fixture error:
+  | error | meaning |
+  | --- | --- |
+  | `PickPlaceError: BEGIN_EVIDENCE_INVALID` | `begin(request)`'s return is **validated**, so `{"anchor": "default"}` is not an acceptable beginning - the runner wants a specific shape |
+  | `PickPlaceError: STOP_NOT_CONFIRMED` | the completion path checks that the stop was **confirmed**, so the fake must return whatever the runner treats as confirmation rather than a plausible-looking dict |
+- **Why this is good news rather than friction:** those two checks are the runner refusing to be driven by a stub that
+  answers loosely - the same fail-closed posture as the child's hash and startup guardrails (CP-1139). A fake port that
+  satisfies them is provably producing what the production code demands, which is exactly the property Boundary V's
+  assertions need in order to mean anything.
+- **The next read is small and named:** `PickPlaceError`'s two conditions in `pick_place_runner.py` - what a valid
+  beginning must carry, and what counts as a confirmed stop - and then the fake answers both. No production change is
+  implied by either error.
+- **State:** the new test currently fails by design (it is the RED), and the pre-existing suites are untouched: the teleop
+  production-chain and case-execution files were **16 passed** at CP-1143 and nothing has changed them. No full suite,
+  nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions remain open and independent.
