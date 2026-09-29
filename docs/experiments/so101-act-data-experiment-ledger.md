@@ -23570,3 +23570,15 @@ not an inference of mine.**
   and the key rules at CP-1419 are already known-good against it.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1424 — The attach is CONDITIONAL on `_act_artifacts`, and that is why no recorder was ever bound
+
+- **The child's code, uncut:** `artifacts = getattr(self, "_act_artifacts", None)` and
+  `if artifacts is not None and callable(attach):` - **the whole evidence attach is skipped when the child holds no artifacts**, and my fixture
+  never saw a recorder because of it. **`_act_artifacts` is the binding the child was constructed with** (its own use sites are printed above), and
+  my fixture builds a real `ActArtifactBinding` but evidently does not hand it to the child in the form that populates this attribute.
+- **So the last structural fix is a constructor argument, not a wiring change:** pass the binding the child expects, and the existing
+  `bind_live_evidence` override will receive the real window, the sample recipe at CP-1415 will record against the real recorder, and the seal will
+  have the evidence it demands. **Every downstream piece is already built and already proven against a fresh recorder (CP-1420).**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
