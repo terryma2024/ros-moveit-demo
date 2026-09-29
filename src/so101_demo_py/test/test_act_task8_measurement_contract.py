@@ -200,3 +200,36 @@ def test_closing_a_batch_refuses_an_identity_that_is_not_the_contract_identity(t
         close_measurement_batch(batch, two_key)
     with pytest.raises(ValueError, match="MEASUREMENT_CONTRACT_IDENTITY_INVALID"):
         require_v2_identity(two_key)
+
+
+def test_the_measurement_cli_requires_a_context_document_separate_from_the_identity(tmp_path):
+    """Boundary I: runtime/admission inputs belong to a context document, not to the identity mapping.
+
+    Today the CLI reads ``measurement_plan_sha256``, ``safe_interval_rad``, ``candidate_sha256``, ``policy_sha256``,
+    ``controller_generation``, ``broker_generation`` and ``resource_binding`` out of the identities file, so a document
+    that carries only the contract's ten identity members fails with a bare ``KeyError`` instead of a named refusal.
+    """
+
+    from so101_demo.cli.act_measure_task8_calibration import main
+
+    # a bound v2 contract plus an identities file carrying exactly the contract's ten identity members, so the run
+    # reaches the context boundary instead of stopping at an unbound template or a missing file
+    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, KIND, SCHEMA_VERSION_V2,
+                                                          _contract_sha256)
+
+    identities = {name: "a" * 64 for name in IDENTITIES_V2}
+    identities["source_commit"] = "0" * 40
+    document = {"schema_version": SCHEMA_VERSION_V2, "kind": KIND, "identities": identities,
+                "source_hashes": {"anchors": "b" * 64}, "bound_files": {"anchors": "config/act/anchors.yaml"},
+                "measurements": {}, "support": {}}
+    document["contract_sha256"] = _contract_sha256(document)
+    contract_path = tmp_path / "contract.json"
+    contract_path.write_text(json.dumps(document))
+    identities_path = tmp_path / "identities.json"
+    identities_path.write_text(json.dumps(identities))
+    argv = ["--contract", str(contract_path),
+            "--identities", str(identities_path),
+            "--batch-root", str(tmp_path / "batch"),
+            "--ledger", str(tmp_path / "ledger.md")]
+    with pytest.raises(ValueError, match="MEASUREMENT_CONTEXT_REQUIRED"):
+        main(argv)
