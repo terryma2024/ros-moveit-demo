@@ -31530,3 +31530,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress with the faithful branch's three fixtures read to the line; applying them in the
   full-case harness is the next edit.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final
   gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1831 — The harness accepts a production broker, with no behaviour change for its existing callers
+
+- **The edit (`test_task8_child_driven_case.py`):**
+  ```python
+  def _prepare_child_case(tmp_path, monkeypatch, *, case_id="case-05", campaign_id="campaign-item5",
+                          expert_route_factory=None, route_motion=None, broker=None, …):
+      …
+      # P1-5: the broker is the ROS/process seam, and *"external I/O may be substituted, but the chain may not"* - so a
+      # caller that has the PRODUCTION broker (WITH its `prefix_source_port`, which APPROACH's admission reads as an
+      # `isinstance`) passes it here; the default stays the stand-in the prefix cases have always used.
+      if broker is None:
+          broker = FakeBroker()
+      child = RclpyActionDriver(pick_place_port=port, owner=owner, broker=broker, act_hashes=bound_hashes, …)
+  ```
+  **Evidence it changed nothing for the existing callers: `7 passed`** across the child-driven suite, and the prefix
+  cases still build with `FakeBroker()` because that is the default.
+- **And it closes the last structural gap between the harness and the faithful branch:** with the production broker
+  passed in, that broker **is** what `build_bound_act_broker` installed the trusted source port on - **so `reset.broker`
+  is the object `begin`'s `isinstance(reset.broker._prefix_source_port, TrustedVisibleApproachSourcePort)` is asking
+  about, and the answer becomes yes because the production composition root said so, not because a fake was taught to
+  answer yes.**
+- **So the remaining edit is one construction**, and every one of its inputs is now accounted for:
+  | the broker's input | where the full-case module gets it |
+  | --- | --- |
+  | `reservation_port` | `_real_client(roles)` over `_AckServer`s - the gate-6 fixtures (CP-1830), reused via the harness's own `sys.path` convention (CP-1829) |
+  | `history`, `admission`, `registry` | `_domain()`, the same file's doubles, which that file's own test shows are what production accepts |
+  | `driver` | the substituted ROS driver (external I/O) |
+  | `ownership`, `roles`, `session_id`, `prefix_source_authority`, `prefix_source_port` | `Ownership()`, the case's roles/session, and `TrustedVisibleApproachSourcePort()` as `ros_child.py:265` builds it |
+- **State:** **P1-5 in progress; the harness is ready to receive the production broker and the construction is fully
+  specified.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review
+  packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
