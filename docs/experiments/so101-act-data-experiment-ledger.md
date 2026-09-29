@@ -29066,3 +29066,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | a complete journal | `completed_phases` covering the runner's whole list |
 - **And a boundary worth stating so the work does not drift:** Task 8P4's `derive_live_measurements(full_runs, contract)` **requires exactly five sealed independent FULL runs** (`FIVE_RUNS_REQUIRED`) - so **the five-run aggregation is a campaign-level operation, not a single case's.** P1-5's sentence asks for **one** case that emits and is **consumed**; the single-case consumer that exists is `validate_case_journals` (the reader the qualification layer uses), and the four facts above are readable from that one case's artifact and journal. **The five-run path remains a Task 8P4 concern and is not to be simulated here with fixtures.**
 - **State:** **P1-5's second half is now specified as: the joined case → `validate_case_journals` → assert the four named facts from the case's own artifact and journal; then the four negatives by corrupting that same baseline**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1735 — The qualification reader answers with its OWN refusal name, which is the join being real
+
+- **The extended test, two cases, one passing and one failing at the reader:**
+  ```
+  1 failed, 1 passed
+  task8_live_qualification.py:32: ValueError: TASK8_QUALIFICATION_JOURNAL_MISSING
+  ```
+  **The chain itself works** - the production runner sealed, the production entry published, the row carries both receipts - **and what fails now is the qualification layer's own reader saying it cannot find the case's row where the campaign writes it.** That is the correct kind of failure for this work: **not my assertion, but the trusted reader's name.**
+- **Two fixture facts learned on the way, both of them the fixture's own rules working:** `write_new_manifest` refuses to overwrite (`FileExistsError`), so the manifest must be **read back** rather than rebuilt; and the row's file name under `case_root/"task8-live"/"cases"` is the **campaign's** case id (`require_campaign_cases(manifest)`), not the one this test picked.
+- **The next read is one function:** `validate_case_journals` (`task8_live_qualification.py:109`) - its path rule and the ids it walks - so the row is placed where it looks, rather than the test guessing a second time.
+- **State:** **P1-5's first half passing, its second half reaching the trusted reader and refused by that reader's own name; the four facts' assertions are written but not yet reached**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.

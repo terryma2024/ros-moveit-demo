@@ -138,3 +138,58 @@ def test_the_production_runner_seals_and_the_production_entry_publishes_its_row(
     assert hashlib.sha256(Path(row["live_evidence_path"]).read_bytes()).hexdigest() == row["live_evidence_sha256"]
     assert row["stack_receipt_sha256"] != "0" * 64 and row["child_receipt_sha256"] != "0" * 64
     assert index["samples"], "the sealed index carries samples"
+
+
+def test_the_qualification_reader_accepts_this_case_and_its_four_facts_hold(tmp_path):
+    """P1-5's four facts, read from the case this chain produced - by the qualification layer's own reader.
+
+    The verdict names them: the requested command event, adjacent support rows, two retirement receipts, and a
+    complete journal. They are properties of ONE case, and this one is the case whose artifact the production runner
+    sealed and whose row the production entry published.
+    """
+
+    from so101_demo.act.task8_live_evidence import require_campaign_cases
+    from so101_demo.act.task8_live_qualification import validate_case_journals
+
+    row, index, artifact_path, root = _joined_case(tmp_path)
+    # the manifest is READ BACK, not rebuilt: `_joined_case` already wrote it with `write_new_manifest`, which refuses
+    # to overwrite (FileExistsError) - the fixture's own rule, and the right one for a frozen document
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    identities = {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                  "contact_policy_fingerprint": manifest["contact_policy_fingerprint"]}
+
+    # the reader walks the campaign's case ids and demands each one's row where the campaign writes it
+    required = tuple(require_campaign_cases(manifest))
+    assert CASE_ID in required, "the frozen manifest names this case"
+    cases = tmp_path / "campaign" / "task8-live" / "cases"
+    cases.mkdir(parents=True, exist_ok=True)
+    (cases / f"{CASE_ID}.json").write_text(json.dumps(row, sort_keys=True))
+
+    # and it accepts this case: the reader is the qualification layer's, not my own expectation
+    validated = validate_case_journals(tmp_path / "campaign", manifest, identities=identities,
+                                       manifest_document_sha256=digest)
+    assert validated, "the qualification reader returned the case rows it accepted"
+
+    # FACT 1 - the requested command event: the artifact records the edge, and says WHICH edge it is
+    records = [json.loads((artifact_path.parent / entry["relative_path"]).read_bytes())
+               for entry in index["samples"]]
+    reasons = [reason for record in records for reason in (record.get("event_reasons") or ())]
+    assert "command" in reasons, f"the case records the moment the gripper was told to open: {sorted(set(reasons))}"
+
+    # FACT 2 - adjacent support rows: the support decision is recorded sample by sample, in order
+    support = [record.get("cup_supported") for record in records]
+    assert len(support) == len(records) and all(value is not None for value in support), (
+        "every recorded sample carries the support decision, so the rows are adjacent rather than sampled apart")
+
+    # FACT 3 - two retirement receipts, named by the row and readable from disk
+    assert row["stack_receipt_sha256"] != row["child_receipt_sha256"], "two distinct receipts"
+    for key in ("stack_retirement_receipt_path", "child_retirement_receipt_path"):
+        receipt = Path(row[key])
+        assert receipt.is_file(), f"the row names a receipt that exists: {key}"
+        assert hashlib.sha256(receipt.read_bytes()).hexdigest() == row[
+            "stack_receipt_sha256" if key.startswith("stack") else "child_receipt_sha256"]
+
+    # FACT 4 - a complete journal: every phase the runner has, in the runner's own order
+    assert row["completed_phases"] == list(PickPlaceRunner.PHASES), "the journal is complete, not a prefix of it"
