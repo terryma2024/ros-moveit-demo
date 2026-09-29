@@ -101,19 +101,47 @@ def _approach_authority(*, session_id: str, attempt_id: str) -> dict:
     return {"manifest": manifest, "motion": motion, "checker": checker, "factory": factory}
 
 
-def _mount_approach_screen(port, authority) -> None:
-    """Mount the screen on the port, with sources bound to the checker's model - the two-phase rule."""
+class _ContactPairs:
+    """The three members the port reads off `sources.contact_pairs` - `model_sha256` (352), `fingerprint` (216),
+    `for_phase` (360) - from the admitted documents rather than invented."""
+
+    def __init__(self, *, model_sha256: str, fingerprint: str, pairs_by_phase: dict):
+        self.model_sha256 = model_sha256
+        self.fingerprint = fingerprint
+        self._pairs_by_phase = dict(pairs_by_phase)
+
+    def for_phase(self, phase):
+        return self._pairs_by_phase.get(phase, frozenset())
+
+
+def _mount_approach_screen(port, authority, *, live_manifest, session_id) -> None:
+    """Mount the screen AND expose the boundary structure the port's own admission reads.
+
+    `begin` reads `boundary.reset.manifest` - the frozen case list and `contact_policy_fingerprint` - and compares that
+    fingerprint with `reset.sources.contact_pairs.fingerprint`, while the screen's coherence check needs the same
+    object's `model_sha256`. Three readers, one object: CP-1823.
+    """
 
     import threading
 
     from so101_demo.adapters.act.pick_place_approach_path_screen import PickPlaceApproachPathScreen
+    from so101_demo.adapters.act.pick_place_child_port import checker_pairs_by_phase
 
+    pairs_by_phase = checker_pairs_by_phase(authority["motion"])
+    contact_pairs = _ContactPairs(model_sha256=authority["checker"].model_sha256,
+                                  fingerprint=live_manifest["contact_policy_fingerprint"],
+                                  pairs_by_phase=pairs_by_phase)
     boundary = port.boundary
-    boundary.contact_pairs = SimpleNamespace(model_sha256=authority["checker"].model_sha256)
+    # `bind_startup_receipt` reads `sources.session_id` (search_port.py:142) - the port binds the receipt to the
+    # SOURCES' session, so the sources must name the session the case runs
+    sources = SimpleNamespace(contact_pairs=contact_pairs, session_id=session_id,
+                              capture=lambda *args, **kwargs: {"rows": list(getattr(boundary, "rows", []))})
+    # `begin` also reads `reset.broker` (search_port.py:220), the command surface beside the sources
+    broker = getattr(boundary, "broker", None) or getattr(port, "broker", None) or SimpleNamespace()
+    boundary.reset = SimpleNamespace(manifest=live_manifest, sources=sources, broker=broker)
+    boundary.contact_pairs = contact_pairs
     if not callable(getattr(boundary, "capture", None)):
-        # the screen reads fresh measurements through `sources.capture`, which the PRODUCTION boundary provides; this
-        # harness's boundary is the ROS/MuJoCo/controller surface, so the capture it offers is the one it already has
-        boundary.capture = lambda *args, **kwargs: {"rows": list(getattr(boundary, "rows", []))}
+        boundary.capture = sources.capture
     port.approach_screen = PickPlaceApproachPathScreen(
         search_port=port, sources=boundary, broker=boundary, path_checker=authority["checker"],
         cancelled=threading.Event())
@@ -142,7 +170,8 @@ def test_the_joined_chain_carries_the_sealed_artifact_a_full_case_produces(tmp_p
         evidence, monkeypatch, case_id="full-01", session_id="session-298",
         attempt_id="full-01", campaign_id="case-298",
         expert_route_factory=authority["factory"], route_motion=authority["motion"])
-    _mount_approach_screen(port, authority)
+    live_manifest = json.loads(Path(spec.payload["manifest_path"]).read_bytes())
+    _mount_approach_screen(port, authority, live_manifest=live_manifest, session_id="session-298")
 
     # the fixture builds a PHASE request; a full case is the same request with the full-case operation and no
     # `stop_after` - which is the rule the worker port itself applies (`bridge.py:266`: `mode == "full" and

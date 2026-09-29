@@ -31310,3 +31310,42 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `reset.sources.contact_pairs.{fingerprint, model_sha256, for_phase}`.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1824 — The full case's next requirement is a production collaborator, and it is named
+
+- **`begin` got past the manifest/fingerprint admission and now asks for something the harness cannot stub away**
+  (`pick_place_search_port.py:218-227`):
+  ```python
+  if (matching[0]["anchor"] == "default" and request.get("stop_after") != "SEARCH"):
+      if not isinstance(reset.broker._prefix_source_port, TrustedVisibleApproachSourcePort):
+          raise ValueError("expert source unavailable")
+      self._expert_route = self._expert_route_factory(request)
+      if (not isinstance(self._expert_route, VisibleApproachExpertRoute)
+              or self._expert_route.manifest["policy_fingerprint"] != manifest["contact_policy_fingerprint"]):
+          raise …
+  ```
+  **So a full case on the `default` anchor requires `reset.broker._prefix_source_port` to BE a
+  `TrustedVisibleApproachSourcePort`** - an `isinstance` check, not a duck-typed one - **and the route the factory
+  builds must be a real `VisibleApproachExpertRoute` whose fingerprint equals the case manifest's
+  `contact_policy_fingerprint`.**
+- **And the fingerprints already line up**, which is worth recording because it means the remaining gap is one object
+  rather than two values: the hand-built factory uses `_POLICY_FINGERPRINT = "d" * 64`, and the live manifest
+  `_prepared` writes carries `contact_policy_fingerprint="d" * 64`. **The admission would accept the route; what it will
+  not accept is a broker without a trusted source port.**
+- **So the drive's convergence is now explicit, and it has been converging by named refusal at every step:**
+  | the refusal | what it asked for | state |
+  | --- | --- | --- |
+  | `TASK8_PHASE_NOT_PROVISIONED: APPROACH: expert_route` | an expert route factory on the port | **done**, CP-1811 |
+  | `MujocoPathChecker … allowed_pairs_by_phase` | the checker's required argument, from the admitted document | **done**, CP-1815 |
+  | `PICK_PLACE_APPROACH_SCREEN_CONFIG_INVALID` | sources bound to the checker's model | **done**, CP-1823/1824 |
+  | `'SimpleNamespace' object has no attribute 'manifest'` | `boundary.reset.manifest` | **done** |
+  | `… has no attribute 'session_id'` | `sources.session_id` for the receipt binding | **done** |
+  | `… has no attribute 'broker'` | `reset.broker` | **done** |
+  | `… has no attribute '_prefix_source_port'` | **a real `TrustedVisibleApproachSourcePort` on the broker** | **next** |
+  **Every one of those is the production code stating its own contract**, which is why the work has been able to
+  proceed without guessing - and why the next step is to build the trusted source port the broker is supposed to hold
+  rather than to loosen the check.
+- **State:** **P1-5 in progress: the authority is mounted, the run reaches `begin`, and the one remaining requirement is
+  a production collaborator - a `TrustedVisibleApproachSourcePort` where the broker expects it.** P1-1 through P1-4
+  CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
+  statuses are unchanged, so they are not re-stated.**
