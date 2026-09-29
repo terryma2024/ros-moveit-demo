@@ -31144,3 +31144,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress, its capability complete and evidenced; the full-case drive is next.** P1-1 through P1-4
   CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1819 — The whole APPROACH authority assembles, and it is necessarily a two-phase mount
+
+- **`assemble_approach_authority(*, port, sources, broker, cancelled, manifest, path_process_factory=None)`** now
+  performs, in one place, exactly what `build_pick_place_child_search_port` does: it derives the document with
+  `route_motion_configuration(manifest)`, builds the `MujocoPathProcess` checker with the admitted per-phase pairs
+  (`checker_pairs_by_phase`, CP-1816), and mounts the `PickPlaceApproachPathScreen` **on the port** - production's own
+  `search_port=port`. **Nothing in it is invented**; every value comes from the document or the caller's sources.
+- **And running it produced a fact worth recording, because the test asserts it rather than working around it:**
+  ```
+  5 passed      test_act_task8_approach_checker_wiring.py
+  the FIRST call with placeholder sources is refused: PICK_PLACE_APPROACH_SCREEN_CONFIG_INVALID
+  ```
+  **`sources.contact_pairs.model_sha256` must equal the checker's - and the checker's hash is only knowable AFTER the
+  checker has started**, since it comes from the compiled model rather than from the document alone (the document's
+  `model_sha256` is what the builder then *verifies* against, with `APPROACH_CHECKER_MODEL_HASH_INVALID`). **So mounting
+  the authority is necessarily two-phase:**
+  1. build the checker from the admitted document;
+  2. learn `checker.model_sha256`, bind the sources' `contact_pairs` to it, and only then mount the screen.
+  **The harness cannot collapse those steps, and neither does production** - which is why this is a property of the
+  design rather than an inconvenience of the test.
+- **Two smaller corrections the run forced, both about keeping suites separate rather than coupling them:**
+  * the assembly test lives in `so101_demo_py`'s suite and **must not import the teleop suite's `_Boundary`** - it now
+    defines the four callables `PickPlaceSearchPhasePort` validates (`begin`, `search`, `safe_stop`,
+    `neck_sweep_checker.check`), because **one package's tests depending on another's internals is how two chains become
+    one**;
+  * the authority is mounted on the **port**, not on the boundary - production's `search_port=port`, and the port is what
+    carries the boundary.
+- **State:** **P1-5's capability is assembled and asserted end to end: checker from the admitted document, expert-route
+  factory available, screen mounted on the port, incoherent sources refused.** What remains is the drive itself -
+  `run_pick_place_case` through a full case with this authority - then the aggregator join, then the xfail and the
+  duplicate chain removed together. P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate
+  and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
