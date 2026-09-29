@@ -17974,3 +17974,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   and no work is lost.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   remain open and independent.
+
+## CP-1141 — Boundary V's fake port spec is now complete
+
+- **The runner's side of the seam, read from `pick_place_runner.py`:** `PickPlaceRunner.__init__(port, *, clock_ns=...)`
+  takes the port and `run(request)` drives it through the case. The methods the port must provide, in the order a case
+  reaches them:
+  | method | used at | expectation |
+  | --- | --- | --- |
+  | `begin(request)` | `run` line 193 | returns the case's beginning, which the evidence window's epoch is bound from |
+  | `run_phase(phase, request)` | line 226 | one nine-phase row per call, for `Task8Runner.PHASES` |
+  | `run_retreat_segment(direction, distance_m, request)` | line 221 | the RADIAL_RETREAT segment |
+  | `set_down(request)` | line 143 | evidence for the release |
+  | `release_preflight(request)` | line 161 | the pre-release check |
+  | `detach_moveit(request)` | line 172 | **must return `True`** |
+  | `planning_attached(request)` | line 174 | **must return `False`** |
+  | `safe_stop(reason, request)` | line 180 | only reached on the stop path |
+  plus the two the child binds first, `bind_startup_receipt(receipt)` and `bind_live_evidence(window)` (CP-1140).
+- **Together with CP-1139 and CP-1140 that is the complete specification of Boundary V's fixture:** construct the child with
+  this fake port and a startup consumer, admit the case through the real composition, run it, and assert the seven artefacts -
+  SEARCH rows from the real path, the release open event, three adjacent 10 Hz support rows in one epoch, FINAL_CHECK, the
+  sealed artifact read back, the confirmed retirement, and the journal path and hash.
+- **What is deliberately not simplified:** the hashes, the deadline and the single-startup rule stay real, so a fixture that
+  reaches the assertions proves the admission and binding code actually ran - which is the property the plan's prohibition
+  on hand-filled state exists to protect.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  (authoritative descriptor document; one authorised live stack for the recording half) remain open and independent.
