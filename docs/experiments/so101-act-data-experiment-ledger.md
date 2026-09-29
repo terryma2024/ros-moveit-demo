@@ -27518,3 +27518,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `identity["measurement_contract_sha256"] = contract["contract_sha256"]`, the same field mix-up CP-1641 removed from the aggregator's seal helper. **That path seals through `close_measurement_batch` and never passes the entry's identity comparison**, so it is a separate question - and it is
   named here so a reviewer can decide whether it should also be corrected.
 - **State:** CP-1620 **done**; CP-1612 and CP-1635 next in that order; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1648 — CP-1612 is GREEN and committed: the seal accepts a case that spans the release boundary
+
+- **The owner's first decision is delivered, and the rule now reads:**
+  ```
+  non-decreasing in release epoch, and the last entry is the epoch the case ended in
+  ```
+  **with two refusals unchanged in substance:** a sequence that goes **backwards**, and a **last entry that disagrees with the identity that seals it**. **Three tests pin that**: the positive case (six samples in epoch 0 and three in
+  epoch 1, sealed as epoch 1 - which the old rule refused with `TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH`), the backwards sequence, and the disagreeing last entry.
+- **Why this shape and not the alternatives:** re-stamping the earlier samples with the later epoch would have **falsified when they were captured** - SEARCH really happens before the release - and sealing one artefact per epoch would change what "the sealed
+  artifact" means for every consumer. **The chosen rule keeps every sample's own epoch true and still gives the seal a single epoch to bind to.**
+- **And two of my own assertions had to be corrected on the way, which is worth the line because it is now a pattern in this batch:** the value `seal` returns is a **three-field artefact**
+  (`path`/`sha256`/`schema_version`), not a path and not the index - so the test first wrapped a dict in `Path(...)` and then demanded exactly one key. **Three rounds of assertion-writing, each wrong about an interface I had not read.** The code was
+  right in all three.
+- **State:** CP-1620 and CP-1612 **done**; **CP-1635** next (the driver supplies the per-run identity and search start to the composition); item 7's boundary re-run follows once the code stops changing; goal **active and armed**; nothing pushed, nothing
+  deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
