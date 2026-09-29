@@ -537,7 +537,12 @@ class FakeBroker:
     # which is exactly what the call-site traceback showed. The attribute is set in `__init__`.
 
     def current_epoch(self):
-        # the trusted source port's `_scope` compares this with the source's own session/epoch (CP-1825)
+        # the trusted source port's `_scope` compares this with the source's own session/epoch (CP-1825) - and the
+        # epoch ADVANCES during `begin`, after this broker is built, so a caller may supply a LIVE reader rather than
+        # the value that happened to hold at construction
+        reader = getattr(self, "epoch_reader", None)
+        if callable(reader):
+            return reader()
         return {"session_id": self._session_id, "reset_epoch": self._reset_epoch}
 
     def refresh_idle(self):
