@@ -20438,3 +20438,21 @@ not an inference of mine.**
   design decision into a passing assertion. **Next round reads that test and rewrites it deliberately.**
 - **State:** the two source edits are **uncommitted while red**; the build tree has been synced for both files; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1249 — Correction, and it is better news than CP-1248 said
+
+- **CP-1248 attributed the second failure wrongly.** The two failures are
+  `test_act_task8_measurement_contract.py::test_the_cli_is_the_only_batch_seal_owner` and
+  **`test_act_task8_measurement_runtime_descriptor.py::test_the_cli_composes_the_production_driver_without_the_injected_test_seam`** -
+  **my own item-1 test** - not a `FileNotFoundError` CLI test. The `FileNotFoundError` in the same log belongs to a different
+  assertion inside that run; the failing test's own message is `DID NOT RAISE <class 'BaseException'>`.
+- **And `DID NOT RAISE` there is the strongest evidence this batch has produced:** that test wraps the CLI invocation in
+  `pytest.raises(BaseException)` because, when it was written, **the production path could not finish** - it died in
+  `PRODUCTION_DRIVER_WIRING_PENDING`, then in the double-seal. **Now the CLI run with fake external-I/O providers completes
+  without raising at all**: the composition builds the driver, the driver acquires, seals the schema's batch, and the entry
+  reports it. **The fix for the test is to assert success and read the sealed batch back, not to expect a failure.**
+- **So item 3's remaining work is two test rewrites, and both are statements about the design rather than patches:**
+  1. `test_the_cli_is_the_only_batch_seal_owner` → the **driver** is the only seal owner; the entry must not seal;
+  2. my item-1 test → assert the CLI **succeeds** against fake providers and that the batch it reports is the schema-valid one.
+- **State:** the two source edits are uncommitted while red; build tree synced for both files; no stack, no hardware, nothing
+  deleted, nothing pushed.
