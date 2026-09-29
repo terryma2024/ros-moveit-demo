@@ -65,7 +65,16 @@ def target():
 
 
 def occluder_geometry():
-    return {"fixed_fingertip_00": {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005}}
+    """Geometry for EVERY occluder the admitted matrix names.
+
+    P1-3 (rereview 5): the evaluator used to skip an admitted occluder whose geometry was missing, so standing in for
+    one was enough. It now refuses by name (`PHASE_CAMERA_OCCLUDER_GEOMETRY_REQUIRED`), which is the point - a
+    measurement may not silently ignore an occluder the matrix admits.
+    """
+
+    from so101_demo.act.task8_measurement_schema import EXPECTED_OCCLUDERS
+
+    return {name: {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005} for name in EXPECTED_OCCLUDERS}
 
 
 def frame_source(_request):
@@ -109,12 +118,28 @@ class _Detector:
     cold_start_latency_ms = 1.0
 
     def detect(self, frame, query):
-        del frame, query
-        from so101_demo.core.detection import DetectionBatch
+        """A REAL detection of the cup, not an empty batch.
 
+        P1-2 (rereview 5): returning `candidates=()` removed the very evidence the chain is supposed to carry - the
+        aggregator computes every detector field from the bboxes a successful detection produces - so the stand-in now
+        finds the cup. Substituting bottom I/O must not substitute a run in which nothing was seen.
+        """
+
+        import numpy as np
+
+        from so101_demo.core.detection import DetectionBatch, DetectionCandidate
+
+        del frame
+        mask = np.zeros((480, 640), dtype=bool)
+        mask[220:260, 300:340] = True
+        candidate = DetectionCandidate(
+            instance_id="cup-1", class_id="plastic_cup", confidence=0.93,
+            bbox_xyxy=(300.0, 220.0, 340.0, 260.0), mask=mask, source_stamp_ns=1_500_000_000,
+            source_frame_id="wrist-1", image_width=640, image_height=480)
+        del query
         return DetectionBatch(
             model_id="bottom-io-stand-in", weights_sha256="b" * 64, runtime_device="cuda",
-            inference_latency_ms=0.0, image_width=640, image_height=480, candidates=())
+            inference_latency_ms=0.0, image_width=640, image_height=480, candidates=(candidate,))
 '''
 
 

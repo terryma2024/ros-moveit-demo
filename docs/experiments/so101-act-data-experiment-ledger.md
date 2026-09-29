@@ -30135,3 +30135,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   recomputed measurements, and report status"* is asking the success test to demonstrate.
 - **State:** **P1-2: emission wired, refusal correctly reproduced, the fixture's empty detection is the next edit.**
   P1-3 CLOSED; P1-1 second half GREEN; P1-4, P1-5, P1-6 and the demo RED's clean re-measurement remain.
+
+## CP-1785 — P1-2's emission reaches the formulas, and their raw shapes differ per field
+
+- **The refusal moved, which is the progress:**
+  ```
+  before:  task8_measurement_formulas.py:51   ValueError: RAW_EVIDENCE_REQUIRED: no raw measurements in payload
+  after:   task8_measurement_formulas.py:214  TypeError: list indices must be integers or slices
+  ```
+  **The evidence now exists and the formulas are reading it** - and the `TypeError` says the shape is wrong for *this*
+  field (`_f_center_deadband_px`, line 214) rather than that nothing arrived.
+- **And the shapes are not uniform, which is the fact that matters:**
+  | formula | what `_evidence(raw, field)` must be |
+  | --- | --- |
+  | `_f_min_bbox_aspect`, `_f_min_area_px2` | **a LIST of bbox dicts** (`_bboxes` iterates it and filters `accepted`) |
+  | `_f_center_deadband_px` | **a dict with `K02` and `bboxes`**: `evidence["K02"]`, then `evidence["bboxes"]` |
+  **So a single emission shape cannot serve every field**, and my write-time renaming - which presented a bbox list
+  under *every* declared field - is right for the first family and wrong for the second.
+- **Which locates the remaining work precisely, and it is a table rather than a guess:** each field's raw shape is
+  fixed by the formula that reads it (`_bboxes` for one family, `_evidence(...)[...]` for another), so the driver's
+  emission needs a **per-field table** - and the honest source for it is the formulas module that already encodes it,
+  **not a shape invented in the driver.**
+- **What is already established and stands:** the contract reaches the driver; the emission happens at write time with
+  no post-seal addition, no re-seal and no identity change; the stand-in detector now finds the cup with a real bbox and
+  a boolean mask; and the aggregator's refusal path is exercised by the RED rather than swallowed.
+- **State:** **P1-2: emission wired and reaching the formulas; the per-field shape table is the next edit.**
+  P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
