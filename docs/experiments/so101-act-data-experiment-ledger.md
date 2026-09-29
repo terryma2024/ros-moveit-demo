@@ -29547,3 +29547,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the demo leg's own JUnit agrees with its log:** `tests=5927 failures=0 errors=0 skipped=163` (5927 − 163 = **5764 passed**, exactly what `demo2.log` reported). **The CTest leg is serial on purpose**, and the script says why: `-j 8 makes test_unified_bridge* contend for the process group`.
 - **Where this went, and why not into the packet:** into **`BOUNDARY.md`** (now 3474 bytes, `455304cca4bebfb8`), which is the artefact the packet points the reviewer at for the boundary's results. **Amending an evidence artefact rather than a narrative one keeps the packet's claims and its sources in one place** - and it cost exactly what the discipline says it should: the index row was re-synced and the freeze rewritten and read back.
 - **State:** **everything frozen, indexed and audited; the review still the owner's to launch (the newest handoff file remains this session's own packet).** The goal stays active; no controlled source change has been made since the freeze.
+
+## CP-1761 — Adversarial self-review of the packet before the reviewer sees it: one stale number found and fixed
+
+- **What the self-review did:** it read the packet's own quantitative claims against the artefacts, which is the first
+  thing an independent reviewer does, and **found one claim that had gone stale while the work continued:**
+  ```
+  packet said:  "**50 rows, 0 mismatches** (46 before the v5 boundary rows were appended)."
+  fact:          52 rows - the packet-5 row and the recovered v5 canonical Test.xml row were appended after
+  ```
+- **And it was fixed by stating the number AND the reason it moves, rather than by writing a new number to go stale again:**
+  *"**52 rows stating a digest (both widths), 0 mismatches** at the time of writing. **The count moves as this index grows, which is why the audit is a procedure and the freeze names values:** it was 46 when the verdict measured it, 50 after the v5 boundary rows were appended, and 52 after the v5 canonical `Test.xml` was recovered out of the build tree and into the evidence root."*
+- **Costs paid, as the discipline requires:** the packet is now **11206 bytes, `468699353e7d4296`**; the index row was re-synced; the freeze rewritten and read back - **six entries, all reproducing:**
+  ```
+   11206 468699353e7d4296  task8-astra-rereview5-packet.md
+    8604 f7443b35919dcd85  task8-astra-rereview4-verdict.md
+   19051 54a820efbe041b3e  task9-package-gate-evidence-index.md
+  662025 eb1130b8b7f8420e  Test.xml  (v4 canonical)
+    3474 455304cca4bebfb8  BOUNDARY.md
+  662035 fa15dd0418203b74  Test.xml  (v5 boundary)
+  ```
+  and the audit is again **52 rows, 0 mismatches.**
+- **Why this was worth doing rather than waiting:** a reviewer's first finding would have been *"the packet's own audit count is wrong"*, which costs a whole round to answer and weakens every other claim beside it. **Finding it myself cost one edit and left the packet's numbers equal to its artefacts.**
+- **State:** **frozen, indexed, audited; the review still the owner's to launch** (the newest handoff file is still this session's own packet). No controlled source change since the freeze; the goal stays active.
