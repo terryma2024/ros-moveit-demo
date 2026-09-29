@@ -27958,3 +27958,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | 5 | `class_id is not in the detection query whitelist` | `DetectionQuery` accepts only `{cup, plastic_cup}` (`core/detection.py:62`), so the model id is **not** a class id - the adapter now queries with the production constant `plastic_cup` (`adapters/act/detector.py:141`) |
 - **And the two stand-ins in the runtime-descriptor suite had to be brought up to the real protocol**, which is the interface the verdict names: `_FakeYolo` gained `detect(self, frame, query)` **and deliberately no `__call__`**, and that suite's provider assertions now reach the built detector **through the adapter** and assert the adapter exists. **A fixture that could not speak the production protocol was hiding the mismatch; now it cannot.**
 - **State:** **P1-1 complete**; task list moves P1-1 GREEN to done and P1-2 to in-progress; boundary unchanged and not re-claimed (a controlled source change has occurred, so the v4 boundary is documentation-only **and** the later integration boundary must be a new run root); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1672 — P1-2's RED: the batch the formal entry seals IS refused by the aggregator as a foreign contract
+
+- **The finding, measured before the test was written - two different quantities with two similar names:**
+  ```
+  identity["measurement_contract_sha256"]   (declared; what the CLI admits and the seal carries) = 0808080808080808…
+  bound_document["contract_sha256"]         (what the aggregator compares a batch against)       = 53cb2428e9221941…
+  EQUAL: False
+  ```
+  **So `batch_factory`'s rewrite (`identity["measurement_contract_sha256"] = contract["contract_sha256"]`) is precisely the workaround the verdict calls "not an end-to-end fix"** - and the code already knows the naming is the problem:
+  `task8_measurement_contract.py:185-187` says *"the contract's own name for itself is measurement_contract_sha256, while contract_sha256 belongs to the bound document - using the wrong one here was the naming fissure between the identity schema and the batch seal"*.
+- **The RED (`test_act_task8_identity_contract_end_to_end.py`), `1 failed, 1 passed`:**
+  ```
+  FAILED  test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting
+      ValueError: CALIBRATION_IDENTITY_MISMATCH
+      "the seal names 0808080808080808… while the bound document's self-digest is 53cb2428e922194…"
+  PASSED  test_a_batch_naming_another_contract_is_still_refused
+  ```
+  **The first test runs the FORMAL entry** - no `--driver`, no provider seam - and hands the batch it seals **straight to `aggregate_task8_calibration` with no rewriting and no resealing**, which is the verdict's own wording. **The second is the foreign-contract negative**, built by re-sealing a copy of the same evidence under an identity that names `"f"*64`, and it passes today
+  and must keep passing: the fix must make the legitimate batch acceptable **without** making a foreign one acceptable.
+- **The GREEN's shape, and the one point that has to be decided rather than assumed:** the two digests need distinct explicit names and one consistent rule. Two candidate readings, and they differ in **where consistency is enforced**:
+  1. **the identity member names the BOUND CONTRACT the run was admitted under** (i.e. it must equal the bound document's `contract_sha256`): admission verifies it and refuses by name otherwise, and the aggregator's existing comparison becomes the same rule stated once;
+  2. **the identity member names the controlled TEMPLATE file** (whose digest already lives at `source_hashes.template`), and the aggregator compares against **that** instead.
+  **Reading 1 keeps the aggregator's rule and puts the check at admission; reading 2 changes the aggregator.** Both are defensible; **reading 1 is what the code's own comment describes** ("the contract's own name for itself"), and it is the one whose blast radius can be measured before editing: every fixture that admits an identity with a placeholder member
+  would have to declare the real digest, which is mechanical and countable.
+- **State:** **P1-2 RED in place**; the task list keeps P1-2 in-progress; boundary unchanged and not re-claimed (P1-1's controlled change already means the next boundary needs a new run root); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
