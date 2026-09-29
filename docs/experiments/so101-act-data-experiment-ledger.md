@@ -21331,3 +21331,25 @@ not an inference of mine.**
   the fixture builds its policy from it and the fingerprints agree because they are the same document.
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1293 — What the loader actually verifies, and why the fixture's fingerprint must be the installed one
+
+- **Read from `adapters/act/phase_contact_allowlist.py`:**
+  ```python
+  def load_installed_phase_contact_allowlist(receipt_path: Path, expected_fingerprint: str, ...):
+      ...  proposal = _read_json_file(Path(proposal_path)); receipt = _read_json_file(Path(receipt_path))
+      if proposal["policy_fingerprint"] != expected_fingerprint:
+          raise ValueError("admitted fingerprint mismatch")
+      ...
+      self.fingerprint = expected_fingerprint
+  ```
+  so the loader **re-reads the proposal and receipt documents itself** and refuses unless the proposal's fingerprint equals the one the
+  binding carries - and the remainder of its body (lines 65-107) is where the *installed* allowlist is located and checked, which is the
+  part that my synthetic policy cannot satisfy.
+- **The consequence is now unambiguous:** the fixture's `policy_fingerprint` must be **the installed allowlist's** fingerprint, which means
+  the proposal must be built from **the installed payload** rather than from `_write_policy`'s synthetic one - i.e. route 1 of CP-1292,
+  and `_write_policy` can supply the *document shape* while the **payload** comes from the installed file.
+- **So the read that finishes this is lines 65-107 of that loader** - the installed location and the checks around it - and then the
+  fixture builds its proposal from the installed payload. **One read, then the write.**
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
+  deleted, nothing pushed.
