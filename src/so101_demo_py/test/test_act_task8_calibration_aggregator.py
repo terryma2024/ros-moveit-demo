@@ -225,3 +225,62 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
                       "--driver", "driver:boom"])
     assert not (failing / "batch.json").exists()
     assert ledger.read_text().splitlines()[-1].split()[4] == "INVALID:"
+
+
+# --- protocol v2 seam: verdicts from raw evidence, all roots, no labels -------------------------------------
+
+def _sealed_batch(root, payload):
+    from so101_demo.act.task8_measurement_schema import write_closed_json
+    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+    import hashlib
+    identity = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+    raw = write_closed_json(Path(root) / "raw" / "records.json", payload)
+    files = {"raw/records.json": hashlib.sha256(raw.read_bytes()).hexdigest()}
+    write_closed_json(Path(root) / "batch.json",
+                      {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                       "identity": identity, "files": files})
+    return Path(root)
+
+
+def test_derived_verdicts_come_from_raw_evidence_across_every_root(tmp_path):
+    from so101_demo.act.task8_calibration_aggregator import derive_field_verdicts
+    from so101_demo.act.task8_measurement_schema import load_contract_v2
+
+    first = _sealed_batch(tmp_path / "batch-a", {"measurements": {"min_confidence": [0.6]},
+                                                 "configured": {"min_confidence": 0.5}})
+    second = _sealed_batch(tmp_path / "batch-b", {"measurements": {"min_confidence": [0.4]},
+                                                  "configured": {"min_confidence": 0.5}})
+    verdicts = derive_field_verdicts([first, second], load_contract_v2())
+    assert set(verdicts) == {str(first), str(second)}          # every root is aggregated, not just the first
+    assert verdicts[str(first)]["min_confidence"] == "PASS"
+    assert verdicts[str(second)]["min_confidence"] == "FAIL"
+    # fields the batch carries no raw record for are reported UNMEASURED rather than passing silently
+    assert verdicts[str(first)]["tracking_iou"] == "UNMEASURED"
+
+
+def test_a_batch_offering_labels_instead_of_raw_evidence_is_refused(tmp_path):
+    from so101_demo.act.task8_calibration_aggregator import derive_field_verdicts
+    from so101_demo.act.task8_measurement_schema import load_contract_v2
+
+    labelled = _sealed_batch(tmp_path / "batch-labels", {"measurements": {"qualified": True},
+                                                         "configured": {"min_confidence": 0.5}})
+    with pytest.raises(ValueError, match="RAW_EVIDENCE_REQUIRED: qualified is a label"):
+        derive_field_verdicts([labelled], load_contract_v2())
+
+
+def test_derived_checks_fold_members_across_roots_and_propagate_unmeasured(tmp_path):
+    from so101_demo.act.task8_calibration_aggregator import derived_checks
+    from so101_demo.act.calibration import CHECK_MEASUREMENTS
+    from so101_demo.act.task8_measurement_schema import load_contract_v2
+
+    synchronisation = sorted(CHECK_MEASUREMENTS["synchronization"])
+    payload = {"measurements": {synchronisation[0]: [{"received_monotonic_s": 0.0,
+                                                      "decision_monotonic_s": 0.1}]},
+               "configured": {synchronisation[0]: 0.5}}
+    only_one = _sealed_batch(tmp_path / "batch-c", payload)
+    contract = load_contract_v2()
+    checks = derived_checks([only_one], contract)
+    # max_skew_s has no raw record, so the synchronization check is UNMEASURED rather than passing on one member
+    assert checks["synchronization"] == "UNMEASURED"
+    # the derived check set is exactly the aggregator's own five checks - no extra names invented here
+    assert set(checks) == {"fov", "collision", "search", "synchronization", "execution"}
