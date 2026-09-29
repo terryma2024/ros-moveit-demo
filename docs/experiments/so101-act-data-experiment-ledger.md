@@ -24122,3 +24122,32 @@ not an inference of mine.**
   refresh of a number the record already carries (**3101 trees, 1538 older than a day, ~291 GB at CP-1306**), at the cost of a multi-minute IO-heavy scan
   of a shared NVMe. **No evidence was involved; the tree counts and the CP-1306 total are what a cleanup decision needs.**
 - **State:** nothing pushed, nothing deleted, cleanup still unauthorised and untouched; no stack, no CUDA, no actuators, no hardware.
+
+## CP-1456 — Resumption index (supersedes CP-1420's plan): what is done, what is not, and where to start
+
+**For whoever picks this up next - human or agent - the state in one place.**
+
+- **The approved plan's state:** the second Astra re-review's items **P1-1 to P1-4 are complete, committed and green**; **P1-5 is complete within
+  everything this repository can perform**, with one part of the review's request impossible here and put to the reviewer as a question (below). The
+  single integration boundary has been **run once** and is green. The packet carries the delivery and the question.
+- **Commits that matter:** `97244cfc` (P1-1) · `9e106c04` (P1-2) · `f48130c8` (P1-3, plus the unvalidatable-INVALID-batch defect) · `ebc17755` (P1-4, the
+  aggregator's layer mismatch) · `9c6c5ca4` (the port's grid feed no longer poisons the recorder, and the child fixture drives the real port) ·
+  `25012e6e` (the real case entry publishes the journal row) · `05d109d5` + `33d4fec1` (trusted translator and the aggregator's own reader) ·
+  `3b0f4e86` (the four negatives) · `a8425206` (indexed evidence + raw-record tamper).
+- **Where the evidence is:** `experiments/gate7-p15-boundary/` holds the boundary (`README.txt` with the parameters and results, `rebuild.log`, both gate
+  logs, both CTest logs, the scratch and IPC paths) **including the mis-invocation it also admits to**; the packet is
+  `handoffs/20260930-task7-onward/task8-astra-rereview-packet.md`, **22641 bytes, sha256
+  `f661dabda9c5ec547beb6e19ed4b751973eb8e82da6f0a0318059a6f5d7b7b44`**; the evidence index is
+  `experiments/task9-package-gate-evidence-index.md`.
+- **The tests that prove P1-5 today:** `src/so101_teleop/test/teleop/test_task8_child_driven_case.py`, **six tests**, all green with the focused
+  interpreter: the child drives the production port through SEARCH and the case's window records nine phase samples; the real case entry publishes the
+  journal row; the trusted translator accepts it; the aggregator's own reader accepts it and refuses a missing row and a tampered one; a missing
+  retirement receipt refuses with `TASK8_RETIREMENT_RECEIPT_INVALID` and publishes nothing; the window binds its epoch exactly once; and the indexed
+  evidence is asserted with a raw-record tamper refused by `append`.
+- **The one open question, already in the packet:** the review's full-case assertions (FINAL_CHECK, a release epoch, a sealed artifact, both receipts as
+  full-case evidence) cannot be produced because the port provisions **SEARCH only** - confirmed from three places (its docstring; the child-port builder;
+  `pick_place_runner.py:209-235`'s loop) - and `pick_place_case_execution` defines a prefix case as carrying **no** sealed artifact. **So: does a prefix
+  (SEARCH) case satisfy item 5 with the reduced assertion set, or does item 5 require provisioning the later phases?**
+- **Constraints still in force:** no live stack, no MuJoCo run, no CUDA, no actuators, no hardware; no push; nothing deleted and no cleanup (the ~300 GB
+  of classified deletion candidates are retained); the owner's dirty work untouched; no self-approval of any review; formal accepted
+  Train/Validation/Offline Test still **0/0/0** and `collection_*` **NOT_PROVISIONED**; Task 10 and `runtime-task8l-gen4` deliberately not started.
