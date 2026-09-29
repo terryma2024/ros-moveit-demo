@@ -240,25 +240,6 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     boundary.contact_pairs = contact_pairs
     if not callable(getattr(boundary, "capture", None)):
         boundary.capture = sources.capture
-    # TEMPORARY DIAGNOSTIC
-    from so101_demo.adapters.act.selected_approach_candidate import (
-        SelectedApproachCandidate as _SAC2)
-
-    _orig2 = _SAC2.prepare
-
-    def _diag2(self, observed, *, selected_source):
-        try:
-            return _orig2(self, observed, selected_source=selected_source)
-        except ValueError as _error:
-            if str(_error) != "SELECTED_APPROACH_SOURCE_STALE":
-                raise
-            _now = self.monotonic()
-            print(f"[xdiag] consumer now={_now!r} max_age={self.max_age!r}")
-            print(f"[xdiag] source receipts={selected_source['source_received_wall_s']!r}")
-            print(f"[xdiag] obs receipts={observed.physical_readback['source_received_wall_s']!r}")
-            raise
-
-    _SAC2.prepare = _diag2
     port.approach_screen = PickPlaceApproachPathScreen(
         search_port=port, sources=boundary, broker=boundary, path_checker=authority["checker"],
         cancelled=threading.Event())
