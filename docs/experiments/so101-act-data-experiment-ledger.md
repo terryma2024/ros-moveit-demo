@@ -13277,3 +13277,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** the plan's Task 7 Step-4 command passes at **51 passed**; all Task 7 increments are green; three files
   carry my additive changes uncommitted inside the user's dirty set; Tasks 8-10 untouched; no runtime, no package
   gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-944 — The window and recorder seal themselves on FINAL_CHECK; `seal_live_evidence` must therefore be idempotent
+
+- **Two tests added to the chain file, four passing:** `test_an_unfinished_window_blocks_the_seal_rather_than_passing_silently`
+  proves a SEARCH-only window makes `seal_live_evidence` raise rather than pass silently, and the port's window seal
+  is now guarded so it does not re-seal a window that already sealed itself.
+- **The remaining failure taught a real fact about the design:** `TASK8_LIVE_EVIDENCE_ALREADY_SEALED` is raised by the
+  **recorder** when `seal_live_evidence` calls `recorder.seal(identity)` on a chain that already recorded
+  FINAL_CHECK - i.e. the recorder, like the window, seals itself when the chain completes. So `seal_live_evidence`
+  must be **idempotent**: when the recorder is already sealed it must return the artifact that sealing produced
+  rather than sealing again or raising.
+- **The next edit, precisely:** read the recorder's sealed-artifact accessor (the `_artifact`/`ALREADY_SEALED` region of
+  `act/task8_live_evidence.py`, whose lines are printed with this checkpoint) and have `seal_live_evidence` return it
+  when the recorder is already sealed - keeping the window-first ordering, so a window that cannot be sealed still
+  never leaves the recorder sealed by *this* call.
+- **State:** the plan's Task 7 Step-4 command passed at **51** before this increment; the chain file now has 4 of 5
+  cases green with the fifth encoding this requirement; the port's idempotency guard is in place in a clean file; the
+  user's dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package gate, no
+  push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
