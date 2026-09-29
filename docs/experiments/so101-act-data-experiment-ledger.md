@@ -18735,3 +18735,25 @@ not an inference of mine.**
   `ros_child._run_pick_place` using its `_pick_place_port` and `_startup_proof_consumer` seams, so the real
   `CaseEvidenceDriver` window seals and the seven artefacts can be asserted. The untracked RED is committed only once green.
 - **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1175 — Item 4's integration identified: the two halves already exist, in two files that have never met
+
+- **Read the existing production-chain test and it holds the half I was missing.**
+  `src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py` (266 lines, written earlier in this task) already
+  covers the **evidence** chain: `_identity()`, `_raw_records(root, sim_time)`, `_sample(root, *, phase, step, sim_time)`,
+  `_port_with(recorder, window)` (a port that records into a window), `_sealed_chain(tmp_path)`, and tests for the nine-phase
+  chain sealing and reading back, an unfinished window sealing INVALID, the journal row readback refusing a missing or
+  mismatched artifact, the port sealing its window together with the recorder, an unfinished window blocking the seal, and the
+  real owner invalid-sealing an open window before child retirement.
+- **My Boundary V test holds the other half:** a fake port that answers `PickPlaceRunner`'s validators across all nine phases,
+  set-down, release preflight and both retreat segments (CP-1149 → CP-1153).
+- **What item 4 actually needs is the two halves meeting:** the child's own `CaseEvidenceDriver` window (created in
+  `_run_pick_place` from `_act_artifacts.evidence_root`, CP-1140) bound into my port via `bind_live_evidence`, with my port's
+  `run_phase`/`run_retreat_segment` recording their rows **into that window** the way `_port_with` already does - then the seal
+  is real, `LIVE_EVIDENCE_SEAL_UNAVAILABLE` cannot occur, and the seven artefacts can be asserted.
+- **So the next round is mechanical and reuses rather than invents:** take `_raw_records`/`_sample`/`_port_with`'s recording
+  approach from the existing file, drive the case through `ros_child._run_pick_place` with `_pick_place_port` and
+  `_startup_proof_consumer` (CP-1139), and assert SEARCH rows, the release open event, three adjacent 10 Hz support rows in one
+  epoch, FINAL_CHECK, the sealed-artifact readback, the confirmed retirement and the journal path and hash. The untracked RED
+  is committed only once it is green, per the owner's instruction.
+- **State:** goal active (revision 51, cap 1000); HEAD `d47f05e0`, staged 0; no full suite, no push, no stack, no hardware.
