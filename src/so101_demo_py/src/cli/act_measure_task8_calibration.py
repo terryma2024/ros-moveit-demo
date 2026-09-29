@@ -42,6 +42,9 @@ def main(argv=None) -> int:
     parser.add_argument("--driver", default=None,
                         help="test-only module:callable override; production runs use the built-in driver")
     parser.add_argument("--ledger", type=Path, required=True)
+    parser.add_argument("--context", type=Path, default=None,
+                        help="the entry-bound runtime context document: measurement plan, safe interval, "
+                             "candidate/policy digests, controller/broker generation and resource binding")
     args = parser.parse_args(argv)
 
     from so101_demo.act.task8_measurement_contract import (
@@ -61,18 +64,22 @@ def main(argv=None) -> int:
         if args.driver:
             _load_driver(args.driver)(contract, args.batch_root)      # test-only injection
         else:
+            # runtime and admission inputs come from their own document; the identity mapping carries identity only
+            if args.context is None:
+                raise ValueError("MEASUREMENT_CONTEXT_REQUIRED")
+            context = json.loads(args.context.read_text())
             from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
             context = CalibrationMeasurementContext(
-                generation=identities["source_commit"],
-                contract_sha256=identities["contract_sha256"],
-                measurement_plan_sha256=identities["measurement_plan_sha256"],
-                safe_interval_rad=identities["safe_interval_rad"],
-                candidate_sha256=identities["candidate_sha256"], policy_sha256=identities["policy_sha256"],
-                driver_source_sha256=identities["source_provenance_sha256"],
-                controller_generation=identities["controller_generation"],
-                broker_generation=identities["broker_generation"],
+                generation=context["generation"],
+                contract_sha256=identity["measurement_contract_sha256"],
+                measurement_plan_sha256=context["measurement_plan_sha256"],
+                safe_interval_rad=context["safe_interval_rad"],
+                candidate_sha256=context["candidate_sha256"], policy_sha256=context["policy_sha256"],
+                driver_source_sha256=identity["driver_source_sha256"],
+                controller_generation=context["controller_generation"],
+                broker_generation=context["broker_generation"],
                 evidence_root=str(args.batch_root.parent),
-                resource_binding=identities["resource_binding"])
+                resource_binding=context["resource_binding"])
             from so101_demo.act.task8_measurement_driver import production_driver
             production_driver().run(context, args.batch_root)
     except BaseException as error:
