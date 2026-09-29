@@ -76,7 +76,7 @@ class Task8LiveEvidenceRecorder:
         self._identity: dict | None = None
         self._sealed: Path | None = None
 
-    def append(self, sample: dict) -> None:
+    def append(self, sample: dict, *, kind: str, reason: str = None) -> None:
         """Validate and persist one canonical sample; never accept a lossy frame."""
 
         if self._sealed is not None:
@@ -137,17 +137,28 @@ class Task8LiveEvidenceRecorder:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        self._entries.append({
+        # P1-4 (rereview 5): the entry says WHICH kind of sample it is, and an event carries the reason it was taken
+        # with. Before this, `add_event` validated the reason and kept it in `self._event_reasons` - the live window's
+        # own state - so a reader of the SEALED evidence could not tell what a given event sample was.
+        entry = {
             "relative_path": f"{self._staging.name}/{relative}",
             "sha256": hashlib.sha256(payload).hexdigest(),
+            "kind": kind,
             "physics_step": sample["physics_step"], "phase": sample["phase"],
             "sim_time_s": sample["sim_time_s"],
             "wrist_target_visible": sample["wrist_target_visible"],
             "release_epoch": sample["release_epoch"], "reset_epoch": sample["reset_epoch"],
-        })
+        }
+        if kind == "event":
+            entry["reason"] = reason
+        self._entries.append(entry)
 
-    def seal(self, identity: dict) -> dict:
-        """Publish the canonical index once; the index is the artifact's only commit point."""
+    def seal(self, identity: dict, *, period_s: float = None) -> dict:
+        """Publish the canonical index once; the index is the artifact's only commit point.
+
+        `period_s` is the cadence the WINDOW recorded at - the recorder does not own it - and it is described in the
+        sealed document so a reader learns the grid's own period rather than inferring it from two samples.
+        """
 
         if self._sealed is not None:
             raise ValueError("TASK8_LIVE_EVIDENCE_ALREADY_SEALED")
@@ -172,9 +183,19 @@ class Task8LiveEvidenceRecorder:
             previous = entry["release_epoch"]
         if previous != identity["release_epoch"]:
             raise ValueError("TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH")
+        # P1-4 / the packet's proposal 1: the sealed document describes its OWN grid - its edges and its count -
+        # rather than leaving a reader to recompute them from the samples.
+        grid_times = [entry["sim_time_s"] for entry in self._entries if entry.get("kind") == "grid"]
         index = {
             "schema_version": SCHEMA_VERSION, "kind": "task8_live_evidence",
             "identity": dict(identity), "sample_count": len(self._entries),
+            "grid": {
+                "count": len(grid_times),
+                "first_sim_time_s": min(grid_times) if grid_times else None,
+                "last_sim_time_s": max(grid_times) if grid_times else None,
+                "period_s": period_s,
+                "event_count": sum(1 for entry in self._entries if entry.get("kind") == "event"),
+            },
             "samples": [dict(entry) for entry in self._entries],
         }
         target = self.evidence_root / f"{self.case_id}-live-evidence.json"
@@ -575,7 +596,7 @@ class LiveEvidenceWindow:
         self._last_grid_s = stamp
         self._grid_count += 1
         self._note_phase(phase)
-        self._recorder.append(sample)
+        self._recorder.append(sample, kind="grid")
 
     def add_event(self, sample: dict, reason: str = None) -> None:
         self._require_bound()
@@ -592,7 +613,7 @@ class LiveEvidenceWindow:
         self._event_count += 1
         self._event_reasons.append(reason)
         self._note_phase(sample.get("phase"))
-        self._recorder.append(sample)
+        self._recorder.append(sample, kind="event", reason=reason)
 
     def invalidate(self, reason: str) -> dict:
         """Close an open window as invalid.
@@ -629,7 +650,7 @@ class LiveEvidenceWindow:
             if chosen.get(name) != self._identity.get(name):
                 raise ValueError(f"TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: {name}")
         self._sealed = True
-        return self._recorder.seal(chosen)
+        return self._recorder.seal(chosen, period_s=self._period_s)
 
     def _note_phase(self, phase) -> None:
         if phase in self.REQUIRED_PHASES and phase not in self._phases_seen:
