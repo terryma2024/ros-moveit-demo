@@ -17927,3 +17927,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the plan lists, and CP-1135/1136/1137/1138 have narrowed that gap to one named seam.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   remain open and independent.
+
+## CP-1139 — The seam exists: the child accepts its port, so Boundary V is a fixture and assertions after all
+
+- **Read `ros_child._run_pick_place` (line 483) instead of assuming a seam had to be built, and it is already there:**
+  - `self._pick_place_port` is an **injected port** - absent, the child fails closed with `ACT_TASK8_PORT_NOT_PROVISIONED`;
+    present, it is the object through which the case's ROS/MuJoCo work is done (and it even has an optional
+    `bind_startup_receipt`, read with `getattr` so a fake need not implement it);
+  - `self._startup_proof_consumer` is likewise injectable, with a real
+    `consume_child_pick_place_startup` fallback when it is not supplied;
+  - the surrounding guardrails are all real and must be satisfied by the fixture rather than bypassed: bound hashes in
+    `_ACT_HASH_ENV` matching the request payload, an unexpired deadline, and `TASK8_STARTUP_PROOF_ALREADY_CONSUMED` allowing
+    exactly one startup per child.
+- **So CP-1138's second branch is the true one: the fake belongs at the port, which is precisely the "external
+  ROS/MuJoCo/controller/process I/O" the plan allows to be faked.** Boundary V therefore needs **no production change to
+  the seam** - it needs a child constructed with a fake port and a startup consumer, admitted through the real
+  composition, and then the seven assertions: SEARCH rows from the real path, the release open event, three adjacent 10 Hz
+  support rows in one epoch, FINAL_CHECK, the sealed artifact read back, the confirmed retirement, and the journal path and
+  hash.
+- **The guardrails are a gift rather than an obstacle for this test:** because the child refuses unbound hashes, expired
+  deadlines and a second startup, a fixture that drives it to completion proves something real - the real admission and
+  binding code ran, not a stub.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  (authoritative descriptor document; one authorised live stack for the recording half) remain open and independent of this
+  piece.
