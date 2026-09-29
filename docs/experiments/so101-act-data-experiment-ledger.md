@@ -22204,3 +22204,22 @@ not an inference of mine.**
   `head-search-qualification.json` under the output root (line 283 in the code reviewed above), which is a stable assertion.
 - **State:** P1-4's source and test changes uncommitted while these two are red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1340 — Decisive: the block needs `measurements.json`, and my RED wrote `raw/records.json` instead
+
+- **The guard, read:** the head-search sample is built only `if readings is not None`, and `readings` comes from
+  `_read(root, "measurements.json")` over the roots. **My hand-built root sealed its payload into `raw/records.json`** (that is what
+  `_sealed_batch` does), so **no root offered a `measurements.json`**, `readings` stayed `None`, the sample was never built, the
+  qualification output was never published - and **the comparison at the heart of P1-4 never ran.** That explains both of my tests'
+  messages at once (`KeyError` on the missing output, and `DID NOT RAISE`), and it means my RED was not yet reproducing the production
+  path at all.
+- **Why this is worth stating plainly:** the reviewer's complaint was that the existing positive coverage *"omits the payload descriptor
+  and misses this bug"*. **My first attempt at the RED omitted the payload document for a different reason and missed it the same way** -
+  the identical failure mode, one layer up. The lesson is the one this whole batch keeps teaching: a fixture that looks production-shaped
+  is not evidence that the production path ran.
+- **The fix, precise:** the RED must build a root whose **`measurements.json` exists and carries the inner `head_search` block** - the model
+  is `_v2_batch`'s own writer (`write_closed_json(root / "measurements.json", {"measurements": ..., "camera_measurements": ...,
+  **({"head_search": descriptor} if ...)})`) - while the **sealed, indexed** `runtime-descriptor.json` is the full document. Then the
+  block runs, the comparison executes, and the assertion is meaningful.
+- **State:** P1-4's source and test changes uncommitted while its two tests are red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
