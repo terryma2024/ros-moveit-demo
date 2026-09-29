@@ -12998,3 +12998,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   evidence deleted, no push, no runtime started, and no gate run.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-932 — Incident lessons promoted to the handoff, with the verified baseline
+
+- **Appended five operational rules and the verified baseline to
+  `handoffs/20260930-task7-onward/HANDOFF.md`** so the next editor of a user-dirty file starts with the constraints
+  this session learned expensively: never `git add` a file carrying uncommitted user work; verify restoration by the
+  presence of their markers rather than the absence of mine; compile any surgically rewritten source (marker counts
+  and diffs both passed on a file that could not be imported); treat a collection error as "the suite did not run";
+  and recover from `git show <commit>:<path>` when needed, then re-verify by compiling and by running the owner's own
+  suite.
+- **Baseline recorded with the rules:** runner suite **14 passed**; live-evidence module **37 passed** (76 with phase
+  camera and renderer); user's dirty set **30 modified + 13 untracked** with the runner's in-flight content present
+  (`after_step` six times, `def set_down` once) and none of the withdrawn edit.
+- **State:** Tasks 1-6 committed and green; Task 7's module green and its wiring design corrected (the port owns the
+  window; anchors at `pick_place_search_port.py` lines 23/35/172/219/231/275); Tasks 8-10 untouched; no runtime, no
+  package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained
+  and ineligible, gen4 reserved for Task 10.
