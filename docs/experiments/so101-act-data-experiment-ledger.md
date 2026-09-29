@@ -16802,3 +16802,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   measured values never written as PASS, the four canonical documents and a real 28-field TASK8_READY, render-twice byte
   comparison with a single publish, on-disk readback, then `require_gate(report, "task8_live")` and
   `validate_head_search_binding()` - is untouched so far.
+
+## CP-1083 — The self-digest RED is proven, and its fix must land with the fixture digests
+
+- **RED, clean:** a batch whose `batch_sha256` was replaced with `"0" * 64` **validates**, because the validator checks
+  the field's shape and never recomputes it - `Failed: DID NOT RAISE <class 'ValueError'>`. That is the gap CP-1079
+  flagged, now proven by execution: the digest that makes a sealed batch uneditable was not being verified at all, which
+  also means the placeholder digests I put in the two hand-built fixtures (CP-1079) were passing for the wrong reason.
+  (The first draft failed on a missing import rather than on the assertion, so it was fixed and re-run before counting.)
+- **The fix is written and works, but it cannot land alone:** making the validator recompute the seal's canonical digest
+  took the two modules from **27 passed** to **4 failed / 24 passed**, because those two fixtures carry placeholder
+  digests. So the reform is reverted and recorded, to land **together with** the fixtures computing real digests - the
+  same pairing pattern as CP-1076 (identity) → CP-1082 (closed), and the reason this round ends green.
+- **State: 27 passed / 0 failed** restored (`beh-r683-restored.log`), scratch `<R>/scratch/r683d.<n>` with `TMPDIR`
+  verified through the exact test interpreter; RED logs `beh-r683-red*.log`, pairing evidence `beh-r683-green.log`.
+- **Next round, in one commit:** recompute the digest in the validator (the block is written and reviewed) **and** give
+  the two hand-built fixtures real digests - computed over the document minus the field, with the seal's own
+  canonicalisation - then expect 28 passed including the new test.
