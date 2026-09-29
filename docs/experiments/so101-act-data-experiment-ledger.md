@@ -18457,3 +18457,30 @@ not an inference of mine.**
 - **State:** goal active (revision 51, cap 1000); new untracked test file
   `src/so101_demo_py/test/test_act_task8_runtime_config_binding.py` is now committed as the RED; tree otherwise unchanged.
   No full suite, no push, no stack, no hardware. Evidence `beh-r763-red.log` (fixture error) and `beh-r764-red.log` (the RED).
+
+## CP-1162 — GREEN: the runtime config is parsed at the bundle boundary and CPU fallback is refused
+
+- **Implemented §4.2 at the artefact that binds the file.** `prepare_task8_bundle` now calls
+  `_require_runtime_descriptor(runtime_config, calibration_report)` before binding anything: the file must be a **regular
+  file** (so a symlink is refused), it must be JSON, it must carry exactly `{"schema_version", "head_search"}` with
+  `schema_version == 1`, its `head_search.detector` must be a dict, and - the CUDA policy §4.2 states in words - it must have
+  **`allow_cpu_fallback is False`** and **`requested_device == "cuda"`**, else
+  **`TASK8_PREPARATION_CUDA_REQUIRED`**. The RED from CP-1161 now passes, and it passes for the CUDA reason specifically
+  because the test asserts that code by name.
+- **A scoping decision made deliberately and recorded rather than fudged:** the **full** `validate_head_search_binding(runtime,
+  report)` pairing is **not** called here. The measurement design puts it at the **aggregator** (§8), my CP-1122 integration
+  test already proves it there in both directions, and calling it at the bundle would demand that every bundle fixture carry
+  a fully bound, measured calibration report - a different decision taken at a different boundary. So the bundle enforces
+  **§4.2's runtime-config rules** (shape, regular file, CUDA policy) and the aggregator enforces **§8's pairing**.
+- **The fixture moved in the same commit, so the suite never went red:** `ValidInputs` in
+  `test/test_act_task8_artifact_bundle.py` wrote `{"schema_version": 1, "kind": "runtime_config", "payload": ...}` as a
+  placeholder; it now writes a descriptor-shaped document with the CUDA policy Task 8 live requires. Nine tests that would
+  otherwise have failed are green.
+- **GREEN: 27 passed, rc=0** across the new binding test, the artifact-bundle suite, the alias suite and the manifest suite
+  (`beh-r766.log`), scratch `<R>/scratch/r766.<n>` with `TMPDIR` verified through the exact test interpreter; the RED is
+  `beh-r764-red.log`.
+- **Next, per the owner's item 2:** the **same parsed descriptor** - not a re-constructed dict - travels through calibration
+  admission, the context and the production driver; the driver registers and seals the descriptor's canonical payload, path
+  and hash **with** the raw batch; the aggregator reads it back from the **strict closed index** and then calls
+  `validate_head_search_binding`. Then the focused negative set (item 3) and Boundary V's mechanical part (item 4).
+- **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
