@@ -22044,3 +22044,19 @@ not an inference of mine.**
   The budget (1000 rounds) is not at risk, but the pattern is worth naming in the ledger rather than only in prose to the owner.
 - **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1331 — P1-3's own test is GREEN; two sibling fixtures remain, and one of them is part of P1-3's requirement
+
+- **`78 passed / 2 failed`**, and the two failures are no longer mine: **P1-3's own RED/GREEN passes** - the entry reads the seal back,
+  validates path/identity/closure, returns nonzero for an INVALID terminal status, records `measurement INVALID:` in the ledger, and leaves
+  the evidence in place. **The schema defect that made INVALID batches unvalidatable is fixed and exercised.**
+- **The substring trap I walked into, recorded because it is instructive:** my assertion `"VALID" not in line` failed because the ledger
+  line contained **`INVALID`**, which *contains* `VALID`. The fix is to check the outcome **token** (`"measurement INVALID:"`) rather than
+  a substring - **a one-word change that would have been invisible had I weakened the assertion to make it pass.**
+- **The two remaining failures are sibling fixtures, and one of them belongs to P1-3's requirement:**
+  1. the **descriptor** suite's driver must produce a batch the strict readback accepts - that is the "valid success" case the reviewer asked
+     for at the formal CLI, so **it is P1-3's work, not collateral**;
+  2. the **contract** test's driver deliberately seals nothing, and the entry now rightly refuses it - **its intent survives and its
+     assertion becomes "the entry refuses a driver that did not seal"**.
+- **State:** P1-3's changes (entry + schema) and the fixture work remain uncommitted while these two are red; no stack started, no CUDA, no
+  actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
