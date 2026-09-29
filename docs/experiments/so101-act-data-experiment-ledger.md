@@ -24683,3 +24683,21 @@ picture in both directions.**
   a required admitted value is the point.
 - **State:** P1-1 and P1-2 green and committed; P1-3's production side landed but uncommitted; the fixture is the open item. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1483 — The exact key inventory, read from the two functions that own it - and the two flags that need an owner
+
+- **The failure that forced the read** (`experiments/gate8-p13/child-diag.log`): the child fixture now gets *past* the attachment (which
+  proves the new `bind_live_evidence` contract works through the real child), and the run fails inside the port with **`KeyError: 'wrist_frame_valid'`** -
+  **my mapping assumed names the production derivation never returns.** Read rather than guessed from here on:
+  | source | keys it actually provides |
+  | --- | --- |
+  | `derive_frame_aggregates(evidence, *, support_distance_max_m)` (`task8_live_evidence.py:419-447`) | `holding_state`, `bilateral_contact`, `no_fingertip_contact`, `cup_supported`, `cup_support_distance_m`, `cup_position_m`, `cup_orientation_xyzw` - **and, by its own docstring, deliberately NOT `released` or `placement_stable`, which are release-epoch relative** |
+  | `capture_evidence_fields(captured, *, support_distance_max_m, raw_records)` (`pick_place_readback.py`, now module-level) | the aggregates plus `physics_step`, `sim_time_s`, `source_stamps_s`, `source_received_monotonic_s`, `raw_records` |
+- **So the port's mapping must be rewritten to what exists, and three groups have different owners:**
+  1. **the canonical keys** come from the derivation, unchanged;
+  2. **`released` and `placement_stable` come from the phase sequence** - exactly as the derivation's docstring says - which for SEARCH is the phase document's own `False`/`False`;
+  3. **`wrist_frame_valid` and `wrist_target_visible` have no provider at all**: the recorder requires both to be `True`, and neither the canonical derivation nor the phase document carries them. **They must come from the phase's own validated evidence** - the component that knows whether the wrist frame was available and the target visible - which means the boundary's `canonical_evidence` returns them alongside the derivation's fields, with a **named refusal when absent**. **Inventing them in the port would be asserting an observation nobody made.**
+- **Design decision made better by the failure:** the derivation was **lifted out of the adapter into a module-level function in the readback module** this round, so the
+  adapter method, the production boundary and the fixture boundary all call **one** implementation - the fixture now substitutes only the I/O, not the rule.
+- **State:** every change since CP-1482 is uncommitted and the fixture is red on exactly the mapping above. **P1-1 and P1-2 remain green and committed.** No new
+  session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
