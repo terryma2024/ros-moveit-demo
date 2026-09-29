@@ -16853,3 +16853,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   dimensions beyond files - missing anchor or phase, a mixed contract across roots, time reversal, cleanup contamination -
   and then the publishing half (real measured values, the four canonical documents, a real 28-field `TASK8_READY`,
   render-twice byte comparison with a single publish, on-disk readback, `require_gate`, `validate_head_search_binding`).
+
+## CP-1086 — The driver's batch shape validates and contamination disqualifies it (RED then GREEN)
+
+- **RED found two defects in one document, and the first was another writer/validator disagreement of CP-1077's class:**
+  a batch carrying the driver's `cleanup` receipt and `contamination` verdict was refused **outright** - so with the
+  driver's CP-1068 change in place, **no driver-sealed batch could ever validate** - while a batch recorded as
+  **contaminated** was accepted, so a failed cleanup could still feed a published report.
+- **The fix keeps the shape exact while allowing the driver's pair:** `_BATCH_REQUIRED` (the seal's seven keys) must be
+  present, `_BATCH_KEYS` (those plus `cleanup` and `contamination`) bounds what may appear, and anything foreign is still
+  refused. A non-null `contamination` disqualifies the batch with `BATCH_INVALID`.
+- **One iteration recorded honestly:** my first patch asserted on a check line that had the `kind` test on the same
+  statement, so the assertion aborted **before** writing anything - no partial state - and the corrected patch fixed both
+  the key set and the check.
+- **GREEN: 30 passed, rc=0**, scratch `<R>/scratch/r686d.<n>` with `TMPDIR` verified through the exact test interpreter;
+  RED `beh-r686-red.log`, iteration logs `beh-r686-green*.log`, final `beh-r686-green3.log`.
+- **Boundary IV still ahead:** missing anchor/phase and mixed-contract index dimensions, then the publishing half - real
+  measured values, the four canonical documents, a real 28-field `TASK8_READY`, render-twice byte comparison with a single
+  publish, on-disk readback, `require_gate` and `validate_head_search_binding`.
