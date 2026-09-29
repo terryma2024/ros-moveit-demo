@@ -20883,3 +20883,20 @@ not an inference of mine.**
   judgement left is the one CP-1266 recorded - reuse the chain test's `FakePort` rather than define a second port contract.
 - **State:** HEAD `8a626fea` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten and fully specified; no
   stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1270 — Item 5's fixture: what is reusable, and the one attach the port will need
+
+- **The chain test's port already carries the method set the runner and the fence exercise:** `bind_live_evidence(window)` at line 40,
+  `begin(request)` at 50, `run_phase(phase, request)` at 85 and the private `_record(phase)` at 92 - i.e. the contract this batch made
+  canonical, as against the fake port a second test would otherwise re-invent. **That is the reuse CP-1266 recorded.**
+- **And the file already shows the honest way to extend it rather than edit it:** `_seal_port_method` is *attached* to the port at line
+  231, with a comment explaining the attachment. So item 5's fixture can attach `bind_startup_receipt` (the eighth precondition) the
+  same way, in its own file, without touching the chain test's port or forking it. **The precedent was already in the repository; I
+  only had to read it.**
+- **`ros_child.py`'s exact path is printed above** - my earlier `find` looked under the wrong roots and printed nothing, which is a
+  reminder that this worktree's layout puts the child where the grep found it and not where I assumed.
+- **What the next round writes, in order:** the artifact directory and `ActArtifactBinding` (CP-1269's recipe), the child constructed
+  with the port and the startup consumer and the binding environment set, the request built from `binding.hashes`, then
+  `asyncio.run(child.pick_place_full(request))`, and the assertions read from the returned dict and the sealed, indexed records.
+- **State:** HEAD `1778f56d` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
+  nothing deleted, nothing pushed.
