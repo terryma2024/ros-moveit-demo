@@ -11602,3 +11602,37 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   verified, not a licence to measure.
 - **Boundaries held, per instruction:** no code was modified, no runtime was started, no evidence was deleted, no
   push was made, no real hardware action was taken, and the goal remains **blocked/disarmed** rather than resumed.
+
+## CP-872 — Measurement-protocol v2 approved and placed; goal resumed for Tasks 1-10
+
+- **Authority:** the user approved the measurement-protocol supplement and implementation plan after independent
+  GPT-6 Astra/High review, delivered as a handoff at
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/handoffs/20260929-measurement-protocol-v2-approved/HANDOFF.md`. `sha256sum -c SHA256SUMS` in that directory verified **all three files OK** before use.
+- **Placed at their reviewed repository paths, byte-exact and re-verified after copying:**
+  - `docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md` (approved sha256
+    `cd7f365412848bb6843e2e5ec7d8db7eb070113eae8eb842ef3b58837fbf23b4`);
+  - `docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md` (approved sha256
+    `125fdea6cf6406dd66ae2a417a9cac0406da343031b87e2ff1b29562086dac86`).
+- **Dirty overlap inspected and preserved:** 31 modified plus 14 untracked, the 14 being the user's 12 untracked
+  paths plus these two approved documents; every earlier change of mine is committed, so nothing of mine sits
+  loose in the user's files, and the one-token `Pairs.fingerprin` typo fix from CP-861 remains the only edit
+  inside a user file (original bytes preserved under `experiments/gate6-runtime/task8-core/user-file-backups/`).
+- **Goal resumed pursuing** (revision 32) and implementation begins with **Task 1 RED only**, per the handoff:
+  no runtime, no full package gate at this stage.
+- **Boundaries carried into implementation:** MuJoCo only; CUDA with no CPU fallback; campaign resources bind
+  **only at the launch entry**; generation-scoped single-flight cleanup; no W4/W6 and only the independent
+  40-scene exact-W8 after W2; stop for human decision on any CPU/GPU/RAM/disk, RTF, recorder-queue, 10 Hz
+  continuity, throughput or QC bottleneck without lowering thresholds or worker count; targeted tests for Tasks
+  1-8; the ordinary full `so101_demo_py` and `so101_teleop` xdist gates only at Task 9 on a new nonexistent
+  NVMe scratch under the registered evidence root with verified `TMPDIR/TMP/TEMP`; `runtime-task8l-gen3`
+  retained and **ineligible**, with `runtime-task8l-gen4` (or the next unused integer) reserved for Task 10 and
+  never reused or overwritten; Task 8L passing is not Task 8 live, `QUALIFIED`, collection or training.
+- **Task 1 scope read from the approved plan** (`### Task 1: Freeze contract v2, controlled inputs, and closed
+  schemas`): create `act/task8_measurement_schema.py`, the v2 measurement contract, the search candidate and
+  search policy documents, and the phase-camera matrix; modify the measurement-contract schema,
+  `act/task8_measurement_contract.py` and `test/test_act_task8_measurement_contract.py`; the RED test must prove
+  v2 carries exactly 21 head/search fields plus seven support fields with `calibration.py`'s units, binds all ten
+  identity members, rejects missing/unindexed/extra/symlink files, and rejects a matrix whose occluder list differs
+  from the approved five-name `EXPECTED_OCCLUDERS`.
+- **Boundaries:** no runtime started, no package gate run, no evidence deleted, no push, no hardware; formal
+  accepted 0/0/0; `collection_*` NOT_PROVISIONED.
