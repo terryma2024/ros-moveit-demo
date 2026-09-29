@@ -22027,3 +22027,20 @@ not an inference of mine.**
      deliberately seals nothing; **that test's intent survives and its assertion becomes "the entry refuses a driver that did not seal".**
 - **State:** P1-3's changes (including the schema fix) and the fixture work remain uncommitted while red; no stack started, no CUDA, no
   actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1330 — The edit aborted before writing (no harm), and the pattern in my failures is now unmistakable
+
+- **What happened:** my script located the two lines by a `startswith` guess at the file's quoting; the guess did not match, `next(...)`
+  raised, and **nothing was written** - so the tree is intact and the run reproduced the same three failures. **That is the fourth
+  consecutive fixture edit that did not land, and every one failed on my memory of the file's bytes rather than on the change itself.**
+- **The exact bytes are printed above** (with `cat -A`, so the quoting and any trailing spaces are visible), which is what the next attempt
+  replaces **by line number** - the approach that has worked twice in this stretch (the nine-row helper and the sorted stamps) and failed
+  every time I reconstructed text instead.
+- **Where P1-3 genuinely stands, separating the two halves honestly:** the **production half is done and correct** - the entry reads the
+  seal back, validates path/identity/closure, returns nonzero with an INVALID ledger outcome, preserves evidence, and **the schema defect
+  that made INVALID batches unvalidatable is fixed**; my own P1-3 test gets past the key check now. The **fixture half** is three fake
+  drivers that must produce production-shaped seals, and **that is a mechanical task I have been failing at by method, not by difficulty.**
+- **A pace note I owe the record:** this fixture work has occupied roughly ten rounds while P1-3's production change waited to be committed.
+  The budget (1000 rounds) is not at risk, but the pattern is worth naming in the ledger rather than only in prose to the owner.
+- **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
