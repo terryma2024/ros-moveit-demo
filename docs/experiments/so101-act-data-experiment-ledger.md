@@ -22297,3 +22297,23 @@ not an inference of mine.**
   reviewer lists (missing row, wrong epoch, missing receipt, tamper preventing qualification).
 - **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
   nothing pushed.
+
+## CP-1345 — The port is injected, so P1-5's seam is the BOUNDARY - and the rewrite is a substitution, not a bypass
+
+- **Read from the fixture's wiring:** the child is constructed as
+  `RclpyActionDriver(pick_place_port=port, owner=owner, broker=FakeBroker(), act_hashes=bound_hashes)` - **the port is supplied by the
+  caller** - and the fixture currently supplies `ChildPort()`, i.e. the chain test's `FakePort` with a monkeypatched seal. **So the port the
+  child runs can simply be the production one.**
+- **Therefore P1-5's GREEN is a substitution at the right layer:** hand the child a real
+  **`PickPlaceSearchPhasePort(boundary, evidence_recorder=<the child's recorder>, live_evidence_window=<the real window>)`**, where the test
+  double moves **down** to the `boundary` - the four methods the production constructor itself validates (`begin`, `search`, `safe_stop`,
+  `neck_sweep_checker.check`). **That is exactly "replace only ROS/MuJoCo/controller/process I/O"**, and it removes the monkeypatched seal
+  from the loop entirely, which is the reviewer's first complaint about this fixture.
+- **And it fixes the epoch problem by construction:** the production seal reads `reset_epoch` and `release_epoch` from the **request**, so the
+  substitute boundary must emit requests carrying those epochs - **the same discipline the production boundary follows** - instead of the
+  fixture setting them as port attributes for the fake seal to read back.
+- **Next steps in order:** (1) this substitution; (2) drive `run_pick_place_case()`; (3) feed what the real case and campaign write to the
+  **trusted aggregator**; (4) the seven indexed assertions plus the four negatives. **Each step is separately testable, which is how this
+  item will be kept honest rather than declared.**
+- **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
+  nothing pushed.
