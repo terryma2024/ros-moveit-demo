@@ -237,8 +237,16 @@ class Task8MujocoMeasurementDriver:
         # measured against (its `threshold_source` is the model's FOV, not a pending config value)
         camera_block = getattr(self.phase_camera, "document", {}).get("camera") or {}
         measurements = {}
-        if camera_block.get("horizontal_fov_rad") is not None:
-            measurements["horizontal_fov_rad"] = float(camera_block["horizontal_fov_rad"])
+        if camera_block.get("horizontal_fov_rad") is not None and camera_block.get("width_px"):
+            # `_f_horizontal_fov_rad` reads `evidence["frames"]` and derives the FOV per frame from `fx`, `cx` and the
+            # width - so the evidence is the camera's own intrinsics, not a pre-computed angle
+            import math
+
+            width_px = float(camera_block["width_px"])
+            cx = width_px / 2.0
+            fx = cx / math.tan(float(camera_block["horizontal_fov_rad"]) / 2.0)
+            measurements["horizontal_fov_rad"] = {
+                "frames": [{"fx": fx, "cx": cx, "width": width_px, "accepted": True}]}
         if boxes:
             for field in measurements_section:
                 if field in DOCUMENT_EVIDENCE_FIELDS:

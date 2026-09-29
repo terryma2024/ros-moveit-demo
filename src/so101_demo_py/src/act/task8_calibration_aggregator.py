@@ -384,7 +384,8 @@ def derive_field_verdicts(roots, contract: dict) -> dict:
                     # a field with no raw record is explicitly UNMEASURED - never a silent pass
                     verdicts[field] = "UNMEASURED"
                     continue
-                if field not in (raw.get("configured") or {}):
+                if (contract[section][field].get("threshold_source") == "config"
+                        and field not in (raw.get("configured") or {})):
                     # P1-2 (rereview 5), owner's disposition: a field whose THRESHOLD is not approved is UNMEASURED
                     # too. The search values in `task8-calibration-search-candidate-v1.json` are
                     # `{"requires_approved_value": true, "value": null}`, so there is nothing to compare against and
