@@ -16255,3 +16255,43 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Why this is the right next step rather than waiting:** the approved plan's own completion criterion requires the
   implementation review to pass, and that review needs this material; producing it involves no guessing and no change to
   any production behaviour, and it leaves Task 10 exactly as blocked as the owner requires.
+
+## CP-1059 — Astra/High review returned CHANGES_REQUIRED: corrections appended, history preserved
+
+- **The independent implementation review's verdict is `CHANGES_REQUIRED`.** This checkpoint records the corrections it
+  requires. Nothing above is rewritten; the superseded claims are named here so a reader following the ledger in order
+  meets the correction rather than the claim.
+- **Correction 1 — the two review packets, checked rather than assumed.** The review reported that
+  `handoffs/20260930-task7-onward/task10-review-packet-search-values.md` and
+  `task8-implementation-review-packet.md` are not on disk, and that `93425150`/`4a74c57a` changed only the ledger.
+  **The second half is exactly right and the first half needs refining:** those commits *did* only touch
+  `docs/experiments/so101-act-data-experiment-ledger.md`, because both packets were written into the **evidence root**,
+  which is outside the repository by design. Measured now:
+  | packet | path | bytes | sha256 |
+  | --- | --- | --- | --- |
+  | search-values review | `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/handoffs/20260930-task7-onward/task10-review-packet-search-values.md` | 2610 | `8ece22fe93d5600d8204934a295ffe98d1c2d03ff9c2734fb294229ea80943df` |
+  | implementation review | `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/handoffs/20260930-task7-onward/task8-implementation-review-packet.md` | 4138 | `8c43a38a077d83cfd0eff1d0fa5440348f151b13c70259d7eb38c9be53ca4f0b` |
+  **The real defect the review found is therefore about reachability, not existence:** a reviewer working from the
+  repository cannot see either packet, and the ledger named them only by relative path. This entry records their absolute
+  paths, sizes and digests so the material is auditable from the ledger alone; the packets themselves stay in the
+  evidence root, as the evidence policy requires.
+- **Correction 2 — what `scratch/z` actually proves.** The passing run's JUnit, counted now:
+  **10 shards, 5759 collected cases, 0 failures, 0 errors, 163 skipped**, rc=0. That is
+  **the gate runner's own collection completing without failure** - it is **not** the repository-required xdist
+  package gate, and the runner's `worker_count=8` is its own file sharding, **not** `pytest-xdist`. The ledger's earlier
+  phrasing "5759/5759" is corrected here: the accurate statement is the counted line above, plus the shard layout
+  (10 shards with JUnit, one serial module path). It does **not** by itself prove the production path, and it must
+  not be cited as a package-gate pass.
+- **Correction 3 — completeness retracted as a basis for progress.** The Task 5-7 production integration with the Task 1
+  contract is **not** complete, so the earlier "Task 5/6/7/9 complete" claims are **withdrawn as grounds for moving
+  forward**. They remain in the ledger as history; this supersedes them. The earliest failing boundary is **I - identity,
+  runtime context and sealed batch unification** (Task 1/4/5/6), and the approved repair order is I, II, III, IV, V, VI,
+  VII, one boundary at a time with RED before GREEN.
+- **Host and provenance facts recorded at this checkpoint (step 1 of the approved instruction):** hostname
+  `ai-station`, pwd `/home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a`, branch `codex/so101-act-data-0917a`, HEAD `4a74c57a`, working tree
+  **30 modified + 13 untracked**, staged 0, one submodule; tmux sessions `act-data` and `dst` present; **no
+  `move_group`/`rviz`/`gz sim`/MuJoCo stack running** - and none started by this checkpoint. The approved sources are
+  the spec `docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md`, the plan
+  `docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md`, root `AGENTS.md` and the
+  `so101-dev` skill, all of which are being re-read as the instruction requires before the first repair.
+- **Last trusted checkpoint before this one:** CP-1058. **Evidence retained, nothing deleted.**
