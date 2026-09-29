@@ -30109,3 +30109,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-2's RED stands with its production error; the GREEN's two edits are named and ordered; P1-3 CLOSED;
   P1-1 second half GREEN.** P1-4, P1-5, P1-6 and the demo RED's clean re-measurement remain. No controlled change this
   round beyond the read.
+
+## CP-1784 — P1-2's emission is wired, and the refusal that remains is about the FIXTURE's empty detection
+
+- **The three plumbing edits are in:** `build_production_measurement_driver(..., contract=None)` forwards the bound
+  contract; `Task8MujocoMeasurementDriver.__init__(..., contract=None)` keeps it; `_write_record` merges
+  `self._aggregator_evidence(record)` into every row **at write time** - a renaming of evidence the record already
+  carries (my P1-1 translation keeps each candidate's `bbox_xyxy`), **with no post-seal addition, no re-seal and no
+  identity change**; and the CLI passes `contract=contract`, the document it already admitted at line 56.
+- **And the RED still refuses, for a reason the plumbing cannot fix:**
+  ```
+  task8_measurement_formulas.py:51: ValueError: RAW_EVIDENCE_REQUIRED: no raw measurements in payload
+  ```
+  **The stand-in detector returns `DetectionBatch(..., candidates=())`** - I wrote it that way in CP-1774 - **so the
+  bbox evidence the aggregator needs does not exist in the batch, and `require_raw_inputs` refuses an empty mapping.**
+  **That refusal is correct**: a measurement that detected nothing has nothing to compute the detector fields from, and
+  the aggregator saying so is the behaviour P1-2 asks for rather than an obstacle to it.
+- **So the next edit is the fixture's, and it is exactly the verdict's own distinction:** *"External I/O may be
+  substituted, but the chain may not."* A stand-in detector that finds **no cup** is not a stand-in for a detector that
+  finds one - **it removes the very evidence the chain is supposed to carry** - so the seam's `detect` must return a
+  **real candidate with a real bbox** (and the mask as the real type requires), after which the emission has something
+  to rename and the aggregator has something to recompute.
+- **What that changes in the picture, stated plainly:** the plumbing is done, the RED is still the RED, and the
+  remaining gap is **evidence that a successful detection produces** - which is what the verdict's *"assert real output,
+  recomputed measurements, and report status"* is asking the success test to demonstrate.
+- **State:** **P1-2: emission wired, refusal correctly reproduced, the fixture's empty detection is the next edit.**
+  P1-3 CLOSED; P1-1 second half GREEN; P1-4, P1-5, P1-6 and the demo RED's clean re-measurement remain.

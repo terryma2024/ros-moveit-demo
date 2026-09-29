@@ -40,7 +40,8 @@ def _sha256(payload: bytes) -> str:
 class Task8MujocoMeasurementDriver:
     """Orchestrates three anchor acquisitions; dependencies are injected so unit tests launch no real stack."""
 
-    def __init__(self, *, stack, clock, detector, controller, phase_camera, identity) -> None:
+    def __init__(self, *, stack, clock, detector, controller, phase_camera, identity,
+                 contract=None) -> None:
         self.stack = stack
         self.clock = clock
         self.detector = detector
@@ -50,6 +51,10 @@ class Task8MujocoMeasurementDriver:
 
         # Astra item 3: the identity is the schema's ten-member document, passed in rather than invented
         self.identity = MeasurementIdentity.require(identity)
+        # P1-2 (rereview 5): the aggregator computes each field from `raw["measurements"][field]` and reads its limit
+        # from `raw["configured"][field]`, keyed by the CONTRACT's field names - so the contract must reach the one
+        # place that writes raw records, and it is passed in rather than guessed.
+        self.contract = contract if isinstance(contract, dict) else {}
         self._files: list[dict] = []
         self._scrub_check: list[str] = []
 
@@ -206,9 +211,34 @@ class Task8MujocoMeasurementDriver:
                       "geometry": {"sample": sample, "anchor": anchor, "ordinal": ordinal}}
             self._write_record(root, anchor, f"geometry-{sample:02d}", record)
 
+    def _aggregator_evidence(self, record: dict) -> dict:
+        """Present this record's own evidence under the names the aggregator's formulas read.
+
+        P1-2 (rereview 5): the formulas read `raw["measurements"][field]` (a list of bbox dicts for the bbox fields)
+        and `raw["configured"][field]` (the configured limit). The record already carries the bbox evidence - my P1-1
+        translation of the real `DetectionBatch` keeps each candidate's `bbox_xyxy` - so this is a RENAMING at write
+        time, never an addition after sealing, never a re-seal, and it does not touch the identity.
+        """
+
+        measurements_section = (self.contract or {}).get("measurements") or {}
+        if not measurements_section:
+            return {}
+        detection = record.get("detector_input")
+        candidates = (detection or {}).get("candidates") if isinstance(detection, dict) else None
+        boxes = []
+        for candidate in candidates or ():
+            bbox = candidate.get("bbox_xyxy") if isinstance(candidate, dict) else None
+            if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+                x1, y1, x2, y2 = (float(value) for value in bbox)
+                boxes.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2, "accepted": True})
+        measurements = {field: boxes for field in measurements_section} if boxes else {}
+        configured = {field: entry.get("configured_limit")
+                      for field, entry in measurements_section.items() if isinstance(entry, dict)}
+        return {"measurements": measurements, "configured": configured}
+
     def _write_record(self, root: Path, anchor: str, name: str, record: dict) -> None:
         # one place stamps the lifecycle, so no row can be written without naming the restart it was measured under
-        record = {**record, "lifecycle": LIFECYCLE}
+        record = {**record, **self._aggregator_evidence(record), "lifecycle": LIFECYCLE}
         payload = _canonical(record)
         text = payload.decode()
         for token in FORBIDDEN_OUTPUT_TOKENS:

@@ -574,7 +574,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
 
 def build_production_measurement_driver(*, context, identity, providers=None,
                                         session_id=None, attempt_id=None, search_start_rad=None,
-                                        frame_source=None):
+                                        frame_source=None, contract=None):
     """Build the single production measurement driver for one measurement context.
 
     Every rule below is the composition's own, and none of them can be satisfied by injecting a driver instead.
@@ -612,6 +612,7 @@ def build_production_measurement_driver(*, context, identity, providers=None,
         raise ProductionCompositionError("PRODUCTION_GENERATION_REQUIRED")
 
     return Task8MujocoMeasurementDriver(
+        contract=contract,
         identity=identity,
         stack=stack,
         clock=supplied["clock"],

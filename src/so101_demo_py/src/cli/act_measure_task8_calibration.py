@@ -104,7 +104,8 @@ def main(argv=None) -> int:
             build_production_measurement_driver(
                 context=context, identity=identity,
                 session_id=_document.get("session_id"), attempt_id=_document.get("attempt_id"),
-                search_start_rad=_document.get("search_start_rad")).run(context, args.batch_root)
+                search_start_rad=_document.get("search_start_rad"),
+                contract=contract).run(context, args.batch_root)
         # Astra item 3: the driver is the ONE seal owner; the entry only reports what it sealed
         sealed = args.batch_root / "batch.json"
         # Astra re-review P1-3: read the seal back and refuse to call an INVALID measurement a success. The
