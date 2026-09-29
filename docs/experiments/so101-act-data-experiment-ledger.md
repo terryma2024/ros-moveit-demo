@@ -27029,3 +27029,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **the source changes stay uncommitted until that set is green**, exactly as the red test does.
 - **State:** item 4's GREEN is in progress with its layer decided and its cost measured; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal,
   worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1619 — CORRECTION to CP-1618: there are TWO seal paths, so the validator IS the right layer
+
+- **What CP-1618 decided and why it was wrong:** it concluded that the cleanup requirement belongs at `close_measurement_batch` - "the seal" - rather than at the validator. **That conclusion was reached before reading how a
+  PRODUCTION batch is actually sealed, and the two are not the same function:**
+  ```
+  driver (task8_measurement_driver.py:90) -> self._seal(root, context, anchors, status=..., cleanup=receipt,
+                                                         contamination=contamination)        # its OWN seal
+  contract helper (task8_measurement_contract.close_measurement_batch)                          # no cleanup parameter
+  ```
+  **The production path seals through `MeasurementDriver._seal`, which already carries the cleanup receipt and the contamination verdict; `close_measurement_batch` is the contract-level helper that TESTS use for closure
+  mechanics.**
+- **So the validator is the layer that covers both:** a rule there guarantees that **whichever path sealed a batch**, a `CLOSED` one carries its cleanup proof - which is exactly what "the cleanup proof must be enforced" asks for. Adding
+  the requirement to the helper instead would have guarded the test path and left the driver's path relying on its own good behaviour.
+- **And the six failures are therefore fixture debt of the ordinary kind:** tests that call `close_measurement_batch` to exercise closure need to supply a cleanup receipt **because they are sealing a CLOSED batch**, and that is a
+  legitimate completion. **The rule stays where it is; the fixtures get completed.**
+- **The lesson, which is the batch's oldest one and was violated again here:** **a decision about "the right layer" is only as good as the reading behind it - and "the seal" was two functions, not one.** CP-1616 read the CLI, CP-1617
+  reproduced the defect, and CP-1618 decided the layer **without** reading the driver's seal; this entry is the correction, made as soon as the driver was read.
+- **State:** item 4's source changes remain in the tree and uncommitted while red; the next step is to complete the six fixtures with a cleanup receipt and re-run the focused set. Item 1 verified; item 2 two-thirds green with the
+  epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
