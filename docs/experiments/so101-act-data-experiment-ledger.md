@@ -20714,3 +20714,24 @@ not an inference of mine.**
   second authority**, and the suite both proves the agreement case and refuses the disagreement and the absence.
 - **State:** committed with its tests green; build tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing
   pushed.
+
+## CP-1263 — Item 5's entry points located, and the fixture is reachable without any stack
+
+- **The seams, read from `ros_child.py` rather than recalled:**
+  | line | what it is |
+  | --- | --- |
+  | `83` | `maybe_provision_pick_place_port(driver)` - the provisioning helper |
+  | `186`, `189` | the constructor takes `pick_place_port` (falling back to `task8_port`) and `startup_proof_consumer` |
+  | `318` | the child may provision the port itself when none was injected |
+  | `483` | **`async def _run_pick_place(self, request, *, mode: str) -> dict`** - the production entry Astra wants driven |
+  | `484`, `500-505` | it refuses without a port, and it **requires** `startup_proof_consumer`, binding the receipt it returns |
+  | `516-519` | it binds live evidence and constructs **the real `CaseEvidenceDriver`** for the case |
+- **So the fixture is: build the child with a fake `pick_place_port` and a fake `startup_proof_consumer` - the two external
+  boundaries - and call `_run_pick_place(request, mode=...)`.** The `CaseEvidenceDriver`, the runner, the seal and the journal are then
+  the **production** objects, which is exactly the distinction Astra drew when it refused "FakePort sealing its own evidence" and
+  "hand-written final result/artifact index/journal". **No MuJoCo, no ROS, no hardware.**
+- **The read that must precede writing it:** `ros_child.py:483-540`, the body - because the request shape, the mode values and the
+  return dict are what the assertions have to be built from, and this batch has already paid four times for writing assertions about
+  fixtures I had not read.
+- **State:** HEAD `88916d08` plus this checkpoint; items 1-4 complete and committed; item 5 not yet started; no stack, no hardware,
+  nothing deleted, nothing pushed.
