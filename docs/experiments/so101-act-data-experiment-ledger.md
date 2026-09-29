@@ -31998,3 +31998,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the repair is a single-object change in the harness's boundary that mirrors production's `self._act_sources`.** P1-1
   through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1844 — CP-1843's conclusion was partly wrong, and reverting it is the honest correction
+
+- **I made the "one sources instance" change CP-1843 concluded, and it broke five tests that were passing:**
+  ```
+  5 failed, 2 passed      test_task8_child_driven_case.py
+  ```
+  **so the conclusion was wrong in a way the tests caught immediately.** The harness's `_ChildSources` is not only a
+  readback source: it is a **queued fixture** (a list of rows with one deliberate `SOURCE_STEP_NOT_ADVANCED` retry, a
+  `_pops` counter, a `_step` cursor), and **a case runs more than one search** - so sharing one instance means the second
+  search meets an exhausted queue. **The change was reverted with `git checkout`, and the suite is green again.**
+- **And the correction says what the real difference is:** production has one `self._act_sources` **because production's
+  sources is not a queue** - it reads live ROS evidence through a node. **The harness's two-object arrangement is not a
+  defect in the harness; it is what a queued stand-in needs**, and CP-1843's framing ("two objects while production has
+  one") mistook a fixture's shape for a structural fault.
+- **Which also re-points the actual failure:** `physical readback scope` is raised by the check on the **evidence
+  DOCUMENTS** - `world` a `SimulationEvidence` with matching session/epoch/step and `paused is False`, `scene` and
+  `contact` dicts with exactly `SCENE_KEYS`/`FRAME_KEYS` and times within `skew` - **not by the sources object being a
+  second instance.** So the next thing to read is **what the readback the segment produces actually contains**, rather
+  than what object it hangs off.
+- **State:** **P1-5 in progress; one hypothesis tested and refuted with 5 failing tests as the evidence, reverted
+  cleanly, and the next question correctly re-pointed at the evidence documents.** P1-1 through P1-4 CLOSED. The demo
+  RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged,
+  so they are not re-stated.**
