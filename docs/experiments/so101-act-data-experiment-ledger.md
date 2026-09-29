@@ -16745,3 +16745,19 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   That is worth a follow-up RED inside Boundary IV - the seal computes the digest, so the validator should verify it.
 - **Evidence:** scratch `<R>/scratch/r679.<n>` with `TMPDIR` verified through the exact test interpreter; log
   `beh-r679.log`. **HEAD is red for one test in that module** until the identities fixture is migrated.
+
+## CP-1080 — One fixture serves two call sites, and that is why the last failure is not a one-liner
+
+- **Tried the obvious fix and it made things worse, so it was reverted and the reason recorded:** giving
+  `_identities()` the contract's ten members fixed the measure-CLI test but broke the offline-report test
+  (`MEASUREMENT_CONTRACT_IDENTITY_INVALID`), taking the suite from **26 passed / 1 failed** to **25 / 2**.
+- **Why:** that one helper feeds **two call sites with different requirements** - `bind_measurement_contract(TEMPLATE,
+  _identities(), …)`, where the identity members must line up with the template's bound files, and the CLI's
+  `--identities` file, where the ten-member identity is what `require_v2_identity` enforces. One mapping cannot satisfy
+  both by construction, so the fix is **two fixtures**: the template-binding shape for the binder, the ten members for the
+  CLI, and the tests that use each made explicit about which they need.
+- **State kept:** the module is back to **26 passed / 1 failed** (`beh-r680-restored.log`), i.e. exactly what CP-1079
+  recorded, with no regression from this round's experiment.
+- **What the next round must do, precisely:** split the helper, then read what `bind_measurement_contract` requires of
+  `identities` (which members must match which bound-file digests) rather than guessing it - the same discipline that has
+  paid off at every other boundary, and the reason this round did not simply force the ten members through.
