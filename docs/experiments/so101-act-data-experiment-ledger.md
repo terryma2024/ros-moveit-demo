@@ -23582,3 +23582,14 @@ not an inference of mine.**
   have the evidence it demands. **Every downstream piece is already built and already proven against a fresh recorder (CP-1420).**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1425 — `_act_artifacts` is never a constructor argument; it is loaded inside the run
+
+- **Read:** `RclpyActionDriver.__init__` takes `broker`, `owner`, the two timeouts, `pick_place_port`/`task8_port`, `act_hashes` and
+  `startup_proof_consumer` - and sets **`self._act_artifacts = None`** among a dozen other None attributes. **So the binding is not passed in; it is
+  loaded during the run**, and the attach is skipped because that load did not happen (or did not succeed) in my fixture.
+- **Its assignment site is printed above**, so the next read names the condition the loader needs - most likely the `_act_hashes` names resolving
+  through the environment, which my fixture populates from `binding.environment()`. **That is the last structural question: once the child loads its
+  artifacts, the attach fires, the recorder is bound, the CP-1415 samples record, and the seal proceeds - all pieces already proven in isolation.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
