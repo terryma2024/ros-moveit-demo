@@ -26837,3 +26837,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   keeping the proven `PYTEST_ADDOPTS="-n 8 --junit-xml=..."` mechanism and `--ctest-args -V` so the `created: 8/8 workers`
   banners are captured as the parallelism proof.
 - **State:** item 5 is **fixed and re-running**; item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1608 — The eight-worker gate now runs cleanly except for the repository's own registration guard, which is right
+
+- **The parallelism proof is now overwhelming and the collision is gone:** the re-run captured **64 `created: 8/8 workers` banners** across the package's registered tests with **zero `INTERNALERROR` lines** - so CP-1607's fix holds
+  under the real gate, not merely in the focused run.
+- **And exactly one CTest test fails, for a reason that is the repository doing its job:**
+  ```
+  5/116 Test #5: test_ctest_registration ***Failed
+  5: FAILED test/test_ctest_registration.py::test_registration_matches_the_ordinary_test_modules
+  5: E  AssertionError: modules the package gate would never run: ('test/teleop/te...
+  ```
+  **A guard test requires every module under `test/teleop/` to be registered as a CTest test**, and **my new `test_teleop_ipc_worker_root_isolation.py` is not** - so the guard caught my omission exactly as intended, and the fix is to
+  register it in `CMakeLists.txt` (beside the other `so101_add_pytest_test(...)` lines) and rebuild.
+- **A note on what that implies, under the owner's item 7:** registering the module changes the **build configuration**, so the build must be refreshed and **the gate re-run** afterwards - and the earlier `-n 8` numbers, like every number
+  from a superseded build, are not the gate's result once that change lands. **Nothing about the artifacts' or the live-bundle's validity changes, because no production source, config or policy value is touched by it.**
+- **State:** item 5 is one registration away from green under the real gate; item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or
+  stack; no hardware; no live stack; P2 live not started.
