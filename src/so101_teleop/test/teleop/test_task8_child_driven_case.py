@@ -254,6 +254,9 @@ class _Boundary:
         # sources object per search, so the dimensions are forwarded here rather than set on the boundary's own
         sources.nq = getattr(self, "nq", 8)
         sources.nv = getattr(self, "nv", 8)
+        sources.scene_qpos = getattr(self, "scene_qpos", None)
+        sources.scene_qvel = getattr(self, "scene_qvel", None)
+        sources.cup_start_m = getattr(self, "cup_start_m", None)
         # the fence and the deadline both compare against the segment's clock, so the clock is the REAL one -
         # the segment suite's `_segment` helper pins it to a frozen list, which cannot work here. Everything
         # else (boundary, verifiers, geometry, timings) comes from the imported doubles unchanged.
@@ -430,7 +433,10 @@ class _ChildSources(_Sources):
             object_state=ObjectState(body=world.object_state.body, body_id=0,
                                     linear_velocity_world=(0.0, 0.0, 0.0),
                                     angular_velocity_world=(0.0, 0.0, 0.0),
-                                    position_world=tuple(world.object_state.position_world),
+                                    # P1-5/CP-1886: the route pins the cup's start, and the candidate compares
+                                    # this with it - so the fixture reports the route's value, not `_raw`'s x
+                                    position_world=tuple(getattr(self, "cup_start_m", None)
+                                                         or world.object_state.position_world),
                                     orientation_xyzw=tuple(world.object_state.orientation_xyzw)),
             has_contact=False,
             minimum_signed_distance_m=0.0,
@@ -467,9 +473,14 @@ class _ChildSources(_Sources):
                         # thirteen for the ACT scene - because `selected_approach_candidate` validates them with
                         # `vector(scene["qpos"], model.nq)` / `vector(scene["qvel"], model.nv)`. The defaults keep the
                         # fixture's own eight for every caller that does not know a model.
+                        # P1-5/CP-1886: the vectors are the REAL scene's initial state - the model's `task_start`
+                        # keyframe - because `selected_approach_candidate` compares them with the manifest's own
+                        # `joint_start_rad`/`cup_start_m`, and a frame of zeros is a different world
                         "model_sha256": self._model_sha256,
-                        "qpos": [0.0] * getattr(self, "nq", 8),
-                        "qvel": [0.0] * getattr(self, "nv", 8)}
+                        "qpos": list(getattr(self, "scene_qpos", None)
+                                     or [0.0] * getattr(self, "nq", 8)),
+                        "qvel": list(getattr(self, "scene_qvel", None)
+                                     or [0.0] * getattr(self, "nv", 8))}
         row["contact"] = {**{key: () for key in FRAME_KEYS},
                           "simulation_session_id": self._session_id,
                           "reset_epoch": self._reset_epoch,

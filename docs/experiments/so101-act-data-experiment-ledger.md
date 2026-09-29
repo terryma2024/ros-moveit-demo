@@ -33250,3 +33250,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress: the candidate's start validation is the next check, and it requires the fixture's scene to
   be the real scene's initial state.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate
   and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1887 — The frames now carry the real scene's start state; the last start condition is the observation
+
+- **What changed, and where each value comes from:**
+  ```python
+  # the mount, from the documents themselves
+  _key = mj_name2id(_model, mjtObj.mjOBJ_KEY, "task_start")
+  boundary.scene_qpos = tuple(_model.key_qpos[_key] if _key >= 0 else _model.qpos0)
+  boundary.scene_qvel = tuple(0.0 for _ in range(_model.nv))
+  boundary.cup_start_m = tuple(authority["manifest"]["cup_start_m"])
+  # and the per-search sources, then the frame builder, carry them
+  "qpos": list(self.scene_qpos), "qvel": list(self.scene_qvel)
+  position_world=tuple(self.cup_start_m or world.object_state.position_world)
+  ```
+  **with the model's own `task_start` keyframe being**
+  ```
+  qpos="0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.02 -0.28 0.165 1.0 0.0 0.0 0.0"
+  ```
+  **- seven zero joints, the cup at `(0.02, -0.28, 0.165)`, upright - which is exactly what the manifest pins
+  (`cup_start_m=[.02, -.28, .165]`, `neck_start_rad=0.`). So the fixture's frame is now the scene's own first moment
+  rather than `[0.0] * nq`, and the world's object state is where the route says the cup starts rather than `_raw`'s
+  `x=-0.08`.**
+- **And the two documents this exposed are worth naming, because they are easy to confuse:**
+  | name | what it is |
+  | --- | --- |
+  | `live_manifest` (the test's) | the **campaign payload** read from `spec.payload["manifest_path"]` |
+  | `authority["manifest"]` | the **route manifest** from `build_route_manifest(scene.xml, …)` - the one with `cup_start_m` |
+  **the first has `contact_policy_fingerprint`; the second has `cup_start_m`. Reaching for the wrong one produced
+  `KeyError: 'cup_start_m'` in the mount - a reminder that "the manifest" names two different documents in this chain.**
+- **State:** **P1-5 in progress: the scene and the world now carry the real start state, and the candidate's start check is
+  still refusing - with the observation-state condition the likely remainder, since the joints, the dof velocities, the cup
+  position and the cup's uprightness now all come from the documents the check compares them against.** P1-1 through P1-4
+  CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses
+  are unchanged, so they are not re-stated.**
