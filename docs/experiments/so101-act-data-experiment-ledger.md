@@ -30716,3 +30716,39 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   production-boundary evidence is recorded** (the sampler is exercised through the runner's own
   `seal_live_evidence`, which the joined-chain test does - that is the boundary trace to capture next). P1-1, P1-2 and
   P1-3 CLOSED; the demo RED's clean re-measurement, P1-5, P1-6 and the final gate remain.
+
+## CP-1806 — P1-4's production-boundary evidence, from a real runner and a real seal
+
+- **The run, with its command, its exit code and its log retained:**
+  ```
+  scratch (previously nonexistent): /data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/v5a/p14-boundary-20260930-013902/tmp
+  tempfile.gettempdir():            /data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/v5a/p14-boundary-20260930-013902/tmp        (checked before the run; fails closed otherwise)
+  $ /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python -m pytest -q -p no:cacheprovider test/test_act_task8_full_case_joined_chain.py
+  3 passed in 28.77s
+  exit code: 0
+  ```
+  **Expected:** the production runner seals its live evidence, the production entry publishes its row, the qualification
+  reader accepts the case and four negatives derived from it are refused. **Actual: 3 passed, rc 0** - and the runner
+  really wrote sealed documents (three of them, one per driving test).
+- **And the sealed document read back from that run, which is the whole point of P1-4:**
+  ```
+  experiments/v5a/p14-boundary-20260930-013902/tmp/…/scenario-1-live-evidence.json
+      5960 bytes, sha256(16) 33b2a43cb227a61e
+  top-level keys: ['grid', 'identity', 'kind', 'sample_count', 'samples', 'schema_version']
+  grid: {"count": 10, "event_count": 10, "first_sim_time_s": 1.5, "last_sim_time_s": 2.4, "period_s": 0.1}
+  kind='grid':  10 samples, reasons=[]
+  kind='event': 10 samples, reasons=['command', 'command', … ×10]
+  sample_count=20  identity={attempt_id: attempt-296, case_id: scenario-1, reset_epoch: 2,
+                             release_epoch: 1, session_id: session-296}
+  ```
+  **So a production run's sealed evidence now describes its own grid** - count, both edges and the period - **and every
+  sample says which kind it is, with each event naming the reason it was taken.** Before this checkpoint those two facts
+  existed only inside the live window's Python state.
+- **Evidence index row:**
+  | path | size | sha16 |
+  | --- | --- | --- |
+  | experiments/v5a/p14-boundary-20260930-013902/pytest.log | 261 | ec172836cfc94638d976bcae7dcf7fdf |
+  | experiments/v5a/p14-boundary-20260930-013902/tmp/…/scenario-1-live-evidence.json | 5960 | 33b2a43cb227a61e |
+- **State:** **P1-4 is CLOSED: RED confirmed (CP-1804), GREEN (CP-1805) and now a production-boundary trace with the
+  runner driving its own seal and the document read back.** P1-1, P1-2 and P1-3 CLOSED. Remaining: the demo RED's clean
+  re-measurement, P1-5, P1-6, the final freeze gate and the re-review packet.
