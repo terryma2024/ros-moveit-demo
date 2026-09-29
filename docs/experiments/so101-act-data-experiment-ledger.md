@@ -25674,3 +25674,20 @@ picture in both directions.**
 - **The full-case run stands where CP-1539 left it** - SEARCH passing inside the run, and the next named piece being the live-evidence window's case identity (`TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH`).
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed, including this correction; the full-case test remains uncommitted while red, per this batch's rule.
   No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1541 — The composite boundary must be ONE case's runtime, not two fixtures stapled together
+
+- **The round's progress, in order, each step named by the system rather than guessed:** the window's identity had to be **this case's** (`TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH`); the
+  composite had to bind **`execute_approach`** like every other production method (`APPROACH: execute_approach`); the readback had to describe **the case being run** (`APPROACH: readback scope`);
+  and the scope rule then exposed the real problem: **`model digests equal: False`** - my probe printed it - because the scene's digest came from the **real MuJoCo model** the proof uses, while the case's
+  contact pairs still carried the **port fixture's** placeholder digest (`"a" * 64`).
+- **Fixing the pairs' digest then broke SEARCH** (`ValueError: physical readback scope`), and that is the useful signal: **the two halves of my composite disagree about which model this case runs on**, and
+  no amount of editing one side fixes it. **A case has ONE model, ONE session, ONE epoch; a boundary assembled from two different fixtures cannot satisfy that, and the validators are right to refuse it.**
+- **So the resolution is structural and bounded:** build **one** boundary for the nine-phase run - the readback and the real model from the batch's own fixture (which is already consistent and whose
+  scope checks pass), plus the four members SEARCH needs from the port fixture's pattern (`begin`, `search`, `safe_stop`, `neck_sweep_checker`). **One case, one runtime, one model digest everywhere** -
+  which is also what production looks like, where there is only ever one boundary.
+- **And the honest reading of the last three rounds:** the full-case test has been walking the *seams* one refusal at a time - window identity, method binding, readback scope, model digest - each of which is
+  a real requirement the system enforces. **None of them are bugs in the production code; all of them are things a substituted runtime has to satisfy to be a faithful stand-in, and the fail-closed interface
+  is what turns "my fixture is inconsistent" into a named error instead of a wrong result.**
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed, including the interface correction (`adda872d`); the full-case test remains uncommitted while red, per
+  this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
