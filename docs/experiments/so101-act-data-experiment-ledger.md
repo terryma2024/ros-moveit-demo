@@ -24069,3 +24069,16 @@ not an inference of mine.**
     artifact by rule - so **does a prefix (SEARCH) case satisfy item 5 with the reduced assertion set, or does item 5 require provisioning the later
     phases?**
 - **State:** nothing pushed, nothing deleted, no self-approval; the next step is the independent GPT-6 Astra/High review of this packet.
+
+## CP-1452 — The evidence index now covers this batch, with every artefact hashed
+
+- **`/data/work/so101-evidence/.../experiments/task9-package-gate-evidence-index.md` grew to 8938 bytes** with a section for the second revision batch
+  (CP-1307 - CP-1451): the commit range (`97244cfc` .. `3b0f4e86`), every boundary artefact **with its size and sha256** (`README.txt`, `rebuild.log`,
+  `demo-gate-root.log`, `teleop-gate.log`, `demo-ctest.log`, `teleop-ctest-new.log`, the retained mis-invocation `demo-gate.log`, and the packet with both
+  addenda), the boundary parameters actually used (scratch path, the interpreter that verified `tempfile.gettempdir()`, IPC base at 0700, `-n 8`,
+  benchmark excluded), the results per gate, and the **measured retention table**.
+- **Retention, measured not asserted:** **3101 scratch trees, 1538 of them older than a day**, the boundary's own 10 files / 44 KB, the earlier
+  `gate6-*` artefacts, and 98 `/tmp` IPC bases - **all retained, nothing deleted, moved or compressed**, with the ~300 GB total from CP-1306 standing as
+  the last full measurement. **Cleanup has never been authorised and has never happened.**
+- **State:** evidence file written under the registered evidence root (not in git by design); ledger checkpoint committed; no stack, no CUDA, no actuators,
+  no hardware; nothing pushed.
