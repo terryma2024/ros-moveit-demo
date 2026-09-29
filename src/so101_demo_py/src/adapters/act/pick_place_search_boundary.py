@@ -184,11 +184,12 @@ class PickPlaceSearchBoundary:
             contact_scope_sha256=prover_identity["contact_scope_sha256"],
             checker_sha256=prover_identity["checker_sha256"],
             expected_samples=prover_identity["expected_samples"])
-        facts = self.approach_facts(snapshot, request, support_distance_max_m=support_distance_max_m)
+        facts = self.sequence_facts("APPROACH", snapshot, request,
+                                    support_distance_max_m=support_distance_max_m)
         return {"proof": proof, "current_snapshot": snapshot, "facts": facts}
 
-    def approach_facts(self, snapshot, request, *, support_distance_max_m):
-        """Establish APPROACH's eight gates and its phase facts from the readback - never accept them.
+    def sequence_facts(self, phase, snapshot, request, *, support_distance_max_m):
+        """Establish one sequence phase's eight gates and its facts from the readback - never accept them.
 
         This mirrors the SEARCH evidence validator: every gate is a conclusion from the readback, and a snapshot that
         cannot support one refuses by name rather than reporting it as true. The phase's own contact allowlist is the
@@ -265,11 +266,15 @@ class PickPlaceSearchBoundary:
             "placement_stable": False, "retreat_stable": False,
         }
         if facts["holding_state"] not in ("EMPTY", "HOLDING"):
-            # APPROACH may not report an unknown holding state, and it may not grip yet: a bilateral grasp here would
-            # mean the gripper closed during the approach, which the runner's own predicate for CLOSE is for
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: holding")
-        if facts["bilateral_contact"] is not False or facts["no_fingertip_contact"] is not True:
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: premature contact")
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: holding")
+        # the runner is the judge of each phase's semantics (CP-1491); these are the NECESSARY conditions this
+        # component can establish, mirrored from it so a contradiction is caught here rather than downstream
+        if phase == "CLOSE" and (facts["bilateral_contact"] is not True
+                                 or facts["no_fingertip_contact"] is not False):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: CLOSE: no bilateral grasp")
+        if phase in ("APPROACH",) and (facts["bilateral_contact"] is not False
+                                       or facts["no_fingertip_contact"] is not True):
+            raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: premature contact")
         return facts
 
     def search(self, request: dict):
