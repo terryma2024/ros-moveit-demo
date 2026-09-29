@@ -19413,3 +19413,30 @@ not an inference of mine.**
 - **What was still worth doing and is kept:** the runner's scratch layout is now **88** characters instead of 102 (`<root>/s/<4hex>/tmp`), with the shortening justified in the code - the four-hex id only needs to disambiguate within one run root, and `physical_name` already carries the process identity in the same hash input. That is a real improvement and it is committed; it is simply **not sufficient on its own**, and I would rather record that than imply the gate is fixed.
 - **So the remaining defect is in the module's own socket handling, not in any module's logic:** its sockets must not be bound beneath `TMPDIR` at all - the runner already exports `SO101_IPC_SOCKET_BASE` pointing at a short `/tmp` path, so the honest fix is for that fixture to bind under that base (or another short, non-`TMPDIR` root), which is a **test-side change with its own RED**: the module must pass at an 88-character `TMPDIR` and at the real gate's layout.
 - **State:** HEAD `20071b4b`; staged 0; my budget RED is still **uncommitted while red** (its 33-character reserve was my estimate, and the real requirement is what this table measures); run roots `scratch/g794`, `scratch/g798w1`, `scratch/g802` and `s799/tmp`, `s800/tmp`, `s801/tmp`, `s802/tmp` retained as deletion candidates; no push, no stack, no hardware.
+
+## CP-1205 — The exact cause, with the arithmetic, and a fix that touches an owner test file
+
+- **`test_controller_reservation_client.py`'s helper, read in full:**
+  ```python
+  def socket_path():
+      task_root = Path(os.environ["TMPDIR"]).parents[2]
+      ipc_root = task_root / "ipc"
+      parent = Path(tempfile.mkdtemp(prefix="res-", dir=ipc_root))
+      return parent / f"p{uuid.uuid4().hex[:8]}.sock"
+  ```
+  So the socket is bound at **`<TMPDIR>/../../ipc/res-XXXXXX/pYYYYYYYY.sock`** - the module deliberately places its IPC
+  directory **three levels above `TMPDIR`**, and the runner's scratch layout is *also* three levels deep, so the two rules
+  multiply into a path no evidence root of this length can host.
+- **The arithmetic, to the byte:** at the shortened layout the socket is
+  `<R>/scratch/g802/69f0/ipc/res-XXXXXX/pYYYYYYYY.sock` = **109 characters**, two over the 107-byte AF_UNIX budget - which is
+  exactly why 88-character `TMPDIR` produced 16 failures while 68 produced 17 passes. **The failure is a path budget, and now
+  it is a counted one rather than a hypothesis.**
+- **Both fixes are real and they are not equivalent, so this goes to the owner rather than being chosen silently:**
+  1. **the module prefers `SO101_IPC_SOCKET_BASE`** - which the runner already exports as a short `/tmp` path, i.e. the
+     environment hook exists and the module simply does not use it. Small, correct, and it **edits an owner test file**;
+  2. **the runner gives a shallower `TMPDIR`** - impossible here, because the evidence root is 63 characters and any layout
+     under it leaves too little room, and moving the scratch off `/data` would break the task's own NVMe rule.
+  So option 1 is the only workable one, and it is a change to a file the owner wrote and which I have not touched all stretch -
+  which is precisely the kind of edit I stop and ask about rather than make quietly inside a checkpoint.
+- **State:** HEAD `d744f60f`; staged 0; the shortened runner layout (88 vs 102 characters) is committed and justified; my budget
+  RED remains uncommitted while red; all scratch and run roots retained as deletion candidates; no push, no stack, no hardware.
