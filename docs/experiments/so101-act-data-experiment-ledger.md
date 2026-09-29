@@ -24259,3 +24259,20 @@ not an inference of mine.**
   `colcon test-result` deserves to know what happened here.
 - **Honest note on why this surfaced now:** I read the skill's reference this round rather than at the batch's start. **The gaps it found were real, and the
   fix was cheap - which is the argument for reading the gate reference before claiming a boundary, not after.**
+
+## CP-1464 — Provenance confirmed from the source tree, the install prefix and the loaded artifact
+
+- **The skill's rule is that provenance comes from three places - source, install products and the running artifact - and that a README or an IDE index
+  proves nothing.** For a test-only batch the "running artifact" is what the test interpreter actually imports, so that is what was checked, with the
+  boundary environment and the exact interpreter (**`experiments/gate7-p15-boundary/provenance-check.log`**):
+  | what | where it resolved |
+  | --- | --- |
+  | `so101_demo.adapters.act.pick_place_search_port` | `build/so101_demo_py/.../pick_place_search_port.py` - **a symlink to `src`, confirmed by `readlink -f` at CP-1450** |
+  | `so101_demo.act.task8_live_evidence` | `build/so101_demo_py/so101_demo/act/task8_live_evidence.py` (likewise) |
+  | `so101_teleop.unified.ros_child` | `src/so101_teleop/so101_teleop/unified/ros_child.py` - loaded from source |
+  | `_grid_sample` | **line 329 of that file, and `inspect.getsource` CONTAINS `return None`** - so the artifact under test carries the fix, not a stale copy |
+  | `ros2 pkg prefix` | both `so101_demo_py` and `so101_teleop` resolve **inside this worktree's `install/`** - no foreign prefix |
+- **Why this is worth a checkpoint:** the batch's central production change is exactly the kind that can appear fixed in `src` while a **stale build copy**
+  keeps running - and it very nearly did (the build copy was a real file until the CP-1450 rebuild). **This is the check that distinguishes "the source
+  says so" from "the code that ran says so".**
+- **State:** evidence file written under the registered root; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
