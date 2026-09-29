@@ -21048,3 +21048,21 @@ not an inference of mine.**
   returned dict and the sealed, indexed records. **The next round writes the file.**
 - **State:** HEAD `c0c9821a` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1279 — Item 5's fixture exists, and the first run fails inside the binder where it should
+
+- **Written:** `src/so101_teleop/test/teleop/test_task8_child_driven_case.py` - a child built as the dispatcher builds it
+  (`RclpyActionDriver(pick_place_port=FakePort(), owner=local_owner(...), startup_proof_consumer=...)`), artifacts created as real
+  files and bound through the **production loader**, and a real `IpcRequest(operation="task8_full", payload=_PickPlacePayload(...))`
+  whose hash fields come from `binding.hashes` and whose `stack_owner` describes the same owner the child was given.
+- **Two failures so far, both mine and both cheap:**
+  1. `ModuleNotFoundError: No module named 'so101_demo.act.act_artifacts'` - the binder lives in **`so101_teleop.unified`**, which I had
+     noted at CP-1275 and then typed wrong; fixed to `from so101_teleop.unified.act_artifacts import ActArtifactBinding`;
+  2. `ValueError: ACT_ARTIFACT_BINDING_INVALID` from `act_artifacts.py:150` - the binder rejecting my binding, and **its `verify` body
+     is the read above**: the fingerprint and the policy members are the likely cause, since I chose `"c" * 64` and wrote policy files
+     without checking what `verify` derives the fingerprint from.
+- **Why this is the right kind of failure:** the fixture drives the **production** loader and the **production** entry, so it fails
+  inside production checks rather than inside a stub - which is exactly the property Astra asked for and the reason a fake-heavy fixture
+  would have passed here while proving nothing.
+- **State:** the new test file is **uncommitted while red** per the owner's rule; items 1-4 complete and committed; no stack, no
+  hardware, nothing deleted, nothing pushed.
