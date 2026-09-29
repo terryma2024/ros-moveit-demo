@@ -10,7 +10,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_task8_live_evidence_production_chain import PERIOD_S, _sample      # noqa: E402
+from test_task8_live_evidence_production_chain import (PERIOD_S, READBACK_SOURCES, _identity,  # noqa: E402
+                                                       _raw_records)
+from so101_demo.act.task8_live_evidence import build_live_evidence_sample      # noqa: E402
 
 from so101_demo.act.pick_place_runner import PickPlaceRunner
 from so101_demo.act.task8 import Task8Runner
@@ -24,6 +26,7 @@ class FakePort:
         self.reset_epoch = 0
         self.release_epoch = 0
         self.grid_step = 0
+        self.rows = []
         self.calls = []
         self.phases = []
         self.receipt = None
@@ -95,8 +98,24 @@ class FakePort:
         # validation - the two clocks must not be the same counter, because the release path advances the step three
         # times between two recorded rows
         self.grid_step += 1
-        self.window.add_grid(_sample(self.evidence_root, phase=phase, step=self.grid_step,
-                                     sim_time=self.grid_step * PERIOD_S))
+        sim_time = self.grid_step * PERIOD_S
+        # the rows model the case's own release rather than one fixed contact block: before it the cup is held, after it
+        # the gripper is open, the cup is supported and no fingertip is touching it
+        released = phase in ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")
+        sample = build_live_evidence_sample(
+            identity=_identity(), phase=phase, physics_step=self.grid_step, sim_time_s=sim_time,
+            source_stamps_s={name: sim_time for name in READBACK_SOURCES},
+            source_received_monotonic_s={name: sim_time for name in READBACK_SOURCES},
+            raw_records=_raw_records(self.evidence_root, sim_time),
+            holding_state="EMPTY" if released else "HOLDING",
+            frame={"wrist_frame_valid": True, "wrist_target_visible": True},
+            contact={"observation_valid": True, "bilateral_contact": not released,
+                     "no_fingertip_contact": released, "cup_supported": True,
+                     "released": released, "placement_stable": released},
+            measurements={"cup_support_distance_m": 0.01, "end_effector_position_m": [0.0, 0.0, 0.1],
+                          "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
+        self.rows.append(sample)
+        self.window.add_grid(sample)
 
     def run_retreat_segment(self, direction, distance_m, request):
         self.calls.append("run_retreat_segment")
@@ -192,6 +211,20 @@ def test_the_runner_sequences_a_case_through_every_phase_in_order(tmp_path):
     # a full case is an episode and confirms its stop; the release was opened and closed in order
     assert result["formal_episode_eligible"] is True and result["stopped_confirmed"] is True, result
     assert "safe_stop" in port.calls, "the case confirmed its stop"
+
+    # the release open event, and three adjacent 10 Hz support rows inside one release epoch
+    rows = sealed["samples"]
+    # the release open event and the 10 Hz adjacency are asserted on the rows the port recorded, because the sealed index
+    # deliberately carries references (relative_path + sha256) rather than the values themselves (CP-1191)
+    port_rows = [row for row in port.rows if isinstance(row, dict)]
+    # build_live_evidence_sample flattens the contact block, so `released` is a top-level key of the built sample
+    released_rows = [row for row in port_rows if row.get("released") is True]
+    assert released_rows, "the case recorded the release open event"
+    support = [row for row in port_rows if row.get("release_epoch") == released_rows[0]["release_epoch"]][:3]
+    assert len(support) == 3, f"three support rows after the release, saw {len(support)}"
+    deltas = [round(later["sim_time_s"] - earlier["sim_time_s"], 6)
+              for earlier, later in zip(support, support[1:])]
+    assert deltas == [round(PERIOD_S, 6), round(PERIOD_S, 6)], f"adjacent 10 Hz rows, saw {deltas}"
     assert isinstance(result, dict), "a completed case reports its result"
 
 
