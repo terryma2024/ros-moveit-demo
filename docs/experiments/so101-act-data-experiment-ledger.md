@@ -5,10 +5,15 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 178d4b2ab9713852fac68533003c0f751151937f (latest code commit; evidence/ledger-only commits up to CP-593 follow it)
+current_commit: cd688387 (code + ledger; the code commits of this batch are listed in CP-1456)
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
+  - CP-1444..CP-1464: P1-1..P1-4 complete and green; P1-5 complete within everything this repository can perform (real port, inherited production seal, real case entry publishing the journal row, trusted translator and aggregator reader accepting it, all four negatives, indexed evidence with digests/epochs/adjacency).
+  - CP-1441: the SEARCH port handed the recorder a THREE-key document while append requires the canonical 24-key sample, so every attached-window SEARCH raised TASK8_LIVE_EVIDENCE_SAMPLE_INVALID in production; RED retained in p15-inner5.log, GREEN in the focused file and the boundary.
+  - CP-1445/1453/1457: a FULL case cannot be performed here (the port provisions SEARCH only, confirmed from its docstring, the child-port builder and pick_place_runner.py:209-235) and a PREFIX case carries no sealed artifact by rule; validate_campaign_summary requires five consecutive fulls, so a campaign of prefixes alone cannot qualify.
+  - CP-1463: the stored CTest results in the build tree reported 27 stale failures (2026-09-29 12:42-12:45) that a reviewer would have read as this batch's; the required package gate was then run (rc=0, 225s) and colcon test-result reports 7241 tests, 0 failures, 206 skipped.
+  - CP-1464: provenance confirmed through the loaded artifact - _grid_sample resolves to line 329 of the symlinked build copy and contains 'return None'.
   - CP-001 verifies dispatch baseline and reviewed document hashes.
   - EXP-176 confirms current schema-v3 collector and analyzer are absent from source and installed overlay.
   - CP-177 rebased this branch onto the independently reviewed ACT Task 8 design and plan at approved-main 1e4664517fecc34a01ef6b8959e4a0f7316cda6e.
@@ -51,17 +56,21 @@ confirmed_conclusions:
   - CP-552 binds the selected SEARCH frame to 51 original arm, gripper and neck controller publications in the same stopped physical interval; broker owner and goal events still need an interval fence.
   - CP-553 binds the selected SEARCH interval to uninterrupted local ACT ownership and no broker goal events, but still requires independent native controller ingress proof.
 disproven_routes:
+  - The SEARCH port can build the canonical 24-key sample itself: false - the missing fields belong to the readback adapter's capture_evidence_fields (CP-1441).
+  - A direct full pytest substitutes the package gate on ai-station: false per the skill's test-and-acceptance reference; colcon test plus colcon test-result is required (CP-1463).
+  - The build tree's stored test results describe the current batch: false - they were stale by six hours (CP-1463).
   - Existing point-validation successes establish ACT recorder readiness: false; required ACT modules are absent.
   - Reuse SEARCH sensor or Unix RPC ingress time as policy_received_wall_s: invalid provenance, EXP-485.
   - Bind controller admission to raw serialized CDR byte equality: invalid under EXP-511 observations.
 open_hypotheses:
+  - Whether the review accepts a PREFIX (SEARCH) case as item 5's evidence with the reduced assertion set, or requires the eight unprovisioned phase implementations to be built first.
   - A single frozen three-anchor route can meet all five staged measurements after the missing physical phases are implemented and verified.
   - A genuine stopped broker reference and an exact 2 ms transfer bridge can be admitted by one complete PathProof followed by a bounded, identity-bound commit window; source contracts exist, but production wiring and verification remain incomplete.
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-598
-next_experiment: second local independent Astra/High Gate 5 review (bounds + offline admission contract + owner-path qualification); Gate 6 stays closed
+latest_checkpoint: CP-1464
+next_experiment: NONE until the owner returns an independent GPT-6 Astra/High verdict on the P1-5 packet (handoffs/20260930-task7-onward/task8-astra-rereview-packet.md, 23306 bytes, sha256 7de92953cc5033c99d35e793729dc51752773f35ee91692fcebee79581f171fe); the alternative is the owner directing the eight unprovisioned phase implementations
 ---
 
 # SO-101 ACT Data Experiment Ledger
