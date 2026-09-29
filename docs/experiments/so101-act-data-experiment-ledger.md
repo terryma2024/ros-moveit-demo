@@ -22075,3 +22075,22 @@ not an inference of mine.**
   this last failure is the descriptor suite's driver, which is also the "valid success" case the reviewer asked for.
 - **State:** P1-3's changes and the fixture work remain uncommitted while this one test is red; no stack started, no CUDA, no actuators, no
   hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1333 — The print settles it: the helper is correct, so the driver is what did not seal
+
+- **Called directly, the helper produces a perfect seal:**
+  ```
+  keys: ['anchors', 'batch_sha256', 'cleanup', 'contamination', 'files', 'identity', 'kind', 'schema_version', 'status']
+  status: CLOSED | anchors: ['default'] | files: 9
+  outside allowed: []   missing required: []
+  ```
+  So the document the validator refuses in that test is **not** the helper's: **the driver never sealed.** One print, two candidates
+  eliminated - which is exactly what CP-1332 said would happen.
+- **The remaining question is why the driver's call does not happen, and the file's own lines are printed above** (the driver string and the
+  helper write are 15 lines apart). The candidates are narrow: the helper module is written **after** the driver module is written but
+  before it runs (fine), the driver's `from seal_valid_helper import seal_valid` may occur **before** the `sys.path` insertion if my patch
+  ordered them that way, or the call may sit outside `fill`. **One more targeted read of those fifteen lines answers it** - and unlike the
+  earlier rounds, it is a read of a region I have printed, not a guess at bytes I have not seen.
+- **State:** P1-3's production half, the schema fix and all of P1-3's own tests are green; this is the last fixture in the batch's P1-3
+  group; changes remain uncommitted while it is red; no stack, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
+  nothing pushed.
