@@ -166,6 +166,13 @@ def _write(path: Path, document: dict) -> Path:
 def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dict:
     """Aggregate sealed batches into the qualification sample, report and receipt."""
 
+    # Boundary IV: one entry, and it begins with the strict closed-batch validation - a batch that is not closed,
+    # carries a mixed contract, hides a symlink or an unindexed file, or was contaminated by a failed cleanup is
+    # refused here, before a single canonical document exists
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+
+    indexes = [validate_closed_batch(Path(root)) for root in batch_roots]
+
     output_root = Path(output_root)
     roots = tuple(Path(root) for root in batch_roots)
     if not roots:

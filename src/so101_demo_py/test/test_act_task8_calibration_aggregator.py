@@ -78,11 +78,13 @@ def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED",
             "yaw_zero_bearing_rad")},
         "observed_lock_frames": {anchor: lock_frames[anchor] for anchor in ANCHORS}})
     # the batch is sealed by the production entry point, which records every raw file hash
-    close_measurement_batch(root, {"source_provenance_sha256": source_provenance_sha256,
-                                   "contract_sha256": contract["contract_sha256"],
-                                   "source_commit": "a" * 40, "config_sha256": "b" * 64,
-                                   "session_id": "s", "reset_epoch": 1,
-                                   "attempt_id": "attempt-1"},
+    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+
+    identity = {name: "b" * 64 for name in IDENTITIES_V2}
+    identity["source_commit"] = "a" * 40
+    identity["source_provenance_sha256"] = source_provenance_sha256
+    identity["measurement_contract_sha256"] = contract["contract_sha256"]
+    close_measurement_batch(root, identity,
                             status=(status_field or
                                     ("INVALID" if declared_status == "INVALID"
                                      else "CLOSED")))
@@ -297,3 +299,31 @@ def test_derived_checks_fold_members_across_roots_and_propagate_unmeasured(tmp_p
     assert checks["synchronization"] == "UNMEASURED"
     # the derived check set is exactly the aggregator's own five checks - no extra names invented here
     assert set(checks) == {"fov", "collision", "search", "synchronization", "execution"}
+
+
+def test_the_aggregator_entry_validates_the_closed_batch_before_publishing(tmp_path, monkeypatch):
+    """Boundary IV: the unique entry runs the strict closed-batch validation first, whatever else it does.
+
+    Proven by a sentinel rather than by inspecting internals: if the entry calls the validator at all, the sentinel it
+    replaces will be raised before any canonical document is written.
+    """
+
+    from so101_demo.act import task8_calibration_aggregator as aggregator
+    from so101_demo.act import task8_measurement_schema as schema
+
+    seen: list = []
+
+    def sentinel(root):
+        seen.append(root)
+        raise ValueError("BATCH_VALIDATION_SENTINEL")
+
+    monkeypatch.setattr(schema, "validate_closed_batch", sentinel, raising=True)
+    batch = tmp_path / "batch"
+    batch.mkdir()
+    output = tmp_path / "out"
+    # whatever else the entry does with an empty batch directory, the assertion is about the validator being reached:
+    # the sentinel records that, and today nothing records it
+    with pytest.raises(Exception):
+        aggregator.aggregate_task8_calibration([batch], {"thresholds": {}, "verdicts": []}, output)
+    assert seen == [batch], "the entry validated the batch it was given, before anything else"
+    assert not output.exists() or not any(output.iterdir()), "nothing is published before validation"
