@@ -28617,3 +28617,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Which is exactly what the joined chain needs, and it also shows why the existing tests stop where they do:** the teleop suites substitute the **worker's result** (a prepared dict) and the demo suites substitute the **owner** entirely - so **each side supplies what the other side is supposed to produce.** The RED must instead give the owner a **worker whose `run_pick_place` drives the production runner**, with only the bottom external I/O substituted.
 - **The next read, therefore, is one name:** the **worker's** full-case entry point on the production side (the child-driven test shows `child.pick_place_phase(request)` is SEARCH-only, so the full-case entry is a different method), together with the object that satisfies `worker.launch.{mujoco_session_id,ros_domain_id}` and `owner.stack.launch.evidence_root` / `owner.child_launch.socket_root`.
 - **State:** **P1-5 RED's wiring is now specified against the code rather than the summary**; P1-4's fixture granularity remains open (CP-1708); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1711 — Two findings in one read: five tests are shadowed, and the live chain test is PREFIX-only
+
+- **Finding 1 - five test functions in `test_task8_child_driven_case.py` share their names with a later definition, so the earlier ones never run:**
+  ```
+  2 x test_a_campaign_of_prefixes_alone_cannot_qualify
+  2 x test_a_missing_retirement_receipt_refuses_the_case_and_publishes_nothing
+  2 x test_the_case_window_binds_its_reset_epoch_exactly_once
+  2 x test_the_real_case_execution_publishes_the_journal_row_for_a_prefix_case
+  2 x test_the_trusted_aggregator_refuses_a_missing_and_a_tampered_case_journal
+  ```
+  **Python binds the later definition and pytest collects one function per name**, so five tests - the earlier halves at lines 541/620/685/700/711 - are **dead code that still reads as coverage**. **That is a distinct defect from P1-5 and it belongs in the record**: a count of collected tests is not a count of distinct tests, and the file's own docstring says the two halves are the same chain twice.
+- **Finding 2 - and it is the verdict's P1-5 in the code's own words:** the **live** chain test (line 743) substitutes **only the worker seam** (`owner.worker.run_pick_place = run_pick_place`) and lets the production `run_pick_place_case` do preflight, campaign check, result validation, live-evidence readback and `_publish_new` - **which is exactly the "join" the verdict asks for** - **but the case it runs is `prefix-01` and the worker calls `child.pick_place_phase(request)`: a SEARCH-only PREFIX case.**
+  ```
+  async def run_pick_place(case_request):
+      events.append("execute")
+      assert case_request["attempt_id"] == "prefix-01"
+      return await child.pick_place_phase(request)
+  ```
+  **So the chain is joined for a prefix and never for a full case** - and a prefix case has **no** live-evidence artifact (`PhaseResult`'s artifact is `None`, and the row says so with the zero digest), **no completed phase list worth indexing, and nothing for a calibration aggregator to consume.**
+- **Which fixes the RED exactly, as an extension of that test rather than a new species:** same shape (`_prepared` + `_prepare_child_case` + the worker seam), but `mode: "full"` with `stop_after: None` so the child runs `task8_full`, **and then the produced artifact, both receipts and the journal are handed to the real aggregator** with the seven facts read from the sealed index, and the four negatives derived by corrupting **that** baseline.
+- **And the open question it raises, which the next step must answer by reading rather than assuming:** whether the child's **full-case** path (`operation` `task8_full`) is exercised anywhere at all - the test named *"the child runs a full case and seals what the runner produced"* (line 518) calls `pick_place_phase`, so **the name says full and the call says phase.**
+- **State:** **P1-5 RED's shape is now an extension of a real test, and two fresh defects are recorded (shadowed tests; prefix-only chain)**; P1-4's fixture granularity remains open (CP-1708); the task list carries them; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
