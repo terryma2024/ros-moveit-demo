@@ -22799,3 +22799,17 @@ not an inference of mine.**
   reality, substituted hardware.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1375 — The real fence is ROS-bound, the double supplies a fake one, and that leaves one read
+
+- **Two facts, read:** the real class is **`RosPhysicsStepFence(node, session_id, *, monotonic=time.monotonic, ...)`** - it needs a **ROS node**,
+  so it **cannot** be instantiated in this fixture and is not what a substituted sources should provide; and the segment suite's `_Sources`
+  supplies a **fake fence** (`physics_fence = SimpleNamespace(request_after_stop=lambda epoch, stopped, deadline: {...})`), which is the honest
+  substitution for a ROS-bound collaborator.
+- **Which leaves a contradiction worth naming rather than papering over:** the refusal I am chasing is
+  `ValueError: PHYSICS_STEP_FENCE_INVALID`, and that string is raised **only in `physics_step_fence.py`** (lines 178 and 211) - so *something*
+  in the chain does run that module's checks even though the double's fence is a lambda. **The `--tb=long` traceback names the raising line
+  itself; reading that line, rather than reasoning about which collaborator could own it, is the next step** - and it is the fifth time in this
+  item that the file's own frame was cheaper than my inference.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
