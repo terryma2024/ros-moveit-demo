@@ -15337,3 +15337,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   finding, and the child IPC socket path question remains with the owner; Task 10 blocked until the 17 search values are
   reviewed. No package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1025 — Compared the interpreters: the demo gate's route is the test venv, and the `tools` import is the last knot
+
+- **Measured both interpreters instead of assuming, and the difference is decisive:**
+  | interpreter | pytest | xdist | mujoco |
+  | --- | --- | --- | --- |
+  | `/usr/bin/python3` (3.12.3) | 7.4.4 | **MISSING** | **MISSING** |
+  | `$R/test-venv/bin/python` (3.12.3) | 7.4.4 | **3.8.0** | **3.12.0** |
+  So the interpreter colcon reaches for the demo package **cannot run its tests meaningfully** - no xdist, and no
+  MuJoCo at all - while the task's test venv has both. Stated plainly: the mandated parallel demo gate must run under
+  the venv.
+- **And the reason the two packages behave differently is now structural, not mysterious:** the demo package has **no
+  `CMakeLists.txt`** - it is an `ament_python` package, so `colcon test` invokes pytest **once** for the whole package and
+  cannot register per-module CTest entries. The teleop package is `ament_cmake` with an explicit
+  `so101_add_pytest_test(<name> <path>)` per module, which is why IT accepted `-n 8` (its test interpreter has xdist) and
+  why its 113 entries are modules. Neither package's gate can be made parallel by the same means, and neither can borrow
+  the other's.
+- **The route for the demo gate, therefore:** `$R/test-venv/bin/python -m pytest -n 8 <full scope>` from the package
+  directory, which is the shape my focused runs already used successfully, and which satisfies the skill's worker rule
+  (`min(8, nproc)`; this host has 32 logical CPUs).
+- **The one knot left, recorded rather than papered over:** a bare full-scope run under that venv reports **8 collection
+  errors, all `No module named 'tools'`**, and the obvious remedy (`PYTHONPATH=src/so101_demo_py`) made collection
+  **worse** (1246 collected, 281 errors) - so the correct `sys.path` arrangement for those modules is not simply "add the
+  package root", and I have not established what it is. Two candidate explanations to test next: those modules expect
+  the package installed in a particular mode (an editable install placing the package root on `sys.path`), or they
+  expect to be invoked through the package's own pytest configuration (`setup.cfg`'s `[tool:pytest]` section, which
+  colcon honours and a bare invocation from the package directory should too). Until that is settled, the demo scope's
+  full run is **not** evidence.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's teleop half fully attributed and fully registered; the demo half has a determined runner
+  (test venv) and one unresolved `sys.path` question; the child IPC socket path question remains with the owner; Task 10
+  blocked until the 17 search values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware;
+  formal 0/0/0; `collection_*` NOT_PROVISIONED.
