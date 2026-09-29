@@ -12376,3 +12376,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   legacy CLI assertion explicitly - and to record which of the two, with the fixture's evidence shape quoted.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-906 — Task 6 committed (deterministic aggregation), with two recorded deviations
+
+- **Committed `fix(act): make task8 calibration aggregation deterministic`** with the aggregator, the report CLI and
+  the aggregator's test module; guard `staged=3 check_rc=0`.
+- **Verified:** the new render suite plus the aggregator and calibration modules report **36 passed, rc=0**
+  (`beh-task6-green10.log`).
+- **Deviation 1 - `test_act_calibration.py` unchanged.** It still passes, so the plan's fourth file needed no edit.
+- **Deviation 2 - the legacy labelled path is off the CLI but still in the module.**
+  `aggregate_task8_calibration` and its `_fov`/`_search`/`_collision`/`_execution` helpers (which read
+  `target_in_view`, `qualified`, `contact_ok` and the four `*_ok` flags) remain for compatibility; the CLI no
+  longer calls them, so the production path is label-free. Removing them wholesale forces a fixture rewrite in the
+  same module, so it is carried forward explicitly rather than half-done - and it is called out here so the Task 9
+  review sees it as a known, deliberate state rather than an oversight.
+- **Four defects of mine found by running, all fixed at the root:** the sealed-batch identity demanded a key the
+  batch does not carry; anchor entries were assumed to be records when the fixture uses bare names (twice - once in
+  validation, once in the rendered document, where `dict(entry)` on a string raised); a contract without a `support`
+  section raised instead of rendering; and a raw record whose **shape** cannot be evaluated raised out of the
+  aggregation instead of yielding `INVALID`. A fifth was a wrong assertion of mine: `--batch-root` is an
+  argparse `append` option, so two batches are accepted by the parser and refused by the runtime contract check
+  (`ONE_V2_SEALED_BATCH_REQUIRED`), which is what the test now asserts.
+- **Migrated rather than deleted:** the legacy CLI test now asserts the four v2 documents, the absence of the old
+  `calibration-report.json`, and that no `--status` override exists - the plan lists that module as a *Modify*
+  target, so the migration is sanctioned, and the old behaviour it asserted is exactly the shortcut this task
+  exists to remove.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
