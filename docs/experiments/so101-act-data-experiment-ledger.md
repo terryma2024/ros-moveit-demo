@@ -26729,3 +26729,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   3. **carry the release epoch the case ended with** into the sealed samples and the sealed identity, consistent with the phase documents this batch already fixed (CP-1555/1558).
 - **State:** item 2 of the remediation list is now **RED-established and localized**; item 1 verified (CP-1599); the rest untouched. Goal still paused+disarmed (tool refuses a model-initiated resume). Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no
   hardware, no live stack; P2 live not started.
+
+## CP-1602 — GREEN for two of the three properties, and a genuine design tension exposed by the third
+
+- **The fix, at the one construction site CP-1601 named (`pick_place_search_port.py`), and its evidence:**
+  ```
+  relative = f"raw/{capture}-{name}.json"           # capture = f"{phase}-{physics_step:07d}"
+  descriptor = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+  except FileExistsError -> PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_RAW_RECORD_EXISTS: <relative>")
+  ```
+  **Naming per capture and opening exclusively**, with the docstring recording why: a constant name per source let a later phase truncate an earlier phase's file while the earlier sample went on quoting its own digest.
+- **And the RED test moved: `3 failed` -> `2 passed, 1 failed`.** `test_every_sample_names_its_own_raw_sources` and `test_every_samples_recorded_digest_still_matches_the_bytes_it_names` **now pass**; only
+  `test_the_sealed_identity_carries_the_epoch_the_case_ended_with` remains red. **Focused suites: `87 passed`** across the nine-phase case, the sealed-artifact assertions, the live-evidence file, the case documents and the search port, **and the port fix is
+  committed (`4f613157`)** while the new test stays uncommitted, as the rule requires while it is red.
+- **And the third property is not a one-line fix - it exposes a real tension, which is why this entry stops and states it rather than forcing a patch:**
+  - the window's identity is bound **once** (its `release_epoch` at construction; `bind_reset_epoch` moves only the reset epoch), and `build_live_evidence_sample` stamps each sample's `release_epoch` from that identity;
+  - **so every sample of a case carries 0**, including SEARCH - which is *truthful at the time*: the case has not passed RELEASE yet when SEARCH is captured;
+  - but **the recorder's seal requires every entry's epoch to EQUAL the identity's**. So the artifact can satisfy that rule only by declaring **one** release epoch for a case whose samples legitimately span **two** (0 before RELEASE, 1 after).
+- **The honest resolution, stated as a proposal rather than applied silently:** the **sealed identity should carry the epoch the case ENDED with** (which is what "the published artifact identity must agree with the case/release epoch" asks for), and the recorder's rule should become
+  **"entries are non-decreasing in release epoch, and the last entry equals the identity"** - which is a **change to a validation rule**, so it is exactly the kind of thing to surface for review rather than slip in. **The alternative - re-stamping earlier samples
+  with a later epoch - would falsify when the capture happened, and this batch will not do that.**
+- **State:** remediation item 2 is **two-thirds green with the third analysed and a proposal on the table**; item 1 verified; the rest untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live
+  not started.
