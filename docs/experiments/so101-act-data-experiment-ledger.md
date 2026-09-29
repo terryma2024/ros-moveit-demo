@@ -31349,3 +31349,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   a production collaborator - a `TrustedVisibleApproachSourcePort` where the broker expects it.** P1-1 through P1-4
   CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1825 — The trusted source port is installed by the production child, and only for the admitted profile
+
+- **`TrustedVisibleApproachSourcePort()` takes no arguments** - it is a registrar: *"Register one current SEARCH source
+  without granting a permit or goal."* **And production installs it in exactly one place, on one condition:**
+  ```python
+  # ros_child.py
+  ownership = Ownership()
+  self._act_visible_source = TrustedVisibleApproachSourcePort()
+  source_authority = PrefixSourceAuthority(ticket_guard=ownership.require_ticket,
+                                           max_observation_age_s=max_age, max_prefix_age_s=max_age)
+  try:
+      _manifest = self._act_artifacts.read_hashed_json("manifest")
+  except ValueError:
+      _manifest = None                      # a child without an admitted manifest keeps the legacy broker
+  if isinstance(_manifest, dict) and _manifest.get("kind") == "ACT_TASK8_LIVE":
+      from so101_demo.adapters.act.broker_authority_wiring import build_bound_act_broker, physics_clock_domain
+      …  prefix_source_port=self._act_visible_source   (lines 292/301)
+  ```
+  **So the collaborator `begin` demands is not something the child's caller supplies - the child builds it, together with
+  an `Ownership` ticket guard, a `PrefixSourceAuthority` and a physics clock domain, and installs them through
+  `build_bound_act_broker` - and only when the manifest it read is the admitted `ACT_TASK8_LIVE` profile.**
+- **Which puts the harness at a genuine fork, and the two branches are not equivalent:**
+  | branch | what it means |
+  | --- | --- |
+  | **extend `FakeBroker`** with `_prefix_source_port`, an `Ownership`, a `PrefixSourceAuthority` and the flow that registers a source through them | **re-implements production behaviour in a fake** - the exact substitution the verdict warns against, and the amount of behaviour is not small: the registrar validates a ticket, the driver's epoch, the simulation session, the armed generation and the stopped state |
+  | **use the production broker** (`build_bound_act_broker`) with only the ROS/MuJoCo I/O replaced | **the faithful substitution**: the collaborator arrives the way it does in production, and the harness substitutes the layer beneath it - which is what *"replace only ROS/MuJoCo/controller/process I/O"* means |
+- **And the second branch is the one the evidence points to**, because every step of this drive has taught the same lesson
+  (CP-1774, CP-1784, CP-1802, CP-1809): **a substitution that removes what the boundary produces does not test the
+  boundary.** The question the next step must answer is therefore not "how do I satisfy `begin`" but **"what does
+  `build_bound_act_broker` need, and can this harness give it real inputs with only the I/O replaced"** - and if that
+  proves to need a live ROS graph, that is a genuine boundary to record rather than to fake past.
+- **State:** **P1-5 in progress, at a recorded fork; the faithful branch's requirements are the next thing to read.**
+  P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**
