@@ -147,6 +147,49 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id) -> Non
         cancelled=threading.Event())
 
 
+def _production_broker(*, session_id: str, driver, settings: dict, model):
+    """The PRODUCTION broker for one full case, with only the external I/O substituted.
+
+    `ros_child.py:286-297` is the reference: `build_bound_act_broker(driver=broker, roles=("arm","gripper","neck"), …)` -
+    the local driver object IS the `driver`, and the returned broker is what carries the authority AND the trusted source
+    port APPROACH's admission asks for. **Two substitutions, both external I/O:** the reservation sockets (the gate-6
+    ack-server fixtures) and the driver (ROS). The domain is the PRODUCTION `physics_clock_domain`, so history,
+    admission and registry are the real ones rather than test doubles.
+    """
+
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    # the gate-6 fixtures live in the other suite's test directory; the child-driven harness already inserts another
+    # suite's directory this way (`sys.path.insert(0, …)`), so this follows its convention rather than inventing one
+    _demo_tests = _Path(__file__).resolve().parents[3] / "so101_demo_py" / "test"
+    if str(_demo_tests) not in _sys.path:
+        _sys.path.insert(0, str(_demo_tests))
+    from test_gate6_bound_authority_wiring import _real_client
+
+    from so101_demo.act.ownership import Ownership
+    from so101_demo.adapters.act.broker_authority_wiring import (build_bound_act_broker,
+                                                                physics_clock_domain)
+    from so101_demo.act.prefix_source import PrefixSourceAuthority
+    from so101_demo.adapters.act.trusted_visible_approach_source import TrustedVisibleApproachSourcePort
+
+    roles = ("arm", "gripper", "neck")
+    ownership = Ownership()
+    client, servers = _real_client(roles)
+    history, admission, registry = physics_clock_domain(
+        session_id=session_id, nq=int(model.nq), nv=int(model.nv), settings=settings)
+    source_port = TrustedVisibleApproachSourcePort()
+    authority = PrefixSourceAuthority(ticket_guard=ownership.require_ticket,
+                                      max_observation_age_s=float(settings["max_wall_age_s"]),
+                                      max_prefix_age_s=float(settings["max_wall_age_s"]))
+    bound = build_bound_act_broker(
+        reservation_port=client, session_id=session_id, roles=roles, history=history,
+        admission=admission, registry=registry, driver=driver, ownership=ownership,
+        simulation_session_id=session_id, prefix_source_authority=authority,
+        prefix_source_port=source_port)
+    return bound["broker"], servers
+
+
 @pytest.mark.xfail(
     strict=True,
     reason=(
