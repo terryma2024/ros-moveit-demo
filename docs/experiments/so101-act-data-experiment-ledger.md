@@ -15988,3 +15988,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   regression-checked; its child side and Task 9 each awaiting one small decision from the owner; Task 10 blocked until
   the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no evidence deleted, no hardware; formal
   0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1049 — Decision A implemented: the gate's scratch sits three levels below its own root (RED then GREEN)
+
+- **Owner's decision:** fix `tools/so101_pytest_gate.py`'s per-process layout so that `Path(TMPDIR).parents[2]` is that
+  process's own root, and **do not** touch `test_controller_reservation_client.py`.
+- **RED first, and it failed on the depth rather than on setup:** the new test asserted
+  `Path(TMPDIR).parent.parent.parent == layout.root` and failed because `TMPDIR` was `root/tmp` - one level below the
+  root, not three. Getting to that RED took two fixture corrections of my own (the run root must exist before a layout is
+  created, since the factory uses `exist_ok=False`; and the repo root must be on `sys.path` for `tools` to import, as
+  CP-1014/CP-1026 established), both recorded rather than hidden.
+- **The minimal change:** `tmp_dir` becomes `root / "scratch" / <id> / "tmp"`, where `<id>` is derived from the same
+  identity as the process directory so two processes cannot collide; `scratch`, `<id>` and `tmp` are each created
+  explicitly with mode `0o700` on previously nonexistent paths, `ros-home`/`ros-log` are untouched, and the run root's
+  `scratch/<run-id>` layout - and with it the AF_UNIX budget check - is unchanged. Distinct runs still get private
+  scratch directories while reaching one `root/ipc` through `parents[2]`, which is exactly the property the module's
+  sibling test protects.
+- **GREEN: 42 passed** in the gate runner's own suite (`beh-r647-green2.log`), including the collision test and the
+  long-evidence-path budget test, both of which had encoded the old depth and were corrected to the new one.
+- **And the module that started all of this now passes:**
+  `test_controller_reservation_client.py` reports **17 passed, rc=0** (`beh-r648-client.log`) with
+  `parents[2] == /data/work/so101-evidence/act-data/20260924-fbc25063-resume` - the registered evidence root, i.e. a
+  genuine task root - which is what the gate's new layout now guarantees rather than accidentally provides.
+- **Two test assertions updated deliberately, not silently:** `test_compact_layout_preserves_existing_directory_on_collision`
+  asserted `tmp_dir.parent == root` (the old shape) and now asserts the three-level depth while still checking that a
+  colliding layout raises `FileExistsError` and preserves existing files.
