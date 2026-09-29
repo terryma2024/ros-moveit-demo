@@ -20479,3 +20479,29 @@ not an inference of mine.**
 - **State:** committed with its tests green; **item 4** (already implemented in the aggregator - needs its two tests) and **item 5** (the
   child-driven Boundary V fixture) remain; the build tree is in sync for every file touched this round; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1251 — Item 4's two defects located precisely, both in the aggregator's descriptor block
+
+- **Read at `task8_calibration_aggregator.py:184-190`:**
+  ```python
+  descriptor_blocks = []
+  for index in indexes:
+      if "runtime-descriptor.json" in index.files:
+          descriptor_blocks.append(json.loads(index.path("runtime-descriptor.json").read_bytes()))
+  if len({json.dumps(block, sort_keys=True) for block in descriptor_blocks}) > 1:
+      raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+  sealed_descriptor = descriptor_blocks[0] if descriptor_blocks else None
+  ```
+  **Defect 1 (the one Astra named): a root without the descriptor is silently skipped.** A multi-root run where one root lacks the
+  indexed descriptor produces a shorter `descriptor_blocks` and **no error at all** - the per-root authority is not enforced, so a
+  published sample can rest on fewer roots than it claims. The fix is for **every** root to be required, failing closed with an
+  explicit code (`CALIBRATION_DESCRIPTOR_MISSING`) rather than quietly comparing whatever it found.
+- **Read at `:273-276`:** `readings.get("head_search")` - `measurements.json`'s own block - is compared with the sealed one and can
+  become the sample's block. **Defect 2 is that path being a second authority**: Astra's requirement is that the sealed, indexed
+  descriptor is the only one, so a document-supplied block must either **agree** with the seal or be refused, and it may never stand
+  in for a missing seal. With defect 1 fixed, `sealed_descriptor` is never `None` and the `elif` fallback becomes unreachable - which
+  is exactly the state the test should pin.
+- **So item 4 is two small code changes and two tests, as CP-1246 predicted:** the fail-closed missing-descriptor case (multi-root, one
+  root bare) and the positive case (all roots sealed with identical payloads → the sample's `head_search` is the sealed block). **The
+  four existing negatives stay as they are.**
+- **State:** HEAD `b4b9ad83` plus this checkpoint; item 4's code untouched so far; no stack, no hardware, nothing deleted, nothing pushed.
