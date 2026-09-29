@@ -141,10 +141,17 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     # the three readers of one hash (CP-1845) - so the boundary is told which model this run is, and its `search`
     # forwards that to the sources it builds
     boundary.model_sha256 = authority["checker"].model_sha256
+    # and the dimensions its scene frames must carry, read from the checker's own compiled model (CP-1884)
+    boundary.nq = int(authority["checker"].model.nq)
+    boundary.nv = int(authority["checker"].model.nv)
     # P1-5/CP-1876: the boundary ALREADY builds `reset.sources` with the members its readers use, and its own comment
     # records that an earlier fix "in the wrong place did not take" because a second namespace was built beside it -
     # so this ADDS to what is already there rather than replacing it.
     sources = boundary.reset.sources
+    # the frames are built by the SOURCES (`_ChildSources`), not by the boundary - so the model's dimensions go there
+    # as well (CP-1884)
+    sources.nq = int(authority["checker"].model.nq)
+    sources.nv = int(authority["checker"].model.nv)
     sources.contact_pairs = contact_pairs
     # the production port reads the PUBLIC name (`bind_startup_receipt`: `receipt["session_id"] !=
     # self.boundary.reset.sources.session_id`), while this double keeps it private - so the public one is added
