@@ -20933,3 +20933,17 @@ not an inference of mine.**
   runner reaches for, including `bind_startup_receipt`) and its sealed-record readback helpers.**
 - **State:** HEAD `c55e3a4f` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1273 — The payload is typed too, so the fixture's request is a model graph rather than a dict
+
+- **Read:** `ACT_OPERATIONS = ("task8_phase", "task8_full", "act_collection_start", "act_collection_resume", ...)` at line 31, a
+  dispatch table mapping **`"task8_full": _PickPlacePayload`** (and `"task8_phase": _PickPlacePhasePayload`) at lines 100-101, and
+  `deadline_ns: int = Field(ge=0)` at 48.
+- **So the fixture builds a model graph, not a dictionary of strings:** an `IpcRequest` whose `operation` is `"task8_full"`, whose
+  `payload` is a `_PickPlacePayload` (its fields are printed above - they are where `scenario_id` and the hash keys live), and whose
+  `deadline_ns` is a real future value. **Every one of the eight preconditions can then be satisfied by construction** rather than by
+  matching literals: the hashes come from `ActArtifactBinding`, and the payload's hash fields come from the same binding.
+- **This is the last piece of item 5's specification.** The next round writes the fixture and runs it; if it fails, it will fail at a
+  named precondition, which is exactly what the eight-precondition list is for.
+- **State:** HEAD `a81e81e5` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
+  nothing deleted, nothing pushed.
