@@ -20970,3 +20970,27 @@ not an inference of mine.**
   `pick_place_full`, and the assertions read the returned dict plus the sealed, indexed records.
 - **State:** HEAD `0a0cb336` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1275 — The stack-owner model, and the honest source for its values
+
+- **Read:**
+  ```python
+  class _StackOwner(BaseModel):
+      model_config = ConfigDict(extra="forbid", frozen=True)
+      pid: int = Field(gt=0, strict=True)
+      pgid: int = Field(gt=0, strict=True)
+      started_ticks: int = Field(gt=0, strict=True)
+      argv_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+  ```
+  and `_ActPayload` is likewise a frozen, closed model - so the whole request graph refuses anything it does not declare.
+- **The values are a *real* process identity, not arbitrary numbers**, which is why the fixture must not invent them: the child's
+  constructor defaults its owner through `local_owner(...)` (CP-1266/CP-1267), and the same helper's output is what the payload's
+  `stack_owner` has to describe - a pid, a process group, a start time in ticks and the argv digest of the process that owns the
+  stack. **Candidate definitions of that helper are printed above; the fixture uses the repository's own, so the payload and the
+  child agree because they were built from one source rather than because a test guessed four plausible integers.**
+- **That is the whole specification, and it is worth naming what changed in this stretch:** item 5 began as "write a child-driven
+  fixture" and turned out to require reading seven distinct contracts - the entry, its preconditions, the fence, the stops, the async
+  entry points, the artifact binder, and now the request graph with its nested models. **Nothing was guessed, which is why the
+  preceding eight checkpoints are mostly reads rather than code.**
+- **State:** HEAD `5e0bd7cc` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
+  nothing deleted, nothing pushed.
