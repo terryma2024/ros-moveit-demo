@@ -13763,3 +13763,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   merge layers green at 27; Tasks 9-10 untouched; one approval outstanding (the 17 candidate search values, three
   `neck_start_rad` starts and the candidate safe interval); the goal's budget is now 756 rounds and it is re-armed; no
   runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-964 — The case-root layout read: Task 8's wiring has one question left, about artifact contents
+
+- **Read `validate_case_journals` and the case-root layout is now known:** journals live at
+  `case_root / "task8-live" / "cases" / f"{case_id}.json"`; the case ids come from `require_campaign_cases(manifest)`
+  with **prefix** cases identified by the `prefix-` id prefix and every other case a **full** case; each journal must
+  be a complete row validated by `require_case_journal_row(row, mode=...)` and bound to the bundle's identity by
+  `require_case_row_matches_bundle(...)`. The docstring states the binding rule Task 8 depends on: **a prefix row
+  carries no live-evidence artifact and a full row carries one.**
+- **So the five sealed FULL runs are the five full-case rows**, and the wiring is:
+  `rows = validate_case_journals(...)` -> take the five full rows -> read each row's `live_evidence_artifact` (path +
+  sha256) -> build the run mappings `derive_live_measurements` expects -> `build_qualified_measurements(ready
+  ["measurements"], runs, contract)` -> write the document -> **read it back and call `require_qualified(report)`**.
+- **The one question left is about the artifact's contents, not its location:** the five live-only **values** must come
+  from the sealed artifact document, and I have not yet read what that document carries (whether the aggregates are
+  written alongside the samples or must be recomputed from them). The fail-closed approach is to require the document
+  to carry the fields and raise a named error when it does not - but writing that check without knowing the document's
+  shape would be another guess, and the last several rounds have shown how those end.
+- **Next read, precisely:** the recorder's seal output in `act/task8_live_evidence.py` (the document written to the
+  artifact path) to see whether it carries the five aggregates or only the samples, then implement
+  `collect_live_runs(rows, *, identities, contract)` accordingly and wire the merge plus the readback and
+  `require_qualified` into `build_task8_qualified_report`.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused, Step-4 command 53); Task 8's derivation and merge layers
+  green at 27 with this single wiring step outstanding; Tasks 9-10 untouched; the goal is re-armed with a 756-round
+  budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe
+  interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
