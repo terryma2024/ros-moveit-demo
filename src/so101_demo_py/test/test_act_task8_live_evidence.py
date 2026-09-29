@@ -278,9 +278,11 @@ def test_search_port_forwards_only_complete_samples_and_never_swallows_a_refusal
     # the port forwards the canonical sample AND the grid sample it builds for the phase, so the assertion is that the
     # sample it was given is among what the recorder received - the exact list is the port's business, not this test's
     assert sample_document in double.appended, double.appended
+    # a caller that STATES the case's epochs must be right: the seal refuses a disagreement by name rather than
+    # ignoring it (CP-1583), and a case that ends after FINAL_CHECK carries the incremented release epoch
     artifact = port.seal_live_evidence({"scenario_id": "full-01", "session_id": "session-1",
                                         "attempt_id": "attempt-1", "reset_epoch": 4,
-                                        "release_epoch": 0})
+                                        "release_epoch": 1})
     assert artifact["sha256"] == "a" * 64
     # the seal happens after FINAL_CHECK, so the release epoch is the incremented one - the same value the runner
     # verifies RELEASE and everything after it with (CP-1555)
