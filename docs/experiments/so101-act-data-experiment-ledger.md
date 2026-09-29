@@ -20900,3 +20900,19 @@ not an inference of mine.**
   `asyncio.run(child.pick_place_full(request))`, and the assertions read from the returned dict and the sealed, indexed records.
 - **State:** HEAD `1778f56d` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1271 — Two findings that change item 5's fixture: the port is already complete, and the child's request is not the runner's
+
+- **`FakePort` already implements `bind_startup_receipt(receipt)`** (line 36) alongside the runner contract - so **CP-1270's "attach
+  the missing method" is unnecessary**, and I am recording that correction rather than carrying a task that does not exist. The
+  reusable port satisfies all eight preconditions that concern the port.
+- **And the request shapes differ, which is the trap item 5 would have fallen into:** the chain test's `_request()` returns a **plain
+  dict** (`{"mode", "stop_after", "lifecycle", "scenario_id", "session_id", "attempt_id", "deadline_ns"}`) because that is what
+  `PickPlaceRunner.run` takes - while `_run_pick_place` reads `request.payload`, `request.operation`, `request.session_id`,
+  `request.attempt_id` and `request.deadline_ns`, i.e. an **object** envelope. **Handing the child the runner's dict would fail on
+  `.payload` before any precondition was even reached.** The candidate request classes are printed above; the fixture uses the real
+  one, because "normal construction" is exactly what Astra asked for.
+- **So the fixture's remaining unknowns are down to one type** (the IPC request) plus the field names of its `payload` - and both are in
+  the file that grep found. **Then the fixture is written, with the port imported from the chain test rather than re-declared.**
+- **State:** HEAD `1258e241` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
+  nothing deleted, nothing pushed.
