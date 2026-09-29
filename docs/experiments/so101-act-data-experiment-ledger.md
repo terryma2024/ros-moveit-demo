@@ -19316,3 +19316,28 @@ not an inference of mine.**
   same flag that influences the shard assignment can also make the assignment reproducible between runs, which is the property
   I want before chasing a specific shard.
 - **State:** HEAD `3d373595`; staged 0; no gate re-run this round; no push, no stack, no hardware.
+
+## CP-1200 — The red gate is one module, now named: `test_controller_reservation_client.py`
+
+- **Found it by reading the runner's own source rather than searching the filesystem again** (CP-1199's lesson):
+  `run_root = arguments.evidence_root.resolve() / "scratch" / arguments.run_id`, and each process writes `pytest.log`,
+  `junit.xml` and `nodeids.json` under `run_root/<physical_name>`. So the per-shard logs are at
+  **`<evidence-root>/scratch/<run-id>/<process>/pytest.log`** - a path I had walked past twice, because I was looking for
+  directories named after shards when the runner names them after physical processes.
+- **Every failing node id is in one module:**
+  ```
+  src/so101_demo_py/test/test_controller_reservation_client.py
+  ```
+  with at least eight failures visible in the first sorted page - a symlinked-ancestor refusal, per-role capability, an expired
+  commit window, parametrised native-ingress rejections, and a neck-arm refusal - and **no failures at all in any module this
+  stretch touched** (aggregator, contract, binding, gate, evidence, training requirements, and the rest of the page).
+- **Two facts that matter more than the names:**
+  1. **CP-1198's contrast hypothesis is confirmed:** the red test is in a module my targeted runs never collected, which is why
+     every suite I ran locally was green while the gate was red. The gate was doing its job.
+  2. **The failure is almost certainly not mine and may be environmental:** nothing I changed touches controller reservation,
+     and this stretch already hit an **AF_UNIX path-length** refusal from the runner itself - so a module that connects over
+     unix sockets is a plausible victim of the **long `TMPDIR`** my scratch uses. That is the CP-1055 class, and it is a
+     hypothesis to test, not a conclusion: the next step is this module **alone**, under the same interpreter, with the same
+     long scratch and then with a shorter one, to see whether the path length is the cause.
+- **State:** HEAD `4992d7c9`; staged 0; run roots `scratch/g794` (8 workers) and `scratch/g798w1` (1 worker, also failed,
+  reported as `shard-01` - so the shard label is not the worker index) both retained; no push, no stack, no hardware.
