@@ -14591,3 +14591,18 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   dependency; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17
   candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate,
   no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-996 — Duplicate-definition sweep across everything this session wrote: clean
+
+- **Applied the CP-978 rule to all nineteen files this session created or edited** - the measurement schema, contract,
+  formulas, phase-camera, calibration admission, search binding, measurement driver, aggregator,
+  live qualification, live evidence, search port, the production-chain test and the seven remaining test modules -
+  parsing each and counting top-level definitions: **0 of 19 files carry a duplicate definition.**
+- **Why the sweep was worth running rather than assuming:** the hazard bit twice already (CP-978 in
+  `task8_live_qualification.py`, where a shadowed older definition silently broke a corrected signature, and CP-995 in
+  its test module, where four byte-identical pairs had accumulated from repeated appends). Both were found by
+  checking; neither would have been visible in a passing test run.
+- **State:** Tasks 1-7 module work complete and green; Task 8's code side complete and green; the driver remains the
+  single dependency; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17
+  candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate,
+  no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
