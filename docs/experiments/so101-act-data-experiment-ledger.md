@@ -27937,3 +27937,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the remaining failure is the stand-in's fidelity, not the wiring** - and the suite already says so in its own words: the old test's comment records that *"a provider stand-in that captures no anchors legitimately seals a batch with an empty anchor list, which the schema refuses"*. **My `_Client` answers every call with `True`/`{}`, so no anchor row is captured.** **The fixture to reuse is the repo's own `CannedMujocoClient`** in `test_act_task8_production_composition_contract.py`, which drives the real composition and seals a `CLOSED` batch with every anchor
   `COLLECTED` - **the same boundary, substituted faithfully** - and reusing it is both cheaper and stronger than teaching my stand-in to imitate it.
 - **State:** P1-1 GREEN continues (next: reuse `CannedMujocoClient` as the seam's client and re-run); the task list stays P1-1 GREEN in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1671 — P1-1 GREEN: `79 passed`, and the success test uses no `--driver` and no provider seam
+
+- **The verdict's completion condition is met, and the evidence is the test rather than a claim:**
+  ```
+  79 passed   (the new formal-entry file + production composition contract + runtime descriptor + per-run identity
+               wiring + formal context fields + measurement driver + calibration aggregator + CLI terminal state)
+  ```
+  **The success case** drives `measure.main([...])` with **no `--driver`** and with `SO101_TASK8_PROVIDER_SEAM` deleted, substitutes **only** the bottom boundaries (`CannedMujocoClient` for the MuJoCo/ROS client, a stand-in model
+  factory, a frame source) through the narrow seam, and requires `rc == 0` plus a **`CLOSED`** batch carrying its cleanup proof and the descriptor. **The negative** removes `calibration_report` and requires
+  `PRODUCTION_CALIBRATION_REPORT_REQUIRED` **by name**. **The interface case** pins that the production detector declares no `__call__`.
+- **What made it work, in the order it was needed - each step moving the refusal strictly deeper:**
+  | attempt | refusal | what it taught |
+  | --- | --- | --- |
+  | 1 | `backend configuration has invalid YOLO artifacts` | the production factory **verifies the model artifacts before** consulting any stand-in factory, so the descriptor must name a real weights file and digest |
+  | 2 | `HEAD_SEARCH_SAMPLE_MISMATCH` | the descriptor and the calibration must be the repo's **matched pair** (`test_act_head_search_binding._inputs`), not two fixtures that merely look similar |
+  | 3 | `HEAD_SEARCH_CONFIG_INVALID` | I wrapped the runtime descriptor twice |
+  | 4 | `BATCH_INVALID` | the entry **ran** to the seal; the stand-in captured no anchors - *"a provider stand-in that captures no anchors legitimately seals a batch with an empty anchor list"*, as the composition suite's own comment predicted, so I reused its `CannedMujocoClient` instead of imitating it |
+  | 5 | `class_id is not in the detection query whitelist` | `DetectionQuery` accepts only `{cup, plastic_cup}` (`core/detection.py:62`), so the model id is **not** a class id - the adapter now queries with the production constant `plastic_cup` (`adapters/act/detector.py:141`) |
+- **And the two stand-ins in the runtime-descriptor suite had to be brought up to the real protocol**, which is the interface the verdict names: `_FakeYolo` gained `detect(self, frame, query)` **and deliberately no `__call__`**, and that suite's provider assertions now reach the built detector **through the adapter** and assert the adapter exists. **A fixture that could not speak the production protocol was hiding the mismatch; now it cannot.**
+- **State:** **P1-1 complete**; task list moves P1-1 GREEN to done and P1-2 to in-progress; boundary unchanged and not re-claimed (a controlled source change has occurred, so the v4 boundary is documentation-only **and** the later integration boundary must be a new run root); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
