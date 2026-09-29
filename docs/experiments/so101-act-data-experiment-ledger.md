@@ -27623,3 +27623,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The fix, named rather than half-applied:** rewrite all three leg scripts with a **quoted heredoc** (`<<'SH'`) so nothing expands when the file is written, and have each script compute its own scratch and IPC base at run time, print them, and **fail closed if the base is missing or not private**.
   **The v4 boundary is NOT valid and is not reported as valid** - runs #1-#3 are evidence of the diagnosis, not a boundary result.
 - **State:** item 7 continues; the three leg scripts are being rewritten; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1654 — The v4 demo leg is GREEN and VALID: 5748 passed, 163 skipped, own fresh scratch
+
+- **The leg, measured after the tree stopped changing:**
+  ```
+  demo_rc=0   elapsed_s=112   5748 passed, 163 skipped, 4 warnings in 111.30s
+  scratch  = .../final-boundary-v4-20260929-220050/demo-scratch4/tmp     (fresh, previously nonexistent)
+  resolved = the same path, verified by the leg's own interpreter before pytest started (fail-closed check passed)
+  -n 8, full `so101_demo_py` gate, `--junit-xml` under the run subroot
+  ```
+  **And the verdict is the test count, not the exit code** - the previous run's `demo_rc=0` sat beside sixteen failures, so this entry quotes `5748 passed` and the `failed: 0` line it was read from.
+- **What the four runs of this leg bought, and why they were worth running rather than assuming:**
+  | run | result | what it found |
+  | --- | --- | --- |
+  | #1 | 4 failed / 5744 passed | **three consequences of this batch's changes in files no focused run collected** - two `build_real_providers` call sites, one seal whose identity was invented, and one test asserting the OLD epoch rule |
+  | #2 | 16 failed / 5732 passed | the same reservation-client family: **the IPC base must exist and be private**, and the demo script never created it |
+  | #3 | 16 failed / 5732 passed | and the script's own `demo_rc=0` beside sixteen failures - **CP-1611's lesson in my own tooling** |
+  | #4 | **0 failed, 5748 passed** | the fix: the base and the environment now agree, because the script creates it |
+- **The teleop leg then failed instantly with `Has this package been built before?`** - because it ran `colcon test` from the package directory instead of the workspace root. **Corrected, and re-running now.** **The third failure of that leg was of the same kind: my harness, not the code.**
+- **State:** **demo leg VALID**; teleop leg running; CTest leg next; the boundary is reported valid **only** when all three are green; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
