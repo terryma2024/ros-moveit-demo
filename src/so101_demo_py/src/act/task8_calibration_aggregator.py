@@ -258,7 +258,10 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
         digest = _digest(sample)
         # camera intrinsics are measurements too: publishing only the head-search seventeen left a report that could
         # never be the contract's twenty-eight, so they are folded in - each cited to its own group's closed sample
-        for name, entry in sorted({**readings["measurements"], **readings["camera_measurements"]}.items()):
+        # the batch's own measurements win over the camera block: the camera rows are a different shape (a camera
+        # measurement of head_intrinsics_px is not a published vector), and folding them in last overwrote the
+        # correctly shaped entries with camera-shaped ones
+        for name, entry in sorted({**readings["camera_measurements"], **readings["measurements"]}.items()):
             cited = support_sample if (support_sample is not None and name in support_names) else sample
             report_measurements[name] = dict(entry, sample_path=str(cited),
                                              sample_sha256=(_digest(support_sample) if cited is support_sample
