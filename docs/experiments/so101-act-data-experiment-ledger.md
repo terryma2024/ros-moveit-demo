@@ -23559,3 +23559,14 @@ not an inference of mine.**
   suspicion is the *state*: a sample recorded after the window has moved on, or an ordering the window refuses.)
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1423 — The boundary's recorder is None, so the child never attached to MY port's hook
+
+- **The probe printed nothing, and that is itself the finding:** its print sits inside `if recorder is not None`, and `record_phases` therefore
+  early-returned - **so `self._evidence_recorder` is None on the boundary, i.e. the child's `bind_live_evidence` call never reached this object** (or
+  reached a different one). **My recording code has never run, which is why its samples could be perfect and the refusal unchanged.**
+- **The child's attach code is printed above**, uncut, so the next read names the object it actually attaches to and the condition it attaches under.
+  **That is the last structural question in P1-5's first half:** once the boundary really holds the child's recorder, the sample recipe at CP-1415
+  and the key rules at CP-1419 are already known-good against it.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
