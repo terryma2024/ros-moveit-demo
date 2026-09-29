@@ -14679,3 +14679,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe
   interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1000 — FINDING: the licence gate requires `schema_version == 1` while the Task 8 report carries 2
+
+- **Read `require_qualified` to explain the refusal my weld test hit, and the cause is a version conflict rather than
+  anything about my measurements.** The gate requires, in order: `require_source_provenance`; the base keys
+  (`schema_version`, `status`, `source_commit`, `config_sha256`, `source_provenance_sha256`, `measurements`, `checks`);
+  `status == "QUALIFIED"`; then `base + ("live_campaign",)`; then **`report["schema_version"] != 1` raising
+  `CALIBRATION_REQUIRED`**; then a 40-hex `source_commit`, a 64-hex `config_sha256`, every `REQUIRED_CHECKS` entry
+  equal to `"PASS"`, `_validate_measurements(..., complete=True)`, and `_validate_live_campaign` requiring exactly
+  **14** journal digests.
+- **The conflict:** the Task 8 ready document - and therefore the qualified document the weld publishes, which copies
+  it - carries **`schema_version: 2`** (the repository's own `_ready` fixture writes 2, and the weld's branch is the
+  protocol-v2 path), while the licence gate insists on **1**. So the plan's Task 8 Step 3 requirement, "write a new
+  report, then perform readback and **call `require_qualified(report)`**", **cannot be satisfied** by a v2 report as the
+  gate is written today - the call always raises `CALIBRATION_REQUIRED` regardless of the measurements being correct.
+- **Why this matters beyond my test:** it is not a fixture problem. Either the Task 8 qualified document must be
+  version 1, or the licence gate must accept the v2 schema; the two cannot both stand, and the choice belongs to the
+  approved design rather than to me - changing either side silently would make one of them lie. It is recorded here as
+  the precise question it is, together with the exact condition (`schema_version != 1`) that produces it.
+- **What my weld test therefore asserts today:** the merge size (28 + 5 = 33) and that **a report the gate refuses
+  leaves no output on disk** - the deletion-on-refusal property. Both are true and valuable; the "published document
+  asserts 33 measurements" half waits on this reconciliation.
+- **State:** Tasks 1-7 module work complete and green; Task 8's code side complete and green at 52 focused tests with
+  three recorded open items - this version conflict, a licence-qualified fixture, and the driver (contract at CP-993);
+  Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search
+  values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
