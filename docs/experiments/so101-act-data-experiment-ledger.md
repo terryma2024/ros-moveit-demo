@@ -15057,3 +15057,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   Task 9 gate is pinned and its blocker is the diagnosed scratch-path/socket conflict awaiting the owner's choice
   (CP-1012); Task 10 stays blocked until the 17 search values are independently designed and reviewed. No runtime, no
   package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1014 — The demo package's bare-pytest scope does not collect: `tools` is missing, and it is the wrong runner
+
+- **Ran the demo package's whole `test/` scope under `pytest-xdist -n 8` from a verified evidence-root scratch, and it
+  does not collect: 8 errors in 6.31 s, every one identical - `ModuleNotFoundError: No module named 'tools'`**
+  (`beh-r607-demo-xdist.log`). These are **collection** errors, not test failures, and they are in files my focused runs
+  never touched because those runs name their files explicitly.
+- **The obvious guess was tested and is wrong:** collecting with `PYTHONPATH=src/so101_demo_py` makes it **worse** -
+  *"1246 tests collected, 281 errors during collection"* - so the package root is not what the suite expects on
+  `sys.path`, and the naive fix would have hidden the real run mode behind a larger failure count.
+- **What this says about the gate command:** the module gate for this package is the repository's `colcon test`
+  invocation (which supplies the environment the package's tests expect), not a bare `python -m pytest`. My earlier
+  focused runs were valid as **localisation** evidence because they named files whose imports resolve standalone; they
+  are not evidence about the package gate, and neither is this bare-pytest run. Task 9 must therefore run the
+  **colcon-based** module gate at `-n min(8, nproc)`, with the scratch and `TMPDIR` handling the rules require.
+- **Consequence for the still-open socket question (CP-1012):** that conflict was measured on the teleop package's bare
+  pytest run, which is the same wrong-runner risk. Before asking the owner to choose a resolution, the teleop scope
+  should be re-measured **through its colcon gate**, because a runner that supplies a different environment may not
+  produce an 82-character scratch-derived socket path at all. If it does not, the conflict is an artefact of my run mode
+  rather than a rule conflict - and asking a question about an artefact is exactly what this ledger exists to prevent.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's runner identified as colcon-based and its socket question now flagged for re-measurement before it
+  is put to the owner; Task 10 blocked until the 17 search values are reviewed. No runtime, no package-gate claim, no
+  push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
