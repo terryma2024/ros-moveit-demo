@@ -12474,3 +12474,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   real `run_pick_place_case()`, owner, child, runner, validation and journal path.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-910 — Task 7: the real interfaces recorded, and a defect in my own RED tests found
+
+- **Read the two anchors the implementation must patch, instead of assuming them:**
+  - `act/task8_live_evidence.py:441` `class LiveEvidenceWindow` with `REQUIRED_PHASES = ("CLOSE", "MICRO_LIFT",
+    "TRANSPORT", "ALIGN", "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")` at line 449. Its docstring states the window
+    "opens at CLOSE" and that sealing requires reaching FINAL_CHECK, so the v2 change is to prepend
+    `SEARCH, APPROACH, CLOSE` to that tuple and correct the docstring - the plan requires the runner to open the
+    window at **SEARCH** and seal only after FINAL_CHECK.
+  - `build_live_evidence_sample`'s **real** signature is keyword-only:
+    `(identity, phase, physics_step, sim_time_s, source_stamps_s, source_received_monotonic_s, raw_records,
+    holding_state, frame, contact, measurements)`. It documents that the port and readback adapters own the values
+    while this function owns the shape, with `frame` carrying the wrist validity/visibility flags, `contact` the
+    four contact booleans plus `observation_valid`, and `measurements` the unit-bearing scalars and vectors.
+- **A defect in my own RED tests, found by reading rather than by failing:** three of the five tests appended in
+  CP-909 call `build_live_evidence_sample` with a signature I **invented** (`head=`/`wrist=`/`receipts=`/
+  `task_camera=`), which the real function does not accept. Left as-is they would either error for the wrong reason
+  or, worse, tempt an implementation to reshape a production interface around a test. They must be rewritten
+  against the real signature - asserting that the produced row carries the required provenance keys and that the
+  Task camera is refused - before or together with the implementation. The two release-correlation tests are
+  unaffected because `correlate_release_open` is genuinely new.
+- **This is the third instance of the same lesson in this session** (the inferred phase list in CP-907, the invented
+  CLI call in CP-902, and now an invented function signature): write the test against the interface that exists and
+  cite its source, rather than against the interface that would be convenient.
+- **State:** Task 7 RED stands at **5 failed, 32 passed**; Tasks 1-6 committed; no runtime, no package gate, no
+  push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
