@@ -253,6 +253,7 @@ def _sealed_batch(root, payload):
     files = {"raw/records.json": hashlib.sha256(raw.read_bytes()).hexdigest()}
     write_closed_json(Path(root) / "batch.json",
                       {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                       "anchors": ["default", "left", "forward"], "batch_sha256": "0" * 64,
                        "identity": identity, "files": files})
     return Path(root)
 
