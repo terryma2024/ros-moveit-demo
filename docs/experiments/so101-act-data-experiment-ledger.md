@@ -14904,3 +14904,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   still reporting ` M` - my separable work committed, their work untouched, my entangled edit pending alongside theirs.
 - **Next:** file 3 of 3, `pick_place_case_owner.py`, whose middle hunk interleaves my three window-invalidate lines with
   the owner's child-retirement block moved before the stack - the case this round's technique was built for.
+
+## CP-1009 — Decision 4, file 3 of 3: the interleaved owner hunk is reconciled and committed
+
+- **The hard case, done the way it needed to be done:** my three semantic lines (plus their comment) sit **inside** the
+  owner's child-retirement block that their hunk moved ahead of the stack retirement, so the index content was built as
+  **HEAD's child-retirement block with my lines inserted before its `stop_owned` call** - their moved-block hunk was not
+  staged, and the working tree was restored byte-for-byte from a copy kept outside the repository.
+- **Verified before committing:** index vs HEAD = *"1 file changed, 4 insertions(+)"*; **0** of their lines
+  (`retire_failed_start`, `_retire`, `stack_owner`) present in the index; the **staged content compiles on its own**;
+  it carries **no duplicate top-level definitions** (the CP-978 hazard checked on the staged bytes, not the worktree);
+  and it still defines both `finish` and `_retire`, so my insertion lands inside a coherent method in the HEAD shape.
+- **Semantics preserved in the HEAD shape:** in HEAD the child retirement follows the stack retirement, and my lines sit
+  immediately before the child step, so the invariant holds there too - **no live-evidence window outlives the child
+  that owns the port recording into it** - and the seal is guarded on the window's own flag, so a completed chain is a
+  no-op.
+- **Committed `cf1fedaa`**, with the file still reporting ` M`: my work committed, their moved block untouched.
+- **Verified: 47 passed, rc=0** (`beh-r601.log`) across the teleop case-execution, production-chain and campaign
+  admission suites, running against the working tree that carries both sides.
+- **Decision 4 is now complete for all three files I had touched, with one honest remainder:** my fixture edit inside
+  the owner's `test_full_case_stays_ineligible_for_formal_collection` (file 2's entangled hunk) stays in the working
+  tree with their work, because no index content can carry mine without theirs - recorded in CP-1008 and here rather
+  than forced.
+- **What this unblocks:** the Task 8 production caller (contract at CP-993) and then Task 9's single full gate; Task 10
+  stays blocked until the 17 search values are independently designed and reviewed.
