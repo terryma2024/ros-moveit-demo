@@ -25014,3 +25014,18 @@ picture in both directions.**
   returns `{goals, receipt, bridge_time_s, start_time_s, snapshot, facts}` - which the child-port builder supplies and tests substitute. **Its contract is now
   fixed by the method that consumes it**, and `PrefixSourceReceipt` is the one shape left to read before writing it.
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1500 — The execution seam's flow, read from the broker: issue the source, dispatch the goals
+
+- **`issue_prefix_source` is the registration, not the execution** (`command_broker.py:86-104`): it takes `ticket, prefix, source, source_kind, source_artifact_sha256,
+  contact_policy_fingerprint`, calls the authority's `issue(...)`, **re-verifies the ticket afterwards and revokes the source if it was lost**, and returns the
+  **`PrefixSourceReceipt`** (`act/prefix_source.py:27-40`: kind, artifact digest, contact fingerprint, observation digest, the source's received wall times, source phase,
+  physics step, reset epoch, owner ticket, `prefix_sha256`, sequence, issue time).
+- **And `broker.dispatch(ticket, kind, goal, *, trusted_search_neck=False)`** (`:106-119`) is how a goal is actually executed through the driver, with the broker lock and its
+  own boundary finalisation. **So the seam's flow is: take the trusted source, register the prefix (`issue_prefix_source` -> receipt), build the two goals from the prefix
+  (`_GOAL_KEYS`, one for the arm and one for the gripper, as the path screen's `_goals` already requires), dispatch each, capture the snapshot, and read the eight gates.**
+- **That means the seam is the one place in P1-4 that genuinely talks to ROS**, and it is therefore exactly what the review allows substituting: the tests supply the goals,
+  the receipt, the times, the snapshot and the facts; production drives `dispatch` for real.
+- **Nothing about APPROACH is now unknown**: the port prepares and qualifies, the boundary inspects and proves, and the seam issues and dispatches. **Next round writes
+  the seam with the goals' construction and the times taken from what `dispatch` reports, then the seam's own refusal tests.**
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
