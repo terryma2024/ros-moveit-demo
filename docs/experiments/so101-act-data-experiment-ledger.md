@@ -25000,3 +25000,17 @@ picture in both directions.**
   produced exactly the kind of plausible-looking partial this batch keeps finding.** The inventory is now complete, so the next round writes it in one pass - and the
   remaining APPROACH work after that is the execution seam itself, which the child-port builder supplies.
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1499 — `execute_approach` is written, and the identity values travel from the route's manifest
+
+- **`32 passed`** (`experiments/gate8-p14/exec.log`). The boundary now orchestrates the real machinery: it requires the **screen** and an **execution seam** by name,
+  refuses a malformed execution result by name, runs the **real inspection authority** over the executed goals, builds the `RelativePathRequest` from the source
+  receipt, and computes the proof with **`PathProver(screen.path_checker).prove(...)`** - returning exactly `{proof, current_snapshot, facts}`, which the port's
+  APPROACH path already expects and qualifies.
+- **And the prover's identity has one source:** the port derives the ticket once and reads `candidate_profile_sha256`, `contact_scope_sha256`, `checker_sha256` and
+  `expected_samples` from the **route's manifest**, passing them in - the tests assert `expected_samples == 701` and that the ticket names this case, so neither can
+  arrive empty.
+- **What remains for APPROACH, precisely:** the **execution seam** itself - the object that issues the prefix source through the broker, drives the prefix and
+  returns `{goals, receipt, bridge_time_s, start_time_s, snapshot, facts}` - which the child-port builder supplies and tests substitute. **Its contract is now
+  fixed by the method that consumes it**, and `PrefixSourceReceipt` is the one shape left to read before writing it.
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
