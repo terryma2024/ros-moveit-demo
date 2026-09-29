@@ -14542,3 +14542,32 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
   candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-994 — The record binding is implemented and green, with a rule correction it surfaced (37 passed)
+
+- **Implemented `record_live_extractors(*, artifact_path, cup_collision_geom, pair_key, occluded_from_record,
+  contact_record="contact", wrist_record="wrist", ...)`:** it takes the record **names**, the pair-list **key** and the
+  occlusion-from-record function from the caller - the choices that belong where those records are written, since the
+  recorder only stores references - and resolves every reference through `make_raw_reader`, which refuses traversal,
+  absence and a digest mismatch, so no predicate can read a record the seal did not cover. Samples are normalized so a
+  sample's `sim_time_s` stands in for the `source_stamp` the span rules order by, and a pair list under the wrong key
+  is refused (`RAW_PAIR_KEY_REQUIRED`) rather than read as empty.
+- **The round surfaced a real rule correction, and it went into the rule rather than the caller:** the design's
+  occlusion row is "CLOSE 到 RELEASE 的 ... 最长连续 source-stamp 区间", so `grasp_occlusion_window_s` now applies that
+  **phase range itself** and leaves the caller's predicate to judge whether occlusion is *legitimate* (owner checks
+  and the like). My first version had pushed the phase condition onto the caller, which the caller's function cannot
+  even see - it receives a record, not a frame - so the correction is what makes the division of responsibility
+  match the row.
+- **Four of my own fixture expectations were wrong and were corrected against the rules' behaviour**, each one
+  clarifying the contract: the occlusion span covered all ten fixture frames once the phase range moved into the rule;
+  the placement rule needed FINAL_CHECK frames the fixture lacked; the release span needed its own filter to be
+  visible; and a contact record that always reports `clear` legitimately yields a zero retreat distance, with an
+  explicit later-frame qualifier giving 0.01 - the test now asserts **both**, which documents what the qualifier is
+  for.
+- **Verified: 37 passed, rc=0** (`beh-r588i.log`).
+- **Task 8's code side is now complete end to end:** rules, span helper, collection, raw reader, extractor factory,
+  record binding and the weld. What remains is the driver that supplies real captures and records.
+- **State:** Tasks 1-7 module work complete and green; Task 8 code side complete and green at 37 focused tests (50
+  with the runner suite); Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding
+  (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no
+  package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
