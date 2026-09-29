@@ -450,7 +450,7 @@ class FakeBroker:
 
 
 def _prepare_child_case(tmp_path, monkeypatch, *, case_id="case-05", campaign_id="campaign-item5",
-                         expert_route_factory=None, route_motion=None,
+                         expert_route_factory=None, route_motion=None, broker=None,
                          session_id="session-item5", attempt_id="attempt-item5",
                          worker_id="item5-child"):
     """Build the real child, its substituted port and the phase request - parameterised for reuse.
@@ -486,7 +486,12 @@ def _prepare_child_case(tmp_path, monkeypatch, *, case_id="case-05", campaign_id
                     "runtime_config_sha256": digests["runtime_config"],
                     "contact_policy_fingerprint": binding.policy_fingerprint}
     # the broker is the ROS/process seam, which a test may stand in for; everything else stays production
-    child = RclpyActionDriver(pick_place_port=port, owner=owner, broker=FakeBroker(), act_hashes=bound_hashes,
+    # P1-5: the broker is the ROS/process seam, and *"external I/O may be substituted, but the chain may not"* - so a
+    # caller that has the PRODUCTION broker (WITH its `prefix_source_port`, which APPROACH's admission reads as an
+    # `isinstance`) passes it here; the default stays the stand-in the prefix cases have always used.
+    if broker is None:
+        broker = FakeBroker()
+    child = RclpyActionDriver(pick_place_port=port, owner=owner, broker=broker, act_hashes=bound_hashes,
                               startup_proof_consumer=lambda request: {
                                   "schema_version": 1, "proof": "startup",
                                   "session_id": session_id,
