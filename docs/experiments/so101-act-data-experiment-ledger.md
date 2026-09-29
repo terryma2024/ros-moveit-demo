@@ -11636,3 +11636,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   from the approved five-name `EXPECTED_OCCLUDERS`.
 - **Boundaries:** no runtime started, no package gate run, no evidence deleted, no push, no hardware; formal
   accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-873 — Task 1 RED established (approved measurement protocol v2)
+
+- **Inputs for the tests taken from the approved documents, not from memory:** 21 head-search fields and seven
+  support fields with their units from `calibration.REQUIRED_MEASUREMENTS`, the ten-member closed identity, and
+  the five approved occluder names; all saved as
+  `handoffs/20260929-measurement-protocol-v2-approved/task1-inventory.md`.
+- **RED run:** `python -m pytest -q -p no:cacheprovider test/test_act_task8_measurement_contract.py` in the
+  worktree package, **exit code 1, elapsed 0 s**, fresh verified NVMe scratch `scratch-r443.gEuk`
+  (`TMPDIR`/`TMP`/`TEMP` verified through the exact interpreter before pytest). Result: **5 failed, 4 passed**,
+  with `ModuleNotFoundError: No module named 'so101_demo.act.task8_measurement_schema'` - the intended boundary -
+  and the failures are exactly the new tests: contract v2 fixtures, the ten-member identity, the phase-camera
+  matrix occluder check, and closed-batch validation (`BATCH_CLOSURE_INVALID` / `BATCH_PATH_INVALID`).
+- **Test file:** new tests appended to `test/test_act_task8_measurement_contract.py` as the approved plan directs;
+  it stays uncommitted until Step 4's GREEN, when the plan's exact `git add` list is used.
+- **Next:** implement Step 3 - `act/task8_measurement_schema.py` (`MeasurementIdentity`, `BatchIndex`,
+  `validate_closed_batch`, `write_closed_json`), the v2 contract with per-measurement `unit`, `source_kind`,
+  `comparator`, `formula_id`, window, threshold source and failure code (and no threshold-override surface), the
+  search candidate and search policy documents, the phase-camera matrix, and the schema update - then run the same
+  test for GREEN and commit with the plan's file list.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
