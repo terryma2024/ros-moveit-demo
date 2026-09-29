@@ -29368,3 +29368,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ```
   If that runs the 117 and passes, the leg's invocation is what is wrong and the fix is in `run-teleop.sh`; if it also executes nothing, the fault is in how the build tree was prepared for this boundary.
 - **State:** **leg 1 green; leg 2 blocked on a harness question with a named next command; leg 3 (serial CTest) after it**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1750 — Leg 2's real result: 1315 cases, 43 skipped, THREE failures - and a correction to CP-1749
+
+- **The xunit files parsed (117 of them, freshly written at 00:23-00:25):**
+  ```
+  files: 117   cases: 1315   failures: 3   errors: 0   skipped: 43
+  ```
+  **1315 cases and 43 skipped are exactly the canonical numbers** (`Test.xml`, CP-1742) - **so the leg did run everything, and CP-1749's "CTest executes zero tests" was WRONG.** The mistake was mine and it is worth naming: `build/…/Testing/Temporary/LastTest.log` is a **121-byte stub** in this layout, while the real per-test logs are written under timestamped names and the xunit under `build/…/test_results/`. **I read a stub as evidence of an empty run, and announced it in the ledger before checking the file's mtime.** The correction is this entry.
+- **And the three failures are real, and they are THIS work's fallout in a suite I had not run:**
+  | failure | what it is |
+  | --- | --- |
+  | `test_ctest_registration.py::test_registration_matches_the_ordinary_test_modules` | *"modules the package gate would never run: ('test/teleop/test_act…"* - **the new test file this work added is not registered**, i.e. CP-1711's sibling: a test that exists and is never collected |
+  | `test_task8_child_driven_case.py::test_the_case_evidence_is_indexed_and_a_tampered_raw_record_is_refused` | *"the phase's own sample is the case's evidence: 2 / assert 2 == 1"* - **the same `== 1` expectation family as CP-1728**, now in the teleop suite |
+  | `test_task8_live_evidence_production_chain.py::test_the_port_seals_its_window_together_with_the_recorder` | **`TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: release_epoch`** - the P1-4 epoch rule meeting a fixture that still seals with the initial epoch |
+- **Which is exactly what a boundary is for, and why it is not being waved through:** the demo leg (5764 passed) and the eleven-suite set (151 passed) could not have found these, because they do not run the teleop suite's own registration check or its two live-evidence fixtures. **All three are in scope, all three are mine, and the next round fixes them one at a time with a focused run each - after which the whole leg is re-run at the same `-n 8`.**
+- **State:** **leg 1 green; leg 2 found three real failures of this work's own making, all named; leg 3 (serial CTest) after them**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd` (**the freeze is what makes these fixes a deliberate, recorded unfreeze**); boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
