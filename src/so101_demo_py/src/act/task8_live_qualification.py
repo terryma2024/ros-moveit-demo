@@ -455,13 +455,15 @@ def grasp_occlusion_window_s(frames, *, occluded) -> float:
     gripper occlusion between CLOSE and RELEASE.
 
     Unlike the stability rows, this one makes a frame break fail the run, so the span is computed with
-    `strict_breaks=True` and a gap raises `SPAN_FRAME_BREAK`. No phase filter is applied: the caller's predicate is
-    what identifies legitimate occlusion, and it must accept only CLOSE..RELEASE frames whose occluder owner is one of
-    the approved group-0 visual geoms - a non-allowed owner belongs in the predicate so it ends the span rather than
-    being silently counted.
+    `strict_breaks=True` and a gap raises `SPAN_FRAME_BREAK`. The row's own phase range is applied here - only CLOSE
+    and RELEASE frames are considered - while the predicate judges whether occlusion is *legitimate*, which is where
+    the approved-owner check belongs: a non-allowed owner ends the span rather than being silently counted.
     """
 
-    return longest_contiguous_span_s(frames, predicate=occluded, strict_breaks=True)
+    in_range = [frame for frame in frames if frame.get("phase") in ("CLOSE", "RELEASE")]
+    if not in_range:
+        raise ValueError("SPAN_FRAMES_REQUIRED: no CLOSE..RELEASE frame in this run")
+    return longest_contiguous_span_s(in_range, predicate=occluded, strict_breaks=True)
 
 
 def collect_live_runs(rows, *, identities: dict, extractors: dict) -> tuple:
@@ -569,4 +571,77 @@ def live_extractors(*, occluded, release_stable, placement_stable, retreat_quali
         "retreat_distance_m": lambda samples, document: retreat_distance_m(
             samples, qualifying=retreat_qualifying),
         "placement_stable_s": lambda samples, document: placement_stable_s(samples, stable=placement_stable),
+    }
+
+
+def record_live_extractors(*, artifact_path, cup_collision_geom: str, pair_key: str,
+                           occluded_from_record, pair_key_shape=("geom1", "geom2"),
+                           contact_record: str = "contact", wrist_record: str = "wrist",
+                           release_stable=None, placement_stable=None, retreat_qualifying=None) -> dict:
+    """Bind the five live rules to the raw records a run's samples reference.
+
+    The record **names** (`contact_record`, `wrist_record`), the key under which a contact record lists its pairs
+    (`pair_key`) and the function that decides occlusion from a wrist record (`occluded_from_record`) are all supplied
+    by the caller, because they are decided where those records are written - the recorder only stores the references.
+    Everything else is already verified here: `make_raw_reader` resolves each reference against the sealed root and
+    refuses traversal, absence or a digest mismatch, so a predicate can never read a record the seal did not cover.
+    """
+
+    reader = make_raw_reader(artifact_path)
+    geom_a, geom_b = pair_key_shape
+
+    def contact_pairs(sample: dict):
+        record = reader(sample, contact_record)
+        pairs = record.get(pair_key)
+        if not isinstance(pairs, list):
+            raise ValueError(f"RAW_PAIR_KEY_REQUIRED: {pair_key!r} is not a pair list")
+        return [{geom_a: pair.get(geom_a), geom_b: pair.get(geom_b),
+                 "signed_distance_m": pair.get("signed_distance_m")} for pair in pairs]
+
+    def normalized(samples):
+        # the span rules order frames by `source_stamp`; a sample records the same instant as `sim_time_s`, so it is
+        # carried across rather than re-derived, and a caller-supplied stamp is respected when present
+        return [dict(sample, source_stamp=sample.get("source_stamp", sample.get("sim_time_s"))) for sample in samples]
+
+    def support_frames(samples):
+        frames = []
+        for sample in normalized(samples):
+            frame = dict(sample)
+            frame["contacts"] = contact_pairs(sample)
+            frame.setdefault("before_first_open", sample.get("before_first_open") is True)
+            frames.append(frame)
+        return frames
+
+    def occluded(sample: dict):
+        return occluded_from_record(reader(sample, wrist_record))
+
+    def stable_from(record_name):
+        def predicate(sample: dict):
+            return reader(sample, record_name).get("stable") is True
+        return predicate
+
+    def wrapped(predicate):
+        """A rule's predicate sees normalized frames, so a sample's sim time stands in for its source stamp."""
+
+        def check(sample: dict):
+            return predicate(normalized([sample])[0])
+        return check
+
+    # the five extractors are built here rather than through live_extractors so that the **frames** handed to the span
+    # rules are normalized too - they sort by source_stamp, which a raw sample records as sim_time_s
+    if not cup_collision_geom:
+        raise ValueError("CUP_COLLISION_GEOM_REQUIRED: the support rule needs the cup's bottom collision geom")
+    return {
+        "grasp_occlusion_window_s": lambda samples, document: grasp_occlusion_window_s(
+            normalized(samples), occluded=wrapped(occluded)),
+        "support_distance_m": lambda samples, document: support_distance_from_frames(
+            support_frames(samples), cup_collision_geom=cup_collision_geom),
+        "release_stable_s": lambda samples, document: release_stable_s(
+            normalized(samples), stable=wrapped(release_stable or stable_from(contact_record))),
+        "retreat_distance_m": lambda samples, document: retreat_distance_m(
+            normalized(samples),
+            qualifying=wrapped(retreat_qualifying
+                               or (lambda sample: reader(sample, contact_record).get("clear") is True))),
+        "placement_stable_s": lambda samples, document: placement_stable_s(
+            normalized(samples), stable=wrapped(placement_stable or stable_from(contact_record))),
     }

@@ -1076,3 +1076,73 @@ def test_the_world_distance_fallback_is_opt_in_and_not_the_default():
         support_distance_from_frames(world_only, cup_collision_geom="cup_a_bottom_collision")
     assert support_distance_from_frames(world_only, cup_collision_geom="cup_a_bottom_collision",
                                         allow_world_distance=True) == pytest.approx(0.004)
+
+
+def _r580_fixture(tmp_path):
+    """One artifact whose samples reference a real contact record and a real wrist record."""
+
+    import hashlib
+    import json as _json
+
+    root = tmp_path / "records"
+    (root / "raw").mkdir(parents=True)
+    contact_payload = _json.dumps({"pairs": [{"geom1": "cup_a_bottom_collision", "geom2": "table_collision",
+                                              "signed_distance_m": 0.002}], "stable": True,
+                                   "clear": True}).encode()
+    wrist_payload = _json.dumps({"occluded": True}).encode()
+    (root / "raw" / "contact.json").write_bytes(contact_payload)
+    (root / "raw" / "wrist.json").write_bytes(wrist_payload)
+    refs = {"contact": {"relative_path": "raw/contact.json",
+                        "sha256": hashlib.sha256(contact_payload).hexdigest()},
+            "wrist": {"relative_path": "raw/wrist.json",
+                      "sha256": hashlib.sha256(wrist_payload).hexdigest()}}
+    def frame(phase, sim_time, *, before=None, effector_x=0.0):
+        entry = {"phase": phase, "sim_time_s": sim_time, "raw_records": refs, "release_epoch": 7,
+                 "cup_position_m": [0.0, 0.0, 0.1], "end_effector_position_m": [effector_x, 0.0, 0.1]}
+        if before is not None:
+            entry["before_first_open"] = before
+        return entry
+
+    samples = [frame("RELEASE", 1.0 + 0.1 * index, before=index < 3) for index in range(4)]
+    samples += [frame("FINAL_CHECK", 1.4 + 0.1 * index) for index in range(3)]
+    # the retreat starts at the cup and moves away, so the first clear frame is the later one
+    samples += [frame("RADIAL_RETREAT", 1.7, effector_x=0.0), frame("RADIAL_RETREAT", 1.8, effector_x=0.01)]
+    artifact = root / "full-00.json"
+    artifact.write_bytes(_json.dumps({"identity": {"session_id": "session-1"},
+                                      "samples": samples}).encode())
+    return artifact, samples
+
+
+def test_record_extractors_bind_the_rules_to_the_records(tmp_path):
+    from so101_demo.act.task8_live_qualification import LIVE_ONLY_FIELDS, record_live_extractors
+
+    artifact, samples = _r580_fixture(tmp_path)
+    # the occlusion rule applies no phase filter of its own - the caller's predicate owns the phase and owner
+    # conditions - so this one counts occlusion only in CLOSE..RELEASE, exactly as the design's row describes
+    def occluded_from_record(record):
+        return record["occluded"]
+
+    extractors = record_live_extractors(artifact_path=artifact, cup_collision_geom="cup_a_bottom_collision",
+                                        pair_key="pairs", occluded_from_record=occluded_from_record)
+    assert set(extractors) == set(LIVE_ONLY_FIELDS)
+    # three consecutive pre-open frames each carry the exact pair, so the support distance is the max of max(0, d)
+    assert extractors["support_distance_m"](samples, {}) == pytest.approx(0.002)
+    # the rule applies the row's own CLOSE..RELEASE phase range, so the ten-frame fixture yields the release span
+    assert extractors["grasp_occlusion_window_s"](samples, {}) == pytest.approx(0.3)
+    assert extractors["release_stable_s"](samples, {}) == pytest.approx(0.3)
+    assert extractors["placement_stable_s"](samples, {}) == pytest.approx(0.2)
+    # this fixture's contact record reports clear in every frame, so the first retreat frame already qualifies and
+    # the radial displacement it reports is zero - the qualifier is what moves the reading to the later frame
+    assert extractors["retreat_distance_m"](samples, {}) == pytest.approx(0.0)
+    later_only = record_live_extractors(
+        artifact_path=artifact, cup_collision_geom="cup_a_bottom_collision", pair_key="pairs",
+        occluded_from_record=occluded_from_record,
+        retreat_qualifying=lambda sample: sample.get("phase") == "RADIAL_RETREAT"
+        and abs(sample["end_effector_position_m"][0]) > 0.005)
+    assert later_only["retreat_distance_m"](samples, {}) == pytest.approx(0.01)
+
+    # a record list under the wrong key is refused rather than silently producing an empty pair list
+    wrong = record_live_extractors(artifact_path=artifact, cup_collision_geom="cup_a_bottom_collision",
+                                   pair_key="collisions", occluded_from_record=lambda record: record["occluded"])
+    with pytest.raises(ValueError, match="RAW_PAIR_KEY_REQUIRED"):
+        wrong["support_distance_m"](samples, {})
