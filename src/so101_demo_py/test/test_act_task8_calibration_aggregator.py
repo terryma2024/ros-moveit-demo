@@ -796,3 +796,27 @@ def test_a_batch_that_does_not_index_the_descriptor_cannot_bind(tmp_path):
         (batch,), contract, tmp_path / "out")["calibration_report"]).read_text())
     with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
         validate_head_search_binding(runtime, report)
+
+
+def test_a_root_without_a_sealed_descriptor_fails_closed(tmp_path, contract):
+    """Astra item 4: every root must carry the sealed, indexed descriptor - a bare root is a refusal, not a skip."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+
+    good = batch_factory(tmp_path, contract, name="good")
+    bare = batch_factory(tmp_path, contract, name="bare", descriptor=False)
+    with pytest.raises(ValueError, match="CALIBRATION_DESCRIPTOR_MISSING"):
+        aggregate_task8_calibration((good, bare), contract, tmp_path / "out")
+
+
+def test_identical_sealed_descriptors_across_roots_pass_and_reach_the_sample(tmp_path, contract):
+    """Astra item 4: agreement is the positive case, and the sample's block is the sealed one."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+
+    first = batch_factory(tmp_path, contract, name="first")
+    second = batch_factory(tmp_path, contract, name="second")
+    aggregate_task8_calibration((first, second), contract, tmp_path / "out")
+    sample = json.loads((tmp_path / "out" / "head-search-qualification.json").read_text())
+    assert sample["head_search"]["detector"]["allow_cpu_fallback"] is False, \
+        "the published sample carries the sealed descriptor's block"
