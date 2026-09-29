@@ -20682,3 +20682,22 @@ not an inference of mine.**
   Astra asked for - a bare root among several must fail closed (the `descriptor=False`/`descriptor_indexed=False` parameters are in
   place for exactly that), and identical sealed payloads across roots must pass.
 - **State:** all edits uncommitted while red (one test); no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1261 — Item 4's code and fixtures are GREEN: 28 passed
+
+- **`28 passed, rc=0`** (`rev4-k.log`) - the aggregator suite is fully green for the first time since the rule changed, and the last
+  step was the one CP-1260 identified: the fake driver seals its own batch, because the **driver** is the seal owner.
+- **Both of item 4's code requirements are in and committed with the suite green:**
+  1. **every root** must carry the sealed, indexed descriptor - a bare root raises `CALIBRATION_DESCRIPTOR_MISSING` rather than being
+     skipped, which is what had allowed a published sample to rest on fewer roots than it claimed;
+  2. **no second authority** - the branch that copied `measurements.json`'s `head_search` into the sample is deleted, so the sealed
+     descriptor is the only one that can reach the published document.
+- **Fixture work that got there, each step measured rather than assumed:** `batch_factory` writes a descriptor before sealing;
+  `_sealed_batch` does too, **idempotently** (it runs twice on one root - the `CLOSED_JSON_EXISTS` collapse confirmed CP-1254's
+  hypothesis, which could not be confirmed when it was written); both builders accept the inner block or the full document; and the
+  CLI test's fake driver seals. **The climb was 15 → 4 → 11 → 3 → 1 → 0.**
+- **What item 4 still owes Astra, and it is only tests now:** the two new cases - **a bare root among several must fail closed**
+  (`descriptor=False` is the parameter for it) and **identical sealed payloads across roots must pass**. The four existing negatives
+  are green inside the 28.
+- **State:** committed with its tests green; build tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing
+  pushed.
