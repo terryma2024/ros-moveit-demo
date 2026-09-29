@@ -28185,3 +28185,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **What is NOT in doubt, and was verified by counting in CP-1682:** the port feeds the frozen grid through **four** `add_grid` sites and **never** calls the window's `add_event`, while the window documents "a frozen 10 Hz grid plus edge events" and says an event "can never stand in for a grid point". **The claim is established; the RED's fixture is what remains.**
 - **Next, and it is one step rather than two:** read the fixture's `request()` identity and the SEARCH evidence it requires, bind the window to *that* case, and implement the port's edge detection (`command` / `release` / `contact`) with the window recording **why** (`add_event(sample, reason=...)`, `event_reasons`) - then the RED's assertions are the ones being tested.
 - **State:** **P1-4 claim 3 verified; RED in place with a two-part fixture correction named**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1684 — Piece 3 is bigger than "call `add_event`": the port records ONE grid point per phase
+
+- **Two refusals in a row moved the RED onto the real shape of the problem:**
+  ```
+  TASK8_PHASE_NOT_PROVISIONED: RELEASE     <- this port fixture provisions one phase at a time
+  TASK8_SEARCH_ALREADY_STARTED             <- and a case runs SEARCH once
+  ```
+  **The second one is the informative one**, because it exposes what the port actually does inside a phase: **it records exactly one sample** - the search-port suite's own test asserts `window._grid_count == 1` after a phase. **So the "frozen 10 Hz grid" is one point per phase, taken when the phase returns**, which is precisely the verdict's third claim: *"Samples occur at phase
+  return/retreat completion, not continuously at 10 Hz."*
+- **Therefore piece 3 is not "add two `add_event` calls"** - it is **sampling continuously inside a phase** at the frozen period, from the readback's own clock, **and** recording the edges (command / release / contact) as additions, which is what the window's docstring already promises:
+  *"a frozen 10 Hz grid plus edge events ... event samples are recorded as additions and can never stand in for a grid point."*
+- **And piece 4 follows from it rather than being independent:** the fixture's `_stamped_add_grid` wrapper and its `index % 40` source-time wrap exist **because** the port has no continuous sampling to produce a cadence - so they can only be removed once piece 3 makes the cadence real. **That is why CP-1652 recorded the cadence claim as unprovable here, and why it is provable once this lands.**
+- **The RED's assertions stay as they are** (`grid_count` grows with the phase's duration, `event_count >= 1`, and an edge says why); what changed is the understanding of what satisfies them.
+- **State:** **P1-4 claims 1-2 green and committed; claim 3 verified and now correctly SCOPED** (continuous in-phase sampling plus edges, not two extra calls); the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
