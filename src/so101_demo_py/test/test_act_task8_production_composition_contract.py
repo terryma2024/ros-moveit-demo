@@ -133,8 +133,12 @@ def _run(tmp_path, monkeypatch, client):
         # them rather than pretending the weights file is a real network
         return CannedDetector()
 
+    # the per-run values are ARGUMENTS: this test stands in for the driver, so it supplies them the way the driver
+    # does - a composition without them refuses by name (CP-1635)
     providers = build_real_providers(context=context, descriptor=document["runtime_descriptor"],
-                                     io_client=client, yolo_detector_factory=canned_detector_factory)
+                                     io_client=client, yolo_detector_factory=canned_detector_factory,
+                                     session_id=document["session_id"], attempt_id=document["attempt_id"],
+                                     search_start_rad=document["search_start_rad"])
     # the driver requires the schema's ten-member identity document, so the test supplies one rather than a
     # single convenient hash (the same document the batch seal and the aggregator share)
     from so101_demo.act.task8_measurement_schema import MeasurementIdentity
@@ -142,7 +146,11 @@ def _run(tmp_path, monkeypatch, client):
     identity = {"source_commit": "a" * 40,
                 **{name: hashlib.sha256(name.encode()).hexdigest() for name in MeasurementIdentity.MEMBERS
                    if name != "source_commit"}}
-    driver = build_production_measurement_driver(context=context, identity=identity, providers=providers)
+    # the per-run values are ARGUMENTS now (CP-1635): the driver supplies them, and a composition that is not
+    # given them refuses by name rather than defaulting
+    driver = build_production_measurement_driver(
+        context=context, identity=identity, providers=providers, session_id=document["session_id"],
+        attempt_id=document["attempt_id"], search_start_rad=document["search_start_rad"])
     return driver.run(context, tmp_path / "batch"), context
 
 
