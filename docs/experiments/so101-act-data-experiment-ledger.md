@@ -15553,3 +15553,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   fixture to distinguish socket-root, endpoint-collision and serial-registration explanations before changing anything;
   Task 10 blocked until the 17 search values are reviewed. No formal-gate claim, no push, no evidence deleted, no
   hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1032 — The failing module derives its socket root from `TMPDIR.parents[2]`, and the gate's tmp depth differs
+
+- **Read the fixture rather than guessing, and it is the same pattern CP-1022 found in the sibling module:**
+  `test_controller_reservation_client.py:20-21` computes `task_root = Path(os.environ["TMPDIR"]).parents[2]` and builds
+  its socket path from there. The failing assertion is `assert ready.wait(1)` at line 80 - the server thread that sets
+  `ready` never does so within a second, which is what a `bind` on a too-long or colliding Unix socket looks like from
+  the client's side (the thread dies, the event is never set).
+- **The depths, computed rather than assumed:**
+  - my invocation's `TMPDIR` = `$R/scratch/r623.<n>/tmp` → `parents[2]` = `$R`, the registered evidence root;
+  - the gate's own per-process tmp (visible as `<shard-dir>/tmp` in the run) = `$R/gate-r623/scratch/r623/<id>/tmp` →
+    `parents[2]` = `$R/gate-r623/scratch`, which is **not** a task root at all.
+  So this module's notion of "task root" depends on a directory depth that neither my scratch nor the gate's scratch
+  reproduces, and the module's socket path is therefore longer than the module assumes.
+- **Two candidate causes remain, and they are distinguishable by one cheap experiment:** (a) the derived socket path
+  exceeds the platform limit, so `bind` fails; or (b) with eight shards running, a fixed endpoint collides. Running this
+  single module alone, once with the gate's tmp layout and once with a short `TMPDIR` outside the evidence root, separates
+  them - and the second variant is only a diagnostic, not a gate configuration, exactly as CP-1012's A/B was.
+- **What I am not doing:** registering the module in the gate's `SERIAL_MODULES` or changing its fixture on the strength
+  of a hypothesis. Both are real options - the tool documents serial treatment for modules that need it, and the fixture's
+  depth assumption is arguably the defect - but choosing between them without the experiment above would be the
+  inferred-interface mistake this ledger records seven times.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's diagnostic is 5754 cases with this one module failing, its cause narrowed to a `TMPDIR`-depth
+  dependency with two distinguishable candidates; Task 10 blocked until the 17 search values are reviewed.
