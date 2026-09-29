@@ -29535,3 +29535,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the review has not arrived:** the handoff directory's newest file is still this session's own packet (00:36). **The session is where CP-1757 left it - at the owner's decision boundary, with no controlled source change made since the freeze, and none planned until the verdict returns.**
 - **What I will do when it returns, so the handoff is unambiguous:** read the verdict in full and verify its digest against the freeze; reproduce every finding it names, item by item, with focused runs; **if it requires a change, write a failing test first, then the change, then the focused run, then the boundary leg it belongs to** - and if it disputes something on technical grounds, record the precise counter-evidence and stop at that item for the owner rather than narrowing the approved contract silently.
 - **State:** **frozen, indexed, audited and waiting; the goal stays active because the review and its outcome are the plan's last step.**
+
+## CP-1760 — The parallelism criterion verified for v5, and the boundary record amended rather than the packet
+
+- **The criterion the previous verdict applied to the v4 canonical artefact - *"all with 8-worker banners"* - verified against the v5 one:**
+  ```
+  v5 canonical Test.xml:  234 x "8 workers"      (234 = 117 tests x 2, the same count as v4)
+  v4 canonical Test.xml:  234 x "8 workers"
+  ```
+  **So the boundary's teleop leg ran at the same parallelism as the run the verdict accepted**, and the evidence is in the artefact rather than in the script.
+- **And the demo leg's own JUnit agrees with its log:** `tests=5927 failures=0 errors=0 skipped=163` (5927 − 163 = **5764 passed**, exactly what `demo2.log` reported). **The CTest leg is serial on purpose**, and the script says why: `-j 8 makes test_unified_bridge* contend for the process group`.
+- **Where this went, and why not into the packet:** into **`BOUNDARY.md`** (now 3474 bytes, `455304cca4bebfb8`), which is the artefact the packet points the reviewer at for the boundary's results. **Amending an evidence artefact rather than a narrative one keeps the packet's claims and its sources in one place** - and it cost exactly what the discipline says it should: the index row was re-synced and the freeze rewritten and read back.
+- **State:** **everything frozen, indexed and audited; the review still the owner's to launch (the newest handoff file remains this session's own packet).** The goal stays active; no controlled source change has been made since the freeze.
