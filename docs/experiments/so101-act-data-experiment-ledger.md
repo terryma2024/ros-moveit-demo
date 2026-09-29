@@ -21732,3 +21732,25 @@ not an inference of mine.**
   camera ← a new matrix-driven evaluator** returning the driver's observation shape per `(phase, index)`.
 - **State:** P1-1's RED uncommitted while red; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup untouched;
   nothing deleted, nothing pushed.
+
+## CP-1313 — P1-1: the formal entry passes, and the positive half is one fake attribute away
+
+- **The reviewer's exact requirement is now GREEN:** `test_the_formal_entry_composes_real_providers_without_any_seam` passes - the
+  formal CLI, with `SO101_TASK8_PROVIDER_SEAM` deleted, no longer dies in `PRODUCTION_PROVIDERS_UNAVAILABLE` (`p11-green.log`), because
+  the composition now has three tiers: explicit `providers` (tests) → the seam (external-I/O substitution) → **real construction from
+  the admitted context and frozen descriptor**.
+- **What the real construction does** (new `build_real_providers(context, descriptor, yolo_detector_factory=None)`): builds the
+  detector through the production factory with `DetectorFactoryOptions` taken field-for-field from the descriptor's admitted detector
+  block (backend, device, CPU-fallback policy, weights path/sha, model id, image size); the controller from the same descriptor's
+  `head_search`; the stack from `PersistentTaskStack()` **constructed only, never started**; a monotonic clock; and the phase camera
+  from the admitted matrix.
+- **And one new production component, because the repository had none** (CP-1312): **`PhaseCameraMatrixEvaluator`** - the admitted
+  matrix, read per `(phase, index)`, returning the observation shape the driver and the chain fixture both document, with the matrix's
+  own occluder set as its content.
+- **The positive half of the test is one fake attribute short:** `build_detector` wraps its detector in a `BuiltDetector` and computes
+  `_cold_start_latency(detector)` (its body is printed above), so my `_FakeYolo` needs whatever that helper reads. **Also settled by
+  running rather than guessing: torch is an opt-in dependency** (the repository's own `explicit_ml` marker), **so the detector's
+  constructor is a legitimate external seam** - which is exactly why `build_detector` exposes `yolo_detector_factory` and why the
+  composition now exposes it too.
+- **State:** P1-1's two tests are uncommitted while the pair is red; ledger current; **no stack was started** (the stack object is
+  constructed, nothing more); no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
