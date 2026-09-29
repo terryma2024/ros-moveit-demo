@@ -79,6 +79,12 @@ class _PickPlacePayload(_ActPayload):
     gripper_closed_rad: float = Field(gt=0)
     # and the time it takes: a duration the phase would otherwise have to invent
     close_duration_s: float = Field(gt=0)
+    # the admitted motion policy the case runs under, named as its VARIANT DIRECTORY
+    # (<share>/config/policies/<policy_id>/<version>). The production variant loader composes the manifest and the
+    # variant, validates the schema, the backend and execution_allowed, and returns the template - so the policy stays
+    # the single source of its own numbers instead of being copied into this payload
+    pick_policy: str = Field(min_length=1)
+    motion_duration_s: float = Field(gt=0)
     manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     runtime_config_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     contact_policy_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")

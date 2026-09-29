@@ -523,8 +523,20 @@ class RclpyActionDriver:
                 # the case's own admitted gripper target, bound once like the evidence attachment
                 bind_targets = getattr(self._pick_place_port, "bind_case_targets", None)
                 if callable(bind_targets):
+                    # the policy document is loaded and validated by the PRODUCTION loader - schema, backend and
+                    # execution_allowed - so the case names its policy instead of restating its numbers here
+                    from so101_demo.core.dynamic_pick_policy import load_dynamic_policy_variant
+                    # the payload names the variant directory (<share>/config/policies/<id>/<version>): the share root the
+# loader takes is parents[3] (the id's parent's parent's parent), because the loader appends the rest
+                    # the loader takes is two levels up from the version directory, and the loader composes the manifest
+                    # with the variant and validates the schema, the backend and execution_allowed
+                    _variant = Path(request.payload["pick_policy"]).resolve()
+                    _loaded = load_dynamic_policy_variant(_variant.parents[3], backend="mujoco",
+                                                          policy_id=_variant.parent.name, version=_variant.name)
                     bind_targets(gripper_closed_rad=request.payload["gripper_closed_rad"],
-                 close_duration_s=request.payload["close_duration_s"])
+                                 close_duration_s=request.payload["close_duration_s"],
+                                 motion_template=_loaded.template,
+                                 motion_duration_s=request.payload["motion_duration_s"])
                 attach(evidence.window,
                        support_distance_max_m=request.payload["support_distance_max_m"],
                        # the recorder's own root is the driver's case root, so the raw records it will index must live there -

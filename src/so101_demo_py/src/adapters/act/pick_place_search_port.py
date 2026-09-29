@@ -107,7 +107,8 @@ class PickPlaceSearchPhasePort:
         return freeze_selected_search_source(
             self.validated_search_observation(), max_skew_s=max_skew_s)
 
-    def bind_case_targets(self, *, gripper_closed_rad=None, close_duration_s=None) -> None:
+    def bind_case_targets(self, *, gripper_closed_rad=None, close_duration_s=None, motion_template=None,
+                          motion_duration_s=None) -> None:
         """Bind the case's admitted motion targets once, before the port begins.
 
         The evidence attachment carries the case's evidence parameters (the support threshold); this carries the ones
@@ -123,8 +124,15 @@ class PickPlaceSearchPhasePort:
         if (type(close_duration_s) not in (int, float) or isinstance(close_duration_s, bool)
                 or not finite(close_duration_s) > 0):
             raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: close_duration_s")
+        if motion_template is None:
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: motion_template")
+        if (type(motion_duration_s) not in (int, float) or isinstance(motion_duration_s, bool)
+                or not finite(motion_duration_s) > 0):
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: motion_duration_s")
         self._gripper_closed_rad = float(gripper_closed_rad)
         self._close_duration_s = float(close_duration_s)
+        self._motion_template = motion_template
+        self._motion_duration_s = float(motion_duration_s)
 
     def bind_startup_receipt(self, receipt: dict) -> None:
         if (self._startup_receipt is not None or self._begun
@@ -642,7 +650,10 @@ class PickPlaceSearchPhasePort:
                    # the case's admitted motion targets travel with the call, as the support threshold does
                    "gripper_closed_rad": getattr(self, "_gripper_closed_rad", None),
                    "close_duration_s": getattr(self, "_close_duration_s", None),
-                   "support_distance_max_m": getattr(self, "_support_distance_max_m", None)}
+                   "support_distance_max_m": getattr(self, "_support_distance_max_m", None),
+                   # the admitted policy travels with the call, so the motion phases resolve against it
+                   "motion_template": getattr(self, "_motion_template", None),
+                   "motion_duration_s": getattr(self, "_motion_duration_s", None)}
         try:
             facts = execute(phase, request, **handoff)
         except PickPlaceSearchPortError:
