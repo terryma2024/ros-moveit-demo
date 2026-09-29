@@ -18532,3 +18532,27 @@ not an inference of mine.**
 - **GREEN evidence so far, unchanged:** 27 passed across the runtime-config binding, artifact bundle, alias and manifest
   suites (CP-1162). RED logs `beh-r767.log` (wrong boundary) and `beh-r768.log` (the RED).
 - **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1165 — Shared descriptor rule landed; the entry-level check is in place but not yet proven reached
+
+- **Landed, and verified by the suites that already existed:** the descriptor's shape and CUDA policy now live in **one**
+  function, `require_runtime_descriptor(runtime)`, in `src/act/task8_artifact_bundle.py`. The bundle's path reader
+  (`_require_runtime_descriptor`) calls it, and `src/cli/act_measure_task8_calibration.py` calls it on the document its
+  `--context` carries, immediately after that document is read and **before any branch**, so a driver-based run cannot bypass
+  it. That is §4.2 enforced at both boundaries from one implementation, as the ledger required.
+- **57 passed** across the descriptor, runtime-config-binding, artifact-bundle, aggregator and contract suites
+  (`beh-r771.log`) - so the shared function and its two call sites do not disturb anything that was green.
+- **But the new RED still does not fire: `Failed: DID NOT RAISE`.** So the check exists yet nothing has proven it is
+  *reached* for a driver-based invocation, and I am recording that plainly rather than marking item 2's first step done.
+  **Two hypotheses, in the order I would test them:** (1) the object named `context` at my insertion point is not the parsed
+  document for this invocation path - the CLI reads it, then takes a branch, and my line may sit after a rebinding; (2) the
+  module actually imported by the test is not the edited file, which the earlier `build/`-versus-source findings in this
+  task make worth ruling out explicitly rather than assuming.
+- **Also fixed this round, because it was my own contamination:** my new test defined a driver module named `driver`, which
+  collided with the aggregator suite's own `driver:boom` module in the same pytest run (`AttributeError: module 'driver' has
+  no attribute 'boom'`). Renaming mine to `descriptor_driver` restored those tests - recorded because a test that breaks
+  another suite's fixtures is a defect in the test, not in the suite.
+- **Next round, in order:** one diagnostic that prints which file is imported and what type the `context` object is at the
+  insertion point (the technique that resolved CP-1118 and CP-1152 in one pass each), then the check moved to wherever that
+  print shows it must live - and only then the context field, the driver's seal and the aggregator's readback.
+- **State:** goal active (revision 51, cap 1000); RED log `beh-r771.log`; no full suite, no push, no stack, no hardware.
