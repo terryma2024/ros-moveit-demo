@@ -18119,3 +18119,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   already exceeds my counter because the runner counts steps itself).
 - **State:** the test fails by design; surrounding teleop suites untouched (16 passed at CP-1143). No full suite, nothing
   weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions remain open and independent.
+
+## CP-1148 — The print settled it: the first phase's evidence passes every condition I read, so the failure is downstream
+
+- **The diagnostic, in one pass, exactly as CP-1147 planned:**
+  ```
+  missing: [] extra: []
+  phase ok: True step: 2
+  epochs: 0 0
+  stopped: PickPlaceError PHASE_EVIDENCE_INVALID
+  ```
+  The fake's evidence matches `_EVIDENCE_KEYS` **exactly**, `phase` matches, `physics_step` is a strictly increasing int, and
+  the epochs equal `begin`'s zeros. **And the print ran once** - so the **first** phase passed all five conditions and the
+  rejection came **later in the case**, not on this call.
+- **That narrows it to the checks I have not read: what each phase's evidence must *say*.** Beyond the shape, identity and
+  step rules at lines 105-113, `_verify_phase` continues, and a case is expected to *change* its evidence as it progresses -
+  a release is not a search, and `released`/`cup_supported`/`holding_state` cannot mean the same thing in every phase. My
+  uniform "everything plausible" evidence is exactly the kind of fixture the runner is designed to refuse once the case
+  leaves its first phase.
+- **So the next read is the body of `_verify_phase` after line 113** - the per-phase expectations - and the fixture then has
+  to model a case honestly: what is true during SEARCH, during MICRO_LIFT, at RELEASE and during RETREAT. **That is the
+  substance Boundary V's assertions were always going to require**, and it is why this test is worth writing rather than
+  faking: a fixture that models the case's progression is the very thing that can prove the artefacts the plan lists.
+- **State:** the test fails by design; surrounding teleop suites untouched (16 passed at CP-1143). No full suite, nothing
+  weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions remain open and independent.
