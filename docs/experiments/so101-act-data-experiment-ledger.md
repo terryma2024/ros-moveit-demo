@@ -12526,3 +12526,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `test_task8_live_evidence_production_chain.py`.
 - **Boundaries unchanged:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-912 — Task 7 WIP: release correlation implemented; the remaining five failures are the window's own flow
+
+- **Implemented `correlate_release_open(rows, open_event, *, period_s, tolerance_s=0.01, indexed=None)`** in
+  `act/task8_live_evidence.py`: a summary or digest-only substitute is refused
+  (`SUMMARY_ONLY_SUBSTITUTE`), the open event must share the rows' release epoch (`RELEASE_EPOCH_MISMATCH`), it must
+  cite a raw command reference (`RAW_REF_REQUIRED`), every `*_ref` it carries must be inside the sealed index
+  (`UNINDEXED_REF`), and the three immediately preceding rows must be consecutive on the frozen grid within
+  tolerance (`SUPPORT_ROWS_NOT_CONSECUTIVE`), with an open stamp preceding its support rows refused
+  (`OPEN_BEFORE_SUPPORT`). Committed as a WIP continuation (`wip(act): add release-open correlation ...`).
+- **Suite movement, measured:** `test/test_act_task8_live_evidence.py` went from **7 failed / 30 passed** to
+  **5 failed / 32 passed** (`beh-task7-green1.log`). The two tests that now pass are the release-correlation ones,
+  so that function's contract is satisfied.
+- **The remaining five are all one cause:** three `TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN` and two
+  `TASK8_LIVE_EVIDENCE_IDENTITY_INVALID` failures come from the window's **existing** tests and its open/record
+  flow, which still assume the window opens at CLOSE. They cannot be fixed in isolation from that flow, which is
+  why the next step is to move the window's open/record/seal sequence to SEARCH and update those tests in the same
+  change - exactly the coupling CP-911 predicted, now with the failure classes named and counted.
+- **State:** Task 7 remains in progress and its focused suite is red at a WIP commit that says so; Tasks 1-6 are
+  committed and green; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
