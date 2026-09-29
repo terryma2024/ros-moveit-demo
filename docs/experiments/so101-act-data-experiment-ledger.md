@@ -11316,3 +11316,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   ruling 3's "no final code gate yet" still holds.
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's dirty paths otherwise untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-863 — Ruling 1 registry correction: new assertions GREEN; old fixture still to update
+
+- **Applied the correction to the controlled source:**
+  - `_ROLE_SPECS` is now 5-tuples `(role, kind, source_rel, install_rel, overlay)` with a comment stating that
+    `overlay` names the install root that **owns** the artefact, and `mujoco_ros2_control_plugin` is set to
+    `("compiled", "third_party/mujoco_ros2_control/mujoco_ros2_control/src",
+    "mujoco_ros2_control/lib/libmujoco_ros2_control.so", "dependency")` - its own package's lib directory in the
+    dependency overlay, sourced from the package that actually builds it, with
+    `simulation_evidence_plugin.cpp` no longer recorded as its source. The two external roles carry `external`.
+  - `build_source_provenance` and `verify_source_provenance` accept `dependency_overlay`, resolve each role
+    against its own root, and fail closed with `SOURCE_PROVENANCE_DEPENDENCY_OVERLAY_REQUIRED` when a dependency
+    role is present without that root; each recorded role now carries its `overlay`. The CLI gained
+    `--dependency-overlay`.
+- **GREEN for the new assertions:** `test/test_act_source_provenance_registry.py` - **4 passed, rc=0**
+  (`beh-registry-green.log`), including that the vendored role is dependency-owned, installs at its
+  package-owned path, and names real submodule sources that exist on disk. The RED from CP-862 is closed.
+- **Known remaining GREEN work, stated so it is not mistaken for green overall:** the pre-existing
+  `test/test_act_source_provenance.py` fixture still unpacks the registry as 4-tuples and builds every role into
+  one overlay, so that module now **errors** (`beh-registry-existing.log`). Its fixture needs the shape change -
+  a separate dependency overlay root, `external` roles skipped, a real source file created inside the
+  directory-shaped source path of the vendored role so its receipt references an existing input, and
+  `dependency_overlay` passed at each build/verify call site. **No full gate run is valid until that lands.**
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; the user's dirty paths are untouched apart from CP-861's one-token fix; formal accepted
+  0/0/0; `collection_*` NOT_PROVISIONED.
