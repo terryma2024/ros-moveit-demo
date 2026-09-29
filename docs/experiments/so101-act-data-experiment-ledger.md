@@ -24467,3 +24467,28 @@ picture in both directions.**
 - **Execution order from here:** P1-1 GREEN (real adapters over the one I/O seam) → P1-2 → P1-3 (route (a), frozen) → P1-4 (the nine phases) → P2 → **one
   final integration boundary** on a fresh NVMe scratch with the exact interpreter's `TMPDIR`/`TMP`/`TEMP` verified first → ledger/packet/evidence index →
   independent Astra review. **No new session, goal, worktree or stack; no push, no deletion, no real hardware; all existing dirty work and evidence kept.**
+
+## CP-1473 — P1-1 GREEN, first slice: the I/O seam exists and the controller's real source is identified
+
+- **Landing the seam moved the failure four times, and every move taught something the review's finding implies:**
+  | attempt | failure | what it proves |
+  | --- | --- | --- |
+  | 1 | `TypeError: build_real_providers() got an unexpected keyword argument 'io_client'` | no seam for the external I/O at all |
+  | 2 | `ValueError: backend configuration has invalid YOLO artifacts` | `detector_factory.py:78-89` demands an **absolute, non-symlink, existing** weights file - so the offline test must provide a **real artifact**, not fake the check |
+  | 3 | `TypeError: canned_detector_factory() got an unexpected keyword argument 'weights_path'` | the factory is called with the validated arguments |
+  | 4 | `AttributeError: ... has no attribute 'cold_start_latency_ms'` | the factory must return a **`DetectorPort`** |
+  | 5 | `ContractError: FIELDS_INVALID` | `HeadSearchController(config)` validates **18 flat fields** in `act/search.py:14-35`, so the composition's controller must be built from those, not from a descriptor mapping I invent |
+- **Landing so far (uncommitted while the RED is still red, per this batch's rule):** `build_real_providers(..., io_client=None)`; **`Task8StackAdapter`** implementing the driver's whole protocol
+  (`launch / close / cleanup / readback / run_search / camera_info / tf / probe`) over one low-level client; **`_MonotonicClock.monotonic()`** replacing the `{"now": time.monotonic}`
+  mapping that could never be a clock; the phase camera now reports the **admitted camera geometry and matrix digest** instead of echoing its occluder list; and the test now provides a real
+  weights artifact.
+- **The decisive discovery, and it is worse than "controller=None":** `grep controller_settings` across the entire tree returns **only `task8_production_composition.py` itself** -
+  **no production caller ever passes it**, so the composition's only non-`None` controller path is unreachable in production. **The real source of a controller config is
+  `HeadSearchBinding.search_config(session_id, attempt_id, search_start_rad)` in `act/head_search_binding.py:47-68`**, which assembles the 18 fields from the **admitted calibration**
+  (`search_values`, `motion`, `camera`) and validates them by constructing the controller.
+- **So P1-1's remaining GREEN is exact, and my descriptor-derived guess is withdrawn:** the admitted **context** must carry the admitted calibration document (the descriptor alone cannot
+  supply FOV, coarse step, timeouts or deadbands), the composition must build the binding (`validate_head_search_binding(runtime, calibration)`), call `binding.search_config(...)` with the
+  measurement's identity, and **fail closed by name** when any of that is absent - never `None`. **The `controller_settings` parameter that nothing calls is to be replaced by that route
+  rather than kept as a second, dead one.**
+- **And a note on my own method:** each of those five failures was found by running the contract, not by reading harder - and the fifth one **invalidated a design I had already written into
+  the source**. That is the RED's whole value: it refused to let a plausible-looking controller through.
