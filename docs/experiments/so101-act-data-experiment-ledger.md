@@ -32408,3 +32408,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   inspection, and the next step is to print the request rather than to guess at it.** P1-1 through P1-4 CLOSED. The demo
   RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so
   they are not re-stated.**
+
+## CP-1857 — The instrumentation did not fire, and that is itself the finding
+
+- **Two diagnostics, one informative and one silent:**
+  ```
+  [brokerdiag] refused operation='acquire' error='ID_INVALID'         <- the broker returns this
+  [iddiag] (nothing)                                                  <- patching `contracts.identifier` intercepted nothing
+  ownership.py:8   from .contracts import finite, identifier          <- because the name is BOUND at import
+  ```
+  **So `handle` returns `error='ID_INVALID'` (it catches the refusal internally, which is why the traceback ended at
+  `command_broker.py:843` - the re-raise in the connection), and my patch of `contracts.identifier` had no effect because
+  `ownership` (and the broker) bound the function at import time.** The instrumentation therefore proves the opposite of
+  what it was meant to: **not "identifier is not the source", but "patching the definition does not reach a bound
+  name".**
+- **Which leaves the next step precise rather than speculative: patch the BOUND references** - `ownership.identifier` and
+  whatever the broker bound - **or, more simply, add a temporary print inside `Ownership.acquire`'s two `identifier(...)`
+  calls**, since that function is the only place in the acquire path where `ID_INVALID` can still arise once the
+  admission block's three fields are known valid (they were printed, all non-empty strings).
+- **And the diagnostics are removed, as before:** `git checkout` of a copy taken before they were installed, so the suite
+  carries no debug scaffolding. **Three of the four instrumented reads in this drive have produced a decisive answer
+  (CP-1845, CP-1848, CP-1851) and this one produced a lesson about Python name binding - which is still cheaper than
+  permuting values until one stops refusing.**
+- **State:** **P1-5 in progress; the acquire refusal is a `ContractError("ID_INVALID")` raised inside `Ownership.acquire`
+  or the admission block, the admission block's three fields are known good, and the next instrumented read must patch a
+  bound reference or sit inside the function.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the
+  final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
