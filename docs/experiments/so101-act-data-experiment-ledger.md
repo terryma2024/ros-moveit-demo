@@ -17809,3 +17809,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   worth keeping and the change was not, and both are recorded that way.
 - **Suite: 57 passed** across the aggregator, contract and head-search binding modules, unchanged from CP-1132 since no
   code moved this round. Nothing weakened, nothing deleted, no push, no stack, no hardware.
+
+## CP-1134 — Re-review packet written to disk with hash readback, and the one decision restated
+
+- **Boundary VI's first half, done now because the substantive work is decision-blocked.** The packet is at
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/handoffs/20260930-task7-onward/task8-boundary-iv-rereview-packet.md`,
+  **size 5333 bytes, sha256 `65bd4ca568792fa3fca65bd1220cd5d2a1040384f30b4f90a2404fab2bb3ad80`**, recorded here because CP-1059's lesson was that a packet nobody can reach is a
+  packet that does not exist - this one is checksummed and the path is absolute.
+- **What it contains:** the owner's five corrections and how each was answered (including the two where **my** claims were
+  wrong - the 28-to-7 grouping and the gate's seven-PASS reading); Boundary IV's index and publishing halves with the
+  commit for each piece and the kind of each (RED, or characterization where no code changed); the targeted verification
+  runs and their counts; the descriptor chain that was never built; an explicit **what is not claimed** section (Boundary V
+  not started, no live stack, no full xdist gate in this stretch, no new measurement values, the 17 provisional values
+  still `null`); and a short reading list.
+- **Still to do before requesting the review formally:** the plan's Boundary VI asks for repository-required **full gates**
+  (xdist, per module) before an independent re-review. The owner instructed no full suite in this stretch, so that gate
+  evidence is **pending** and the packet says so rather than implying it.
+- **The decision I am not making alone, restated for the record:** which document is the authoritative runtime head-search
+  descriptor - a new launch-path document, or the parsed `--runtime-config`. Everything else in Boundary IV is finished;
+  this one choice, plus an authorised live stack, is what Boundary V and the rest of the chain wait on.
