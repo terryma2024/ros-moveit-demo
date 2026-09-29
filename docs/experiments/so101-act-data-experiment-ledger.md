@@ -12215,3 +12215,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   binding, Ownership-role, broker-enforcement and context pieces are all in place.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-899 — Task 4: the CLI entry now carries the entry-bound calibration context (52 passed)
+
+- **`src/cli/act_command_broker.py` edited, additively (it was clean before this edit):**
+  - an optional `--calibration-context` path argument, honoured **only** in calibration mode;
+  - the context is constructed **before any driver, broker or reservation object exists**, and its generation must
+    equal the session id (`CALIBRATION_CONTEXT_GENERATION_MISMATCH` otherwise), so the entry is the single place
+    resources and identity are bound;
+  - the plan hash is handed to the broker via `bind_measurement_plan(...)` only when a context is present, so the
+    calibration gate has something to match against and the production path is untouched when it is absent.
+- **Verified structurally and by test:** the file compiles; the context construction appears **before** the
+  `CommandBroker(` construction in source order; the production line
+  `ownership=Ownership(lease_timeout_s=options.lease_timeout_s)` is intact; the CLI module imports without
+  initialising rclpy (so no runtime was started); and the focused set reports **52 passed, rc=0**
+  (`beh-task4-green7.log`).
+- **Remaining for Task 4's nine-file commit:** wire the reservation and owner factory through
+  `runtime/launch_composition.py` carrying the admission generation, and layer the generation-carrying
+  expectations onto `test_act_control_event_timeline.py` and the **user-dirty**
+  `test_act_task8_search_binding.py` - additive only, never a rewrite - then re-run the 75-test baseline.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
