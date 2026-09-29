@@ -32790,3 +32790,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | `model_qpos`/`model_qvel` written as literals | **taken from the observation's own scene**, because the physical proof is checked against the physics the scene reports |
 - **Which leaves the wiring, and only the wiring:** the boundary needs `attach_proofs` set, plus `max_skew` (the route's, which the harness already passes to the factory as `motion["max_skew_s"]`) and `owner_generation` (the ticket's first element). **Then the registration's four-proof check has everything it reads.**
 - **State:** **P1-5 in progress: the four proofs exist, gated behind `attach_proofs` so no existing test changes behaviour, and the three attributes they need are named.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1870 — The proofs attach now, and my own construction has a type error to fix
+
+- **The `native_snapshots` refusal is gone** - `trusted_visible_approach_source`'s native-ingress check passed - **and the
+  drive is inside my own proof construction:**
+  ```
+  pick_place_search_port.py:661 in run_phase
+  test_task8_child_driven_case.py:294 in search
+      TypeError: 'int' object is not iterable
+  ```
+  with line 294 being
+  ```python
+  "model_qpos": tuple(scene["qpos"]), "model_qvel": tuple(scene["qvel"]),
+  ```
+  **so one of `scene["qpos"]`/`scene["qvel"]` is an `int` rather than a sequence** - which is my assumption about the
+  readback scene document's shape, **not** a production requirement: the physical proof's `model_qpos`/`model_qvel` are
+  compared against the scene the observation carries (CP-1868), **so whatever the scene holds is what belongs there -
+  the fix is to take its actual shape, not to force a tuple.**
+- **And it is worth noting what changed in one round:** the registration's refusal moved from `native_snapshots` (a missing
+  member of the proof) to a type error inside the code that BUILDS the proof - **which means the four proofs are being
+  constructed and attached, and the check that reads them has advanced past its first requirement.**
+- **State:** **P1-5 in progress: the four proofs are attached, the native-ingress requirement is satisfied, and the
+  remaining error is my own line's assumption about the scene document's `qpos`/`qvel` shape.** P1-1 through P1-4 CLOSED.
+  The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
+  unchanged, so they are not re-stated.**
