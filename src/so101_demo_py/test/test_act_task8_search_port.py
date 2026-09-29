@@ -322,9 +322,12 @@ def test_a_search_phase_records_a_canonical_sample_through_the_port(tmp_path):
 
     port.run_phase("SEARCH", request())
 
-    assert window._grid_count == 1, "the phase's own feed recorded exactly one sample"
+    # P1-4: the phase's feed records one sample per INSTANT it reports, not one per phase, so the count follows the
+    # phase rather than a literal 1 (CP-1687 predicted this assertion). WHAT the instants are is the port's business
+    # and is checked in the nine-phase suite; here the point is that the feed recorded and the window counted.
+    assert window._grid_count >= 1, "the phase's own feed recorded its samples"
     entries = recorder._entries
-    assert len(entries) == 1
+    assert len(entries) >= 1, "and the recorder holds them"
     recorded = json.loads((tmp_path / entries[0]["relative_path"]).read_bytes())
     assert len(recorded) == 24, f"the recorded sample is the canonical shape: {len(recorded)} keys"
     assert recorded["phase"] == "SEARCH" and recorded["reset_epoch"] == 2

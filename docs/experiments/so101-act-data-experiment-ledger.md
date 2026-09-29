@@ -28927,3 +28927,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | the cadence over **every entry's** stamps (with a docstring describing a fixture wrapper that no longer exists) | **the grid's cadence** with the edge additions folded in, and a docstring that now describes the one-clock fixture piece 4 built |
 - **And the whole migration in one line:** the fixture now runs **one monotonic source clock, no timestamp rewriting, one construction site for the plan, and no readback without a sample** - and the case it drives **records ten grid samples exactly one period apart, ten edge additions beside them, and seals.**
 - **State:** **P1-4's fixture half green on its four suites; the wider eleven-suite set is running**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1728 — The eleven-suite set is at 1 failure, and that failure is the one CP-1687 predicted
+
+- **The wider run:**
+  ```
+  1 failed, 150 passed in 100.28s
+  FAILED test_act_task8_search_port.py::test_a_search_phase_records_a_canonical_sample_through_the_port
+      test_act_task8_search_port.py:327: AssertionError: assert 2 == 1
+  ```
+  **`assert 2 == 1`** - the literal `window._grid_count == 1` from the one-sample-per-phase era, and the port now records **two** samples because this fixture's phase reports two instants. **The exact assertion CP-1687 named as stale** (*"`assert window._grid_count == 1` - the very assumption the finding removed"*), reached last because it lives in another suite.
+- **And it is restated - carefully, without over-claiming:**
+  ```
+  assert window._grid_count >= 1, "the phase's own feed recorded its samples"
+  assert len(entries) >= 1, "and the recorder holds them"
+  ```
+  **My first attempt tried to derive the number inline** (`== len(port._phase_instants("SEARCH", port._validated_search_observation, {}))`) and failed on a second assertion (`every grid sample is an entry`) - because this suite's `recorder` and the window's own `_recorder` are not the same object, so equating them asserted something about the FIXTURE rather than about the feed. **The rule the old literal was approximating - how many instants a phase has, and that the grid advances one period per sample - is checked in the nine-phase suite, where the whole case runs**; here the honest claim is that the feed recorded and the window counted. **`32 passed` for that suite.**
+- **State:** **P1-4's eleven-suite set is expected green with the confirming run in flight**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
