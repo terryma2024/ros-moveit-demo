@@ -30019,3 +30019,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   chain, P1-4's acquisition-time sampling and sealed reasons, P1-5's real child→campaign chain, P1-6's registration
   read-back, and the demo RED's clean re-measurement once code stops moving.** Two fixtures from CP-1777's list are
   resolved by this work (`BATCH_ANCHOR_MISSING` and the occluder order); the rest follow their own findings.
+
+## CP-1781 — P1-2's gap, traced to one line on each side
+
+- **The aggregator's side (`task8_calibration_aggregator.py:378`, `_load_raw_records`):** it opens **only** the files the
+  sealed index names, requires each to be a JSON object, and collects
+  ```python
+  measurements.update(document.get("measurements") or {})
+  configured.update(document.get("configured") or {})
+  ```
+  then `require_raw_inputs(raw)` refuses when `payload["measurements"]` is empty -
+  `RAW_EVIDENCE_REQUIRED: no raw measurements in payload`. **So the aggregator's contract is: every indexed raw record
+  must carry a `measurements` mapping (and optionally `configured`).**
+- **The driver's side (`task8_measurement_driver.py:209`, `_write_record`):** it writes `anchors/<anchor>/<name>.json`
+  carrying the record it was handed - `geometry`, `controller_ack`, `source_stamp`, `lifecycle`, `receive_monotonic_s`,
+  `session_id`, `reset_epoch`, `attempt_id`, `physics_step` - **and no `measurements` mapping at all.** So the retained
+  71-file CLOSED batch the verdict inspected yields `measurements == {}` and the aggregator refuses, exactly as it says.
+- **And the vocabulary the mapping must satisfy is one module away:** `task8_measurement_formulas.py` holds one formula
+  per field (`_f_horizontal_fov_rad`, `_f_min_bbox_aspect`, `_f_center_deadband_px`, `_f_tracking_iou`, …) with
+  `FIELD_FORMULAS` as the table, and `compute_field(field, raw, contract)` dispatches through it. **So "make the driver
+  emit the aggregator's required raw records" means: for each contract field, the raw inputs its formula reads must be
+  present under the names the aggregator's loader collects** - not a new format, the existing one, filled in.
+- **The plan for the next round, in the verdict's own terms:**
+  1. **RED first**: a test that seals a batch with the formal entry, feeds it to the **real** aggregator, and asserts
+     **real output** - recomputed measurements and a report status - **with no `except ValueError` around it** (the
+     verdict's complaint about `identity_contract_end_to_end.py:54` is precisely that a total aggregator failure
+     currently produces GREEN);
+  2. **GREEN**: the driver emits the `measurements`/`configured` mapping its own raw records already contain the inputs
+     for, **added at write time, never after sealing and never with a re-seal or an altered identity** - which is the
+     verdict's explicit prohibition.
+- **State:** **P1-3 CLOSED; P1-1 second half GREEN; P1-2's gap now has a named line on each side and a plan; P1-4, P1-5,
+  P1-6 and the demo RED's clean re-measurement remain.** No controlled change this round beyond the analysis.
