@@ -28444,3 +28444,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The fix is therefore not another patch but the removal of a duplicate:** build **one** widened prefix, hand **that same object** to the executor, the route, and the refresh - and the three then cannot disagree. **This is the same lesson the batch has recorded for values handed to many processes (CP-1589's family): a shared quantity must have one construction site.**
 - **And the note from CP-1698 now has a concrete shape rather than an exhortation:** the fixture's clock has three consumers that must agree - the **readback** (which refreshes the plan), the **executor** (which reports the path's axis), and the **route** (which executes the plan) - **and today each of them reaches for its own copy.** One construction site, one object, one sequence.
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: window green, axis blocked on a duplicated prefix object**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1700 — The axis is green, and the last link is two hardcoded times in the fixture's snapshot
+
+- **The probe, after one construction site:**
+  ```
+  AXIS bridge=1.6 obs=1.65 start=1.7 first=1.752 ok=True      <- the path's time axis passes
+  cause: ValueError PATH_SOURCE_TIME_CHANGED                  <- and the chain moved one link
+  ```
+  **So CP-1699's fix worked:** one widened prefix shared by the executor, the route and the refresh, and the axis that had failed three times now holds by construction.
+- **The new link, with its rule:**
+  ```
+  path_proof.py:175  def checker_inputs(self, snapshot):
+      if (_nanoseconds(snapshot['controller_start_time_s']) != self.source_start_ns
+              or _nanoseconds(snapshot['controller_bridge']['time_s']) != self.source_bridge_ns):
+          raise ValueError('PATH_SOURCE_TIME_CHANGED')
+  ```
+  **The snapshot the checker is run against must carry the SAME two times the request's axis was built from** - and the fixture's `_proof_snapshot` still writes the literals `"controller_start_time_s": 1.32` and `"controller_bridge": {"time_s": 1.30, ...}`. **Two hardcoded times for quantities that now belong to the run: the same defect as the prefix's fixed origin (CP-1679's family), one layer further in.**
+- **And the fix is the same shape as the last one, which is why the chain is converging rather than growing:** the snapshot must be built from the **same plan the executor reports the axis from** - one object, one pair of times - instead of a third copy of the same numbers.
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: prefix window green, time axis green, snapshot times the last link**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
