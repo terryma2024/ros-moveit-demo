@@ -11071,3 +11071,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries unchanged:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate
   lowered; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-855 — The enforced order, and a cross-generation identity match
+
+- **Order read from the code, not assumed:** `prepare_task8_bundle(inputs, bundle_root)` requires
+  `inputs.identities` to be exactly the five-key set (`:113-115`) and consumes the nine business artefacts
+  (`_ARTIFACTS`, verified at `:168`), recording `manifest["calibration_report_path"]` and its sha256 — so the
+  **bundle consumes the calibration report**. The report CLI
+  (`act_build_task8_qualified_report --task8-ready --preparation-receipt --campaign-result --case-root --output`)
+  consumes a **campaign result** and a preparation receipt. And `cli/act_prepare_task8_live_artifacts.py` turns
+  out to be a **legacy console shim** whose real module is `act_prepare_pick_place_validation`. Net effect: the
+  ladder is campaign -> report -> bundle -> live, with the calibration report feeding the bundle.
+- **No prior identities document exists to borrow from.** A bounded search of the evidence root found only
+  `experiments/gate6-runtime/identities.txt` (a session/allocation record: `domain_id`, `session_id`,
+  `campaign_id`) and `experiments/gate6-runtime/calibration-identity.txt` (calibration status comparisons), and
+  no JSON anywhere shallow carries `act_profile_sha256`. So the two remaining digests genuinely have to come out
+  of the runtime/preparation flow rather than out of an earlier generation's files - which is what CP-853/854
+  said, now verified against the filesystem instead of inferred.
+- **A useful independent confirmation of the freeze:** `calibration-identity.txt` (written 2026-09-28 21:57)
+  records `current config_sha256 = 0aef56dfaf527e3fa7ffe53e1a073ed417a74d1a690cb18a7c670d7708b8da3f`, which is
+  **byte-identical** to the `config_sha256` inside the `calibration_identity` of the provenance document built
+  this round (CP-851). The ACT config digest is therefore stable across generations, which is exactly what a
+  frozen identity is supposed to be, and it is the first cross-generation agreement recorded in this stretch.
+- **Where that leaves the ladder:** provenance built; the next step needs the runtime flow's identities, so the
+  measurement runs after the values exist rather than on invented ones. Nothing was synthesised to force it.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
