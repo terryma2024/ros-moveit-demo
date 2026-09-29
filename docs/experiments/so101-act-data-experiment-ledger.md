@@ -14181,3 +14181,32 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   at 31; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate
   search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push,
   no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-979 — The last two live-only rules implemented; a broken heredoc injected shell text and was repaired
+
+- **`release_stable_s(frames, *, stable)`** - the longest contiguous source-stamp span in RELEASE over which the
+  caller's cup pose/velocity/contact predicate holds, with a frame break simply ending the span - and
+  **`grasp_occlusion_window_s(frames, *, occluded)`** - the longest contiguous interval of legitimate occlusion
+  between CLOSE and RELEASE, computed with `strict_breaks=True` so a gap **fails the run** (`SPAN_FRAME_BREAK`), which
+  is what that row alone requires. No phase filter is applied to the occlusion window: the predicate identifies
+  legitimate occlusion and must accept only CLOSE..RELEASE frames whose occluder owner is one of the approved group-0
+  visual geoms, so a non-allowed owner ends the span instead of being counted.
+- **All five live-only rules now have an implementation** built on the shared structures: `support_distance_m` from
+  the exact collision pair, `retreat_distance_m` radially from the placed cup at the first qualifying readback,
+  `placement_stable_s` and `release_stable_s` from their stability spans, and `grasp_occlusion_window_s` from the
+  occlusion span with strict breaks.
+- **An incident in this round, caught and repaired:** a heredoc whose terminator did not match silently swallowed the
+  test append and then **injected shell lines and a stray `EOF` into the test file**, producing a `SyntaxError` and
+  then a `NameError` rather than a test result. Both were visible only because the file is compiled and run; the
+  repair removed the injected lines and the marker, after which the suite reports **32 passed, rc=0**
+  (`beh-task8-green17.log`). The rule: after any append to a source file in a shell heredoc, **compile the file** -
+  which is the same rule CP-931 produced for surgical rewrites, and it earned its place again here.
+- **Remaining in Task 8:** wire the collection layer - `collect_live_runs(rows, *, identities, contract)` reading each
+  of the five full rows' `live_evidence_artifact`, verifying its digest, and evaluating these rules per run - then pass
+  the runs through `derive_live_measurements` and `build_qualified_measurements` inside
+  `build_task8_qualified_report`, read the written document back and call `require_qualified(report)`.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation layer green
+  at 32 with only the collection/wiring step outstanding; Tasks 9-10 untouched; the goal is armed with a 756-round
+  budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate
+  safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
