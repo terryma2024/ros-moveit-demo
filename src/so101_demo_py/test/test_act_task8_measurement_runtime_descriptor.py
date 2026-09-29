@@ -6,6 +6,7 @@ components receive identity, generation, deadline and audit hashes - they do not
 So the descriptor travels as a parsed document in the context, and the entry is where a wrong one is refused.
 """
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -158,3 +159,66 @@ def test_the_context_requires_a_runtime_descriptor(tmp_path):
             safe_interval_rad=[0.0, 0.1], candidate_sha256="c" * 64, policy_sha256="d" * 64,
             driver_source_sha256="e" * 64, controller_generation="ctrl-1", broker_generation="broker-1",
             evidence_root=str(tmp_path / "ev"), resource_binding={"bound_at_entry": True})
+
+
+def test_the_formal_entry_composes_real_providers_without_any_seam(tmp_path, monkeypatch):
+    """Astra P1-1 (re-review): the formal entry must build the real composition by itself.
+
+    No ``SO101_TASK8_PROVIDER_SEAM`` is set, so today the composition raises PRODUCTION_PROVIDERS_UNAVAILABLE and the
+    formal CLI has no production path at all. The test asserts the opposite: the entry reaches a built driver whose
+    collaborators came from the admitted context - and it must not require a test-only environment seam to do it.
+    """
+
+    monkeypatch.delenv("SO101_TASK8_PROVIDER_SEAM", raising=False)
+    context = _context_document(tmp_path, _descriptor())
+    with pytest.raises(BaseException) as caught:
+        _invoke(tmp_path, context, driver=None)
+    message = str(caught.value)
+    assert "PRODUCTION_PROVIDERS_UNAVAILABLE" not in message, message
+    assert "PRODUCTION_PROVIDER_SEAM_INVALID" not in message, message
+
+
+def test_real_production_providers_are_built_from_the_admitted_descriptor(tmp_path):
+    """The positive half of P1-1: the composition builds the real collaborators from the descriptor alone.
+
+    A weights file the test writes makes the production detector factory produce a real detector from the descriptor's
+    admitted CUDA configuration, and the other four collaborators come from their own production classes. The stack is
+    constructed but never started, so no stack runs.
+    """
+
+    from so101_demo.act.search import HeadSearchController
+    from so101_demo.act.task8_production_composition import PhaseCameraMatrixEvaluator, build_real_providers
+    from so101_demo.runtime.task_stack import PersistentTaskStack
+
+    weights = tmp_path / "best.pt"
+    weights.write_bytes(b"p11-weights")
+    descriptor = _descriptor()
+    descriptor["head_search"]["detector"]["weights_path"] = str(weights)
+    descriptor["head_search"]["detector"]["weights_sha256"] = hashlib.sha256(weights.read_bytes()).hexdigest()
+
+    class _Context:
+        runtime_descriptor = descriptor
+
+    class _FakeYolo:
+        cold_start_latency_ms = 12.5          # the production factory reads this from the detector it wraps
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    seen_settings = {}
+
+    class _Recorder:
+        def __init__(self, settings):
+            seen_settings.update(settings or {})
+
+    settings = {"max_fine_corrections": 2, "search_start_rad": 0.0, "vertical_bounds_px": 480,
+                "attempt_id": "a", "session_id": "s", "frame_id": "f", "ray_origin_frame_id": "f"}
+    providers = build_real_providers(context=_Context(), descriptor=descriptor,
+                                     controller_settings=settings,
+                                     yolo_detector_factory=_FakeYolo, controller_factory=_Recorder)
+    assert seen_settings == settings, "the controller is built from exactly the settings handed in"
+    assert isinstance(providers["stack"], PersistentTaskStack)
+    assert isinstance(providers["phase_camera"], PhaseCameraMatrixEvaluator)
+    assert providers["detector"].kwargs["requested_device"] == "cuda", "the descriptor's device reaches the detector"
+    assert providers["detector"].kwargs["allow_cpu_fallback"] is False, "and its CUDA policy"
+    assert callable(providers["phase_camera"])
