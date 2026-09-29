@@ -25554,3 +25554,16 @@ picture in both directions.**
   and the runner's `_verify_phase` judges every document. **That test is the next step, and it is the milestone the approved plan's P1-4 was aiming at.**
 - **State:** P1-1..P1-3 green and committed; nine phases, the policy wiring, the Planning Scene capabilities, the shared validator, the two release documents and the retreat segment committed. No
   new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1533 — The port protocol is complete and the wide focused set is green
+
+- **`67 passed`** across the nine focused demo-side files (case documents, planning scene, motion phases, CLOSE, port, APPROACH execution, goals builder, path screen, child port), and the
+  implementation is committed as `2595ca9d`.
+- **The last piece of the stretch was a test telling the truth about what changed:** the file's old "these five refuse unconditionally" test became the **delegation contract** - every one of the
+  runner's extra methods **delegates to the boundary** and **fails closed with a named refusal** when the capability, the case's admitted support distance, or a seam the capability needs is absent.
+  **A test that still expected an unconditional refusal would have had to be deleted; turning it into the contract is what keeps it useful.**
+- **And a detail worth keeping, because it is the kind of thing that bites later:** the delegation passes the retreat segment's `direction` and `distance_m` as **keywords**, not positionally, because
+  the capability's signature orders them after the request and **two positional arguments of the same shape would have swapped silently.**
+- **What is unlocked:** the runner's whole port protocol exists (`begin`, `run_phase`, `run_retreat_segment`, `set_down`, `release_preflight`, `detach_moveit`, `planning_attached`, `safe_stop`),
+  so **a nine-phase case can run end to end through the port** - which is the next test and the milestone P1-4 was aiming at.
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
