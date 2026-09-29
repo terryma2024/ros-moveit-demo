@@ -129,10 +129,15 @@ def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED",
     # the batch is sealed by the production entry point, which records every raw file hash
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
 
+    # P1-2: for a V2 contract the batch carries the identity the contract ADMITTED - no rewriting, because that is
+    # what the formal entry seals and what the aggregator compares against. This suite's `contract` fixture is a V1
+    # document (five-member identity), whose only self-name is its own digest, so that member is what it declares.
     identity = {name: "b" * 64 for name in IDENTITIES_V2}
     identity["source_commit"] = "a" * 40
     identity["source_provenance_sha256"] = source_provenance_sha256
-    identity["measurement_contract_sha256"] = contract["contract_sha256"]
+    admitted = contract["identities"]
+    identity["measurement_contract_sha256"] = admitted.get("measurement_contract_sha256",
+                                                           contract["contract_sha256"])
     close_measurement_batch(root, identity,
                             status=(status_field or
                                     ("INVALID" if declared_status == "INVALID"
@@ -603,7 +608,9 @@ def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=True):
     root = Path(root)
     evidence, configured = _valid_evidence(contract)
     identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
-    identities["measurement_contract_sha256"] = contract["contract_sha256"]
+    # P1-2: a V2 batch carries the identity the contract ADMITTED - not the bound document's self-digest, which no
+    # identity member could ever equal. This is what the formal entry seals, so a fixture states the same rule.
+    identities["measurement_contract_sha256"] = contract["identities"]["measurement_contract_sha256"]
     # the published entries are written before the seal, because the seal indexes every file it closes over
     # the declared unit and size per field are the repository's own REQUIRED_MEASUREMENTS, so the published entries
     # take their shape from it rather than from a uniform scalar
@@ -929,7 +936,9 @@ def test_a_payload_carrying_the_inner_head_search_block_matches_the_sealed_descr
     inner = _complete_inner_block()
     evidence, configured = _valid_evidence(contract)
     identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
-    identities["measurement_contract_sha256"] = contract["contract_sha256"]
+    # P1-2: the identity member names the contract this run was ADMITTED under, which the bound document carries in
+    # its `identities` field - the self-digest is a different quantity and no member could equal it
+    identities["measurement_contract_sha256"] = contract["identities"]["measurement_contract_sha256"]
     # a seeded root provides a schema-true measurements.json to lift; the payload root itself is written ONCE
     seed = _v2_batch(tmp_path / "seed", contract, descriptor=inner)
     batch = _build_payload_root(tmp_path / "batch", seed, inner)
@@ -954,7 +963,9 @@ def test_a_payload_carrying_a_different_inner_block_is_refused(tmp_path):
     other = _complete_inner_block(device="cpu")
     evidence, configured = _valid_evidence(contract)
     identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
-    identities["measurement_contract_sha256"] = contract["contract_sha256"]
+    # P1-2: the identity member names the contract this run was ADMITTED under, which the bound document carries in
+    # its `identities` field - the self-digest is a different quantity and no member could equal it
+    identities["measurement_contract_sha256"] = contract["identities"]["measurement_contract_sha256"]
     seed = _v2_batch(tmp_path / "seed", contract, descriptor=inner)
     batch = _build_payload_root(tmp_path / "batch", seed, other)   # the payload claims a DIFFERENT block
     _sealed_batch(batch, {"measurements": evidence, "configured": configured}, identities,

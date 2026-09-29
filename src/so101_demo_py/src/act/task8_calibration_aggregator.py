@@ -200,11 +200,22 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     if len(provenances) != 1:
         raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
     source_provenance_sha256 = provenances.pop()
-    contract_sha256 = contract["contract_sha256"]
+    # rereview4 P1-2: the batch's contract identity is the identity this contract ADMITTED, not the bound document's
+    # self-digest. The self-digest is computed over the document that CONTAINS the identities, so no identity member
+    # could ever equal it - comparing against it made every batch the formal entry seals look foreign, and the only way
+    # to satisfy it was to rewrite the member in a fixture. One rule end to end: the seal carries the admitted
+    # ten-field identity, and `load_measurement_contract` already requires the document to carry the same one.
+    from so101_demo.act.task8_measurement_contract import (
+        IDENTITY_CONTRACT_MEMBER, admitted_identity, bound_document_digest,
+    )
+
+    admitted = admitted_identity(contract)
+    # Two schemas, one rule each, stated here rather than implied: a V2 contract carries the ten-field identity, so the
+    # batch must carry the identity this contract admitted; a V1 contract's identity has five members and no contract
+    # member at all, so the only name it has for itself is the document's self-digest.
+    contract_identity = admitted.get(IDENTITY_CONTRACT_MEMBER, bound_document_digest(contract))
     for batch, identity in batches:
-        # the identity names the contract it was measured under as measurement_contract_sha256; contract_sha256 is the
-        # bound document's own key, and reading the wrong one made every batch look foreign
-        if identity.get("measurement_contract_sha256") != contract_sha256:
+        if identity.get(IDENTITY_CONTRACT_MEMBER) != contract_identity:
             raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
     # and every member must agree across roots, not only the provenance: two batches measured under different anchor
     # sets or camera matrices are not the same generation, however equal their provenance happens to be
@@ -330,7 +341,9 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     receipt = {
         "schema_version": SCHEMA_VERSION, "kind": "task8_calibration_aggregation_receipt",
         "batch_roots": [str(root) for root in roots],
-        "contract_sha256": contract_sha256,
+        # the receipt names the CONTRACT DOCUMENT it aggregated - its self-digest, `BOUND_DOCUMENT_DIGEST_KEY` - which
+        # is a different quantity from the ten-field identity's contract member the batches carry (P1-2)
+        "contract_sha256": bound_document_digest(contract),
         "source_provenance_sha256": source_provenance_sha256,
         "checks": checks,
         "calibration_report_sha256": _digest(report_path),

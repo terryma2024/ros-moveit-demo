@@ -74,6 +74,29 @@ def _canonical(document: dict) -> bytes:
             + "\n").encode("utf-8")
 
 
+#: The BOUND DOCUMENT's own self-digest, over the document minus this key. It is an INTEGRITY value: a member of the
+#: ten-field identity can never equal it, because the identities live inside the document the digest is computed over,
+#: so requiring equality would demand a hash fixed point that does not exist (CP-1673).
+BOUND_DOCUMENT_DIGEST_KEY = "contract_sha256"
+#: The ten-field identity's own name for the contract this run was ADMITTED under. The bound document carries it
+#: verbatim in its `identities` field - which `load_measurement_contract` already requires to equal the caller's
+#: mapping - so "the batch was measured under this contract" means "the batch's identity equals the contract's
+#: admitted identities", and that is the single rule every layer states (rereview4 P1-2).
+IDENTITY_CONTRACT_MEMBER = "measurement_contract_sha256"
+
+
+def bound_document_digest(document: dict) -> str:
+    """The bound document's self-digest - integrity, never an identity."""
+
+    return document[BOUND_DOCUMENT_DIGEST_KEY]
+
+
+def admitted_identity(document: dict) -> dict:
+    """The ten-field identity the bound contract admits; the only contract identity a seal may be compared against."""
+
+    return dict(document["identities"])
+
+
 def _contract_sha256(document: dict) -> str:
     payload = {key: value for key, value in document.items() if key != "contract_sha256"}
     return hashlib.sha256(_canonical(payload)).hexdigest()
