@@ -25406,3 +25406,18 @@ picture in both directions.**
 - **So the next piece of work is a design decision I can make with the material already read**, and it is the same shape as everything else in this batch: name the evidence each phase needs, refuse by
   name when it is absent, and establish the flags from it rather than from a literal.
 - **State:** P1-1..P1-3 green and committed; six of nine phases committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1524 — Eight of nine phases proven; RADIAL_RETREAT taught the routing a distinction it was missing
+
+- **`44 passed`** across the motion-phase, CLOSE, port and APPROACH-execution files. **RELEASE and RADIAL_RETREAT are now proven by the runner**, and only **FINAL_CHECK** remains.
+- **RELEASE opens the gripper to the MODEL's own joint limit** - read from the simulated joint's range in the opening direction - **because nothing about "open" is a preference**: the joint has a
+  range and the limit is that range's value, and a boundary without the model **refuses by name** instead of picking a number. That is the same discipline as the admitted support distance and the
+  case's closed position, applied to a value the model happens to supply.
+- **And RADIAL_RETREAT turned out to be the one phase that is BOTH a motion phase and a released-facts phase.** My first routing put it with RELEASE, and the test caught it immediately: it hit the IK
+  seam and aimed at the retreat target (place + 0.10, exactly `State.RETREAT`). **The routing now says so explicitly** - RADIAL_RETREAT stays in the motion route and its flags are established there -
+  **and the two phases have separate tests rather than one loop that would have hidden the difference.** A loop that passes for the wrong reason is the failure mode this batch keeps finding.
+- **A cup still held cannot claim a release** (the necessary predicate fires), and **FINAL_CHECK refuses by name** until its place tolerances are compared: that is the last phase, and it needs the
+  cup's settled pose against the place target using the policy's own `position_tolerance_m` / `scene_*_tolerance_*`.
+- **Where P1-4 stands:** **eight of nine phases proven**; FINAL_CHECK next; then the nine-phase case reaching the end, the seal, the full-case journal, and the seven indexed assertions with their four
+  negatives. **P2 and the final integration boundary follow that**, and the review request comes after all five findings - as the owner's instruction says.
+- **State:** P1-1..P1-3 green and committed; eight phases committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
