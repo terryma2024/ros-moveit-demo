@@ -11900,3 +11900,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the plan's four-file list.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-885 — Task 2: 24 of 28 formulas implemented, 73 focused tests green
+
+- **Camera and TF group added**, with head and wrist sharing one implementation each (registered through small
+  per-field factories): `head_intrinsics_px`/`wrist_intrinsics_px` (per-frame `[K00,K11,K02,K12]`,
+  component-wise median, spread and the modelled `fy=(H/2)/tan(fovy/2)`, `fx=fy`, `cx=W/2`, `cy=H/2` cross-check
+  both bounded by tolerance, and a non-640x480 frame failing outright),
+  `head_translation_m`/`wrist_translation_m` (component-wise median against the expected transform within
+  tolerance), `head_rpy_rad`/`wrist_rpy_rad` (ZYX decomposition with a unit-norm gate, then median and
+  normalisation into `(-pi, pi]`), and `yaw_zero_bearing_rad` (optical forward axis `R*[0,0,1]` projected to a
+  bearing, combined by a **circular** median that minimises total circular distance and tie-breaks by smallest
+  value; a degenerate forward axis is refused).
+- **Case coverage added** for all eight: intrinsics pass and K-drift violation, translation median pass and
+  shifted-expected violation, known 90-degree yaw quaternion pass and mismatch violation, yaw-bearing pass and
+  violation, plus two refusal cases (non-unit quaternion, degenerate forward axis) that assert the honest error
+  rather than a silent normalisation or an invented bearing.
+- **Verified:** formula module (with the aggregator) reports **73 passed, rc=0** (`beh-task2-green7.log`).
+- **Still missing (4 of 28):** `lock_valid_neck_rad` (the closed-grid contact/clearance sweep with bisection and
+  unique-component selection), `velocity_limit_rad_s` and `acceleration_limit_rad_s2` (installed limits against
+  bounded probe / adjacent velocity differences), and `path_clearance_m` (minimum MuJoCo signed distance over the
+  PathProof grid with the per-phase contact allowlist).
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED. Task 2 remains uncommitted until all 28 are implemented and green, per the
+  plan's four-file commit.
