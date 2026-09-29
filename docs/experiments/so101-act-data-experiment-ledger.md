@@ -21307,3 +21307,27 @@ not an inference of mine.**
   | `_CONTACT_POLICY_INVALID` | the child now validates the contact policy the report references against the bound policy - my `_write_policy` fingerprint is not the one the admission suite's calibration report carries | **next: print the report's policy fingerprint and align the two** - both come from the same suite, so this is a wiring question, not a new document |
 - **Six gates in two rounds, each with its own name and each fixed in a line or a reuse.** The fixture has gone from "cannot construct the child" to "the child is validating the contact policy" - i.e. it has passed the artifact binding, the descriptor shape, the weights digest, the calibration provenance, the report format and the head-search sample, **all in production code**.
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1292 — The gate is an **installed** allowlist, and that decides where the fixture's policy must come from
+
+- **The chained cause, read from the traceback:**
+  ```python
+  from so101_demo.adapters.act.phase_contact_allowlist import load_installed_phase_contact_allowlist
+  self._act_model, self._act_contact_pairs = load_installed_phase_contact_allowlist(
+      expected_fingerprint=self._act_artifacts.policy_fingerprint, ...)
+  ...  raise ValueError("TASK8_CONTACT_POLICY_INVALID") from error
+  ```
+  **the child loads the *installed* phase-contact allowlist and checks it against the fingerprint the binding carries.** My synthetic
+  fingerprint matches no installed allowlist, so the check fails - correctly.
+- **That settles a design question I had been treating as a wiring detail: the fixture's policy documents must be built from the
+  *installed* allowlist's own payload**, so that `policy_fingerprint(payload)` equals what the child expects. **Two honest routes:**
+  1. read the installed allowlist (its path is discoverable from that loader) and construct the proposal from **its** payload, so the
+     fingerprint is the installed one by construction - the same "reuse what production uses" judgement as `_write_policy`,
+     `_calibration` and `FakePort`;
+  2. stand in for the loader - **which I am not doing**, because it is an in-process adapter rather than an external I/O boundary, and
+     Astra's constraint was that only ROS/MuJoCo/controller/process I/O may be faked. **Reaching for a monkeypatch here would be exactly
+     the shortcut that makes a passing test prove nothing.**
+- **So the next read is that loader's own resolution logic** (where the installed allowlist lives and what shape its payload has), then
+  the fixture builds its policy from it and the fingerprints agree because they are the same document.
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
+  deleted, nothing pushed.
