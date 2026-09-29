@@ -23954,3 +23954,24 @@ not an inference of mine.**
   production build (the port's docstring calls them "unprovisioned")?
 - **State:** the focused child fixture passes with 9 grid samples recorded and all nine phases seen through the case's own window; changes remain
   uncommitted until their focused tests are green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1446 — The case-execution harness is reusable as-is, and its worker seam is where the real child belongs
+
+- **Read (`test_task8_case_execution.py:22-123`), and it is exactly the harness P1-5 needs - imported, not forked:**
+  `_prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False, omit_child_receipt=False, start_fails=False)` returns
+  **`(spec, owner, journal, events)`** and builds, for real: a `build_task8_live_manifest(...)` + `write_new_manifest(...)`, a `SimpleNamespace` context
+  (campaign id, manifest digest, the three config digests, evidence root), a `spec` with `kind="task8_full"`, a real deadline and a payload naming the
+  manifest, and an `Owner` whose `start/finish/retire_failed_start` write the **real `cleanup-receipt.json` files** (stack root and child root) with the
+  fields `_retirement_receipt(...)` demands, and whose `Worker.launch` carries `mujoco_session_id`, `socket_root` and `ros_domain_id`.
+- **And the worker is the seam:** `Worker.run_pick_place(request)` is a plain async method the case entry awaits, so **the real child can be substituted
+  there** - the rest of the run stays production: `_preflight`, `PickPlaceValidationCampaign(...).planned_cases(...)` (the case must be frozen), the
+  request assembly, `_require_result`, `_require_live_evidence_readback` (which returns early for a prefix case **and refuses an unexpected artifact**),
+  the retirement-receipt requirement, and `_publish_new(journal_path, row)`.
+- **Which gives P1-5 its honest, achievable target:** run `run_pick_place_case(spec, "prefix-01", owner, journal)` with **our** worker that drives the
+  real `RclpyActionDriver` through the production port, let production publish the journal row, and then feed that row to the trusted path
+  (`case_row_to_journal_row` + the aggregator) and assert what it accepts.
+- **Next steps, in order:** (1) refactor the focused child fixture to extract the child/port/request construction into a helper that takes `case_id`,
+  `session_id` and `attempt_id` (the harness uses `prefix-01`/`session-298`); (2) add the case-execution test that uses the helper as the worker;
+  (3) assert the published row's own fields, then the aggregator's verdict on it.
+- **State:** no source change this round; the focused child fixture remains green (CP-1444/1445); no stack, no CUDA, no actuators, no hardware; nothing
+  pushed, nothing deleted.
