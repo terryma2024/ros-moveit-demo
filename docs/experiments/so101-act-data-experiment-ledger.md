@@ -25646,3 +25646,18 @@ picture in both directions.**
   facts, and running the code is what turned them back into questions.**
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test is uncommitted while red, per this batch's rule. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1539 — The real interface correction leaves three tests describing the contract I invented
+
+- **Where it stands (`experiments/gate8-p14/check.log`): 3 failed, 51 passed.** The production change is right - `execute_approach` now takes the case's
+  **frozen selected source** (`freeze_selected_search_source`, built by the port from the same SEARCH observation the route prepared against) instead of calling a producer that does not exist in that role -
+  **and the three failures are tests that encode the old, invented contract:**
+  1. `test_approach_prepares_qualifies_and_the_runner_accepts_the_document` (port test): its stub `execute_approach` signature does not accept `source`;
+  2. `test_the_chain_issues_approves_submits_waits_takes_the_snapshot_inspects_and_proves`: the chain test stubs `_prefix_source_port` as a callable **and** its ordering assertion predates the extra argument;
+  3. `test_each_missing_piece_refuses_by_name`: it expects `APPROACH: prefix_source_port`, which is no longer a piece the method needs - the named refusal is now `APPROACH: selected_source`.
+- **This is the honest cost of the correction, and it is the right cost:** the tests were written against my assumption, so they have to be rewritten against the real interface. **Loosening the production
+  code to keep them passing would have preserved the assumption and hidden the discovery** - which is exactly what this batch's rules exist to prevent.
+- **And the full-case run is closer than the last three rounds suggest:** SEARCH passes in the same run, and the run now stops at **`TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH`** - the live-evidence window's
+  case identity against the case being driven, which is the next named piece rather than a structural gap.
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; **the interface correction and the full-case test are uncommitted while red**, per this batch's rule. No
+  new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
