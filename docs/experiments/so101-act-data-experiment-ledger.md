@@ -18412,3 +18412,26 @@ not an inference of mine.**
   malformed content.
 - **State:** decision recorded at CP-1158, goal resumed and active (revision 51, cap raised to 1000 at the owner's request),
   HEAD `7cb55ddb`, staged 0, tree unchanged at 31 modified + 14 untracked. No full suite, no push, no stack, no hardware.
+
+## CP-1160 — The RED's fixture found: `valid_inputs` already builds a complete preparation invocation
+
+- **`src/so101_demo_py/test/test_act_task8_artifact_bundle.py` is the home, and it already has what the RED needs:** a
+  `_inputs(tmp_path)` helper (line 52) and a `valid_inputs(tmp_path)` fixture (line 70) that build the full artifact set -
+  including `runtime_config=source.paths["runtime_config"]` - and the module already drives the preparation entry and
+  `validate_cli` end to end (its tests cover a committed bundle surviving source-evidence loss, a bundle without a receipt
+  never being admitted, the receipt recording every artifact hash and identity, a tampered artifact being refused, startup
+  validation acquiring nothing, and the validate CLI refusing a bare directory).
+- **So the RED is three lines of fixture and one call:** take `valid_inputs`, **rewrite the runtime config it points at** with
+  `allow_cpu_fallback: true` (or a device that disagrees with `parallel_batch_v3.yaml`), invoke the preparation entry, and
+  require a refusal. Today the entry only digests that file (CP-1131), so the invocation succeeds and the test fails - a RED
+  on the **intended boundary actually running**, not an ImportError dressed up as one.
+- **The one thing to read first, and it is small:** the bodies of `_inputs` and `valid_inputs` (lines 52-73) to see how the
+  argv for the entry is assembled, so the RED invokes it the same way the module's own tests do rather than inventing an
+  invocation - the mistake CP-1142 recorded.
+- **Then, in order, from the owner's list:** the parsing/binding GREEN (read once, refuse symlink/extra/malformed/CPU-fallback,
+  canonical bytes + SHA256 into the receipt/context); the same parsed descriptor through admission/context/driver with the
+  driver registering and sealing descriptor payload/path/hash beside the raw batch; the aggregator reading it back from the
+  strict closed index before `validate_head_search_binding`; the focused negative set; and Boundary V's mechanical part
+  through `ros_child._run_pick_place`.
+- **State:** goal active (revision 51, cap 1000), HEAD `e8162d2f`, staged 0, tree 31 modified + 14 untracked. No full suite,
+  no push, no stack, no hardware.
