@@ -13522,3 +13522,46 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
   set 244); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
   gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-955 — The owner's constructor read: the full-chain fixture's specification is COMPLETE
+
+- **`PickPlaceCaseOwner.__init__`** is now known in full:
+
+  ```python
+  PickPlaceCaseOwner(workload_service, child_owner, *, stack_factory, final_clear_probe,
+                     artifact_binding=ActArtifactBinding.from_admission,
+                     startup_proof_issuer=PickPlaceStartupProofIssuer,
+                     require_startup_proof: bool = True,
+                     final_clear_timeout_s: float = 5.0)
+  ```
+
+  It validates that `stack_factory` is callable, **`final_clear_probe` is an async function**
+  (`inspect.iscoroutinefunction`), `artifact_binding` and `startup_proof_issuer` are callable,
+  `require_startup_proof` is a bool and `0 < final_clear_timeout_s <= 30`, else
+  `TASK8_CASE_OWNER_CONFIG_INVALID`. `require_startup_proof=False` is the fixture's simplest honest route past
+  startup-proof issuance.
+- **Nothing about the full-chain fixture is now unknown - the construction is purely mechanical.** The complete
+  specification, assembled across CP-943 and CP-949 through CP-955:
+  1. **owner**: the real `PickPlaceCaseOwner` with the two positional doubles (`workload_service`, `child_owner`) and
+     the keyword doubles `stack_factory`, `artifact_binding` (callable), `final_clear_probe` (async, returns `True`),
+     `require_startup_proof=False`;
+  2. **spec**: `kind == "task8_full"`; `payload["evidence_root"]` equal to the context's; `payload["children"]` a
+     one-element list for `ActChildLaunch(campaign_id, worker_id, execution_generation, ros_domain_id, namespace,
+     controller_name, mujoco_session_id, socket_root)` whose campaign and generation match the context;
+  3. **context** from `workload_service.start(spec, allow_existing=False)`: `workload_kind == "task8_full"`,
+     `worker_count == 1`, `evidence_root`, `campaign_id`, `execution_generation`;
+  4. **child owner double**: `start(context, launches, artifacts=...)` -> one port with `.launch == child` and
+     `.client.owner` an `OwnerKey(pid, pgid, started_ticks, argv_sha256, environment_sha256)`; `stop_owned()`;
+  5. **stack double**: `launch.evidence_root`, `.owner` (an `OwnerKey`), `.process`; `stop()`;
+  6. **worker**: the real port carrying a real `Task8LiveEvidenceRecorder` and `LiveEvidenceWindow`, with
+     `cancel(...) -> {"stopped_confirmed": True}`, `run_pick_place(request)` returning a result whose
+     `live_evidence_artifact` reads back, and `live_evidence_window` exposed;
+  7. **receipts**: `cleanup-receipt.json` in the child and stack roots holding `leader_pid`, `pgid`, `started_ticks`,
+     `argv_sha256` matching each root's `OwnerKey` by value **and type**, `group_clear is True`, plus `session_id`,
+     `ros_domain_id`, `physical_stop_confirmed is True` and `graph_clear is True` for the stack - and the **child root
+     must contain no socket or ready files**;
+  8. **assertions**: the journal row carries the artifact's path and sha256, and the window is left `INVALID` with
+     reason `OWNER_RETIRE` - which is what proves the uncommitted `_retire` insertion works through the real chain.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
+  set 244); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
+  gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
