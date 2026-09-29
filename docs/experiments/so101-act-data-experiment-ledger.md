@@ -32266,3 +32266,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   four requirements only `act_context["lease_token"]` is missing - with its honest source identified as the owner.**
   P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1853 — The lease's production source is an `acquire` RPC, and nothing else sets `reset.act_context`
+
+- **The greps answer the question CP-1852 asked, and the answer narrows it to one origin:**
+  ```
+  adapters/act/leased_action_client.py:77   context['lease_token'] = self.request('acquire', context)['lease_token']
+  adapters/act/leased_action_client.py:103  key = (context['broker_socket'], context['lease_token'])
+  adapters/act/leased_action_client.py:42   lease_token=context.get('lease_token',''), **extra
+  adapters/act/pick_place_search_port.py:666   context = reset.act_context        <- the ONLY reader in the tree
+  ```
+  **A lease token is obtained by ACQUIRING a lease - an RPC over the broker socket** - and the port's line 666 is the
+  **only** place that reads `reset.act_context`: **nothing in the tree sets it on a boundary.** So in production the
+  child/owner publishes it when it acquires its ACT lease, **and in this harness nobody does**, which is exactly what the
+  `AttributeError` says.
+- **Which leaves two honest options, and they are not equivalent:**
+  | option | what it means |
+  | --- | --- |
+  | **acquire a lease** through the same path production uses (`leased_action_client`'s `acquire` over the broker socket) | faithful, **and it needs the lease IPC to be served** - the gate-6 `_AckServer`s serve the CONTROLLER reservation protocol, so whether they also answer `acquire` is the next thing to determine |
+  | **supply an `act_context` with a token** and let `ownership.ticket(...)` mint from it | cheaper, **but the registrar validates that ticket against the driver's epoch, the simulation session, the armed generation and the stopped state** (CP-1825's `_scope`) - **so a token the ownership and driver state do not support will be refused, which is the right behaviour and would only move the refusal one step** |
+- **And the deciding consideration is the one this drive keeps re-learning:** the second option's only virtue is that it
+  is quicker, **and its risk is that it teaches a fake to answer a question the production chain asks** - which is the
+  thing P1-5 exists to stop. **So the next step is to find out whether `acquire` is answerable in this harness at all**:
+  if it is, the faithful path is open; if it needs the launch's process topology, **that is a genuine boundary to record
+  rather than to route around.**
+- **State:** **P1-5 in progress; the registration's last requirement is traced to a lease `acquire` RPC, the port's line
+  666 is the only reader of `reset.act_context`, and the next question is whether the lease can be acquired in this
+  harness.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
+  remain. **Task-list statuses are unchanged, so they are not re-stated.**
