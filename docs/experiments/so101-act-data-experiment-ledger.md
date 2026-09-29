@@ -27559,3 +27559,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | **CP-1635** per-run values as arguments | (this entry) | 85 passed |
 - **What is left is item 7**, which by its own terms waits for exactly this moment: **the code has stopped changing**, so the re-run boundary can measure it - **three legs on fresh scratches, serial CTest, and a new run subroot**, per the owner's constraints.
 - **State:** all three decisions delivered; item 7 next; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1650 — The v4 boundary's first run: `5744 passed / 4 failed` on its own fresh scratch, and the four are localized
+
+- **The demo leg, run exactly as the owner's constraints require** - its own previously nonexistent scratch, `TMPDIR`/`TMP`/`TEMP` set, and the exact interpreter confirming `tempfile.gettempdir()`:
+  ```
+  demo_rc=1   elapsed_s=117   4 failed, 5744 passed, 163 skipped
+  scratch  = .../final-boundary-v4-20260929-220050/demo-scratch/tmp
+  resolved = .../final-boundary-v4-20260929-220050/demo-scratch/tmp     (equal - the fail-closed check passed)
+  ```
+  **And the four failures are exactly what a full gate exists to find:** three consequences of this batch's changes **in files the focused runs never collected**, plus one environment limit.
+  | failure | cause | state |
+  | --- | --- | --- |
+  | `measurement_runtime_descriptor::test_real_production_providers_are_built_from_the_admitted_context` | `build_real_providers` called without the per-run values (CP-1635) | **fixed** |
+  | `sealed_raw_sources::test_the_sealed_identity_carries_the_epoch_the_case_ended_with` | asserted the OLD equality rule (CP-1612) | **fixed** - it now asserts non-decreasing, last-equals-identity, and no epoch outside `{0, identity}` |
+  | `measurement_runtime_descriptor::test_an_invalid_sealed_batch_is_never_reported_valid` | a **second** driver string in that file still invents its seal identity | localized |
+  | `controller_reservation_client::test_client_rejects_symlinked_ancestor_before_connecting` | **`OSError: AF_UNIX path too long`** - the demo leg had no short IPC base, so the socket path grew with the scratch | localized: the leg now sets `SO101_IPC_SOCKET_BASE=/tmp/...` |
+- **The lesson is the batch's own, applied at the boundary it was designed for:** the focused cadence cannot see a test in a file it does not collect, and **"the suites I ran are green" is not "the tree is green"** - which is why the re-run is a full gate rather than another focused set.
+- **State:** the v4 boundary is **not valid yet** and will not be reported as valid until the demo leg is green; item 7 continues; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
