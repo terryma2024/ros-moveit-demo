@@ -15081,3 +15081,18 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   (CP-1013); Task 9's runner identified as colcon-based and its socket question now flagged for re-measurement before it
   is put to the owner; Task 10 blocked until the 17 search values are reviewed. No runtime, no package-gate claim, no
   push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1015 — In flight: the teleop scope re-measured through its colcon gate
+
+- **Running now (background job `bash-2712`):** `colcon test --packages-select so101_teleop` with
+  `--pytest-args "-q -n 8 -p no:cacheprovider"` and `--return-code-on-test-failure`, from a fresh verified
+  evidence-root scratch with `TMPDIR`/`TMP`/`TEMP` set there and bytecode writing disabled. Log:
+  `experiments/gate6-batch3-py-gate/beh-r608-colcon-teleop.log`.
+- **Why this run decides the open question:** CP-1012's socket conflict was measured with a bare
+  `python -m pytest`, and CP-1014 then showed that bare pytest is the wrong runner for these packages (the demo scope
+  fails collection with `No module named 'tools'`, and adding `PYTHONPATH` makes it worse). If the colcon gate supplies
+  the environment these tests expect, the 82-character scratch-derived socket path may never arise - in which case
+  CP-1012's "rule conflict" was an artefact of my run mode and **the question put to the owner is withdrawn**, which is
+  the honest outcome rather than asking for a decision about my own mistake.
+- **Not yet claimed:** whether the teleop colcon gate is green, and whether the socket error appears under it. The
+  result will be recorded when the job settles; nothing above should be read as its outcome.
