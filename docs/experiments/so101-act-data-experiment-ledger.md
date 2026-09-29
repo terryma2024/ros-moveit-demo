@@ -28834,3 +28834,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | `test_the_index_chains_to_complete_canonical_records:69` | *"ten samples: nine phases, two retreat segments"* - the count must follow the case's own instants |
   | `test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period:109` | *"the retreat is two segments of one phase"* - the cadence is the port's clock, which is now one period per sample |
 - **State:** **P1-4's grid sequence green, sealing green, and the three stale expectations are the only failures left in these suites - all three named above with the rule each was approximating**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1723 — Measured, not guessed: the case now produces 20 samples and 10 distinct captures
+
+- **The three assertions, with their numbers read this time (CP-1722 predicted the list; this entry supplies the values):**
+  ```
+  AssertionError: each capture must name its own raw record:
+      world has 10 distinct path(s) for 20 samples, scene has 10 ... for 20 samples,
+      contact has 10 ... for 20 samples, head has ...
+  AssertionError: ten samples: nine phases, two retreat segments
+  AssertionError: the retreat is two segments of one phase
+  ```
+  **So the case produces 20 samples (two per phase, ten phases counting RADIAL_RETREAT's two segments) and only 10 distinct captures** - i.e. **within a phase the two samples share one capture name**, which is the collision CP-1688 half-fixed: the name carries the phase, the physics step and the instant, and those two samples agree on all three.
+- **And that fixes both remaining edits precisely, each as the rule it was approximating:**
+  | assertion | restated as |
+  | --- | --- |
+  | "each capture names its own raw record" | **per SAMPLE**: the capture must carry the sample's own sequence position, not only the phase/step/instant triple it currently shares |
+  | "ten samples: nine phases, two retreat segments" | **the case's own instants**: the index's count follows what the case emitted, whatever that number is |
+  | "the retreat is two segments of one phase" | **the port's clock**: one period per sample, which is what the grid now enforces and what the probe showed |
+- **So the two open edits are one line of production naming plus two restated assertions, and both are now measured rather than assumed.** The production half of P1-4 named the instant (CP-1688); the sample's *position* is the piece that name still lacks.
+- **State:** **P1-4: grid green, sealing green, APPROACH mechanism closed, and the last three failures measured with their numbers**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
