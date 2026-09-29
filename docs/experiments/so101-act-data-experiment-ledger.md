@@ -13843,3 +13843,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
   candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-967 — Two of the five live-only values are now derived from sealed samples (29 passed)
+
+- **Implemented `retreat_distance_m(samples)`** - the Euclidean displacement of `end_effector_position_m` between the
+  first and last RADIAL_RETREAT sample of a run, refusing fewer than two (`RETREAT_SAMPLES_REQUIRED`) - and
+  **`placement_stable_s(samples)`** - the `sim_time_s` span of the FINAL_CHECK samples, refusing when none reports a
+  stable placement (`PLACEMENT_STABLE_REQUIRED`) or when any of them does not
+  (`PLACEMENT_NOT_STABLE_THROUGHOUT`, so a partially stable final check cannot be reported as a stable duration).
+  Both read only the 25 sealed sample keys recorded in CP-966.
+- **Verified: 29 passed, rc=0** (`beh-task8-green4.log`).
+- **Where the five live-only values now stand:** `retreat_distance_m` and `placement_stable_s` implemented from
+  samples; `cup_support_distance_m` implemented with the three-consecutive-pre-open-samples rule in
+  `_support_from_frames` but still needing the **raw contact record** for the exact `bottom_collision` /
+  `table_collision` proof; `grasp_occlusion_window_s` still needs the **wrist records** for the legitimate-occlusion
+  stretch; and `release_stable_s` awaits the plan's own definition of "release stable" - the samples carry
+  `cup_supported`, `released`, `placement_stable` and `holding_state`, and which combination defines that span is a
+  question for the approved design rather than for my inference, which is why it is named here rather than guessed.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge, retreat distance and placement stability all green at 29; Tasks 9-10 untouched; the goal is armed
+  with a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and
+  the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
