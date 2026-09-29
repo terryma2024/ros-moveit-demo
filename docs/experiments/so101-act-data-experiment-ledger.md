@@ -22419,3 +22419,16 @@ not an inference of mine.**
   **The contract being satisfied is the production contract, discovered by running it.**
 - **State:** step 1's changes are uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware; cleanup
   untouched; nothing deleted, nothing pushed.
+
+## CP-1351 — The production chain now runs deep, and the next requirement is the runner's stop confirmation
+
+- **Where the focused test now fails, and why that is progress:** the traceback passes through
+  `ros_child.py:560 pick_place_full` -> `:545 _run_pick_place` and raises `PickPlaceError: STOP_NOT_CONFIRMED` from
+  `so101_demo.act.pick_place_runner`. **That means the startup proof was accepted by the production port, the phases ran through production
+  code, and the failure is now the last production gate** - the stop confirmation the runner demands - rather than any fixture wiring.
+- **The requirement to satisfy is therefore a shape, not a bypass:** the boundary's `safe_stop` currently returns
+  `{"stopped": True, "schema_version": 1}`, and the runner's own check (its `stop_act` gate, named in the grep above) is what refuses it.
+  **The next edit reads that check and returns what it actually requires** - and the honest note is that this is the same pattern as the
+  previous three: the production code names the contract, and the fixture supplies it.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
