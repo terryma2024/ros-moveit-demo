@@ -51,7 +51,10 @@ def _driver(stack):
 
     return Task8MujocoMeasurementDriver(stack=stack, clock=FakeClock(), detector=lambda frame: {"bbox": [10, 10, 20, 20]},
                                         controller=lambda command: {"accepted": True},
-                                        phase_camera=lambda rows, matrix: {"verdict": "PASS"})
+                                        # the phase camera reports raw observation rows; a verdict here is refused by
+                                        # the raw layer's own token rule, which is what the driver enforces
+                                        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index,
+                                                                           "row_count": 0})
 
 
 def _context():
@@ -126,3 +129,59 @@ def test_the_production_factory_fails_closed_while_stack_wiring_is_absent():
 
     with pytest.raises(ValueError, match="PRODUCTION_DRIVER_WIRING_PENDING"):
         production_driver()
+
+
+def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_path):
+    """Boundary II: the phase camera is a real dependency, so every anchor must actually replay the nine phases.
+
+    Today the driver stores ``phase_camera`` and never calls it, so a run can seal CLOSED while no phase coverage was
+    ever evaluated - the coverage the measurement contract's phase matrix depends on.
+    """
+
+    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.task8_measurement_driver import ANCHORS, Task8MujocoMeasurementDriver
+
+    phases: list[tuple[str, str]] = []
+
+    class Stack:
+        def __init__(self):
+            self.launched, self.closed, self.cleaned = [], [], []
+
+        def launch(self, anchor):
+            self.launched.append(anchor)
+
+        def close(self, anchor):
+            self.closed.append(anchor)
+
+        def cleanup(self, anchor, generation):
+            self.cleaned.append((anchor, generation))
+
+    class Clock:
+        """The driver reads ``clock.monotonic()``, so the fake exposes that surface rather than being a bare callable."""
+
+        def __init__(self):
+            self.now = 0.0
+
+        def monotonic(self):
+            self.now += 0.002
+            return self.now
+
+    stack = Stack()
+    driver = Task8MujocoMeasurementDriver(
+        stack=stack, clock=Clock(), detector=lambda request: {"anchor": request["anchor"]},
+        controller=lambda request: {"ack": True},
+        phase_camera=lambda phase, sample: phases.append((phase, sample)))
+    # the real context, so only external I/O is faked; its digests are 64-hex and the binding happens at the entry
+    context = CalibrationMeasurementContext(
+        generation="generation-1", contract_sha256="a" * 64, measurement_plan_sha256="b" * 64,
+        safe_interval_rad=(-0.1, 0.1), candidate_sha256="c" * 64, policy_sha256="d" * 64,
+        driver_source_sha256="e" * 64, controller_generation="controller-1",
+        broker_generation="broker-1", evidence_root=str(tmp_path),
+        resource_binding={"bound_at_entry": True, "cpu_cores": 8, "gpu_device": "0"})
+    sealed = driver.run(context, tmp_path / "batch")
+
+    assert Path(sealed).is_file()
+    assert stack.launched == list(ANCHORS), "every anchor is launched"
+    assert stack.closed == list(ANCHORS), "every anchor is closed"
+    assert stack.cleaned == [(ANCHORS[-1], "generation-1")]
+    assert len(phases) == len(ANCHORS) * 9, f"nine phases per anchor, saw {len(phases)}"
