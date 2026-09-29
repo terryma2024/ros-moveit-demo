@@ -510,6 +510,21 @@ class _ChildSources(_Sources):
         return row
 
 
+# P1-5/CP-1891: the boundary's PRODUCTION methods are ADOPTED rather than re-implemented. The harness substitutes I/O -
+# the sources, the scene, the driver - and the boundary's logic is the production boundary's, so that `execute_approach`,
+# `sequence_facts`, the aggregate checks and the sequence phases run the code the real child runs. A method the harness
+# defines itself wins; everything else comes from `PickPlaceSearchBoundary`.
+from so101_demo.adapters.act.pick_place_search_boundary import (  # noqa: E402
+    PickPlaceSearchBoundary as _ProductionBoundary)
+
+for _name in dir(_ProductionBoundary):
+    if _name.startswith("__") or _name in _Boundary.__dict__:
+        continue
+    _attribute = getattr(_ProductionBoundary, _name)
+    if callable(_attribute):
+        setattr(_Boundary, _name, _attribute)
+
+
 class ChildPort(PickPlaceSearchPhasePort):
     """The PRODUCTION port, with only its boundary substituted.
 
