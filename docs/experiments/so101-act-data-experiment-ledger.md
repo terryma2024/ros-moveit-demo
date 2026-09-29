@@ -20806,3 +20806,27 @@ not an inference of mine.**
   definition of the same contract, which is the drift this whole revision batch exists to remove.**
 - **State:** HEAD `eb3c1f1e` plus this checkpoint; item 5's fixture unwritten; items 1-4 complete and committed; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1267 — The question is answered: a real binding entry exists, and it derives the hashes too
+
+- **The line that settles item 5's last open question, read rather than guessed:**
+  ```python
+  self._act_artifacts = ActArtifactBinding.verify_environment(os.environ)
+  ```
+  So `_act_artifacts` is **not** meant to be assigned by a fixture: there is a **production loading entry**,
+  `ActArtifactBinding.verify_environment`, which verifies a binding from the environment - and the same method (its first lines are
+  printed above) then derives `_act_hashes` from the binding's own `hashes`, checks the `contacts` fingerprint, and reads
+  `runtime_config` and `calibration_report` through the binding's hashed reader.
+- **That is much better news than the plan's earlier note assumed.** The owner/child boundary was recorded as blocked because "the
+  child *loads* its artifacts rather than having them injected, and no binder exists" - **but the binder does exist and it is
+  environment-driven**, which means Astra's "drive `_run_pick_place` through the normal construction/**loading** entry" is satisfiable
+  exactly as written: the fixture builds real artifacts, points the environment at them, and lets the production binder verify and
+  bind. **No attribute assignment, no hand-written index, no `object.__new__`.**
+- **It also collapses two of the eight preconditions into one step:** `_act_hashes` comes **from the binding** (line 206 and its
+  neighbours), so the hash set and the request payload can both be built from `binding.hashes` instead of the fixture inventing six
+  64-hex strings and hoping the payload matches.
+- **The next read is the binder's environment contract** - `ActArtifactBinding.verify_environment`'s names and `read_hashed_json`'s
+  expectations - because that is what the fixture's artifact directory must look like, and inventing it would be the fifth time this
+  batch paid for writing before reading.
+- **State:** HEAD `c01b3fc0` plus this checkpoint; item 5's fixture unwritten; items 1-4 complete and committed; no stack, no hardware,
+  nothing deleted, nothing pushed.
