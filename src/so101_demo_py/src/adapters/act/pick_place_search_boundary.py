@@ -411,7 +411,10 @@ class PickPlaceSearchBoundary:
                 # exactly the gates that rule names - one extra key is a schema violation, which is how this was found
                 **{key: gates[key] for key in ("controller_reference_ok", "joint_feedback_ok", "contact_ok",
                                                "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok")},
-                "cup_supported": aggregates["cup_supported"],
+                # the runner's set-down document asks whether the cup will FALL - true while the gripper holds it -
+                # which is a different question from the frame's `supported` (does it still rest on the world); the
+                # frame's value would make the runner's own "HOLDING and cup_supported" pair unsatisfiable
+                "cup_supported": bool(aggregates["bilateral_contact"]) or aggregates["cup_supported"],
                 "bilateral_contact": aggregates["bilateral_contact"],
                 "controller_stopped": True}
 
@@ -434,7 +437,11 @@ class PickPlaceSearchBoundary:
                 "reset_epoch": self.reset.receipt.new_epoch, "release_epoch": self._release_epoch,
                 "physics_step": world.simulation_step,
                 "holding_state": aggregates["holding_state"],
-                "cup_supported": aggregates["cup_supported"],
+                # TWO DIFFERENT NOTIONS: the frame's `supported` asks whether the cup still rests on the WORLD (and
+                # HOLDING means it does not), while the runner's release-side documents ask whether it will FALL - true
+                # when the gripper holds it. Reporting the frame's value made the runner's own
+                # "HOLDING and cup_supported" pair unsatisfiable, which is how the distinction was found.
+                "cup_supported": bool(aggregates["bilateral_contact"]) or aggregates["cup_supported"],
                 "fresh": True, "planning_attached": self.planning_attached(request)}
 
     def run_retreat_segment(self, direction, distance_m, request, *, motion_template, motion_duration_s,
@@ -596,6 +603,9 @@ class PickPlaceSearchBoundary:
         wait = getattr(getattr(broker, "driver", None), "wait", None)
         if not callable(wait):
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}: driver.wait")
+        # the repository's own rule: the PHYSICAL release happens with no planning attachment, so the cup is detached
+        # from MoveIt BEFORE the gripper opens - and the detach is read back, not assumed (see detach_moveit)
+        self.detach_moveit(request)
         from so101_demo.act.joints import ARM_JOINTS
 
         open_rad = self._gripper_open_rad()

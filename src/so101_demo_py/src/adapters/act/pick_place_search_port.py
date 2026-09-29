@@ -668,7 +668,8 @@ class PickPlaceSearchPhasePort:
             route.qualify(prepared, result["proof"], current_snapshot=result["current_snapshot"])
             facts = result["facts"]
             document = {"phase": phase, "session_id": request["session_id"], "attempt_id": request["attempt_id"],
-                        "reset_epoch": self.boundary.reset.receipt.new_epoch, "release_epoch": 0, **facts}
+                        "reset_epoch": self.boundary.reset.receipt.new_epoch,
+                    "release_epoch": self._release_epoch_for(phase), **facts}
             return self._checked_sequence_document(phase, document)
 
         execute = getattr(self.boundary, "sequence_phase", None)
@@ -691,8 +692,22 @@ class PickPlaceSearchPhasePort:
         if type(facts) is not dict:
             raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: not a mapping")
         document = {"phase": phase, "session_id": request["session_id"], "attempt_id": request["attempt_id"],
-                    "reset_epoch": self.boundary.reset.receipt.new_epoch, "release_epoch": 0, **facts}
+                    "reset_epoch": self.boundary.reset.receipt.new_epoch,
+                    "release_epoch": self._release_epoch_for(phase), **facts}
         return self._checked_sequence_document(phase, document)
+
+    #: the runner increments its release epoch AFTER the RELEASE phase, so the phases that follow carry the new value
+    _RELEASE_EPOCH_AFTER = ("RADIAL_RETREAT", "FINAL_CHECK")
+
+    def _release_epoch_for(self, phase: str) -> int:
+        """The release epoch the runner expects on this phase's document.
+
+        One release per case - the phase appears once in the runner's own PHASES - so the epoch is a function of the
+        phase's position in that order: zero up to and including RELEASE, one afterwards. Deriving it from the runner's
+        order keeps one source of truth instead of a second counter here.
+        """
+
+        return 1 if phase in self._RELEASE_EPOCH_AFTER else 0
 
     def _checked_sequence_document(self, phase: str, document: dict) -> dict:
         """One closed rule for every sequence phase's document, used by both preparation paths."""
