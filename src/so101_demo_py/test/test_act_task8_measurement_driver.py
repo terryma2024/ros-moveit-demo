@@ -27,6 +27,12 @@ class FakeStack:
     def probe(self, anchor, command):
         return {"contacts": []}
 
+    def camera_info(self, anchor):
+        return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
+
+    def tf(self, anchor):
+        return {"head": {"translation_m": [0.0, 0.0, 1.0], "rpy_rad": [0.0, 0.0, 0.0]}, "wrist": {"translation_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
+
     def readback(self, anchor):
         return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
 
@@ -156,6 +162,12 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
         def probe(self, anchor, command):
             return {"contacts": []}
 
+        def camera_info(self, anchor):
+            return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
+
+        def tf(self, anchor):
+            return {"head": {"translation_m": [0.0, 0.0, 1.0], "rpy_rad": [0.0, 0.0, 0.0]}, "wrist": {"translation_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
+
         def readback(self, anchor):
             return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
 
@@ -218,6 +230,12 @@ def test_a_failed_anchor_keeps_a_cleanup_receipt_in_the_sealed_batch(tmp_path):
     cleaned = []
 
     class Stack:
+        def camera_info(self, anchor):
+            return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
+
+        def tf(self, anchor):
+            return {"head": {"translation_m": [0.0, 0.0, 1.0], "rpy_rad": [0.0, 0.0, 0.0]}, "wrist": {"translation_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
+
         def readback(self, anchor):
             return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
 
@@ -259,6 +277,12 @@ def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
     from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
 
     class Stack:
+        def camera_info(self, anchor):
+            return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
+
+        def tf(self, anchor):
+            return {"head": {"translation_m": [0.0, 0.0, 1.0], "rpy_rad": [0.0, 0.0, 0.0]}, "wrist": {"translation_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
+
         def readback(self, anchor):
             return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
 
@@ -297,6 +321,12 @@ def test_rows_carry_the_stack_readback_rather_than_a_synthesized_identity(tmp_pa
         def probe(self, anchor, command):
             return {"contacts": []}
 
+        def camera_info(self, anchor):
+            return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
+
+        def tf(self, anchor):
+            return {"head": {"translation_m": [0.0, 0.0, 1.0], "rpy_rad": [0.0, 0.0, 0.0]}, "wrist": {"translation_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
+
         def launch(self, anchor):
             pass
 
@@ -332,6 +362,12 @@ def test_a_stack_without_readback_is_refused_by_name(tmp_path):
         def probe(self, anchor, command):
             return {"contacts": []}
 
+        def camera_info(self, anchor):
+            return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
+
+        def tf(self, anchor):
+            return {"head": {"translation_m": [0.0, 0.0, 1.0], "rpy_rad": [0.0, 0.0, 0.0]}, "wrist": {"translation_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
+
         def launch(self, anchor):
             pass
 
@@ -365,6 +401,12 @@ def test_every_anchor_is_an_independent_full_restart(tmp_path):
     class Stack:
         def probe(self, anchor, command):
             return {"contacts": []}
+
+        def camera_info(self, anchor):
+            return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
+
+        def tf(self, anchor):
+            return {"head": {"translation_m": [0.0, 0.0, 1.0], "rpy_rad": [0.0, 0.0, 0.0]}, "wrist": {"translation_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
 
         def readback(self, anchor):
             return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
@@ -418,6 +460,12 @@ class _ProbeStack:
         self.hits = hits
         self.probes = []
 
+    def camera_info(self, anchor):
+        return {"width": 640, "height": 480, "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
+
+    def tf(self, anchor):
+        return {"head": {"translation_m": [0.0, 0.0, 1.0], "rpy_rad": [0.0, 0.0, 0.0]}, "wrist": {"translation_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
+
     def readback(self, anchor):
         return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
 
@@ -454,3 +502,57 @@ def test_a_probe_that_touches_anything_fails_the_anchor_by_name(tmp_path):
     document = json.loads(Path(sealed).read_text())
     assert document["status"] == "INVALID"
     assert "MEASUREMENT_PROBE_CONTACT" in json.dumps(document)
+
+
+class _CameraStack:
+    """A stack that reports the camera intrinsics and the head/wrist transforms it actually used."""
+
+    def __init__(self, camera=True):
+        self.camera = camera
+
+    def readback(self, anchor):
+        return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
+
+    def launch(self, anchor):
+        pass
+
+    def close(self, anchor):
+        pass
+
+    def cleanup(self, anchor, generation):
+        return {"cleaned": anchor}
+
+    def probe(self, anchor, command):
+        return {"contacts": []}
+
+    def camera_info(self, anchor):
+        if not self.camera:
+            raise AttributeError("no camera surface")
+        return {"width": 640, "height": 480,
+                "k": [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]}
+
+    def tf(self, anchor):
+        if not self.camera:
+            raise AttributeError("no tf surface")
+        return {"head": {"translation_m": [0.0, 0.0, 1.0], "rpy_rad": [0.0, 0.0, 0.0]},
+                "wrist": {"translation_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
+
+
+def test_each_anchor_records_the_camera_info_and_transforms_it_used(tmp_path):
+    """Boundary II: the raw batch carries real CameraInfo and TF rows, not just a claimed intrinsics field."""
+
+    batch = tmp_path / "batch"
+    sealed = _probe_driver(_CameraStack()).run(_measurement_context(tmp_path), batch)
+    assert json.loads(Path(sealed).read_text())["status"] == "CLOSED"
+    info = json.loads((batch / "anchors/default/camera-info.json").read_text())
+    tf_row = json.loads((batch / "anchors/default/tf.json").read_text())
+    assert info["width"] == 640 and len(info["k"]) == 9
+    assert set(tf_row["head"]) == {"translation_m", "rpy_rad"} and "wrist" in tf_row
+    assert info["lifecycle"] == tf_row["lifecycle"] == "FULL_RESTART"
+
+
+def test_a_stack_that_cannot_report_camera_evidence_fails_closed_by_name(tmp_path):
+    sealed = _probe_driver(_CameraStack(camera=False)).run(_measurement_context(tmp_path), tmp_path / "batch")
+    document = json.loads(Path(sealed).read_text())
+    assert document["status"] == "INVALID"
+    assert "MEASUREMENT_CAMERA_REQUIRED" in json.dumps(document)

@@ -124,6 +124,22 @@ class Task8MujocoMeasurementDriver:
                                 "period_s": PRIVATE_REPLAY_PERIOD_S, "phase": phase,
                                 "observation": observation})
 
+        # the camera evidence the measurement claims must be in the batch as raw rows: the intrinsics the camera
+        # actually reported and the transforms actually used, or the anchor fails by name
+        try:
+            info = self.stack.camera_info(anchor)
+            transforms = self.stack.tf(anchor)
+        except Exception as error:
+            raise ValueError(f"MEASUREMENT_CAMERA_REQUIRED: {anchor}: {type(error).__name__}") from error
+        if type(info) is not dict or type(transforms) is not dict:
+            raise ValueError(f"MEASUREMENT_CAMERA_REQUIRED: {anchor}: camera evidence is not a mapping")
+        stamp = self.clock.monotonic()
+        for name, payload in (("camera-info", info), ("tf", transforms)):
+            self._write_record(root, anchor, name,
+                               {"source_stamp": stamp, "receive_monotonic_s": self.clock.monotonic(),
+                                "session_id": identity["session_id"], "reset_epoch": identity["reset_epoch"],
+                                "attempt_id": identity["attempt_id"], "physics_step": -2, **payload})
+
         probe = getattr(self.stack, "probe", None)
         if not callable(probe):
             raise ValueError("MEASUREMENT_PROBE_REQUIRED: the stack cannot run the fixed non-contact arm probe")
