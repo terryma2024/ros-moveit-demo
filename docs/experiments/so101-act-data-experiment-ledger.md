@@ -24978,3 +24978,25 @@ picture in both directions.**
   `TrustedVisibleApproachSource`), build the request from the source receipt, have the **screen** inspect the executed goals, run **`PathProver.prove`** for the proof, capture the current snapshot, and report
   the eight gates from readback. **The two things it must be handed - the executed goals and the bridge times - come from the ROS/broker layer, i.e. exactly the I/O the review allows substituting.**
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1498 — `execute_approach`'s parameter inventory is complete, and the route's manifest owns four of them
+
+- **`PathProver.prove(request, snapshot, *, ticket, reset_epoch, policy_fingerprint, profile_sha256, contact_scope_sha256, checker_sha256, expected_samples)`** -
+  read in full (`path_proof.py:322-324`) - and **all four of the identity values it needs come from the expert route's own manifest**
+  (`visible_approach_expert_route.py`): `candidate_profile_sha256` (`:53`), `contact_scope_sha256` (`:64`), `checker_sha256` (`:66`), `expected_samples` (`:68`) - which
+  `qualify` re-checks against the proof line by line (`:243-246`, `:200`).
+- **So the port passes them, because the port is what holds the route** (`self._expert_route` is built by `begin`): `execute_approach(prepared, request, *, prover_identity)`
+  with the four manifest values and the owner ticket the port already derives. **The boundary then needs only what the ROS/motion layer produces** - the executed `goals`,
+  the `PrefixSourceReceipt` from the broker's permit, `bridge_time_s`/`start_time_s`, the current `snapshot`, and the per-phase `facts` - **which is precisely the I/O the
+  review allows substituting.**
+- **The method's shape, fully specified and nothing left to discover:**
+  1. require `self.approach_screen` and an execution seam, refusing by name if either is absent;
+  2. ask the execution seam for its result and refuse a malformed one by name;
+  3. `screen.inspect(goals, prepared["prefix"])` - the real inspection authority;
+  4. `RelativePathRequest.from_source_receipt(prefix, receipt=..., bridge_time_s=..., start_time_s=...)`;
+  5. `PathProver(screen.path_checker).prove(request, snapshot, ticket=..., reset_epoch=..., **prover_identity)`;
+  6. return `{"proof": proof, "current_snapshot": snapshot, "facts": facts}` - which is exactly what the port's APPROACH path already expects and qualifies.
+- **Why this round wrote no code:** the method needs six values from the execution seam and four from the route's manifest, and **writing it with a guessed subset would have
+  produced exactly the kind of plausible-looking partial this batch keeps finding.** The inventory is now complete, so the next round writes it in one pass - and the
+  remaining APPROACH work after that is the execution seam itself, which the child-port builder supplies.
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
