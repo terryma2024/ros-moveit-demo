@@ -23233,3 +23233,18 @@ not an inference of mine.**
   passes - **but "on paper" is what has cost this item three rounds already, so the next probe prints both numbers rather than concluding.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1402 — Every condition I can evaluate passes, so the gap is in what I have not enumerated
+
+- **The last two probes together:** the readback's seven keys, both exact key sets, the body, the empty fingertip contacts,
+  `paused`/`truncated` false, the session, the epoch (**now equal to the receipt**), the step and sim-time agreements, the digest cross-check,
+  `contacts.safe()`, and now the lock timestamp against the world (`2.0` within `[0, 2.104]`) - **all true on the very observation the port
+  validates.**
+- **So the failing condition is one I have not enumerated, and the way to find it is not another probe of my own guesses but a literal
+  side-by-side:** the port's check spans `pick_place_search_port.py:236-260`, and my probe covers ten of its conditions. **The next round reads
+  those lines again, one condition per line, and marks each against the probe - the gap will be a condition I skimmed, which is exactly the
+  failure mode this item keeps producing.**
+- **And the honest note:** this is the fourth round in which everything I could measure passed while the port refused. **The measurement is not
+  wrong; my enumeration of the check is incomplete, and reading is the only fix for that.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
