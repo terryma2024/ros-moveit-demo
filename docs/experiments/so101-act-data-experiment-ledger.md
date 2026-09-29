@@ -28542,3 +28542,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Why this is worth a probe rather than a patch:** the last five rounds each fixed a real defect and each moved the failure on (window → axis → snapshot → APPROACH closed → gap → regression). **This one has two candidate causes that would need opposite fixes**, so patching either would be a coin toss - and the batch's own rule is that a claim about an artefact waits until the artefact has been read.
 - **And the state, unchanged in substance:** APPROACH chain closed (CP-1701); window, axis and snapshot green (CP-1700/1704); **the grid's per-sample instant is the last thing**, and it is now one of exactly two causes.
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration one probe from the last link**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1706 — `count` is frozen at 0 while the code increments it: two names, one of them not the object I think
+
+- **The probe, and it contradicts the source:**
+  ```
+  CAPTURE clock={'count': 0, 'capture_base': 1.3} sim=1.4      <- count never advances
+  SAMPLE  phase=SEARCH   step=4  readback_id=132982811660992  sim=1.4
+  CAPTURE clock={'count': 0, 'capture_base': 1.3} sim=1.4
+  SAMPLE  phase=APPROACH step=7  readback_id=132981340347456  sim=1.4
+  ```
+  **Two different readback objects (ids differ) and the same instant**, while the code I read verbatim at `test_act_task8_nine_phase_case.py:394-395` does
+  ```
+  clock["count"] += 1
+  _case_clock["count"] += 1
+  raw = _case_capture(sources, prefix, boundary)
+  ```
+  **before the capture - so either `_current_readback` is not the function being called, or `_case_clock` is not the object the capture reads.**
+- **Which is the same shape this batch has now recorded five times:** *a name is not an identity.* `hasattr(cls, "__call__")` was not the class's interface (CP-1669), a length was not a key set (CP-1625), a substring was not an equality (CP-1621), a rule found in a file was not a module function (CP-1695), a shared value constructed twice became two (CP-1699) - **and now a counter that increments where I read it but not where the capture reads it.**
+- **The next probe is three lines and settles it:** print `id(nine._case_clock)` at the capture and `id(_case_clock)` inside `_current_readback`, together with `id(boundary.current_readback)` against `id(_current_readback)`. **If the ids differ, the fix is one assignment; if they match, the counter is being reset elsewhere** - and the fixture does re-create `_case_clock = {"count": 0}` at module scope (line 502), which is worth checking against the closure's own binding.
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration one identity check from the last link**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
