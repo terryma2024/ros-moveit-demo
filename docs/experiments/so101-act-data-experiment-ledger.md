@@ -27110,3 +27110,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `Testing/<stamp>` in its own log, or the log will be read before anything else runs CTest). **Reconstructing the attribution of a superseded run is bookkeeping with no consumer; recording that the run is superseded is the honest alternative.**
 - **What is preserved and what is corrected:** every log, `Testing/` directory and scratch stays where it is; the packet and the index will say, when next updated, that **the boundary legs recorded up to CP-1613 are superseded by the remediation and will be re-run**, and that **the earlier citation of `Testing/20260929-1252` in CP-1594 is withdrawn**.
 - **State:** item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 4 CLI half green and committed with its cleanup scope awaiting CP-1620 and three driver-seam scenarios to add; items 5 and 6 closed and independently confirmed; item 3 unstarted; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1624 — All five of P2's scenarios are covered, and the review was right that none of them needs a live stack
+
+- **`5 passed`** for `test_act_task8_measurement_cli_terminal_state.py`, covering every scenario the review named:
+  | scenario | how it is driven | asserted |
+  | --- | --- | --- |
+  | **terminal ledger state** | a driver that seals nothing | refused, **and the ledger's last state is INVALID, not RUNNING** |
+  | **corrupted seal** | a driver that writes a `batch.json` of the wrong kind | refused, INVALID in the ledger |
+  | **cleanup contamination** | a driver that seals `contamination` | refused by the validator's existing contamination rule, INVALID in the ledger |
+  | **foreign identity** | a driver that seals another identity | refused, INVALID in the ledger |
+  | **exit status** | the entry run as a **subprocess** with `raise SystemExit(main())` | **non-zero**, and INVALID in the ledger |
+- **And the review's correction of my claim is recorded as such:** I had written that P2's remaining work *"requires live authorization"*. **It does not** - the entry has a `--driver module:callable` seam for exactly this, and **all five scenarios are exercised through it, with no stack, no simulator and no hardware.** The claim is withdrawn.
+- **Three of the cases build their own seal document rather than calling a helper**, which was a deliberate choice: it keeps them independent of both the helper's shape **and** the still-open question of where the cleanup
+  proof must be required (CP-1620), so they test the entry rather than a decision that has not been made.
+- **And one assertion was mine to fix twice, which is worth the line:** the foreign-identity case first demanded a *particular refusing layer*, the schema's validator refused it instead, and the case now asserts what the review asked for - **refused, and INVALID** - because which layer catches it is an implementation detail, not the requirement.
+- **State:** item 4's CLI half is green and committed with **all five scenarios**; only its **cleanup-proof scope** awaits CP-1620. Item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed and independently confirmed; item 3 unstarted; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
