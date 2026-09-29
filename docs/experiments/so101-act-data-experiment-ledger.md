@@ -24600,3 +24600,19 @@ picture in both directions.**
   (`capture_evidence_fields` then `build_live_evidence_sample`) from the components that hold the data, because the driver object is unreachable from the phase loop
   (CP-1467/1470). **The ledger says that plainly rather than implying the driver was involved.**
 - **State:** no code changed this round; P1-1 and P1-2 remain green and committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1479 — P1-3's RED is in place, against the port's own contract
+
+- **RED retained** (`experiments/gate8-p13/red-1.log`, **2 failed**): three new tests in the port's own test file, of which the filter ran two and both
+  fail on the missing contract - `bind_live_evidence(window, support_distance_max_m=...)` does not exist, and a boundary exposing `canonical_evidence` is never
+  asked for it.
+- **What the RED demands, in the review's own terms:**
+  1. a normal SEARCH **records a canonical sample through the port itself** - the recorded document must have **24 keys**, the case's epoch, `phase == "SEARCH"`, and the
+     values the boundary supplied (not a three-key stub, and not something the fixture wrote);
+  2. a boundary that **cannot** derive the fields is refused with **`TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED`** - no silent `None`;
+  3. an attachment **without the support threshold** is refused with the same code - **the threshold is never defaulted**.
+- **Design settled by reading, before writing any of it** (CP-1478 and this round): the production boundary builds its adapter and segment **inside `search()`**
+  (`pick_place_search_boundary.py:104-112`), so the canonical derivation has to happen **where the adapter and the captured document are both in scope**; the boundary
+  therefore keeps the adapter of its most recent search for a documented `canonical_evidence(captured, *, support_distance_max_m, raw_records)`, and the **port** -
+  which owns the recorder's evidence root - writes the raw records the recorder will index.
+- **State:** the RED is committed with the tests; P1-1 and P1-2 stay green. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
