@@ -54,9 +54,10 @@ def _manifest(tmp_path: Path) -> tuple[dict, Path, str]:
 class _Owner:
     """The process/stack seam, substituted: it starts and retires, and everything else is production."""
 
-    def __init__(self, tmp_path: Path, result: dict, launch: SimpleNamespace):
+    def __init__(self, tmp_path: Path, result: dict, launch: SimpleNamespace, manifest: dict = None):
         self._result = result
         self._launch = launch
+        self._manifest = manifest or {}
         self.context = None
         self._stack_retired = self._child_retired = self._final_clear = False
         self.stack = SimpleNamespace(launch=SimpleNamespace(evidence_root=str(tmp_path / "stack-evidence")))
@@ -77,10 +78,18 @@ class _Owner:
         return self._result
 
     async def start(self, spec):
+        # the campaign is production and checks these by name: the worker must point BACK at the same context, and
+        # the context must say it is a single-worker full-case workload
+        # `_HASH_FIELDS`: the campaign binds the context to the manifest by comparing these, so the context carries
+        # the frozen manifest's own values rather than literals of my own
         self.context = SimpleNamespace(campaign_id="case-298",
                                        manifest_sha256=spec.payload["manifest_sha256"],
-                                       contact_policy_fingerprint="d" * 64,
-                                       operation_id="op-1", execution_generation=1)
+                                       operation_id="op-1", execution_generation=1,
+                                       worker_count=1, workload_kind="task8_full",
+                                       **{name: self._manifest[name] for name in
+                                          ("source_sha256", "runtime_config_sha256",
+                                           "collection_config_sha256", "contact_policy_fingerprint")})
+        self.worker.context = self.context
         return self.context, self.worker
 
     async def finish(self, *, attempt_id):
@@ -103,7 +112,7 @@ def _joined_case(tmp_path) -> tuple[dict, dict, Path, Path]:
     journal = tmp_path / "journal" / "result.json"
     journal.parent.mkdir()
     launch = SimpleNamespace(mujoco_session_id=SESSION, ros_domain_id=198)
-    owner = _Owner(tmp_path, result, launch)
+    owner = _Owner(tmp_path, result, launch, manifest)
     spec = SimpleNamespace(kind="task8_full", deadline_ns=10 ** 18,
                            payload={"evidence_root": str(tmp_path), "manifest_path": str(manifest_path),
                                     "manifest_sha256": digest})

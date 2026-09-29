@@ -28965,3 +28965,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | fixtures must not carry stale expectations | the four the finding predicted, each restated as the rule it approximated (CP-1727/1728) |
 - **And the honest cost, for the packet:** P1-4's fixture half took roughly forty checkpoints, and **every one of them moved a real defect** - including three that were the *same* defect in new places ("a shared value constructed twice": the prefix, the boundary's prefix, and the test's injected route) and one that was a **test collaborator outliving its reason** (CP-1722, the most expensive single item). **The lesson worth carrying forward is not the count; it is that a fixture with three module globals has three ways to leak, and a substituted collaborator that bypasses its own constructor is not a measurement.**
 - **State:** **P1-4 complete (production and fixture halves, eleven suites green); P1-5's joined chain is next, with its RED committed and its first half already passing** (the production runner seals, `run_pick_place_case` publishes, only the owner is substituted); boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1730 — The joined chain runs: production runner seals, production entry publishes, one substitution
+
+- **The test passes:**
+  ```
+  1 passed in 10.19s      test_act_task8_full_case_joined_chain.py
+  ```
+  **And what it establishes is exactly the verdict's P1-5 requirement** - *"at least one ACTUAL full case whose production code emits the artifact, both retirement receipts and the journal"*:
+  | element | who produced it |
+  | --- | --- |
+  | the nine-phase composition and the sealed live-evidence artifact | the **production** `PickPlaceRunner` over the existing full-case port |
+  | the preflight, the campaign check (`PickPlaceValidationCampaign.planned_cases`), the byte-for-byte readback rule and the journal row | the **production** `run_pick_place_case` / `_publish_new` |
+  | both retirement receipts | the production code, reading back the files the owner wrote |
+  | the **owner** (process/stack start, retire, the three retired flags) | the **only** substitution - the external-I/O seam |
+- **Two fixture facts the campaign taught, and both are its own checks rather than mine:** the context must carry `worker_count == 1` with `worker.context` pointing **back** at the same object, and it must carry the frozen manifest's **`_HASH_FIELDS`** (`source_sha256`, `runtime_config_sha256`, `collection_config_sha256`, `contact_policy_fingerprint`) - **literals of my own were refused with `TASK8_MANIFEST_BINDING_INVALID`, which is the campaign binding the context to the manifest as it should.**
+- **What is left of P1-5, and each is an extension of this same passing test:** feed the same case root to `validate_case_journals`; feed the same sealed artifact to the **real** `aggregate_task8_calibration`; read the **seven facts** from the sealed index; and derive the **four negatives** by corrupting *this* baseline - including the cadence negative, which CP-1711 recorded as building a new row rather than mutating the successful chain.
+- **State:** **P1-5's core requirement is met and passing on the production path; the aggregator join, the seven facts and the four negatives remain**; the teleop-side RED stays committed as its own failing boundary; the task list carries P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
