@@ -23470,3 +23470,15 @@ not an inference of mine.**
   these samples back are what remain of P1-5.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1417 — My call matches the builder's signature exactly, so the key set comes from its RETURN
+
+- **Read: `build_live_evidence_sample(*, identity, phase, physics_step, sim_time_s, source_stamps_s, source_received_monotonic_s,
+  raw_records, holding_state, frame, contact, measurements)`** - and it validates my three dictionaries against **exactly** the shapes I passed:
+  `identity` = the five identity keys, `frame` = `{wrist_frame_valid, wrist_target_visible}`, `contact` = the six booleans, `measurements` = the
+  four unit-bearing values. **So no argument of mine is wrong, and the builder accepted the call.**
+- **Which moves the question to the builder's RETURN** (`task8_live_evidence.py:248` onward): `append` demands `set(sample) == set(_SAMPLE_KEYS)`,
+  so if the returned dictionary's key set differs from the recorder's own constant - or if `_refuse_audit_camera` rejected one of my raw records -
+  that is the refusal. **Those twenty-five lines are the next read, and they are the last thing between this fixture and a recorded case.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
