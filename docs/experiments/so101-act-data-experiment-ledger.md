@@ -22679,3 +22679,14 @@ not an inference of mine.**
   validating the evidence), so what remains is identity plumbing inside the doubles, not new evidence construction.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1367 — The identity stamp landed; the remaining differ is captured with its context
+
+- **Written:** `_ChildSources(_Sources)` overrides `capture` to write **this case's** session, the reset proof's epoch and `truncated=False` onto
+  the readback the shared builder produced - **no forked evidence, only identity plumbing** - and the boundary now builds
+  `_segment(_ChildSources(...), _Adapter(decision), _Scene())`.
+- **The refusal is unchanged** (`TASK8_SEARCH_EVIDENCE_INVALID`) and still shows an attempt-id differ (`- attempt-1` / `+ attempt-item5`), **so the
+  offending comparison is not the session or the epoch I just fixed.** The eight lines above the differ are captured verbatim so the next round
+  reads the **comparison**, not the symptom - which is the difference between the last several rounds and the ones before them.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
