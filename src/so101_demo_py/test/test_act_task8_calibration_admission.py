@@ -168,10 +168,14 @@ def _context(**overrides):
     arguments.setdefault("runtime_descriptor", {
         "schema_version": 1,
         "head_search": {"schema_version": 1,
+                        # the shared rule is closed over the detector block, so the fixture supplies every
+                        # member the production document carries - the thread and software-version fields included
                         "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt",
                                      "weights_sha256": "a" * 64, "model_id": "plastic-cup",
                                      "image_size_px": 640, "requested_device": "cuda",
-                                     "allow_cpu_fallback": False},
+                                     "allow_cpu_fallback": False, "torch_threads": 4,
+                                     "torch_interop_threads": 2, "torch_version": "2.0",
+                                     "ultralytics_version": "8.0"},
                         "camera": {"frame_id": "head_camera_frame",
                                    "ray_origin_frame_id": "head_camera_frame",
                                    "width_px": 640, "height_px": 480},
