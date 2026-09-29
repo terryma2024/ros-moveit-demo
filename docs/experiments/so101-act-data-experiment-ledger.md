@@ -21941,3 +21941,18 @@ not an inference of mine.**
   edited four times by pattern rather than by reading the call site first, the error CP-1238 and CP-1323 both named.
 - **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1325 — The helper is valid Python now; four failures remain and each has its own body to read
+
+- **What this round fixed:** the `SEAL_VALID_HELPER` literal was a **single physical line with escaped newlines**, so the module it wrote
+  would not have been valid Python even once imported. It is now a real multi-line literal whose body indexes **every regular file except
+  `batch.json`**, making the seal closure-exact - the property the strict validator demands. **That was a genuine latent defect of my own
+  making, found by reading the grep output rather than by re-running the same edit.**
+- **What it did not fix, honestly: the same four tests still fail.** The counts printed above show which files still seal markers or call
+  the helper, and **each of the four needs its own driver body read in full** - not another pattern substitution. The helper now exists and
+  is correct, so this is three small, well-defined edits rather than an open question.
+- **A note on method, because it is the honest content of this stretch:** P1-3's production change has been correct for several rounds
+  while the fixture repair has taken five, and the reason is not the difficulty of the change - it is that I kept editing by pattern
+  instead of reading each fake driver's body first. **The next round does that, one file at a time, and stops guessing at quoting.**
+- **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
