@@ -19440,3 +19440,21 @@ not an inference of mine.**
   which is precisely the kind of edit I stop and ask about rather than make quietly inside a checkpoint.
 - **State:** HEAD `d744f60f`; staged 0; the shortened runner layout (88 vs 102 characters) is committed and justified; my budget
   RED remains uncommitted while red; all scratch and run roots retained as deletion candidates; no push, no stack, no hardware.
+
+## CP-1206 — My guessed RED is gone, the owner's file is byte-identical to HEAD, and the runner's own budget is already asserted
+
+- **Removed my budget test rather than leave it wrong:** its 33-character socket reserve was my estimate, CP-1203 measured 88
+  characters of layout and CP-1205 counted the real socket at 109 - so the assertion was founded on a number I had invented, and
+  a test built on a guess is the thing this stretch has already paid for three times (CP-1142, CP-1186, CP-1202). The file is
+  **restored with `git checkout --` and verified byte-identical to HEAD** (`git status --short` prints nothing), because it is an
+  owner file and I want my add-then-remove cycle to leave no trace in it - a `M` marker with no real change is exactly the kind
+  of noise that makes a later hunk-level reconciliation harder.
+- **What the same suite told me while I was there, and it is useful:** the runner's own test file already asserts
+  `validate_process_path_budget(run_root) == 106` and that a longer root **raises** - so the runner *does* model its budget and
+  fails fast on it, which is why it refused at CP-1197 before doing any work. **The runner is not the defect.** Its budget
+  covers the socket it creates; a test module that binds its own socket three levels above `TMPDIR` (CP-1205) is outside that
+  model, which is why 42 runner tests pass while one module fails under the gate.
+- **So the position is unchanged and clean:** the shortened layout is committed and justified, the runner's suite is
+  **42 passed**, no file of the owner's carries a stray modification from me, and the single remaining fix is the one I asked
+  about - the module's socket base - which edits their file.
+- **State:** HEAD `fd1372a7`; staged 0; scratch `s804/tmp` added to the deletion candidates; no push, no stack, no hardware.
