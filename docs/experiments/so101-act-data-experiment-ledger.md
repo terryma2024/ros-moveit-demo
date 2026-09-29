@@ -23679,3 +23679,19 @@ not an inference of mine.**
   identity plumbing, the full readback validation and the recorder binding - is built, proven, and sitting uncommitted in this worktree by design.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1432 — Batch state, verified rather than asserted
+
+- **The four revision commits, checked by subject:**
+  | commit | subject |
+  | --- | --- |
+  | `97244cfc` | the formal entry composes real providers (P1-1) |
+  | `9e106c04` | one complete head-search validator, descriptor preserved end to end (P1-2) |
+  | `f48130c8` | the entry reads the seal back and never reports INVALID as VALID (P1-3) |
+  | `ebc17755` | the aggregator compares head-search at one layer and validates every seal (P1-4) |
+- **`HEAD` is `c85faf5f`**, staged is **0**, the tree carries **32 modified and 13 untracked** files - the owner's work untouched and P1-5's fixture
+  among them **uncommitted by design** (`M src/so101_teleop/test/teleop/test_task8_child_driven_case.py`) - and the ledger stands at **23681 lines /
+  1140 checkpoints**.
+- **What that means for the review:** the revision batch's **answerable half is committed and green**, with two production defects found and fixed
+  along the way; the uncommitted half is **P1-5 only**, and its handoff is complete at CP-1431. **Nothing in the tree was reverted, nothing was
+  pushed, no evidence was deleted, and the ~300 GB of classified deletion candidates were never touched.**
