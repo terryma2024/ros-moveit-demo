@@ -28055,3 +28055,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   replay **without** them should refuse by name rather than seal an `ABSENT` observation.
 - **Why it is split rather than rushed:** the remaining piece changes what the **driver** records inside a sealed batch, and the verdict's execution order puts focused RED/GREEN at each boundary - so the driver's wiring gets its own RED (a run whose replay must carry `MEASUREMENT`), not a quiet edit inside this one.
 - **State:** **P1-3 in progress (evaluator green, driver wiring next)**; the task list keeps P1-3 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1676 — P1-3's wiring RED: the sealed replay row says `ABSENT`, and the batch is where that must be judged
+
+- **The RED is an END-TO-END one, deliberately:** `test_the_formal_entrys_replay_rows_carry_a_measured_observation` runs the **formal entry**, then reads the `phase-*.json` rows **inside the sealed batch** and requires `geometry_state == "MEASURED"` with more than one retained sample. **`1 failed, 4 passed`:**
+  ```
+  AssertionError: phase-00-search.json carries 'ABSENT': the replay must measure the phase path, and the driver must
+  hand the evaluator the run's trajectory, camera and target
+  ```
+  **The verdict's words are "2 ms projected sampling", and a sampling property belongs to the sealed evidence**, not to an evaluator called in isolation - so the test judges the batch, and the evaluator's own four cases stay green beside it.
+- **And reading the driver for its geometry sources is what makes the remaining work concrete rather than vague:**
+  | what the replay needs | what the driver actually collects, and when |
+  | --- | --- |
+  | camera frame/intrinsics | `self.stack.camera_info(anchor)` - **after** the private replay, in the live half of `_acquire` |
+  | camera pose | `self.stack.tf(anchor)` - also after the replay |
+  | the phase path | **nothing**: the driver never commands the nine phases; it replays them privately, so there is no commanded joint path to sample |
+  | the target | **nothing**: no cup position reaches this driver at all |
+  `run_search`'s iterations carry `bearing_rad`, `confidence` and `physics_step` - **bearings, not a joint path** - so they cannot be the trajectory either.
+- **So the GREEN has two halves, and neither is a rename:**
+  1. **the geometry must come from the bottom I/O boundary**, which is where a phase path and a target genuinely live: the composition already accepts a `frame_source` for the detector adapter, and the private replay needs the same boundary (per-sample joints and camera) plus the admitted binding's target. **The stand-in that the P1-1 test already supplies is exactly the layer where those become available**, which is why the success path can be proved without a simulator.
+  2. **and the driver must fail closed by name when it has none** - `MEASUREMENT_PHASE_GEOMETRY_REQUIRED: <anchor>` - because CP-1675's `ABSENT` marker was introduced to make the gap **visible**, and a production run that seals it would turn a visible gap into a silent one.
+- **State:** **P1-3 in progress** - evaluator green, wiring RED in place, wiring unstarted; the task list keeps P1-3 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
