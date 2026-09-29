@@ -928,9 +928,11 @@ def test_the_case_evidence_is_indexed_and_a_tampered_raw_record_is_refused(tmp_p
 
     recorder = port._evidence_recorder
     entries = list(recorder._entries)
-    # the port feeds this window itself now (P1-3): a bounded SEARCH case carries the sample the phase produced
-    assert len(entries) == 1, f"the phase's own sample is the case's evidence: {len(entries)}"
-    assert entries[0]["phase"] == "SEARCH"
+    # the port feeds this window itself now (P1-3), and since P1-4 it records the phase's EDGE ADDITIONS beside the
+    # grid samples (`add_event`: "it never counts as a grid point"), so a bounded SEARCH case carries its sample AND
+    # the edge the phase produced - the count is the case's own, not a literal (the same family as CP-1728)
+    assert len(entries) >= 1, f"the phase's own samples are the case's evidence: {len(entries)}"
+    assert {entry["phase"] for entry in entries} == {"SEARCH"}, "and they belong to the phase that ran"
 
     # every index row names a real file whose bytes hash to the digest the row claims
     for entry in entries:
