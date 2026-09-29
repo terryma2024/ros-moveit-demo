@@ -33718,3 +33718,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The re-run sets it explicitly to a short path**, the same way the launcher sets it to the run's own root.
 - **State:** **P1-1 through P1-6 CLOSED; the freeze gate is re-run with the reservation root named.** **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1902 — The last three failures are a conflict between two rules, and the test states its own formula
+
+- **The test computes its root from `TMPDIR`, by the repository's own scratch convention:**
+  ```python
+  # test_controller_reservation_paths.py
+  def test_stable_per_session_paths_fit_linux_socket_limit():
+      root = Path(os.environ["TMPDIR"]).parents[2]
+      first = controller_reservation_directory(root, "session_A")
+      …
+      assert len(os.fsencode(first / "gripper.sock")) <= 107
+  ```
+  **and the convention is `<evidence-root>/scratch/<run-id>/tmp`**, so `TMPDIR.parents[2]` IS the evidence root's
+  `experiments/v5a` directory:
+  ```
+  TMPDIR = /data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/v5a/final-freeze-gate2/scratch/ctest-serial
+  parents[2] = /data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/v5a
+  first / "gripper.sock" -> len 109  >  107
+  ```
+  **so the assertion is correct, the convention is followed, and the two are simply incompatible at THIS evidence root:**
+  the registered root is two bytes too deep for a Unix socket path once the per-session directory is added.
+- **Which is why the same three tests passed in earlier gates:** those runs used a scratch whose grandparent was short
+  (`/tmp/so101-…`), **and this repository's rules require the pytest scratch to be under the registered evidence root on
+  `/data`** - **so a run cannot satisfy both at once, and no code change can make it:** the three failures are a property
+  of the root's length, not of the change under test. **Neither rule is mine to relax, so it is recorded and reported.**
+- **The gate's own result, with that classification:**
+  ```
+  ctest -N: 117        ctest -j1: 97% tests passed, 3 failed out of 117      Total Test time = 218.78 s
+  failed: 32 test_controller_reservation_paths, 34 test_act_ros_child, 36 test_act_stack_probes
+  ```
+  **and all three name the same 109-byte path**, so 114 of 117 pass with every P1 change in place.
+- **State:** **P1-1 through P1-6 CLOSED; the freeze gate is 114/117 with three failures classified as an
+  evidence-root/socket-limit conflict, which is a decision for the owner rather than a change for me to make.** **Task-list
+  statuses are unchanged, so they are not re-stated.**
