@@ -28874,3 +28874,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | `test_the_index_chains_to_complete_canonical_records:69` | it expects **10** entries ("nine phases, two retreat segments") | **the case's own instants plus its events**: ten grid samples and ten event entries, which is what the design records |
 - **And the third failure follows from the same fact:** `test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period:109` asserts *"the retreat is two segments of one phase"* against a list that now includes events, so it must read the **grid** entries when it checks the cadence - which is also what `validate_evidence_grid` is for (`validate_evidence_grid(samples, period_s=…, tolerance_s=…)`, i.e. the grid is the thing with a period).
 - **State:** **P1-4: grid green, sealing green, APPROACH mechanism closed, and the three remaining failures are now explained by one structural fact (grid entries vs event entries) with the design's own sentence as the authority**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1725 — The entry has no kind marker, so the classification must come from the record
+
+- **`seal()` read in full, and it settles how a test may tell the two kinds apart:**
+  ```
+  index = {"schema_version": SCHEMA_VERSION, "kind": "task8_live_evidence",
+           "identity": dict(identity), "sample_count": len(self._entries),
+           "samples": [dict(entry) for entry in self._entries]}
+  ```
+  and every entry is checked as `{"relative_path", "sha256"}` plus the two epochs the sealing rule walks
+  (`entry["reset_epoch"]`, `entry["release_epoch"]`). **There is no field that says "this entry is a grid point" or "this is an event".**
+- **So a test cannot classify by the entry - it must classify by the RECORD it points at**, which is where P1-4 put the information: `add_event(sample, reason)` records the reason (`command|release|contact`), and the sample's own key set carries it. **That is the honest way to restate the three assertions:**
+  | assertion | restated as |
+  | --- | --- |
+  | `test_every_sample_names_its_own_raw_sources` | read each record; **grid records** must each name their own raw record, **event records** are additions beside them |
+  | `test_the_index_chains_to_complete_canonical_records` | `index["sample_count"] == len(index["samples"])` **and** the count is the case's own (ten grid samples plus its events), not a literal 10 |
+  | `test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period` | the cadence is checked on the **grid** records - which is exactly what `validate_evidence_grid(samples, period_s=…, tolerance_s=…)` exists to do |
+- **And a note for the next review, because it is a design observation rather than a test one:** the sealed index cannot currently tell its reader how many of its entries are grid points. **The window refuses gaps and regressions among them, so the information exists while recording and is lost at sealing** - a reader (a reviewer, an aggregator, a future qualification gate) has to re-derive it from the records. **Recording a count (or a kind) in the index would make the artifact self-describing**; that is a candidate for the packet rather than a change to make unilaterally now.
+- **State:** **P1-4: three remaining failures explained and their restatement specified in terms of what the artifact actually carries**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
