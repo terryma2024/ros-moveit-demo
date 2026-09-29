@@ -594,6 +594,18 @@ def test_the_real_case_execution_publishes_the_journal_row_for_a_prefix_case(tmp
     assert Path(row["child_retirement_receipt_path"]).is_file()
     assert events == ["start", "execute", "finish"]
 
+    # the published artifact is the bytes on disk, canonically: the row the caller receives is the file the
+    # trusted reader will open, and a replay of the same case cannot overwrite it
+    import json as _json
+    published = journal.read_bytes()
+    expected = (_json.dumps(row, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode()
+    assert published == expected, "the journal's bytes are the row, canonically encoded"
+    journal_sha256 = hashlib.sha256(published).hexdigest()
+    assert len(journal_sha256) == 64
+    with pytest.raises(ValueError, match="TASK8_CASE_JOURNAL_INVALID"):
+        from so101_teleop.unified.pick_place_case_execution import _publish_new
+        _publish_new(journal, row)
+
     # and the trusted path's own translator: the row a campaign publishes becomes the journal row the
     # aggregator reads, validated by the same rule the aggregator applies
     import hashlib as _hashlib
