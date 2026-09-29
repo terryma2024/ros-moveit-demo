@@ -18874,3 +18874,30 @@ not an inference of mine.**
   the tracked tree is red - the teleop suites around it were 40 passed at CP-1155 and none of them collects this file.
 - **State:** goal active (revision 51, cap 1000); HEAD `f3eff7bf`; staged 0; logs `beh-r783.log` … `beh-r786.log`; no full suite,
   no push, no stack, no hardware.
+
+## CP-1181 — The grid rule read exactly: each successive stamp must differ from its predecessor by `period_s`
+
+- **The continuity check (`task8_live_evidence.py:197-209`), verbatim in substance:**
+  ```python
+  if not samples:                      raise TASK8_LIVE_EVIDENCE_GRID_EMPTY
+  for sample in samples:
+      stamp = sample.get("sim_time_s")                     # must be finite, else SAMPLE_INVALID
+      if previous is not None:
+          delta = stamp - previous
+          if delta <= 0:               raise TASK8_LIVE_EVIDENCE_GRID_REGRESSION
+          if abs(delta - period_s) > tolerance_s:
+                                       raise TASK8_LIVE_EVIDENCE_GRID_GAP
+  ```
+  So the rule is **not** "roughly 10 Hz" but "**exactly `period_s` between neighbours**", with a distinct code for a
+  non-increasing stamp. My rows advance by one `PERIOD_S` per recorded step, which *should* satisfy it - so the remaining
+  candidates are narrow and testable: (a) the `period_s` the window was constructed with differs from the `PERIOD_S` the
+  samples use, or (b) a row reaches the window whose stamp is not on that grid (for instance because `_sample` derives its
+  stamp from something other than the `sim_time` argument I pass it).
+- **Also worth noting for the record:** `add_grid` opens the window only when the phase is in the window's own
+  `REQUIRED_PHASES` set, and refuses a sample before that (`WINDOW_NOT_OPEN`). So the window has its own notion of which
+  phases open it, which is another thing the fixture must satisfy rather than assume.
+- **Next round, one print and done:** print the stamps my rows produce and the window's `period_s`, then fix whichever of (a)
+  or (b) it shows - the same one-print technique that resolved CP-1118, CP-1152 and CP-1166, each on the first attempt after
+  the print.
+- **State:** goal active (revision 51, cap 1000); HEAD `83cb2f05`; staged 0; the untracked test remains failing and uncommitted;
+  no full suite, no push, no stack, no hardware.
