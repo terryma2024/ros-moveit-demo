@@ -30664,3 +30664,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
      future enhancement.
 - **State:** **P1-4 in progress, its RED specified as the two checks above; P1-1, P1-2 and P1-3 CLOSED.** The demo RED's
   clean re-measurement, P1-5, P1-6 and the final gate remain.
+
+## CP-1804 — P1-4's RED confirmed, and the fixture had to learn three of production's rules to state it
+
+- **The RED, in its own file (`test_act_task8_live_evidence_events.py`):**
+  ```
+  2 failed, 1 passed
+  test_a_sealed_event_still_says_which_edge_it_was      -> the sealed evidence distinguishes event samples from grid
+                                                           samples: {None}      (no `kind` on any sample)
+  test_the_sealed_evidence_describes_its_own_grid       -> the sealed document describes its grid: [identity, kind,
+                                                           sample_count, samples, schema_version]   (no `grid`)
+  test_the_grid_still_refuses_a_gap_duplicate_or_regression  -> PASSES (the existing discipline, recorded so the fix
+                                                           cannot trade it away)
+  ```
+- **And the fixture's three corrections are the production contract being stricter than my first guess, recorded because
+  each one is a rule a real measurement obeys:**
+  | my guess | the contract |
+  | --- | --- |
+  | one source, `wrist_camera` | **seven** (`_SOURCES = ("world", "scene", "contact", "head", "wrist", "arm", "neck")`), and the stamps, the received-monotonic map and the raw-record map must each name **exactly** those |
+  | `raw_records` paths as written | **relative to the evidence root**, no leading `/`, no `..`, regular file, digest matching |
+  | three phases | **all nine `REQUIRED_PHASES`**, or the window refuses to seal (`WINDOW_INCOMPLETE`) |
+  **Each refusal was a named error that said which rule was missed** - `SOURCE_MISSING`, `RAW_RECORD_INVALID`, then
+  `WINDOW_INCOMPLETE` - which is what makes a fixture's education cheap rather than mysterious.
+- **State:** **P1-4's RED is confirmed against the production recorder with real raw records and a real seal**, and its
+  two requirements are exactly CP-1803's pair: an event must carry its own `kind`/`reason` into the sealed evidence, and
+  the sealed document must describe its own grid. **The GREEN is the next edit.** P1-1, P1-2 and P1-3 CLOSED; the demo
+  RED's clean re-measurement, P1-5, P1-6 and the final gate remain.
