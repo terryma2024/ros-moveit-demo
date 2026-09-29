@@ -22652,3 +22652,16 @@ not an inference of mine.**
   `build_live_evidence_sample`/the segment's own construction rather than from my hand.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1365 — The boundary now delegates to the PRODUCTION segment: the structural half of P1-5 is done
+
+- **The write:** `_Boundary.search` no longer fabricates anything - it builds
+  `_segment(_Sources(), _Adapter(), _Scene())` from **the segment suite's own doubles** (imported across packages with one `sys.path` insert,
+  not forked) and returns `segment.run(request, reset_epoch=self.reset_epoch)`. **So the observation, the physical readback, the scene receipt
+  and the proofs are produced by production code from substituted I/O** - which is the reviewer's instruction applied literally, and the end of
+  hand-built evidence in this fixture.
+- **The failure is again the wrapped one** (`MutationError: ACT_TASK8_FAILED` at `ros_child.py:545`) and the inner line is printed above, so the
+  next read is the usual `--tb=long`. **What matters is what changed underneath it: the run now passes through the production segment, so any
+  remaining refusal is a production contract about the substituted I/O, not about my fixture's shape vocabulary.**
+- **State:** step 1's and this structural change remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no
+  hardware; cleanup untouched; nothing deleted, nothing pushed.
