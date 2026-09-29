@@ -22479,3 +22479,24 @@ not an inference of mine.**
   guessing, which is what made the middle of this batch expensive.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1355 — Gate six's exact shape, read in full
+
+- **`PickPlaceSearchObservation`** (`adapters/act/pick_place_search_segment.py:24`) is
+  ```python
+  search_result: dict
+  physical_readback: dict
+  planning_scene: SceneCommandReceipt
+  stationary_physics_proof: dict | None = None
+  stationary_reference_proof: dict | None = None
+  local_owner_goal_proof: dict | None = None
+  physics_step_fence: dict | None = None
+  native_controller_ingress_proof: dict | None = None
+  ```
+  so the boundary's `search` must return a real instance with `search_result`, `physical_readback` and a **`SceneCommandReceipt`**, and the
+  five optional proofs stay `None` for a substituted boundary - **each of which is exactly the kind of physical proof a test may not
+  fabricate, which is presumably why they are optional.**
+- **One read remains before the edit:** the `SceneCommandReceipt` shape, since the production port validates the observation and will name the
+  next missing field itself if this one is wrong - the same way it named the previous five.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
