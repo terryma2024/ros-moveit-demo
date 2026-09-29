@@ -4,9 +4,12 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
+import json
+
 import pytest
 
 from so101_demo.act.task8 import Task8Runner
+from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPortError
 from so101_demo.adapters.act.task8_search_port import (
     Task8SearchPhasePort, Task8SearchPortError,
 )
@@ -230,14 +233,12 @@ def test_failed_search_cannot_expose_a_physical_observation():
     assert ("stop", "TASK8_SEARCH_ABORT") in events
 
 
-def test_a_boundary_without_a_field_builder_records_no_grid_sample(tmp_path):
-    """The port cannot assemble the canonical sample, so it must not hand the recorder a partial one.
+def test_a_boundary_without_a_field_builder_is_refused_rather_than_skipped(tmp_path):
+    """P1-3 replaced this test's premise: "records nothing and does not crash" is what the review refused.
 
-    This boundary exposes no ``capture_evidence_fields``, which is exactly the production situation the port is
-    in: it holds the validated observation but not the readback adapter that owns the field builder. Before this
-    contract, the port handed the recorder a three-key document on every attached-window SEARCH and the
-    recorder - correctly - raised ``TASK8_LIVE_EVIDENCE_SAMPLE_INVALID``, so no SEARCH could complete with a
-    window attached. The phase must now complete, and nothing may be recorded.
+    The old contract let an attached window go unfed - which is precisely how production ended up with a driver that
+    was constructed and never used (CP-1467/1470). With a window attached and no way to derive the fields, the phase
+    must refuse by name.
     """
 
     from so101_demo.act.task8_live_evidence import LiveEvidenceWindow, Task8LiveEvidenceRecorder
@@ -250,17 +251,13 @@ def test_a_boundary_without_a_field_builder_records_no_grid_sample(tmp_path):
         identity={"case_id": "case-20", "session_id": SESSION, "attempt_id": ATTEMPT,
                   "reset_epoch": 2, "release_epoch": 0},
         period_s=0.1, tolerance_s=0.01)
-    port.bind_live_evidence(window)
+    port.bind_live_evidence(window, support_distance_max_m=0.02, raw_records_root=tmp_path)
     bind(port)
     port.begin(request())
 
-    evidence = port.run_phase("SEARCH", request())
-
-    assert evidence["phase"] == "SEARCH", "the phase completed with a window attached"
-    assert window._grid_count == 0, "no partial sample was handed to the recorder"
-    assert recorder._entries == [], "the recorder stayed empty rather than refusing a partial sample"
-    assert port._grid_sample("SEARCH", port._validated_search_observation, evidence) is None, \
-        "the port reports that it cannot fill the frame, instead of a document the recorder must refuse"
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: canonical_evidence"):
+        port.run_phase("SEARCH", request())
+    assert recorder._entries == [], "nothing was recorded, and nothing was silently skipped either"
 
 
 # --- P1-3: the SEARCH phase must produce canonical evidence ITSELF, or refuse by name -----------------------
@@ -289,15 +286,15 @@ def test_a_search_phase_records_a_canonical_sample_through_the_port(tmp_path):
     port, events = fixture()
     port.boundary.canonical_evidence = lambda captured, *, support_distance_max_m, raw_records: {
         "physics_step": 12, "sim_time_s": 2.0,
-        "source_stamps_s": {name: 2.0 for name in ("head", "wrist", "arm", "neck")},
-        "source_received_monotonic_s": {name: 2.0 for name in ("head", "wrist", "arm", "neck")},
+        "source_stamps_s": {name: 2.0 for name in ("world", "scene", "contact", "head", "wrist", "arm", "neck")},
+        "source_received_monotonic_s": {name: 2.0 for name in ("world", "scene", "contact", "head", "wrist", "arm", "neck")},
         "holding_state": "EMPTY", "cup_supported": False, "released": False,
         "placement_stable": False, "bilateral_contact": False, "no_fingertip_contact": True,
         "wrist_frame_valid": True, "wrist_target_visible": True,
         "cup_support_distance_m": 0.01, "end_effector_position_m": [0.0, 0.0, 0.1],
         "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
         "contact_observation_valid": True}
-    port.bind_live_evidence(window, support_distance_max_m=0.02)
+    port.bind_live_evidence(window, support_distance_max_m=0.02, raw_records_root=tmp_path)
     bind(port)
     port.begin(request())
 
@@ -317,7 +314,7 @@ def test_a_boundary_that_cannot_derive_the_fields_is_refused_by_name(tmp_path):
 
     _recorder, window = _p13_window(tmp_path)
     port, _events = fixture()                      # this boundary has no canonical_evidence method
-    port.bind_live_evidence(window, support_distance_max_m=0.02)
+    port.bind_live_evidence(window, support_distance_max_m=0.02, raw_records_root=tmp_path)
     bind(port)
     port.begin(request())
 
@@ -330,9 +327,5 @@ def test_an_attachment_without_the_support_threshold_is_refused_by_name(tmp_path
 
     _recorder, window = _p13_window(tmp_path)
     port, _events = fixture()
-    port.bind_live_evidence(window)                # deliberately no support_distance_max_m
-    bind(port)
-    port.begin(request())
-
-    with pytest.raises(Exception, match="TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED"):
-        port.run_phase("SEARCH", request())
+    with pytest.raises(Exception, match="TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: support_distance_max_m"):
+        port.bind_live_evidence(window)            # deliberately no support_distance_max_m: refused at attach
