@@ -31644,3 +31644,42 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress; every input of the faithful branch is now sourced, and the construction is written down
   in this ledger entry rather than in a guess.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the
   final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1834 — The production-broker helper is written, loads, and its remaining wiring is enumerated
+
+- **`_production_broker(*, session_id, driver, settings, model)`** in the full-case module now performs the construction
+  CP-1833 fixed, with the two references it needs read from the code rather than guessed:
+  ```python
+  _demo_tests = Path(__file__).resolve().parents[3] / "so101_demo_py" / "test"
+  if str(_demo_tests) not in sys.path: sys.path.insert(0, str(_demo_tests))     # the harness's own convention
+  from test_gate6_bound_authority_wiring import _real_client                    # the ack servers + the REAL client
+  from so101_demo.act.ownership import Ownership
+  from so101_demo.adapters.act.broker_authority_wiring import build_bound_act_broker, physics_clock_domain
+  from so101_demo.act.prefix_source import PrefixSourceAuthority                # NOT adapters.act.* - found by looking
+  from so101_demo.adapters.act.trusted_visible_approach_source import TrustedVisibleApproachSourcePort
+  ...
+  history, admission, registry = physics_clock_domain(session_id=…, nq=model.nq, nv=model.nv, settings=settings)
+  bound = build_bound_act_broker(reservation_port=client, session_id=…, roles=("arm","gripper","neck"),
+                                 history=…, admission=…, registry=…, driver=driver, ownership=ownership,
+                                 simulation_session_id=session_id, prefix_source_authority=authority,
+                                 prefix_source_port=source_port)
+  return bound["broker"], servers
+  ```
+  **and it imports cleanly**: `helper present: True`, `signature: (*, session_id: 'str', driver, settings: 'dict', model)`.
+- **One correction the run forced, recorded because it is the kind of thing that otherwise becomes a guess:** I wrote
+  `from so101_demo.adapters.act.prefix_source_authority import PrefixSourceAuthority`, and the class is in
+  **`so101_demo.act.prefix_source`** (`prefix_source.py:46`). **Looking cost one command; guessing would have cost a
+  wrong import in a ledger entry.**
+- **And the remaining wiring in the test body is now a list rather than a question:**
+  1. compile the ACT model (`mujoco.MjModel.from_xml_path(scene)` - the harness already names the scene);
+  2. derive `settings` the way the child does: `bound_act_source_settings(report, timestep_s=model.opt.timestep)`
+     (`ros_child.py:51`/`:234`), which needs the calibration **report** - **and the child-driven harness already builds
+     that report's binding, so the caller can take it from there rather than invent the two keys**;
+  3. build the driver - the object the harness calls `FakeBroker()`, which CP-1833 established **is** the driver;
+  4. `broker, servers = _production_broker(session_id=…, driver=…, settings=…, model=…)`;
+  5. pass `broker=broker` to `_prepare_child_case(...)` (CP-1831);
+  6. set `reset.broker` to that same broker in the mount (CP-1823), so `begin`'s `isinstance` passes because the
+     production composition root installed the trusted source port.
+- **State:** **P1-5 in progress; the production broker is buildable from the module and six wiring steps remain, each with
+  its source already identified.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and
+  the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
