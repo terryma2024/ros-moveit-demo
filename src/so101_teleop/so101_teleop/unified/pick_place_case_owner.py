@@ -195,6 +195,10 @@ class PickPlaceCaseOwner:
                                 ros_domain_id=self.child_launch.ros_domain_id)
             self._stack_retired = True
         if not self._child_retired:
+            # an open live-evidence window must not outlive the child that owns the port recording into it
+            window = getattr(self.worker, "live_evidence_window", None)
+            if window is not None and not getattr(window, "_sealed", False):
+                window.invalidate("OWNER_RETIRE")
             await self.child_owner.stop_owned()
             _retirement_receipt(Path(self.child_launch.socket_root),
                                 self.child_owner_key, stack=False)
