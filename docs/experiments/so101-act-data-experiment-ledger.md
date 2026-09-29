@@ -33927,3 +33927,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ```
 - **State:** **P1-1 … P1-6: P1-6 CLOSED here; P1-1 is next and the remaining five stay open.** **Task-list statuses are the
   only change made to the list.**
+
+## CP-1910 — P1-1 RED→GREEN, first half: the bottom-io frame IS a DetectionFrame
+
+- **RED, captured before the fix (targeted, real MuJoCo/EGL scene, real head camera):**
+  ```
+  src/so101_demo_py/test/test_act_task8_bottom_io_frame_contract.py
+      3 failed in 0.73 s      scratch=R/scratch/p11a/tmp   socket base=/data/work/so101-evidence/act-data/ipc-p11a
+    AssertionError: ModelFrameSource returned ndarray; the real detector declares DetectionFrame
+    AssertionError: the bottom-io frame reached the detector as ndarray, not DetectionFrame
+    (+ one assertion of my own that string-compared the annotation: `detect` is declared under
+       `from __future__ import annotations`, so it needed `typing.get_type_hints` - corrected in the test, not relaxed)
+  ```
+  **which is the verdict's own sentence, produced by running the production adapter rather than by reading it.**
+- **GREEN, and the two production facts that decide the shape of the frame:**
+  ```python
+  # src/so101_demo_py/src/act/task8_bottom_io.py  (ModelFrameSource.__call__)
+  rgb8 = numpy.ascontiguousarray(self._renderer.render()[..., :3], dtype=numpy.uint8)
+  return DetectionFrame(rgb8=rgb8, source_stamp_ns=int(time.monotonic_ns()), source_frame_id=str(camera))
+  ```
+  * `YoloSegDetector.detect(frame: DetectionFrame, ...)` - the declaration, resolved with `get_type_hints`;
+  * `adapters/act/detector.py:131/138` - the production ACT detector requires `source_stamp_ns >= 1` **and strictly
+    increasing** stamps, which is why the stamp is the real render instant rather than a constant;
+  * `ros_search.py:131-132` - a ROS image's stamp and `header.frame_id` are its identity, so the camera name is this
+    source's.
+- **And the adapter's own contract was exercised too, not bypassed:** the test's detector double returns a REAL
+  `DetectionBatch` (the only type `_serializable_detection` accepts - it refuses anything else by name), and the test
+  asserts the CLOSED document: fixed keys, no numpy values, the mask reduced to `mask_shape` + `mask_sha256`.
+  ```
+  3 passed in 0.73 s
+  ```
+- **State:** **P1-1 in progress: the frame contract is GREEN; what remains in P1-1 is the formal builder's real
+  `io_client`/`phase_path`/`trajectory` wiring and an actual run of the default production composition with its input,
+  output, exit code and log.** **Task-list statuses unchanged: P1-1 in_progress, six others as they were.**
