@@ -51,6 +51,33 @@ _HASHED = ("source", "manifest", "runtime_config", "collection_config", "calibra
 _POLICY = ("proposal", "activation_receipt")
 
 
+def _head_search(root):
+    """The head-search block the runtime config and the calibration report both carry.
+
+    P1-5: a module-level helper in the same spirit as `_prepare_child_case` - "parameterised for reuse" -
+    because the full-case module needs this block BEFORE it builds the production broker (the report, then the
+    settings, then the broker, then the child), while `_binding` needs it for the runtime config and for the
+    report's provenance. **One copy, two callers**, so the hashed-weights descriptor cannot drift between
+    them.
+    """
+
+    weights_path = root / "best.pt"             # the validator hashes the weights, so they must exist
+    weights_path.write_bytes(b"item5-weights")
+    head_search = {
+        "schema_version": 1,
+        "detector": {"backend": "yolo_seg", "weights_path": str(weights_path),
+                     "weights_sha256": hashlib.sha256(weights_path.read_bytes()).hexdigest(),
+                     "model_id": "plastic-cup", "image_size_px": 640,
+                     "requested_device": "cuda", "allow_cpu_fallback": False,
+                     "torch_threads": 4, "torch_interop_threads": 2,
+                     "torch_version": "2.0", "ultralytics_version": "8.0"},
+        "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
+                   "width_px": 640, "height_px": 480},
+        "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01,
+                   "neck_goal_duration_s": 0.5}}
+    return head_search
+
+
 def _binding(tmp_path: Path) -> ActArtifactBinding:
     """Real artifacts, with the policy documents written by the admission suite's own writer."""
 
@@ -92,20 +119,7 @@ def _binding(tmp_path: Path) -> ActArtifactBinding:
     # the binding names, and an unwritten receipt is exactly the file the last run could not find
 
 
-    weights_path = root / "best.pt"             # the validator hashes the weights, so they must exist
-    weights_path.write_bytes(b"item5-weights")
-    head_search = {
-        "schema_version": 1,
-        "detector": {"backend": "yolo_seg", "weights_path": str(weights_path),
-                     "weights_sha256": hashlib.sha256(weights_path.read_bytes()).hexdigest(),
-                     "model_id": "plastic-cup", "image_size_px": 640,
-                     "requested_device": "cuda", "allow_cpu_fallback": False,
-                     "torch_threads": 4, "torch_interop_threads": 2,
-                     "torch_version": "2.0", "ultralytics_version": "8.0"},
-        "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
-                   "width_px": 640, "height_px": 480},
-        "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01,
-                   "neck_goal_duration_s": 0.5}}
+    head_search = _head_search(root)
     paths, hashes = [], []
     for name in _HASHED + _POLICY:
         if name == "proposal":
