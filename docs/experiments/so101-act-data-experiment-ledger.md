@@ -22619,3 +22619,20 @@ not an inference of mine.**
   shape.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1363 — The build collapses: an existing test already drives the production segment
+
+- **Two reads, one conclusion.** `_next` asks exactly one thing of `sources` - `self.sources.capture(request["attempt_id"], after_step=after_step)`
+  - and builds the geometry through the production helper `pick_place_scene_geometry(self.geometry, raw, session_id=..., reset_epoch=...)`.
+  **And the repository already contains a test that drives `PickPlaceSearchSegment` directly:
+  `src/so101_demo_py/test/test_act_task8_search_segment.py`.** That file must already hold the substitutes P1-5 needs - a sources double, an
+  adapter double with a `neck_port`, a scene-port double, a real `TaskGeometry` and the five verifiers.
+- **So the honest revision of CP-1360's estimate:** P1-5's harness is **not** a build on the scale of the original item - it is **an import plus
+  wiring**, the same "imported, not forked" move that CP-1358 and CP-1363's own precedent point to. **I said at CP-1360 that the surface had no
+  builder; that was true of the *physical readback* and false of the *collaborators*, and I am correcting it in the record rather than letting
+  the larger estimate stand.**
+- **Next:** read that test's doubles, then have `_Boundary.search` delegate to a real `PickPlaceSearchSegment.run(request, reset_epoch=...)`
+  built from them. **After that the case-level evidence is the remaining work: the trusted aggregator, the seven indexed assertions and the
+  four negatives.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
