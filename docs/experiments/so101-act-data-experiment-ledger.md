@@ -17008,3 +17008,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Index work now:** entry validates first, canonical shape, self-digest, symlink, contamination, anchor coverage, phase
   coverage, source-time monotonicity, contract-vs-bound. **Still open:** identity agreement across roots beyond
   provenance, and the whole publishing half.
+
+## CP-1095 — The last index item, designed; and where Boundary IV stands after eight pieces
+
+- **What is left in the index, and why it is a design rather than a regex:** the entry checks that all roots share one
+  **provenance** and that each batch's `measurement_contract_sha256` matches the **bound contract** - so two batches that
+  each agree with the contract but **differ from each other** on another identity member (`anchors_sha256`,
+  `phase_camera_matrix_sha256`, `act_profile_sha256`, …) are aggregated together today. Closing it means comparing the
+  **full ten-member identity across roots**, which is the review's "mixed identity refused" in its general form.
+- **The fixture that will prove it:** the aggregator test's `_sealed_batch` builds one identity for every batch, so the RED
+  needs a builder that can **vary a single member** between two otherwise identical batches. That is a small, contained
+  fixture addition - and, unlike the anchor and phase rules, this one needs **no convention scoping** because it compares
+  identities rather than paths, which is why it should land without a fixture migration.
+- **Boundary IV after eight landed pieces, each RED first except where noted:** entry validates the closed batch before
+  publishing (`a3934099`, RED); one canonical batch shape shared by writer and validator (`6d694e6d`, RED); the aggregator
+  reads the contract member the identity defines (`65eedab1`, RED); the self-digest is recomputed and a tampered seal
+  refused (`953e8d1a`, RED→GREEN as a pair); the symlink rule pinned (`99a8bbd5`, characterization - no code change); the
+  driver's batch shape accepted and contamination disqualifying (`66a0cc2c`, RED); anchor coverage over both conventions
+  (`d84dacdf` + the six-fixture migration closed at `56e4f2ba`); phase coverage (`a30c50d1`, RED, no migration); source-time
+  monotonicity (`30ede2a9`, RED, no migration).
+- **Still ahead in Boundary IV, unchanged and not claimed:** the cross-root identity comparison above, and the whole
+  **publishing half** - real measured values published rather than written as PASS, the four canonical documents, a real
+  28-field `TASK8_READY`, render-twice byte comparison with a single publish, on-disk readback of the sample path and hash,
+  then `require_gate(report, "task8_live")` and `validate_head_search_binding()`.
