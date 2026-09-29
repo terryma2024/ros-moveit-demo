@@ -18922,3 +18922,25 @@ not an inference of mine.**
 - **State:** goal active (revision 51, cap 1000); HEAD `5275f614`; staged 0; the untracked test remains failing and
   uncommitted; logs `beh-r787.log` (the accepted-row print) and `beh-r788.log` (the test); no full suite, no push, no stack,
   no hardware.
+
+## CP-1183 — The case completes and the seal succeeds; one of my own assertions is what fails now
+
+- **Five fixture errors, each named by the code, took the case from a stub that could not finish to one that runs the real
+  evidence path:**
+  | iteration | error | fix |
+  | --- | --- | --- |
+  | 1 | `AttributeError: reset_epoch` | the fake stores the epochs its `begin` returns |
+  | 2 | `TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH` | recorder, window and request agree on the case identity |
+  | 3 | **`GRID_GAP`** | the print showed the release path advances the physics step **three times** between two recorded rows, so the grid clock was decoupled from the step counter |
+  | 4 | `TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH` | the window is bound to the fixture's `reset_epoch`, and the runner's incremented `release_epoch` applies to the phase evidence rather than to the seal identity |
+  | 5 | `AssertionError` in **my own test** | - |
+- **What iteration 5 proves, and it is the milestone this round reached:** the runner **completed the case** - every phase
+  accepted, the release handshake, both retreat segments, and a **real seal** through the production recorder and window,
+  because a fixture error would have raised a `TASK8_*` code instead of reaching my assertion. The remaining failure is my own
+  expectation at line 169, which the next round reads and corrects; **nothing in the production code is implicated by it.**
+- **The tooltip worth keeping:** the physics-step clock and the evidence-grid clock are **different clocks** - the runner
+  advances physics during the release handshake without recording a row - and conflating them is what produced the grid gap.
+  That is now written into the fixture's comment, and it is the kind of detail the plan's "no hand-filled state" rule is meant
+  to force a test to confront.
+- **State:** goal active (revision 51, cap 1000); HEAD `96719519`; staged 0; the untracked test remains failing and
+  **uncommitted**, per the owner's instruction, and it is one assertion from green; logs `beh-r783` … `beh-r795`.
