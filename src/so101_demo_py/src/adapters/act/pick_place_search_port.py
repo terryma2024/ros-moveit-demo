@@ -583,17 +583,26 @@ class PickPlaceSearchPhasePort:
             if route is None:
                 raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: expert_route")
             reset = self.boundary.reset
+            ticket = reset.broker.ownership.ticket(
+                reset.act_context["lease_token"], "act",
+                request["session_id"], request["attempt_id"])
             prepared = route.prepare(
-                observed, selected_source=selected_source,
-                owner_ticket=reset.broker.ownership.ticket(
-                    reset.act_context["lease_token"], "act",
-                    request["session_id"], request["attempt_id"]),
+                observed, selected_source=selected_source, owner_ticket=ticket,
                 active_policy_fingerprint=reset.sources.contact_pairs.fingerprint)
+            # the prover's identity values belong to the route's manifest, and the route lives here - so they travel
+            # into the boundary's orchestration rather than being re-derived from anything else
+            prover_identity = {
+                "policy_fingerprint": reset.sources.contact_pairs.fingerprint,
+                "profile_sha256": route.manifest["candidate_profile_sha256"],
+                "contact_scope_sha256": route.manifest["contact_scope_sha256"],
+                "checker_sha256": route.manifest["checker_sha256"],
+                "expected_samples": route.manifest["expected_samples"],
+            }
             execute = getattr(self.boundary, "execute_approach", None)
             if not callable(execute):
                 raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: execute_approach")
             try:
-                result = execute(prepared, request)
+                result = execute(prepared, request, prover_identity=prover_identity, ticket=ticket)
             except PickPlaceSearchPortError:
                 raise
             except Exception as error:
