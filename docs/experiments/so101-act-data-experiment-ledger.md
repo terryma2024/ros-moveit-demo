@@ -18653,3 +18653,29 @@ not an inference of mine.**
   descriptor) can be written against a boundary that is real in both directions.
 - **State:** goal active (revision 51, cap 1000); RED log `beh-r776-red.log`; the other 25 tests in that module were green
   before this test was added; no full suite, no push, no stack, no hardware.
+
+## CP-1171 — GREEN, and item 2 is complete: the descriptor is read back from the closed index
+
+- **Implemented the readback where §4.2 says it belongs.** The aggregator, which already validated every batch root with
+  `validate_closed_batch`, now reads `runtime-descriptor.json` **through each index** (`index.files` membership plus
+  `index.path(...)`, so an unindexed file cannot be picked up), requires **every root to agree** on it, and refuses a batch
+  whose payload claims a **different** descriptor with `CALIBRATION_IDENTITY_MISMATCH`. The published sample's `head_search`
+  is therefore the sealed descriptor - not a field anyone could add to a payload - and `validate_head_search_binding` closes
+  the loop through the path CP-1122 already proved.
+- **GREEN: 59 passed, rc=0** across the aggregator, contract, head-search-binding and runtime-descriptor suites
+  (`beh-r777.log`), fresh NVMe scratch, `TMPDIR` verified through the exact test interpreter. The CP-1170 RED passes for the
+  right reason: the sample now carries the descriptor the **index** holds.
+- **Item 2's chain, complete end to end:**
+  | step | checkpoint |
+  | --- | --- |
+  | parsed once at the bundle, symlink/malformed/CPU-fallback refused, canonical bytes bound | CP-1162 |
+  | one shared rule serving every boundary | CP-1165 |
+  | enforced at the measurement entry before both branches | CP-1166 |
+  | carried in `CalibrationMeasurementContext` as the parsed document | CP-1167 |
+  | written into the batch the driver seals | CP-1169 |
+  | read back from the strict closed index, disagreements refused | this checkpoint |
+- **Next, the owner's item 3 - the focused negative set, at a boundary that is now real in both directions:** an
+  opaque-digest-only context, a descriptor whose `head_search` disagrees with the weights/model/device/CUDA policy recorded
+  elsewhere, a changed controlled-config hash, and a batch that does **not** index the descriptor. Then item 4, Boundary V's
+  mechanical part through `ros_child._run_pick_place`.
+- **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
