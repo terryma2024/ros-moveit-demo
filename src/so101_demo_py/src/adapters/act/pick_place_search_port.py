@@ -578,10 +578,22 @@ class PickPlaceSearchPhasePort:
     def run_retreat_segment(self, direction, distance_m, request, *args, **kwargs):
         # the direction and the distance travel as KEYWORDS: the capability's own signature orders them after the
         # request, and a positional call here would silently swap two arguments of the same shape
-        return self._boundary_capability("run_retreat_segment", request, direction=direction, distance_m=distance_m,
-                                         support_distance_max_m=self._support_distance(),
-                                         motion_template=getattr(self, "_motion_template", None),
-                                         motion_duration_s=getattr(self, "_motion_duration_s", None))
+        # A retreat segment is a PHASE document like any other: the boundary reports the facts, and the port stamps the
+        # case scope and runs the same closed rule - the runner validates this with the same verifier it uses for every
+        # phase, so returning the boundary's raw mapping (no phase, no epochs) is refused by name. That gap is what the
+        # probe found, and it would have failed on every retreat segment of a real case.
+        facts = self._boundary_capability("run_retreat_segment", request, direction=direction,
+                                          distance_m=distance_m,
+                                          support_distance_max_m=self._support_distance(),
+                                          motion_template=getattr(self, "_motion_template", None),
+                                          motion_duration_s=getattr(self, "_motion_duration_s", None))
+        if type(facts) is not dict:
+            raise PickPlaceSearchPortError("TASK8_PHASE_EVIDENCE_INVALID: RADIAL_RETREAT: not a mapping")
+        document = {"phase": "RADIAL_RETREAT", "session_id": request["session_id"],
+                    "attempt_id": request["attempt_id"],
+                    "reset_epoch": self.boundary.reset.receipt.new_epoch,
+                    "release_epoch": self._release_epoch_for("RADIAL_RETREAT"), **facts}
+        return self._checked_sequence_document("RADIAL_RETREAT", document)
 
     def set_down(self, request, *args, **kwargs):
         return self._boundary_capability("set_down", request, support_distance_max_m=self._support_distance())
