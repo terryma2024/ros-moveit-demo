@@ -315,3 +315,16 @@ def derived_checks(roots, contract: dict) -> dict:
         else:
             checks[name] = "PASS"
     return checks
+
+
+def derived_phase_camera_checks(replay_rows, live_frames, window_kind: str, matrix: dict) -> dict:
+    """Fold replay coverage and live continuity into the aggregator's vocabulary.
+
+    The two axes are evaluated by different functions and reported under different keys, so a replay result can
+    never be presented as live-continuity success.
+    """
+
+    from so101_demo.act.task8_phase_camera import evaluate_live_continuity, evaluate_replay_coverage
+
+    return {"replay_coverage": evaluate_replay_coverage(replay_rows, matrix),
+            "live_continuity": evaluate_live_continuity(live_frames, window_kind, matrix)}
