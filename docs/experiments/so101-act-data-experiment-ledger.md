@@ -24528,3 +24528,24 @@ picture in both directions.**
 - **And the test that enshrined the old behaviour is replaced, not weakened:** `test_real_production_providers_are_built_from_the_admitted_descriptor` asserted types, keys and the dead parameter; it is now
   `..._from_the_admitted_context`, which asserts the **named refusal** when the admitted context is incomplete and **driveability** when it is complete.
 - **State:** committed. P1-1 done; next is P1-2 (the descriptor validator). No new session/goal/worktree/stack; nothing pushed, nothing deleted; no real hardware.
+
+## CP-1476 — P1-2's shared validator is in place; 22 pre-existing tests now fail because their FIXTURES were the weak point
+
+- **P1-2's RED was exact and is retained** (`experiments/gate8-p12/red-1.log`, **9 failed, 9 passed**): all **nine** malformed descriptors - missing
+  `torch_threads`, missing `ultralytics_version`, an extra field in each of detector/camera/motion, a 320x240 camera, negative motion, stringly-typed
+  motion, zero threads - were **accepted by the measurement entry** and **refused by the binding**. **That split IS the review's finding**: the two entries
+  called a shared function that only checked presence.
+- **GREEN for the new contract** (`green-1.log`, **32 passed**): the complete closure/type/value rule - copied verbatim from the binding, not invented - now
+  lives in `validate_head_search_shape`, so both entries enforce it; `validate_head_search_binding` keeps **report pairing** (weights digest, calibration
+  status/provenance, sample document equality) and its own tests still pass.
+- **And the wider set exposes what the review was pointing at** (`regress-1.log`, **22 failed, 92 passed**): two pre-existing test families build
+  **incomplete descriptors** that only ever passed because the weak path let them through -
+  - `test_act_task8_calibration_admission.py:_context` builds a head-search block **without the detector's own keys** (the snippet shows only `camera` and
+    `motion`), so the shared rule refuses it at the detector block;
+  - `test_act_task8_calibration_aggregator.py`'s `_v2_batch` sealed descriptor is refused at `head_search_binding.py:139` - the detector block again -
+    for the same reason.
+- **The remedy is fixture data, not the rule:** both families must build a **complete** head-search block, and the honest single source for one is the
+  binding's own `_inputs(tmp_path)[0]` (or the aggregator's `_descriptor(model_id=...)`, which is already complete). **I will not weaken the validator to
+  keep green tests that encode the very gap the review found** - that would be re-introducing P1-2 to make a suite pass.
+- **State:** the P1-2 code change and its new test file stay **uncommitted** while the wider set is red, per this batch's rule; the ledger checkpoint is
+  committed alone. P1-1 remains green and committed (`99881b9d`). No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
