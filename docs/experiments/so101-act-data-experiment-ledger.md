@@ -25595,3 +25595,20 @@ picture in both directions.**
   **Then the seal, the journal and the seven indexed assertions with their four negatives.**
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed, and SEARCH now proven through the runner. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1536 — The full-case run reaches APPROACH, and what it needs next is the prefix-execution seam set
+
+- **Where it stands (`experiments/gate8-p14/full3.log`):** the runner's **full mode** drives the composite boundary through **SEARCH successfully** in the same run that continues into
+  APPROACH, which now refuses by name: **`TASK8_PHASE_NOT_PROVISIONED: APPROACH: expert_route`**. **The run stops at the first phase it cannot honestly perform, which is the behaviour this whole
+  batch has been building towards** - a case that cannot complete says which piece is missing instead of producing a result nobody can trust.
+- **Two runner rules the full mode enforced immediately, both worth recording because they are the runner's, not mine:** a full case is `mode="full"` with **`stop_after is None`** and
+  **`lifecycle == "FULL_RESTART"`**; and the closed gripper value the port admits must be **positive** (zero is refused by name - closing moves the joint towards its closed limit; it does not mean
+  "no value").
+- **What APPROACH needs on the double, and it is a bounded list rather than a discovery:** the **expert route** (`manifest` with the prover's five identity values, `prepare`, `qualify`), the
+  **prefix-execution seams** the boundary's `execute_approach` asks for by name (`issue_prefix_source`, `_prefix_source_port`, and a `prefix_executor` with `approve_with_source`, `submit`,
+  `wait_for`, `time_axis` and `snapshot`), and the real screen the fixture already provides. **Every one of those is substituted I/O - the orchestration between them is production code** - so this
+  is one round of wiring the double, not a new subsystem.
+- **And the honest note about pace:** the nine-phase milestone is the batch's last big integration, and it is being built the way the phases themselves were - **one phase at a time, with each
+  refusal naming the next piece.** With ~405 rounds left there is room for it plus the seal, the journal, the seven indexed assertions with their four negatives, then P2 and the final boundary.
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test is uncommitted while it is red, per this batch's rule. No new session,
+  goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
