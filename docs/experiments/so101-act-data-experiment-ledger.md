@@ -21567,3 +21567,14 @@ not an inference of mine.**
   new size and digest are recorded here.
 - **State:** all logs, JUnit files, provenance files, per-shard pytest logs, scratches and IPC bases retained as deletion candidates; no
   live stack, no hardware; nothing deleted, nothing pushed.
+
+## CP-1305 — Evidence index extended and the deletion-candidate inventory written down
+
+- **Why this is worth a checkpoint while the review is pending:** the repository's own rules require a completion report to name
+  **retained runs, archived runs and deletion candidates**, and until now that list lived in my head and in prose across a thousand
+  checkpoints. It is now a table in `experiments/task9-package-gate-evidence-index.md`, with **counts and sizes measured** rather than
+  estimated: scratch trees under the evidence root, the short IPC bases under `/tmp`, the gate logs and JUnit files, and the retained
+  runtime generations (`gen4` deliberately never created, per CP-1223).
+- **Nothing was deleted, moved or compressed** - the inventory is a read-only measurement, which is the point: the decision to remove any
+  of it belongs to the owner, and the numbers make that decision cheap.
+- **State:** HEAD `997d71da` plus this checkpoint; no live stack, no hardware; nothing deleted, nothing pushed.
