@@ -27577,3 +27577,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | `controller_reservation_client::test_client_rejects_symlinked_ancestor_before_connecting` | **`OSError: AF_UNIX path too long`** - the demo leg had no short IPC base, so the socket path grew with the scratch | localized: the leg now sets `SO101_IPC_SOCKET_BASE=/tmp/...` |
 - **The lesson is the batch's own, applied at the boundary it was designed for:** the focused cadence cannot see a test in a file it does not collect, and **"the suites I ran are green" is not "the tree is green"** - which is why the re-run is a full gate rather than another focused set.
 - **State:** the v4 boundary is **not valid yet** and will not be reported as valid until the demo leg is green; item 7 continues; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1651 — The boundary's third failure was the SAME field mix-up a third time, and the check caught it again
+
+- **`12 passed / 1 failed`** after the fix, and the fixed one is instructive: the invalid-sealing driver in `test_act_task8_measurement_runtime_descriptor` built its identity from `contract['identities']` and then
+  ```
+  identity['source_commit'] = 'a' * 40
+  identity['measurement_contract_sha256'] = contract['contract_sha256']
+      ^ the identity's own digest of the measurement contract
+                                                  ^ the BOUND DOCUMENT's self-digest
+  ```
+  **so it sealed with one member holding another field's value** and the entry refused it by name. **Both overrides are gone** - the contract's identities are the ones the entry admits, so a seal has no reason to adjust them.
+- **This is the THIRD occurrence of that exact mix-up** (CP-1641 removed it from the aggregator's seal helper, CP-1646 recorded a fourth copy it deliberately left alone in `batch_factory`, and this is the one inside a driver string). **Three copies, one root cause, and every one of them was caught by
+  the identity comparison this batch added (CP-1621)** - which is as clear a demonstration as this batch has that the check earns its place, and a reminder that a pattern found once in a codebase is worth grepping for twice.
+- **The last failure is localized to the fixture rather than to the rule:** `test_the_sealed_identity_carries_the_epoch_the_case_ended_with` runs a **real `PickPlaceRunner`** through the substituted port in `test_act_task8_sealed_raw_sources`, and asserts that the
+  case ended with the incremented epoch. **Whether that holds depends on what the substituted port's reset/boundary reports**, which is the same distinction CP-1626 drew about cadence: a demo-level fixture can only assert what its substitution produces. **The next step is to
+  read that fixture's epoch handling rather than to weaken the assertion.**
+- **State:** the v4 boundary is still **not valid** - the demo leg must be re-run once the tree is green; item 7 continues; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
