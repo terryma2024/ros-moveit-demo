@@ -26996,3 +26996,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The other two halves of item 4 are separate checks and are named for the next rounds:** **compare the seal's complete identity against the admitted identity** (not merely its presence), and **enforce the cleanup proof**. Both are
   assertions about the same block, so they belong in the same change - with **targeted tests that use the CLI's own driver seam rather than a live stack**.
 - **State:** item 4 verified with the defect localized; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1617 — Item 4's RED reproduces the finding: the ledger is left saying RUNNING
+
+- **Two targeted cases, through the entry's own `--driver` seam, no stack and no hardware - and both fail the way the review said they would:**
+  ```
+  2 failed
+  AssertionError: the ledger must record the terminal failure, got:
+      - Task 8P2 measurement PLANNED: contract=4e9a6068… provenance=aaaa…
+      - Task 8P2 measurement RUNNING: contract=4e9a6068… provenance=aaaa…
+  assert 'INVALID' in '…PLANNED…RUNNING…'
+  ```
+  1. **a driver that seals nothing** - the entry refuses the run (`BATCH_INVALID`), **and the ledger ends at `RUNNING`**;
+  2. **a corrupted seal** (`batch.json` with the wrong `kind`) - refused, **and again no INVALID row**.
+- **So the defect is confirmed behaviourally, not only by reading the code (CP-1616):** the ledger is the artefact an operator or a qualification report reads, and after a refused seal it **claims the run is still in progress.**
+- **What the GREEN must do, and the shape that avoids appending twice:** the region from the driver onward must be wrapped **once**, so that the driver's failure, the validator's refusal and an unreadable seal all append **one** INVALID row and then re-raise -
+  rather than adding a second handler around the existing one, which would leave two INVALID lines for a driver failure. **The ledger is append-only; "one terminal state per run" is the property worth keeping.**
+- **The two companion checks of item 4 remain, and they go into the same change:** the **seal's complete identity against the admitted identity**, and the **enforced cleanup proof** - both assertable through this same seam.
+- **State:** item 4 **RED-established and localized**; the new test stays uncommitted while red, as the rule requires. Item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
