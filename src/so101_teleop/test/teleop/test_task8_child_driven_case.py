@@ -711,3 +711,57 @@ def test_the_case_window_binds_its_reset_epoch_exactly_once(tmp_path, monkeypatc
     assert window is not None, "the child attached its evidence window to the production port"
     with pytest.raises(ValueError):
         window.bind_reset_epoch(99)
+
+
+def test_the_case_evidence_is_indexed_and_a_tampered_raw_record_is_refused(tmp_path, monkeypatch):
+    """The indexed evidence this repository can produce for a bounded case, plus one more tamper negative.
+
+    The recorder writes each sample once, fsync'd, and keeps an index row per sample with its own digest,
+    phase, step, sim time and epochs. A bounded (prefix) case does not seal - that is the production rule -
+    so what exists to check is the index and the bytes it names, and one production refusal for a raw record
+    whose bytes no longer match the digest a sample claims.
+    """
+
+    import json
+    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+    from so101_demo.adapters.act.pick_place_readback import PickPlaceReadbackError  # noqa: F401
+
+    child, request, port = _prepare_child_case(tmp_path, monkeypatch)
+    asyncio.run(child.pick_place_phase(request))
+
+    recorder = port._evidence_recorder
+    entries = list(recorder._entries)
+    assert len(entries) == 9, "one indexed sample per required phase"
+
+    # every index row names a real file whose bytes hash to the digest the row claims
+    for entry in entries:
+        # the index row's relative path already names the staging directory inside the evidence root
+        path = Path(recorder.evidence_root) / entry["relative_path"]
+        assert path.is_file(), f"indexed evidence exists: {entry['relative_path']}"
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == entry["sha256"]
+
+    assert [entry["phase"] for entry in entries] == list(port.live_evidence_window.REQUIRED_PHASES)
+    assert [entry["physics_step"] for entry in entries] == list(range(9))
+    assert {entry["reset_epoch"] for entry in entries} == {port.boundary.reset_epoch}
+    assert {entry["release_epoch"] for entry in entries} == {0}
+
+    # tamper negative at the evidence layer: a raw record whose bytes were changed is refused by append
+    root = Path(recorder.evidence_root)
+    identity = {"case_id": request.payload["scenario_id"], "session_id": request.session_id,
+                "attempt_id": request.attempt_id, "reset_epoch": port.boundary.reset_epoch,
+                "release_epoch": 0}
+    stamps = {name: 5.0 for name in READBACK_SOURCES}
+    records = _raw_records(root, 5.0)
+    first = sorted(records)[0]
+    (root / records[first]["relative_path"]).write_bytes(b"{\"tampered\": true}")
+    sample = build_live_evidence_sample(
+        identity=identity, phase="SEARCH", physics_step=99, sim_time_s=5.0,
+        source_stamps_s=dict(stamps), source_received_monotonic_s=dict(stamps),
+        raw_records=records, holding_state="HOLDING",
+        frame={"wrist_frame_valid": True, "wrist_target_visible": True},
+        contact={"observation_valid": True, "bilateral_contact": False, "no_fingertip_contact": True,
+                 "cup_supported": False, "released": False, "placement_stable": False},
+        measurements={"cup_support_distance_m": 0.01, "end_effector_position_m": [0.0, 0.0, 0.1],
+                      "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_RAW_RECORD_INVALID"):
+        recorder.append(sample)
