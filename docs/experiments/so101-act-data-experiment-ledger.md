@@ -13588,3 +13588,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
   set 244, chain file 5 of 6); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no
   runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-957 — MILESTONE: the real owner's retirement path is proven; Task 7 is complete
+
+- **The retirement-path case now passes: 16 passed, rc=0** (`beh-task7-owner4.log`) for the chain file plus the teleop
+  case-execution suite. It exercises the **real** `PickPlaceCaseOwner.finish()` -> `_retire()` with doubles built to
+  the recorded specification, and it proves the property that mattered: **an open window is invalid-sealed with reason
+  `OWNER_RETIRE` before the child is retired**, both retirement receipts are written with matching owner keys, all
+  three retirement flags are set, and the window then refuses further grid samples. The insertion currently carried
+  uncommitted in the user's `pick_place_case_owner.py` is therefore verified **through the real code path**, not in
+  isolation - which is exactly what CP-948 warned a fake owner could never show.
+- **Two fixture defects found and fixed on the way, both by reading the error rather than the guess:** the first was my
+  own diagnosis confirmed (`AttributeError ... finish` came from a collaborator double lacking `finish`, not from the
+  owner), and the second was that double needing to accept the real call's keyword arguments.
+- **Task 7 status - complete:** module (nine phases, release correlation, audit-camera exclusion, invalid seal) 37,
+  runner baseline 14, port (attachment, grid feed from real readback, idempotent seal, public accessor) 81,
+  retirement-path seal 40, journal-row readback 10, chain file 16, the plan's Step-4 command 53 and the broader
+  focused set 244 - every increment green, with each rejection path asserted rather than assumed.
+- **Carried uncommitted by design:** `pick_place_case_owner.py` (the verified retirement insertion),
+  `pick_place_case_execution.py` (the journal-row readback) and `test/teleop/test_task8_case_execution.py` (the real
+  fixture and its mismatch case) - inside the user's dirty set, to be staged hunk-wise or after their work lands.
+- **State:** Tasks 1-6 committed and green, Task 7 complete and green; Tasks 8-10 untouched - the five live-only
+  fields, the single full `so101_demo_py` + `so101_teleop` xdist gate with the implementation review, and the Task 8L
+  rebuild in a new generation subroot; one approval outstanding (the 17 candidate search values, three
+  `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted,
+  no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
