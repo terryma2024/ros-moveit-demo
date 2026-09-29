@@ -349,7 +349,12 @@ def build_qualified_measurements(ready_measurements: dict, live_runs, contract) 
         # a live-only field must not already be present, or the ready report was not the 28-field document
         raise ValueError(f"LIVE_FIELD_ALREADY_PRESENT: {sorted(overlap)[0]}")
     for field in LIVE_ONLY_FIELDS:
-        merged[field] = {"value": derived[field]["value"], "unit": derived[field]["unit"]}
+        # the report contract wants each entry to cite the sealed sample it came from, so the run whose value produced
+        # the reported extremum is the one cited - deterministically the first such run
+        reported = derived[field]["value"]
+        source = next((run for run in live_runs if float(run[field]) == float(reported)), live_runs[0])
+        merged[field] = {"value": reported, "unit": derived[field]["unit"],
+                         "sample_path": source["sample_path"], "sample_sha256": source["sample_sha256"]}
     return merged
 
 
