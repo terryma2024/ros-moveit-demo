@@ -28330,3 +28330,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **That is a design fact rather than a fixture defect, and it is the same shape as the live-evidence identity:** a signed statement about a case's start cannot be edited afterwards - which is why my refresh had no effect and why **the honest change is to issue the receipt where the plan is issued** (per readback, with a monotonic source that advances), not to mutate a document behind a signature.
 - **And the two clocks the fixture now needs are exactly the two production has:** the **capture clock** (one monotonic sequence for the grid) and the **authority's monotonic clock** (advancing, for prefix age) - with the prefix's window met by re-issuing the receipt from the current observation, as production does.
 - **State:** **P1-4 pieces 1-3 working; piece 4's clock landed; the prefix must be re-issued WITH its receipt** and the expectation restatements follow; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1693 — Six causes into the fixture's clock migration, and the production side of P1-4 already stands
+
+- **The chain, each link read rather than guessed (`__cause__`, because port:802 wraps the real exception):**
+  | # | cause | what it was |
+  | --- | --- | --- |
+  | 1 | `ContractError PREFIX_INVALID` | the widened window had 600 times and **one** positions row - fixed by widening both |
+  | 2 | `ValueError APPROACH_HEADER_STAMP_INVALID` | the goal header must fall strictly inside the prefix's window, which the contract fixes at `0.1 + 0.002` s |
+  | 3 | - | the prefix travels inside a **signed receipt**; mutating the document behind the signature changes nothing |
+  | 4 | - | and the receipt is issued from the prefix **it is given** (`issue_prefix_source=lambda **kwargs: _receipt(kwargs["prefix"], ...)`) |
+  | 5 | - | so the fixture refreshed the wrong object: the route executes against `_wide_prefix(prefix)`, a **new dict** |
+  | 6 | **still `APPROACH_HEADER_STAMP_INVALID`** | **and it is still failing after targeting the widened dict** |
+- **So the honest state is not "close" but "not yet located", and the next step is a probe rather than another patch:** print, at the moment the boundary builds the goals, **the prefix's `observation_time_s` and `target_times_s[0]` beside the header stamp it is given** (`finite(observation["sim_time_s"])`,
+  `pick_place_search_boundary.py:177`). **Six patches have taught what the check is; the probe will say which object is being checked.**
+- **And what already stands, independent of the fixture:** the production side of P1-4 is **in and committed** - the epoch derives from the phase (CP-1679), the terminal epoch has one name and the seals **compare** it
+  (CP-1680), the port samples one grid point per instant and records the edges with their reasons (CP-1685/1687), and the capture name carries the instant (CP-1688). **The remaining work is the fixture's own clock migration, which the verdict requires for exactly this reason: fixtures must not rewrite timestamps.**
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration six causes deep and not yet green**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
