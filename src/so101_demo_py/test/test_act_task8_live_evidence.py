@@ -13,6 +13,7 @@ bounded occlusion: the recorder refuses it instead of degrading.
 
 import hashlib
 import json
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -204,6 +205,9 @@ class _Boundary:
 
     def __init__(self):
         self.neck_sweep_checker = _NeckSweepChecker()
+        # the port reads the reset generation from the verified receipt when it stamps a document or seals a case, so a
+        # double without `reset` is refused by name rather than silently given epoch zero
+        self.reset = SimpleNamespace(receipt=SimpleNamespace(new_epoch=2))
 
     def begin(self, *args, **kwargs):
         return {}
@@ -824,7 +828,7 @@ def test_the_port_binds_one_evidence_window_and_refuses_a_second():
 
     port = PickPlaceSearchPhasePort(_Boundary())
     window = Window()
-    port.bind_live_evidence(window)
+    port.bind_live_evidence(window, support_distance_max_m=0.02)
     assert port.live_evidence_window is window
     with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_ALREADY_BOUND"):
         port.bind_live_evidence(Window())
@@ -898,7 +902,7 @@ def test_the_port_gives_its_attached_window_the_verified_reset_epoch():
 
     port = PickPlaceSearchPhasePort(_Boundary())
     window = Window()
-    port.bind_live_evidence(window)
+    port.bind_live_evidence(window, support_distance_max_m=0.02)
     port._bind_case_epoch({"reset_epoch": 7})
     assert window.bound == [7]
     port._bind_case_epoch({"reset_epoch": 7})       # the window's own one-shot rule is what refuses a repeat
@@ -908,7 +912,7 @@ def test_the_port_gives_its_attached_window_the_verified_reset_epoch():
             return {"status": "SEALED"}
 
     other = PickPlaceSearchPhasePort(_Boundary())
-    other.bind_live_evidence(NoBind())
+    other.bind_live_evidence(NoBind(), support_distance_max_m=0.02)
     with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_WINDOW_INVALID"):
         other._bind_case_epoch({"reset_epoch": 7})
     PickPlaceSearchPhasePort(_Boundary())._bind_case_epoch({"reset_epoch": 7})   # no window, nothing to bind
