@@ -13296,3 +13296,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   cases green with the fifth encoding this requirement; the port's idempotency guard is in place in a clean file; the
   user's dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package gate, no
   push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-945 — `seal_live_evidence` is idempotent and the chain file is green (15 passed)
+
+- **Read the recorder's seal internals instead of guessing at an accessor:** `seal()` raises
+  `TASK8_LIVE_EVIDENCE_ALREADY_SEALED` when `self._sealed is not None`, and on success it sets
+  `self._sealed = target` (the published index path) and returns
+  `{"path": str(target), "sha256": _digest(target), "schema_version": SCHEMA_VERSION}`. So the published artifact is
+  reachable from `_sealed` itself, with no new accessor needed.
+- **`seal_live_evidence` is now idempotent:** the window is sealed first (only when it has not already sealed
+  itself), then, if the recorder has already published, the port returns that artifact - path, freshly computed
+  digest and the module's own `SCHEMA_VERSION` - instead of calling `seal()` again. A completed chain therefore
+  reads back through the same call that a partially completed one would fail on, which is the property the journal
+  row depends on.
+- **Verified: 15 passed, rc=0** (`beh-task7-chain10.log`) for the chain file (five cases) plus the teleop
+  case-execution suite (ten), covering: the nine-phase chain sealing and reading back byte-exact, an invalid seal for
+  a window that never reached FINAL_CHECK, the readback refusing missing/mismatched/unexpected artifacts, a SEARCH-only
+  window blocking the seal rather than passing silently, and the port sealing its window together with the recorder
+  idempotently.
+- **Two small defects of mine fixed on the way, both caught by running:** the port needed `Path` available in the
+  new block (imported locally rather than disturbing the module's import block), and my first version called
+  `window.seal()` unconditionally, which raised on a window that had already sealed itself on FINAL_CHECK.
+- **State:** all Task 7 increments green; the plan's Step-4 command passed at 51 before this increment and the chain
+  file has grown since; three files carry my additive changes uncommitted inside the user's dirty set; Tasks 8-10
+  untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
