@@ -19275,3 +19275,20 @@ not an inference of mine.**
   not scattered), then a `grep FAILED` in the shard-06 log.
 - **State:** HEAD `b4e413b6`; staged 0; **no commit was made while the gate ran** (the CP-1030 rule); the gate's own scratch
   `scratch/r807.8601` and the run's log are retained as deletion candidates, not deleted; no push, no stack, no hardware.
+
+## CP-1198 — Four dead ends recorded so the next stretch does not repeat them, and the one read that will settle it
+
+- **The shard logs for `g794` are not where I looked, and listing the failures is worth more than re-searching:** the gate's
+  summary log holds one line; there is no `g794`, `gate-g794`, `experiments/g794` or `runs/g794` directory; a bounded
+  `find -maxdepth 3 -name shard-06` returns nothing; and the run's scratch (`scratch/r807.8601/tmp`) is empty. **Four targeted
+  attempts, none of them the answer**, so the next stretch should not spend its first rounds on the same four.
+- **The read that will settle it, named exactly:** `tools/so101_pytest_gate.py` lines ~300-315, where the per-shard `root` is
+  computed and `junit.xml` and `pytest.log` are written into it. The runner's own source says where its artefacts go; nothing
+  else needed guessing, and my mistake was to search the filesystem instead of reading the code that decides.
+- **What is already known and sufficient to act on:** the gate ran for 121 seconds and failed closed with
+  `shard-06: exit=1`, so at least one test fails under the **ordinary** gate while the targeted suites I have been running are
+  green (aggregator, contract, binding, render, calibration, admission, bundle, manifest, formulas, driver, teleop chain and my
+  Boundary V test - 7 to 109 tests per run, all rc=0). That contrast is itself information: the failure is in a module those
+  targeted runs never collect, or in a collection-level interaction the full gate exposes.
+- **State:** HEAD `b251d457`; staged 0; gate log `experiments/gate6-batch3-py-gate/g794.log` retained; scratch
+  `scratch/r807.8601` retained; no full re-run attempted while my context was short; no push, no stack, no hardware.
