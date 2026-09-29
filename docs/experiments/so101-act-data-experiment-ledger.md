@@ -18099,3 +18099,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   complete, resumable specification of the fake - no reasoning is lost, only typing remains.
 - **State:** the test fails by design; the surrounding teleop suites are untouched (16 passed at CP-1143). No full suite,
   nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions remain open and independent.
+
+## CP-1147 — `run_phase`'s five conditions read exactly; the next step is to print the mismatch rather than guess it
+
+- **`_verify_phase` (lines 101-113) checks five things, in order:**
+  1. `set(evidence) == _EVIDENCE_KEYS` - exactly 25 keys;
+  2. `evidence["phase"] == phase` **and** `_scope(...)`: `session_id` and `attempt_id` equal to the request, and
+     `reset_epoch`/`release_epoch` **equal to the values `begin` returned** (`type(...) is int` for both);
+  3. `physics_step` an int **strictly greater** than the step recorded before the call;
+  4. `manual_intervention is False` and `moveit_recovery is False`, else it raises the distinct
+     `HUMAN_OR_RECOVERY_INTERVENTION`.
+- **My fixture appears to satisfy all five** - the fake's evidence is built from `_EVIDENCE_KEYS`' own membership (25 fields:
+  the five identity fields plus twenty phase fields), `phase` is the argument, the epochs are `begin`'s zeros, the step
+  increments before returning, and both intervention flags are `False`. So the next round should **print** the two sets and
+  the step values at the point of failure instead of reading more code - the same technique that resolved CP-1118 in one
+  pass after three rounds of reading, and the reason CP-1146's note about pace stands.
+- **What that print will distinguish, exhaustively:** a key-set difference (an extra or missing field), an epoch or identity
+  mismatch (if the runner binds different epochs than my `begin` returned), or a step-ordering mismatch (if `after_step`
+  already exceeds my counter because the runner counts steps itself).
+- **State:** the test fails by design; surrounding teleop suites untouched (16 passed at CP-1143). No full suite, nothing
+  weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions remain open and independent.
