@@ -23495,3 +23495,26 @@ not an inference of mine.**
   negatives, the integration boundary and the packet correction are all still ahead of it.** The recommendation I made at CP-1397 stands unchanged.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1419 — `append`'s full requirement list, so the remaining rounds are execution rather than reading
+
+- **Everything `append` checks, now read in full:**
+  1. not already sealed; `type(sample) is dict`; **key set exactly `_SAMPLE_KEYS`** (matches the builder, CP-1418);
+  2. `case_id`/`session_id`/`attempt_id` equal to the recorder's own;
+  3. `reset_epoch`, `release_epoch`, `physics_step` non-negative **ints**;
+  4. `sim_time_s` finite, `phase` a non-empty string;
+  5. every `_BOOLEANS` key a real **bool**; `contact_observation_valid` and `wrist_frame_valid` both **True**;
+  6. `cup_support_distance_m` finite;
+  7. **`_VECTORS`**: three lists of the exact lengths (`end_effector_position_m`, `cup_position_m`, `cup_orientation_xyzw`) with finite values;
+  8. `holding_state` a non-empty string;
+  9. **`source_stamps_s` and `source_received_monotonic_s`**: plain dicts over **exactly `_SOURCES`** with finite values;
+  10. **`raw_records`**: a plain dict over **exactly `_SOURCES`**, each entry exactly `{relative_path, sha256}`, the path relative and free of
+      `..`, **the file present under `evidence_root` as a regular file, and its digest equal**.
+- **So the next round walks that list against my ten-argument call** - the builder already satisfies 1, 2, 4 (partly), 5, 6, 8 and the shapes of
+  7 and 9 through its own validation, **which narrows the likely fault to the raw-record files under the recorder's root or to the epochs, and one
+  probe that prints the sample and stats its records settles which.**
+- **And the arithmetic, stated once for the record: seventeen rounds remain; P1-5's recorder step is within reach, and its case-level assertions,
+  the four negatives, the integration boundary and the packet correction are not.** My CP-1397 recommendation - stop the tail, submit items 1-4 with
+  P1-5 documented, re-approve P1-5 as its own round - is the one I would still choose if the decision were mine.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
