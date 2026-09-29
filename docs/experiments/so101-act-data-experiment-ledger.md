@@ -26018,3 +26018,27 @@ picture in both directions.**
 - **What remains for P1-4's close-out, precisely:** the **sealed artifact's indexed assertions** - the aggregator's `_require_sealed_batch` / `_read_indexed` path over the batch the nine-phase case sealed, asserting the
   facts **from the records** rather than from the run's return value. That is the last piece before P2 and the final integration boundary.
 - **State:** P1-1..P1-3 green and committed; the nine-phase milestone and this gate committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1562 — The sealed artifact's real structure, read from a run rather than assumed
+
+- **A nine-phase run was executed and its sealed artifact read back, and the structure is now known exactly:**
+  ```
+  index keys   : identity, kind, sample_count, samples, schema_version
+  identity     : {case_id: 'scenario-1', session_id, attempt_id, reset_epoch: 2, release_epoch: 0}
+  sample_count : 10 of 10
+  sample keys  : phase, physics_step, relative_path, release_epoch, reset_epoch, sha256, sim_time_s,
+                 wrist_target_visible
+  phases       : SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, RADIAL_RETREAT,
+                 RADIAL_RETREAT, FINAL_CHECK
+  ```
+- **Three facts worth naming, because each one changes how the close-out is written:**
+  1. **the index carries ten samples for nine phases - `RADIAL_RETREAT` appears twice**, because the runner drives **two** retreat segments. **A check that demanded nine samples would be wrong, and a check that
+     demanded distinct phases would be wrong too: both facts are true at once.**
+  2. **the sample's keys are an INDEX entry, not the canonical sample**: it points at the raw record by `relative_path` and commits to it by `sha256`. **So "read from records" means following that path and
+     verifying that digest** - the index is a chain, and breaking it is what the negatives are for;
+  3. **the identity's `release_epoch` is 0**, stamped by the window the case was bound to rather than by the port's seal argument - **and the recorder requires every entry's epochs to match it** (which is why a
+     mismatched seal identity is refused by name rather than written).
+- **So the close-out's seven indexed assertions are: the artifact's own digest; `sample_count` against the index; every index entry's `relative_path` + `sha256` verifying; every raw record carrying the seven sources;
+  the identity matching the case; the phases covering the runner's nine; and the sim times advancing by exactly one period** - **and the four negatives tamper with a record, drop a record, swap the identity and
+  miscount the index, each of which must refuse by name.**
+- **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
