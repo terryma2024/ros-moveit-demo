@@ -24492,3 +24492,21 @@ picture in both directions.**
   rather than kept as a second, dead one.**
 - **And a note on my own method:** each of those five failures was found by running the contract, not by reading harder - and the fifth one **invalidated a design I had already written into
   the source**. That is the RED's whole value: it refused to let a plausible-looking controller through.
+
+## CP-1474 — P1-1 runs end to end now; the last gap is that the controller is not callable
+
+- **The contract's two cases are `1 passed, 1 failed`** (`experiments/gate8-p11/green-9.log`), and the split is informative:
+  - **passed:** a client that refuses `launch` seals an **`INVALID`** batch carrying that client's own code - the fail-closed direction works through the real composition;
+  - **failed:** the success path seals `INVALID` with **`'HeadSearchController' object is not callable`** - the driver calls `self.controller({...})` per sample, and `HeadSearchController` is a **state machine**, not the callable port the driver needs.
+- **Everything before that is now solved, each by running rather than guessing:** the `io_client` seam, the stack adapter implementing all eight protocol methods, the real `_MonotonicClock`,
+  a **real weights artifact** for the detector's validation, the detector factory's `DetectorPort` shape, the **ten-member `MeasurementIdentity`** document
+  (`source_commit` 40-hex plus nine 64-hex digests - the same document P2's seal reads), and the controller's **18-field config** built from the admitted calibration through
+  `HeadSearchBinding.search_config`. **The measurement now drives every anchor and reaches the seal.**
+- **The last gap's real shape, read from the code:** the only production object that is callable in this role is built in
+  `adapters/act/pick_place_search_binding.py:100-105` - `RosSearchAdapter(node, HeadSearchController(config), detector.runtime, neck, tf_buffer=..., operation_guard=...)` followed by
+  `adapter.reset(config, source_floor_s=floor)`. **It is assembled from the ROS/MuJoCo boundary** (node, tf buffer, neck port, guards), so the composition cannot reuse it offline
+  without binding the measurement path to ROS classes. **The honest GREEN is therefore a composition-owned controller adapter** - the review's own wording, "consume the admitted
+  context's adapters" - that wraps `HeadSearchController` into the callable shape the driver uses, builds it from the admitted config, and delegates whatever motion the ack requires
+  through the same `io_client`.
+- **State:** the composition and test edits stay **uncommitted** while the contract is red, per this batch's rule; the ledger checkpoint is committed on its own. No new session, goal,
+  worktree or stack; nothing pushed, nothing deleted; no real hardware.
