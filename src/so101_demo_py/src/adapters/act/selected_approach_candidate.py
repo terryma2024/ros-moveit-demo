@@ -80,8 +80,14 @@ class SelectedApproachCandidate:
     def manifest(self) -> dict:
         return copy.deepcopy(self._manifest)
 
-    def prepare(self, observed, *, selected_source: dict) -> dict:
-        """Freeze the first candidate only; never issue a receipt or permit."""
+    def prepare(self, observed, *, selected_source: dict, require_fresh: bool = True) -> dict:
+        """Freeze the first candidate only; never issue a receipt or permit.
+
+        `require_fresh` is the freshness boundary of the SELECTION, not of every later consumption: the source port
+        checks it when it REGISTERS a source, and a registered source is by definition older than its registration -
+        so a caller consuming an already-registered source passes `require_fresh=False` rather than making the bound
+        unsatisfiable after a phase boundary (CP-1889/CP-1890).
+        """
         source = freeze_selected_search_source(observed, max_skew_s=self.max_skew)
         if type(selected_source) is not dict or source != selected_source:
             raise ValueError("SELECTED_APPROACH_SOURCE_CHANGED")
@@ -93,8 +99,8 @@ class SelectedApproachCandidate:
             raise ValueError("SELECTED_APPROACH_SOURCE_INVALID")
         now = finite(self.monotonic(), nonnegative=True)
         receipts = source["source_received_wall_s"]
-        if (any(value > now for value in receipts.values())
-                or not now - min(receipts.values()) < self.max_age):
+        if require_fresh and (any(value > now for value in receipts.values())
+                              or not now - min(receipts.values()) < self.max_age):
             raise ValueError("SELECTED_APPROACH_SOURCE_STALE")
         raw = observed.physical_readback
         world, scene = raw["world"], raw["scene"]

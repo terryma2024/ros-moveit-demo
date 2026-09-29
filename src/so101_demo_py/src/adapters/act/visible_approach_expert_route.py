@@ -77,7 +77,7 @@ class VisibleApproachExpertRoute:
         return copy.deepcopy(self._manifest)
 
     def prepare(self, observed, *, selected_source: dict, owner_ticket: tuple,
-                active_policy_fingerprint: str) -> dict:
+                active_policy_fingerprint: str, require_fresh: bool = True) -> dict:
         """Prepare one exact prefix only when every selected SEARCH fence agrees."""
         try:
             if (not isinstance(observed, PickPlaceSearchObservation)
@@ -150,7 +150,8 @@ class VisibleApproachExpertRoute:
                               <= snapshots[kind]["received_monotonic_ns"] <= now_ns
                            for kind in _ROLES)):
                 raise ValueError("native")
-            candidate = self.candidate.prepare(observed, selected_source=source)
+            candidate = self.candidate.prepare(observed, selected_source=source,
+                                               require_fresh=require_fresh)
             prefix = validate_action_prefix(candidate["prefix"])
             if (candidate.get("eligible_for_collection") is not False
                     or candidate.get("command_authority") is not False
