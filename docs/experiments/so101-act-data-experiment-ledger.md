@@ -27738,3 +27738,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the limitation is recorded rather than worked around:** this session **cannot run that review**. Its subagents execute the same model it does, and AGENTS.md forbids silently substituting another model or switching to a lower-capability one. **So the packet is ready, the request is explicit, and the review itself belongs to the owner** - which is also why no
   self-approval appears anywhere in this batch.
 - **State:** items 1-8 have their outcomes recorded; the boundary is green; the request is registered and audited; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1661 — The teleop case count is now measured, and the answer is "the two numbers answer two questions"
+
+- **The same tool, against two result bases, and the difference is the base rather than the run:**
+  ```
+  colcon test-result --test-result-base experiments/v4a/teleop-results   ->  117 tests, 0 errors, 0 failures, 0 skipped
+  colcon test-result --test-result-base build/so101_teleop              ->  1432 tests, 0 errors, 0 failures, 43 skipped
+  ```
+  **So this run's own base reports 117** - the registered **CTest** tests, one per module - **while the build tree's base reports 1432, which is what the earlier runs read.** Aggregating this run's 117 `xunit` suites gives **1311 cases**. **The 1432 is therefore an accumulation across runs rather than a single run's count**, and the
+  reconciliation is arithmetic: 117 CTest tests, 1311 pytest cases across their 117 suites, and 43 skips that only the aggregated view sees.
+- **And the honest consequence is about the OLD number, not the new one:** **CP-1613's `1432 tests` was read from the accumulating base**, so it was never one run's count either. **That number is now flagged for withdrawal or restatement, and the review request's fourth weak point has been
+  rewritten from an explanation into this measurement** - **which is exactly what the request asked a reviewer to verify, so it should not have been left for them to find.**
+- **State:** the request and its index row carry the measured form; the boundary stands (117/117 CTest, 1311 cases, 0
+  failures); goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no
+  hardware; no live stack; P2 live not started.
