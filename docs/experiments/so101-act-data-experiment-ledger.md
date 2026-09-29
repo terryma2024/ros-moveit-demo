@@ -12702,3 +12702,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   audit-camera exclusion, and the builder's key-set validations - **37 passed** for the module and **76** across the
   focused set. Tasks 1-6 are committed and green; Tasks 8-10 are untouched. No runtime, no package gate, no push,
   no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-920 — Task 7 wiring: in-flight work measured and read; a real integration point found
+
+- **Measured the constraint from CP-919 rather than assuming it:** the user's uncommitted work on the six
+  plan-named wiring files is **139 insertions / 13 deletions** (30 files overall: 1153 insertions / 43 deletions), so
+  it is small enough to read and layer onto rather than a reason to wait. Per the goal's standing instruction to
+  continue autonomously and the approved plan's own instruction to modify these files, option (a) applies: read each
+  file, then make minimal, additive, per-file-diffed edits that carry the user's content forward untouched.
+- **Read the two smallest diffs, and they change the plan's step 3-4 shape in a useful way:**
+  - `ros_child.py` now passes `policy_proposal_path` and `policy_receipt_path` into the pick-place port
+    provisioning - so the port provisioned by `maybe_provision_pick_place_port` is already policy-aware, and the
+    recorder binding must sit alongside those arguments rather than replacing them;
+  - `pick_place_case_execution.py` wraps `owner.start(spec)` so that a startup failure calls
+    `owner.retire_failed_start(attempt_id=case_id)` when a context exists, "keep[ing] its admission fenced unless the
+    exact failed-start owner can retire it".
+- **The integration point this reveals:** the plan requires that "on failure, the child closes or invalid-seals the
+  window before owner retirement". The user's in-flight code owns the retirement half of that. My wiring must
+  therefore invalid-seal (or close) the live-evidence window **inside or immediately before**
+  `retire_failed_start`, not in a parallel exception path - otherwise a failed start could retire the owner while an
+  open window survives, which is exactly the fenced-admission property the user's comment is protecting. This is the
+  single most important thing learned this round and it is why reading before editing mattered.
+- **Next concrete edit, in order:** read `pick_place_case_owner.py` (28 added lines) to find `retire_failed_start`
+  and the recorder provisioning seam, then `pick_place_runner.py` (46 added lines) for the SEARCH open /
+  FINAL_CHECK seal and the artifact readback, then `pick_place_child_port.py` (42 added lines) for the port-side
+  artifact return. Only after those three are read should any of them be edited.
+- **State:** Task 7's module work complete and green (**37** module, **76** focused set); Tasks 1-6 committed and
+  green; Tasks 8-10 untouched. No runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
