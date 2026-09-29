@@ -11754,3 +11754,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `git add` list.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-879 — Gap: no approved source enumerates the 17 search-candidate values
+
+- **Task 1 GREEN so far:** the v2 contract is assembled at
+  `config/act/task8-calibration-measurement-contract-v2.json` (21 measurements + 7 support, every entry with unit,
+  source, formula, window, comparator, threshold source and failure code) and the focused test is **9 passed,
+  rc=0**. The implementation plan's remaining Task 1 items are the two search documents, the contract-schema
+  update and the `bind_measurement_contract` identity extension.
+- **The blocker is one of authority, not effort.** Design section 3.1 requires
+  `task8-calibration-search-candidate-v1.json` to hold **17 search configuration values**, detector/runtime
+  identities, the three anchors' `neck_start_rad` and the candidate safe interval - but **neither the approved
+  design nor the approved plan enumerates those values**, and no configuration document for them exists in the
+  tree: `act/search.py` declares only the key set and its invariants, `act/head_search_binding.py` only the
+  binding key set, and there is no head-search or search config file anywhere under `config/`.
+- **The only concrete values in the repository are a test fixture** -
+  `src/so101_teleop/test/teleop/test_act_campaign_admission.py:105` carries
+  `"min_confidence": 0.5, "tracking_iou": 0.5, "min_bbox_aspect": 0.2, ...` - plus an unrelated selector value in
+  `cli/perception_benchmark.py`. Promoting a test fixture into the qualification's frozen candidate would be
+  exactly the "trust the label instead of raw evidence" failure the independent review rejected, so I have not
+  done it.
+- **The precise question:** where should these 17 values come from? Either (a) an approved source names them
+  (point me at the document or the config file and I will freeze exactly those values), or (b) freezing them is
+  itself an approval step and the candidate document should be authored by the design owner and then transcribed
+  by me, as was done for the measurement protocol itself.
+- **State:** no runtime started, no package gate, no evidence deleted, no push, no hardware; formal accepted
+  0/0/0; `collection_*` NOT_PROVISIONED. `runtime-task8l-gen3` remains retained and ineligible; no new generation
+  has been allocated.
