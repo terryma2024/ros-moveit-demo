@@ -24201,3 +24201,16 @@ not an inference of mine.**
 - **And the count delta is recorded rather than implied:** this adds one test to the **demo** package, whose boundary figure was **5651 passed / 163
   skipped**; the file itself is green (`12 passed`) and, as with CP-1455, **I did not re-run the whole gate** - the plan allows one integration boundary.
 - **State:** committed; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1461 — The published journal is the bytes on disk, and a replay cannot overwrite it
+
+- **Read (`pick_place_case_execution.py:94-113`):** `_publish_new` writes **canonical JSON** - `json.dumps(row, sort_keys=True, separators=(",", ":"),
+  allow_nan=False)` plus a trailing newline - to a staging file, fsyncs it, **links it into place** and fsyncs the directory, and **refuses outright if the
+  path already exists or is a symlink** (`TASK8_CASE_JOURNAL_INVALID`).
+- **Now asserted (`7 passed` for the focused file):**
+  1. the journal's **bytes on disk are exactly the row the caller received**, encoded in the publisher's own canonical form - so the row and the artifact
+     cannot disagree;
+  2. its **sha256** is recomputed from those bytes, which is the "journal digest" this scope can carry;
+  3. **a replay of the same case is refused** with `TASK8_CASE_JOURNAL_INVALID` by the no-overwrite rule - **published evidence cannot be replaced by
+     re-running the case**, which is the artifact-layer half of the review's tamper concern.
+- **State:** committed; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
