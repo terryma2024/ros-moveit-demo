@@ -16184,3 +16184,43 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   (CP-1051/1052/1053, 79 + 6 + 38 focused tests); Task 9 measured as above; Task 10 blocked until the 17 provisional
   search values are independently designed and Astra-reviewed. No push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1056 — Task 9 boundary gate PASSES; CP-1055 is superseded by evidence, and CP-1054 is marked invalid
+
+- **Correction, appended rather than rewritten (the owner's reconstruction is what the evidence supports):** CP-1054's
+  run passed `--evidence-root <R>/gate-r650` while `so101_pytest_gate.py` appends `scratch/<run-id>` itself, so the real
+  process root became `<R>/gate-r650/scratch/r650/<physical>` - **a doubled nesting that was my invocation error, not a
+  property of the evidence root.** `CP-1054`'s tree is **retained and marked *invalid runner invocation / diagnostic
+  evidence***; `CP-1055`'s "the path length is irreducible" conclusion is **superseded by the run below** and must not be
+  cited as a budget limit. No history is rewritten, and nothing was moved or deleted.
+- **The corrected invocation, from the registered root:**
+  ```
+  tools/so101_pytest_gate.py --evidence-root /data/work/so101-evidence/act-data/20260924-fbc25063-resume \
+      --run-id z --workers 8 --python <test venv> --process-id-chars 4 --allow-dirty \
+      --expected-source-commit 43adf2b3…
+  ```
+  launched only after a fail-closed check that `<R>/scratch/z` did **not** exist ("absent" - the tool then created it).
+- **Result: rc=0, PASS, with the acceptance criteria checked rather than assumed:**
+  | criterion | measured |
+  | --- | --- |
+  | exact coverage | **5759 cases** across 10 shards with JUnit |
+  | failures | **0** |
+  | shards/serial modules | no failing shard; no failing serial module |
+  | JUnit | present for every shard |
+  | source status before/after | identical: HEAD `43adf2b3`, staged 0, 30 modified + 13 untracked |
+  | children reaped | no `so101_pytest_gate`/`pytest` process remaining |
+  | provenance | `--allow-dirty` diagnostic, `allowed_dirty_paths: []`, correct commit at collection |
+- **The path budget under the correct root, as the owner computed it:** the worst client socket is
+  `<R>/scratch/z/<4>/ipc/res-XXXXXXXX/pXXXXXXXX.sock` = **106 bytes ≤ 107**, which is why
+  `test_controller_reservation_client` and `test_controller_reservation_provision` - the two modules that failed inside
+  the doubled nesting - pass here.
+- **Short IPC base created for the short-IPC-convention tests and registered as a deletion candidate:**
+  `/tmp/so101-debug-act-task9-z-439921378`, mode 0700, non-symlink, exported as `SO101_IPC_SOCKET_BASE` (honoured by
+  `test/teleop/conftest.py:33` and others). It carries ephemeral sockets and capabilities only - **no evidence** - and it
+  is **not deleted**. `TMPDIR`/`TMP`/`TEMP` remained the gate's own per-process paths under
+  `<R>/scratch/z/<physical>/scratch/<unique>/tmp`, and every JUnit, log and summary stayed under `R`.
+- **No tool or test was changed to accommodate the earlier bad invocation.** The only change between the failing and the
+  passing run is the `--evidence-root` argument, which is exactly the reconciliation the owner asked for.
+- **What Task 9's pass does NOT authorise:** the 17 provisional search values remain `null` with
+  `requires_approved_value: true`, pending their independent design and GPT-6 Astra/High review. **Task 10 stays
+  blocked**, and a passing gate is not permission to guess a value.
