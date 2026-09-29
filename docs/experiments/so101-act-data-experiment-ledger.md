@@ -25112,3 +25112,18 @@ picture in both directions.**
 - **So APPROACH's remaining work is exactly one method:** `approach_facts`, mirroring `_search_evidence` - validate the snapshot and readback for APPROACH's phase (the eight gates,
   the holding/contact facts, the scope), and refuse by name when anything is absent. **Then APPROACH is end to end and the pattern is set for the seven phases after it.**
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1506 — `approach_facts` exists, so APPROACH's chain is complete end to end
+
+- **`45 passed`** across the port, goals-builder, path-screen and child-port files.
+- **`approach_facts(snapshot, request, *, support_distance_max_m)`** establishes the gates the way SEARCH's validator does: `SimulationEvidence` scope (session, epoch,
+  step, not paused, not truncated), the scene's **closed key set** and its agreement with the world, the contact frame's key set and step, `contacts.safe() is True`,
+  `contact_hazard(contact, contact_pairs.for_phase("APPROACH"))`, the four RGB stamps within the readback skew, and then `derive_frame_aggregates` for the holding and
+  contact facts. **It refuses by name for anything it cannot check, and it refuses a premature grip outright** - bilateral contact during APPROACH would mean the
+  gripper closed during the approach, which is CLOSE's own predicate.
+- **And the support threshold is the case's admitted value, passed in by the port that holds it** - the first draft used `sources.readback.joint_tolerance`, which is a
+  *neighbouring* number and exactly the kind of invented value this batch keeps finding. It is now an explicit argument, and a non-positive threshold refuses.
+- **So APPROACH's chain is complete: port prepares and qualifies -> boundary issues, approves, submits, waits, builds the goals, inspects, proves and establishes the
+  facts -> the runner's own verifier judges the document.** What remains before calling APPROACH done is a **boundary-level test of the real `execute_approach`** with
+  the physics and the ROS calls substituted (the port test stubs the method itself), and then the seven phases after it - which now have a working template.
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
