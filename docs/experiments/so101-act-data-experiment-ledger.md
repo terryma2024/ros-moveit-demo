@@ -14416,3 +14416,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   binding outstanding; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the
   17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package
   gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-989 — The remaining binding, specified to the argument list, without inventing the record keys
+
+- **What is left in Task 8 is one small function and its call site**, and it needs exactly two facts that are not in
+  the code I have read: the key under which a raw record carries its collision-pair list, and the fields a wrist record
+  uses to express occlusion. Rather than invent either, the intended shape is recorded here so the wiring round is
+  mechanical:
+  ```python
+  record_live_extractors(*, artifact_path, cup_collision_geom, pair_key,
+                         occluded_from_record, contact_record="contact", wrist_record="wrist")
+  ```
+  It would build `reader = make_raw_reader(artifact_path)` (already implemented, digest-verifying and refusing
+  traversal), then derive the five extractors for `live_extractors`:
+  - `support_frames`: for each sample, read `contact_record` through the reader and take `pair_key` as its pair list,
+    so `support_distance_from_frames` sees real `contacts` entries with `geom1`/`geom2`/`signed_distance_m` - the
+    design's exact-pair proof rather than the opt-in fallback;
+  - `occluded`: `occluded_from_record(reader(sample, wrist_record))`, with the approved-owner check belonging inside
+    that caller-supplied function because the owner identifiers are the wrist record's business;
+  - `release_stable`, `placement_stable` and `retreat_qualifying`: likewise callables over the records the caller
+    names, since table support, forbidden contact and clearance are all record-level facts.
+- **Two facts must come from the code that writes those records** - `pair_key` and the wrist record's occlusion
+  fields - and `capture_evidence_fields`'s own docstring confirms why they are not visible here: it takes
+  `raw_records` **from its caller**, so their shape is decided at that call site (CP-985). The call site is in the
+  port/child path, part of which is the user's in-flight work (CP-919, CP-984).
+- **So the choice for the next round is unchanged and explicit:** either read that writer (including a user-dirty file,
+  read-only) and fill in the two facts, or land the wiring together with the user's work. Either way nothing in the
+  module needs redesigning - `make_raw_reader`, `live_extractors`, `collect_live_runs`, `derive_live_measurements`,
+  `build_qualified_measurements` and the weld in `build_task8_qualified_report` are all in place and green at 50
+  focused tests.
+- **State:** Tasks 1-7 complete and green; Task 8's code side complete and green; Tasks 9-10 untouched; the goal is
+  armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad`
+  starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware;
+  formal 0/0/0; `collection_*` NOT_PROVISIONED.
