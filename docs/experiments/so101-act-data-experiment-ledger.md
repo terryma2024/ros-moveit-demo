@@ -27534,3 +27534,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   right in all three.
 - **State:** CP-1620 and CP-1612 **done**; **CP-1635** next (the driver supplies the per-run identity and search start to the composition); item 7's boundary re-run follows once the code stops changing; goal **active and armed**; nothing pushed, nothing
   deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1649 — CP-1635 is GREEN and committed: all three decisions are delivered
+
+- **The third and last decision, `85 passed`:**
+  ```
+  build_real_providers(..., session_id=..., attempt_id=..., search_start_rad=...)
+  build_production_measurement_driver(..., session_id=..., attempt_id=..., search_start_rad=...)
+      -> _admitted_controller_config(context, descriptor, session_id, attempt_id, search_start_rad)
+  ```
+  **The refusals are unchanged in substance and in name** (`PRODUCTION_MEASUREMENT_IDENTITY_REQUIRED: <field>`), and **that is not a claim - it is what two existing contract tests demonstrated**: they failed with exactly that refusal once the
+  arguments became required, and were then completed to supply them, **which is the fail-closed behaviour working rather than a regression.**
+- **And the decision's own evidence was the adapter:** `pick_place_search_binding.py:57` already built its search config from the request and the reset targets -
+  ```
+  config = binding.search_config(session_id=request["session_id"], attempt_id=request["attempt_id"],
+                                 search_start_rad=targets.joints_rad[6])
+  ```
+  - **so the tree already contained the pattern the composition was failing to follow**, and CP-1635's choice (the driver supplies them) is the one that matches it.
+- **All three of the owner's decisions are now delivered and committed:**
+  | decision | commit | evidence |
+  | --- | --- | --- |
+  | **CP-1620** cleanup proof for every `CLOSED` batch | `e4eeaebe` | 83 passed; two helpers carried the fixtures |
+  | **CP-1612** non-decreasing epochs, last equals identity | `56a1bf01` | 3 passed for the boundary; 144 passed around it |
+  | **CP-1635** per-run values as arguments | (this entry) | 85 passed |
+- **What is left is item 7**, which by its own terms waits for exactly this moment: **the code has stopped changing**, so the re-run boundary can measure it - **three legs on fresh scratches, serial CTest, and a new run subroot**, per the owner's constraints.
+- **State:** all three decisions delivered; item 7 next; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
