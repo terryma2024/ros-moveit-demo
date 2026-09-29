@@ -22944,3 +22944,21 @@ not an inference of mine.**
   cheap to disprove with a counter. **The counters are earning their keep; my inferences about this loop are not.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1385 — The per-pop probe found the bug in one run: a marker that named a step the physics was not at
+
+- **The probe, verbatim:**
+  ```
+  pop#1 after_step=0  head_step=1        <- the search's first read
+  pop#2 after_step=1  head_step=EXC      <- the deliberate retry
+  pop#3 after_step=1  head_step=2        <- recovered
+  pop#4 after_step=54 head_step=3        <- the cursor JUMPED to 54 while the queue is at step 3
+  pop#5..8 after_step=54 head_step=4..7  <- so every later row looks stale and is refused
+  ```
+  **54 was my own fence marker**, which I had hard-coded as `marked_physics_step: 54` when CP-1380's rewrite replaced the class. The interval uses
+  the marker as its cursor, so a constant made every queued step look stale - **one line, found by counting rather than by reasoning.**
+- **The fix:** the marker now reports `self._step + 1`, i.e. the step the physics is actually at, which is what the production fence reports and
+  what the interval's cursor expects. **No production code was touched to make this pass, and the checks that refused my earlier attempts were all
+  correct about a fixture that lied.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
