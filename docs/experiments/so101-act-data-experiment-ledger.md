@@ -21787,3 +21787,21 @@ not an inference of mine.**
   report exactly as the child does.
 - **State:** P1-1's tests uncommitted while the pair is red; ledger current; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1316 — Where the controller's settings cross the package boundary, and why the CLI is the right place
+
+- **Read: `bound_act_source_settings(report, *, timestep_s)` is defined *inside* `so101_teleop/unified/ros_child.py:51`** - it is the
+  child's own helper, not a shared library - and the child calls it at line 234 with its compiled model's timestep. **So the demo-side
+  composition cannot derive those settings without importing a teleop module, and a production library importing its own consumer is the
+  layering inversion worth avoiding.**
+- **The design that avoids it, decided explicitly rather than by convenience: the CLI is where the two worlds already meet**, so the
+  **entry** loads the admitted binding (`ActArtifactBinding.verify_environment`, the same call the child makes, never monkeypatched),
+  derives the controller settings with the child's own helper, and passes **both the binding and the settings** into the composition.
+  The composition then stays a demo package that consumes what its entry hands it, and the controller is configured from the **admitted
+  calibration report** rather than from the runtime descriptor - which is what the child does and therefore what "real" means here.
+- **What this changes in the code, precisely:** `build_real_providers` gains `binding` and `controller_settings` inputs (no hidden
+  environment reads inside the library); `build_production_measurement_driver` forwards them; and the CLI, in its production branch,
+  loads the binding when `SO101_ACT_CAMPAIGN_ID` is set - the same condition the child uses - and passes the derived settings through.
+  **P1-1's tests then assert the real classes, the descriptor-driven detector options, and the settings-driven controller.**
+- **State:** P1-1's tests uncommitted while the pair is red; ledger current; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
