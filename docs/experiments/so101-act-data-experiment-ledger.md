@@ -29411,3 +29411,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the three fixes are what took it from `rc=1` to `rc=0`** (CP-1751): a missing registration, a literal count, and a literal epoch. **None of the three was reachable from the demo leg or the eleven-suite set**, which is the whole argument for the boundary.
 - **Leg 3 (serial CTest) launched**, with its own corrections: a **fresh short scratch** (`experiments/v5a/t-ctest`, 84-char class) and its own private IPC base (`/tmp/s101-v5-ctest`), running `ctest -V` **serially** - the script's own comment records why: *"-j 8 makes test_unified_bridge\* contend for the process group"*.
 - **State:** **legs 1 and 2 green on the new root; leg 3 running; then the boundary record, the packet update and a further independent review**; P1-1 … P1-5 and P2 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1753 — THE INTEGRATION BOUNDARY IS COMPLETE AND GREEN: three legs, rc 0, on the new run root
+
+- **The boundary, at the freeze plus the three recorded fixes:**
+  | leg | result | elapsed | scratch |
+  | --- | --- | --- | --- |
+  | **demo** | **5764 passed, 163 skipped, rc 0** | 134 s | `$ROOT/demo-scratch2/tmp` |
+  | **teleop** | **117 xunit files, 1315 cases (1272 passed + 43 skipped), 0 failures, rc 0** | 235 s | `experiments/v5a/t-teleop3` |
+  | **ctest (serial)** | **117/117 passed, 0 failed, rc 0** | 216 s | `experiments/v5a/t-ctest` |
+  **All three on `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/final-boundary-v5-20260930-001236`**, each leg with a fresh, previously nonexistent NVMe scratch verified by **the same test interpreter** (fail-closed: a leg whose `TMPDIR` does not resolve inside its scratch exits 9 rather than running).
+- **And the boundary record is an artefact, not a narration:** `$ROOT/BOUNDARY.md` (2868 bytes) states the source commit, the interpreter, the overlay chain, the three results with their scratches and elapsed times, **the four failures it found and what was fixed because of them** (CP-1745's load-sensitive test - re-run at the same `-n 8`, not waived - and CP-1751's three: a missing registration, a literal count, a literal epoch), and a **"not claimed"** section: the counts are a sum (1432 = 1315 + 117), no live stack/simulator/CUDA/hardware was used, and **this is a test-suite boundary rather than a release**.
+- **The evidence index now describes it too, append-only:** four rows added for the v5 boundary (BOUNDARY.md, demo2.log, teleop3.log, ctest.log) with their sizes and digests, **nothing above them rewritten** - and the widest audit (46 rows stating a digest) re-run below.
+- **State:** **P1-1 … P1-5 and P2 complete; the ONE integration boundary complete and green on the new run root; what remains is the packet update and a further independent GPT-6 Astra / High review**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
