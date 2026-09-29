@@ -22,7 +22,12 @@ _SOURCE_COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 # the one canonical batch document: exactly what the production seal writes, so the writer and the validator cannot
 # disagree about the shape of a sealed batch (they did: the seal wrote anchors and its own digest, the validator allowed
 # five keys, and every sealed batch was refused as BATCH_INVALID)
-_BATCH_KEYS = frozenset({"schema_version", "kind", "status", "identity", "files", "anchors", "batch_sha256"})
+# the measurement driver seals cleanup and contamination beside the seal's fields, so the one canonical shape has to
+# include them - otherwise a driver-sealed batch can never validate (the same writer/validator disagreement as the
+# anchors/digest pair, one layer along)
+_BATCH_REQUIRED = frozenset({"schema_version", "kind", "status", "identity", "files", "anchors", "batch_sha256"})
+# the driver adds its cleanup receipt and contamination verdict; nothing else may appear, so the shape stays exact
+_BATCH_KEYS = _BATCH_REQUIRED | {"cleanup", "contamination"}
 _ROOT = Path(__file__).resolve().parents[2]
 _CONFIG = _ROOT / "config/act"
 
@@ -159,7 +164,7 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
 
     root = Path(root)
     recorded = _load(root / "batch.json", "BATCH_INVALID")
-    if set(recorded) != _BATCH_KEYS or recorded.get("kind") != BATCH_KIND:
+    if not _BATCH_REQUIRED <= set(recorded) <= _BATCH_KEYS or recorded.get("kind") != BATCH_KIND:
         raise ValueError("BATCH_INVALID")
     if recorded.get("status") not in BATCH_STATUSES:
         raise ValueError("BATCH_INVALID")
@@ -176,6 +181,9 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
     recomputed = hashlib.sha256(_seal_canonical({key: value for key, value in recorded.items()
                                                 if key != "batch_sha256"})).hexdigest()
     if recorded["batch_sha256"] != recomputed:
+        raise ValueError("BATCH_INVALID")
+    # a contaminated batch is a failed cleanup: it keeps its evidence but must never feed a published report
+    if recorded.get("contamination") is not None:
         raise ValueError("BATCH_INVALID")
     found = _regular_files(root)
     if set(found) != set(files):
