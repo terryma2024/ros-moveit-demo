@@ -21532,3 +21532,21 @@ not an inference of mine.**
   **That is the boundary doing exactly what a boundary is for.**
 - **State:** committed with the gate green; every log, JUnit file, provenance file, scratch and IPC base retained as deletion
   candidates; no live stack, no stepping, no CUDA, no hardware; nothing deleted, nothing pushed.
+
+## CP-1303 — Re-review packet written, checksummed and read back; the batch is ready for Astra
+
+- **Packet:** `handoffs/20260930-task7-onward/task8-astra-rereview-packet.md`, **9336 bytes**, sha256
+  `0b075cc0ed6f946f34dd0ea99666c87ae7b7bd8d5f3b943da60126944b150f2e` - **read back from disk**, with the section count printed, because a
+  packet nobody can verify is the failure mode CP-1059 recorded.
+- **It answers the verdict item by item, each with its RED and its GREEN and the commit that carries it:** item 1
+  (`2e2d1d93`, 3 passed), item 2 (`0a625b30` + `57d2d715`, 88 passed), item 3 (`6131d1e3` + `882ddc5c`, 89 passed), item 4
+  (`56febc94` + `6f4affc2`, 30 passed), item 5 (`186fb17f`, 1 passed), plus the integration boundary (demo 5807 / 0 failures, teleop
+  1262 / 0 failures) and the registration gap the boundary itself exposed (`43d650e4`). **The list of files this batch changed is
+  generated from git rather than typed**, so it cannot drift from the commits.
+- **And it carries an explicit "what is NOT claimed" section**, because the honest boundary of this work is as important as its result:
+  no live stack, no `mj_step`, no CUDA, no actuators, no hardware; no production measurement exists; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED; the 17 provisional values still `null`.
+- **The batch therefore ends where the owner's instruction put it: at the independent GPT-6 Astra / High re-review, which I do not run
+  and do not pre-empt.** If that model is unavailable, that limitation should be reported rather than substituted.
+- **State:** HEAD `a0fcb57b` plus this checkpoint; every log, JUnit file, provenance file, scratch and IPC base retained as deletion
+  candidates; no live stack, no hardware; nothing deleted, nothing pushed.
