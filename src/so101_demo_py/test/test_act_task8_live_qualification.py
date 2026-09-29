@@ -801,3 +801,29 @@ def test_a_ready_field_that_is_already_live_only_is_refused():
     ready = {"grasp_occlusion_window_s": {"value": 0.1, "unit": "s"}}
     with pytest.raises(ValueError, match="LIVE_FIELD_ALREADY_PRESENT"):
         build_qualified_measurements(ready, [_live_run(index) for index in range(5)], {})
+
+
+def _sample_row(phase, sim_time, *, position=(0.0, 0.0, 0.1), stable=True):
+    return {"phase": phase, "sim_time_s": sim_time, "end_effector_position_m": list(position),
+            "placement_stable": stable}
+
+
+def test_retreat_distance_is_the_end_effector_displacement_over_the_retreat():
+    from so101_demo.act.task8_live_qualification import retreat_distance_m
+
+    samples = [_sample_row("RADIAL_RETREAT", 0.0, position=(0.0, 0.0, 0.1)),
+               _sample_row("RADIAL_RETREAT", 0.1, position=(0.03, 0.04, 0.1))]
+    assert retreat_distance_m(samples) == pytest.approx(0.05)
+    with pytest.raises(ValueError, match="RETREAT_SAMPLES_REQUIRED"):
+        retreat_distance_m([_sample_row("RADIAL_RETREAT", 0.0)])
+
+
+def test_placement_stability_span_requires_every_final_check_sample_to_be_stable():
+    from so101_demo.act.task8_live_qualification import placement_stable_s
+
+    stable = [_sample_row("FINAL_CHECK", 1.0), _sample_row("FINAL_CHECK", 1.4)]
+    assert placement_stable_s(stable) == pytest.approx(0.4)
+    with pytest.raises(ValueError, match="PLACEMENT_NOT_STABLE_THROUGHOUT"):
+        placement_stable_s(stable + [_sample_row("FINAL_CHECK", 1.5, stable=False)])
+    with pytest.raises(ValueError, match="PLACEMENT_STABLE_REQUIRED"):
+        placement_stable_s([_sample_row("FINAL_CHECK", 1.0, stable=False)])
