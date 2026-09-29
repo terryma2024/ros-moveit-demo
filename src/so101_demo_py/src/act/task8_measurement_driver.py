@@ -233,7 +233,12 @@ class Task8MujocoMeasurementDriver:
                 boxes.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2, "accepted": True})
         from so101_demo.act.task8_measurement_formulas import DOCUMENT_EVIDENCE_FIELDS
 
+        # the camera evidence: the admitted camera block's own horizontal FOV, which is what the FOV field is
+        # measured against (its `threshold_source` is the model's FOV, not a pending config value)
+        camera_block = getattr(self.phase_camera, "document", {}).get("camera") or {}
         measurements = {}
+        if camera_block.get("horizontal_fov_rad") is not None:
+            measurements["horizontal_fov_rad"] = float(camera_block["horizontal_fov_rad"])
         if boxes:
             for field in measurements_section:
                 if field in DOCUMENT_EVIDENCE_FIELDS:
@@ -242,8 +247,16 @@ class Task8MujocoMeasurementDriver:
                         "K02": float((detection or {}).get("image_width", 0)) / 2.0, "bboxes": boxes}
                 else:
                     measurements[field] = boxes
-        configured = {field: entry.get("configured_limit")
-                      for field, entry in measurements_section.items() if isinstance(entry, dict)}
+        # ONLY approved limits travel: an entry whose value is unapproved (`value: null` with
+        # `requires_approved_value: true`) or absent is omitted, and the aggregator reports that field UNMEASURED
+        configured = {}
+        for field, entry in measurements_section.items():
+            if not isinstance(entry, dict):
+                continue
+            limit = entry.get("configured_limit")
+            if limit is None:
+                continue
+            configured[field] = limit
         return {"measurements": measurements, "configured": configured}
 
     def _write_record(self, root: Path, anchor: str, name: str, record: dict) -> None:
