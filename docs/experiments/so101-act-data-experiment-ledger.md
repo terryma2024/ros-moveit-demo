@@ -26657,3 +26657,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
      omits it is about the **caller**, which is the next check.
 - **State:** the review is recorded; **the goal is PAUSED and DISARMED and `update_goal(action=resume)` is refused with "the model cannot resume a paused goal; the user must resume it"** - so the goal needs the **user** to
   resume it in the TUI, while this session continues to work the remediation list. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live not started.
+
+## CP-1599 — P1-1 verified against the code, in two halves, and the halves do not have the same standing
+
+- **The owner's instruction was to verify before acting, and this is the result - read, not assumed:**
+  1. **the context really does lack a calibration report and a measurement identity.** `CalibrationMeasurementContext.__init__`
+     (`task8_calibration_admission.py:77-80`) takes twelve keyword arguments and **none** carries either; and a search for `measurement_identity` across `src/so101_demo_py/src` finds **no consumer at all** - `calibration_report_path` appears only in the
+     validation **manifest** and the collection config, not in the measurement path. **So the review's description of the context is accurate.**
+  2. **but the identity is not absent from the path:** `build_production_measurement_driver(*, context, identity, providers=None)` (`task8_production_composition.py:256`) takes **`identity` as its own parameter**. **So "the context lacks it" and "the
+     composition does not carry it" are different claims, and only the first is established so far.** Whether the contract requires it *through the context* is the open question, and it is the one to answer before writing code.
+- **And the second half of P1-1 is verified outright, with the refusal's own name:**
+  ```
+  build_production_measurement_driver(*, context, identity, providers=None):
+      supplied = build_real_providers(context=context, descriptor=descriptor)      # line 278 - no io_client
+  build_real_providers(*, context, descriptor, binding=None, io_client=None, ...):
+      if io_client is None:
+          raise ProductionCompositionError("PRODUCTION_CONTROLLER_ADAPTER_REQUIRED: io_client")   # lines 240-241
+  ```
+  **So the default path (`providers=None`) calls the real provider builder without an `io_client`, and the builder refuses by name.** That is a genuine defect for a "formal production path" - **and it is a fail-closed refusal rather than a silent hole**, which
+  shapes the fix: what is missing is the production wiring, not a guard.
+- **What this means for the remediation order, and it is why the owner's "verify first" rule earns its place:** **half of P1-1 is a contract question that must be settled before any edit**, and the other half is a concrete wiring gap with a named
+  refusal. **The next actions are one check each** - find whether the qualification path requires the identity *from the context* (and if so, where the contract says so), and identify what the CLI is supposed to hand the composition as its `io_client` - **and neither is guessed at.**
+- **State:** remediation list visible in the task list with this item's verification status; goal still **paused+disarmed** (the tool refuses a model-initiated resume) while this session continues; nothing pushed, nothing deleted; no new session, goal, worktree
+  or stack; no hardware, no live stack; P2 live not started.
