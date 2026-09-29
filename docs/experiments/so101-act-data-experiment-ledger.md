@@ -25707,3 +25707,18 @@ picture in both directions.**
   faithful enough to drive them all in sequence.
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1543 — Five guesses at a clock rule is the signal to read it
+
+- **The round's progress, all of it real:** the SEARCH observation's readback is now **this case's own** (real model digest, real qpos/qvel, this session and epoch); the two documents were **separated**
+  (SEARCH's raw carries **seven** wall receipts, a sequence snapshot carries the **four** RGB stamps - overwriting one with the other is what produced `physical receipt schema`); the readback now
+  **advances in both step and time**, with every time-bearing member sharing the one time; and the monotonic clock is later than the wall receipts so a receipt cannot arrive from the future.
+- **And then I hit `ValueError: RGB source skew` and guessed at it five times** - the stamps, the receipts, the clock, the reference's requested time - **each guess reasonable, none of them the rule.**
+  **That is exactly the pattern this batch's own rules warn about** (CP-1496's lesson, and the reason the ledger keeps saying "assert the anchor or read the definition"): **when consecutive attempts at the same
+  error stop narrowing it, the next action is to read the code that raises it, not to try a sixth value.**
+- **So the next round has one instruction and no ambiguity: read the code that raises `RGB source skew`,** print the two values it compares, and only then change the fixture. The rule lives in the readback or
+  ingress validator, and one read settles what five edits could not.
+- **What is nonetheless true:** the nine-phase run is now **one case's runtime** end to end, SEARCH passes inside it, and the remaining gap is a **clock-agreement rule in the substituted readback** - a fixture
+  fact, not a production defect, and not a design question.
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
