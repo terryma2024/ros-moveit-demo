@@ -31492,3 +31492,41 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress with the reuse's direction and mechanism both settled against the file's own
   conventions.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review
   packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1830 — The three fixtures' signatures, and why their domain doubles are sanctioned
+
+- **Read from `test_gate6_bound_authority_wiring.py`, and each is small enough to reuse verbatim:**
+  ```python
+  class _AckServer:                                  # a real unix-socket reservation service
+      def __init__(self, role, capability):
+          self.short_dir = Path(f"/tmp/so101-debug-act-b3-wire-{uuid.uuid4().hex[:8]}")   # short path: <= 107 bytes
+          self.path = self.short_dir / f"{role}.sock"
+          self.socket.bind(str(self.path)); os.chmod(self.path, 0o600); self.socket.listen(1)
+          threading.Thread(target=self._serve, daemon=True).start()
+      # "the real service is long-lived: arm, per-role query and close each arrive on their own short connection"
+
+  def _real_client(roles):                           # the PRODUCTION client over those sockets
+      client = ControllerReservationClient({role: str(server.path) for role, server in servers.items()},
+                                           capability=capabilities, timeout_s=1.0)
+      return client, servers
+
+  def _domain():                                     # history, admission, registry
+      class _History: version = 1; incarnation = "clock-session"
+      class _Admission:
+          def admit_sample(self, **kwargs): …        # a commit receipt
+          def owner_is_active(self): return True
+          def revoke_current(self, reason): return True
+      return _History(), _Admission(), AuthorityTransactionRegistry(clock_ns=_clock, history=history)
+  ```
+- **And the domain doubles are not a loophole, because that same file tests the rule they satisfy:**
+  `test_a_missing_domain_piece_is_refused_rather_than_fabricated`. **The production composition refuses a missing
+  history/admission/registry; what it accepts is a piece that ANSWERS the calls it makes** - `admit_sample`,
+  `owner_is_active`, `revoke_current` - **and the doubles above answer them.** So reusing this pattern substitutes the
+  external I/O (the reservation sockets) and the environment's physics clock domain, **while the broker, the session,
+  the authority and the ACT chain stay production.**
+- **One detail worth carrying over rather than rediscovering:** the ack server's socket path is kept short on purpose
+  (`assert len(os.fsencode(str(self.path))) <= 107`) because `AF_UNIX` paths are bounded - **so a harness that builds its
+  own must keep that bound, and reusing this fixture inherits the care.**
+- **State:** **P1-5 in progress with the faithful branch's three fixtures read to the line; applying them in the
+  full-case harness is the next edit.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final
+  gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
