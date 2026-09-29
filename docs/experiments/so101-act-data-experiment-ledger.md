@@ -27643,3 +27643,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | #4 | **0 failed, 5748 passed** | the fix: the base and the environment now agree, because the script creates it |
 - **The teleop leg then failed instantly with `Has this package been built before?`** - because it ran `colcon test` from the package directory instead of the workspace root. **Corrected, and re-running now.** **The third failure of that leg was of the same kind: my harness, not the code.**
 - **State:** **demo leg VALID**; teleop leg running; CTest leg next; the boundary is reported valid **only** when all three are green; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1655 — The v4 teleop leg ran the full gate and reports test failures; the demo leg remains VALID
+
+- **The leg completed its whole run - `3min 56s`, `237 s`, `-n 8` on its own fresh scratch - and colcon reported `[ with test failures ]`.** So the tree's teleop side is **not** green at this boundary, and the failures are being read from the per-test result XML rather than
+  from the console, because **colcon's console output does not carry the counts** (`so101_teleop` is `ament_cmake`, so the pytest summary lives in the per-test results and in CTest's own logs).
+- **And one harness note, recorded because it cost a run:** the first attempt failed instantly with `Has this package been built before?` because `colcon test` was invoked from the package directory; **the workspace root is the correct cwd**, and with that fixed the leg ran to completion.
+- **Where the v4 boundary stands, stated plainly:**
+  | leg | result | valid? |
+  | --- | --- | --- |
+  | **demo** | **`5748 passed, 163 skipped`, own fresh scratch #4, `failed: 0`** | **YES** |
+  | **teleop** | ran 237 s, `-n 8`, own fresh scratch, **colcon reports test failures** - counts being read from the result XML | **NO** |
+  | **CTest** | not yet run (serial, as the owner requires) | **NO** |
+  **The boundary is therefore NOT reported as green.** Two legs are outstanding: the teleop failures must be understood and fixed or explained, and the serial CTest leg has not run.
+- **State:** item 7 continues with concrete next steps; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
