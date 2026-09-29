@@ -11470,3 +11470,37 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed yet, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
   no ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-868 — Interface gap: the measurement driver does not exist in the tree
+
+- **What the measurement CLI needs and what the tree provides.** `act_measure_task8_calibration` requires
+  `--contract` (bound, available: `gen3/measurement/measurement-contract.json`), `--identities`
+  (available: `gen3/measurement/measurement-identities.json`), `--batch-root`, `--ledger`, and
+  **`--driver module:callable`**. Searching `src/` for a driver that could fill the batch found only consumers
+  and neighbours (`application/task_batch.py`, `cli/act_build_task8_calibration_report.py`,
+  `cli/act_measure_task8_calibration.py`, `parallel_batch/resources.py`, `act/task8_calibration_aggregator.py`,
+  `runtime/parallel_ros_runtime.py`) - **no implementation of the measurement procedure itself**.
+- **The batch contract the driver must satisfy** (`close_measurement_batch`, `task8_measurement_contract.py:123`):
+  it seals **every file** under the batch root except `batch.json` with its SHA256, records the identity
+  (`source_provenance_sha256`, `contract_sha256`), the status, and `anchors: ["default", "left", "forward"]`;
+  the batch is never reopened. So the driver's job is to perform the real measurement and write the raw files.
+- **What those raw files must evidence, read from the frozen contract template:** `measurements`
+  (`center_deadband_px`, `coarse_step_rad`, `horizontal_fov_rad`, …) and `camera_measurements`
+  (`head_intrinsics_px`, `head_rpy_rad`, `head_translation_m`) for **three anchors** (`default`, `left`,
+  `forward`), which is a live MuJoCo procedure rather than an offline computation.
+- **Why I am stopping rather than writing one:** a driver is the component that decides *how* each quantity is
+  measured, and inventing that procedure would put the qualification's numbers on my design choices instead of the
+  plan's. Ruling 2 explicitly anticipated gaps of this shape - it allows calling an existing production function
+  through the exact interpreter, and forbids building a second implementation of logic that already exists - but
+  it does not authorise inventing a measurement procedure that does not exist.
+- **The single question for the orchestrator:** is a measurement driver defined elsewhere (name the module or the
+  plan section and I will run it through the exact interpreter against this bound contract), or should the driver
+  be implemented as a controlled source change - TDD, RED first - that runs the three anchors against the MuJoCo
+  stack, writes the raw measurement files the contract names, and leaves `close_measurement_batch` to seal them?
+- **Everything up to this point is in place and frozen:** generation-3 provenance built on the corrected
+  registry (CP-866), five-key identities built by production rules, and the contract bound **before** any
+  measurement (CP-867). No measurement has been taken, so nothing here needs redoing whichever way the answer
+  goes.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
