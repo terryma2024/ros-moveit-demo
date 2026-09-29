@@ -26971,3 +26971,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The generalisable rule, worth more than the two rows:** **match artefacts by identity (their path), not by the shape of the cell that describes them** - the same principle as CP-1611's "a value handed to many processes is a resource, not a parameter".
   Both are cases of a check that was satisfied by the wrong thing.
 - **State:** items 5 and 6 closed with this correction applied; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 3, 4, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1616 — Item 4 verified: the seal validation really does sit outside the handler that appends INVALID
+
+- **The review's claim, checked against the code rather than accepted (`cli/act_measure_task8_calibration.py`):**
+  ```
+  try:
+      build_production_measurement_driver(context=context, identity=identity).run(context, args.batch_root)
+  except BaseException as error:
+      _append_ledger(args.ledger, "INVALID", ledger_identity, f"driver failed: {type(error).__name__}")
+      raise
+  # ---- everything below runs OUTSIDE that handler ----
+  sealed = args.batch_root / "batch.json"
+  validate_closed_batch(args.batch_root)          # a corrupted or contaminated seal is refused HERE
+  record = json.loads(sealed.read_text())         # a missing or unreadable batch.json raises HERE
+  if record["status"] != "CLOSED":
+      _append_ledger(..., "INVALID", ...); return 1
+  _append_ledger(..., "VALID", ...); return 0
+  ```
+  **So a seal that fails `validate_closed_batch`, or a `batch.json` that cannot be read or parsed, propagates without any INVALID row being appended** - **the ledger keeps whatever it last said** (in a real run, `RUNNING`), and the run's failure is
+  invisible to anything reading the ledger. **That is exactly the review's P2 finding, and it is a defect rather than a style question.**
+- **The fix's shape, in the same idiom the driver path already uses:** the whole post-run block must sit inside a handler that **appends INVALID and then re-raises** - so every way a seal can fail leaves the ledger's terminal
+  state honest, whether the failure is the driver's, the validator's, or the file's.
+- **The other two halves of item 4 are separate checks and are named for the next rounds:** **compare the seal's complete identity against the admitted identity** (not merely its presence), and **enforce the cleanup proof**. Both are
+  assertions about the same block, so they belong in the same change - with **targeted tests that use the CLI's own driver seam rather than a live stack**.
+- **State:** item 4 verified with the defect localized; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
