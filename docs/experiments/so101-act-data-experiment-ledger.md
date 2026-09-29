@@ -29303,3 +29303,14 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **It passes both ways in isolation** - so it is not a defect this work introduced, and it is not broken in its own file: **it is a five-second wait that the full parallel gate can starve.** The test's subject (revoke/claim serialization in `exp571`) is untouched by P1-1 … P1-5 and P2.
 - **And the gate is not being lowered to make it pass, which is the rule:** `AGENTS.md` requires a shared-resource or timing conflict to be fixed in the test's isolation and **the same parallel gate re-run** - *"不能降为单进程或串行分组来宣称通过"*. **So the demo leg is being re-run at the SAME `-n 8` on a FRESH scratch (`demo-scratch2`, `demo2.log`)**; if it recurs, the fix belongs in that test's wait, not in the gate.
 - **State:** **boundary leg 1 found one load-sensitive failure and is re-running at the same parallelism; legs 2 and 3 follow in order**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1746 — Boundary leg 1 (demo) PASSED at the same parallel gate
+
+- **The re-run, fresh scratch, same `-n 8`:**
+  ```
+  5764 passed, 163 skipped, 4 warnings in 133.11s
+  demo_rc=0  elapsed_s=134  scratch=/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/final-boundary-v5-20260930-001236/demo-scratch2/tmp  resolved=<same, fail-closed check passed>
+  ```
+  **rc 0 - and the single failure CP-1745 recorded did not recur.** The honest reading is the one already written: **that test is a five-second wait that the full parallel gate can starve**, it passes in isolation and in its own file, and **the gate was re-run at the same parallelism rather than lowered** (which is what `AGENTS.md` requires). **5764 passed against the v4 baseline's 5748** - the difference is this work's own tests, all of them green.
+- **Leg 2 (teleop) launched** with its own fresh scratch (`teleop-scratch/tmp`), the same fail-closed `gettempdir()` check, `-n 8`, and xunit output into `$ROOT/teleop-results` - so the canonical `Test.xml` for this boundary will be a NEW file under the new root, not the v4 one (`…/Testing/20260929-1419/Test.xml`, which stays untouched as the artefact P2 froze).
+- **State:** **boundary leg 1 green; leg 2 in flight; leg 3 (serial CTest) follows**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
