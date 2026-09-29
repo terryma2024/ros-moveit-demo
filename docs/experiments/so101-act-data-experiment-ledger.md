@@ -20262,3 +20262,14 @@ not an inference of mine.**
   descriptor absent from `files`, or `anchors` shaped incompatibly - and the failure message will say which.
 - **State:** items 1 and 2 are complete and committed; HEAD `8c828d58` plus this checkpoint; no source changed yet for item 3; no
   stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1241 — Both seal owners named by file and line
+
+- **Seal owner A (to keep, after it is made schema-correct):** `src/so101_demo_py/src/act/task8_measurement_driver.py` writes the batch
+  during `run(...)`.
+- **Seal owner B (to remove):** `close_measurement_batch` is defined in
+  **`src/so101_demo_py/src/act/task8_measurement_contract.py`**, imported by the CLI at **line 51** and called at **line 102**
+  *after* the driver has already sealed - which is the `MEASUREMENT_BATCH_ALREADY_CLOSED` collision Astra reported, and the reason
+  "one owner" is the requirement. The CLI keeps its `INVALID` ledger append and its cleanup semantics; only the second seal goes.
+- **State:** HEAD `37c63ce1` plus this checkpoint; no source changed yet for item 3; no stack, no hardware, nothing deleted,
+  nothing pushed.
