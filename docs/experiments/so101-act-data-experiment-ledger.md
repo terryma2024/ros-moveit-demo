@@ -15315,3 +15315,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   (CP-1013); Task 9's two scopes are now blocked on two concrete, non-political findings - the demo gate's interpreter
   lacking xdist, and unregistered test modules - plus the child IPC socket path question that remains with the owner.
   Task 10 blocked until the 17 search values are reviewed.
+
+## CP-1024 — The unregistered module named, registered, and the registration check green
+
+- **Asked the checker instead of guessing, and it named exactly one module:**
+  `registration_gaps` reported *"modules the package gate would never run:
+  ('test/teleop/test_task8_live_evidence_production_chain.py',)"* - the production-chain suite added in this session. It
+  was never registered with CTest, so **`colcon test` would not have run it at all**, and a green package gate would not
+  have proved those six cases passed. That is the concrete instance of the "do not shrink the collection scope" rule.
+- **Fixed in the package's own shape:** `src/so101_teleop/CMakeLists.txt` gained
+  `so101_add_pytest_test(test_task8_live_evidence_production_chain test/teleop/test_task8_live_evidence_production_chain.py)`
+  beside its neighbours, and the file was clean before the edit (no user work displaced, staged alone).
+- **Verified: `test/test_ctest_registration.py` now reports 3 passed, rc=0** (`beh-r617b.log`), so the gate's scope
+  covers the module - and the module itself was already green in focused runs (16 cases including the nine-phase chain).
+- **What this changes for Task 9:** the teleop gate's coverage is now complete with respect to this session's additions.
+  The teleop scope's remaining failures are the pre-existing child-IPC-socket class and nothing of this task's, and the
+  demo scope's blocker is the missing xdist in its colcon interpreter (CP-1023) - two concrete environment findings
+  rather than unknown failures.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's teleop half is fully attributed and now fully registered, its demo half blocked on the interpreter
+  finding, and the child IPC socket path question remains with the owner; Task 10 blocked until the 17 search values are
+  reviewed. No package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
