@@ -28111,3 +28111,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   (3) implement the **frozen grid plus command/release/contact edge sampling at the source-acquisition layer** - the port calling the window's event path, which is what makes "continuously at 10 Hz, plus the edges" true; (4) make the fixture use **one monotonically increasing source
   clock and rewrite no timestamps**, which is only possible once (1) and (3) hold.
 - **State:** **P1-4 RED in place**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed (the next boundary needs a new run root); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1679 — P1-4 piece 1 landed, and the refusal it produced names the REAL defect: the window seals with the initial epoch
+
+- **The change is one line, and it is the verdict's first bullet:** `_grid_sample` now stamps each sample with
+  `self._release_epoch_for(phase)` instead of the literal `0`. **The samples carry the port's own rule per phase.**
+- **And the two RED cases immediately moved from "wrong value" to "named refusal", which is the more useful failure:**
+  ```
+  build/so101_demo_py/so101_demo/act/task8_live_evidence.py:174: ValueError: TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH
+  ```
+  That is the **recorder's own rule** (CP-1612: non-decreasing, and the last entry equals the sealing identity) firing at **seal** time - so with the samples now honest, the two halves of P1-4's second claim are visible as one disagreement:
+  | who | epoch |
+  | --- | --- |
+  | the **samples** | 0 before RELEASE, **1** from RELEASE onward - the port's rule, now true |
+  | the **window's identity** | **0** - the *initial* epoch, fixed at construction |
+  | the **recorder's seal identity** | **1** - `seal_live_evidence` computes `_release_epoch_for("FINAL_CHECK")` |
+  **The window and the port therefore disagree by construction**, and `seal_live_evidence` salts it by sealing the **window** first (`:296-298`) - whose own identity is the initial epoch - before the recorder sees the port's identity. **Nothing ever compared them, which is exactly claim 2.**
+- **And the production construction site is named, so the fix is not a hunt:** the window is built at
+  `task8_live_evidence.py:627` (`self._window = LiveEvidenceWindow(...)`, with the test fixtures at
+  `test_act_task8_nine_phase_case.py:239` and `test_act_task8_search_port.py:271,294`). **The identity a window seals with must be the epoch the CASE ENDS IN**, which the port already computes for its own seal - so the two must come from one place rather than being written twice.
+- **Next, in order:** (2) make the window's identity the case's terminal epoch, from the same rule the port uses, and have `seal_live_evidence` compare rather than assume agreement; (3) the frozen grid plus command/release/contact **edge** sampling at the
+  source-acquisition layer (`add_event`/`add_gripper_event`, which the port never calls); (4) the fixture on **one monotonic source clock with no timestamp rewriting** - which only becomes possible once (1)-(3) hold.
+- **State:** **P1-4 in progress (piece 1 landed, pieces 2-4 open)**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
