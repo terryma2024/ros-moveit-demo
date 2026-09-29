@@ -17896,3 +17896,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   (authoritative descriptor document; one authorised live stack for the recording half) remain open and independent of this
   piece.
+
+## CP-1138 — The existing fakes are at the wrong level for Boundary V, and that is a production-code finding
+
+- **Read `Worker` and `Lifecycle` rather than assuming they fake I/O, and the distinction is decisive:**
+  ```python
+  async def task8(self, request):
+      ...
+      return {"status": "PASSED", "completed_phases": phases,
+              "stopped_confirmed": True,
+              "formal_episode_eligible": request["mode"] == "full"}
+  ```
+  `Worker.task8` does **not** fake ROS or MuJoCo calls - it returns a **canned summary of the whole task-8 run**, including
+  `completed_phases = list(Task8Runner.PHASES)`. So the four green owner-composition tests prove routing, admission, fresh
+  owners and refusal - and **cannot** prove that a case produces SEARCH rows, a release open event, 10 Hz support rows, a
+  FINAL_CHECK, a sealed artifact or a journal entry, because nothing in the path runs the code that would produce them.
+  `Lifecycle.start/finish` faking the session lifecycle, by contrast, is at the right level: that is external I/O.
+- **So Boundary V's requirement is a production-code question, not a test-fixture question:** "only external
+  ROS/MuJoCo/controller/process I/O faked" means the fake belongs **below** `ros_child._run_pick_place` (at the process and
+  ROS/MuJoCo primitives it calls), not at the `task8` summary the composition receives. Until the child path can be driven
+  with that granularity, a test asserting the case's artefacts would be asserting against a stub that never ran them -
+  which is exactly the "no hand-filled `_ready`, no direct `finish`" prohibition in the plan.
+- **What that means for the boundary's order of work:** the next piece is to learn whether `ros_child._run_pick_place` has a
+  seam at that level already (a session/stack object or a driver it accepts), since `CaseEvidenceDriver` and
+  `attach(evidence.window)` were wired into it earlier in this task. If the seam exists, Boundary V is a fixture and a set of
+  assertions; if it does not, the honest deliverable is the **seam itself** with its own RED - not a test that fakes the
+  answer.
+- **This is recorded as a finding about the production path, not as a complaint about the tests:** the four tests do exactly
+  what they were written to do. The gap is that no test in the tree yet drives the case far enough to produce the artefacts
+  the plan lists, and CP-1135/1136/1137/1138 have narrowed that gap to one named seam.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  remain open and independent.
