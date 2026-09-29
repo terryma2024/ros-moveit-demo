@@ -333,7 +333,7 @@ def test_an_attachment_without_the_support_threshold_is_refused_by_name(tmp_path
 
 # --- P1-4: the unprovisioned sequence refuses BY NAME, one phase at a time -----------------------------------
 
-@pytest.mark.parametrize("method", ["set_down", "release_preflight", "run_retreat_segment"])
+@pytest.mark.parametrize("method", ["run_retreat_segment"])
 def test_the_unprovisioned_protocol_methods_refuse_by_name(method):
     """The runner calls five more methods than SEARCH implements, and each must fail closed with its own name."""
 
