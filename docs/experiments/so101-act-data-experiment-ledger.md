@@ -33000,3 +33000,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress: the four proofs pass, the registration is at the scope check, and the seam needs the
   case's own session and epoch.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and
   the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1878 — The live-epoch reader is in; the scope refusal's failing condition is not yet named
+
+- **What was done and what it showed:**
+  ```
+  FakeBroker.current_epoch()  -> reads a LIVE reader when one is supplied (`epoch_reader`)
+  the mount supplies         -> lambda: {"session_id": session_id, "reset_epoch": boundary.reset_epoch}
+  result                     -> VISIBLE_APPROACH_SOURCE_SCOPE_CHANGED   (unchanged)
+  ```
+  **so the epoch is no longer the mismatch** - or at least not the only one - **and the failing condition is one of the
+  other five:** the ticket's owner/session/attempt versus the source's, `broker.simulation_session_id`, the armed
+  generation versus `ticket[0]`, or `driver.stopped() is not True`.
+- **And the diagnostic attempt to name it failed on its own mechanics, which is recorded rather than hidden:**
+  `_scope` is a plain function on the class (line 22, called as `self._scope(broker, ticket, source)`), and my first
+  wrapper used `classmethod` and the second `staticmethod`; **the second left the module in a state where a later line
+  raised `AttributeError: 'function' object has no attribute …`, so the file was restored from a pre-diagnostic copy and
+  the suite is unchanged.** **The instrumented-read method has been decisive four times in this drive, and this is its
+  second miss - both because the patch mechanics were wrong rather than because the read was uninformative.**
+- **So the next attempt patches differently, and the lesson is specific:** `_scope` is called as an instance method
+  (`self._scope(...)`), so the wrapper must be assigned as a **function on the class** (not `staticmethod`/`classmethod`)
+  **or, more simply, the seven operands can be printed by wrapping `register` instead** - a public method whose call site
+  is unambiguous.
+- **State:** **P1-5 in progress: the four proofs pass, the live epoch is supplied, and the scope check's failing condition
+  needs one more instrumented read - with the patch mechanics now known.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
