@@ -18143,3 +18143,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   faking: a fixture that models the case's progression is the very thing that can prove the artefacts the plan lists.
 - **State:** the test fails by design; surrounding teleop suites untouched (16 passed at CP-1143). No full suite, nothing
   weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions remain open and independent.
+
+## CP-1149 — The whole nine-phase sequence now passes; the failure moved to `set_down`
+
+- **The phase-aware fake worked, and it is the substantive step CP-1148 predicted:** `run_phase`'s evidence is now modelled
+  per phase - `EMPTY`/`HOLDING` as the runner's vocabulary requires, `bilateral_contact` true at CLOSE, the hold set
+  (`HOLDING` + `micro_lift_confirmed` + `cup_off_table` + `cup_supported` false) during MICRO_LIFT/TRANSPORT/ALIGN, and the
+  released set (`EMPTY` + `released` + `cup_supported` + `no_fingertip_contact`) during RELEASE/RADIAL_RETREAT/FINAL_CHECK.
+  **The runner accepted the entire nine-phase sequence** - SEARCH through FINAL_CHECK - which means Boundary V's phase
+  assertion is now exercised by the real code path.
+- **The failure moved one method along: `SET_DOWN_EVIDENCE_INVALID`.** `set_down`'s return carries `_SET_DOWN_KEYS` (17) and I
+  have corrected the obvious error (`holding_state` was a bool; the vocabulary is `EMPTY`/`HOLDING`, and `release_preflight`
+  likewise). So `set_down` has its own value rules beyond the key set, of the same kind the phases had - the next single read.
+- **Where this leaves the test:** three of the port's contracts are satisfied (`begin`, `safe_stop`, `run_phase` across all
+  nine phases), `release_preflight` and `set_down` are the remaining two, and `run_retreat_segment` shares the phase-evidence
+  shape that already works. **The seven Boundary V assertions are now within a couple of small reads** rather than a design
+  question - which is worth recording, because four rounds ago this looked like it might be the wrong test to write.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  remain open and independent.
