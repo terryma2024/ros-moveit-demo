@@ -23048,3 +23048,18 @@ not an inference of mine.**
   time.** Items 1-4 remain complete and green throughout.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1391 — The port's requirements, enumerated - the last build spec for the search path
+
+- **Read (`pick_place_search_port.py:244-268`), and it is a finite list rather than a mystery:**
+  | requirement | what the fixture must provide |
+  | --- | --- |
+  | `world` | `object_state.body == "plastic_cup"`, **`left/right_fingertip_contacts` falsy**, and `result["timestamp"]` within the sim time - so my queued rows must carry **no** fingertip contacts at the stop |
+  | `scene` | exactly `SCENE_KEYS`, session/epoch/step/paused matching the world, `simulation_time_s` within `skew`, and `model_sha256 == sources.contact_pairs.model_sha256` |
+  | `contact` | exactly `FRAME_KEYS`, session/epoch/step matching, sim time within `skew` |
+  | sources | `sources.contacts.safe() is True` and no contact hazard for the SEARCH phase - so the sources double needs `contacts` **and** `contact_pairs` |
+  | `observation` | `validate_observation(raw["observation"])` with `session_id`, `attempt_id` matching the request and `sim_time_s` matching the world |
+  | `reference` | validated further down, same pattern |
+- **And the key sets are importable** (`SCENE_KEYS`, `FRAME_KEYS`) exactly as `READBACK_SOURCES` was, **so the fixture builds to the production vocabulary instead of a copy of it** - the rule this whole item has followed and the reason the remaining work is mechanical.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
