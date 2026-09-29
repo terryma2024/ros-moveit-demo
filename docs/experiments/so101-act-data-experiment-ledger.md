@@ -12971,3 +12971,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   verify restoration by the **presence of their markers**, never by the absence of mine.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-931 — Incident closed on evidence: the runner's suite is green and the user's content is present
+
+- **The repair needed a second fix, and the reason is worth recording.** My line-based restore removed the
+  `window_factory=None) -> None:` continuation line but left the `def __init__(self, port: PickPlaceExecutionPort, *,
+  clock_ns=time.monotonic_ns,` line unterminated, so the restored file was **invalid Python**
+  (`SyntaxError: '(' was never closed` at line 65) and every suite importing it raised a collection error. I had
+  verified the restore by **counting markers** (`window_factory: 0`, `after_step: 6`) instead of **compiling it** -
+  marker counts cannot detect a dangling signature. The signature is now the user's single-line form, the file
+  parses, and the stale copy under `build/` (a build artefact, not user work) was refreshed from the source.
+- **Verified state, all from a clean run with fresh caches:**
+  - `src/act/pick_place_runner.py` parses, contains the user's in-flight content (`after_step` six times,
+    `def set_down` once) and **none of my withdrawn edit** (`window_factory` zero times), and differs from HEAD
+    exactly as their uncommitted work should;
+  - `test/test_act_task8.py` reports **14 passed, rc=0** (`beh-task7-port6.log`) - the same baseline it showed before
+    the incident, which is the evidence that the displacement is fully undone;
+  - the scratch directory `scratch-r523.*` was created fresh under the registered evidence root with
+    `TMPDIR/TMP/TEMP` set and `PYTHONDONTWRITEBYTECODE=1`, and stale `__pycache__` trees under `test/` were cleared.
+- **Two lessons, both now rules:** (1) never `git add` a file carrying uncommitted user work when committing my own
+  change to it, and withdraw such a change only after confirming the user's markers are **present** - the absence of
+  mine proves nothing; (2) after any surgical rewrite of a source file, **compile it** before trusting it, because
+  marker counts and diffs both passed on a file that could not be imported.
+- **Cost of the incident, stated plainly:** one round of diagnostic work and two repair attempts, with the user's
+  content never lost - it was recoverable throughout from `5f0e58af`, the commit that had captured it - and no
+  evidence deleted, no push, no runtime started, and no gate run.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
