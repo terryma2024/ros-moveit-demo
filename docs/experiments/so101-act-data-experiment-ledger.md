@@ -23695,3 +23695,16 @@ not an inference of mine.**
 - **What that means for the review:** the revision batch's **answerable half is committed and green**, with two production defects found and fixed
   along the way; the uncommitted half is **P1-5 only**, and its handoff is complete at CP-1431. **Nothing in the tree was reverted, nothing was
   pushed, no evidence was deleted, and the ~300 GB of classified deletion candidates were never touched.**
+
+## CP-1433 — The packet correction the review asked for, written with real diffs
+
+- **`handoffs/20260930-task7-onward/task8-astra-rereview-packet.md` now carries a status addendum** - **15268 bytes** (was 10438), sha256
+  `6af051be358af14d4257bb955a7efd1fb8f402189a500fd3a059f192c034eb5e` - and it says, in its own first paragraph, that **the previous packet's claim that all
+  five items were complete does not stand: items 1-4 are complete and item 5 is not.**
+- **What the addendum contains, generated from the repository rather than typed:** each of the four commits with its subject and its **real
+  diffstat** (`git show --stat`), the **two production defects** found and fixed with the reason each mattered, item 5's state split into *built and
+  proven* versus *not started*, the single remaining call site by name, and the handoff entry point (**ledger CP-1403 to CP-1431**, with CP-1420's
+  resumption plan and CP-1431's call-site specification called out).
+- **And the state paragraphs are the ones this batch has held throughout:** no live stack, no MuJoCo run, no CUDA, no actuators, no hardware,
+  nothing pushed, no evidence deleted, the ~300 GB of deletion candidates untouched, and 0/0/0 with `collection_*` NOT_PROVISIONED.
+- **State:** HEAD is this checkpoint's commit; staged 0; the revision work stands as CP-1432 verified it.
