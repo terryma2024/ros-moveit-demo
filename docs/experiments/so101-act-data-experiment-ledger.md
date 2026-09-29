@@ -25787,3 +25787,20 @@ picture in both directions.**
   `facts.update({...})`; writing the helper's body explicitly, with the call inserted only after locating `def sequence_facts(` **and** searching from there, is both shorter and verifiable.
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the working tree is clean for this file and the full-case test remains uncommitted while red, per this
   batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1548 — One gate construction, a seventeen-key set-down, and three rules read instead of guessed
+
+- **`57 passed`** across the seven focused demo-side files; the extraction is committed.
+- **What the round actually fixed, each from reading a rule:**
+  1. **`_SET_DOWN_KEYS` has seventeen keys** - so `set_down` now carries the scope, the physical facts, the stop, `planning_attached`, and **exactly the seven gates that rule names**:
+     `planning_ok` is **not** among them, **and one extra key is a schema violation** - which is how the omission was found, and then the surplus;
+  2. **the frame's `supported` and the release documents' `cup_supported` are different questions** - "does the cup still rest on the world" versus "will it fall", the second being true when the
+     gripper holds it. **Reporting the frame's value made the runner's own `HOLDING and cup_supported` pair unsatisfiable, and I briefly mistook that for a contract contradiction rather than my own
+     conflation of two names;**
+  3. **the RGB stamps and the seven-key wall receipts belong to different documents**, which is what `RGB source skew` was telling me for five guesses.
+- **And the extraction is now one helper rather than a second copy of the gate rules** - the failure mode this batch has already been bitten by twice (the unvalidatable sealed batch, the readback
+  validator). **The first attempt mangled the file and was restored; the second passed `ast.parse` before writing and so wrote nothing; the third went in by hand and is green.**
+- **Where the nine-phase run stands:** the focused set is green and **only the full-case test is red**, whose next step is the set-down document it just gained. **That test is committed next time it is
+  green, not before.**
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed, including this refactor; the full-case test remains uncommitted while red, per this batch's rule. No
+  new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.

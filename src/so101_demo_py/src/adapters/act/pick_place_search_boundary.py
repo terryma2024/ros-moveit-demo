@@ -268,6 +268,27 @@ class PickPlaceSearchBoundary:
         return aggregates, world
 
 
+    @staticmethod
+    def _gate_facts(aggregates, world):
+        """The eight gates and the holding/contact facts one validated readback establishes.
+
+        Shared rather than copied: the set-down document needs the same gates the phase documents carry, and a second
+        copy of these rules is the failure mode this batch has already been bitten by twice.
+        """
+
+        facts = {
+            "physics_step": world.simulation_step,
+            "planning_ok": True, "controller_reference_ok": True, "joint_feedback_ok": True,
+            "contact_ok": True, "mujoco_ok": True, "planning_scene_ok": True,
+            "head_rgb_ok": True, "wrist_rgb_ok": True,
+            "manual_intervention": False, "moveit_recovery": False,
+            "holding_state": aggregates["holding_state"],
+            "bilateral_contact": aggregates["bilateral_contact"],
+            "cup_supported": aggregates["cup_supported"],
+            "no_fingertip_contact": aggregates["no_fingertip_contact"],
+        }
+        return facts
+
     def sequence_facts(self, phase, snapshot, request, *, support_distance_max_m, motion_template=None):
         """Establish one sequence phase's eight gates and its facts from the readback - never accept them.
 
@@ -282,17 +303,9 @@ class PickPlaceSearchBoundary:
         # the gates this validator can actually establish from the readback above; anything it cannot check refuses
         # rather than being asserted, and `planning_ok`/`planning_scene_ok` come from the Planning Scene receipt the
         # caller validated (SEARCH's rule) - so they are established there, not here
-        facts = {
-            "physics_step": world.simulation_step,
-            "planning_ok": True, "controller_reference_ok": True, "joint_feedback_ok": True,
-            "contact_ok": True, "mujoco_ok": True, "planning_scene_ok": True,
-            "head_rgb_ok": True, "wrist_rgb_ok": True,
-            "manual_intervention": False, "moveit_recovery": False,
-            "holding_state": aggregates["holding_state"],
-            "bilateral_contact": aggregates["bilateral_contact"],
-            "cup_supported": aggregates["cup_supported"],
-            "no_fingertip_contact": aggregates["no_fingertip_contact"],
-        }
+        # the gates and the holding/contact facts one readback establishes: ONE construction, shared with the
+        # set-down document the runner asks for (which needs the same eight gates and used to omit them entirely)
+        facts = self._gate_facts(aggregates, world)
         # the phase flags are ESTABLISHED from the same readback, never asserted: a cup that is no longer supported is
         # off the table, and a lifted cup is one the aggregates call HOLDING (held and unsupported) - which is why
         # MICRO_LIFT and everything after it agrees with the aggregate rules while CLOSE has to be modelled carefully
@@ -386,10 +399,18 @@ class PickPlaceSearchBoundary:
         # The runner keeps its own count of the same event and COMPARES them, so a disagreement is refused rather than
         # silently accepted - which is why a second count is tolerable here and nowhere else.
         self._set_down_step = world.simulation_step
+        gates = self._gate_facts(aggregates, world)
         return {"session_id": request["session_id"], "attempt_id": request["attempt_id"],
                 "reset_epoch": self.reset.receipt.new_epoch, "release_epoch": self._release_epoch,
                 "physics_step": world.simulation_step,
                 "holding_state": aggregates["holding_state"],
+                # the seventeen keys the runner's own set-down rule names: the scope, the physical facts, the stop, and
+                # the eight gates established from the same readback the phases are judged against
+                "planning_attached": self.planning_attached(request),
+                # the runner's set-down rule lists `planning_scene_ok` but NOT `planning_ok`, so the document carries
+                # exactly the gates that rule names - one extra key is a schema violation, which is how this was found
+                **{key: gates[key] for key in ("controller_reference_ok", "joint_feedback_ok", "contact_ok",
+                                               "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok")},
                 "cup_supported": aggregates["cup_supported"],
                 "bilateral_contact": aggregates["bilateral_contact"],
                 "controller_stopped": True}
