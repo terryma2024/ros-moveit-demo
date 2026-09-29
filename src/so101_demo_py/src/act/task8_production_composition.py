@@ -21,6 +21,9 @@ from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
 __all__ = ["build_production_measurement_driver", "PROVIDER_SEAM_ENV"]
 
 PROVIDER_SEAM_ENV = "SO101_TASK8_PROVIDER_SEAM"
+#: P1-1: the seam a SUCCESS test may use. It names only the two BOTTOM boundaries - the MuJoCo/ROS client and the
+#: detector model - so the stack, clock, controller and phase camera are still the real composition's own.
+BOTTOM_IO_SEAM_ENV = "SO101_TASK8_BOTTOM_IO_SEAM"
 
 #: the five collaborators the driver needs, and the order the composition builds them in
 PROVIDER_NAMES = ("stack", "clock", "detector", "controller", "phase_camera")
@@ -28,6 +31,64 @@ PROVIDER_NAMES = ("stack", "clock", "detector", "controller", "phase_camera")
 
 class ProductionCompositionError(ValueError):
     """Raised when the composition cannot be built; the message is the machine-readable code."""
+
+
+def _bottom_io_from_seam():
+    """The TWO bottom boundaries the success test may stand in for, and nothing else.
+
+    ``SO101_TASK8_BOTTOM_IO_SEAM="pkg.mod:client,pkg.mod:detector_factory"`` - an entry whose attribute name mentions
+    the detector is the model factory, anything else is the lowest-level client. Anything not named here (the stack,
+    the clock, the controller, the phase camera) is still built by this composition.
+    """
+
+    spec = os.environ.get(BOTTOM_IO_SEAM_ENV)
+    if not spec:
+        return None, None, None
+    client = factory = frames = None
+    for entry in (part.strip() for part in spec.split(",")):
+        if not entry:
+            continue
+        module_name, _, attribute = entry.partition(":")
+        if not module_name or not attribute:
+            raise ProductionCompositionError(f"PRODUCTION_BOTTOM_IO_SEAM_INVALID: {entry}")
+        module = importlib.import_module(module_name)
+        value = getattr(module, attribute, None)
+        if value is None:
+            raise ProductionCompositionError(f"PRODUCTION_BOTTOM_IO_SEAM_INVALID: {entry}")
+        if "detector" in attribute:
+            factory = value
+        elif "frame" in attribute:          # the camera boundary the real detector's protocol needs
+            frames = value
+        else:
+            client = value
+    return client, factory, frames
+
+
+class MeasurementDetectorAdapter:
+    """The driver calls its detector as a CALLABLE; the production detector's interface is ``detect(frame, query)``.
+
+    P1-1 named the mismatch: ``task8_measurement_driver`` does ``self.detector({...})`` while ``YoloSegDetector``
+    exposes ``detect(frame, query)`` and declares no ``__call__``. Protocol matching belongs here, where the
+    composition already adapts the controller for the same reason - and a missing frame source fails closed by name
+    rather than being papered over with an empty image.
+    """
+
+    def __init__(self, detector, *, frame_source=None, class_id=None):
+        self.detector = detector
+        self.frame_source = frame_source
+        self.class_id = class_id
+
+    def __call__(self, request):
+        if self.frame_source is None:
+            raise ProductionCompositionError("PRODUCTION_DETECTOR_FRAME_SOURCE_REQUIRED")
+        frame = self.frame_source(request)
+        if frame is None:
+            raise ProductionCompositionError("PRODUCTION_DETECTOR_FRAME_SOURCE_REQUIRED")
+        from so101_demo.core.detection import DetectionQuery
+
+        # the same whitelisted class the production ACT detector queries with (`adapters/act/detector.py:141`):
+        # DetectionQuery validates its class_id against {cup, plastic_cup}, so the model id is NOT a class id
+        return self.detector.detect(frame, DetectionQuery(class_id=self.class_id or "plastic_cup"))
 
 
 def _providers_from_seam():
@@ -204,7 +265,7 @@ def _admitted_controller_config(*, context, descriptor, session_id=None, attempt
 
 def build_real_providers(*, context, descriptor, binding=None, io_client=None,
                          session_id=None, attempt_id=None, search_start_rad=None,
-                         yolo_detector_factory=None, controller_factory=None) -> dict:
+                         yolo_detector_factory=None, controller_factory=None, frame_source=None) -> dict:
     """Build the five production collaborators from the admitted context and the frozen descriptor.
 
     This is what the formal entry reaches with nothing set in the environment: the detector comes from the descriptor's
@@ -212,6 +273,19 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
     block, the stack from its own class (constructed, never started here), the clock from the monotonic source, and the
     phase camera from the admitted phase-camera matrix.
     """
+
+    # P1-1: the two BOTTOM boundaries may be stood in for - and only those two. Everything else (the stack when a
+    # client is supplied, the clock, the controller adapter, the phase camera) is still this composition's own work,
+    # which the whole-provider seam could never show because it replaced all five at once.
+    if io_client is None or yolo_detector_factory is None or frame_source is None:
+        seam_client, seam_factory, seam_frames = _bottom_io_from_seam()
+        # a named client may be an object or a factory/class: call it once when it is the latter, so the seam can name
+        # either the repo's own canned client class or a ready-made instance
+        if io_client is None and seam_client is not None:
+            io_client = seam_client() if callable(seam_client) and not hasattr(seam_client, "launch") else seam_client
+        yolo_detector_factory = (yolo_detector_factory if yolo_detector_factory is not None else seam_factory)
+        frame_source = frame_source if frame_source is not None else seam_frames
+
 
     from so101_demo.act.search import HeadSearchController
     from so101_demo.act.task8_measurement_schema import load_phase_camera_matrix
@@ -246,9 +320,17 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
             raise ProductionCompositionError("PRODUCTION_CONTROLLER_ADAPTER_REQUIRED: io_client")
         controller = MeasurementControllerAdapter(
             HeadSearchController(config), client=io_client, clock=_monotonic_clock(),
-            session_id=getattr(context, "session_id"), attempt_id=getattr(context, "attempt_id"))
+            session_id=session_id, attempt_id=attempt_id)          # P1-1: the parameters, not the context
+    # P1-1: `task8_measurement_driver` calls `self.detector({...})`, while the production detector's interface is
+    # `detect(frame, query)` and it declares no `__call__`. Match the protocols here, where the controller is adapted
+    # for the same reason - and refuse by name when the frame source the real detector needs is not available.
+    detector = built.detector
+    if not callable(detector):
+        if not hasattr(detector, "detect"):
+            raise ProductionCompositionError("PRODUCTION_DETECTOR_PROTOCOL_UNSUPPORTED")
+        detector = MeasurementDetectorAdapter(detector, frame_source=frame_source)
     return {
-        "detector": built.detector,
+        "detector": detector,
         "controller": controller,
         # the stack is the adapter over the one low-level client when one is supplied; without a client the
         # persistent stack is still built, but the adapter is what implements the protocol the driver calls
@@ -259,7 +341,8 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
 
 
 def build_production_measurement_driver(*, context, identity, providers=None,
-                                        session_id=None, attempt_id=None, search_start_rad=None):
+                                        session_id=None, attempt_id=None, search_start_rad=None,
+                                        frame_source=None):
     """Build the single production measurement driver for one measurement context.
 
     Every rule below is the composition's own, and none of them can be satisfied by injecting a driver instead.
@@ -282,7 +365,8 @@ def build_production_measurement_driver(*, context, identity, providers=None,
         supplied = _providers_from_seam()
     else:                                           # the formal entry's path: real construction
         supplied = build_real_providers(context=context, descriptor=descriptor, session_id=session_id,
-                                        attempt_id=attempt_id, search_start_rad=search_start_rad)
+                                        attempt_id=attempt_id, search_start_rad=search_start_rad,
+                                        frame_source=frame_source)
     missing = [name for name in PROVIDER_NAMES if name not in supplied]
     if missing:
         raise ProductionCompositionError(f"PRODUCTION_PROVIDER_MISSING: {missing[0]}")

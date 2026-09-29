@@ -213,6 +213,12 @@ def test_real_production_providers_are_built_from_the_admitted_context(tmp_path)
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
+        def detect(self, frame, query):
+            """The REAL detector interface: `detect(frame, query)`, and deliberately no `__call__` (P1-1)."""
+
+            del frame
+            return {"class_id": query.class_id, "candidates": [], "backend": "fake-yolo"}
+
     class _Client:
         """Only the external I/O: everything else below is the production construction path."""
 
@@ -254,8 +260,17 @@ def test_real_production_providers_are_built_from_the_admitted_context(tmp_path)
                                      yolo_detector_factory=_FakeYolo,
                                      session_id="session-1", attempt_id="attempt-1", search_start_rad=0.0)
 
-    assert providers["detector"].kwargs["requested_device"] == "cuda", "the descriptor's device reaches the detector"
-    assert providers["detector"].kwargs["allow_cpu_fallback"] is False, "and its CUDA policy"
+    # P1-1: the composition MATCHES the detector's protocol, exactly as it already matches the controller's - the
+    # driver calls its detector as a callable while the production detector exposes `detect(frame, query)`. So the
+    # provider handed to the driver is the adapter, and the built detector is reachable through it.
+    from so101_demo.act.task8_production_composition import MeasurementDetectorAdapter
+
+    assert isinstance(providers["detector"], MeasurementDetectorAdapter), (
+        "a detector that is not callable must be adapted, not handed to the driver as it is")
+    assert callable(providers["detector"]), "the driver calls its detector"
+    assert providers["detector"].detector.kwargs["requested_device"] == "cuda", \
+        "the descriptor's device reaches the detector"
+    assert providers["detector"].detector.kwargs["allow_cpu_fallback"] is False, "and its CUDA policy"
     assert isinstance(providers["phase_camera"], PhaseCameraMatrixEvaluator)
     assert callable(providers["phase_camera"])
     # the two that used to be missing entirely: a stack with the driver's protocol, and a CALLABLE controller

@@ -91,11 +91,20 @@ def main(argv=None) -> int:
                 broker_generation=context["broker_generation"],
                 evidence_root=str(args.batch_root.parent),
                 resource_binding=context["resource_binding"],
+                # P1-1: the composition reads these from the context (the calibration) and takes the rest as arguments;
+                # the admitted document is where they come from, and a missing one is refused by name downstream
+                calibration_report=_document.get("calibration_report"),
+                session_id=_document.get("session_id"),
+                attempt_id=_document.get("attempt_id"),
+                search_start_rad=_document.get("search_start_rad"),
                 # section 4.2: the same parsed descriptor the CUDA policy was enforced on, not a re-read of the file
                 runtime_descriptor=_document["runtime_descriptor"])
             from so101_demo.act.task8_production_composition import build_production_measurement_driver
 
-            build_production_measurement_driver(context=context, identity=identity).run(context, args.batch_root)
+            build_production_measurement_driver(
+                context=context, identity=identity,
+                session_id=_document.get("session_id"), attempt_id=_document.get("attempt_id"),
+                search_start_rad=_document.get("search_start_rad")).run(context, args.batch_root)
         # Astra item 3: the driver is the ONE seal owner; the entry only reports what it sealed
         sealed = args.batch_root / "batch.json"
         # Astra re-review P1-3: read the seal back and refuse to call an INVALID measurement a success. The
