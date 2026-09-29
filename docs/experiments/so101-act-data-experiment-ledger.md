@@ -25630,3 +25630,19 @@ picture in both directions.**
   wiring rather than a redesign. **That is what a fail-closed interface is supposed to feel like when it is being completed.**
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test is uncommitted while red, per this batch's rule. No new session,
   goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1538 — The prefix source port is an OBJECT with `register`, not a callable - and my `execute_approach` assumed otherwise
+
+- **The traceback named it exactly** (`pick_place_search_port.py`, the APPROACH branch):
+  **`reset.broker._prefix_source_port.register(reset.broker, self, self._expert_route, ticket, active_policy_fingerprint=reset.sources.contact_pairs.fingerprint)`**
+  - and my composite double had set `_prefix_source_port` to a **lambda**, which is why the error said `'function' object has no attribute 'register'`.
+- **So the real interface is a registrar, not a producer:** the port calls `_prefix_source_port.register(broker, port, route, ticket, active_policy_fingerprint=...)` for its **side effect** (announcing
+  the prefix to the authority) and **does not use a return value** - while my `execute_approach` calls `source_port(ticket)` expecting a **source document**, which is a different contract entirely.
+  **That assumption was mine, written when I first wired the chain, and it is wrong.**
+- **The correction is small and it removes a duplication rather than adding one:** the port is the component that has the route and therefore the component that registers; `execute_approach` should take
+  the **source document** it needs as an argument (the port has it) instead of calling a producer that does not exist in that role. **One call moves to the layer that owns its inputs.**
+- **And the pattern is worth another line, because it is now the fifth time in this stretch:** each refusal has named exactly one wrong assumption - `expert_route` (the route must exist), `register`
+  (the port is not a callable), and before them the time axis, the snapshot's owner and the goals' contract. **None of them were design errors; all of them were guesses I had written down as if they were
+  facts, and running the code is what turned them back into questions.**
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test is uncommitted while red, per this batch's rule. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
