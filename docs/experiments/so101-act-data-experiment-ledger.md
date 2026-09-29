@@ -12063,3 +12063,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   entry passed through the context - then GREEN and the plan's nine-file commit.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-892 — Task 4: admission and binding modules GREEN (30 passed); wiring modifications remain
+
+- **Implemented `act/task8_calibration_admission.py`:** one-flight admission for a `CALIBRATION_REQUIRED`
+  generation. `admit(role, generation, operation)` refuses with a named reason at each gate - status not
+  admissible, role not `calibration` (so the production child is rejected whatever the operation), generation
+  mismatch, `release`/`recorder` refused explicitly, unknown operations, and a **second flight**. Every decision,
+  admitted or not, is appended to `events` with its generation so an audit can see which admission authorized a
+  command.
+- **Implemented `adapters/act/task8_calibration_search_binding.py`:** arm commands must byte-match
+  `measurement_plan_sha256` (`MEASUREMENT_PLAN_MISMATCH` otherwise); neck targets must be inside the approved safe
+  interval (`NECK_TARGET_OUTSIDE_INTERVAL`) **and** sweep-safe (`NECK_TARGET_NOT_SWEEP_SAFE`); a direct broker
+  submission without this adapter's signed receipt is refused (`CALIBRATION_BINDING_REQUIRED`), so the generic
+  non-ACT submit path is never reused; and the state machine advances only on a **new** target (reissue reports
+  `REISSUE_NO_ADVANCE`), classifies fine corrections separately, starts the deadline at the first
+  `advance_deadline`, and terminates an out-of-interval target as `TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL`
+  **without submitting**.
+- **Verified:** the new module plus the two modules the plan also modifies (control-event timeline, task8 search
+  binding) report **30 passed, rc=0** (`beh-task4-green1.log`) - their existing behaviour is preserved unchanged.
+- **Remaining for Task 4's nine-file commit:** extend `act/ownership.py` with the explicit `calibration` role and
+  its restricted capability set; add broker-side enforcement in `adapters/act/command_broker.py` (byte-matching
+  arm probe or an adapter-signed receipt, never the generic non-ACT path); wire the reservation and owner factory
+  through `runtime/launch_composition.py`; carry the admission generation on every acquire, state, command,
+  feedback, stop, retire and cleanup event; keep resource binding in `cli/act_command_broker.py`'s entry and pass
+  it through the context; and update `test_act_control_event_timeline.py` / `test_act_task8_search_binding.py`
+  with the generation-carrying expectations. The production `owner=act` binding semantics stay untouched.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
