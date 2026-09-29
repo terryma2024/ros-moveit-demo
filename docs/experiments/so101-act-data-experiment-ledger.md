@@ -13421,3 +13421,35 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   this broader set at 244; three files carry my additive changes uncommitted inside the user's dirty set; Tasks 8-10
   untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-951 — The complete `_retire` contract, my insertion confirmed in place, and the last fixture hurdle
+
+- **Read the rest of `_retire` and my insertion is there, in the user's file, exactly as intended:**
+  ```python
+  if not self._child_retired:
+      # an open live-evidence window must not outlive the child that owns the port recording into it
+      window = getattr(self.worker, "live_evidence_window", None)
+      if window is not None and not getattr(window, "_sealed", False):
+          window.invalidate("OWNER_RETIRE")
+      await self.child_owner.stop_owned()
+  ```
+  It sits before the child retirement and is guarded on the window's own sealed flag, so a completed chain is a no-op.
+- **The full retirement contract the fixture must satisfy, in order:**
+  1. `worker.cancel({session_id, attempt_id, reason, deadline_ns})` must return `{"stopped_confirmed": True}` or
+     `TASK8_CASE_STOP_NOT_CONFIRMED`;
+  2. the window is invalid-sealed (only if open) - my insertion;
+  3. `child_owner.stop_owned()` then `_retirement_receipt(Path(child_launch.socket_root), child_owner_key, stack=False)`;
+  4. `stack.stop()` then `_retirement_receipt(Path(stack.launch.evidence_root), stack_owner_key, stack=True,
+     session_id=..., ros_domain_id=...)`;
+  5. `final_clear_probe(ros_domain_id)` awaited within `final_clear_timeout_s` and required to be exactly `True`, else
+     `TASK8_FINAL_GRAPH_NOT_CLEARED`.
+- **The last hurdle, named rather than discovered later:** `_retirement_receipt` **validates a receipt file** on disk
+  (regular, within its size limit, with a matching identity and proof). So the fixture's `stop_owned` and `stop`
+  doubles must either write **valid receipts** - which keeps the chain real and is the honest choice - or the test
+  must patch `_retirement_receipt`, which would weaken what the chain test proves. Choosing the former means the
+  fixture also needs the receipt's identity/proof fields to match `child_owner_key` / `stack_owner_key`, whose shape is
+  the one thing left to read.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment (Step-4 command 53, broader set 244);
+  three user-dirty files carry my additive, uncommitted changes with the `_retire` insertion confirmed present;
+  Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
