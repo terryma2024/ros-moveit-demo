@@ -23775,3 +23775,23 @@ not an inference of mine.**
   exact resumption point: the ledger CP-1403 to CP-1437 in order, then the driver's window period.**
 - **State:** changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted; the ~300 GB of
   deletion candidates untouched.
+
+## CP-1438 — Final entry of the second revision batch: where P1-5 stands and the one print that resumes it
+
+- **The window rule, read exactly (`task8_live_evidence.py:199-209`):** consecutive grid samples must have `sim_time_s` deltas that are positive and
+  within `tolerance_s` of the window's own **`period_s`** - `GRID_REGRESSION` for a non-positive delta, `GRID_GAP` for one that is too far from the
+  period. **My samples now flow through the window (the milestone at CP-1437) and the refusal is that comparison.**
+- **Two fixes tried and kept, both honest and both compiling:** the phases are recorded **once** per case (a second pass restarted `sim_time` at zero,
+  which the sequential grid must refuse), and the grid spacing now uses **`window.period_s` when the window exposes it**. **`GRID_GAP` still fires,
+  so the period the window actually holds is neither the suite's 0.1 nor what my fallback assumes - and the next step is therefore a PRINT, not an
+  edit: read `window.period_s` and `window.tolerance_s` at runtime and space the nine grid samples by exactly that.**
+- **That is a single, concrete, five-minute resumption point**, and it is the only thing between this fixture and a recorded - then sealed - case.
+  **Everything after it is the reviewer's second half:** the seven indexed assertions (grid, the release-epoch edge event, SEARCH and FINAL_CHECK,
+  both retirement receipts, the artifact and journal digests) and the four negatives, then the single integration boundary and the packet update.
+- **What this batch leaves committed, verified and green:** items **1-4** (`97244cfc`, `9e106c04`, `f48130c8`, `ebc17755`) with **two production
+  defects fixed**; the **packet addendum** (15268 bytes, sha256 `6af051be...eb5e`) that retracts the earlier "all five complete" claim and states
+  item 5's position; and **CP-1307's retraction**. **Nothing was pushed, nothing was deleted, no evidence was discarded, the ~300 GB of classified
+  deletion candidates were never touched, and no review was self-approved.**
+- **The one question, unchanged and still the owner's:** submit items 1-4 now with P1-5 documented as above and re-approve P1-5 as its own round
+  (the ledger's recommendation at CP-1397, CP-1414, CP-1419, CP-1428 and CP-1434), or continue the tail first - **in which case the resumption is
+  the print described three paragraphs above.**
