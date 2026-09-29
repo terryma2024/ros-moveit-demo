@@ -29168,3 +29168,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **What is already true after this round:** **every reference the index states a size and a digest for matches the file on disk**, including the two rows corrected in CP-1738 - **so the "two mismatches" the verdict found are gone and nothing new appeared.**
 - **Still to do for P2:** reconcile 37 with the reviewer's 46; correct the counts (packet:340's `1311` → 1272 passed + 43 skipped = **1315**, with `1432 = 1315 + 117` named as a sum and not as accumulation); **freeze and read back the canonical evidence copy**.
 - **State:** **P2 in progress with its index audit green and its count correction next**; P1-1 … P1-5 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1740 — The 37-versus-46 question answered by counting, and a THIRD stale statement found in the same index
+
+- **The index counted three ways:**
+  ```
+  total table rows:            88
+  rows with a path:            61
+  rows with a 16-hex digest:   46        <- exactly the reviewer's number
+  rows with BOTH:              46
+  ```
+  **So the verdict's 46 is the number of rows that state a digest, and the file has them** - my auditor parsed 37 because it demands the size in a particular cell, and nine of those 46 state the digest without a size in the shape it expects. **The reconciliation is therefore "widen the auditor to the rows that state a digest", not "the reviewer counted differently".**
+- **And the listing turned up a third stale statement, in a different table of the same index:**
+  ```
+  | `handoffs/20260930-task7-onward/task8-astra-rereview-packet.md` | the re-review packet (10438 bytes after the addendum) |
+  ```
+  **The packet is 36042 bytes** (CP-1738 measured it, and its digest matches the verdict's). **A row that describes a file's size in prose is as much an index entry as a row that tabulates it** - and this one is wrong for the same reason the two tabulated rows were.
+- **What P2 still needs, now with three stale statements identified rather than two:**
+  | # | what | correct value |
+  | --- | --- | --- |
+  | 1-2 | index lines 130/159: size and digest of the packet | **done and verified** (36042 / `df220deebfd05e56`) |
+  | 3 | the index row that says the packet is *"10438 bytes after the addendum"* | **36042 bytes** (measure, then write) |
+  | 4 | packet line 340: *"117 xunit files, 1311 cases, 0 failures, 43 skipped"* | **1272 passed + 43 skipped = 1315** pytest cases, with `1432 = 1315 + 117` named as a sum rather than as accumulation |
+  | 5 | the auditor's reach | widened to **every row that states a digest (46)**, still expecting zero mismatches |
+- **State:** **P2 in progress: three stale statements located, two corrected; the count correction, the auditor widening and the canonical copy's freeze/read-back remain**; P1-1 … P1-5 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
