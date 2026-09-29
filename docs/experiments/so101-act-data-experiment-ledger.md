@@ -17792,3 +17792,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Running list of what this boundary's verification has found, for the review:** CP-1124 (support sample not returned),
   CP-1126 (receipt did not vouch for it), CP-1127 (report named against no definition), and now this open question about
   the report's own identity - plus CP-1117/CP-1129/CP-1131, the three links of the descriptor chain that were never built.
+
+## CP-1133 — CP-1132's open question closed by reading: the report's key set is exact, so no `kind` is by design
+
+- **The one read decided it.** `contracts.fields(value, names)` is an **exact** check - `set(value) != set(names)` raises
+  `FIELDS_INVALID` - and `require_qualified` calls `fields(report, base + ("live_campaign",))` with `base` being the
+  report's seven keys. So **adding `kind` to the report would break the QUALIFIED path**, which is the very contract the
+  later 33-field report is judged by. `require_gate`, by contrast, only checks that the seven are **present**, which is why
+  it tolerates extra provenance.
+- **Consequence, decided rather than deferred:** the report's identity *is* its exact key set plus `status`, and a `kind`
+  field would be a change to the QUALIFIED contract rather than a tidy-up. **So the idea is dropped**, not queued: the
+  other three documents carry `kind` because their validators demand it, and the report does not because its validator
+  forbids the extra key. That is a coherent design, and my CP-1132 test was asserting a uniformity the tree never intended.
+- **This is the second time in three rounds that reading first stopped a change I had already written a test for** - CP-1121
+  (the raw-evidence shape is load-bearing) and now CP-1132/1133 (the report's key set is exact). Both times the finding was
+  worth keeping and the change was not, and both are recorded that way.
+- **Suite: 57 passed** across the aggregator, contract and head-search binding modules, unchanged from CP-1132 since no
+  code moved this round. Nothing weakened, nothing deleted, no push, no stack, no hardware.
