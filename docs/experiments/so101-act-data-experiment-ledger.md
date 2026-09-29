@@ -31417,3 +31417,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   driver - and its one open question is whether the reservation service can be served headlessly.** P1-1 through P1-4
   CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1827 — The faithful branch is already demonstrated in this repository
+
+- **Looking for the feasibility answer instead of arguing it found the answer already written:** the repo carries
+  ```
+  src/so101_demo_py/test/test_gate6_bound_authority_wiring.py      <- exercises build_bound_act_broker itself
+  src/so101_demo_py/test/test_gate6_bound_authority_session.py
+  src/so101_demo_py/test/test_gate6_bound_authority_order.py
+  src/so101_demo_py/test/test_controller_reservation_provision.py
+  src/so101_demo_py/test/test_controller_reservation_client.py
+  src/so101_demo_py/test/test_act_batch2_identity_binding.py
+  ```
+  **So the production composition root has a test harness, the reservation provision has one, and the client has one** -
+  which answers CP-1826's open question in the affirmative: **the reservation endpoint can be served in a test, and
+  `build_bound_act_broker` has been built in tests before.** The faithful branch is not a hypothesis; it is a pattern
+  this repository already uses.
+- **And that settles P1-5's shape without loosening anything:** the full-case harness should build **the production
+  broker** through the same route the gate-6 wiring test takes, **substituting the reservation endpoint and the driver**
+  (external I/O), and keep the per-phase authority, the checker and the screen **production** - which is what every step
+  of this drive has been assembling anyway (CP-1811, CP-1816, CP-1818, CP-1819).
+- **What that changes in the plan:** CP-1825's rejected branch (extend `FakeBroker`) is now rejected with a working
+  alternative in hand rather than on principle alone, **and CP-1826's feasibility question is closed by evidence** rather
+  than by a decision. **The next step is to read how `test_gate6_bound_authority_wiring.py` builds the broker and reuse
+  its construction in the full-case harness.**
+- **State:** **P1-5 in progress with its faithful branch proven feasible by an existing test pattern; the reuse is
+  next.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
+  remain. **Task-list statuses are unchanged, so they are not re-stated.**
