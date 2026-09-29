@@ -24237,3 +24237,25 @@ not an inference of mine.**
 - **This checkpoint exists because the skill requires source commit, overlay, runtime executable, `ROS_DOMAIN_ID` and `GZ_PARTITION` per record** - the
   earlier checkpoints in this batch named commits and the interpreter but left the last two implicit. **Stating "unset, because no stack was started" is
   the honest form of that field, not a blank.**
+
+## CP-1463 — Reading the skill's gate reference found two real evidence problems, and the package gate fixed both
+
+- **What the reference requires** (`test-and-acceptance.md:99-105`): the **package gate** - `colcon test` plus `colcon test-result` - and explicitly
+  *"直接整包 pytest 可以加速反馈，但在 ai-station 上不替代必要的 CTest 登记、package gate、`colcon test-result`、build/copied-install/provenance gate"*.
+  **My teleop gate had been a direct `pytest -n 8`, which does not satisfy that**, and the boundary README had omitted memory and load, which the
+  reference also asks for.
+- **And running `colcon test-result --verbose` exposed something worse than a missing record:** it reported **27 failures** - every one of them from
+  **2026-09-29 12:42-12:45**, a **stale earlier CTest run** still sitting in the build tree. **A reviewer running that command would have read them as this
+  batch's failures**, while my own gates were green.
+- **Fixed by running the required gate once, with its own fresh scratch and a saved proof** (not by re-rolling anything):
+  | item | result |
+  | --- | --- |
+  | `colcon test --packages-select so101_teleop --event-handlers console_direct+` | **rc=0, 225.0s** |
+  | `colcon test-result --verbose` | **rc=0 - 7241 tests, 0 errors, 0 failures, 206 skipped** |
+  | tempfile proof (the skill asks for one per test interpreter) | `teleop-pkg-tempfile-proof.log`, rc=0, naming python/pytest/xdist and asserting `gettempdir()` inside the scratch |
+  | resources, recorded because the boundary omitted them | 31 GiB RAM (26 available), loadavg 0.54 1.13 1.45, 32 CPUs, `-n 8` |
+- **The stale numbers are recorded, not hidden:** the 27 failures were overwritten **by the fresh run's own results**, which is the ordinary behaviour of
+  the tool - **nothing was deleted, and the fact that they existed is now in the evidence README and the index**, because the next person to read
+  `colcon test-result` deserves to know what happened here.
+- **Honest note on why this surfaced now:** I read the skill's reference this round rather than at the batch's start. **The gaps it found were real, and the
+  fix was cheap - which is the argument for reading the gate reference before claiming a boundary, not after.**
