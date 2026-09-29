@@ -610,6 +610,11 @@ def _reset_case_clock():
     _case_clock.clear()
     _case_clock["count"] = 0        # `clear()` alone left the reader below with no key at all (KeyError: 'count')
     _case_capture.readings = []
+    # and the plan: a previous test's `prefix_signed` flag would freeze THIS case's prefix before it was refreshed,
+    # so its ~0.102 s window would be stale and APPROACH would refuse by name
+    _case_capture.prefix_signed = False
+    if hasattr(_case_capture, "prefix"):
+        del _case_capture.prefix
 
 
 def test_the_runner_runs_the_whole_case_and_reports_which_phases_completed(tmp_path):
