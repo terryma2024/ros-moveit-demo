@@ -75,14 +75,15 @@ class CalibrationMeasurementContext:
     def __init__(self, *, generation: str, contract_sha256: str, measurement_plan_sha256: str,
                  safe_interval_rad, candidate_sha256: str, policy_sha256: str,
                  driver_source_sha256: str, controller_generation: str, broker_generation: str,
-                 evidence_root: str, resource_binding, runtime_descriptor=None) -> None:
+                 evidence_root: str, resource_binding, runtime_descriptor) -> None:
         # section 4.2/6: the parsed runtime descriptor travels in the context once, so no later component re-reads the
         # preparation directory; the one shared rule reads it, and an omitted descriptor is a state a caller must be
         # able to see rather than a silent default
-        if runtime_descriptor is not None:
-            from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
+        # Astra item 2: required, not optional - a context without a descriptor cannot say which configuration was
+        # measured, so the ``None`` default was a bypass rather than a convenience
+        from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
 
-            require_runtime_descriptor(runtime_descriptor)
+        require_runtime_descriptor(runtime_descriptor)
         self.runtime_descriptor = runtime_descriptor
         if type(resource_binding) is not dict:
             raise ValueError("RESOURCE_BINDING_REQUIRED: the CLI entry must bind resources once")

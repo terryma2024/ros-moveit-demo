@@ -139,3 +139,16 @@ def test_a_descriptor_whose_head_search_payload_is_not_the_production_shape_is_r
         with pytest.raises(ValueError) as caught:
             require_runtime_descriptor(document)
         assert "MEASUREMENT_RUNTIME_DESCRIPTOR" in str(caught.value) or "HEAD_SEARCH" in str(caught.value), name
+
+
+def test_the_context_requires_a_runtime_descriptor(tmp_path):
+    """Astra item 2: the descriptor is required, so the ``None`` bypass cannot exist."""
+
+    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+
+    with pytest.raises(TypeError):
+        CalibrationMeasurementContext(
+            generation="gen-required", contract_sha256="a" * 64, measurement_plan_sha256="b" * 64,
+            safe_interval_rad=[0.0, 0.1], candidate_sha256="c" * 64, policy_sha256="d" * 64,
+            driver_source_sha256="e" * 64, controller_generation="ctrl-1", broker_generation="broker-1",
+            evidence_root=str(tmp_path / "ev"), resource_binding={"bound_at_entry": True})

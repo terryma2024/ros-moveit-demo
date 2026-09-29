@@ -162,6 +162,12 @@ def _context(**overrides):
                  "controller_generation": "ctrl-1", "broker_generation": "g1",
                  "evidence_root": "/data/work/so101-evidence/act-data/run",
                  "resource_binding": {"bound_at_entry": True, "cpu_cores": 8, "gpu_device": 0}}
+    # Astra item 2: the descriptor is a required part of the context, so every context in this suite carries one
+    arguments.setdefault("runtime_descriptor", {
+        "schema_version": 1,
+        "head_search": {"schema_version": 1,
+                        "detector": {"requested_device": "cuda", "allow_cpu_fallback": False},
+                        "camera": {}, "motion": {}}})
     arguments.update(overrides)
     return CalibrationMeasurementContext(**arguments)
 
