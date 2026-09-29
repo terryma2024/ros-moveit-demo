@@ -25065,3 +25065,18 @@ picture in both directions.**
   it against. **Writing it next to a test that uses the screen as the judge - rather than guessing `validate_action_prefix`'s schema in this round - is the difference between a builder and a plausible
   one.**
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1503 — The goals builder exists, and the screen is its judge
+
+- **`3 passed`** (`experiments/gate8-p14/goals.log`) for `adapters/act/pick_place_approach_goals.py`:
+  - **`build_approach_goals(prefix, held_positions, *, header_stamp_s)`** mirrors the screen **field for field** - the same closed key set, the same
+    `ARM_JOINTS[:5]`/`[5:]` split, the same offsets `(0,) + (target - stamp)`, the same `split_positions((held,) + prefix["positions"])` rows - **so it makes
+    no choices of its own**;
+  - a header stamp outside the prefix's own window is refused by name (`APPROACH_HEADER_STAMP_INVALID`), because the screen requires it strictly between the
+    observation time and the first target time;
+  - and the test's judge is **`PickPlaceApproachPathScreen._goals`** - the validator the goals will actually meet - plus an assertion that the key set mirrors
+    the screen's exactly, so the two cannot drift quietly.
+- **What remains for APPROACH, exactly:** wire this into `execute_approach`'s adapter - trusted source -> `issue_prefix_source` -> `approve_with_source` ->
+  `submit` -> wait on `goal_state` -> `build_approach_goals` -> `screen.inspect` -> `PathProver.prove` -> snapshot and facts - and test the boundary level with
+  substituted physics. **Every piece of that chain now exists and is individually verified; what is left is joining them.**
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
