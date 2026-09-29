@@ -13160,3 +13160,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   since.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-939 — Production-chain test written; two of three cases fail because my fixture guesses the source schema
+
+- **Created `src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py`** with three cases over the
+  **real** recorder, window, release correlation and journal-row readback: (1) the nine-phase chain recorded at the
+  frozen grid, the release open event correlated with three pre-open support rows, sealing, and an artifact read back
+  byte for byte; (2) a window that never reached FINAL_CHECK invalid-sealing instead, with the recorder refusing to
+  seal afterwards; (3) the journal-row readback refusing a missing artifact, accepting a matching one, refusing a
+  mismatched digest, and refusing an artifact handed back for a prefix case.
+- **Measured: 1 passed, 2 failed** (`beh-task7-chain2.log`). The passing case is the **journal-row readback**
+  contract, which is verified in all four directions. Both failures are `TASK8_LIVE_EVIDENCE_SOURCE_MISSING` from my
+  own `_sample` fixture, and the second attempt still failed after I widened the source maps to the seven names the
+  port's receipt schema lists (`world/scene/contact/head/wrist/arm/neck`) - so the recorder's requirement is
+  something other than that set, and I have now guessed at it twice.
+- **The next step is a read, not another guess:** open the `TASK8_LIVE_EVIDENCE_SOURCE_MISSING` check in
+  `act/task8_live_evidence.py` and write the fixture to exactly what it demands, citing the keys in a comment. This is
+  the fourth instance of the same lesson in this session (the inferred phase list, the invented CLI call, the guessed
+  builder signature, and now a guessed source schema); the rule that has caught each one is: read the interface,
+  cite it, and only then write the test or the call site.
+- **Honest scope note:** even once green, this test covers the **artifact lifecycle end to end** - recorder, window,
+  correlation, sealing, readback - but not yet the full plan-specified chain through `run_pick_place_case()`, owner
+  start/finish, `ros_child._run_pick_place()`, `PickPlaceRunner` and journal publication, which needs the teleop
+  fixtures and stays as Task 7's final piece.
+- **State:** Task 7's module, runner baseline, port, retirement path and journal readback are all green; this new test
+  file is untracked and its two failing cases are fixture defects, not production ones; the user's dirty files carry
+  my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted,
+  no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
