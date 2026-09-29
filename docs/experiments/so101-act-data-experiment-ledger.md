@@ -17157,3 +17157,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   readback test keeps the v2 contract it now needs.
 - **Evidence:** scratch `<R>/scratch/r698.<n>` with `TMPDIR` verified through the exact test interpreter; log
   `beh-r698.log`.
+
+## CP-1103 — The decisive structural finding: v2 is 21 + 7 with per-field comparators, and the aggregator is v1 architecture
+
+- **Read the v2 contract's own metadata, and the arithmetic finally closes:** `measurements` has **21** entries and
+  `support` has **7** - so the contract's 28 fields are **21 head-search + 7 support**, and the camera intrinsics are
+  among the 21 rather than additional to them. My earlier reading (17 + 4 + 7) was wrong, and the camera fold I landed at
+  CP-1101 is still correct: it moved the report from the fixture's 17 to 21, which is the head-search half.
+- **More importantly, the entries are not thresholds at all:** each carries a **`comparator`**, a **`failure_code`** and a
+  failure-detail field - e.g. `center_deadband_px` is judged by `lock_frame_error_leq_configured_limit`, `path_step_s` by
+  `all_adjacent_dt_positive_and_leq_configured`. So v2 replaces the v1 design's handful of **aggregate threshold checks**
+  (`fov`, `collision`, `search`, `synchronization`, `execution`, each reading `contract["thresholds"][...]`) with
+  **per-field comparators over the raw evidence**.
+- **That is why the entry stops at `KeyError: 'thresholds'`, and it is not a naming problem:** the aggregator is built on
+  the **v1 verification architecture**. Making it produce a real 28-field `TASK8_READY` means evaluating each of the 28
+  fields by **its own comparator against the raw evidence**, and reporting `failure_code` when one fails - not porting a
+  dictionary lookup. The claim in CP-1102 that this was "either mapping metadata or teaching the checks the v2 shape" was
+  too small; the honest statement is that the **check architecture has to be rebuilt on comparators**, which is a real
+  piece of implementation work with its own REDs.
+- **State, unchanged and disclosed:** the module is at 1 failed / 18 passed, the failure being CP-1100's proven RED
+  (`21 == 28` until the support half and the comparator architecture land). The index half of Boundary IV is complete and
+  green; this is the publishing half's central piece of work.
+- **Evidence:** the contract read is in this round's tool output; scratch `<R>/scratch/r698.<n>` with `TMPDIR` verified
+  through the exact test interpreter; log `beh-r698.log`.
