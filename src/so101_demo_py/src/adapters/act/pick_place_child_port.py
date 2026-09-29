@@ -172,13 +172,23 @@ def build_pick_place_child_search_port(
         from .pick_place_approach_path_screen import PickPlaceApproachPathScreen
 
         factory = MujocoPathProcess if path_process_factory is None else path_process_factory
+        # `MujocoPathChecker` REQUIRES `allowed_pairs_by_phase` (physics.py:34, keyword-only, no default) and this call
+        # site did not pass it - so a caller supplying the admitted route motion got `TypeError` instead of a checker,
+        # which is why a full case could never be driven. The pairs are the ADMITTED ones: the document's own per-phase
+        # mapping when it carries one, else its single `allowed_pairs` read as APPROACH's - the same shape
+        # `calibration_motion.py:174-184` uses for a single-phase gate (`{'APPROACH': allowed}`).
+        pairs_by_phase = route_motion.get("allowed_pairs_by_phase")
+        if not isinstance(pairs_by_phase, dict):
+            pairs_by_phase = {"APPROACH": frozenset(
+                tuple(pair) for pair in (route_motion.get("allowed_pairs") or ()))}
         checker = factory(check_timeout_s=route_motion["submit_lead_s"], start_timeout_s=2.0,
                           model_path=route_motion["model_path"], protected_roots=("base",),
                           cup_joint="cup_free_joint", gripper_body="gripper",
                           path_step_s=route_motion["path_step_s"],
                           path_clearance_m=route_motion["path_clearance_m"],
                           velocity_limit_rad_s=route_motion["velocity_limit_rad_s"],
-                          acceleration_limit_rad_s2=route_motion["acceleration_limit_rad_s2"])
+                          acceleration_limit_rad_s2=route_motion["acceleration_limit_rad_s2"],
+                          allowed_pairs_by_phase=pairs_by_phase)
         if checker.model_sha256 != route_motion["model_sha256"]:
             checker.close()
             raise ValueError("APPROACH_CHECKER_MODEL_HASH_INVALID")

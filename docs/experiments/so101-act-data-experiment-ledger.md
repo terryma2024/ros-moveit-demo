@@ -31031,3 +31031,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   checker needs `allowed_pairs_by_phase` from an admitted source, not from invention.** P1-1 through P1-4 CLOSED. The
   demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
   unchanged, so they are not re-stated.**
+
+## CP-1815 — The checker's configuration is correct, and the spawn failure was my probe's, not the code's
+
+- **Direct construction succeeds, with the hash the admitted motion names:**
+  ```
+  DIRECT CONSTRUCTION OK, sha256: 3c876e7bbf879dbf   matches: True
+  ```
+  and the `MujocoPathProcess` probe fails at the handshake instead:
+  ```
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 399, in _recv
+      raise EOFError
+  ```
+  **The child died before sending `{"pid", "model_sha256"}`** - and the reason is my probe, not the checker:
+  `multiprocessing.get_context("spawn")` **re-imports the module the child is to run, and a `__main__` fed through
+  stdin is not importable.** So the heredoc probe can never spawn that worker, while **a real test file - whose
+  `__main__` is a file on disk - can.**
+- **Which makes two things true at once, and both are progress:**
+  1. **the production defect I recorded in CP-1814 is genuinely fixed** - `allowed_pairs_by_phase` is now passed, from
+     the admitted document's own pairs when it carries a per-phase mapping and otherwise from its single
+     `allowed_pairs` read as APPROACH's, the same shape `calibration_motion.py:174-184` uses - **and the checker that
+     call site builds is correct, as the direct construction proves**;
+  2. **the spawn-based integration must be exercised from an importable module**, so the wiring belongs in a proper
+     `test_*.py` file rather than in a probe script - **which is where it was always going to live, and the probe has
+     now said so with a concrete failure instead of an assumption.**
+- **And the diagnostic gap is worth naming for whoever debugs this next:** the child's own exception does not reach the
+  parent - the parent sees `EOFError` on `recv` and no cause. **A worker that dies during construction should report why
+  through the same pipe it was going to greet through**; until it does, "the worker died" is all a reader gets.
+- **State:** **P1-5's checker is unblocked: the required argument is supplied from the admitted document, and the
+  construction is proven correct in-process; the wiring into a real test file is next, followed by the aggregator join
+  and the removal of the xfail and the duplicate chain.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement,
+  P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
