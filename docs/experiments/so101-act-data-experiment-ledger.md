@@ -21971,3 +21971,19 @@ not an inference of mine.**
   driver's.**
 - **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1327 — Nine phase rows did not move the four refusals, so the next step is to read all four messages verbatim
+
+- **What I did and what it shows:** the helper now writes the nine phase rows with non-decreasing source stamps **and** indexes the whole
+  closure, and the aggrepate result is **unchanged - the same four tests fail**. Since `BATCH_PHASE_MISSING` was only one of the three
+  lines the tracebacks pointed at, at least one of the four is failing earlier (the `_load` path at line 90, or the key/kind/status check
+  at 168), and **I have been treating them as one cause when they may be two.**
+- **The next diagnostic is exact and cheap:** one run with `--tb=short` capturing **all four** messages verbatim - which code each test
+  raises - instead of my repeated one-line summaries. **That is what the next round opens with, before any further edit**, because seven
+  rounds of fixture work have moved the result once.
+- **A note I owe the record:** this fixture repair is now the largest time sink in the revision batch, and it is not the production work -
+  P1-3's entry-side change has been correct since CP-1321. **The cause is my own method:** I have been fixing fake drivers by inference
+  from traceback line numbers rather than by reading each driver and each refusal in full. `--tb=short`, four messages, then four precise
+  edits is the way out.
+- **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
