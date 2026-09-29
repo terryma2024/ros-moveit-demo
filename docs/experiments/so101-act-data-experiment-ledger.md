@@ -22528,3 +22528,21 @@ not an inference of mine.**
   physical evidence - **the same "one definition" discipline the batch has applied to the validator and the seal.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1358 — The reuse target is named, and it already holds the evidence vocabulary
+
+- **Found by following the chain test's own imports:** it takes `PERIOD_S`, `READBACK_SOURCES` and `_identity` from
+  **`test_task8_live_evidence_production_chain`**, and that module defines
+  `PHASES` (the nine, in order), `_SOURCES`/`READBACK_SOURCES`, `_identity()`, `_raw_records(root, sim_time)`,
+  `_sample(root, *, phase, step, sim_time)`, `_port_with(recorder, window)`, `_sealed_chain(tmp_path)`, `_owner_key(pid)` and
+  `_receipt(root, key, *, stack, session_id=None, ros_domain_id=None)`.
+- **So the physical-evidence vocabulary this fixture needs already exists in one place**, written by the owner for the same runner and the same
+  nine phases. **`_Boundary.search` therefore builds its `source_stamps_s` and `source_received_wall_s` from `READBACK_SOURCES`** - the seven
+  sources the production port demands, in one definition - and takes its phase/stamp shapes from the same module, **imported rather than
+  copied**, exactly as planned in CP-1357.
+- **And there is a second reason this is the right move:** that module drives the real chain and the real seal with the same `_port_with`
+  construction, **so reusing its vocabulary keeps the child fixture and the chain fixture describing one production reality instead of two
+  drifting ones** - which is also how the reviewer's "the old release-event/adjacent-three-support assertion problem remains" gets fixed rather
+  than papered over.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
