@@ -12570,3 +12570,17 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7 in progress at an explicit WIP commit whose message states the suite is red; Tasks 1-6 committed
   and green; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-914 — Task 7 WIP state appended to the handoff so resumption is unambiguous
+
+- **Appended a Task 7 section to
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/handoffs/20260930-task7-onward/HANDOFF.md`**
+  recording the WIP commit chain (`67ad2606`, `ebf3546d`, `c5d05181`), the measured suite state (**3 failed, 34
+  passed**), each remaining failure with the specific action it needs and the explicit warning not to fix any of them
+  by relaxing the code under test, what is already correct and must not be redone, and the recurring lesson about
+  writing tests against interfaces that exist.
+- **Why this checkpoint exists:** Task 7 is mid-flight with a red focused suite on purpose, so the record has to make
+  the difference between "red because the change is incomplete" and "red because something regressed" unmistakable
+  to whoever resumes - including the reviewer at Task 9.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
