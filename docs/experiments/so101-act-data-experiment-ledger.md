@@ -33536,3 +33536,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   re-measurement, the final freeze gate on a fresh run root, and the re-review packet.
 - **State:** **P1-1 through P1-5 CLOSED with evidence; P1-6 and the three evidence gates remain.** **Task-list statuses
   are updated to match, and their content is unchanged.**
+
+## CP-1895 — P1-6: the CTest list matches the source, and the deleted chain is gone from it
+
+- **The reconfigure, run twice because the first attempt used a target this package does not have:**
+  ```
+  colcon build --packages-select so101_teleop --cmake-target tests
+      gmake: *** No rule to make target 'tests'.  Stop.        <- my flag, not the code (rc=2)
+
+  colcon build --packages-select so101_teleop                  <- rc=0, 0.44 s
+      build/so101_teleop/CTestTestfile.cmake
+          add_test( entries: 117
+          full_case entries: (none)
+          test_act_task8_full_case_chain hits: 0
+  ```
+  **so after the deletion and a real reconfigure the teleop CTest list is consistent with the source tree:** 117 entries -
+  the same count the freeze gate has been using - **and the duplicate chain that the list would have gained is no longer
+  registered anywhere.**
+- **And the failing first attempt is recorded rather than dropped, because the rule it broke is the one already in this
+  ledger's discipline:** a failed build must be classified as *what failed* before it is treated as a source regression -
+  **`No rule to make target` names a missing target, not a broken source, and the second invocation with no target
+  argument built the package and regenerated the list.**
+- **State:** **P1-6 is satisfied for the teleop package; the remaining items are the demo RED's clean re-measurement, the
+  final freeze gate on a fresh run root, and the re-review packet.** P1-1 through P1-5 CLOSED. **Task-list statuses are
+  updated to match, and their content is unchanged.**
