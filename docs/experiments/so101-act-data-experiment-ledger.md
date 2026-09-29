@@ -14282,3 +14282,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   raw-access and extractor layers green at 35; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one
   approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval);
   no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-983 — The weld is in: the qualified report can now carry all 33 fields (49 passed)
+
+- **`build_task8_qualified_report` gained `live_extractors` and an optional `contract`**, and when extractors are
+  supplied it: validates the case journals, **collects the five sealed FULL runs**, merges their derived fields into
+  the measurements **by value** through `build_qualified_measurements`, refuses anything but **33** measurements
+  (`QUALIFIED_MEASUREMENT_COUNT_INVALID`), writes the document atomically as before, then **reads the published
+  document back and hands it to `require_qualified`** - and **deletes the output if the gate refuses it**, so a report
+  that cannot pass its own qualification check is never left on disk looking qualified.
+- **Without extractors the previous 28-field behaviour is unchanged**, so existing callers and their tests keep
+  working while the production wiring supplies the extractors - which is the sequencing the plan's steps imply:
+  the derivation layers first, the wiring last.
+- **Verified: 49 passed, rc=0** (`beh-task8-green23.log`) across the live-qualification suite and the Task 8 runner
+  suite, so the weld neither broke the ready-to-qualified path nor the existing gate behaviour.
+- **Remaining in Task 8, and only this:** the production extractors that read the raw **contact** records (the exact
+  pair for `support_distance_m`, the table-support and forbidden-contact evidence for `placement_stable_s`, the
+  clearance/contact/pose qualifier for `retreat_distance_m`) and the raw **wrist** records (the legitimate-occlusion
+  predicate with its approved-owner check for `grasp_occlusion_window_s`), all through `make_raw_reader`; plus a test
+  that drives the new 33-field path end to end.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation, collection,
+  raw-access, extractor and weld layers green at 49 across the two suites; Tasks 9-10 untouched; the goal is armed with
+  a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
+  candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
