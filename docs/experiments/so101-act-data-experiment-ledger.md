@@ -22703,3 +22703,20 @@ not an inference of mine.**
   cause, which for the first time is beyond the evidence-validation layer.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1369 — The chain bottoms out at a named proof: the physics step fence
+
+- **The four levels, read in one run (`--tb=long`):**
+  ```
+  ValueError: PHYSICS_STEP_FENCE_INVALID
+    -> PickPlaceSearchError: SEARCH_PHYSICS_STEP_FENCE_INVALID      (pick_place_search_segment)
+      -> PickPlaceSearchPortError: TASK8_SEARCH_EVIDENCE_INVALID   (pick_place_search_port)
+        -> MutationError: ACT_TASK8_FAILED                         (ros_child)
+  ```
+  **So the substitution is past identity, past the source step and past the observation type, and now stops on a real proof the production code
+  builds and validates** - the same class of object the observation carries as `physics_step_fence` (CP-1355).
+- **Its definition site is printed above.** The next read is that check, which will say which relationship the fence must satisfy - the step
+  against the source stamps and the wall receipts my `_raw`-based readback carries. **That is now the only thing between this fixture and a
+  completed `search`.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
