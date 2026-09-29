@@ -20334,3 +20334,27 @@ not an inference of mine.**
   7. the CLI's `close_measurement_batch` call is deleted (CP-1241), its `INVALID` ledger append and cleanup kept.
 - **State:** HEAD `7b6c20d7` plus this checkpoint; no source changed yet for item 3; no stack, no hardware, nothing deleted,
   nothing pushed.
+
+## CP-1244 — The seal's remaining unknowns, closed by reading the validator's body
+
+- **`batch_sha256`, exactly as the validator computes it:**
+  ```python
+  from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+  recomputed = hashlib.sha256(_seal_canonical({k: v for k, v in recorded.items()
+                                              if k != "batch_sha256"})).hexdigest()
+  if recorded["batch_sha256"] != recomputed:
+      raise ValueError("BATCH_INVALID")
+  ```
+  **The seal must therefore canonicalise with the *contract's* `_canonical`, not the schema's** - the validator deliberately imports the
+  seal's own function, and if the two ever differ the batch is unsealed by construction. That is the detail I refused to guess, and it
+  was worth the read.
+- **Three more rules from the same body, all of which the driver's current seal violates or must respect:**
+  | rule in the validator | consequence for `_seal` |
+  | --- | --- |
+  | `set(_regular_files(root)) == set(files)` → else `BATCH_CLOSURE_INVALID` | the index must name **every** regular file under the batch root, **exactly** - so the descriptor enters `files`, and nothing may be left lying beside it (the hand-rolled `batch.json.partial` must never survive) |
+  | `contamination is not None` → `BATCH_INVALID` | a contaminated batch is a failed cleanup and must not be published; the seal keeps the field, the validator refuses it |
+  | `anchors` must be a non-empty list/tuple | the driver's anchor shape must survive as a list, while its *contents* must still satisfy the nine-phase/anchor coverage rules the same module enforces |
+- **So item 3's rewrite is now completely specified** - keys from `_BATCH_REQUIRED`, the passed-in `MeasurementIdentity`, descriptor in `files`,
+  closure exact, `anchors` a non-empty list, `batch_sha256` from the **contract's** canonicalisation, written with `write_closed_json`,
+  and the CLI's second seal removed with its `INVALID`/cleanup semantics kept.
+- **State:** HEAD `2c3a8a19` plus this checkpoint; no source changed yet for item 3; no stack, no hardware, nothing deleted, nothing pushed.
