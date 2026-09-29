@@ -109,8 +109,19 @@ def validate_head_search_shape(runtime: dict) -> dict:
     descriptor = runtime["head_search"]
     if type(descriptor) is not dict or set(descriptor) != {"schema_version", "detector", "camera", "motion"}:
         raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
-    for name in ("detector", "camera", "motion"):
-        if type(descriptor[name]) is not dict:
+    # Astra re-review P1-2: the CONTENTS matter, not only the closed key sets. The inner version was lost when this
+    # function was extracted, and empty or incomplete blocks passed a rule the production binding refused.
+    if descriptor["schema_version"] != 1:
+        raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
+    required = {
+        "detector": ("backend", "weights_path", "weights_sha256", "model_id", "image_size_px",
+                     "requested_device", "allow_cpu_fallback"),
+        "camera": ("frame_id", "ray_origin_frame_id", "width_px", "height_px"),
+        "motion": ("goal_tolerance_rad", "settle_velocity_rad_s", "neck_goal_duration_s"),
+    }
+    for name, fields in required.items():
+        block = descriptor[name]
+        if type(block) is not dict or not fields or any(field not in block for field in fields):
             raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
     return descriptor
 

@@ -163,11 +163,20 @@ def _context(**overrides):
                  "evidence_root": "/data/work/so101-evidence/act-data/run",
                  "resource_binding": {"bound_at_entry": True, "cpu_cores": 8, "gpu_device": 0}}
     # Astra item 2: the descriptor is a required part of the context, so every context in this suite carries one
+    # Astra re-review P1-2 strengthened the shared rule to check the contents, so the fixture supplies a
+    # COMPLETE production descriptor - strengthening the fixture rather than weakening the rule
     arguments.setdefault("runtime_descriptor", {
         "schema_version": 1,
         "head_search": {"schema_version": 1,
-                        "detector": {"requested_device": "cuda", "allow_cpu_fallback": False},
-                        "camera": {}, "motion": {}}})
+                        "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt",
+                                     "weights_sha256": "a" * 64, "model_id": "plastic-cup",
+                                     "image_size_px": 640, "requested_device": "cuda",
+                                     "allow_cpu_fallback": False},
+                        "camera": {"frame_id": "head_camera_frame",
+                                   "ray_origin_frame_id": "head_camera_frame",
+                                   "width_px": 640, "height_px": 480},
+                        "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01,
+                                   "neck_goal_duration_s": 0.5}}})
     arguments.update(overrides)
     return CalibrationMeasurementContext(**arguments)
 

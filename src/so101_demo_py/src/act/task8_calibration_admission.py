@@ -8,6 +8,8 @@ admission authorized a command.
 
 from __future__ import annotations
 
+import json
+
 ADMISSIBLE_OPERATIONS = ("arm_probe", "neck_target", "stop", "retire")
 REFUSED_OPERATIONS = ("release", "recorder")
 ADMISSIBLE_STATUS = "CALIBRATION_REQUIRED"
@@ -120,7 +122,10 @@ class CalibrationMeasurementContext:
                 "driver_source_sha256": self.driver_source_sha256,
                 "controller_generation": self.controller_generation,
                 "broker_generation": self.broker_generation, "evidence_root": self.evidence_root,
-                "resource_binding": dict(self.resource_binding)}
+                "resource_binding": dict(self.resource_binding),
+                # Astra re-review P1-2: the descriptor must survive the round trip, or a context that is
+                # serialised and rebuilt silently loses the configuration it was admitted under
+                "runtime_descriptor": json.loads(json.dumps(self.runtime_descriptor))}
 
     def admission(self, *, status: str) -> CalibrationMeasurementAdmission:
         """Build the generation's admission from this context, so both share one identity."""
