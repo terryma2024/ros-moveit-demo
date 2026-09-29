@@ -22358,3 +22358,27 @@ not an inference of mine.**
   because that is where the production seal now reads them from.
 - **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
   nothing pushed.
+
+## CP-1348 — The probe settles both halves of step 1, and one of my earlier worries was wrong
+
+- **Run, not reasoned:** `PickPlaceSearchPhasePort(FakePort())` is refused with `TASK8_SEARCH_PORT_CONFIG_INVALID`, and the reason is
+  concrete - `FakePort` has `begin` but **no `search`, no `safe_stop` and no `neck_sweep_checker`**. **So the boundary double has to be
+  purpose-built after all**, which is exactly what the production constructor's own validation was there to tell me.
+- **And the other half is better than CP-1346 assumed:** the production port's public surface is
+  `begin`, `safe_stop`, `seal_live_evidence`, `bind_live_evidence`, `bind_startup_receipt`, `live_evidence_window`, `record_evidence`,
+  `run_phase`, `selected_prefix_source`, `validated_search_observation` - **so it already provides both bind hooks the child and parent
+  drive**, and the phase machinery the child uses for SEARCH and FINAL_CHECK. **The concern that a subclass would have to keep test-side
+  bookkeeping was unfounded**: the production class offers the surface, and the fixture only has to supply the boundary.
+- **So step 1 is now fully determined:**
+  ```python
+  class ChildPort(PickPlaceSearchPhasePort):     # production port; the boundary alone is substituted
+      def __init__(self, boundary):
+          super().__init__(boundary)
+      def bind_live_evidence(self, window):      # the child attaches its real window and recorder here
+          self._live_evidence_window = window
+          self._evidence_recorder = getattr(window, "_recorder", None)
+  ```
+  with a `_Boundary` double exposing `begin`, `search`, `safe_stop` and a `neck_sweep_checker.check`, each emitting requests that carry
+  `scenario_id`, `session_id`, `attempt_id`, `reset_epoch` and `release_epoch` - the five fields the production seal reads.
+- **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
+  nothing pushed.
