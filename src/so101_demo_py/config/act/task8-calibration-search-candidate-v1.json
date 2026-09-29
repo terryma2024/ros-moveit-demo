@@ -1,0 +1,104 @@
+{
+ "anchors": {
+  "default": {
+   "neck_start_rad": null,
+   "requires_approved_value": true
+  },
+  "forward": {
+   "neck_start_rad": null,
+   "requires_approved_value": true
+  },
+  "left": {
+   "neck_start_rad": null,
+   "requires_approved_value": true
+  }
+ },
+ "candidate_safe_interval": {
+  "lower_rad": null,
+  "requires_approved_value": true,
+  "upper_rad": null
+ },
+ "detector_runtime_identity": {
+  "cuda_device_policy": "cuda_only_no_cpu_fallback",
+  "detector_weights_sha256": null,
+  "model_id": null,
+  "torch_version": null,
+  "ultralytics_version": null
+ },
+ "kind": "task8_calibration_search_candidate",
+ "notes": "The approved plan requires this file to hold the frozen 17 search values and the three anchor starts. Neither the approved design nor the plan enumerates the numeric values, and no configuration document for them exists in the tree - the only concrete numbers are a teleop test fixture that models measured observations. Every value is therefore null with requires_approved_value=true; filling them is an approval step, not an implementation choice, and this file must not be treated as frozen until they are supplied.",
+ "schema_version": 1,
+ "search_values": {
+  "center_deadband_px": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "coarse_step_rad": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "horizontal_fov_rad": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "lock_valid_neck_rad": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "max_age_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "max_fine_corrections": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "max_fine_total_rad": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "max_skew_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "min_area_px2": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "min_bbox_aspect": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "min_confidence": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "search_timeout_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "stop_latency_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "stop_velocity_rad_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "submit_lead_s": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "tracking_iou": {
+   "requires_approved_value": true,
+   "value": null
+  },
+  "vertical_bounds_px": {
+   "requires_approved_value": true,
+   "value": null
+  }
+ },
+ "source_design": "docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md",
+ "source_plan": "docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md",
+ "status": "SKELETON_PENDING_APPROVED_VALUES"
+}

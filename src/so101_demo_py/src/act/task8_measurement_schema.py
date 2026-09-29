@@ -1,0 +1,173 @@
+"""Task 8 measurement protocol v2: the closed identity, the sealed batch, and closed JSON writes.
+
+The approved protocol requires every measurement to be recomputed from raw evidence, so the batch is the only
+source of truth: `validate_closed_batch` compares the recursive regular-file set against `batch.json.files`
+*before* any raw file is opened, refuses traversal and links, and verifies every digest. The identity is a closed
+ten-member set, so a consumer can never read a dangling extra field.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import tempfile
+from pathlib import Path
+
+BATCH_KIND = "task8_calibration_batch"
+BATCH_STATUSES = ("CLOSED", "INVALID")
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+_SOURCE_COMMIT = re.compile(r"[0-9a-f]{40}\Z")
+_BATCH_KEYS = frozenset({"schema_version", "kind", "status", "identity", "files"})
+_ROOT = Path(__file__).resolve().parents[2]
+_CONFIG = _ROOT / "config/act"
+
+
+class MeasurementIdentity:
+    """The closed identity every driver, batch seal and aggregator must share."""
+
+    MEMBERS = (
+        "source_commit", "config_sha256", "source_provenance_sha256", "runtime_config_sha256",
+        "anchors_sha256", "contact_policy_fingerprint", "act_profile_sha256",
+        "measurement_contract_sha256", "phase_camera_matrix_sha256", "driver_source_sha256",
+    )
+
+    @staticmethod
+    def require(document: object) -> dict:
+        if type(document) is not dict or tuple(sorted(document)) != tuple(sorted(MeasurementIdentity.MEMBERS)):
+            raise ValueError("MEASUREMENT_IDENTITY_INVALID")
+        if _SOURCE_COMMIT.fullmatch(str(document["source_commit"])) is None:
+            raise ValueError("MEASUREMENT_IDENTITY_INVALID")
+        for name in MeasurementIdentity.MEMBERS:
+            if name == "source_commit":
+                continue
+            if _SHA256.fullmatch(str(document[name])) is None:
+                raise ValueError("MEASUREMENT_IDENTITY_INVALID")
+        return dict(document)
+
+
+def _canonical(document: object) -> bytes:
+    return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                      allow_nan=False).encode()
+
+
+def sha256_file(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def write_closed_json(path: Path, document: object) -> Path:
+    """Write canonical JSON atomically; an existing target is never overwritten."""
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(dir=str(path.parent), prefix=".closed-")
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(_canonical(document))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, str(path))
+    except FileExistsError as error:
+        raise ValueError("CLOSED_JSON_EXISTS") from error
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return path
+
+
+def _load(path: Path, code: str) -> dict:
+    path = Path(path)
+    if not path.is_file() or path.is_symlink():
+        raise ValueError(code)
+    try:
+        document = json.loads(path.read_bytes())
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(code) from error
+    if type(document) is not dict:
+        raise ValueError(code)
+    return document
+
+
+def load_contract_v2(path: Path | None = None) -> dict:
+    document = _load(path or _CONFIG / "task8-calibration-measurement-contract-v2.json",
+                     "MEASUREMENT_CONTRACT_V2_INVALID")
+    for section in ("measurements", "support"):
+        if type(document.get(section)) is not dict or not document[section]:
+            raise ValueError("MEASUREMENT_CONTRACT_V2_INVALID")
+        for name, entry in document[section].items():
+            if type(entry) is not dict or type(entry.get("unit")) is not str:
+                raise ValueError("MEASUREMENT_CONTRACT_V2_INVALID")
+    return document
+
+
+def load_phase_camera_matrix(path: Path | None = None) -> dict:
+    document = _load(path or _CONFIG / "task8-phase-camera-matrix-v1.json",
+                     "PHASE_CAMERA_MATRIX_INVALID")
+    occluders = document.get("occluders")
+    if occluders != EXPECTED_OCCLUDERS:
+        raise ValueError("PHASE_CAMERA_OCCLUDERS_INVALID")
+    return document
+
+
+EXPECTED_OCCLUDERS = [
+    "fixed_fingertip_pad_visual",
+    "gripper_visual_00",
+    "gripper_visual_01",
+    "jaw_visual_00",
+    "moving_fingertip_pad_visual",
+]
+
+
+class BatchIndex:
+    """The sealed, indexed view of one raw batch."""
+
+    def __init__(self, root: Path, identity: dict, files: dict) -> None:
+        self.root = Path(root)
+        self.identity = identity
+        self.files = files
+
+    def path(self, relative: str) -> Path:
+        if relative not in self.files:
+            raise ValueError("BATCH_INDEX_INVALID")
+        return self.root / relative
+
+
+def _regular_files(root: Path) -> dict:
+    found = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("BATCH_PATH_INVALID")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise ValueError("BATCH_PATH_INVALID")
+        relative = path.relative_to(root).as_posix()
+        if relative == "batch.json":
+            continue
+        if ".." in Path(relative).parts:
+            raise ValueError("BATCH_PATH_INVALID")
+        found[relative] = sha256_file(path)
+    return found
+
+
+def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchIndex:
+    """Closure first, then digests: nothing is opened that the index does not name."""
+
+    root = Path(root)
+    recorded = _load(root / "batch.json", "BATCH_INVALID")
+    if set(recorded) != _BATCH_KEYS or recorded.get("kind") != BATCH_KIND:
+        raise ValueError("BATCH_INVALID")
+    if recorded.get("status") not in BATCH_STATUSES:
+        raise ValueError("BATCH_INVALID")
+    identity = MeasurementIdentity.require(recorded.get("identity"))
+    files = recorded.get("files")
+    if type(files) is not dict:
+        raise ValueError("BATCH_INVALID")
+    found = _regular_files(root)
+    if set(found) != set(files):
+        raise ValueError("BATCH_CLOSURE_INVALID")
+    for relative, digest in files.items():
+        if _SHA256.fullmatch(str(digest)) is None or found[relative] != digest:
+            raise ValueError("BATCH_CLOSURE_INVALID")
+    return BatchIndex(root, identity, dict(files))
