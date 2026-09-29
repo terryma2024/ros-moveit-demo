@@ -19864,3 +19864,17 @@ not an inference of mine.**
 - **Preserved:** every failure log (five colcon collection failures, the two RED runs), both gates' artefacts, all three review
   packets, and every scratch tree and IPC base - all classified as **deletion candidates**, none deleted; nothing pushed; no
   MuJoCo stack; no hardware.
+
+## CP-1223 — Task 10 entry conditions checked read-only, while the Astra verdict is pending
+
+- **Nothing was started; this is a read-only precondition check so the next step is unambiguous when the verdict arrives.**
+  | precondition (owner's item 5) | observed |
+  | --- | --- |
+  | a fresh, never-reused runtime generation | `runtime-task8l-gen2` and `runtime-task8l-gen3` exist under the evidence root; **`gen4` does not exist**, and the ledger already reserves it - so the next measurement must create `gen4` and never reuse `gen2`/`gen3` |
+  | a single MuJoCo/CUDA stack | not started, as instructed; exactly one stack may run, and none is running now |
+  | three anchors, FULL_RESTART | not begun; belongs to Task 10 itself |
+  | gate to entry | **Astra APPROVED**, which is the pending item |
+- **Why this is worth a checkpoint rather than a memory:** "gen4 does not exist yet" is the kind of fact that is free to check now and expensive to get wrong later, because a
+  reused generation would silently contaminate the measurement it is supposed to make honest. The check is also the cheapest possible form of it - two `ls` patterns.
+- **State:** HEAD `bf01f558` plus this checkpoint; staged 0; both existing generations and every scratch tree retained; no push, no
+  stack, no hardware.
