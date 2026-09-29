@@ -59,13 +59,30 @@ class Task8MujocoMeasurementDriver:
             anchors.append({"anchor": anchor, "identity": identity, "status": "COLLECTED"})
         if failure is not None:
             anchor, identity, kind, message = failure
-            self.stack.cleanup(anchor, context.generation)
+            receipt, contamination = self._cleanup_once(context, anchor)
             anchors.append({"anchor": anchor, "identity": identity, "status": "ABORTED"})
             # the raw message is the error code when the failure carried one; the type name is the fallback
             return self._seal(root, context, anchors, status="INVALID",
-                              error_code=message or kind)
-        self.stack.cleanup(ANCHORS[-1], context.generation)
-        return self._seal(root, context, anchors, status="CLOSED", error_code=None)
+                              error_code=message or kind, cleanup=receipt, contamination=contamination)
+        receipt, contamination = self._cleanup_once(context, ANCHORS[-1])
+        return self._seal(root, context, anchors, status="CLOSED" if contamination is None else "INVALID",
+                          error_code=contamination, cleanup=receipt, contamination=contamination)
+
+    def _cleanup_once(self, context, anchor) -> tuple:
+        """Clean up once for this case's own generation; a refused cleanup is recorded, never raised.
+
+        Single-flight and generation-scoped: the receipt names the generation the cleanup was requested for, so a stale
+        generation cannot clean a newer one by accident, and a stack that refuses the cleanup leaves contamination
+        evidence instead of an unattributed exception.
+        """
+
+        requested = {"anchor": anchor, "generation": context.generation}
+        try:
+            result = self.stack.cleanup(anchor, context.generation)
+        except Exception as error:
+            return ({"requested": requested, "status": "REFUSED", "error": type(error).__name__,
+                     "message": str(error)}, f"CLEANUP_REFUSED: {type(error).__name__}")
+        return ({"requested": requested, "status": "CONFIRMED", "result": result}, None)
 
     def _acquire(self, root: Path, anchor: str, identity: dict, ordinal: int) -> None:
         """Record ten geometry samples and one raw frame per phase - all provenance, no judgement."""
@@ -109,8 +126,10 @@ class Task8MujocoMeasurementDriver:
                             "payload_path": relative, "payload_sha256": _sha256(payload),
                             "encoding": "utf-8", "shape": [len(record)]})
 
-    def _seal(self, root: Path, context, anchors: list, *, status: str, error_code) -> Path:
+    def _seal(self, root: Path, context, anchors: list, *, status: str, error_code,
+              cleanup=None, contamination=None) -> Path:
         document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": status,
+                    "cleanup": cleanup, "contamination": contamination,
                     "identity": {"source_commit": context.generation,
                                  "config_sha256": context.contract_sha256,
                                  "source_provenance_sha256": context.driver_source_sha256,
