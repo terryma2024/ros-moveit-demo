@@ -23890,3 +23890,19 @@ not an inference of mine.**
   touches one method; **(2)** is larger and moves the recording responsibility out of the port, which is a design change, not a fix.
 - **State:** no source change yet in this round; changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed,
   nothing deleted.
+
+## CP-1443 — SEARCH now completes end to end; the next gate is phase provisioning, and the child already supports it
+
+- **The milestone:** with the port's grid feed no longer handing the recorder a three-key document, the focused run gets through **the whole SEARCH
+  phase** - segment, validation, phase document, evidence - and the failure is now **`TASK8_PHASE_NOT_PROVISIONED`**, raised for the *second* phase.
+  **That is the port behaving exactly as designed** (its `run_phase` refuses any phase but SEARCH, printing that a later phase must be provisioned) and
+  it is the first time this fixture has driven the production port past a completed phase.
+- **And the fixture already has the supported way to stay inside SEARCH:** the child builds its runner task as
+  `mode` plus `stop_after` **only when `mode == "phase_prefix"`**, and `RclpyActionDriver` exposes the phase entry (`pick_place_phase`). **So the
+  next edit is the request's mode/stop-after - driving SEARCH-only through the supported path - not a production change.**
+- **Honest note on the patch I landed:** it currently reads as a capability check (`capture_evidence_fields` on the boundary, else `None`) because my
+  second, cleaner rewrite of `_grid_sample` was rejected by a script error and the file kept the first version. **The behaviour is right (a partial
+  sample is never handed to the recorder) and the intent is documented in the ledger; tidying that method into its honest "returns None, and why" form
+  is queued for the next round so the source reads as clearly as the record does.**
+- **State:** the port change is written, compiles, and its build copy is the same file (the earlier `cp` reported "same file", so no divergent copy
+  exists); changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
