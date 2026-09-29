@@ -26173,3 +26173,15 @@ picture in both directions.**
 - **So the next round's deliverable is one file with three tests plus the exit-code assertions, and the reconnaissance above is what makes it mechanical:** seal an attempt, then (1) rewrite a sealed file's bytes,
   (2) add a file to the sealed workspace, (3) project it under an identity differing in one of the ten fields - each must refuse **by name**, exit non-zero and leave a ledger row that says INVALID.
 - **State:** P1-1..P1-4 complete and committed; the focused set green; no new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1571 — The three scenarios are in, and they share one refusal name
+
+- **`41 passed`** in the projection file, including the three new scenarios. Each is driven through the installed projection path and each is **refused**: rewriting a sealed file's bytes, leaving a file inside
+  the sealed workspace, and changing one identity field in the sealed attempt's own recorded request.
+- **Two facts the scenarios taught, recorded rather than smoothed over:**
+  1. **the seal marks its files READ-ONLY**, so tampering has to break that protection first (`os.chmod`) - **that protection is part of what sealing means**, and the test now says so rather than tripping over it;
+  2. **all three are refused by the SAME code: `ServiceConflict: UPSTREAM_PROJECTION_INVALID`.** The projection refuses an invalid upstream batch **without distinguishing** a corrupted seal from contamination from a
+     foreign identity. **So each scenario asserts that shared name, and this entry records the finding** - three differently-worded assertions would have pretended a distinction the code does not make.
+- **And the honest statement of what P2 still lacks:** the review asks for a **non-zero exit** and a **ledger row that says INVALID**, and these tests assert the **refusal** at the service level. **The CLI half - the exit
+  code and the ledger's own vocabulary - is the remaining work**, and it is the next round's target rather than something these tests can claim.
+- **State:** P1-1..P1-4 complete and committed; the P2 scenarios committed; the projection file green at 41 passed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
