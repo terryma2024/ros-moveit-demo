@@ -19774,3 +19774,34 @@ not an inference of mine.**
   depends on directly.
 - **State:** HEAD `bd386fe4` plus this checkpoint; staged 0; the two verification logs join the retained evidence set; no push, no
   stack, no hardware.
+
+## CP-1220 — Closing checkpoint: every remaining item is owner-gated, and the two decisions are precise
+
+- **Owner's list, final state for this stretch:**
+  | item | state |
+  | --- | --- |
+  | 1 descriptor = option (b), the immutable runtime config | ✅ CP-1158, CP-1162 |
+  | 2 the same parsed descriptor through context, driver and closed-index readback | ✅ CP-1167, CP-1169, CP-1171 |
+  | 3 focused negative set, four cases | ✅ CP-1172, CP-1173, CP-1174 |
+  | 4 Boundary V's mechanical part, seven artefacts | ✅ CP-1185, CP-1193, CP-1195, re-verified CP-1219 |
+  | 5 the gates | **pytest-xdist green: 5638 passed, 0 failed, 163 skipped** (CP-1211); the authorised fixture fix RED→GREEN (CP-1210); **the `colcon` package gate is blocked by one collection path** (CP-1216-CP-1218) and needs decision **(a)** below, or classification **(b)** |
+  | 6 no live stack, low-frequency tests, preserve everything | ✅ honoured |
+- **Decision (a), precise:** add `pythonpath` to `src/so101_demo_py/setup.cfg`'s existing `[tool:pytest]` section so the repository root
+  is on the test run's `sys.path`. One line in an owner file; exactly one module needs it
+  (`test/test_pytest_full_gate_runner.py`, which tests the root-level `tools/so101_pytest_gate.py`), and five attempts have shown
+  no environment variable can substitute for it (CP-1217).
+- **Decision (b), precise:** accept the pytest-xdist result plus CP-1217/CP-1218's classification as the package gate for this
+  stretch, and move to the independent GPT-6 Astra re-review - whose packet v2 is already on disk, 6141 bytes, sha256
+  `e9590ad6c2de92e3891e6aa3e1eadf12e3280e546f1cba41bd39c5f0d720b9a0`, with claims re-verified at CP-1219.
+- **Decision (c), carried from CP-1189 and still open:** whether Boundary V additionally needs a fixture driving the **child**
+  (`_run_pick_place`) rather than the runner, given the child **loads** its artifacts rather than having them injected and the
+  owner/child boundary already has green tests. It blocks nothing.
+- **Why I am stopping here:** every remaining piece of work needs one of those answers, and the last three rounds have produced
+  the measurements that make them cheap to decide - a one-line config change, a classification, or a scope call. Improvising any
+  of them would put my judgement into the owner's files or into the review's evidence, which is the line this whole stretch has
+  held.
+- **Evidence and state:** HEAD `116dfc8d`; staged 0; tree 31 modified + 13 untracked (the owner's work untouched, my changes
+  additive and hunk-staged); ledger 928 checkpoints; all five `colcon` logs, per-package logs, the xdist JUnit and log, the
+  packet-verification logs, every scratch and IPC base retained as **deletion candidates, nothing deleted**; no push, no MuJoCo
+  stack, no hardware; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED; the 17 provisional
+  values still `null` with `requires_approved_value: true`.
