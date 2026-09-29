@@ -16094,3 +16094,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **What remains:** the child-side attachment in `ros_child.py` (`bind_live_evidence(driver.window)` where the case
   identity and `attempt_id` are in hand, as a hunk-level addition so the owner's in-flight work stays unstaged), and then
   the single full gate at the Task 9 boundary from fresh NVMe scratch - with nothing committed while it runs (CP-1030).
+
+## CP-1053 — Decision B completed: the child attaches the window, staged alone
+
+- **The last piece, in the owner's file, staged as a hunk and nothing else.** The child now builds
+  `CaseEvidenceDriver(case_id=request.payload["scenario_id"], staging_root=artifacts.evidence_root,
+  session_id=request.session_id, attempt_id=request.attempt_id)` and calls the port's `bind_live_evidence(window)`
+  immediately before `PickPlaceRunner` is constructed - i.e. before the case can record anything, and without an epoch,
+  because the port binds that from the reset receipt it verifies when the case begins (CP-1052). Verified with
+  `git diff --cached`: **14 insertions, 0 of the owner's lines**, the staged content compiling on its own, and the
+  worktree restored byte-for-byte from a copy kept outside the repository.
+- **One correction during the work, recorded because it changed the semantics:** the first version required the
+  attachment unconditionally and broke two of the child's own tests with
+  `AttributeError: 'NoneType' object has no attribute 'evidence_root'` - those tests drive the cancel and stop paths with
+  no provisioned artifacts. The attachment is now guarded to "artifacts **and** a port that can take a window", which
+  keeps a Task 8 case attaching while a double without artifacts is left alone. **That is not fail-open:** a case whose
+  evidence never attaches is refused downstream by the journal row's live-evidence readback, which is the check this
+  session added earlier and which requires a byte-exact sealed artifact.
+- **Verified: 38 passed, rc=0** (`beh-r651b.log`) across the teleop production-chain, child and case-execution suites.
+- **Both owner decisions are therefore complete:** A (gate scratch depth, CP-1049) and B (one-shot fail-closed epoch
+  binding plus the child attachment, CP-1051/CP-1052/CP-1053).
+- **What remains:** the single full gate at the Task 9 boundary, on fresh NVMe scratch, with **no commits while it runs**
+  (CP-1030). Task 10 stays blocked until the 17 provisional search values are independently designed and Astra-reviewed.
