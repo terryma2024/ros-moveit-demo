@@ -31274,3 +31274,39 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress with the drive's last unknown removed: it needs a route manifest beside the case's live
   manifest, carrying the case's own ids.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final
   gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1823 — The full case now RUNS: the wiring is in, and the failure is the boundary's shape
+
+- **The drive reaches the port's own expert-route validation, which is the milestone:**
+  ```
+  pick_place_search_port.py:208  in begin
+      AttributeError: 'types.SimpleNamespace' object has no attribute 'manifest'
+  … ros_child.py:559 _run_pick_place -> pick_place_runner.py:193 run -> pick_place_search_port.py:252 begin
+  ```
+  **The checker built (its spawn took ~1.8 s), the screen mounted, the child ran, and the case got as far as
+  `begin`'s expert-route admission check** - so P1-5's wiring is no longer the problem. What fails now is the shape of
+  the harness's boundary.
+- **And `begin` states that shape exactly** (`pick_place_search_port.py:204-216`):
+  ```python
+  reset = self.boundary.reset
+  manifest = reset.manifest
+  cases = (*manifest["prefix_cases"], *manifest["full_cases"])
+  matching = [case for case in cases if case["case_id"] == request.get("scenario_id")]
+  if (len(matching) != 1
+          or any(matching[0][key] != request.get(key) for key in ("mode", "stop_after", "lifecycle"))
+          or manifest["contact_policy_fingerprint"] != reset.sources.contact_pairs.fingerprint):
+      raise …
+  ```
+  so the boundary must expose **`reset` with `.manifest` and `.sources`**, and
+  **`sources.contact_pairs` must carry `model_sha256` (line 352), `fingerprint` (line 216) and `for_phase(phase)`
+  (line 360)** - three things, where my mount supplied one hash holder. **The screen's coherence check needed the hash;
+  the port's admission needs the fingerprint; the contact hazard check needs the per-phase pairs. Same object, three
+  readers.**
+- **Which is a fixture obligation rather than a production gap, and worth saying plainly:** the production boundary is
+  the ROS/MuJoCo/controller surface, and it already offers `reset`/`sources`/`contact_pairs` with all three members -
+  **this harness's `_Boundary` offers the substituted surface but not that structure**, so the harness must expose the
+  same three things rather than a stand-in with one of them.
+- **State:** **P1-5 in progress, one step from the drive: the boundary must carry `reset.manifest`,
+  `reset.sources.contact_pairs.{fingerprint, model_sha256, for_phase}`.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**

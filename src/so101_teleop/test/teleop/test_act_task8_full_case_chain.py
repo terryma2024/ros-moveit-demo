@@ -24,11 +24,99 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
+
+_POLICY_FINGERPRINT = "d" * 64        # the campaign manifest's own contact policy fingerprint
 
 from so101_demo.act.pick_place_runner import PickPlaceRunner
 from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
 from test_task8_case_execution import _prepared
 from test_task8_child_driven_case import _prepare_child_case
+
+
+def _route_manifest(*, session_id: str, attempt_id: str) -> dict:
+    """The TASK-6 route manifest, with the CASE's ids - the document `route_motion_configuration` accepts."""
+
+    from pathlib import Path as _Path
+
+    from ament_index_python.packages import get_package_share_directory
+
+    from so101_demo.act.visible_approach_diagnostic import build_route_manifest
+
+    share = _Path(get_package_share_directory("so101_demo_py"))
+    config = share / "config/mujoco/act"
+    return build_route_manifest(scene_path=share / "assets/mujoco/act/scene.xml",
+                                plugin_path=config / "task6_route_plugins.yaml",
+                                profile_path=config / "task6_visible_approach_v1.json",
+                                session_id=session_id, attempt_id=attempt_id)
+
+
+def _approach_authority(*, session_id: str, attempt_id: str) -> dict:
+    """Build the checker and the production expert-route factory from the admitted documents.
+
+    Returns the motion document, the checker (so the caller can close it), and a factory shaped exactly as
+    `pick_place_child_port.py:147` shapes it - `SelectedApproachCandidate` over the three admitted config files, then
+    `VisibleApproachExpertRoute` with the manifest's own policy fingerprint. **The checker is built first because its
+    `model_sha256` is what the screen's sources must carry (CP-1819).**
+    """
+
+    from pathlib import Path as _Path
+
+    from ament_index_python.packages import get_package_share_directory
+
+    from so101_demo.adapters.act.visible_approach_expert_route import (
+        SelectedApproachCandidate, VisibleApproachExpertRoute)
+    from so101_demo.adapters.act.calibration_motion import route_motion_configuration
+    from so101_demo.adapters.act.physics import MujocoPathProcess
+    from so101_demo.adapters.act.pick_place_child_port import checker_pairs_by_phase
+
+    share = _Path(get_package_share_directory("so101_demo_py"))
+    config = share / "config/mujoco/act"
+    manifest = _route_manifest(session_id=session_id, attempt_id=attempt_id)
+    motion = route_motion_configuration(manifest)
+    checker = MujocoPathProcess(
+        check_timeout_s=motion["submit_lead_s"], start_timeout_s=2.0,
+        model_path=motion["model_path"], protected_roots=("base",),
+        cup_joint="cup_free_joint", gripper_body="gripper",
+        path_step_s=motion["path_step_s"], path_clearance_m=motion["path_clearance_m"],
+        velocity_limit_rad_s=motion["velocity_limit_rad_s"],
+        acceleration_limit_rad_s2=motion["acceleration_limit_rad_s2"],
+        allowed_pairs_by_phase=checker_pairs_by_phase(motion))
+
+    readback_joint_tolerance = 0.01
+    readback_cup_tolerance = 0.01
+
+    def factory(request):
+        candidate = SelectedApproachCandidate(
+            scene_path=share / "assets/mujoco/act/scene.xml",
+            plugin_path=config / "task6_route_plugins.yaml",
+            source_profile_path=config / "task6_visible_approach_v1.json",
+            candidate_profile_path=config / "visible_approach_candidate_v1.json",
+            session_id=request["session_id"], attempt_id=request["attempt_id"],
+            max_skew_s=motion["max_skew_s"], max_source_age_s=min(readback_joint_tolerance, motion["max_age_s"]),
+            joint_tolerance_rad=readback_joint_tolerance, cup_tolerance_m=readback_cup_tolerance,
+            stop_velocity_rad_s=motion["stop_velocity_rad_s"])
+        return VisibleApproachExpertRoute(candidate, policy_fingerprint=_POLICY_FINGERPRINT)
+
+    return {"manifest": manifest, "motion": motion, "checker": checker, "factory": factory}
+
+
+def _mount_approach_screen(port, authority) -> None:
+    """Mount the screen on the port, with sources bound to the checker's model - the two-phase rule."""
+
+    import threading
+
+    from so101_demo.adapters.act.pick_place_approach_path_screen import PickPlaceApproachPathScreen
+
+    boundary = port.boundary
+    boundary.contact_pairs = SimpleNamespace(model_sha256=authority["checker"].model_sha256)
+    if not callable(getattr(boundary, "capture", None)):
+        # the screen reads fresh measurements through `sources.capture`, which the PRODUCTION boundary provides; this
+        # harness's boundary is the ROS/MuJoCo/controller surface, so the capture it offers is the one it already has
+        boundary.capture = lambda *args, **kwargs: {"rows": list(getattr(boundary, "rows", []))}
+    port.approach_screen = PickPlaceApproachPathScreen(
+        search_port=port, sources=boundary, broker=boundary, path_checker=authority["checker"],
+        cancelled=threading.Event())
 
 
 @pytest.mark.xfail(
@@ -46,9 +134,15 @@ def test_the_joined_chain_carries_the_sealed_artifact_a_full_case_produces(tmp_p
     spec, owner, journal, events = _prepared(tmp_path, case_id="full-01")
     evidence = tmp_path / "child-evidence"
     evidence.mkdir()
+    # P1-5: APPROACH's inspection authority, assembled from the ADMITTED documents - the route's own manifest (which
+    # must carry THIS case's ids, because the production factory is built per request), the checker whose hash the
+    # screen's sources must be bound to, and the production expert-route class. Nothing here is invented: CP-1819.
+    authority = _approach_authority(session_id="session-298", attempt_id="full-01")
     child, phase_request, port = _prepare_child_case(
         evidence, monkeypatch, case_id="full-01", session_id="session-298",
-        attempt_id="full-01", campaign_id="case-298")
+        attempt_id="full-01", campaign_id="case-298",
+        expert_route_factory=authority["factory"], route_motion=authority["motion"])
+    _mount_approach_screen(port, authority)
 
     # the fixture builds a PHASE request; a full case is the same request with the full-case operation and no
     # `stop_after` - which is the rule the worker port itself applies (`bridge.py:266`: `mode == "full" and
