@@ -29424,3 +29424,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the boundary record is an artefact, not a narration:** `$ROOT/BOUNDARY.md` (2868 bytes) states the source commit, the interpreter, the overlay chain, the three results with their scratches and elapsed times, **the four failures it found and what was fixed because of them** (CP-1745's load-sensitive test - re-run at the same `-n 8`, not waived - and CP-1751's three: a missing registration, a literal count, a literal epoch), and a **"not claimed"** section: the counts are a sum (1432 = 1315 + 117), no live stack/simulator/CUDA/hardware was used, and **this is a test-suite boundary rather than a release**.
 - **The evidence index now describes it too, append-only:** four rows added for the v5 boundary (BOUNDARY.md, demo2.log, teleop3.log, ctest.log) with their sizes and digests, **nothing above them rewritten** - and the widest audit (46 rows stating a digest) re-run below.
 - **State:** **P1-1 … P1-5 and P2 complete; the ONE integration boundary complete and green on the new run root; what remains is the packet update and a further independent GPT-6 Astra / High review**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1754 — The index audit, re-run over the extended index: 50 rows stating a digest, zero mismatches
+
+- **The audit after the v5 boundary's four rows were appended:**
+  ```
+  rows stating a digest: 50
+  mismatches: 0
+  ```
+  **The two rows the verdict found mismatching are correct, the four re-synced rows are correct, the nine 64-hex rows are correct, and the four new boundary rows are correct** - with nothing above them rewritten (append-only).
+- **What remains, and it is the tail rather than the substance:**
+  1. **the packet update** - the review packet must state what the verdict asked for and what answered it: P1-1 … P1-5 (each with its RED, its GREEN and its checkpoint), P2 (the counts decoded from the canonical XML, the four corrected index rows, the freeze/read-back, the 50/0 audit), and the boundary (three legs, rc 0, with its record). **Two items belong in it as proposals rather than as silent gaps:** the sealed evidence cannot describe its own edges or its grid count (`_SAMPLE_KEYS` closed at 24 keys; the index reporting `sample_count` only), and **FACT 1 - the requested command event - is therefore not derivable from the artefact today**;
+  2. **the further independent review** - an independent GPT-6 Astra / High pass over this packet. **The task model rules require that reviewer for review tasks, and it is an external model: I cannot invoke it from here, so the request is prepared and the review itself is the owner's to launch.**
+- **State:** **P1-1 … P1-5 and P2 complete; the integration boundary complete and green; the packet update and the review request are the last two items**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
