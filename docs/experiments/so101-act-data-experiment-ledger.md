@@ -29483,3 +29483,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ```
   **The log and the JUnit agree**, which is the same check the teleop leg got from its 117 xunit files (1315 cases, 43 skipped) and the CTest leg from its 117/117.
 - **State:** **every finding closed with evidence; the boundary green on the new run root; the packet written, indexed and frozen; the index audit at 50 rows and zero mismatches; the review request prepared.** What remains is **not mine to execute**: the independent reviewer is an external model the repository's task rules require for review tasks.
+
+## CP-1757 — Owner decision: the independent review is the owner's to launch, and no code moves until it returns
+
+- **The question asked and the answer given:** *"你来启动独立 Astra/High 复核，我在结果出来前不动代码"* - i.e. **the owner launches the independent GPT-6 Astra / High pass over packet 5, and this session makes no controlled source change until its result arrives.**
+- **What that means concretely, so the freeze is unambiguous:**
+  - **HEAD stays at `e12ef362`** plus nothing; no production file, no test file, no CMake registration is edited from here until the review comes back;
+  - the **closed contracts stay closed** - `_SAMPLE_KEYS` (24 keys), the index's key set, and the ledger's append-only discipline - and the two proposals in packet 5 remain **proposals**;
+  - the **owner's dirty/untracked tree** (27 modified, 13 untracked at the freeze) stays exactly as it is;
+  - **nothing is pushed, deleted or moved**, and no Task 10 / Task 8L / P2-live / bundle / live / QUALIFIED path is entered.
+- **What is ready for the reviewer, all frozen and indexed:**
+  | artefact | size | sha256 (16) |
+  | --- | --- | --- |
+  | `handoffs/20260930-task7-onward/task8-astra-rereview5-packet.md` | 10876 | `598f8887f62d194d` |
+  | `handoffs/20260930-task7-onward/task8-astra-rereview4-verdict.md` (the verdict being answered) | 8604 | `f7443b35919dcd85` |
+  | `experiments/task9-package-gate-evidence-index.md` | 18675 | `f9cd386d1bfee19b` |
+  | `experiments/task9-package-gate-canonical-freeze.txt` | - | the freeze file itself |
+  | `experiments/final-boundary-v5-20260930-001236/BOUNDARY.md` | 2868 | `b671908bc4010f2a` |
+  and the boundary's three legs: **demo 5764 passed / 163 skipped / rc 0**, **teleop 117 files, 1315 cases, 43 skipped, 0 failures / rc 0**, **CTest 117/117 / rc 0**.
+- **The three questions the packet puts to the reviewer, restated here so they are not lost in prose:** (1) is each of P1-1 … P1-5 and P2 closed by the artefacts named; (2) are the three boundary legs sufficient evidence for the frozen commit; (3) are the two proposals - a self-describing sealed artifact, and whether a full case's aggregation should be reachable per case - the right disposition for the two gaps they describe.
+- **State:** **the session is paused at a user-decision boundary with everything frozen and indexed; the goal stays active because the plan's last step (the review and whatever it returns) is not complete.**
