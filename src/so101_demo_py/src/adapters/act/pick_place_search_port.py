@@ -465,7 +465,10 @@ class PickPlaceSearchPhasePort:
         for name in ("wrist_rgb_ok", "contact_ok", "released", "placement_stable"):
             if name not in evidence:
                 raise PickPlaceSearchPortError(f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: phase:{name}")
-        raw_records = self._write_raw_records(observed, root)
+        # the capture's own identity travels into the file names: a constant name per source let a later phase
+        # overwrite an earlier phase's evidence while the earlier sample kept its digest (CP-1600/1601)
+        capture = f"{phase}-{int(evidence['physics_step']):07d}"
+        raw_records = self._write_raw_records(observed, root, capture=capture)
         fields = canonical(raw, support_distance_max_m=threshold, raw_records=raw_records)
         if not isinstance(fields, dict):
             raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: canonical_evidence_return")
@@ -505,8 +508,15 @@ class PickPlaceSearchPhasePort:
             raise PickPlaceSearchPortError(
                 f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: {type(error).__name__}") from error
 
-    def _write_raw_records(self, observed, root) -> dict:
-        """Persist this capture's raw source documents under the recorder's root, with their digests."""
+    def _write_raw_records(self, observed, root, *, capture: str) -> dict:
+        """Persist this capture's raw source documents under the recorder's root, with their digests.
+
+        `capture` names the capture the records belong to. It is **not** decoration: with a name that only carried the
+        source, every phase wrote `raw/<source>.json`, each open truncated the previous phase's file, and every sample
+        went on quoting the digest of what *it* had written - so the sealed artifact claimed ten phases of raw evidence
+        and could support none of them per phase (CP-1600). The name therefore carries the capture, and the open is
+        exclusive so a collision is a named refusal instead of silent data loss.
+        """
 
         raw = observed.physical_readback
         directory = Path(root) / "raw"
@@ -530,13 +540,20 @@ class PickPlaceSearchPhasePort:
                 raise PickPlaceSearchPortError(f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:{name}")
             payload = json.dumps(_raw_document(document), sort_keys=True,
                                  separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
-            target = directory / f"{name}.json"
-            descriptor = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            relative = f"raw/{capture}-{name}.json"
+            target = directory / f"{capture}-{name}.json"
+            try:
+                # O_EXCL, not O_TRUNC: two captures must never share a record, and if they somehow try to, the second
+                # one is refused by name rather than destroying the first one's evidence
+                descriptor = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            except FileExistsError as error:
+                raise PickPlaceSearchPortError(
+                    f"TASK8_LIVE_EVIDENCE_RAW_RECORD_EXISTS: {relative}") from error
             with os.fdopen(descriptor, "wb") as handle:
                 handle.write(payload)
                 handle.flush()
                 os.fsync(handle.fileno())
-            records[name] = {"relative_path": f"raw/{name}.json",
+            records[name] = {"relative_path": relative,
                              "sha256": hashlib.sha256(payload).hexdigest()}
         return records
 
