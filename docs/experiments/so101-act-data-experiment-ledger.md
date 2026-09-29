@@ -17828,3 +17828,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **The decision I am not making alone, restated for the record:** which document is the authoritative runtime head-search
   descriptor - a new launch-path document, or the parsed `--runtime-config`. Everything else in Boundary IV is finished;
   this one choice, plus an authorised live stack, is what Boundary V and the rest of the chain wait on.
+
+## CP-1135 — Boundary V has a home and a green starting point; the work it still needs is itemised
+
+- **Located rather than assumed:** the production chain is
+  `src/so101_teleop/so101_teleop/unified/pick_place_case_execution.py` and `…/ros_child.py` (`_run_pick_place`), driven by
+  `src/cli/act_task8_live.py` and `src/act/pick_place_runner.py` - and the boundary already has a test file,
+  `src/so101_demo_py/test/test_act_task8_live_owner_composition.py`, which **passes 4 tests** today
+  (`beh-r742.log`, scratch `<R>/scratch/r742.<n>` with `TMPDIR` verified through the exact test interpreter).
+- **So Boundary V is not a blank page:** four owner-composition tests are green, and what the plan asks for beyond them is
+  specific and testable **without a live stack**, because only external ROS/MuJoCo/controller/process I/O is faked:
+  - the **SEARCH rows** are produced by the real path rather than hand-written,
+  - the **release open event** is observed,
+  - **three adjacent 10 Hz support rows in the same epoch**,
+  - the **FINAL_CHECK** stage is reached,
+  - the **sealed artifact reads back**,
+  - the **retirement is confirmed**,
+  - the **journal path and hash** are recorded,
+  and none of it may use `object.__new__`, a hand-filled `_ready`, or a direct `finish` call - the shortcuts that would make
+  such a test prove nothing.
+- **Why this is the right next work rather than idling on the descriptor decision:** the two are independent. The descriptor
+  chain needs a design answer and a live stack; Boundary V's chain runs against fakes by design, and its assertions are
+  exactly what would catch a driver that never recorded evidence - so finishing it first means the descriptor wiring lands
+  into a chain that is already proven end to end.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's decisions still
+  open: the authoritative descriptor document (CP-1131/CP-1134) and authorisation for one live stack for the recording half.
