@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,9 @@ BOTTOM_IO_MODULE = '''"""Only the two bottom boundaries: the MuJoCo/ROS client a
 
 import pathlib
 
-RECORDED = pathlib.Path(__file__).with_suffix(".seen")
+# `with_name`, not `with_suffix`: the module's name is unique per run, so replacing the suffix would move the record
+# file's name with it and the test would read a path nothing writes
+RECORDED = pathlib.Path(__file__).with_name("bottom_io.seen")
 
 
 def client():
@@ -98,9 +101,12 @@ def _formal_run(tmp_path, monkeypatch):
     from so101_demo.cli import act_measure_task8_calibration as measure
 
     monkeypatch.delenv(PROVIDER_SEAM_ENV, raising=False)          # the verdict forbids this seam
-    (tmp_path / "bottom_io.py").write_text(BOTTOM_IO_MODULE)
+    # a UNIQUE module name per run: `importlib.import_module` caches by name, so a fixed name would hand a later test
+    # the earlier test's module - and with it the earlier test's `.seen` path
+    module_name = f"bottom_io_{uuid.uuid4().hex}"
+    (tmp_path / f"{module_name}.py").write_text(BOTTOM_IO_MODULE)
     monkeypatch.setenv(BOTTOM_IO_ENV,
-                       "bottom_io:client,bottom_io:detector_factory,bottom_io:frame_source")
+                       f"{module_name}:client,{module_name}:detector_factory,{module_name}:frame_source")
 
     identities_document = _cli_identities()
     identities = tmp_path / "identities.json"
