@@ -22008,3 +22008,22 @@ not an inference of mine.**
      not seal" rather than "no batch exists and the run is fine".
 - **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1329 — A real production defect, found by P1-3's requirement and fixed: an INVALID seal was unvalidatable
+
+- **The finding, read from both sides as CP-1328 promised:** the validator's key check was
+  `_BATCH_REQUIRED <= set(recorded) <= _BATCH_KEYS` with `_BATCH_KEYS = _BATCH_REQUIRED | {"cleanup", "contamination"}`, and
+  **`error_code` appears nowhere in the schema** - while the **driver writes `error_code` on every INVALID seal**. **So an INVALID batch
+  could never pass `validate_closed_batch`**, which is precisely the readback P1-3 requires the entry to perform. **That is a production
+  defect, not a fixture slip, and it was hiding behind the fixture failures I had been chasing.**
+- **The fix is minimal and keeps CLOSED strict:** the allowed set gains `error_code` **only when the status is not `CLOSED`**; a CLOSED
+  batch is exactly as strict as before. Build copy synced.
+- **And the suites moved: 77 passed / 3 failed** (from 56/3 before this fix, in a larger run) - my own P1-3 driver now gets past the key
+  check, and the two remaining causes are both fixture work I can name exactly:
+  1. **`BATCH_PHASE_MISSING` in my P1-3 driver** - it writes one phase row, `phase-release.json`, while the validator requires the nine
+     for an anchor evidenced the driver's way. **The same nine-row completion the aggregator helper already received, applied to this
+     driver.**
+  2. **two `BATCH_INVALID`s** - the descriptor suite's driver (its helper wiring is still partial) and the **contract** test, whose driver
+     deliberately seals nothing; **that test's intent survives and its assertion becomes "the entry refuses a driver that did not seal".**
+- **State:** P1-3's changes (including the schema fix) and the fixture work remain uncommitted while red; no stack started, no CUDA, no
+  actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
