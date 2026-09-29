@@ -15122,3 +15122,16 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   socket path - and the demo scope still needs its colcon gate run; Task 10 blocked until the 17 search values are
   reviewed. No runtime, no package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1017 — In flight: the demo package's colcon gate
+
+- **Running now (background job `bash-2717`):** `colcon test --packages-select so101_demo_py` with
+  `--pytest-args "-q -n 8 -p no:cacheprovider"` and `--return-code-on-test-failure`, from a fresh verified
+  evidence-root scratch with `TMPDIR`/`TMP`/`TEMP` set there and bytecode writing disabled. Log:
+  `experiments/gate6-batch3-py-gate/beh-r610-colcon-demo.log`.
+- **What it completes:** with CP-1016's teleop measurement (6 failed of 113 under colcon, all traceable to
+  `IPC_SOCKET_PATH_TOO_LONG`), this run gives Task 9 its full two-package picture under the correct runner - and it
+  tests CP-1014's finding that the demo scope's bare-pytest collection errors (`No module named 'tools'`) were a runner
+  artefact rather than a defect. If it collects and passes, that finding is confirmed and Task 9's demo half is clean.
+- **Not yet claimed:** whether the demo colcon gate is green or what it reports. The result is recorded when the job
+  settles; nothing above is its outcome.
