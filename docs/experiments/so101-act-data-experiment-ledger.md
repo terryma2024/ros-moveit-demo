@@ -19105,3 +19105,24 @@ not an inference of mine.**
   | journal path and hash | ⏳ child/owner path - **the decision at CP-1189 is with the owner** |
 - **State:** goal active (revision 51, cap 1000); HEAD `41803c12`; staged 0; logs `beh-r798` … `beh-r800`; no full suite, no
   push, no stack, no hardware.
+
+## CP-1191 — The sealed entries are references, not values: the release evidence is in the row's raw record
+
+- **One print settled the last assertion, and it also corrected my mental model of the artifact:**
+  ```
+  entry keys: ['phase', 'physics_step', 'relative_path', 'release_epoch', 'reset_epoch', 'sha256',
+               'sim_time_s', 'wrist_target_visible']
+  phases: ['SEARCH', 'APPROACH', 'CLOSE', 'MICRO_LIFT', 'TRANSPORT', 'ALIGN', 'RELEASE',
+           'RADIAL_RETREAT', 'RADIAL_RETREAT', 'FINAL_CHECK']
+  ```
+  A sealed entry carries **`relative_path` and `sha256`** - a reference to the raw record it was built from - not the contact
+  block itself. So the release open event is evidenced **in the referenced file**, and my assertion was looking for it in the
+  index. That is the artifact doing exactly what the plan wants: the index cites evidence, and a verifier resolves it.
+- **The phase list is worth keeping as evidence in its own right:** all nine phases appear, with **RADIAL_RETREAT twice** (the
+  two retreat segments `PickPlaceRunner` runs) and FINAL_CHECK last - so Boundary V's "the real path produced the rows"
+  requirement is visible in the sealed artifact, not merely inferred from the port's call log.
+- **So the last two artefact assertions become a resolver, not a lookup:** read each entry's `relative_path`, verify its
+  `sha256`, and check the row's own contact block for `released` - which is the same readback discipline the publishing half
+  already established (CP-1112/CP-1113) and closes both outstanding artefacts with one more line than I had written.
+- **State:** goal active (revision 51, cap 1000); HEAD `94a41fb6`; staged 0; log `beh-r801.log`; no full suite, no push, no
+  stack, no hardware.
