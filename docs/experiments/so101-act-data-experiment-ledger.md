@@ -13900,3 +13900,42 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   green at 29 with this correction outstanding; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one
   approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval);
   no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-969 — The design's full live-field table transcribed verbatim; three divergences found in my work
+
+- **The authoritative rows, quoted from design lines 458-462 so the implementation can be written to them:**
+
+```
+| `grasp_occlusion_window_s` | CLOSE 到 RELEASE 的 10 Hz live 时间线中，合法 gripper occlusion 的最长连续 source-stamp 区间；断帧、非允许 owner 或 phase 越界使该 run FAIL | 取五次最大值，必须 `<=` 配置上限 |
+| `support_distance_m` | 同一 release epoch 中，首个 gripper-open command 前紧邻的 3 个连续 10 Hz live sample；每帧从 MuJoCo exact collision pair `bottom_collision`/`table_collision` 读取有符号最短距离 `d_signed`，reported sample=`max(0,d_signed)`，单次取三帧最大值；三帧还必须都有该 exact pair 的 active contact，且 cup linear/angular velocity 与 pose 稳定谓词通过 | 取五次最大值，必须 `<=` 配置上限；任一帧无真实 `bottom_collision`/`table_collision` contact 即 FAIL，距离通过不能替代支撑接触 |
+| `release_stable_s` | RELEASE 后首次满足 cup pose/velocity/contact 稳定谓词起，到首次破坏或 phase 结束的最长连续 source-stamp 时长 | 取五次最小值，必须 `>=` 配置下限 |
+| `retreat_distance_m` | RADIAL_RETREAT 中 gripper 相对已放置 cup 的径向位移，首次同时满足 clearance/contact/pose 稳定时的 readback 值 | 每次必须出现 qualifying readback；取五次最小值，必须 `>=` 配置下限 |
+| `placement_stable_s` | FINAL_CHECK 中 pose、linear/angular velocity、table support 和 forbidden-contact 全部满足的最长连续 source-stamp 时长 | 取五次最小值，必须 `>=` 配置下限 |
+```
+
+- **Divergence 1 - the field's name.** The design's row is `support_distance_m`, while my `LIVE_ONLY_FIELDS`
+  (CP-960) uses `cup_support_distance_m` - which is the *sample* key's name, not the report field's. The five
+  report fields must be named as the design names them, so `cup_support_distance_m` in the derived mapping is
+  wrong and must be corrected (the sample key stays as it is; only the report field's name changes).
+- **Divergence 2 - `placement_stable_s`.** The design requires the longest contiguous source-stamp duration in
+  FINAL_CHECK over which **pose, linear/angular velocity, table support and forbidden-contact all hold**, not the
+  sim-time span of samples whose single `placement_stable` boolean is true. My implementation (CP-967) is a
+  simplification of that rule and is recorded as **provisional, to be corrected**.
+- **Divergence 3 - `retreat_distance_m`.** The design requires the **radial** displacement relative to the
+  **already-placed cup**, at the **first** readback satisfying clearance, contact and pose stability together -
+  not the total displacement between the first and last retreat sample. Also provisional, same treatment.
+- **What is right and can stand:** the extrema directions in `derive_live_measurements` match the table exactly
+  (max for the occlusion window and the support distance, min for release stability, retreat distance and
+  placement stability), and the three-consecutive-samples-before-first-open structure of `_support_from_frames`
+  matches the `support_distance_m` row's window, though its contact evidence must come from the MuJoCo exact
+  collision pair `bottom_collision`/`table_collision` in the raw records and its per-frame value is the maximum
+  of the three, as the row states.
+- **The lesson, again, and this time it cost nothing but a read:** I had written two plausible simplifications and
+  one wrong field name, all three caught by transcribing the approved table instead of reasoning from the sample
+  keys. The next steps are therefore ordered: transcribe-and-correct the field names and the two rules, then
+  implement the raw-record layer the two corrected rules and the occlusion window all need.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge and two provisional value functions are green at 29; Tasks 9-10 untouched; the goal is armed with
+  a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and
+  the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal
+  0/0/0; `collection_*` NOT_PROVISIONED.
