@@ -21987,3 +21987,24 @@ not an inference of mine.**
   edits is the way out.
 - **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1328 — 56 passing, three refusals left, and one of them may be a production defect rather than a fixture slip
+
+- **Progress: four failures became three** (56 passed). The aggregator's CLI-seal test is green now, and the cause of its failure was precise:
+  the validator sorts the phase rows **by file name**, so the source stamps had to increase **alphabetically** - my tuple order made them
+  go backwards and raised `BATCH_TIME_REVERSED`. Fixed by numbering the sorted phase names.
+- **The three remaining, each with its own cause:**
+  1. `test_the_cli_composes_the_production_driver_without_the_injected_test_seam` - the descriptor suite's driver still is not sealing a
+     batch the validator accepts; its helper wiring needs the same treatment the aggregator's got (write the helper beside the driver,
+     import it, call it) rather than my partial edit.
+  2. `test_an_invalid_sealed_batch_is_never_reported_valid` - **and this one is worth flagging**: my INVALID driver writes
+     `"error_code": "ANCHOR_FAILED"`, and the validator's allowed key set is `_BATCH_REQUIRED | {cleanup, contamination}` (**printed
+     above, together with the production driver's own `error_code` writes**). **If `error_code` is outside the allowed set, then the
+     production driver's INVALID seal is itself unvalidatable** - which matters directly, because P1-3 requires the entry to read an
+     INVALID seal back. **Either the validator permits `error_code` for a non-CLOSED status, or the driver must stop writing it; the
+     reviewer's own requirement decides which, and I am reading both sides before touching either.**
+  3. `test_the_entry_does_not_seal_on_the_drivers_behalf` - its driver deliberately seals nothing, which the entry's new readback now
+     refuses; **the test's intent is still right and its assertion path has changed**, so it becomes "the entry refuses a driver that did
+     not seal" rather than "no batch exists and the run is fine".
+- **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
