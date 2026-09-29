@@ -18079,3 +18079,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** the new test fails by design on the current contract; the teleop suite around it is untouched (16 passed at
   CP-1143, nothing has changed those files). No full suite, nothing weakened, nothing deleted, no push, no stack, no
   hardware. The owner's two decisions remain open and independent.
+
+## CP-1146 — Three contracts satisfied; the phase evidence now fails on values rather than keys
+
+- **Read every key set from the class itself rather than from truncated source lines** - `_REQUEST_KEYS` (7), `_BEGIN_KEYS`
+  (5), `_EVIDENCE_KEYS` (25), `_RELEASE_KEYS` (9), `_SET_DOWN_KEYS` (17) - and built the fake's returns from them, so a
+  missing field fails in the fixture rather than in the runner.
+- **Contracts satisfied so far:** `begin` (exactly its five keys, with the request's identities and non-negative epochs;
+  my first attempt added `physics_step` and was refused, which is the exact-key rule doing its job) and `safe_stop`
+  (literally `True`). **Now at `PHASE_EVIDENCE_INVALID` for `run_phase`, and this time the key count is right** - 25 fields,
+  matching `_EVIDENCE_KEYS` - so the rejection is about **values**, not membership: the runner checks more than the shape of
+  a phase's evidence.
+- **That is the honest state of this test and it is progress:** each round has moved from "wrong module" to "import name" to
+  "missing contract" to "extra key" to "value semantics". What remains is to read the value conditions `run_phase`'s
+  evidence must satisfy (which flags must be true in which phase, and what `physics_step` must be relative to the case), and
+  then the remaining methods (`set_down`, `release_preflight`, `run_retreat_segment`) have their own checks of the same kind.
+- **Whether this is worth continuing at this pace, said plainly:** it is, but the marginal value per round is now a single
+  contract, and the ledger carries every one of them. If the session ends part-way, this checkpoint plus CP-1141/1145 are a
+  complete, resumable specification of the fake - no reasoning is lost, only typing remains.
+- **State:** the test fails by design; the surrounding teleop suites are untouched (16 passed at CP-1143). No full suite,
+  nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions remain open and independent.
