@@ -21550,3 +21550,20 @@ not an inference of mine.**
   and do not pre-empt.** If that model is unavailable, that limitation should be reported rather than substituted.
 - **State:** HEAD `a0fcb57b` plus this checkpoint; every log, JUnit file, provenance file, scratch and IPC base retained as deletion
   candidates; no live stack, no hardware; nothing deleted, nothing pushed.
+
+## CP-1304 — The file-sharded runner is green too, once and classified
+
+- **`rc=0`, 120 s, every shard passing** (`tools/so101_pytest_gate.py`, fresh NVMe scratch, interpreter verified, 8 workers, short run id):
+  `507 + 589 + 776 + 655 + 620 + 644 + 795 + 284 + 774` passed, and the collection shard reports **5807/5819 collected, 12 deselected**
+  - which is the same ordinary scope the package gate ran, so the two agree about what exists.
+- **Classified explicitly, as the owner asked:** the runner is **not** the ordinary pytest-xdist/package gate and is offered as
+  supporting evidence. The two gates at CP-1302 remain the boundary result. **Its value here is the contrast:** the run that made this
+  harness red failed in one module (`test_controller_reservation_client.py`, sixteen failures from the AF_UNIX path budget), and that
+  module is green under it now - the fixture fix the owner authorised (CP-1210) holds in the sharded harness as well as in the package
+  gate.
+- **Every gate this task has is therefore green on one tree:** demo package gate **5807 / 0 failures**; teleop ordinary gate
+  **1262 / 0 failures**; file-sharded runner **rc=0**.
+- **The packet was extended rather than rewritten**, so its earlier checksum stands as history: the addendum is section 10 and the file's
+  new size and digest are recorded here.
+- **State:** all logs, JUnit files, provenance files, per-shard pytest logs, scratches and IPC bases retained as deletion candidates; no
+  live stack, no hardware; nothing deleted, nothing pushed.
