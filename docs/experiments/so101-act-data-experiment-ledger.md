@@ -23310,3 +23310,17 @@ not an inference of mine.**
   `evidence_loss`/`truncated` as real booleans - a frame of zeros pretending to be measurements is what reports a hazard.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1407 — Contact hazard passed, and the port is now checking the RGB observation
+
+- **The refusal became `RGB source skew`**, which means `physical readback scope` **and** `contact hazard` both pass now. **The cause of the
+  hazard, read uncut from `contact_hazard` itself, was a one-liner I would never have guessed:** it requires `allowed_pairs` to be a
+  `set`/`frozenset` and **returns True (a hazard) for anything else**, while my `contact_pairs.for_phase("SEARCH")` returned a plain dict. **Two
+  `for_phase` lambdas now return `frozenset()`, the contact frame carries genuinely empty arrays with real booleans, and the check is satisfied.**
+- **And the same function corrected one of my own earlier plans:** `frame['truncated'] or frame['evidence_loss']` **returns True** - a hazard - so
+  setting either flag True "to mean no evidence" would have been exactly wrong; they must be **False**, which is what the fixture now reports.
+- **The next check is the RGB one:** the port validates the observation (`validate_observation`) and then compares its frames' timing against the
+  world - `RGB source skew`. **Its rule is printed above; the fixture's frames are real arrays with a sim time, so this is another named-field fix
+  rather than a hunt.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
