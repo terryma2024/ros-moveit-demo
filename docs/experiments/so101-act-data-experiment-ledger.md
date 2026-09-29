@@ -18484,3 +18484,29 @@ not an inference of mine.**
   and hash **with** the raw batch; the aggregator reads it back from the **strict closed index** and then calls
   `validate_head_search_binding`. Then the focused negative set (item 3) and Boundary V's mechanical part (item 4).
 - **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1163 — Item 2's seam read: the context is closed, so the descriptor is added to it explicitly
+
+- **`CalibrationMeasurementContext` lives in `src/act/task8_calibration_admission.py:65`, and its docstring states the very
+  rule this item implements:** *"Resource binding happens once, at the calibration CLI entry, and travels in this context;
+  internal components never rebind. The context carries the contract and controlled-input digests so every event and receipt
+  can name the exact inputs its generation was measured against."* That is §6's boundary in code - and the runtime descriptor
+  is exactly such a controlled input.
+- **Its current closed parameter list** - `generation`, `contract_sha256`, `measurement_plan_sha256`, `safe_interval_rad`,
+  `candidate_sha256`, `policy_sha256`, `driver_source_sha256`, `controller_generation`, `broker_generation`, `evidence_root`,
+  `resource_binding`, with `REQUIRED_BINDING_KEYS = ("bound_at_entry", "cpu_cores", "gpu_device")` - carries digests but **no
+  runtime descriptor**, which is the gap this item closes.
+- **The change, specified so it lands in one piece without guessing:**
+  1. `CalibrationMeasurementContext` gains the descriptor as **(canonical payload, source path, sha256)** - the parsed
+     document itself, not a path to re-read, because §6 forbids internal components returning to the preparation directory
+     to re-select files;
+  2. the CLI's `--context` path builds it from the same document the bundle validated at CP-1162, so the bytes and digest are
+     the ones already bound rather than a fresh read;
+  3. the driver (`Task8MujocoMeasurementDriver.run`) registers that payload in the batch it seals - so the closed index
+     covers it and `close_measurement_batch` hashes it like every other file;
+  4. the aggregator reads it **back from the strict closed index** (never from the context's path) and passes it to
+     `validate_head_search_binding(runtime, report)`, which closes §8's loop with the readback §4.2 requires.
+- **And the negative tests that go with it (the owner's item 3), all at this same seam:** an opaque-digest-only context, a
+  descriptor whose `head_search` disagrees with the weights/model/device/CUDA policy recorded elsewhere, a changed controlled
+  config hash, and a batch that does **not** index the descriptor each fail closed.
+- **State:** goal active (revision 51, cap 1000); HEAD `64370c2a`, staged 0; no full suite, no push, no stack, no hardware.
