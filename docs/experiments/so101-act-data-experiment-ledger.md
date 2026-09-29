@@ -29651,3 +29651,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   freeze, which was then rewritten and read back - **seven entries, all reproducing**.
 - **State:** **everything is frozen, indexed, audited, and now launchable: the next action is the owner's.** No
   controlled source change since the freeze; the goal stays active.
+
+## CP-1768 — The last self-inflicted staleness: closed ranges in living documents, fixed and then stopped
+
+- **What happened, and it happened twice in one round:** the request said *"entries CP-1742 … CP-1766"* and the packet
+  said *"(checkpoints CP-1742 … CP-1754 cover this packet)"*. **Both were true when written and both were false the
+  moment the ledger grew** - which it does every time I record a checkpoint, i.e. by design.
+- **Fixed by removing the closure rather than by updating the number:** *"entries from CP-1742 onwards"* and
+  *"the checkpoints from CP-1742 onwards cover this packet, up to the newest entry"*. **A number that must be
+  maintained is a liability; a rule that stays true is an asset.**
+- **And this class of finding is now closed by construction, not by another pass:** it is the fifth self-review
+  finding and the only one that recurred, because every other finding was about a **value** while this one was about
+  a **form**. The two documents now contain no closed checkpoint range, so the next round's growth cannot invalidate
+  them.
+- **Costs paid:** request **5895 bytes, `92b7287e8c57ff0e`**; packet **13285 bytes** with digest as frozen; index row
+  re-synced; freeze rewritten and read back - **seven entries, all reproducing.**
+- **State:** **frozen, indexed, audited, launchable; the review is the owner's next action and there is no work of
+  mine left that does not either change code (not authorised) or repeat a verification already recorded.** The goal
+  stays active because the review and its outcome are the plan's last step.
