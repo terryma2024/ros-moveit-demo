@@ -369,3 +369,25 @@ def test_two_batches_that_disagree_on_a_second_identity_member_are_refused(tmp_p
     second = _sealed_batch(tmp_path / "batch-b", {"measurements": {"min_confidence": [0.6]}}, other)
     with pytest.raises(ValueError, match="CALIBRATION_IDENTITY_MISMATCH"):
         aggregate_task8_calibration((first, second), bound, tmp_path / "out")
+
+
+def test_the_published_measurements_are_values_with_their_sample_never_verdicts(tmp_path, contract):
+    """Boundary IV's publishing half: a report carries measured values, and a verdict belongs in `checks` only."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+
+    batch = batch_factory(tmp_path, contract)
+    outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
+    document = json.loads(Path(outputs["calibration_report"]).read_text())
+    measurements = document["measurements"]
+    assert measurements, "a ready report names its measurements"
+    for name, entry in measurements.items():
+        assert isinstance(entry, dict), name
+        assert entry.get("unit"), f"{name} keeps its unit"
+        assert "sample_path" in entry and "sample_sha256" in entry, f"{name} cites the sample it came from"
+        value = entry.get("value")
+        assert not isinstance(value, str), f"{name} is a value, not the verdict {value!r}"
+        assert isinstance(value, (int, float, list)), f"{name} has a numeric value"
+    # the verdicts live in checks, and only there
+    assert set(document["checks"]) <= set(document["checks"])
+    assert all(isinstance(verdict, str) for verdict in document["checks"].values())
