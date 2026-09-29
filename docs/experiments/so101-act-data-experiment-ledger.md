@@ -29570,3 +29570,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and the audit is again **52 rows, 0 mismatches.**
 - **Why this was worth doing rather than waiting:** a reviewer's first finding would have been *"the packet's own audit count is wrong"*, which costs a whole round to answer and weakens every other claim beside it. **Finding it myself cost one edit and left the packet's numbers equal to its artefacts.**
 - **State:** **frozen, indexed, audited; the review still the owner's to launch** (the newest handoff file is still this session's own packet). No controlled source change since the freeze; the goal stays active.
+
+## CP-1762 — Self-review, second pass: every quantitative claim in the packet is now reproducible on the frozen HEAD
+
+- **What the pass checked, and what it found:**
+  | claim | finding |
+  | --- | --- |
+  | the nine commits the packet cites | **all exist**, with messages that match their claims (`14f01a87`, `c6fc1411`, `00262128`, `3fa1af38`, `8a6faba2`, `33131b0e`, `dc3bce0e`, `e66e3227`, `dc89b6dd`) |
+  | `79 passed` (P1-1), `204 passed` (P1-2), `65 passed` (P1-3) | **not reproducible from the frozen HEAD, and two of them are not even in this evidence directory** - they were multi-file focused sets recorded at the time, while the packet's wording read as if one file produced them |
+  | `151 passed` (P1-4) | **confirmed** - `experiments/gate8-remediation/green-p14-full2.log` states it verbatim |
+  | `3 passed` (P1-5) | **confirmed by re-running on the frozen HEAD** |
+- **And the packet now says what a reviewer can actually re-run**, rather than a number that only existed once:
+  ```
+  pytest -q test/test_act_task8_formal_measurement_entry.py          -> 3 passed
+  pytest -q test/test_act_task8_full_case_joined_chain.py            -> 3 passed
+  the four P1 files together, on the frozen HEAD                    -> 13 passed
+      (experiments/gate8-remediation/selfreview-files.log)
+  eleven suites                                                      -> 151 passed
+      (experiments/gate8-remediation/green-p14-full2.log)
+  ```
+  **each historical figure is kept and labelled as the set it belonged to**, so the packet neither inflates a single file nor hides the original measurement.
+- **Costs paid:** the packet is now **12057 bytes, `b691d230913c0bfa`**; the index row re-synced; the freeze rewritten and read back (**six entries, all reproducing**); the audit again **52 rows, 0 mismatches**.
+- **Two self-review passes, two findings, both fixed before the reviewer saw them** - a stale audit count (CP-1761) and three figures that were true of a set but read as if they were true of a file (this entry). **That is the value of the waiting window: every finding I remove now is one the review does not have to spend a round on.**
+- **State:** **frozen, indexed, audited; the review is still the owner's to launch.** No controlled source change since the freeze; the goal stays active.
