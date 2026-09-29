@@ -30598,3 +30598,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   composition builds what it can and refuses by name for what it cannot. P1-2 and P1-3 CLOSED; P1-1 second half GREEN;
   the demo RED's clean re-measurement, P1-4, P1-5, P1-6 and the final gate remain. **Task-list statuses are unchanged, so
   they are not re-stated.**
+
+## CP-1802 — P1-1's first half wired: the default path builds its own bottom I/O and refuses for what it cannot
+
+- **The edit in `build_real_providers`:** before it reaches for the seam, the composition now resolves the ACT scene the
+  way production does (`get_package_share_directory("so101_demo_py") / "assets/mujoco/act/scene.xml"`, the same
+  expression `phase_contact_allowlist.py:129` and `pick_place_child_port.py:65` use) and builds the three model-derived
+  values itself - `ModelFrameSource(scene)`, `target_from_model(scene)`, `occluder_geometry_from_model(scene)`. **The seam
+  is still reached, but only for the values still missing**, so a run-supplied client or phase path is never overridden
+  by it, and **a host with no scene and no seam is refused by name** (`PRODUCTION_BOTTOM_IO_UNAVAILABLE: <type>: <error>`)
+  rather than silently proceeding.
+- **And the two run-derived values stay required**, which is the boundary CP-1801 drew: the composition cannot invent a
+  transport to a child or a trajectory the run is executing, so their absence is `PRODUCTION_CONTROLLER_ADAPTER_REQUIRED`
+  / the phase path's own refusal - **named, not stood in for.**
+- **Evidence: `18 passed`** across the formal-entry, composition-contract, identity-contract and bottom-I/O files - **so
+  the formal entry now seals with the composition building the model-derived three.**
+- **And one fixture had to be told, which is the check working rather than an obstacle:**
+  ```
+  test_act_task8_production_composition_contract.py:178 -> :156 -> composition.py:586 -> :207
+      ProductionCompositionError: PHASE_CAMERA_OCCLUDER_GEOMETRY_REQUIRED: fixed_fingertip_pad_visual
+  ```
+  the stand-in handed the evaluator geometry keyed `fixed_fingertip_00`, **a name the admitted matrix does not contain**,
+  and the evaluator refused for exactly the reason P1-3 built into it. The stand-in now names the admitted occluders -
+  **the same lesson as CP-1774 and CP-1784: substituting bottom I/O does not license substituting the interface, and here
+  it does not license substituting the vocabulary either.**
+- **State:** **P1-1's first half is wired end to end with the model-derived values built and the run-derived two refused
+  by name; its evidence is 18 passing tests across four files.** The remaining work is P1-4, P1-5, P1-6, the demo RED's
+  clean re-measurement and the final gate. P1-2 and P1-3 CLOSED; P1-1 second half GREEN. **Task-list statuses are
+  unchanged, so they are not re-stated.**

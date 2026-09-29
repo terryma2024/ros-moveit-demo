@@ -38,7 +38,12 @@ def _target():
 
 
 def _occluders():
-    return {"fixed_fingertip_00": {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005}}
+    # the names must be ones the admitted matrix actually names: the evaluator refuses an admitted occluder it has no
+    # geometry for (P1-3, rereview 5), and `fixed_fingertip_00` is not in `EXPECTED_OCCLUDERS` - so a stand-in that
+    # invents its own vocabulary makes the composition refuse for the right reason.
+    from so101_demo.act.task8_measurement_schema import EXPECTED_OCCLUDERS
+
+    return {name: {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005} for name in EXPECTED_OCCLUDERS}
 
 
 class CannedMujocoClient:
