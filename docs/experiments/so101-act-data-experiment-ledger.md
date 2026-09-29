@@ -20653,3 +20653,32 @@ not an inference of mine.**
   deliberately instead of doing whichever is quicker to type.**
 - **State:** aggregator source, `batch_factory`, `_v2_batch` and `_sealed_batch` edits all **uncommitted while red** (one failing test);
   build tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1260 — The last failure's premise is obsolete, and the fix keeps the test's meaning
+
+- **Read in full now, the test says:**
+  ```python
+  driver_module.write_text(
+      "def fill(contract, root):\n"
+      "    import json, pathlib\n"
+      "    root = pathlib.Path(root)\n"
+      "    root.mkdir(parents=True, exist_ok=True)\n"
+      "    (root / 'execution.json').write_text(json.dumps({}))\n"
+      "def boom(contract, root):\n"
+      "    raise RuntimeError('measurement failed')\n")
+  ...
+  assert measure.main([... "--driver", "driver:fill"]) == 0
+  assert (batch / "batch.json").is_file()
+  ```
+  **The fake driver writes one raw file and no seal, and the test then demands a sealed batch - because until CP-1248 the entry
+  sealed it.** With the seal moved to the driver (Astra's finding 3), the assertion is asking the entry to do the thing the review
+  removed. **The premise is obsolete, not the code.**
+- **The chosen fix, and why option 1 over option 2:** extend the fake `fill` so the fake driver **seals its own batch**, which is what a
+  real driver does - keeping the test's actual subject ("seals only on success" - `fill` seals, `boom` fails before sealing) exactly as
+  written and only correcting who does it. **CP-1259's option 2** (the entry verifying the seal exists before its `VALID` line) is a
+  worthwhile hardening, but it would change what the entry does on a driver that never sealed, which is not what this test is about;
+  **it belongs in its own RED if we want it, not smuggled into a fixture repair.**
+- **Everything else in the aggregator suite is green: `27 passed`.** Item 4's remaining work after this one test is the two new cases
+  Astra asked for - a bare root among several must fail closed (the `descriptor=False`/`descriptor_indexed=False` parameters are in
+  place for exactly that), and identical sealed payloads across roots must pass.
+- **State:** all edits uncommitted while red (one test); no stack, no hardware, nothing deleted, nothing pushed.
