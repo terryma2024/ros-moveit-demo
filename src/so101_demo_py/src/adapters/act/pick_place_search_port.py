@@ -70,6 +70,20 @@ class PickPlaceSearchPhasePort:
             raise PickPlaceSearchPortError("TASK8_STARTUP_PROOF_INVALID")
         self._startup_receipt = dict(receipt)
 
+    def bind_live_evidence(self, window) -> None:
+        """Attach this case's evidence window once, before the port starts recording into it.
+
+        The window is bound here rather than passed at construction because a case's identity - its attempt id in
+        particular - only exists once the request arrives, and the port refuses anything after it begins, so the bind
+        has to be explicit and one-shot rather than a later rebind.
+        """
+
+        if self._live_evidence_window is not None or self._begun:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_ALREADY_BOUND")
+        if window is None or not callable(getattr(window, "seal", None)):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_WINDOW_INVALID")
+        self._live_evidence_window = window
+
     def _stop_or_raise(self, reason: str, request: dict) -> None:
         try:
             confirmed = self.boundary.safe_stop(reason, request)
