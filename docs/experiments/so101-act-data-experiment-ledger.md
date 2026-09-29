@@ -11208,3 +11208,79 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-860 — Three orchestrator rulings recorded; overlay reading of CP-849/850 REVERSED
+
+- **Ruling 1 (overlay).** The qualification overlay is **not** a staging tree and its runtime artefacts may not be
+  reordered. Task 8P1 provenance must describe the roles the runtime **actually loads**, in the plan's default
+  **isolated colcon install root** (`<install-root>/<package>/...`), not a merged prefix. Concretely:
+  `mujoco_ros2_control_plugin` must point at the library **its real package/build produces in the dependency
+  overlay**, together with that package's real submodule sources and build receipt;
+  `simulation_evidence_plugin.cpp` must **not** be recorded as its source; and the `.so` must **not** be copied
+  into `so101_mujoco_support/lib/` to satisfy a wrong registry path. The closed role registry, its tests and the
+  receipt generation must be corrected by focused RED/GREEN so source path, package-owned installed path, build
+  inputs and the real loader path agree.
+  **This invalidates the CP-851 provenance document** and reverses my staging interpretation of CP-850.
+- **Ruling 2 (calibration ordering).** Follow the plan's Task 8L Step 2 -> Step 3 strictly and **never reuse an
+  earlier generation's calibration report**. Order: build-by-rule this run's five-key
+  `measurement-identities.json` from current source provenance + runtime config + anchors + the already approved
+  contact policy fingerprint + the installed ACT-profile digest; bind the contract **before** measuring with
+  `bind_measurement_contract()`; run a fresh MuJoCo measurement; aggregate offline into a new `TASK8_READY`
+  report, head-search sample and aggregation receipt; only then run artifact preparation to produce the committed
+  bundle and `preparation-receipt.json`; finally live and `QUALIFIED`. The pre-measurement identities document is
+  **not** the preparation receipt, and **CP-859's identification of the two must be corrected in the next
+  checkpoint**.
+  All five values come from production rules: source-provenance file SHA256, runtime-config raw-file SHA256,
+  anchors raw-file SHA256, the approved and consistent contact policy fingerprint from activation/policy, and
+  `installed_calibration_identity()`'s config SHA256. Canonical JSON, exact key set, fail-closed readback; no
+  hand-filled values and no reuse of an old report. If no formal CLI exists, call the existing production
+  `bind_measurement_contract()` through the exact installed interpreter and save command, interpreter and
+  input/output hashes - **do not build a second binding implementation**.
+- **Ruling 3 (scope).** Stay in this session. Batch work as "one reviewable source fix / one complete gate / one
+  runtime ladder step" with coarser checkpoints instead of one requirement per round, keeping full tests
+  low-frequency. The reported integration gate (**5580 collected, 28 failures**) means the final code gate is
+  **not** passed and nothing may be declared frozen for Task 8L. First attribute all 28 failures against the
+  exact frozen working tree: if they belong to relevant dirty paths inside this approved plan's scope, apply the
+  minimal fix and re-verify with focused tests; if they are genuinely user-external changes that cannot be
+  handled in scope, save the failure list and the first root cause and then stop - "my modules have 0 failures"
+  is not an acceptable bypass. Before Task 8L begins, the plan's package/full gate must show green evidence, or a
+  plan-permitted exclusion rule must prove those cases are outside gate collection.
+- **Boundaries restated as binding:** MuJoCo only, CUDA with no CPU fallback, no real SO-101 motion, no push, no
+  evidence deletion; after W2 go straight to the independent 40-scene exact-W8 without testing W4/W6; resource
+  bottlenecks stop the run rather than lowering a threshold.
+
+## CP-861 — The 28 failures: one root cause, one token, fixed and re-verified
+
+- **Attribution against the exact frozen working tree, as ruling 3 requires.** All 28 failures have a **single root
+  cause**: `test/test_act_pick_place_approach_source_binding.py:63` calls `Pairs.fingerprin`, while every `Pairs`
+  class in the tree defines **`fingerprint`** (e.g. `test_act_task6_contact_transition.py:34`,
+  `test_act_held_cup_micro_lift_candidate.py:28`, `test_act_task6_alt_full_contact_diagnostic.py:27`, each
+  `0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11`). The second failing module is not a second
+  defect: `test/test_act_task8_reset.py:75-76` and `:108-109` **import `physical_case` from that same file**, so
+  its 8 failures are the same `AttributeError` reached through the import. 20 + 8 = 28, one cause.
+- **In-scope judgement, stated plainly:** the file is one of the user's **untracked** paths, but it is a relevant
+  dirty path in the Task 8 pick-place approach-source area this plan covers (the live approach-reset path depends
+  on it), which is exactly the case ruling 3 permits a minimal fix for. The original bytes were preserved first
+  at `experiments/gate6-runtime/task8-core/user-file-backups/test_act_pick_place_approach_source_binding.py.orig`
+  (sha256 begins `bcfd45d25fb4b540`), and the edit is **one token**:
+  `contact_policy_fingerprint=Pairs.fingerprin,` -> `contact_policy_fingerprint=Pairs.fingerprint,`, verified by
+  diffing against that backup (a single changed line, `63c63`).
+- **Focused re-verification:** both modules together now pass - **36 passed, rc=0, 18.03 s**
+  (`beh-typo-fix.log`), against fresh verified scratch `scratch-r431.mBRK`.
+- **What this does *not* yet establish:** the plan's package/full gate is still **not green** - ruling 3 is
+  explicit that 5580-collected-with-28-failures cannot be called a passed final code gate. The next full-gate run
+  must show zero unexplained failures before anything is frozen for Task 8L, and that run happens **after** the
+  ruling-1 registry correction, so the gate covers the corrected provenance path rather than the stale one.
+- **Next, in the order ruling 1 and ruling 3 imply:** (a) correct the closed role registry, its tests and the
+  receipt generation so `mujoco_ros2_control_plugin` names the dependency overlay's own package-produced library,
+  its real submodule sources and its real build receipt, with `simulation_evidence_plugin.cpp` no longer recorded
+  as its source, and no file copied into `so101_mujoco_support/lib/` - RED/GREEN, focused; (b) then run the
+  package/full gate for green evidence; (c) then rebuild the Task 8L provenance from Step 1 in a **new run
+  subroot** under the same evidence root, keeping the old run subroot untouched; (d) then ruling 2's ordering:
+  five-key `measurement-identities.json` by production rules, `bind_measurement_contract()` before measuring,
+  fresh MuJoCo measurement, offline aggregation to a new `TASK8_READY` report, then artifact preparation, live and
+  `QUALIFIED`. The ledger's CP-859 claim that the pre-measurement identities document *is* the preparation receipt
+  is **wrong and is corrected here**: they are different documents produced at different steps.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; the user's dirty paths are otherwise untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
