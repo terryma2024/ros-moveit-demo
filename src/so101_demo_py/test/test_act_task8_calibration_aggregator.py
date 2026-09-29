@@ -45,7 +45,7 @@ def contract(tmp_path):
 
 def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED", status_field=None,
                   source_provenance_sha256="a" * 64, lock_frames=None, fov_ok=True,
-                  sync=True, collision_ok=True, execution_ok=True):
+                  sync=True, collision_ok=True, execution_ok=True, descriptor=True):
     root = tmp_path / name
     lock_frames = lock_frames or {"default": 4, "left": 4, "forward": 4}
     (root / "declared.json").parent.mkdir(parents=True, exist_ok=True)
@@ -79,6 +79,13 @@ def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED",
             "head_intrinsics_px", "head_translation_m", "head_rpy_rad",
             "yaw_zero_bearing_rad")},
         "observed_lock_frames": {anchor: lock_frames[anchor] for anchor in ANCHORS}})
+    # Astra item 4: every sealed batch indexes its runtime descriptor, so the fixture writes one before sealing -
+    # descriptor=False builds the bare root that the aggregator must refuse
+    if descriptor:
+        _write(root / "runtime-descriptor.json", {"schema_version": 1, "head_search": {
+            "schema_version": 1,
+            "detector": {"requested_device": "cuda", "allow_cpu_fallback": False},
+            "camera": {}, "motion": {}}})
     # the batch is sealed by the production entry point, which records every raw file hash
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
 
@@ -235,6 +242,9 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
         "    root = pathlib.Path(root)\n"
         "    root.mkdir(parents=True, exist_ok=True)\n"
         "    (root / 'execution.json').write_text(json.dumps({}))\n"
+      # Astra item 3: the driver is the seal owner, so a driver that succeeds seals and a driver that fails does not.
+      # This test is about who seals and when, so the seal here is a marker rather than a schema-true batch.
+      "    (root / 'batch.json').write_text(json.dumps({'sealed_by': 'driver:fill'}))\n"
         "def boom(contract, root):\n"
         "    raise RuntimeError('measurement failed')\n")
     import sys
@@ -258,7 +268,8 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
 
 # --- protocol v2 seam: verdicts from raw evidence, all roots, no labels -------------------------------------
 
-def _sealed_batch(root, payload, identities=None, extra_files=None):
+def _sealed_batch(root, payload, identities=None, extra_files=None,
+                 descriptor=None, descriptor_indexed=True):
     from so101_demo.act.task8_measurement_schema import write_closed_json
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
     import hashlib
@@ -268,6 +279,19 @@ def _sealed_batch(root, payload, identities=None, extra_files=None):
     raw = write_closed_json(Path(root) / "raw" / "records.json", payload)
     files = {"raw/records.json": hashlib.sha256(raw.read_bytes()).hexdigest()}
     files.update(extra_files or {})
+    # Astra item 4: this builder seals a batch the aggregator will read, so it indexes a descriptor like production -
+    # descriptor_indexed=False is how a test deliberately builds the bare root the rule must refuse
+    if descriptor is None:
+        descriptor = {"schema_version": 1, "head_search": {"schema_version": 1,
+                      "detector": {"requested_device": "cuda", "allow_cpu_fallback": False},
+                      "camera": {}, "motion": {}}}
+    if "head_search" not in descriptor:      # callers may hand in the inner block; the sealed document is the document
+        descriptor = {"schema_version": 1, "head_search": descriptor}
+    descriptor_path = Path(root) / "runtime-descriptor.json"
+    if not descriptor_path.exists():      # this builder may be called twice on one root; a sealed file is never rewritten
+        write_closed_json(descriptor_path, descriptor)
+    if descriptor_indexed:
+        files["runtime-descriptor.json"] = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
     # the batch declares three anchors, so it must evidence them: the aggregator's per-anchor sync file is the
     # convention it consumes, and indexing what it wrote keeps the fixture schema-true by construction
     for anchor in ("default", "left", "forward"):
@@ -517,7 +541,13 @@ def _valid_evidence(contract):
     return evidence, configured
 
 
-def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=False):
+def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=True):
+    if descriptor is None:                      # production always seals a descriptor, so the fixture does too
+            descriptor = {"schema_version": 1, "head_search": {"schema_version": 1,
+                          "detector": {"requested_device": "cuda", "allow_cpu_fallback": False},
+                          "camera": {}, "motion": {}}}
+    # Astra item 4: a sealed batch always indexes its descriptor, so the fixture's default matches production;
+    # the False case is still available for tests that deliberately build a bare root
     """A batch that is schema-true for v2: valid raw evidence in the indexed records and the 28 published entries."""
 
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
@@ -564,6 +594,8 @@ def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=False):
     index_descriptor = None
     if descriptor is not None and descriptor_as_index_file:
         # the descriptor the driver seals into the batch root: indexed evidence, not a block inside measurements.json
+        if "head_search" not in descriptor:      # callers may hand in the inner block; the sealed document is the document
+            descriptor = {"schema_version": 1, "head_search": descriptor}
         descriptor_file = root / "runtime-descriptor.json"
         descriptor_file.parent.mkdir(parents=True, exist_ok=True)
         descriptor_file.write_text(json.dumps(descriptor, sort_keys=True))

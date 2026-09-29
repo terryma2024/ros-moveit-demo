@@ -182,8 +182,11 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     # from a context object and never by globbing - so the published sample can only carry what the seal vouches for
     descriptor_blocks = []
     for index in indexes:
-        if "runtime-descriptor.json" in index.files:
-            descriptor_blocks.append(json.loads(index.path("runtime-descriptor.json").read_bytes()))
+        # Astra item 4: EVERY root must carry the sealed, indexed descriptor. Skipping a bare root silently published a
+        # sample resting on fewer roots than it claimed; a missing seal is now a refusal, not a shorter comparison
+        if "runtime-descriptor.json" not in index.files:
+            raise ValueError("CALIBRATION_DESCRIPTOR_MISSING")
+        descriptor_blocks.append(json.loads(index.path("runtime-descriptor.json").read_bytes()))
     if len({json.dumps(block, sort_keys=True) for block in descriptor_blocks}) > 1:
         raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
     sealed_descriptor = descriptor_blocks[0] if descriptor_blocks else None
@@ -273,8 +276,10 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
             if isinstance(readings.get("head_search"), dict) and readings["head_search"] != sealed_descriptor:
                 raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
             sample_document["head_search"] = sealed_descriptor["head_search"]
-        elif isinstance(readings.get("head_search"), dict):
-            sample_document["head_search"] = readings["head_search"]
+        # Astra item 4: the SEALED descriptor is the only authority. The former fallback let a
+        # measurements.json block stand in for a missing seal, which is the second authority the review refused
+        else:
+            raise ValueError("CALIBRATION_DESCRIPTOR_MISSING")
         sample = _write(output_root / "head-search-qualification.json", sample_document)
     # the support fields have their own approved closed sample, so they are published with their own citation rather
     # than borrowing the head-search one
