@@ -26252,3 +26252,19 @@ picture in both directions.**
 - **Progress this round, measured:** `36 passed` -> `37 passed` of 42 in this file with the double extended, and the module gate's 24 failures now have a precise plan: **5 here, 19 in the measurement driver's
   `runtime_descriptor` fixture** (already recorded in this ledger at line 21865).
 - **State:** nothing deleted, nothing pushed; the focused sets still green; the boundary is not complete and is not claimed to be. No new session, goal, worktree or stack; no hardware.
+
+## CP-1576 — Four remaining causes, each a named field: the fixture lag is now a checklist
+
+- **After the double fix and the end-effector patch, this file stands at `37 passed / 5 failed`, and the five reduce to four named causes, read from the failure lines:**
+  | count | failure | what it actually asks for |
+  | --- | --- | --- |
+  | **2** | `TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw_reco...` at `pick_place_search_port.py:168` | the two `bind_live_evidence` tests must carry the **raw-records root** as well as the support distance - the attachment has three things, not one |
+  | **1** | `AssertionError` at `test_act_task8_live_evidence.py:274` | the SEARCH-forwarding test asserts on the samples the port forwards, and **the port now forwards one more** (the grid sample is built on every phase) - so the expectation moves, and the move is the point of the change |
+  | **1** | `KeyError: 'clock_interval_end_monotonic_ns'` at `pick_place_readback.py:449` | the composed-sample fixture lacks a field the readback adapter requires |
+  | **1** | `READBACK_END_EFFECTOR_REQUIRED` at `pick_place_readback.py:441` | the **driver** test's own capture path still supplies no end-effector - the same rule as the case I fixed, at the other call site |
+- **And the shape of this whole day's work is worth naming, because it is not a defect list:** every one of these is the **fixture** catching up with a requirement the production code states and enforces. The port refuses a
+  boundary that cannot supply a reset generation; it refuses an attachment without the case's own parameters; the readback refuses a frame without the end-effector because *"a frame without it must not be recorded as if it
+  had one."* **Each refusal is correct, each is by name, and each names exactly which field is missing** - which is why this checklist could be written at all.
+- **Next round is four mechanical edits and a re-run**, then the nineteen in the measurement driver's `runtime_descriptor` fixture (ledger line 21865), then the boundary again - this time with the teleop gate and CTest, and with
+  numbers that belong to that run rather than to the earlier batch.
+- **State:** nothing deleted, nothing pushed; the boundary is not complete and is not claimed to be; no new session, goal, worktree or stack; no hardware.
