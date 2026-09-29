@@ -13110,3 +13110,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7's module, runner baseline, port and retirement path all green; the
   user's files intact apart from this one additive, uncommitted insertion; Tasks 8-10 untouched; no runtime, no
   package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-937 — Journal-row readback implemented; one existing fixture needs a real artifact
+
+- **Implemented in `pick_place_case_execution.py` (user-dirty, left uncommitted per the CP-930/CP-932 rules):**
+  immediately after `result = await worker.run_pick_place(request)` and `_require_result(result, case)`, the call
+  `_require_live_evidence_readback(result["live_evidence_artifact"], case)` runs, so the journal row can only be
+  published once the sealed artifact has been read back. The helper enforces the runner's own contract: a **full**
+  case must hand back a dict whose `path` is a non-symlink regular file whose sha256 equals the recorded digest
+  (`TASK8_LIVE_EVIDENCE_READBACK_MISSING` / `..._MISMATCH`), while a **prefix** case must hand back `None`
+  (`TASK8_LIVE_EVIDENCE_UNEXPECTED`), matching the runner's `formal_episode_eligible is (mode == "full")` rule.
+- **Measured result: 8 passed, 1 failed.** The failure is
+  `test_full_case_stays_ineligible_for_formal_collection`, and its cause is a **fixture**, not the production rule:
+  the test's full-case stub returns an artifact whose path was never written to disk, so a check that insists on
+  reading the bytes back necessarily refuses it. `ValueError: TASK8_LIVE_EVIDENCE_READBACK_MISSING` is the correct
+  verdict for the fixture as it stands.
+- **Deliberate decision, stated so it is not mistaken for an oversight:** I did **not** relax the production check to
+  make that fixture pass. The requirement is that the artifact is read back before the journal row; a stub that only
+  names a path cannot satisfy it. The fixture must write a real sealed artifact - a test-side change in a file the
+  plan already lists as a *Modify* target and which is user-dirty, so it is made together with the production-chain
+  test rather than piecemeal.
+- **State:** Tasks 1-6 committed and green; Task 7's module, runner baseline, port and retirement path green;
+  `pick_place_case_owner.py` and `pick_place_case_execution.py` each carry one additive, uncommitted insertion;
+  Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
