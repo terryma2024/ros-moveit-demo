@@ -765,3 +765,35 @@ def test_the_case_evidence_is_indexed_and_a_tampered_raw_record_is_refused(tmp_p
                       "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_RAW_RECORD_INVALID"):
         recorder.append(sample)
+
+
+def test_a_campaign_of_prefixes_alone_cannot_qualify():
+    """The trusted qualification gate refuses the bounded campaign we can actually run - by its own rules.
+
+    ``validate_campaign_summary`` demands PASSED, nine prefixes, **five consecutive fulls** and one digest per
+    case. A run of prefixes alone therefore cannot qualify, which is the honest bound on this fixture's
+    evidence: it does not produce a qualification, and the code says exactly why.
+    """
+
+    from so101_demo.act.task8_live_qualification import validate_campaign_summary
+
+    digests = [f"{index:064x}" for index in range(14)]
+    complete = {"status": "PASSED", "prefix_count": 9, "consecutive_full_count": 5,
+                "case_journal_sha256": digests}
+    assert validate_campaign_summary(complete)["status"] == "PASSED"
+
+    prefixes_only = dict(complete, consecutive_full_count=0)
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_FULLS_NOT_CONSECUTIVE"):
+        validate_campaign_summary(prefixes_only)
+
+    short = dict(complete, case_journal_sha256=digests[:9])
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_CASE_COUNT_INVALID"):
+        validate_campaign_summary(short)
+
+    not_passed = dict(complete, status="INVALID")
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_NOT_PASSED"):
+        validate_campaign_summary(not_passed)
+
+    duplicate = dict(complete, case_journal_sha256=[digests[0]] * 14)
+    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_JOURNAL_DUPLICATE"):
+        validate_campaign_summary(duplicate)
