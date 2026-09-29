@@ -27807,3 +27807,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the review request's third weak point is rewritten from a question into that distinction**, because the useful thing for a reviewer is not *"should this line change?"* but *"are these two paths asking different questions, or has one been made to agree with the other by accident?"* - the second would be a real defect hiding
   behind a correct-looking line.
 - **State:** the request (5411 bytes as of CP-1661, re-stamped with this edit) and its index row carry the corrected weak point; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1665 — Every absolute reference in the packet resolves, and the first check that said otherwise was mine
+
+- **A pass a reviewer should never have to do for me: follow every path the packet names.**
+  ```
+  absolute references that do not exist: 0
+  whole-index audit -> checked: 27, mismatched: 0
+  packet: 36042 bytes, sha256 begins df220deebfd05e56      index: sha256 begins 34f1813c0fb1fb05
+  ```
+  **Three of the references were genuinely ambiguous and are now absolute** - the demo, teleop and CTest scratch paths
+  were written as `experiments/…` without saying relative to what, and they live under the **evidence root**, not the worktree. **A reviewer following them would have found nothing**, which is exactly the waste this check exists to prevent.
+- **And the first run of the check reported eight missing files that were not missing.** My script prefixed repo-relative `src/…` paths with the **worktree** root, while the package's sources live under **`src/so101_demo_py/`** - so the tool was wrong and the packet was right, **for the second time in this batch after the four failed index-row matchers (CP-1638)**.
+  **When a check reports a wall of failures at once, the check is the first suspect.**
+- **The packet's historical numbers were checked as well and are honestly framed:** CP-1472's `5651 demo / 1266 teleop / 116 CTest` appear only in the earlier addenda, Addendum 3 carries *"the batch's numbers … are deliberately not reused"*, the withdrawal of
+  `Testing/20260929-1252` is stated, and the RE-RUN banner carries the current three legs. **The 116 → 117 difference is explained in the packet by the registration this batch committed.**
+- **State:** the packet is reference-verified and internally consistent; the re-review request stands; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
