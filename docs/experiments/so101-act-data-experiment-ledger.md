@@ -12255,3 +12255,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   never a rewrite), then the commit with the plan's exact nine-file list.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-901 — Task 4 committed (bounded calibration admission), with one justified deviation from the plan's list
+
+- **Committed `feat(act): admit bounded task8 calibration measurements`** with **seven** files: the two new modules
+  (`act/task8_calibration_admission.py`, `adapters/act/task8_calibration_search_binding.py`), the four modified
+  sources (`act/ownership.py`, `adapters/act/command_broker.py`, `cli/act_command_broker.py`,
+  `runtime/launch_composition.py`) and the new test module. Guard reported `staged=7 check_rc=0`.
+- **The deviation, stated rather than hidden:** the plan's list also names
+  `test/test_act_control_event_timeline.py` and `test/test_act_task8_search_binding.py`. **Neither needed a
+  change.** This work is additive - the existing behaviour they assert is exactly the behaviour that must be
+  preserved - and the 76-test baseline that *includes both modules* passes with them untouched
+  (`beh-task4-green9.log`). `test_act_task8_search_binding.py` is additionally **user-dirty**, so editing it
+  without need would have violated the standing rule to preserve user work. The commit message records the same
+  reasoning, so the omission is auditable from git history alone.
+- **Final verification for Task 4:** the plan's named set - two focused files plus the existing child-port tests -
+  plus the broker module reports **76 passed, rc=0, elapsed 4 s**, including the new test asserting that every
+  decided admission event carries the admission generation and that the bound context is the single identity
+  downstream receipts can cite.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
