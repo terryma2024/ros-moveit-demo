@@ -22432,3 +22432,23 @@ not an inference of mine.**
   previous three: the production code names the contract, and the fixture supplies it.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1352 — The stop gate passes, and the production wrapper confirms the contract reading
+
+- **Read, and it matches what the run asked for:** the production port's stop is
+  ```python
+  def safe_stop(self, reason: str, request: dict) -> bool:
+      return self.boundary.safe_stop(reason, request) is True
+  ```
+  so the runner's `confirmed is not True` gate is satisfied by the **boundary** returning a real `True` - which the fixture now does. **The
+  stop gate passed, and the child reached the end of the run path.**
+- **The failure moved one layer deeper and is now wrapped:** `ros_child.py:545 _run_pick_place` raises
+  `so101_teleop.unified.contracts.MutationError: ACT_TASK8_FAILED`, which is the child's own conversion of an inner failure - **so the next
+  read is a `--tb=long` run that prints the inner cause** ("the above exception was the direct cause of..."), not another guess at which
+  gate is unhappy.
+- **Sequence so far in this one item, all named by production code rather than by me:** boundary must expose `reset` with `.sources.session_id`
+  -> startup receipt must carry session and owners -> stop must be a real `True`. **Four gates, four production-named contracts, no relaxed
+  checks** - and the remaining work for P1-5 is the case-level evidence: `run_pick_place_case()`, the trusted aggregator, the seven indexed
+  assertions and the four negatives.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
