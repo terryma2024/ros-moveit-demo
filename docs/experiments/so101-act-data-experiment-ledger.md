@@ -21516,3 +21516,19 @@ not an inference of mine.**
   specified** - a fresh registered NVMe scratch with `TMPDIR`/`TMP`/`TEMP` verified through the exact interpreter, a fresh real 0700
   short IPC base, `workers = min(8, CPU)`, one ordinary `so101_demo_py` and one ordinary `so101_teleop` pytest-xdist/package gate with
   the benchmark excluded - **and no early full gates**; no live stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1302 — The integration boundary is GREEN on both packages, and the repository's own guard closed a gap
+
+- **Both ordinary gates, one boundary, one fresh scratch each:**
+  | gate | result | elapsed | notes |
+  | --- | --- | --- | --- |
+  | `so101_demo_py` (package gate, venv interpreter, xdist 8) | **rc=0** - `colcon test-result`: **5807 tests, 0 errors, 0 failures, 163 skipped** | 108 s | 5807 is six more than CP-1221's 5801, i.e. the revision batch's new tests are inside the ordinary gate |
+  | `so101_teleop` (ordinary scope, xdist 8) | **rc=0** - **1262 passed, 43 skipped** | 42 s | after the registration fix below |
+  Freshly created, previously nonexistent NVMe scratches under the registered evidence root; `TMPDIR`/`TMP`/`TEMP` verified through the exact interpreter (`tempfile.gettempdir()` inside the scratch); a fresh real 0700 IPC base per run; `workers = min(8, CPU)` = 8 of 32; demo benchmark excluded; JUnit, exit codes, skip counts, elapsed and provenance written beside the logs.
+- **And the boundary caught something worth keeping:** the first teleop run failed **one** test - the package's own
+  `test_ctest_registration.py`, refusing because `test_task8_case_runner_chain.py` and `test_task8_child_driven_case.py` were **not
+  registered with CTest**, i.e. *"modules the package gate would never run"*. **The repository's guard found my omission, and the
+  owner's module was in the same list** - both are now registered, the guard passes (3 passed), and the re-run is green at 1262 passed.
+  **That is the boundary doing exactly what a boundary is for.**
+- **State:** committed with the gate green; every log, JUnit file, provenance file, scratch and IPC base retained as deletion
+  candidates; no live stack, no stepping, no CUDA, no hardware; nothing deleted, nothing pushed.
