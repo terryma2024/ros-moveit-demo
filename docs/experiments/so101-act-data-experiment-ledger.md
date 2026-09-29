@@ -21956,3 +21956,18 @@ not an inference of mine.**
   instead of reading each fake driver's body first. **The next round does that, one file at a time, and stops guessing at quoting.**
 - **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1326 — Where the four refusals actually come from, and the likely gap in my helper
+
+- **The one-line tracebacks all point inside the schema validator** - `task8_measurement_schema.py` lines **90**, **168** and **214** -
+  whose contents are printed above. So the fake batches are failing the **schema's own** checks, not my readback logic, and the fix is to
+  make the fakes produce what the schema demands rather than to soften any check.
+- **And line 214 is the likely gap:** the validator's **phase coverage** rule requires the nine phase rows for an anchor evidenced the
+  driver's way (`search`, `approach`, `close`, `micro_lift`, `transport`, `align`, `release`, `radial_retreat`, `final_check`), while my
+  helper writes **one** file, `phase-release.json`. **That is exactly the class of optimism the reviewer asked me to remove** - a seal that
+  looks plausible and is not production-shaped.
+- **So the helper needs what the production driver writes:** the nine phase rows for its anchor, plus the anchor's own file, all indexed.
+  **Then the three fake drivers can simply call it, and the schema will accept their batches for the same reason it accepts the real
+  driver's.**
+- **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
