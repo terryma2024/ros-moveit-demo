@@ -16708,3 +16708,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   re-asserting the tests that expected the old refusal order.
 - **Evidence:** scratch `<R>/scratch/r677.<n>` with `TMPDIR` verified through the exact test interpreter; log
   `beh-r677.log` (both modules together: 13 failed, 14 passed).
+
+## CP-1078 — The same naming fissure, one layer up: the aggregator read `contract_sha256` off the identity
+
+- **Found by following the failure rather than the fixture:** the entry's provenance loop compared
+  `identity.get("contract_sha256")` against the bound contract's digest, but the identity's member is
+  **`measurement_contract_sha256`** - `contract_sha256` is the **bound document's own key**. So with a correctly sealed
+  batch, every identity looked foreign and the entry raised `CALIBRATION_IDENTITY_MISMATCH` on data that was right. This is
+  the **same fissure** Boundary I closed at the seal (`f6b334c3`), appearing one layer further up; the fix reads the member
+  the identity actually defines.
+- **Progress across the migration, all measured:** the aggregator module went **12 failed / 3 passed** (CP-1076's
+  starting point) → **10 / 5** (identity migration) → and the two modules together now report **5 failed / 22 passed**,
+  down from **13 / 14** one round earlier.
+- **The five that remain, by class:** two `BATCH_INVALID` - fixture **documents** that still predate the canonical
+  closed-batch key set and lack `batch_sha256`; one `MEASUREMENT_CONTRACT_IDENTITY_INVALID` - an identity fixture that is
+  not yet the ten-member shape; and one test whose expected refusal message changed, because validation now rejects before
+  the check it used to exercise. Each is a deliberate fixture or assertion update, not a production defect.
+- **Evidence:** scratch `<R>/scratch/r678.<n>` with `TMPDIR` verified through the exact test interpreter; log
+  `beh-r678.log`. **HEAD remains red for `test/test_act_task8_calibration_aggregator.py`**, with five failures instead of
+  twelve, and the remaining work named above.
