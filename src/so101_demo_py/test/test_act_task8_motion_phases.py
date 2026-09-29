@@ -137,3 +137,35 @@ def test_the_phases_whose_evidence_is_not_designed_yet_refuse_by_name():
     for phase in ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK"):
         with pytest.raises(PickPlaceSearchBoundaryError, match=f"{phase}"):
             _call(boundary, ticket, template, duration, phase=phase)
+
+@pytest.mark.parametrize("phase,expected", [
+    ("MICRO_LIFT", "micro_lift"),
+    ("TRANSPORT", "lift"),
+    ("ALIGN", "above_place"),
+])
+def test_every_motion_phase_aims_at_its_own_admitted_target_and_the_runner_accepts_it(phase, expected):
+    """One path, three phases: what differs is the admitted target each one aims at, and nothing else."""
+
+    calls = []
+    boundary, ticket, capture, template, duration = _case(calls)
+    request = {"session_id": ticket[3], "attempt_id": ticket[4]}
+    document = _call(boundary, ticket, template, duration, phase=phase)
+
+    assert [call[0] for call in calls] == ["ik", "dispatch", "wait"], calls
+    target = calls[0][1]
+    cup_z = capture["world"].object_state.position_world[2]
+    place_z = template.place_tcp_world.values[2]
+    if expected == "micro_lift":
+        assert target.position_m[2] == pytest.approx(cup_z + 0.035 + 0.02, abs=1e-9)
+    elif expected == "lift":
+        assert target.position_m[2] == pytest.approx(cup_z + 0.035 + 0.10, abs=1e-9)
+    else:
+        assert target.position_m[2] == pytest.approx(place_z + 0.08, abs=1e-9)
+        assert target.position_m[:2] == pytest.approx(template.place_tcp_world.values[:2], abs=1e-9)
+
+    stamped = {**document, "phase": phase, "session_id": ticket[3], "attempt_id": ticket[4],
+               "reset_epoch": 2, "release_epoch": 0}
+    step = PickPlaceRunner(boundary)._verify_phase(phase, stamped, request, reset_epoch=2,
+                                                   release_epoch=0,
+                                                   after_step=document["physics_step"] - 1)
+    assert step == document["physics_step"]
