@@ -16687,3 +16687,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   re-asserting the identity-mismatch test against where the refusal now happens.
 - **Evidence:** scratch `<R>/scratch/r676.<n>` with `TMPDIR` verified through the exact test interpreter; logs
   `beh-r675-restored.log` (12 failed, before), `beh-r676-green.log` (10 failed, after).
+
+## CP-1077 — A real cross-boundary break found: the seal's batch document and the validator's key set disagreed
+
+- **The aggregator fixtures were not the whole story, and this is the finding worth carrying into the review:**
+  `close_measurement_batch` writes **`{"schema_version", "kind", "status", "identity", "files", "anchors",
+  "batch_sha256"}`**, while `task8_measurement_schema._BATCH_KEYS` allowed exactly
+  **`{"schema_version", "kind", "status", "identity", "files"}`**. The validator's check is `set(recorded) != _BATCH_KEYS`,
+  so **every batch the production seal has ever produced is refused as `BATCH_INVALID`** - the aggregator could not
+  validate a single real batch. That is a genuine writer/validator disagreement, exactly the class the review's "one
+  schema" requirement is about, and it was invisible until the entry started validating.
+- **The fix:** one canonical key set shared by writer and validator, with the validator additionally requiring
+  `batch_sha256` to be a sha256 - stricter about what it names, not looser about what it accepts. Both modules compile and
+  the schema module's own suite is unaffected by the key set itself.
+- **Where the migration stands, honestly:** the aggregator module went **12 failed / 3 passed → 10 failed / 5 passed**
+  (CP-1076) and now reports failures of a different kind - **`CALIBRATION_IDENTITY_MISMATCH`** from the entry's provenance
+  check, i.e. the migrated fixtures' identities do not yet agree across the batches each test builds. **HEAD remains red
+  for `test/test_act_task8_calibration_aggregator.py`**, and finishing it means giving the factory a coherent identity per
+  test (one provenance for the success paths, the parametrised difference only where a mismatch is the point) and
+  re-asserting the tests that expected the old refusal order.
+- **Evidence:** scratch `<R>/scratch/r677.<n>` with `TMPDIR` verified through the exact test interpreter; log
+  `beh-r677.log` (both modules together: 13 failed, 14 passed).
