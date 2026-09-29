@@ -827,15 +827,70 @@ def test_retreat_distance_is_radial_from_the_cup_at_the_first_qualifying_readbac
     assert retreat_distance_m([frame(0.0, (0.0, 0.0, 0.1))], qualifying=lambda f: True) == pytest.approx(0.0)
 
 
-def test_placement_stability_span_requires_every_final_check_sample_to_be_stable():
+def test_placement_stability_is_the_longest_contiguous_final_check_span():
     from so101_demo.act.task8_live_qualification import placement_stable_s
 
-    stable = [_sample_row("FINAL_CHECK", 1.0), _sample_row("FINAL_CHECK", 1.4)]
-    assert placement_stable_s(stable) == pytest.approx(0.4)
-    with pytest.raises(ValueError, match="PLACEMENT_NOT_STABLE_THROUGHOUT"):
-        placement_stable_s(stable + [_sample_row("FINAL_CHECK", 1.5, stable=False)])
-    with pytest.raises(ValueError, match="PLACEMENT_STABLE_REQUIRED"):
-        placement_stable_s([_sample_row("FINAL_CHECK", 1.0, stable=False)])
+    def frame(stamp, *, settled):
+        return {"phase": "FINAL_CHECK", "source_stamp": stamp, "settled": settled}
+
+    frames = [frame(0.0, settled=True), frame(0.1, settled=True), frame(0.2, settled=False),
+              frame(0.3, settled=True)]
+    assert placement_stable_s(frames, stable=lambda f: f["settled"]) == pytest.approx(0.1)
+    # a break ends the span rather than failing the run, and a phase with no frames at all is refused
+    gapped = [frame(0.0, settled=True), frame(0.25, settled=True)]
+    assert placement_stable_s(gapped, stable=lambda f: f["settled"]) == 0.0
+    with pytest.raises(ValueError, match="SPAN_FRAMES_REQUIRED"):
+        placement_stable_s([frame(0.0, settled=True)][:0], stable=lambda f: f["settled"])
+
+
+def test_qualified_measurements_copy_by_value_and_add_exactly_five():
+    from so101_demo.act.task8_live_qualification import (LIVE_ONLY_FIELDS, build_qualified_measurements,
+                                                         derive_live_measurements)
+
+    ready = {f"ready_field_{index}": {"value": float(index), "unit": "rad"} for index in range(28)}
+    snapshot = json.loads(json.dumps(ready))
+    runs = [_live_run(index) for index in range(5)]
+    merged = build_qualified_measurements(ready, runs, {})
+
+    assert set(merged) - set(ready) == set(LIVE_ONLY_FIELDS), "exactly the five live-only fields are added"
+    assert len(merged) == 33
+    assert ready == snapshot, "the ready report is never mutated"
+    derived = derive_live_measurements(runs, {})
+    for field in LIVE_ONLY_FIELDS:
+        assert merged[field]["value"] == pytest.approx(derived[field]["value"])
+        assert merged[field]["unit"] == derived[field]["unit"]
+
+
+def test_a_ready_field_that_is_already_live_only_is_refused():
+    from so101_demo.act.task8_live_qualification import build_qualified_measurements
+
+    ready = {"grasp_occlusion_window_s": {"value": 0.1, "unit": "s"}}
+    with pytest.raises(ValueError, match="LIVE_FIELD_ALREADY_PRESENT"):
+        build_qualified_measurements(ready, [_live_run(index) for index in range(5)], {})
+
+
+def _sample_row(phase, sim_time, *, position=(0.0, 0.0, 0.1), stable=True):
+    return {"phase": phase, "sim_time_s": sim_time, "end_effector_position_m": list(position),
+            "placement_stable": stable}
+
+
+def test_retreat_distance_is_radial_from_the_cup_at_the_first_qualifying_readback():
+    from so101_demo.act.task8_live_qualification import retreat_distance_m
+
+    def frame(stamp, effector, *, clearing=False):
+        return {"phase": "RADIAL_RETREAT", "source_stamp": stamp, "cup_position_m": [0.0, 0.0, 0.1],
+                "end_effector_position_m": list(effector), "clearing": clearing}
+
+    frames = [frame(0.0, (0.0, 0.0, 0.1)), frame(0.1, (0.03, 0.04, 0.1), clearing=True),
+              frame(0.2, (0.06, 0.08, 0.1))]
+    # the radial distance grows from 0 to 0.05 at the first qualifying readback, not to 0.10 at the last
+    assert retreat_distance_m(frames, qualifying=lambda f: f["clearing"]) == pytest.approx(0.05)
+    with pytest.raises(ValueError, match="RETREAT_QUALIFYING_READBACK_REQUIRED"):
+        retreat_distance_m(frames, qualifying=lambda f: False)
+    # the refusal is for a run with no retreat frame at all; a single qualifying frame legitimately reports zero
+    with pytest.raises(ValueError, match="RETREAT_SAMPLES_REQUIRED"):
+        retreat_distance_m([], qualifying=lambda f: True)
+    assert retreat_distance_m([frame(0.0, (0.0, 0.0, 0.1))], qualifying=lambda f: True) == pytest.approx(0.0)
 
 
 def _contact_pair(geom_a, geom_b, distance):

@@ -358,17 +358,25 @@ def retreat_distance_m(frames, *, qualifying) -> float:
     raise ValueError("RETREAT_QUALIFYING_READBACK_REQUIRED: no frame satisfied clearance, contact and pose stability")
 
 
-def placement_stable_s(samples) -> float:
-    """The sim-time span over which the placement is stable in the FINAL_CHECK samples of one run."""
+def placement_stable_s(frames, *, stable) -> float:
+    """The design's `placement_stable_s` rule: the longest contiguous source-stamp duration in FINAL_CHECK over which
+    pose, linear/angular velocity, table support and forbidden contact all hold.
 
-    final = sorted((sample for sample in samples if sample.get("phase") == "FINAL_CHECK"),
-                   key=lambda sample: sample["sim_time_s"])
-    stable = [sample for sample in final if sample.get("placement_stable") is True]
-    if not stable:
-        raise ValueError("PLACEMENT_STABLE_REQUIRED: no FINAL_CHECK sample reports a stable placement")
-    if len(stable) != len(final):
-        raise ValueError("PLACEMENT_NOT_STABLE_THROUGHOUT: every FINAL_CHECK sample must report stability")
-    return _span_s(stable)
+    The design states four conditions together, and three of them - table support and forbidden contact in
+    particular - are read from the raw contact records rather than from the sample keys, so the combined predicate is
+    supplied by the caller and the span structure is the shared one. A frame break ends the span here; the row does
+    not require the run to fail on a break, only the occlusion row does.
+    """
+
+    return longest_contiguous_span_s(frames, predicate=stable, phase="FINAL_CHECK")
+
+
+
+
+
+
+
+
 
 
 def longest_contiguous_span_s(frames, *, predicate, phase=None, period_s: float = 0.1,
