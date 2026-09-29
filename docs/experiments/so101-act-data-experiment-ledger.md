@@ -30079,3 +30079,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   sealing identity**.
 - **State:** **P1-3 CLOSED; P1-1 second half GREEN; P1-2 RED confirmed with its production error named; the driver's
   emission is the next edit.** P1-4, P1-5, P1-6 and the demo RED's clean re-measurement remain.
+
+## CP-1783 — P1-2's GREEN needs one piece of plumbing, and the mapping itself is now exact
+
+- **The exact shape the aggregator reads, from its own accessors:**
+  ```python
+  def _limit(raw, field):
+      configured = raw.get("configured")            # raw["configured"][field] -> the configured limit
+  def _evidence(raw, field):
+      return raw["measurements"].get(field)         # raw["measurements"][field] -> the evidence
+  def _bboxes(raw, field, *, accepted_only=True):
+      boxes = list(_evidence(raw, field))           # ... and for the bbox fields that evidence is a LIST of bbox dicts
+  ```
+  So a raw record must carry **`measurements: {<contract field>: [ {x1,y1,x2,y2,accepted}, … ] }`** and
+  **`configured: {<contract field>: <limit>}`** - **keyed by the contract's own field names**, which is why the driver
+  cannot invent them.
+- **And the driver has the first half already, in the exact currency:** the record it writes carries `detector_input` -
+  **my P1-1 translation of the real `DetectionBatch`, whose candidates carry `bbox_xyxy`** - and the geometry the
+  phase-camera evaluator measured. **So the bbox evidence exists at write time**; it only has to be presented under the
+  names the formulas read, with `accepted` made explicit.
+- **The missing half is `configured`, and tracing it found a real gap rather than a shape problem:**
+  ```
+  grep -n "contract" task8_measurement_driver.py   ->  no data access, only a comment and an import alias
+  ```
+  **the driver never receives the bound contract**, and the limits live there (`configured_limit` is the formulas' own
+  name for them). So the GREEN is two edits, in this order: **pass the contract through the composition to the driver**
+  (plumbing, no behaviour change), **then emit `measurements` and `configured` at `_write_record`** - the one place that
+  already stamps every row, **at write time, with no post-seal addition, no re-seal and no identity change**.
+- **State:** **P1-2's RED stands with its production error; the GREEN's two edits are named and ordered; P1-3 CLOSED;
+  P1-1 second half GREEN.** P1-4, P1-5, P1-6 and the demo RED's clean re-measurement remain. No controlled change this
+  round beyond the read.
