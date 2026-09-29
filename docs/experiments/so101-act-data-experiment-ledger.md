@@ -20634,3 +20634,22 @@ not an inference of mine.**
   rewritten as it was in the contract suite (CP-1250).
 - **State:** aggregator source `_v2_batch`/`batch_factory`/`_sealed_batch` edits all **uncommitted while red**; build tree synced for
   the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1259 — Item 4's fixture work is done: **27 passed, 1 failed**, and the survivor is the old owner again
+
+- **The whole fixture climb, in one line:** `15 → 4 → 11 → 3 → 1` failures, ending at **`27 passed / 1 failed`** (`rev4-j.log`), and every
+  step was a **fixture** change: `batch_factory` writes a descriptor before sealing, `_sealed_batch` does too **idempotently** (the
+  `CLOSED_JSON_EXISTS` collapse confirmed CP-1254's hypothesis), and **both** builders now accept either descriptor shape - the inner
+  `head_search` block or the full document - which was the last `KeyError`.
+- **The one survivor is `test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest`**, failing on
+  `assert (batch / "batch.json").is_file()`. **That is the old seal owner asserted a third time** - the entry sealing - after the same
+  statement was rewritten in the contract suite at CP-1250. Its body is printed above so the next round reads it rather than guessing.
+- **Two honest ways to fix it, and the choice is a design question worth one thought rather than a reflex:**
+  1. **the test's fake driver seals** a schema-valid batch, so the entry's report is true - a driver that does not seal is not a driver
+     (the CP-1255 lesson, applied to a fake);
+  2. **the entry verifies the seal exists** before writing its `VALID` ledger line, so an entry can never report a seal that is not
+     there - which would also make the test's own name, "keeps the ledger honest", true in a stronger sense than it is today.
+  Option 2 is a small production improvement and option 1 is a fixture change; **both are defensible, and the next round picks one
+  deliberately instead of doing whichever is quicker to type.**
+- **State:** aggregator source, `batch_factory`, `_v2_batch` and `_sealed_batch` edits all **uncommitted while red** (one failing test);
+  build tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
