@@ -134,8 +134,20 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     boundary = port.boundary
     # `bind_startup_receipt` reads `sources.session_id` (search_port.py:142) - the port binds the receipt to the
     # SOURCES' session, so the sources must name the session the case runs
-    sources = SimpleNamespace(contact_pairs=contact_pairs, session_id=session_id,
-                              capture=lambda *args, **kwargs: {"rows": list(getattr(boundary, "rows", []))})
+    # the sources the PORT reads (`_search_evidence` wants `readback`) is the same KIND the boundary's own search
+    # builds - `_ChildSources`, whose readback, proofs and scene receipt come from production code over substituted
+    # I/O - with the members the admission and the screen additionally read ADDED to it rather than replacing them.
+    from test_task8_child_driven_case import _ChildSources
+
+    sources = _ChildSources(session_id=session_id, reset_epoch=getattr(boundary, "reset_epoch", 1))
+    sources.contact_pairs = contact_pairs
+    # the production port reads the PUBLIC name (`bind_startup_receipt`: `receipt["session_id"] !=
+    # self.boundary.reset.sources.session_id`), while this double keeps it private - so the public one is added
+    # beside it rather than the double being rewritten
+    if not hasattr(sources, "session_id"):
+        sources.session_id = getattr(sources, "_session_id", session_id)
+    if not callable(getattr(sources, "capture", None)):
+        sources.capture = lambda *args, **kwargs: {"rows": list(getattr(boundary, "rows", []))}
     # `begin` also reads `reset.broker` (search_port.py:220), the command surface beside the sources
     # the PRODUCTION broker when the caller has it: `begin` asks `isinstance(reset.broker._prefix_source_port,
     # TrustedVisibleApproachSourcePort)`, and that answer must come from the composition root (CP-1833)
