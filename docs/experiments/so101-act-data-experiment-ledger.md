@@ -29949,3 +29949,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1 second half GREEN; P1-3's evaluator contracts implemented (intrinsics required, `in_frame` bounded,
   occluders fail closed) with the matrix RED and now known to need a runtime; the formal entry's refusal is correct
   behaviour, recorded as such.** No new controlled change this round.
+
+## CP-1779 — Scouting the headless runtime: the MuJoCo model supplies every quantity the matrix needs
+
+- **First, the safety check the rules require, and it is the same lesson as `pkill`:** the "process matching
+  `move_group|gz sim|ros2 launch`" that my own check reported was **my own shell** (etimes 0) - a pattern is not an
+  identity. **`ros2 node list` is empty and no MuJoCo/pytest process of mine is running: no stack is live**, so a
+  single headless MuJoCo compile/step is within the rules (MuJoCo-only, headless, no second stack).
+- **And the model carries what the design's matrix is made of** (probe, `assets/mujoco/act/scene.xml`, compiled
+  headless and never stepped for this read):
+  ```
+  cameras: ['task_camera', 'wrist_camera', 'head_camera']
+    task_camera:  fovy=45.0°  pos=[0.65,-0.65,0.55]  mode=0  body=world
+    wrist_camera: fovy=95.0°  pos=[0,0,0]            mode=0  body=wrist_camera_mount
+    head_camera:  fovy=60.0°  pos=[0,0,0]            mode=0  body=head_mount
+  nq: 14  nv: 13  timestep: 0.002
+  camera xpos[0]: [0.65,-0.65,0.55]   xmat[0][:3]: [0.707...,-0.349...,0.614...]
+  ```
+  | the matrix needs | where it comes from |
+  | --- | --- |
+  | `horizontal_fov_rad` | the camera's `fovy` (the design defines it from CameraInfo as `atan(cx/fx)+atan((W-cx)/fx)`, whose inputs are `fovy` and the image size) |
+  | `head_translation_m` / `head_rpy_rad` / `yaw_zero_bearing_rad` | `head_mount`'s body pose and orientation via `data.cam_xpos` / `data.cam_xmat`, i.e. the model's own TF, at neck = 0 |
+  | the wrist camera's block | `wrist_camera_mount`, the same way |
+  | the sampling cadence | **`model.opt.timestep = 0.002`** - the admitted 2 ms period, read from the model rather than asserted |
+- **So the sampler is a small, honest piece of work rather than a research task:** step the model headless at its own
+  2 ms, take ≥10 consecutive samples per anchor (strictly increasing stamps, same reset epoch, as the design requires),
+  and derive the matrix's geometry from those samples with the cross-check tolerances the design fixes. **The one thing
+  it must not do is copy the numbers above out of `model.cam_*` and call that a measurement** - that is the shortcut the
+  design refuses in its own words.
+- **State:** **P1-3's matrix requirement now has a concrete, scouted route (headless MuJoCo sampling at the model's own
+  2 ms), and the next work is the sampler plus the matrix builder, with its RED already standing
+  (`test_the_shipped_matrix_is_not_a_scaffold`).** No stack is live; nothing was started for this read beyond a
+  compile.
