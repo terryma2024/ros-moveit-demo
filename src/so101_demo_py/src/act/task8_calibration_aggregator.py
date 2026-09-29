@@ -196,16 +196,25 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
         values = {identity.get(name) for _, identity in batches}
         if len(values) != 1 or None in values:
             raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
-    thresholds = contract["thresholds"]
-    checks = {
-        "fov": _fov(roots[0], thresholds["fov"]["sample_period_s"]),
-        "collision": _collision(roots[0], thresholds["collision"]),
-        "search": _search(roots[0], thresholds["search"]["min_consecutive_lock_frames"]),
-        "synchronization": _synchronization(roots[0], thresholds["synchronization"]),
-        "execution": _execution(roots[0]),
-        "release": "UNMEASURED",
-        "retreat": "UNMEASURED",
-    }
+    if "thresholds" in contract:
+        thresholds = contract["thresholds"]
+        checks = {
+            "fov": _fov(roots[0], thresholds["fov"]["sample_period_s"]),
+            "collision": _collision(roots[0], thresholds["collision"]),
+            "search": _search(roots[0], thresholds["search"]["min_consecutive_lock_frames"]),
+            "synchronization": _synchronization(roots[0], thresholds["synchronization"]),
+            "execution": _execution(roots[0]),
+            "release": "UNMEASURED",
+            "retreat": "UNMEASURED",
+        }
+    else:
+        # v2 carries per-field comparators instead of aggregate thresholds, so the five ready checks are folded from
+        # the per-field verdicts over the repository's own CHECK_MEASUREMENTS groups - and release/retreat stay
+        # UNMEASURED, because those five live-only fields belong to the later 33-field QUALIFIED report and a
+        # TASK8_READY report must not claim them
+        checks = dict(derived_checks(roots, contract))
+        checks["release"] = "UNMEASURED"
+        checks["retreat"] = "UNMEASURED"
     readings = None
     for root in roots:
         document = _read(root, "measurements.json")
@@ -226,11 +235,30 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
             "source_provenance_sha256": source_provenance_sha256,
         }
         sample = _write(output_root / "head-search-qualification.json", sample_document)
+    # the support fields have their own approved closed sample, so they are published with their own citation rather
+    # than borrowing the head-search one
+    support_names = set(contract.get("support", {}))
+    support_sample = None
+    if sample is not None and support_names:
+        from so101_demo.act.task8_measurement_formulas import build_support_closed_sample
+
+        support_document = build_support_closed_sample(
+            support={name: readings["measurements"][name] for name in sorted(support_names)
+                     if name in readings["measurements"]},
+            source_commit=next(iter(batches))[1]["source_commit"],
+            config_sha256=next(iter(batches))[1]["config_sha256"],
+            source_provenance_sha256=source_provenance_sha256)
+        support_sample = _write(output_root / "task8-ready-support.json", support_document)
     report_measurements = {}
     if sample is not None:
         digest = _digest(sample)
-        for name, entry in sorted(readings["measurements"].items()):
-            report_measurements[name] = dict(entry, sample_path=str(sample), sample_sha256=digest)
+        # camera intrinsics are measurements too: publishing only the head-search seventeen left a report that could
+        # never be the contract's twenty-eight, so they are folded in - each cited to its own group's closed sample
+        for name, entry in sorted({**readings["measurements"], **readings["camera_measurements"]}.items()):
+            cited = support_sample if (support_sample is not None and name in support_names) else sample
+            report_measurements[name] = dict(entry, sample_path=str(cited),
+                                             sample_sha256=(_digest(support_sample) if cited is support_sample
+                                                            else digest))
     report = {
         "schema_version": SCHEMA_VERSION,
         "status": "TASK8_READY" if ready and sample is not None else "CALIBRATION_REQUIRED",
