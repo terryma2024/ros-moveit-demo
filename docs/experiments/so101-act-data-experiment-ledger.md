@@ -26495,3 +26495,17 @@ pick the flattering number.**
   5. **one run per leg** on the reduced cadence: demo ordinary gate `-n 8` with the benchmark suite excluded, teleop package gate `-n 8`, serial CTest;
   6. **per-leg scratch, assertion output, command, rc, counts and elapsed recorded**, with every new scratch classified as a **deletion candidate** and **not deleted**.
 - **State:** the goal stays **active**; no new session, goal, worktree or stack; nothing pushed, nothing deleted; no live stack, no CUDA, no actuators, no hardware, and **P2's live half is not started.**
+
+## CP-1590 — The correction is carried in the packet too, not only in the ledger
+
+- **Why this round did it before the replacement boundary finished:** a packet that still says the boundary is green while the ledger retracts it **is exactly the kind of document a reviewer reads first and trusts**. So the packet now
+  carries a **correction banner ahead of Addendum 3**, stating:
+  - the three legs **shared one scratch**, which AGENTS.md forbids (every pytest or benchmark run needs a fresh, previously nonexistent NVMe scratch);
+  - **those runs are INVALID and non-counting**, and **the boundary is not to be treated as green on their strength**;
+  - the corrected boundary re-runs each leg on its own fresh scratch with a **fail-closed `tempfile.gettempdir()` equality assertion**, and the packet's numbers will be replaced once those legs pass;
+  - **all original logs, JUnit files and scratch trees are retained**;
+  - and the **findings** in Addendum 3 (the driver's unforwarded end-effector; the seal's identity read and its refusal of a disagreeing caller; the gate scripts' missing IPC base; the `ctest -j 8` observation) **do not depend on those
+    runs and are unaffected**.
+- **Packet: 30602 -> 31516 bytes, sha256 begins `c368a504bd4b2976`.** The earlier hash recorded in CP-1588 is therefore superseded, and the evidence index's revision-batch-3 section will be corrected with the final hash once the
+  compliant legs pass.
+- **State:** demo re-run in flight on its own fresh scratch; teleop and CTest waiting their turn on their own scratches; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware; goal active.
