@@ -12352,3 +12352,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `test_act_calibration.py`.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-905 — Task 6 GREEN for the new suite; one existing fixture uses a v1 raw shape (open, diagnosed)
+
+- **State:** the new render suite plus the existing aggregator and calibration modules report **35 passed,
+  1 failed** (`beh-task6-green7.log`). The single failure is
+  `test_act_task8_calibration_aggregator.py::test_offline_report_cli_rebuilds_without_any_status_override`, and it
+  is **an interface mismatch, not a behavioural regression**: its fixture feeds raw records in a **v1 evidence
+  shape**, so the v2 formula for `min_area_px2` receives a string where it expects a bbox mapping and raises
+  `AttributeError` (traceback line: `task8_measurement_formulas.py:204 in _f_min_area_px2`, reached through
+  `_bboxes`). The traceback also confirms the run resolves the module through `build/so101_demo_py/...`, i.e. the
+  colcon build tree, which is the source I have been editing via the package path.
+- **Three real hardening fixes came out of this run and are kept:** the sealed-batch identity requires only the
+  members a batch actually carries (`source_commit`, `config_sha256`, `source_provenance_sha256` - the ten-member
+  identity is the *contract's*, not the batch's, so extra members are accepted but not required); an anchor entry
+  may be the bare name or a record carrying it, since only the **order** carries meaning; and a contract without a
+  `support` section (a v1 bound contract) renders instead of raising. A raw record whose shape cannot be evaluated
+  now yields `INVALID` - never a pass.
+- **Why I stopped rather than patching further:** every remaining failure came from reading an existing fixture I
+  had not inspected, and loosening a formula's accepted input to fit an unseen shape would weaken exactly the
+  raw-evidence contract this task exists to enforce. The next step is to read that fixture, then either migrate it
+  to the v2 raw shape (the plan lists this test module as a *Modify* target, so that is sanctioned) or scope the
+  legacy CLI assertion explicitly - and to record which of the two, with the fixture's evidence shape quoted.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
