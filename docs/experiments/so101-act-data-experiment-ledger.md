@@ -19667,3 +19667,20 @@ not an inference of mine.**
   blocker is an interpreter mismatch in the `colcon` runner, not a defect in the code under test.
 - **State:** HEAD `b8b12891` plus this checkpoint; staged 0; all three colcon logs, both xdist artefacts, every scratch and IPC
   base retained as deletion candidates; no push, no MuJoCo stack, no hardware.
+
+## CP-1215 — Re-review packet v2 on disk, with size and sha256 readback
+
+- **Written because the owner's item 5 puts the Astra implementation re-review after the gates, and the v1 packet (CP-1134)
+  predates everything in this stretch.** The new packet is at
+  `handoffs/20260930-task7-onward/task8-boundary-iv-rereview-packet-v2.md`, **6141 bytes**, sha256
+  `e9590ad6c2de92e3891e6aa3e1eadf12e3280e546f1cba41bd39c5f0d720b9a0` - checksummed and read back from disk, because CP-1059's
+  lesson was that a packet nobody can reach, or cannot verify, may as well not exist.
+- **What it contains, and each section is traceable to a checkpoint:** my two self-corrections (the runner does not export the
+  IPC base; the earlier base was not pre-created); item 1's option (b) with the approved design's §4.2 and §6 quoted; item 2's
+  chain in a three-row table; item 3's four negative cases with the honest note that three are pins rather than fixes; item 4's
+  seven artefacts and their sources, including that the test was committed only once green and uses none of the three forbidden
+  shortcuts; item 5's two gate results with every condition the owner set, plus the `colcon` classification and its mechanism;
+  and an explicit **what is not claimed** section - the package gate is not green, no live stack, no new measurement values, the
+  17 provisional values still null, formal 0/0/0, and Boundary V's child step still an open owner decision.
+- **State:** HEAD `9c8ef7c6` plus this checkpoint; staged 0; the packet sits beside v1 and the two earlier packets, all retained;
+  no push, no stack, no hardware.
