@@ -26751,3 +26751,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   with a later epoch - would falsify when the capture happened, and this batch will not do that.**
 - **State:** remediation item 2 is **two-thirds green with the third analysed and a proposal on the table**; item 1 verified; the rest untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live
   not started.
+
+## CP-1603 — Item 5 verified: the review is right, my teleop gate never ran eight workers, and the mechanism is named
+
+- **The two checks, and what they show:**
+  1. **`so101_teleop` is an `ament_cmake` package** - `package.xml` declares `<buildtool_depend>ament_cmake</buildtool_depend>`, `<buildtool_depend>ament_cmake_python</buildtool_depend>`,
+     `<test_depend>ament_cmake_pytest</test_depend>` and `<build_type>ament_cmake</build_type>`, and the package carries a `CMakeLists.txt`. **`colcon test --pytest-args` is an `ament_python`/`ament_cmake_python` option, so on this package it is silently ignored** - which is
+     exactly the review's claim;
+  2. **the log confirms it rather than leaving it as a theory:** the pytest **plugins line does list `xdist-3.8.0`** (the plugin is installed and loaded), **but there is no `created: N/N workers` banner and not one `gw<N>`-prefixed line** in
+     `experiments/final-boundary-v2/teleop.log` - and the same is true of the retracted run's log. **So the teleop gate ran single-worker**, and its counts came from a serial execution.
+- **What that does and does not invalidate:** the **numbers are real** (1430 tests, 0 errors, 0 failures, 43 skipped, 217 s) - **what they are not is evidence of the required eight-worker parallel gate.** The skill's rule is explicit that the parallel
+  gate is the gate, so **the teleop leg of the corrected boundary does not satisfy it and must be re-run rather than re-labelled.**
+- **And the fix's shape is now known rather than guessed:** for an `ament_cmake_pytest` package the pytest arguments travel by **`PYTEST_ADDOPTS`** (the standard mechanism `ament_cmake_pytest` honours) or as a CMake argument, **not** through
+  `--pytest-args`. **The re-run must therefore prove the parallelism rather than assume it**: the worker banner (`created: 8/8 workers`), at least one `gw<N>`-prefixed line, the resolved argv, the scratch with its fail-closed tempdir equality assertion, and the actual JUnit
+  file - all saved as the proofs the owner asked for.
+- **State:** item 5 **verified and diagnosed**; its re-run is the next action on that item. Item 1 verified; item 2 two-thirds green with the epoch rule question open (CP-1602); items 3, 4, 6, 7 untouched. Goal still
+  paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live not started.
