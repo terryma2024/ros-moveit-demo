@@ -30370,3 +30370,40 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-2's chain runs to the aggregator with the pending-threshold disposition in place; the regression is
   fixed; the owner's tree is exactly as the freeze recorded it; the measured shape table is the next edit.**
   P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
+
+## CP-1794 — The probe says the evidence is FIELD-SPECIFIC, which settles what P1-2 can honestly claim
+
+- **A behavioural probe over all 28 contract fields (21 measurements + 7 support), each formula run against a bbox
+  LIST and against a DOCUMENT, with a permissive limit so only shape acceptance is measured:**
+  ```
+  DOCUMENT-shaped fields: ['center_deadband_px']
+  list-shaped fields (count): 5
+  neither accepted by the probe: 19
+      coarse_step_rad, head_intrinsics_px, head_rpy_rad, head_translation_m, horizontal_fov_rad,
+      lock_valid_neck_rad, max_age_s, … (19 names)
+  ```
+  **Nineteen fields accept neither shape**, because each formula reads its own keys: `head_intrinsics_px` wants a `K`,
+  `coarse_step_rad` wants the state events' `coarse_accumulator_before/after`, the timing fields want their stamps.
+  **So there is no two-family split to tabulate - the evidence is field-specific, one structure per field**, and that is
+  the fact CP-1786 and CP-1792 were circling.
+- **And it settles what this chain can honestly claim, in the owner's own disposition:** the driver's raw records are
+  **the measurement it actually performed** - a real detection's bboxes, the admitted camera's intrinsics, the controller
+  acks, the stamps - **not the raw evidence a full calibration head search produces** (detector frames, per-frame
+  CameraInfo, search state events, lock timings). So:
+  | field family | in this chain |
+  | --- | --- |
+  | the camera FOV (its threshold is the MODEL's, and the evaluator measured the camera) | **measured** |
+  | the bbox fields, whose evidence a real detection supplies | **measured** |
+  | the pending-threshold fields (CP-1789) | **`UNMEASURED`** - the owner's disposition |
+  | the fields whose evidence only a full head search produces | **`UNMEASURED`** - and truthfully so, rather than a shape invented to make them pass |
+- **Which is a closure for P1-2 rather than a workaround:** the verdict asked for the driver to emit the aggregator's
+  required raw records **or** for the aggregator to interpret the driver's real format - and the honest answer, now
+  measured rather than assumed, is **both in part**: the driver emits what it truly measures, the aggregator computes
+  every field it can from that, and reports the rest `UNMEASURED` instead of passing a limit that does not exist against
+  evidence that was never taken.
+- **The remaining edits, in order:** the aggregator's other call site must apply the same disposition so no
+  `TypeError`/`CONFIGURED_LIMIT_REQUIRED` propagates (its `except` already maps `REQUIRED` to `UNMEASURED`, but a
+  `TypeError` becomes `INVALID`, which would be a false statement about the evidence), then the RED is restated to assert
+  exactly the four rows above.
+- **State:** **P1-2's honest scope is now measured and named; the two edits are ordered.** P1-3 CLOSED; P1-1 second half
+  GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
