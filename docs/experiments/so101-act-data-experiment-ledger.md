@@ -17305,3 +17305,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   rather than 14 failed runs.
 - **State: unchanged at 2 failed / 18 passed** in the aggregator module, both failures being the publishing-half REDs, now
   blocked only on fixture evidence. The v2 checks dispatch and the support-closed-sample citation from CP-1107 stand.
+
+## CP-1109 — Evidence spec completed for the remaining groups; two shapes left to read
+
+- **Added to CP-1108's table, read from the implementations:**
+  | field group | evidence |
+  | --- | --- |
+  | `head\|wrist_intrinsics_px` | `{"frames": [{"width": 640, "height": 480, "K": [4+ numbers], "fovy_rad": …}, …], "tolerance_px": t}` - a frame that is not 640x480 returns **FAIL** by construction, and the verdicts compare the median of the frames' `K` components against the modelled `[fx, fx, w/2, h/2]` |
+  | `lock_valid_neck_rad` | `{"bounds_rad": [lower, upper], "anchor_starts_rad": [...], "unsafe_intervals_rad": [[start, stop], ...], "shrink_rad": r}` - the unique safe component containing 0 and every anchor start wins, and the reported interval is the shrunk one |
+  | `velocity_limit_rad_s` | `{"samples": [{"dt_s": dt, "dq_rad": [...]}, ...]}`, with `configured` a **list** per dimension; a non-positive `dt_s` yields `INVALID` |
+  | `acceleration_limit_rad_s2` | same sample shape as velocity |
+- **Two shapes still unread, named rather than guessed:** `_f_path_clearance_m` and `_f_path_step_s` (the latter defined near line
+  302). Reading them is one call, and I would rather spend it than discover the key names through failed runs.
+- **Why this matters for the next round:** with `FIELD_CASES` covering 14 fields and this table covering 11 more groups, the
+  aggregator fixture can be written in **one pass**, taking the 14 from the formulas suite's own cases and building the rest
+  from these shapes - and then the two publishing-half REDs (`21 == 28` and the `require_gate` assertion) are decided by
+  evidence rather than by argument.
+- **State: unchanged at 2 failed / 18 passed** in the aggregator module; the v2 dispatch and the support-sample citation
+  from CP-1107 stand; nothing weakened, nothing deleted, no push, no stack, no hardware.
