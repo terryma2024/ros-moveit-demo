@@ -25722,3 +25722,20 @@ picture in both directions.**
   fact, not a production defect, and not a design question.
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1544 — SEARCH and APPROACH pass inside the nine-phase run; CLOSE refuses because the substituted world never closes
+
+- **Reading the rule instead of guessing it worked in one edit.** `RGB source skew` is
+  `any(not 0 <= world.simulation_time_s - finite(stamp) <= skew for stamp in stamps.values())` - so the **RGB stamps belong to the readback's clock** and must advance with it, while
+  `source_received_wall_s` is **SEARCH's own seven-key wall receipt map**. My five earlier guesses had excluded **both** from the update, which kept a stale 1.2 s stamp against a 1.31 s world clock.
+  **Five values guessed, one line read, fixed first try.**
+- **And the run advanced further than in any previous attempt:** with the sweep checker's `neck_qpos`, the readback's `joint_tolerance`/`max_skew` and the checker's `step`/`clearance` supplied -
+  each named by the system - **SEARCH and APPROACH now both pass inside the nine-phase run**, and the run reaches **CLOSE**, which executes and whose evidence is refused with
+  **`CLOSE: no bilateral grasp`**.
+- **That refusal is the validator working, not a defect:** the substituted world has no fingertip contacts, so a CLOSE document claiming a grasp would be a lie. **A faithful stand-in must therefore be
+  STATEFUL** - the readback has to model the world changing as the phases change it: a bilateral grasp after CLOSE, the cup off the table and HOLDING after MICRO_LIFT, released and supported after
+  RELEASE. **That is the next piece, and it is the last one: a double that remembers what the phases did.**
+- **And it is worth naming why this is the right place to be:** every phase's validator is production code that refuses a document it cannot support, so the run's progress is the **validators' own
+  verdict on the substituted world's fidelity** - SEARCH and APPROACH accept it, CLOSE does not yet, and nothing about that is a matter of opinion.
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
