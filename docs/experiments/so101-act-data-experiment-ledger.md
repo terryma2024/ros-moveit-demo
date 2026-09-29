@@ -27069,3 +27069,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Per the owner's rule, this is where I stop on this item and ask:** *enforce the cleanup proof for every CLOSED batch (option 1, wide but strongest), or scope it to the measurement entry's close-out (option 2, narrow)?* **I will not
   quietly pick one and let it reshape 25 fixtures' meaning** - the difference is what "a sealed batch" promises.
 - **State:** item 4 **partially in the tree and red, with one decision requested**; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1621 — The CLI half of item 4 is green, and my own assertion was the last thing in the way
+
+- **`2 passed`** for `test_act_task8_measurement_cli_terminal_state.py`, and the probe that settled it printed the ledger the entry now writes:
+  ```
+  raised: ValueError BATCH_INVALID
+  ledger content:
+  - Task 8P2 measurement PLANNED: contract=4e9a6068… provenance=aaaa…
+  - Task 8P2 measurement RUNNING: contract=4e9a6068… provenance=aaaa…
+  - Task 8P2 measurement INVALID: contract=4e9a6068… provenance=aaaa…
+  ```
+  **So the guarded region does append the terminal state - and the case was red because of MY assertion:** `"VALID" not in ledger` is a **substring false-positive**, since `VALID` is inside `INVALID`. **The negative assertion now names the terminal state
+  (`"measurement VALID"`), and the case is green.** Committed with the CLI change.
+- **That is a small finding with a general shape, worth as much as the fix:** **a substring test is not an identity test** - the same family as CP-1611's "a value handed to many processes is a resource" and CP-1615's "match
+  artefacts by path". Three times in one stretch, a check was satisfied by the wrong thing; each time the correction was to name the thing precisely.
+- **What is committed and what is held, stated exactly:** the **CLI change and its test are committed** (`MEASUREMENT_SEAL_IDENTITY_MISMATCH` plus the single guarded region). **The schema change - requiring a cleanup proof on every CLOSED
+  batch - remains UNCOMMITTED in the tree**, because its measured blast radius is 25+ sealing fixtures and **its scope is CP-1620's open question.** The tree therefore carries one intentional, declared red change.
+- **State:** item 4's CLI half green and committed; item 4's cleanup half **awaiting the scope decision**; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
