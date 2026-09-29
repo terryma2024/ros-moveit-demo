@@ -49,6 +49,9 @@ def packet(operation: str = "task8_phase", **overrides) -> dict:
         "payload": {
             "scenario_id": "scene-1",
             "support_distance_max_m": 0.02,   # the admitted support distance (P1-3)
+            "gripper_closed_rad": 0.5,
+            "gripper_closed_rad": 0.5,
+            "gripper_closed_rad": 0.5,
             "stop_after": "MICRO_LIFT",
             "manifest_sha256": "a" * 64,
             "runtime_config_sha256": "b" * 64,
@@ -79,6 +82,9 @@ def test_task8_phase_packet_has_bound_worker_and_closed_payload():
         {"campaign_id": None},
         {"payload": {"scenario_id": "scene-1", "stop_after": "MICRO_LIFT", "manifest_sha256": "a" * 64,
         "support_distance_max_m": 0.02,   # the admitted support distance (P1-3)
+        "gripper_closed_rad": 0.5,
+        "gripper_closed_rad": 0.5,
+        "gripper_closed_rad": 0.5,
                      "runtime_config_sha256": "b" * 64, "contact_policy_fingerprint": "c" * 64,
                      "gpu_selector": "INDEX:0"}},
     ],
@@ -92,6 +98,9 @@ def test_task8_full_has_no_phase_override_and_cancel_has_closed_reason():
     full = packet("task8_full", payload={
         "scenario_id": "scene-1", "manifest_sha256": "a" * 64,
         "support_distance_max_m": 0.02,   # the admitted support distance (P1-3)
+        "gripper_closed_rad": 0.5,
+        "gripper_closed_rad": 0.5,
+        "gripper_closed_rad": 0.5,
         "runtime_config_sha256": "b" * 64, "contact_policy_fingerprint": "c" * 64,
         "stack_owner": STACK_OWNER,
     })
@@ -150,6 +159,9 @@ def test_worker_port_binds_task8_packet_and_rejects_foreign_reply():
     request = {
         "session_id": "session-w00", "attempt_id": "attempt-1", "scenario_id": "scene-1",
         "support_distance_max_m": 0.02,   # P1-3: admitted support distance
+        "gripper_closed_rad": 0.5,
+        "gripper_closed_rad": 0.5,
+        "gripper_closed_rad": 0.5,
         "mode": "phase_prefix", "stop_after": "MICRO_LIFT",
         "contact_policy_fingerprint": "d" * 64, "deadline_ns": time.monotonic_ns() + 10**9,
     }
@@ -170,6 +182,9 @@ def test_task8_worker_refuses_to_dispatch_before_owner_proof_is_bound():
     request = {
         "session_id": "session-w00", "attempt_id": "attempt-1", "scenario_id": "scene-1",
         "support_distance_max_m": 0.02,   # P1-3: admitted support distance
+        "gripper_closed_rad": 0.5,
+        "gripper_closed_rad": 0.5,
+        "gripper_closed_rad": 0.5,
         "mode": "phase_prefix", "stop_after": "MICRO_LIFT",
         "contact_policy_fingerprint": "d" * 64,
         "deadline_ns": time.monotonic_ns() + 10**9,

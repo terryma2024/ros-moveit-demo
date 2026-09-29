@@ -520,6 +520,10 @@ class RclpyActionDriver:
                                           staging_root=artifacts.evidence_root,
                                           session_id=request.session_id, attempt_id=request.attempt_id)
             try:
+                # the case's own admitted gripper target, bound once like the evidence attachment
+                bind_targets = getattr(self._pick_place_port, "bind_case_targets", None)
+                if callable(bind_targets):
+                    bind_targets(gripper_closed_rad=request.payload["gripper_closed_rad"])
                 attach(evidence.window,
                        support_distance_max_m=request.payload["support_distance_max_m"],
                        # the recorder's own root is the driver's case root, so the raw records it will index must live there -
