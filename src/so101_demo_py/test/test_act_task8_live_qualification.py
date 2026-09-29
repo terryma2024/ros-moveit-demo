@@ -718,7 +718,7 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
 
 # --- protocol v2 additions (Task 8): the five live-only fields ---------------------------------------------
 
-LIVE_FIELDS = ("grasp_occlusion_window_s", "cup_support_distance_m", "release_stable_s",
+LIVE_FIELDS = ("grasp_occlusion_window_s", "support_distance_m", "release_stable_s",
                "retreat_distance_m", "placement_stable_s")
 
 
@@ -744,7 +744,7 @@ def test_the_five_live_fields_take_the_documented_extrema_across_five_runs():
     assert set(derived) == set(LIVE_FIELDS)
     # occlusion and support distance take the maximum; the three stability/distance fields take the minimum
     assert derived["grasp_occlusion_window_s"]["value"] == pytest.approx(0.55)
-    assert derived["cup_support_distance_m"]["value"] == pytest.approx(0.05)
+    assert derived["support_distance_m"]["value"] == pytest.approx(0.05)
     assert derived["release_stable_s"]["value"] == pytest.approx(0.9)
     assert derived["retreat_distance_m"]["value"] == pytest.approx(0.04)
     # placement values are 2.0, 1.2, 1.8, 2.4, 1.5 - the minimum is 1.2, not the fixture default
