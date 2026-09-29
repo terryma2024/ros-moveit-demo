@@ -21066,3 +21066,23 @@ not an inference of mine.**
   would have passed here while proving nothing.
 - **State:** the new test file is **uncommitted while red** per the owner's rule; items 1-4 complete and committed; no stack, no
   hardware, nothing deleted, nothing pushed.
+
+## CP-1280 — Item 5's fixture is now failing inside the *policy* validators, and the rule is named
+
+- **Two failures fixed, one named:**
+  1. `verify()` at `act_artifacts.py:136` requires the evidence root to be absolute and a directory, the path and hash **name tuples to
+     equal `_PATHS`/`_HASHED` exactly**, every path to be absolute, and - the part I had wrong - **`calibration_report`, `proposal` and
+     `activation_receipt` to live *under* the evidence root**. Moving those three was the fix;
+  2. the run now fails with **`ACT_POLICY_BINDING_INVALID`**, from the two validators `verify()` calls:
+     `contact_calibration.verify_disabled_proposal(proposal)` (`:454`) and `contact_policy.verify_activation(...)` (`:115`), reached
+     through `contact_calibration`'s binding check at `:499-510`, which also shows where the fingerprint comes from -
+     **`canonical_policy_payload(proposal["payload"])`**. My invented `"c" * 64` cannot match that, which is exactly what the error
+     says.
+- **So the fixture needs a genuinely valid *disabled* proposal and its matching activation receipt** - not a dummy JSON. **The cheapest
+  honest source is `test_act_contact_calibration.py`, the validator's own test**, which must already construct them; the alternative is
+  reverse-engineering `verify_disabled_proposal`'s required fields, which is more work for a worse fixture.
+- **This is the fifth failure in this one test, and every one has been inside a production check rather than inside a stub** - the
+  binder's shape rules, its digest rules, the evidence-root rule, the policy validators, and now the fingerprint binding. **That is the
+  property Astra asked the fixture to have, and it is why it is worth finishing rather than relaxing.**
+- **State:** the new test file remains **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
+  deleted, nothing pushed.
