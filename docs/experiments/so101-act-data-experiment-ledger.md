@@ -32332,3 +32332,44 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress with the expert-route registration's last requirement sourced from production itself; the
   `acquire` call is the next edit.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate
   and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1855 — The lease's owner is a whitelist name, and `ID_INVALID` is the next refusal
+
+- **One refusal cleared, one named:**
+  ```
+  before: PermissionError: OWNER_INVALID
+  after:  PermissionError: ID_INVALID
+  ```
+  and the broker's own admission block explains the first and bounds the second:
+  ```python
+  # command_broker.py handle()
+  if operation not in EXTRA: raise ValueError('OPERATION_INVALID')
+  fields(request, BASE | EXTRA[operation])
+  if type(request['protocol_version']) is not int or request['protocol_version'] != 1:
+      raise ValueError('PROTOCOL_VERSION_INVALID')
+  if request['owner'] not in OWNERS: raise ValueError('OWNER_INVALID')          # <- cleared
+  for key in ('request_id', 'session_id', 'attempt_id'): identifier(request[key])   # <- ID_INVALID comes from here
+  if (self.simulation_session_id is not None and operation != 'status'
+          and request['session_id'] != self.simulation_session_id): raise PermissionError('SESSION_MISMATCH')
+  ```
+  with `OWNERS = frozenset(('act', 'teacher', 'teleop', 'recovery', 'calibration'))` (`act/ownership.py:10`) and
+  ```python
+  def identifier(value):                                        # act/contracts.py:27
+      if not isinstance(value, str) or not value.strip() or len(value) > 256:
+          raise ContractError("ID_INVALID")
+  ```
+- **And the request's own ids look valid, which is why this is recorded rather than guessed at:** the in-process
+  connection builds
+  ```python
+  request = dict(protocol_version=1, request_id=str(uuid.uuid4()), operation=operation, owner=context['owner'],
+                 session_id=context['session_id'], attempt_id=context['attempt_id'],
+                 lease_token=context.get('lease_token', ''), **extra)
+  ```
+  **so `request_id` is a uuid and my `session_id="session-298"` / `attempt_id="full-01"` are non-empty strings** - **which
+  means the failing `identifier(...)` call is one I have not yet located, most likely reached after admission inside the
+  acquire branch rather than at the three fields above.** **Stating that plainly is better than trying three more values
+  and calling whichever one works the answer.**
+- **State:** **P1-5 in progress: the lease is acquired through production's in-process connection, the owner now comes from
+  the broker's own whitelist, and the remaining refusal is a non-empty-string check whose call site is the next thing to
+  find.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
+  remain. **Task-list statuses are unchanged, so they are not re-stated.**

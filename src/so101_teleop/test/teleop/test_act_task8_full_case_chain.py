@@ -182,6 +182,18 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     reset.manifest = live_manifest
     reset.sources = sources
     reset.broker = broker
+    # and the ACT context the expert-route registration reads (`run_phase`: `reset.act_context["lease_token"]`). The
+    # lease is acquired through PRODUCTION's own in-process connection to the very broker built here - the same call
+    # `ros_child.py` makes for the ACT path (CP-1854) - so the token is minted by the broker's `acquire`, not invented.
+    from so101_demo.adapters.act.command_broker import LocalBrokerConnection
+
+    connection = LocalBrokerConnection(broker)
+    # `owner` comes from the broker's own whitelist (`so101_demo.act.ownership.OWNERS`, checked at
+    # command_broker.py:659) - the child acquires on behalf of one of those names, not an arbitrary string
+    from so101_demo.act.ownership import OWNERS
+
+    lease_owner = "act" if "act" in OWNERS else sorted(OWNERS)[0]
+    reset.act_context = connection.acquire(owner=lease_owner, session_id=session_id, attempt_id="full-01")
     boundary.contact_pairs = contact_pairs
     if not callable(getattr(boundary, "capture", None)):
         boundary.capture = sources.capture
