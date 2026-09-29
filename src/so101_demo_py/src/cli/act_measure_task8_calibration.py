@@ -95,11 +95,12 @@ def main(argv=None) -> int:
                 runtime_descriptor=_document["runtime_descriptor"])
             from so101_demo.act.task8_production_composition import build_production_measurement_driver
 
-            build_production_measurement_driver(context=context).run(context, args.batch_root)
+            build_production_measurement_driver(context=context, identity=identity).run(context, args.batch_root)
     except BaseException as error:
         _append_ledger(args.ledger, "INVALID", ledger_identity, f"driver failed: {type(error).__name__}")
         raise
-    sealed = close_measurement_batch(args.batch_root, identity)
+    # Astra item 3: the driver is the ONE seal owner; the entry only reports what it sealed
+    sealed = args.batch_root / "batch.json"
     _append_ledger(args.ledger, "VALID", ledger_identity, f"sealed {sealed}")
     print(sealed)
     return 0

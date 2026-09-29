@@ -49,7 +49,7 @@ def _providers_from_seam():
     return built
 
 
-def build_production_measurement_driver(*, context, providers=None):
+def build_production_measurement_driver(*, context, identity, providers=None):
     """Build the single production measurement driver for one measurement context.
 
     Every rule below is the composition's own, and none of them can be satisfied by injecting a driver instead.
@@ -80,6 +80,7 @@ def build_production_measurement_driver(*, context, providers=None):
         raise ProductionCompositionError("PRODUCTION_GENERATION_REQUIRED")
 
     return Task8MujocoMeasurementDriver(
+        identity=identity,
         stack=stack,
         clock=supplied["clock"],
         detector=supplied["detector"],
