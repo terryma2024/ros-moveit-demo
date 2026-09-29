@@ -15823,3 +15823,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   and two writes left (its test, and the child-side bind at `ros_child.py:505`); Task 9's single failing module awaits
   the (b1)/(b2) choice; Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no
   push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1041 — The obligation is discharged: the bind has its test, written with the module's own double
+
+- **CP-1040's gap is closed in one pass, using exactly what that checkpoint said it needed:** the file's existing
+  `_Boundary` class, which is what its other port tests construct, rather than another `SimpleNamespace` guess. The new
+  test asserts the three behaviours the method promises - a valid window binds and is exposed through
+  `live_evidence_window`, a second bind is refused with `TASK8_LIVE_EVIDENCE_ALREADY_BOUND`, and a non-window is refused
+  with `TASK8_LIVE_EVIDENCE_WINDOW_INVALID`.
+- **Verified: 39 passed, rc=0** (`beh-r637b.log`).
+- **Two interface assumptions died on the way, both from the same habit, and both are now paid for:** the class is
+  `PickPlaceSearchPhasePort` (not `PickPlaceSearchPort`), and it is imported **inside** the module's test functions
+  rather than at file scope - the second one showed up as `NameError` only after the first was fixed, which is what
+  iterative RED looks like when a fixture is reused instead of invented. The lesson is already in this ledger eight
+  times; what is new here is that following it took two attempts and still cost less than a wrong test would have.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller now has its port-side seam **committed and
+  tested** (`90d81722` + this commit), with **one write left** - the child-side bind at `ros_child.py:505` (construct
+  `CaseEvidenceDriver`, call `bind_live_evidence(driver.window)`), after reading where `reset_epoch` comes from and
+  confirming the `case_id` pattern; Task 9's single failing module awaits the (b1)/(b2) choice (CP-1035); Task 10 blocked
+  until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no evidence deleted, no hardware;
+  formal 0/0/0; `collection_*` NOT_PROVISIONED.
