@@ -319,8 +319,10 @@ def derive_live_measurements(full_runs, contract) -> dict:
     derived = {}
     for field in LIVE_ONLY_FIELDS:
         extrema = LIVE_EXTREMA[field]
-        if field == "support_distance_m":
-            values = [_support_from_frames(run) for run in runs]
+        if field == "support_distance_m" and any(run.get("support_frames") for run in runs):
+            # the frames path is the older route: it is used only when a run carries frames and no collected value
+            values = [_support_from_frames(run) if run.get("support_frames") else float(run[field])
+                      for run in runs]
         else:
             values = [float(run[field]) for run in runs]
         derived[field] = {"value": extrema(values), "unit": LIVE_UNITS[field],
@@ -501,8 +503,16 @@ def collect_live_runs(rows, *, identities: dict, extractors: dict) -> tuple:
         if not samples:
             raise ValueError("SEALED_SAMPLE_REQUIRED: the artifact carries no samples")
         identity = document.get("identity") or {}
+        # the identity keys may come from the bundle or from the artifact's own identity; if neither carries one the
+        # run cannot be matched to its siblings, which is refused by name rather than as a confusing mismatch
+        run_policy = policy or identity.get("contact_policy_fingerprint")
+        run_matrix = matrix or identity.get("phase_camera_matrix_sha256")
+        for name, value in (("contact_policy_fingerprint", run_policy),
+                            ("phase_camera_matrix_sha256", run_matrix)):
+            if not value:
+                raise ValueError(f"IDENTITY_KEY_REQUIRED: {name}")
         run = {"run_index": index, "session_id": identity.get("session_id"),
-               "contact_policy_fingerprint": policy, "phase_camera_matrix_sha256": matrix,
+               "contact_policy_fingerprint": run_policy, "phase_camera_matrix_sha256": run_matrix,
                "sample_path": str(target), "sample_sha256": digest,
                "support_frames": [], "samples": samples}
         for field in LIVE_ONLY_FIELDS:
