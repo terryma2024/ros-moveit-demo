@@ -33849,3 +33849,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-6 in progress: serial CTest green; the teleop full-module gate over `test/` and the demo package gate
   with a MuJoCo-capable interpreter are the remaining two, then the configure/build + generated-CTest check.** **Task-list
   statuses: P1-6 in_progress, six pending, none completed.**
+
+## CP-1907 — P1-6's gates: serial CTest green, full-module xdist green, and the PACKAGE gate green
+
+- **Three gates, each run with the environment CP-1905/CP-1906 established:**
+  ```
+  scratch          = R/scratch/<run>/tmp                  (tempdir VERIFIED inside it)
+  SO101_IPC_SOCKET_BASE = <family>/ipc-<run>              (mode 0700; 41 bytes)
+  interpreter      = R/test-venv/bin/python               (pytest 7.4.4; pydantic 2.13.5; mujoco 3.12.0)
+  P1-6 gate results
+    serial CTest (teleop, 117 items)        -> 100% tests passed, 0 failed, ctest rc=0        (CP-1906)
+    teleop FULL MODULE over test/ (xdist 8) -> 1272 passed, 43 skipped, rc=0                  (CP-1908)
+    demo PACKAGE gate (colcon test)         -> 5956 tests, 0 errors, 0 failures, 163 skipped   colcon rc=0
+  ```
+- **The package gate took four attempts, and each failure named a different environment fact - none of them a test:**
+  | attempt | what happened | what it taught |
+  | --- | --- | --- |
+  | `colcon test` with the system interpreter | `collected 0 items / 1 error — No module named 'mujoco'` (CP-1904) | the package's pytest must run under the MuJoCo-capable interpreter |
+  | colcon under the venv + `PYTHONPATH=/usr/lib/python3/dist-packages` | system `_pytest` shadowed the venv's; `launch_testing` hook failed | **prepending a directory that also contains pytest shadows the venv's** |
+  | system colcon + venv site-packages prepended | `ImportError: cannot import name 'field_validator'` — pydantic **1.10.14** from `/usr/lib/python3/dist-packages` | the venv's pydantic **2.13.5** arrives through a `.pth` chain that PYTHONPATH entries do not process |
+  | **venv colcon + a shim dir of `colcon*` symlinks** | **ran: 5956 tests, 15 failures, all `SO101_IPC_SOCKET_BASE_NOT_PRIVATE`** | the socket base must be mode **0700** |
+  | **same + `mkdir -m 0700` + `--return-code-on-test-failure`** | **5956 tests, 0 errors, 0 failures, 163 skipped, rc=0** | **GREEN** |
+- **And the count reconciles with the direct run rather than contradicting it:** 5956 collected = the 5793 passed + 163 skipped the direct runs reported, **so the package gate covers exactly the same corpus and now runs through the mechanism the verdict requires.**
+- **State:** **P1-6 in progress: serial CTest, the full-module teleop gate and the demo package gate are green; the configure/build + generated-CTest verification is running.** **Task-list statuses: P1-6 in_progress, six pending, none completed.**
