@@ -30956,3 +30956,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   join, then the xfail and the duplicate chain removed together.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1813 — The checker is feasible here, and its own docstring says what to expect
+
+- **`adapters/act/physics.py`, `MujocoPathProcess`:** *"Bounded IPC around the same checker, with a compiled-model
+  handshake. The local model serves snapshot reconstruction only. Every path check runs in the spawned process, whose GIL
+  is independent of ROS callback threads. **Worker loss is permanent for this instance; it never silently restarts.**"*
+  ```python
+  def __init__(self, *, check_timeout_s, start_timeout_s, **configuration):
+      local = MujocoPathChecker(**configuration)          # the model, its sha256, the cup address
+      self.model, self.model_sha256, self.cup_address = local.model, local.model_sha256, local.cup_address
+      context = multiprocessing.get_context("spawn")
+      self._connection, child = context.Pipe()
+      self.process = context.Process(target=_path_worker, args=(child, configuration), daemon=True)
+      self.process.start()
+      if not self._connection.poll(startup): raise ValueError("PATH_WORKER_START_TIMEOUT")
+      ready = self._connection.recv()                     # {"pid", "model_sha256"} handshake
+  ```
+- **So the integration is feasible rather than speculative, for four reasons read off the code:**
+  1. the checker is a **`multiprocessing` `spawn` process**, so **the checker itself needs no ROS** - the ROS threads the
+     docstring contrasts with are not part of it;
+  2. configuration is **a model path and seven numbers**, all of which `route_motion_configuration(manifest)` supplies
+     (CP-1810);
+  3. the handshake is **`{"pid", "model_sha256"}`**, which is exactly the value the builder then compares against
+     `route_motion["model_sha256"]` - **so a checker pointed at the wrong model is refused, not tolerated**;
+  4. **`PATH_WORKER_START_TIMEOUT` is a real hazard and it is named**: the start is bounded by `start_timeout_s=2.0` in
+     the production builder, and this session has already measured that **load, not code, decides whether a bounded
+     window is met** - the demo gate's revoke race (2 failures in 3 runs under load, 0 in 3 after the fix) is the same
+     shape of hazard. **So a suite that spawns this process under xdist load should expect to see it, not be surprised
+     by it.**
+- **Which also sets the honest expectation for the next increment:** constructing the checker and mounting the screen is
+  a real step with a real failure mode, **and if it proves flaky under parallel load the honest response is to record
+  the measured rate rather than to widen the timeout until it passes** - the same discipline the demo gate is held to.
+- **State:** **P1-5's integration is confirmed feasible with its hazards named; the construction itself is next.**
+  P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**
