@@ -15736,3 +15736,38 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   its seam identified; Task 9's single failing module awaits the owner's (b1)/(b2) choice (CP-1035); Task 10 blocked
   until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no evidence deleted, no hardware;
   formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1038 — The identifiers, and the seam the binding should use
+
+- **The identifiers are all present, just not all in the same scope:**
+  | piece | where it exists |
+  | --- | --- |
+  | `evidence_root` | `driver._act_artifacts.evidence_root`, passed to the factory at `ros_child.py:112` |
+  | `campaign_id` | `os.environ["SO101_ACT_CAMPAIGN_ID"]`, passed at `ros_child.py:113` |
+  | `session_id` | `os.environ.get("SO101_SIMULATION_SESSION_ID")`, read at `ros_child.py:237` |
+  | `attempt_id` | `request.attempt_id`, available in `_run_pick_place` (`ros_child.py:519-520`) |
+  So the port factory's `campaign_id` and the driver's `case_id` come from the same environment identity, while
+  `attempt_id` only exists **later**, in the request-handling path.
+- **That timing decides the seam, and the code already has the right one.** The port refuses a second binding or any
+  binding after it begins (`bind_startup_receipt`, CP-1010), so a window passed at construction time would have to be
+  built before the request is known - but `attempt_id` arrives with the request. `_run_pick_place` therefore already
+  contains the correct moment: right after `bind(receipt)` at `ros_child.py:505` and before `PickPlaceRunner` is
+  constructed at `:512`, where the receipt, the case identity, the session and the attempt are all in hand - and it is
+  exactly where the approved plan says the recorder must be bound.
+- **The proposed change, in the order it should be made:**
+  1. **the port gains a one-shot `bind_live_evidence(window)`** mirroring `bind_startup_receipt`: validate the window
+     exposes `seal`, refuse a second binding or one after `_begun`, store it, and let the existing `_grid_sample` record
+     through it. This is a clean file of mine (`pick_place_search_port.py`), it is testable in isolation, and it keeps
+     the port's "accept nothing after it begins" invariant intact rather than weakening it;
+  2. **the child binds the driver at `:505`**: `CaseEvidenceDriver(case_id=<campaign id>, staging_root=<the same
+     evidence_root>, session_id=…, attempt_id=request.attempt_id, reset_epoch=…)`, then `bind_live_evidence(driver.window)`
+     - a hunk-level addition in the owner's file, staged alone, with their work untouched;
+  3. seal after FINAL_CHECK; failure paths already covered by the child's invalid-seal and `PickPlaceCaseOwner._retire`.
+- **What is still to verify before writing step 2, rather than assumed:** where `reset_epoch` comes from in that scope
+  (the reset connection is the likely source, but I have not read it), and whether `CaseEvidenceDriver`'s `case_id`
+  pattern accepts the campaign id's own format - the factory validates it against `_CHILD_ID`, which is suggestive but
+  not proof.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller now has a named seam, a three-step plan and
+  two specific remaining reads; Task 9's single failing module awaits the (b1)/(b2) choice; Task 10 blocked until the 17
+  search values are reviewed. No runtime, no formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
