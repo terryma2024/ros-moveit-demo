@@ -11678,3 +11678,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   different bytes and therefore correctly trips `BATCH_CLOSURE_INVALID` before the symlink case can be reached.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-875 — Task 1 harness corrected by probe: only the design transcription remains (2 failed, 7 passed)
+
+- **Diagnosed by probing instead of guessing:** `validate_closed_batch` returns a `BatchIndex` object - the
+  approved interface says "a validated identity plus indexed paths" - so my test's `validated["identity"]` was a
+  `TypeError: 'BatchIndex' object is not subscriptable`, a **test** defect rather than a code one. The probe also
+  confirmed `write_closed_json` refuses an existing target with `CLOSED_JSON_EXISTS` by design, so my earlier
+  "restore" line could never run; the canonical bytes are `b'{"value":1}'` and are now restored directly.
+- **After both corrections:** **2 failed, 7 passed** (`beh-task1-partial3.log`) - and the two remaining failures
+  are exactly the ones that need the approved design's own tables:
+  `test_contract_v2_freezes_the_21_head_search_fields_with_calibration_units` and
+  `test_contract_v2_freezes_the_seven_support_fields`, both failing because
+  `config/act/task8-calibration-measurement-contract-v2.json` does not exist yet.
+- **What that means concretely:** the schema module, the ten-member identity, the closed-batch validation and the
+  phase-camera occluder guard are all green; nothing else can be finished without transcribing the v2 contract's
+  21 + 7 entries (each with `unit`, `source_kind`, `comparator`, `formula_id`, `window`, `threshold_source`,
+  `failure_code`) and the search candidate/policy documents from design sections 3.1, 4, 5 and 6.
+- **Still uncommitted by design:** the module, the matrix, the test additions and the two approved documents go in
+  together at Step 4 with the plan's exact `git add` list.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
