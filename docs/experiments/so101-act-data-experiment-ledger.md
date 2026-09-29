@@ -25438,3 +25438,17 @@ picture in both directions.**
   2. the **nine-phase case reaching FINAL_CHECK** through the port, with the seal and the trusted aggregator;
   3. the **seven indexed assertions** read from records and the **four negatives** that break the chain.
 - **State:** P1-1..P1-3 green and committed; all nine phases committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1526 — The policy wiring is in place end to end; the remaining detail is WHICH loader reads it
+
+- **Where it stands (`experiments/gate8-p14/pol5.log`: 5 failed, 50 passed):** the case now **names its admitted policy** and the whole path is wired - payload → bridge field set and payload →
+  child → `bind_case_targets` → the port's handoff → the boundary's motion phases - **and the remaining failures are about the policy document's FORM, not the wiring:**
+  **`DYNAMIC_POLICY_INVALID: missing=['backend', 'execution_allowed', …]`** says I pointed `load_dynamic_pick_template` at the **variant fragment**
+  (`config/policies/<id>/v1/mujoco.yaml`), which by design carries only the variant's own numbers - **the full document is composed by `load_dynamic_policy_variant(share_dir, backend=…,
+  policy_id=…, version=…)`, which reads the manifest and the variant together and returns `.template` (plus `.sha256`, `.qualification_status`, `.execution_allowed`).**
+- **So the next fix is one call, and it makes the case's admission cleaner than a path:** the payload should name **the policy and its version**, and the child should call the **variant loader** - which
+  also gives the case the policy's **digest and qualification status**, values worth having in the seal rather than discarding.
+- **And a provenance fact worth keeping, because it cost a round:** in this worktree **`so101_teleop` imports from `src/`** while **`so101_demo` imports from `build/`**. **An edit to one is live
+  immediately; an edit to the other is live only after a build.** I spent a round reading the wrong code path because of it - `inspect.getsource` on the loaded module is the check that settles it.
+- **State:** P1-1..P1-3 green and committed; all nine phases committed; the policy wiring is uncommitted while these five tests are red. No new session, goal, worktree or stack; nothing pushed,
+  nothing deleted; no hardware.
