@@ -32578,3 +32578,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   callable, and the remaining `ID_INVALID` needs the ownership-side traceback that names its call site.** P1-1 through
   P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1863 — Past the lease: the expert route reaches REGISTRATION, and production confirmed the fix
+
+- **The call-site traceback named the whole path in five frames, and the production driver confirmed the conclusion
+  independently:**
+  ```
+  [site] ownership.identifier refused <bound method FakeBroker.hazard_reason …> (method)
+  [site]   command_broker.py:371 in tick: self._fault_reason = hazard; self.ownership.revoke(hazard)
+  [site]   ownership.py:107 in revoke: identifier(reason)
+
+  ros_broker.py:143   self.unknown_goal_seen=False; self.hazard_reason=None      <- an ATTRIBUTE, not a method
+  ros_broker.py:367   self.unknown_goal_seen=True;  self.hazard_reason='UNKNOWN_ACTIVE_GOAL'
+  ```
+  **so `command_broker.py:369`'s `getattr(self.driver, 'hazard_reason', None)` reads a VALUE, and my method was handed
+  straight to `revoke` → `identifier` → refused.** The fix was to make it an attribute set in `__init__` - **and the
+  production driver's own line 143 is the authority for that shape.**
+- **And the drive is now far past where it was:**
+  ```
+  trusted_visible_approach_source.py:53 in register -> KeyError: 'native_snapshots'
+  pick_place_search_port.py:670 in run_phase -> trusted_visible_approach_source.py:88 in register
+      -> ValueError("TRUSTED_VISIBLE_APPROACH_SOURCE_INVALID")
+  ```
+  **`run_phase` got past the lease acquisition, built the ticket, and called
+  `reset.broker._prefix_source_port.register(...)` - so the expert route is being REGISTERED**, and the trusted source
+  port is validating the source document the route carries. **That document lacks `native_snapshots`.**
+- **Which is the same kind of requirement as the ones before it** - a named member of a document the production code
+  consumes - **and the fixtures' own evidence is where it must come from, not from a value chosen to satisfy the check.**
+- **State:** **P1-5 in progress: the SEARCH evidence passes, the lease is acquired, the expert route reaches registration,
+  and the source document's `native_snapshots` is the next requirement.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**

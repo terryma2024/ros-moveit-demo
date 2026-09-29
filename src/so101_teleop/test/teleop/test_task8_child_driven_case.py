@@ -471,6 +471,7 @@ class FakeBroker:
         self._goals = {}
         self._session_id = session_id
         self._reset_epoch = reset_epoch
+        self.hazard_reason = None                       # a reason or None - a VALUE, because the broker reads it
 
     def stop(self, *args, **kwargs):
         return True
@@ -478,10 +479,10 @@ class FakeBroker:
     def stopped(self):
         return True                                     # the broker refuses `acquire` unless the driver is stopped
 
-    def hazard_reason(self):
-        # a REASON, so it is a string or None - never the blanket callable: the broker stores what this returns as its
-        # fault reason and can hand it to `ownership.revoke(reason)`, whose first act is `identifier(reason)`
-        return None
+    # `hazard_reason` is an ATTRIBUTE on the production driver, not a method: `command_broker.py:369` does
+    # `hazard = getattr(self.driver, 'hazard_reason', None)` and `:371` then hands it straight to
+    # `ownership.revoke(hazard)`, whose first act is `identifier(reason)` - so a METHOD here is refused as a non-string,
+    # which is exactly what the call-site traceback showed. The attribute is set in `__init__`.
 
     def current_epoch(self):
         # the trusted source port's `_scope` compares this with the source's own session/epoch (CP-1825)
