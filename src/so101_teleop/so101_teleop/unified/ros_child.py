@@ -507,6 +507,20 @@ class RclpyActionDriver:
             bind(receipt)
         except Exception as error:
             raise MutationError("ACT_TASK8_PORT_INVALID") from error
+        # The case records its evidence through the port, and the port learns the reset epoch from the receipt it
+        # verifies when the case begins - so the window is attached here without an epoch and bound there, which keeps
+        # every sample on the generation the case actually performed.
+        artifacts = getattr(self, "_act_artifacts", None)
+        attach = getattr(self._pick_place_port, "bind_live_evidence", None)
+        if artifacts is not None and callable(attach):
+            from so101_demo.act.task8_live_evidence import CaseEvidenceDriver
+            evidence = CaseEvidenceDriver(case_id=request.payload["scenario_id"],
+                                          staging_root=artifacts.evidence_root,
+                                          session_id=request.session_id, attempt_id=request.attempt_id)
+            try:
+                attach(evidence.window)
+            except Exception as error:
+                raise MutationError("ACT_TASK8_PORT_INVALID") from error
         from so101_demo.act.pick_place_runner import PickPlaceRunner
 
         task = {
