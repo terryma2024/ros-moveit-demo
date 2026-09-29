@@ -12730,3 +12730,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7's module work complete and green (**37** module, **76** focused set); Tasks 1-6 committed and
   green; Tasks 8-10 untouched. No runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-921 — Task 7 wiring: `_retire()` is the exact seam for the window's failure seal
+
+- **Read the owner's in-flight diff (28 added lines) and it resolves the integration point CP-920 flagged.** The
+  user has added `retire_failed_start(attempt_id=...)`, which validates its scope strictly
+  (`PICK_PLACE_CASE_FAILED_START_SCOPE_INVALID` when the case is ready, has no context/worker/child launch/stack, or
+  the stack has no process; `PICK_PLACE_CASE_STACK_OWNER_INVALID` when the stack owner key does not match) and then
+  calls a **new private `_retire(attempt_id=...)`** which `finish()` now also delegates to. Inside `_retire` the
+  retirement order was changed: the **child is retired before the stack** (each guarded by `_child_retired` /
+  `_stack_retired`), where it used to be the stack first.
+- **So the correct place for my wiring is inside `_retire`, immediately before the child retirement step** - not in
+  a second exception path. One insertion there covers *both* the normal `finish()` path and the new
+  `retire_failed_start()` path, and because the child is now retired before the stack (and the child owns the
+  recorder), sealing must happen before `await self.child_owner.stop_owned()`. That satisfies the plan's requirement
+  that on failure the child closes or invalid-seals the window *before* owner retirement, and it preserves the
+  fenced-admission property the user's own comment protects.
+- **Next edit, precisely scoped:** (1) give `PickPlaceCaseOwner` a way to reach the recorder/window it provisioned
+  (the child startup receipt is the natural carrier, since the plan says the recorder is provisioned *through* the
+  owner and the startup receipt); (2) in `_retire`, before the child step, close or invalid-seal that window if it
+  is open and not yet sealed - idempotent, so a normal finish after a successful seal is a no-op; (3) then read
+  `pick_place_runner.py` (46 added lines) for the SEARCH open / FINAL_CHECK seal and the artifact readback, and
+  `pick_place_child_port.py` (42 added lines) for the port-side artifact return, before editing either.
+- **State:** Task 7 module work complete and green (37 module, 76 focused set); Tasks 1-6 committed and green;
+  Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
