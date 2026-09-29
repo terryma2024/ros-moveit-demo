@@ -28600,3 +28600,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Which fixes the RED's shape exactly:** drive `run_pick_place_case(spec, "full-01", owner, journal)` where the owner's `execute` runs the **production `Task8Runner`** (only the bottom external I/O substituted - which is what "at external-I/O seams" means), take the **artifact the production code sealed** plus **both retirement receipts**, then
   **feed that same case root to `validate_case_journals` and that same artifact to `aggregate_task8_calibration`**, read the seven facts from the sealed index, and derive the four negatives **by corrupting this baseline** rather than by building a new row.
 - **State:** **P1-5 RED scoped to steps that name their artefacts**; P1-4's fixture granularity remains open as recorded (CP-1708); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1710 — P1-5's RED needs the exact owner/worker protocol, and here it is read line by line
+
+- **`run_pick_place_case` (69 lines, `pick_place_case_execution.py:137`) demands, in order:**
+  | what it calls | what it must be |
+  | --- | --- |
+  | `_preflight(spec, case_id, journal_path)` | returns `(manifest, case, manifest_path)` - so the case must be **frozen in the manifest** |
+  | `await owner.start(spec)` | returns `(context, worker)` |
+  | `PickPlaceValidationCampaign(manifest_path, context, worker, journal_path)` | **real production**, and `planned_cases(deadline_ns=spec.deadline_ns)` must contain the case or `TASK8_CASE_NOT_FROZEN` |
+  | `await worker.run_pick_place(request)` | the case itself - and this is the seam where the **production runner** must produce the result |
+  | `_require_result`, `_require_live_evidence_readback` | the sealed artifact must read back **byte for byte** |
+  | `await owner.finish(attempt_id=case_id)` | and afterwards `owner.context is None` **and** `_stack_retired`/`_child_retired`/`_final_clear` are all **`True`**, else `TASK8_CASE_RETIREMENT_UNCONFIRMED` |
+  | `_retirement_receipt(stack_root, owner.stack_owner_key, stack=True, ...)` and the child's | with `stack_root = owner.stack.launch.evidence_root`, `child_root = owner.child_launch.socket_root` |
+  | `_publish_new(journal_path, row)` | the row names both receipt digests **and both receipt paths and the live-evidence path/digest** |
+- **Which is exactly what the joined chain needs, and it also shows why the existing tests stop where they do:** the teleop suites substitute the **worker's result** (a prepared dict) and the demo suites substitute the **owner** entirely - so **each side supplies what the other side is supposed to produce.** The RED must instead give the owner a **worker whose `run_pick_place` drives the production runner**, with only the bottom external I/O substituted.
+- **The next read, therefore, is one name:** the **worker's** full-case entry point on the production side (the child-driven test shows `child.pick_place_phase(request)` is SEARCH-only, so the full-case entry is a different method), together with the object that satisfies `worker.launch.{mujoco_session_id,ros_domain_id}` and `owner.stack.launch.evidence_root` / `owner.child_launch.socket_root`.
+- **State:** **P1-5 RED's wiring is now specified against the code rather than the summary**; P1-4's fixture granularity remains open (CP-1708); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
