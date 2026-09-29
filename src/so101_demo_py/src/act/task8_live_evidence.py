@@ -159,10 +159,19 @@ class Task8LiveEvidenceRecorder:
             raise ValueError("TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH")
         if not self._entries:
             raise ValueError("TASK8_LIVE_EVIDENCE_EMPTY")
+        # The release epoch is CREATED at the release, so a case's entries legitimately span it: the phases before
+        # RELEASE are captured in epoch 0 and those after it in epoch 1, and both are true. The rule is therefore
+        # "non-decreasing, and the last entry is the epoch the case ended in" - a backwards sequence and a last entry
+        # that disagrees with the sealing identity are both still refused (CP-1612, chosen by the owner).
+        previous = None
         for entry in self._entries:
-            if (entry["reset_epoch"] != identity["reset_epoch"]
-                    or entry["release_epoch"] != identity["release_epoch"]):
+            if entry["reset_epoch"] != identity["reset_epoch"]:
                 raise ValueError("TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH")
+            if previous is not None and entry["release_epoch"] < previous:
+                raise ValueError("TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH")
+            previous = entry["release_epoch"]
+        if previous != identity["release_epoch"]:
+            raise ValueError("TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH")
         index = {
             "schema_version": SCHEMA_VERSION, "kind": "task8_live_evidence",
             "identity": dict(identity), "sample_count": len(self._entries),
