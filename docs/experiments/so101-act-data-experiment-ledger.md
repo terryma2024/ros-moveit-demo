@@ -33960,3 +33960,44 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1 in progress: the frame contract is GREEN; what remains in P1-1 is the formal builder's real
   `io_client`/`phase_path`/`trajectory` wiring and an actual run of the default production composition with its input,
   output, exit code and log.** **Task-list statuses unchanged: P1-1 in_progress, six others as they were.**
+
+## CP-1911 — P1-1's remaining half, defined by evidence: production has no io_client at all
+
+- **The formal builder is `build_real_providers(*, context, descriptor, ...)` and the default composition is
+  `build_production_measurement_driver(*, context, identity, providers=None, …)`, whose own comment marks the branch:**
+  ```python
+  else:                                    # the formal entry's path: real construction
+      supplied = build_real_providers(context=context, descriptor=descriptor, session_id=session_id,
+                                      attempt_id=attempt_id, search_start_rad=search_start_rad,
+                                      frame_source=frame_source)
+  ```
+- **And when `io_client` is not supplied, the builder does NOT construct one:** it looks in the seam
+  (`_bottom_io_from_seam`), and if that is unset it refuses by name (`PRODUCTION_CONTROLLER_ADAPTER_REQUIRED: io_client`).
+  **Exhaustive check of the repository:**
+  ```
+  grep -rn "io_client=" src --include=*.py | grep -v /build/
+      src/so101_demo_py/test/test_act_task8_production_composition_contract.py:162
+      src/so101_demo_py/test/test_act_task8_measurement_runtime_descriptor.py:243, 259
+  -> every caller that supplies a client is a TEST. No production call site exists.
+  ```
+  **and the low-level client's protocol exists only in the adapter and in tests:**
+  ```
+  Task8StackAdapter(client) turns the driver's calls into: launch / close / cleanup / readback /
+                                                           run_search / camera_info / tf / probe
+  grep -rln "def readback(" src  ->  src/so101_demo_py/src/act/task8_production_composition.py (the adapter itself)
+                                     + 4 TEST files
+  grep -rln "def tf("       src  ->  the same adapter + 3 TEST files
+  ```
+  **so "接通正式 builder 的真实 io_client/phase_path/trajectory" is not a wiring tweak: the production client that the
+  formal path requires does not exist yet, and the trajectory `phase_path` has no production producer either** - the
+  composition's own docstring says why the model cannot supply them: *"the other two are facts about the RUN - the
+  transport to the child, and the trajectory being executed - and the model cannot supply them."*
+- **What that means for the next step, stated so it can be executed without re-deriving it:**
+  1. implement the low-level client over the real MuJoCo/ROS stack with exactly those eight methods, returning the
+     client's own values (the adapter's docstring: *"a measurement carries real readback rather than constants"*);
+  2. give `build_real_providers` a real `phase_path`/trajectory (the admitted/expert route's phase path);
+  3. run `build_production_measurement_driver` with `providers=None` (the formal path, seam unset) and record the input,
+     output, exit code and log.
+- **State:** **P1-1 half done - the bottom-io frame contract is RED→GREEN with evidence (CP-1910); the other half is the
+  production client above, which is the next implementation.** **Task-list statuses unchanged: P1-1 in_progress, P1-6
+  completed, five pending.**
