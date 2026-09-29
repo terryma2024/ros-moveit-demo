@@ -23819,3 +23819,27 @@ not an inference of mine.**
 - **State:** all of this round's edits compile and are covered by the parse-before-write guard (two of my insertions were rejected by it this round and
   the file was left untouched both times); changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed,
   nothing deleted.
+
+## CP-1440 — GRID_GAP gone: the PORT owns the grid, and its own `_grid_sample` is the last refusal
+
+- **The answer the cap-round grep produced, and it settles CP-1439's open question:** there are exactly three `add_grid` sites, and the one my
+  wrapper could not cover is **production**:
+  ```
+  so101_demo_py/src/adapters/act/pick_place_search_port.py:376:
+      self._live_evidence_window.add_grid(self._grid_sample(phase, observed, evidence))
+  ```
+  So the **port records the grid itself** from its validated observation, and my fixture's own nine samples were a **second, differently-based grid**
+  interleaving with it - which is exactly what the window's period rule refused. **Fix applied: `record_phases` is now a no-op that says why** (the
+  port owns the grid), and with it the `TASK8_LIVE_EVIDENCE_GRID_GAP` refusal is **gone**.
+- **The refusal that remains is production-side and narrower:** `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID` raised from the port's own
+  `add_grid(self._grid_sample(phase, observed, evidence))` call. **So the port builds a canonical sample from the observation my substituted boundary
+  produces, and one of `append`'s enumerated rules (CP-1419) refuses it** - the base is the port's phase document, not my numbers, which is why
+  every fixture-side spacing change moved the error without clearing it.
+- **Exact resumption recipe:** read `_grid_sample(phase, observed, evidence)` in the port, walk its returned dictionary against `append`'s ten rules
+  (the 24-key set; the three non-negative int epochs; `sim_time_s` finite; `phase` non-empty; the `_BOOLEANS` all real bools with
+  `contact_observation_valid`/`wrist_frame_valid` True; `cup_support_distance_m` finite; the three vector lengths 3/3/4; `holding_state` non-empty;
+  both stamp maps and `raw_records` over exactly `_SOURCES` with the record files present under the recorder's root and their digests matching), and
+  fix **whichever substituted input feeds the failing field** - most likely `raw_records` (files under the port's own evidence root) or the stamps,
+  since every other field is derived from the observation that already passes the port's full evidence validation.
+- **State:** the edit compiles; `record_phases` is a documented no-op; changes remain uncommitted by design; no stack, no CUDA, no actuators, no
+  hardware; nothing pushed, nothing deleted.
