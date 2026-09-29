@@ -25231,3 +25231,21 @@ picture in both directions.**
   surface, implement the execution path, add the phase's predicate, write the test that lets the runner judge it). **With ~430 rounds left that is comfortably feasible, and P2 plus the
   final boundary and the review still fit - but it means P1-4 is the batch's critical path and the review request belongs after it, exactly as the owner's instruction says.**
 - **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed; CLOSE is next. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1514 — CLOSE needs one admitted value that does not exist yet, and the fix follows the precedent that already worked
+
+- **Read, and the gripper goal's shape is settled:** `RosControllerPort.send(goal)` runs the goal through **`trajectory_message(goal)`** and refuses unless the wire's
+  `joint_names` equal the port's own `names` - i.e. **a gripper goal is a trajectory document of the same family the prefix's goals use** (`joint_names`,
+  `header_stamp_times/positions` …), submitted through `broker.dispatch(ticket, 'gripper', goal)`.
+- **But the value that means "closed" has NO admitted source:** there is no `closed_rad` / `GRIPPER_CLOSED` / `close_position` anywhere in the source, and the validation
+  manifest carries no grasp or close section. **So CLOSE cannot be written honestly today without inventing the gripper's closed position - which is precisely the thing
+  this batch keeps refusing to do.**
+- **The fix follows the precedent the review already accepted:** the **case's own definition** carries its admitted values - the IPC payload gained
+  `support_distance_max_m` for exactly this reason (CP-1482) - **so CLOSE's target belongs there too**, as an admitted `gripper_closed_rad` (a finite value inside the
+  gripper joint's own limits, which the model supplies), **with a named refusal when it is absent** rather than a default. The child hands it to the case the same way
+  it hands the support distance.
+- **And that keeps the honest boundary intact:** nothing about CLOSE's motion is guessed; a case that does not admit its closed position **fails closed by name**, which
+  is a reportable gap rather than a silent assumption.
+- **Next:** add the admitted field, plumb it to the boundary as the support distance is plumbed, write CLOSE's execution (a `'gripper'` trajectory to that value) and let
+  the runner judge the resulting document through the phase-aware `sequence_facts("CLOSE", ...)` that already checks the bilateral-grasp predicate.
+- **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
