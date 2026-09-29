@@ -19061,3 +19061,25 @@ not an inference of mine.**
   test also drives. Setting it by hand would be the "hand-filled state" item 4 forbids, so the next round reads for the proper
   binder rather than assigning it.
 - **State:** goal active (revision 51, cap 1000); HEAD `c9fce481`; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1189 — There is no artifact binder: the child loads its bundle, which makes the compliant child test a different shape
+
+- **Searched for the binder CP-1188 assumed must exist, and it does not:** `_act_artifacts` appears in `ros_child.py` at the
+  child's **consumption** sites - `driver._act_artifacts.read_hashed_json("calibration_report")` and
+  `driver._act_artifacts.paths` inside the port-provisioning path - and there is **no `def *_artifact*`** function anywhere in
+  the driver. So the artifacts are **loaded**, not injected: the child obtains its admitted bundle from the workspace the
+  preparation and admission chain produced, and the existing test only short-circuits that by assigning the field.
+- **Which is why CP-1187's shortcut exists, and why copying or avoiding it are both wrong answers:** the field has no public
+  setter because in production nobody sets it by hand - the loading path does. So a **compliant** Boundary V child test cannot
+  inject it either; it has to let the loading path run, which means the test needs the admitted workspace and environment the
+  child reads (worker id, generation, manifest, reservation root, the bundle directory), not a hand-filled object.
+- **That is a real statement about the production chain rather than a testing inconvenience:** "no hand-filled state" and
+  "the child loads its artifacts" are the same rule seen from two sides, and it explains why the owner's item 4 pairs Boundary
+  V with the production-chain requirement instead of with a fixture.
+- **So Boundary V's child step is now a decision I should not take alone:** either (a) the test drives the **admitted
+  workspace** path end to end (preparation → admission → child), which is the honest shape but a substantially larger fixture
+  and overlaps the campaign-level tests; or (b) the child step is scoped to what the **runner-and-port** level can prove - which
+  is what CP-1184/CP-1185 already do green, with the child supplying the window left to the campaign tests that already build
+  it. Both are defensible and they differ in what the reviewer sees, so this goes to the owner rather than being chosen
+  silently - the same discipline as the descriptor decision at CP-1131.
+- **State:** goal active (revision 51, cap 1000); HEAD `2c6e9e4a`; staged 0; no full suite, no push, no stack, no hardware.
