@@ -18577,3 +18577,22 @@ not an inference of mine.**
   it in the batch it seals, and have the aggregator read it back **from the strict closed index** before calling
   `validate_head_search_binding` - then the negative set (item 3) and Boundary V's mechanical part (item 4).
 - **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1167 — The context carries the descriptor, validated by the one shared rule
+
+- **Landed:** `CalibrationMeasurementContext` gains a keyword-only `runtime_descriptor` argument, validated with the same
+  `require_runtime_descriptor` the bundle and the measurement entry use - so there is still exactly **one** reading of
+  §4.2 in the tree, now serving three boundaries. An omitted descriptor stays `None` and is therefore **visible** to the
+  driver and the aggregator rather than silently substituted, which is what the fail-closed posture requires.
+- **No regression, measured: 62 passed** across the measurement-driver, calibration-admission, aggregator and
+  runtime-descriptor suites (`beh-r773.log`), with a fresh NVMe scratch and `TMPDIR` verified through the exact test
+  interpreter.
+- **Why the field came before its behaviour test, stated so the order is not mistaken for a shortcut:** the driver's RED needs
+  a context that *can* carry a descriptor, and adding the field is not itself a behaviour - so the countable RED is next
+  round's: a driver run seals a batch that **indexes and records** the descriptor, and the aggregator reads it back **from the
+  closed index** before `validate_head_search_binding`. Until that test fails and then passes, item 2 is **not** done.
+- **Remaining for item 2:** the driver registers the descriptor's canonical payload/path/hash in the batch it seals; the
+  aggregator reads it back from the strict closed index; then item 3's negative set (opaque-only digest, descriptor mismatch,
+  weights/model/device/CUDA policy change, controlled config hash change, unindexed descriptor) and item 4's Boundary V
+  mechanical part.
+- **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
