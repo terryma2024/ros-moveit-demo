@@ -747,7 +747,8 @@ def test_the_five_live_fields_take_the_documented_extrema_across_five_runs():
     assert derived["cup_support_distance_m"]["value"] == pytest.approx(0.05)
     assert derived["release_stable_s"]["value"] == pytest.approx(0.9)
     assert derived["retreat_distance_m"]["value"] == pytest.approx(0.04)
-    assert derived["placement_stable_s"]["value"] == pytest.approx(1.0)
+    # placement values are 2.0, 1.2, 1.8, 2.4, 1.5 - the minimum is 1.2, not the fixture default
+    assert derived["placement_stable_s"]["value"] == pytest.approx(1.2)
 
 
 @pytest.mark.parametrize("runs,reason", [
