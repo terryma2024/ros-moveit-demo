@@ -19759,3 +19759,18 @@ not an inference of mine.**
   classification as the package gate. **Both are one decision, and neither is a judgement call I should make on the owner's file.**
 - **State:** HEAD `07b4b014` plus this checkpoint; staged 0; every log, artefact, scratch and IPC base retained as deletion
   candidates; no push, no MuJoCo stack, no hardware.
+
+## CP-1219 — The packet's green claims re-verified after every later edit
+
+- **Re-ran the suites the v2 packet cites, on a fresh scratch with a fresh 0700 IPC base, so the review request rests on tests
+  that pass *now* rather than on tests that passed before later edits:**
+  | suite | result |
+  | --- | --- |
+  | teleop: `test_task8_case_runner_chain.py`, `test_task8_live_evidence_production_chain.py`, `test_task8_case_execution.py` | **rc=0** (`packet-verify.log`) |
+  | `test_controller_reservation_client.py` (the authorised fixture fix) | **rc=0** (`packet-verify2.log`) |
+  So Boundary V's seven artefacts and the fixture fix both still hold, and the packet's claims are true of the tree as it stands.
+- **What is deliberately not re-verified here:** the 5638-test xdist result (CP-1211) is not re-run every round - it is a full
+  package gate and belongs to a boundary, not to a verification step; the two suites above are the ones the review request
+  depends on directly.
+- **State:** HEAD `bd386fe4` plus this checkpoint; staged 0; the two verification logs join the retained evidence set; no push, no
+  stack, no hardware.
