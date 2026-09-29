@@ -25143,3 +25143,18 @@ picture in both directions.**
   4. and the goals builder's held row and header stamp are taken from the capture, which is why the stub snapshot has to carry a real `observation` shape.
 - **State:** the boundary chain test is **uncommitted** while it is red, per this batch's rule; everything else in this stretch is committed. No new session, goal, worktree or stack; nothing
   pushed, nothing deleted; no hardware.
+
+## CP-1508 — The chain test needs a REAL snapshot document, and that is a fixture to import rather than to hand-build
+
+- **Where it stands:** the test now gets through the receipt (production authority), the ticket shape, the hex digests, the time axis - **and `PATH_TIME_AXIS_INVALID` was a genuine
+  production bug it caught**: `execute_approach` had been passing `monotonic()` for `bridge_time_s`/`start_time_s`, but the builder's rule is the **case's own axis**
+  (`bridge <= observation < start < first target`). **The fix asks the executor for a documented `time_axis(ticket, goal_id)` and refuses by name when it is absent** - the executor is
+  what knows when the prefix was bridged and started.
+- **What is left is my stub, not the repository:** the prover reads `checker.model.nq/nv`, `snapshot['model_sha256']`, the state vectors, and `checker_inputs(snapshot)`, which wants a
+  `controller_bridge` member. **Every one of those is a real field of the snapshot the readback path produces - the stub is simply not that document.** Two more additions got it to
+  `PATH_PROOF_STATE_INVALID`, which is the same statement again.
+- **So the honest next step is to stop hand-building a snapshot:** the path-screen test file already drives the REAL screen with a REAL snapshot, **so the chain test should import that
+  fixture** rather than approximate it a field at a time. **Four iterations of "one more key" is the signal that the shape should be borrowed, not reconstructed** - and it is the same
+  lesson as the calibration fixture (CP-1503) and the payload schema (CP-1487).
+- **State:** the boundary chain test is **uncommitted** while red; the `time_axis` production fix and the two corrected fixtures are part of it. Everything else in this stretch is
+  committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
