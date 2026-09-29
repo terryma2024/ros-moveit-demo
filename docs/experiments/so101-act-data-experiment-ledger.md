@@ -21296,3 +21296,14 @@ not an inference of mine.**
   | `ACT_ARTIFACT_INVALID` | the binder could not read the report as a JSON dict - so what `_calibration` returned or wrote is not what the binding expects | **next step: print what that helper produces** |
 - **The important reading is not the list but its shape:** every refusal is a **production check** with its own name, in the order the production code performs them, and each fix has been smaller than the one before. **The fixture is being accepted by real code one gate at a time, which is exactly what Astra asked for and what a fake-heavy test could never show.**
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed (item 4 at 30 passed, item 3 at 89, item 2 at 88, item 1 at 3); no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1291 — Two more gates cleared, one more named: the fixture keeps converging through production checks
+
+- **This round's sequence:**
+  | refusal | cause | fix |
+  | --- | --- | --- |
+  | `ACT_ARTIFACT_INVALID` | `_calibration` returns a **tuple** `(path, sha256)`, not a path or a dict - my `isinstance(built, Path)` branch fell through and wrote `json.dumps(tuple)`, i.e. a JSON **array**, which the binder refuses | unpack the tuple and use the path it wrote |
+  | `HEAD_SEARCH_SAMPLE_MISMATCH` | the child compares the calibration report's head-search **sample** with the runtime descriptor's, and I had passed a stub to `_calibration` while the config carried the full document | one full head-search block, used by both |
+  | `_CONTACT_POLICY_INVALID` | the child now validates the contact policy the report references against the bound policy - my `_write_policy` fingerprint is not the one the admission suite's calibration report carries | **next: print the report's policy fingerprint and align the two** - both come from the same suite, so this is a wiring question, not a new document |
+- **Six gates in two rounds, each with its own name and each fixed in a line or a reuse.** The fixture has gone from "cannot construct the child" to "the child is validating the contact policy" - i.e. it has passed the artifact binding, the descriptor shape, the weights digest, the calibration provenance, the report format and the head-search sample, **all in production code**.
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing deleted, nothing pushed.
