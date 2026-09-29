@@ -26877,3 +26877,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   parameter.**
 - **State:** the chain (register -> rebuild -> re-run) is still in its wait phase with the previous gate at 97 banners and its single known failure (the registration guard); item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still
   paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1611 — `colcon test` returned 0 while a CTest test was failing, so the exit code is not the gate's verdict
+
+- **Read from the finished re-run, and it changes how the gate must be judged:**
+  ```
+  gate2: teleop_rc=0 ... but the same log contains 116 `created: 8/8 workers` banners AND 1 `***Failed` CTest test
+         (the registration guard, which the registration has since fixed)
+  ```
+  **`colcon test` does not fail its own exit status on a test failure unless it is asked to** - the flag is `--return-code-on-test-failure` - **so a gate judged by `rc` alone would have called a red run green.** That is precisely the
+  flattering reading this batch keeps refusing to take, and it is now recorded rather than relied upon.
+- **What the gate's verdict must therefore be read from, and it is not one number:**
+  1. **the CTest failure count** (`***Failed` lines, or `colcon test-result`'s summary: "N tests, E errors, F failures") for pass/fail;
+  2. **the `created: 8/8 workers` banners** for the parallelism proof - **116 of them in this run, one per registered test**, which is the strongest form that proof has taken;
+  3. **colcon's own per-test xunit files** for the JUnit evidence (CP-1610);
+  4. **the scratch and its fail-closed tempdir equality assertion**, and the IPC base with its mode.
+- **And the two corrections that follow from it are already in the chain or queued:** the **registration** landed (`CMakeLists.txt` now carries the new module and `build_rc=0`), and **the next gate invocation will pass `--return-code-on-test-failure`** so that its exit
+  status is a verdict rather than a formality. **The re-run currently in flight (gate3) predates that flag, so its `rc` will carry the same caveat and its verdict will be read from the four signals above.**
+- **State:** the chain has registered the module and rebuilt successfully, and gate3 is running on a fresh scratch. Item 5 closes when gate3 shows zero CTest failures with the banners and the per-test xunit files present. Item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not
+  started.
