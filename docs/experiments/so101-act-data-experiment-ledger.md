@@ -12136,3 +12136,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the two modified test modules with generation-carrying expectations.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-895 — Task 4: entry-bound CalibrationMeasurementContext (34 passed)
+
+- **`CalibrationMeasurementContext` added** to `act/task8_calibration_admission.py` - the plan's third produced
+  interface for Task 4. It enforces the standing ruling that **resource binding happens once at the calibration CLI
+  entry and travels in the context**: a missing binding, a binding whose `bound_at_entry` is not `True`, or one
+  missing its required keys raises `RESOURCE_BINDING_REQUIRED`, so no inner component can rebind. The context
+  carries the generation, contract / measurement-plan / candidate / policy / driver-source digests, the safe
+  interval, controller and broker generations, the evidence root and the binding, exposes them through `to_dict()`
+  for receipts, and builds that generation's admission via `admission(status=...)` so context and admission share
+  one identity.
+- **Verified:** admission/binding tests plus the two modified modules report **34 passed, rc=0**
+  (`beh-task4-green6.log`).
+- **Remaining for Task 4's nine-file commit:** keep resource binding in `cli/act_command_broker.py`'s entry (now
+  with a context to carry it) and pass it through; wire the reservation and owner factory through
+  `runtime/launch_composition.py`; carry the admission generation on every acquire, state, command, feedback, stop,
+  retire and cleanup event; update `test_act_control_event_timeline.py` and `test_act_task8_search_binding.py` with
+  generation-carrying expectations.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
