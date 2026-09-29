@@ -33752,3 +33752,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1 through P1-6 CLOSED; the freeze gate is 114/117 with three failures classified as an
   evidence-root/socket-limit conflict, which is a decision for the owner rather than a change for me to make.** **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1903 — The demo RED, measured as a rate: three consecutive runs, no RED
+
+- **The re-measurement the freeze item asked for - same code, consecutive runs, reported as a rate rather than as one
+  green:**
+  ```
+  run 1  head 39099918   5793 passed, 163 skipped, rc 0   120.74 s
+  run 2  head e3d341ec   5793 passed, 163 skipped, rc 0   126.42 s
+  run 3  head e3d341ec   5793 passed, 163 skipped, rc 0   120.70 s
+  ```
+  **and the two commits differ only in the ledger, so all three runs are the same code** - **0 RED in 3 runs**, where the
+  earlier record was *2 failures in 3 runs*, **one of which (demo6's) the ledger already attributes to P1-3 rather than to
+  the test** - **so the honest statement is: the demo gate's RED has not recurred in three consecutive post-change runs,
+  and the pre-change failures were not all the same cause.**
+- **State:** **P1-1 through P1-6 CLOSED; the gates are measured (demo 3/3 green, teleop 1109 passed, joined chain 3 passed,
+  serial CTest 114/117 with three classified environment failures); the re-review packet carries every number.** **Task-list
+  statuses are unchanged, so they are not re-stated.**
