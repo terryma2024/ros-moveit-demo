@@ -12091,3 +12091,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   with the generation-carrying expectations. The production `owner=act` binding semantics stay untouched.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-893 — Task 4: Ownership carries the calibration role with a restricted capability set (28 passed)
+
+- **`act/ownership.py` extended, additively:** `OWNERS` gains `calibration`; a new `CAPABILITIES` table grants that
+  role exactly `arm_probe`, `neck_target`, `stop` and `retire` - deliberately **not** `release` and not the
+  Recorder - and `require_capability(owner, operation)` raises `CAPABILITY_NOT_GRANTED` when a restricted role asks
+  for anything outside its grant. Roles absent from the table keep their existing unrestricted semantics, so the
+  production `owner=act` binding is unchanged: the new test asserts exactly that (`require_capability("act",
+  "release") is True`).
+- **Verified:** the new admission tests plus `test_act_ownership.py` and `test_act_control_event_timeline.py`
+  report **28 passed, rc=0** (`beh-task4-green2.log`) - the pre-existing ownership and timeline behaviour is
+  preserved, and a calibration lease really does acquire (`RUNNING`) through the same code path.
+- **Also already green from CP-892:** the admission module (one-flight, named refusals, generation on every
+  decision) and the search binding (byte-matching arm commands, interval + sweep-safety for neck targets, signed
+  receipt required, state machine with `REISSUE_NO_ADVANCE` / `TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL`).
+- **Remaining for Task 4's nine-file commit:** broker-side enforcement in `adapters/act/command_broker.py` (a
+  byte-matching arm probe or an adapter-signed receipt, never the generic non-ACT submit path); keeping resource
+  binding in `cli/act_command_broker.py`'s entry and passing it through the context; wiring the reservation and
+  owner factory through `runtime/launch_composition.py`; carrying the admission generation on every acquire,
+  state, command, feedback, stop, retire and cleanup event; and updating `test_act_control_event_timeline.py` and
+  `test_act_task8_search_binding.py` with generation-carrying expectations.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
