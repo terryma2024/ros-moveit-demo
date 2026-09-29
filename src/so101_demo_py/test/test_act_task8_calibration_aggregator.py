@@ -391,3 +391,23 @@ def test_the_published_measurements_are_values_with_their_sample_never_verdicts(
     # the verdicts live in checks, and only there
     assert set(document["checks"]) <= set(document["checks"])
     assert all(isinstance(verdict, str) for verdict in document["checks"].values())
+
+
+def test_rendering_the_same_immutable_batch_twice_is_byte_identical_and_publishes_once(tmp_path, contract):
+    """Boundary IV: a canonical render is a function of the batch, so a second render cannot differ or duplicate."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+
+    batch = batch_factory(tmp_path, contract)
+    out = tmp_path / "out"
+    first = aggregate_task8_calibration((batch,), contract, out)
+    snapshot = {name: Path(path).read_bytes() for name, path in first.items()}
+    listing = sorted(str(path.relative_to(out)) for path in Path(out).rglob("*") if path.is_file())
+
+    second = aggregate_task8_calibration((batch,), contract, out)
+    rerender = {name: Path(path).read_bytes() for name, path in second.items()}
+
+    assert set(second) == set(first), "the same documents are named both times"
+    assert rerender == snapshot, "a second render of the same immutable batch is byte-identical"
+    assert sorted(str(path.relative_to(out)) for path in Path(out).rglob("*") if path.is_file()) == listing, \
+        "publishing once leaves no extra or duplicated file behind"
