@@ -30346,3 +30346,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-2's chain runs to the aggregator and steps through the formulas; the regression I introduced is fixed
   and recorded; the measured shape table is the next edit.** P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix
   awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
+
+## CP-1793 — The owner's tree is back to its exact pre-freeze inventory: 26 modified, 13 untracked
+
+- **The revert was verified against HEAD rather than assumed:**
+  ```
+  test_act_task8_artifact_bundle.py                 clean vs HEAD
+  test_act_task8_formal_context_fields.py           clean vs HEAD
+  test_act_task8_measurement_runtime_descriptor.py  clean vs HEAD
+  test_act_task8_production_composition_contract.py clean vs HEAD
+  test_act_task8_runtime_config_binding.py          clean vs HEAD
+  git status --short | awk '{print $1}' | sort | uniq -c   ->   13 ??   26 M
+  ```
+  **26 modified and 13 untracked is the inventory the freeze recorded (CP-1756/CP-1776)**, so every incidental edit this
+  work made to the owner's files is undone: five fixtures are byte-identical to HEAD again, and the sixth (the
+  measurement-driver fixture, which was already the owner's dirty file) holds the owner's changes and nothing of mine.
+  **CP-1776's "+6 difference" no longer exists.**
+- **And the guard did its job while the mistake was being corrected:** the commit for this checkpoint was staged as
+  `s == 8` (the six fixtures plus the aggregator and the ledger), the fixtures turned out to need no staging because the
+  revert had restored them, `s` came out as 2, **and the guard refused the mismatched commit rather than sweeping the
+  owner's file into it.** The retry staged exactly the two files that are mine. **That is the CP-1776 lesson applied
+  proactively rather than learned again.**
+- **State:** **P1-2's chain runs to the aggregator with the pending-threshold disposition in place; the regression is
+  fixed; the owner's tree is exactly as the freeze recorded it; the measured shape table is the next edit.**
+  P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
