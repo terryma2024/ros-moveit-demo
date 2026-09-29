@@ -17646,3 +17646,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   head-search descriptor and the raw evidence **at measurement time** cannot be finished against fixtures - it needs an
   authorised runtime (a live MuJoCo/ROS stack) to compose the real adapters, which is Boundary II's outstanding
   composition item as well. Everything on the reporting side is now in place for that wiring to plug into.
+
+## CP-1126 — Item 1's content review found a second missing link: the receipt did not vouch for the fourth document
+
+- **RED, clean, and the same shape as CP-1124:** walking the aggregation's outputs and requiring each document's digest to
+  appear in the receipt failed with **`the receipt vouches for task8_ready_support`** - the receipt carried the report's
+  digest and the head-search sample's, but not the support sample's. So the fourth canonical document was published
+  **without the receipt vouching for it**, which breaks the receipt's own purpose as the index of a publication.
+- **Fixed and GREEN: 56 passed** across the aggregator, contract and head-search binding modules, scratch
+  `<R>/scratch/r735.<n>` with `TMPDIR` verified through the exact test interpreter; logs `beh-r734-red.log` (the RED) and
+  `beh-r735.log` (green).
+- **Two missing links found in two rounds by the same technique** - enumerate what is published, then check that every
+  other document accounts for it. Both were real, both were invisible to the gate: `require_gate` validates the report,
+  and nothing validated that the publication as a whole is self-consistent. That is now twice in a row that the review's
+  "the four canonical documents" phrasing hid a gap rather than a formality.
+- **Boundary IV's remaining work, unchanged and named:** the live driver wiring that records the descriptor and raw
+  evidence at measurement time (CP-1117, needs an authorised runtime - the question is with the owner), and then
+  Boundary V's production-chain test. Nothing weakened, nothing deleted, no push, no stack, no hardware.
