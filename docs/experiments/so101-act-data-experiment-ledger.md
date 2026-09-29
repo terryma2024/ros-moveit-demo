@@ -27689,3 +27689,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **CTest recorded a placeholder because it expected a differently-named result file** - a packaging/registration detail, not a case that ran and failed. **The leg is therefore reported as `1311 cases, 0 failures, 43 skipped, 1 CTest-level placeholder`, which is what the artifacts say.**
 - **A count difference worth recording rather than glossing:** v3's run reported **1432 tests** and this one **1311**. **The module count is identical (117 files, 117 CTest entries)**, so nothing stopped being collected - the difference is in how the two runs' summaries were produced (v3 read `colcon test-result`, this one aggregates the `xunit` suites). **Both numbers come from the artifacts; neither is being presented as the other.**
 - **State:** **demo VALID, teleop VALID**; the CTest leg is re-running with a short scratch and a private IPC base, because its four failures were the same socket-path family; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1658 — The v4 boundary is GREEN on all three legs, each on its own fresh scratch
+
+- **The re-run boundary the owner's seventh item required, and the numbers as the artifacts report them:**
+  | leg | result | scratch (fresh, previously nonexistent, verified by that leg's interpreter) | mode |
+  | --- | --- | --- | --- |
+  | **demo** | **`5748 passed, 163 skipped`, `failed: 0`**, 111 s | `.../final-boundary-v4-20260929-220050/demo-scratch4/tmp` | `-n 8`, full `so101_demo_py` gate |
+  | **teleop** | **`teleop_rc=0`**, 117 xunit files, **1311 cases, 0 failures**, 43 skipped, 234 s | `.../experiments/v4a/t-teleop` (84 chars) | `-n 8` via `PYTEST_ADDOPTS`, `--return-code-on-test-failure` |
+  | **CTest** | **`100% tests passed, 0 tests failed out of 117`**, 215 s | `.../experiments/v4a/t-ctest` (84 chars) | **serial `ctest -V`** |
+- **Every constraint the owner set is satisfied and checkable:** a **unique evidence root with a new run subroot** (`final-boundary-v4-20260929-220050`), **a fresh NVMe scratch per leg**, **`TMPDIR`/`TMP`/`TEMP` set per leg with a fail-closed exact-equality `tempfile.gettempdir()` check** by that leg's interpreter, **new log/result paths**, a **fresh 0700 IPC base**, and **serial CTest only** - no `-j 8`.
+- **And the road to it is the part worth keeping, because every obstacle was the harness rather than the code:**
+  | what failed | what it actually was |
+  | --- | --- |
+  | 3 focused-suite failures in the demo leg | **this batch's changes in files no focused run collected** - two `build_real_providers` call sites, one invented seal identity, one test asserting the old epoch rule |
+  | 16 reservation-client refusals | the **IPC base must exist and be private**, and the demo script never created it |
+  | `demo_rc=0` beside 16 failures | **`rc` is not a verdict** (CP-1611), in my own script |
+  | `Has this package been built before?` | `colcon test` must run from the **workspace root** |
+  | 2 teleop + 4 CTest socket failures | **`AF_UNIX` path length**: 124 characters of scratch against 117 in the last green run |
+  | 1 teleop `errors=1` | a **CTest placeholder** for a differently-named result file, not a failing case |
+  **Not one of them was a defect in the code under test, and every one of them looked like a test failure until the number was read.**
+- **State:** **item 7's boundary is COMPLETE**; the packet and index must now carry it **in place of the supersession banner**; then the one independent GPT-6 Astra/High re-review the owner asked for; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
