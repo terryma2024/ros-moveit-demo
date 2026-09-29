@@ -27378,3 +27378,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And with this, the queued corrections from CP-1622/1623 are all delivered:** the packet says the legs are superseded and withdraws the CTest citation; the index says the same and its rows all verify. **The one thing neither file yet carries is the re-run boundary itself, which
   cannot exist until the three open decisions are made and the code stops changing.**
 - **State:** the evidence set (packet, index, ledger) is **internally consistent and audited** for the first time since the third review; item 1's context half is done with its CLI half awaiting CP-1635; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched pending the code settling. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1639 — The pending cleanup-proof change is PARKED as a patch, the teleop registration is committed, and one failure is localized
+
+- **Why this round parked rather than carried a red tree:** the cleanup-proof change (CP-1620) was sitting **uncommitted** in three files, and with it in place **25+ measurement fixtures failed**. **A tree that is red for a decision that has not been made is a hazard** - it hides
+  any new breakage behind known ones - **and the owner's rule is not to bypass the item silently but to record it and stop on it.** So the change is now **preserved as a patch** under the evidence root:
+  ```
+  experiments/gate8-remediation/pending-cleanup-proof-scope.patch      (4648 bytes - the validator rule, the helper's
+                                                                       cleanup/contamination/error_code keywords, and the
+                                                                       test-file completions, all three halves)
+  ```
+  **It is visible, auditable and re-appliable** (`git apply`), **and the decision that unblocks it is still CP-1620's.**
+- **And the round committed one thing that was genuinely missing:** `src/so101_teleop/CMakeLists.txt`'s registration of the IPC-isolation test. **The eight-worker gate could not be green without it** - the package's own guard refused the run for that reason - **and it was still uncommitted**, so the gate's result rested on an
+  uncaptured edit. Committed as `e602c94d`.
+- **The result of parking: `1 failed, 82 passed`** across the six measurement suites, down from 25+ failures. **The single remaining failure is localized rather than mysterious:**
+  ```
+  .../cli/act_measure_task8_calibration.py:111: ValueError: MEASUREME...
+  ```
+  raised **inside the guarded region this batch added** (CP-1617/1621) and reported by a test that loads the CLI from a **scratch rebuild copy** (`scratch/rebuild-symlink-…`). **So the likely cause is a test expectation that my new refusal changed, not a defect** - and the next step is to read
+  that test's assertion and the full refusal name, then update the expectation **or** the code, depending on which is wrong.
+- **State:** the tree carries only the owner's pre-existing modifications plus this batch's **committed** work; the parked patch and its decision are recorded; the remaining failure is named with its file and line. Item 1's context half done with its CLI half awaiting CP-1635; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 pending the code settling. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
