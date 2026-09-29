@@ -25914,3 +25914,17 @@ picture in both directions.**
   next correction, and it is the same shape as every other one in this stretch: name where the value really comes from.
 - **State:** P1-1..P1-3 green and committed; every production fix committed except the release-epoch correction and the recorder attachment, which are in the tree with the focused set green; the full-case test
   remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1556 — Nine phases verify, the seal runs, and the recorder's grid refuses a clock that went backwards
+
+- **The trace of the full run is the milestone:** `verify ok` for SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, both retreat segments and FINAL_CHECK - **nine phases, one substituted
+  runtime, the runner's own verifier as the only judge.**
+- **Three corrections got it there, each from reading the refusing code:**
+  1. **the release epoch follows the runner's loop, not my assumption**: it increments **inside** the RELEASE iteration, before verifying that document;
+  2. **the retreat segment must record its grid sample**, because the window seals only after seeing every required phase - and `REQUIRED_PHASES` lists all nine;
+  3. **the seal's identity comes from the case state**, since the runner's request has no epochs.
+- **And the run now stops one step further, on the recorder: `TASK8_LIVE_EVIDENCE_GRID_REGRESSION`.** The reason is precise and is **my fixture's fault, not the code's**: the retreat's grid sample is built from the
+  **SEARCH observation**, whose clock is older than the samples the phase path records - so the grid goes backwards. **The fix is to give the retreat sample the case's CURRENT time, which the boundary's own readback
+  carries** - a small, well-defined change and the last thing between this case and a sealed artifact.
+- **State:** P1-1..P1-3 green and committed; the corrections above committed with the focused set green; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
