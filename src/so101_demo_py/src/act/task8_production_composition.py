@@ -113,26 +113,150 @@ def _providers_from_seam():
 
 
 class PhaseCameraMatrixEvaluator:
-    """The production phase-camera evaluator: the admitted matrix, read per (phase, index).
+    """The production phase-camera evaluator: the admitted matrix, and the GEOMETRY it must be judged against.
 
-    No such component existed before this batch - the repository had the matrix (``load_phase_camera_matrix``) and the
-    aggregator's derivation, but nothing the driver could call. It returns the observation shape the driver and the
-    chain fixture both document, with the matrix's own occluder set as its content.
+    P1-3 (rereview4) named what this class used to be: *"configuration echo, not measurement."* It returned the matrix's
+    own occluder names, camera block and hash, with `phase` and `index` as labels - so moving the cup, the camera or an
+    occluder could not change the observation, and the driver's `period_s=0.002` was a claim about ONE sample per phase.
+
+    It now measures: for each sample of the phase's joint path it poses the head camera from the admitted geometry and
+    the sample's **neck joint** (this camera is head-mounted, so the neck pans it), projects the target through the
+    pinhole, and decides visibility against the occluders' own geometry. **Every sample keeps the input it was projected
+    from and the result it produced**, so a reader re-derives the projection instead of trusting a summary.
+
+    When it is handed no geometry it says so (`geometry_state: "ABSENT"`) rather than returning something that looks
+    like a measurement - the shape the driver's own fixtures rely on, made honest.
     """
 
-    def __init__(self, document: dict) -> None:
+    #: the joint that pans the head camera; the same index the search binding reads for its start angle
+    NECK_JOINT_INDEX = 6
+    #: the horizontal field of view the pixels are derived from when the document does not carry intrinsics
+    DEFAULT_HFOV_RAD = 1.0
+    #: the admitted phase-path cadence: 2 ms, the period the driver's private replay labels its rows with. One number,
+    #: named in one place, so "sampled at the admitted period" is a property rather than a coincidence of two literals
+    ADMITTED_PERIOD_S = 0.002
+
+    def __init__(self, document: dict, *, trajectory=None, target=None, occluder_geometry=None,
+                 period_s=None) -> None:
         self.document = document
         self.occluders = tuple(document.get("occluders", ()))
+        self.trajectory = trajectory
+        self.target = target
+        self.occluder_geometry = dict(occluder_geometry or {})
+        declared = period_s if period_s is not None else document.get("period_s")
+        self.period_s = float(declared) if declared is not None else self.ADMITTED_PERIOD_S
+
+    # -- geometry -------------------------------------------------------------------------------------------------
+    @staticmethod
+    def _rotation(rpy):
+        import math
+
+        roll, pitch, yaw = (float(value) for value in rpy)
+        cr, sr, cp, sp, cy, sy = (math.cos(roll), math.sin(roll), math.cos(pitch), math.sin(pitch),
+                                  math.cos(yaw), math.sin(yaw))
+        return ((cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr),
+                (sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr),
+                (-sp, cp * sr, cp * cr))
+
+    @staticmethod
+    def _apply(matrix, vector):
+        return tuple(sum(row[index] * vector[index] for index in range(3)) for row in matrix)
+
+    def _camera_pose(self, neck_rad: float):
+        """The camera's world pose at one sample: the admitted block, panned by the sample's own neck angle."""
+
+        import math
+
+        camera = self.document.get("camera", {})
+        position = tuple(float(value) for value in camera.get("position_m", (0.0, 0.0, 0.0)))
+        rpy = list(float(value) for value in camera.get("rpy_rad", (0.0, 0.0, 0.0)))
+        rpy[2] += float(neck_rad)
+        return position, tuple(rpy)
+
+    def _project(self, point_world, position, rpy):
+        """Pinhole projection: world point -> pixel, or None when it is behind the camera."""
+
+        camera = self.document.get("camera", {})
+        width = float(camera.get("width_px", 640))
+        height = float(camera.get("height_px", 480))
+        hfov = float(camera.get("horizontal_fov_rad", self.DEFAULT_HFOV_RAD))
+        focal = (width / 2.0) / max(1e-9, __import__("math").tan(hfov / 2.0))
+        rotation = self._rotation(rpy)
+        relative = tuple(point_world[index] - position[index] for index in range(3))
+        # world -> camera is the transpose of camera -> world
+        in_camera = tuple(sum(rotation[row][col] * relative[row] for row in range(3)) for col in range(3))
+        if in_camera[2] <= 1e-6:
+            return None
+        u = width / 2.0 + focal * in_camera[0] / in_camera[2]
+        v = height / 2.0 - focal * in_camera[1] / in_camera[2]
+        return u, v, focal, in_camera
+
+    def _occluded(self, position, target_point, target_radius):
+        """Whether a named occluder's own geometry stands between the camera and the target."""
+
+        import math
+
+        blocked_by = []
+        for name in self.occluders:
+            geometry = self.occluder_geometry.get(name)
+            if not isinstance(geometry, dict):
+                continue
+            centre = tuple(float(value) for value in geometry.get("position_m", ()))
+            if len(centre) != 3:
+                continue
+            radius = float(geometry.get("radius_m", 0.0))
+            direction = tuple(target_point[index] - position[index] for index in range(3))
+            length = math.sqrt(sum(value * value for value in direction))
+            if length <= 0:
+                continue
+            unit = tuple(value / length for value in direction)
+            to_centre = tuple(centre[index] - position[index] for index in range(3))
+            along = sum(to_centre[index] * unit[index] for index in range(3))
+            if along <= 0 or along >= length:            # behind the camera or beyond the target
+                continue
+            perpendicular = math.sqrt(max(0.0, sum(value * value for value in to_centre) - along * along))
+            if perpendicular <= radius + target_radius:
+                blocked_by.append(name)
+        return blocked_by
+
+    def _sample(self, entry):
+        """One retained sample: its INPUT (the joints it was taken at) and its RESULT (the projection)."""
+
+        import math
+
+        joints = [float(value) for value in entry.get("joints_rad", ())]
+        neck = joints[self.NECK_JOINT_INDEX] if len(joints) > self.NECK_JOINT_INDEX else 0.0
+        position, rpy = self._camera_pose(neck)
+        target_point = tuple(float(value) for value in (self.target or {}).get("position_m", ()))
+        target_radius = float((self.target or {}).get("radius_m", 0.0))
+        projected = self._project(target_point, position, rpy) if len(target_point) == 3 else None
+        blocked = self._occluded(position, target_point, target_radius) if projected else []
+        sample = {"t_s": float(entry.get("t_s", 0.0)), "joints_rad": joints, "neck_rad": neck,
+                  "camera": {"position_m": list(position), "rpy_rad": list(rpy)}}
+        if projected is None:
+            sample.update({"bbox_px": None, "visible": False, "occluded_by": blocked})
+            return sample
+        u, v, focal, _in_camera = projected
+        radius_px = focal * target_radius / max(1e-9, abs(_in_camera[2]))
+        sample.update({"bbox_px": [u - radius_px, v - radius_px, u + radius_px, v + radius_px],
+                       "visible": not blocked, "occluded_by": blocked})
+        return sample
 
     def __call__(self, phase, index):
-        # the observation names the geometry the matrix was evaluated against, so the row proves WHICH camera and
-        # which admitted matrix produced it rather than echoing a configured occluder set (Astra re-review #3, finding 1)
         camera = self.document.get("camera", {})
-        return {"phase": phase, "frame_index": index, "row_count": len(self.occluders),
-                "occluders": list(self.occluders),
-                "camera": {"frame_id": camera.get("frame_id"), "width_px": camera.get("width_px"),
-                           "height_px": camera.get("height_px")},
-                "matrix_sha256": self.document.get("matrix_sha256")}
+        observation = {"phase": phase, "frame_index": index, "row_count": len(self.occluders),
+                       "occluders": list(self.occluders),
+                       "camera": {"frame_id": camera.get("frame_id"), "width_px": camera.get("width_px"),
+                                  "height_px": camera.get("height_px")},
+                       "matrix_sha256": self.document.get("matrix_sha256")}
+        samples = (self.trajectory or {}).get("samples") or []
+        if not samples or not self.target:
+            observation.update({"geometry_state": "ABSENT", "period_s": self.period_s, "samples": []})
+            return observation
+        observation.update({"geometry_state": "MEASURED", "period_s": self.period_s,
+                            "target": dict(self.target),
+                            "samples": [self._sample(entry) for entry in samples]})
+        return observation
 
 
 class _MonotonicClock:
