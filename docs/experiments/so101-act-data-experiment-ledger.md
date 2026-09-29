@@ -26767,3 +26767,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   file - all saved as the proofs the owner asked for.
 - **State:** item 5 **verified and diagnosed**; its re-run is the next action on that item. Item 1 verified; item 2 two-thirds green with the epoch rule question open (CP-1602); items 3, 4, 6, 7 untouched. Goal still
   paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live not started.
+
+## CP-1604 — Item 5's root cause explains TWO missing proofs, and the parallel mechanism is not yet established
+
+- **`--pytest-args` being ignored does not only cost the worker count:** the compliant teleop leg also **never wrote its JUnit file** - `experiments/final-boundary-v2/teleop-junit.xml` **does not exist** - because
+  `--junit-xml=…` travelled in the same ignored argument. **One root cause, two missing proofs**, and the owner's item 5 asks for exactly those proofs, so this is recorded as a gap in the leg rather than glossed over.
+- **And the replacement mechanism is NOT yet established, which is the honest state after three probes:**
+  1. `PYTEST_ADDOPTS="-n 2"` with `python -m pytest <file>`: `31 passed` **with no `created: N/N workers` banner** (the `-q` in the same variable hides it, and the run took the same 2.02 s as serial);
+  2. the **same file with an explicit `-n 2`** on the command line: **`created: 2/2 workers` appears** - **so that banner is the proof marker, and it is only observable when the flag reaches pytest directly**;
+  3. `colcon test --packages-select so101_teleop --ctest-args -R test_expert_validation_api` with `PYTEST_ADDOPTS="-n 8"` in the environment: colcon finished green in 2.63 s, **`Testing/Temporary/LastTest.log` holds 121 bytes** (CTest logs only failures), and the
+     resulting xunit records **`hostname: None` for all 31 cases** - **so nothing in what CTest keeps proves eight workers either way.**
+- **What that means for the gate, stated plainly:** the teleop leg must be re-run with a mechanism that **provably** engages eight workers **and** leaves a JUnit behind, and the proof must be captured by construction rather than inferred - the
+  **banner**, at least one **`gw<N>`-prefixed line or hostname**, the **resolved argv**, the scratch with its equality assertion, and the **JUnit file itself**. **The next step is to establish which invocation does that** (the package's own
+  `so101_add_pytest_test` wrapper at `CMakeLists.txt:87-95` is the place to read next, since it decides what reaches pytest).
+- **State:** item 5 verified, diagnosed, and now **known to be insufficient in two ways** (no worker proof, no JUnit); item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal,
+  worktree or stack; no hardware; no live stack; P2 live not started.
