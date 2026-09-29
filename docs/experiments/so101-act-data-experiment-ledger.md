@@ -23338,3 +23338,13 @@ not an inference of mine.**
   combination *is* the hazard. **Reading uncut is what has moved this item; my anchors are what have slowed it.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1409 — RGB skew fixed by line-number edit; `controller reference` is the last evidence gate
+
+- **The line-number replacement landed first time** (CP-1408's rule works when followed), the RGB check now passes, and the refusal is
+  **`controller reference`** - the **reference** document, which my fixture currently fills as a copy of the observation.
+- **And that makes this the last shape in the evidence path:** the port's sequence is the readback scope, the contact hazard, the RGB scope and
+  skew, and then the reference; after that the port returns the observation to the segment, which builds the proofs and the scene receipt.
+  **Its rule is printed above for the next edit**, which by this round's evidence will be another named-field fix rather than a hunt.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
