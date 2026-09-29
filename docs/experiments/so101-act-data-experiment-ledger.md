@@ -18330,3 +18330,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Final state of this session:** HEAD `76b95ffa` plus this checkpoint, staged 0, tree 31 modified + 14 untracked, goal
   **active** (revision 48) with the objective **not** complete - Boundary V part-way, two owner decisions outstanding, no full
   gate, no stack, no push, nothing deleted.
+
+## CP-1157 — Closing checkpoint: what this stretch delivered, and the one decision that ends it
+
+- **Delivered, each with a commit and a test run behind it:** Boundary I finished and its twelve-failure migration closed;
+  Boundary IV's **index half** complete (entry validation, canonical batch shape, the identity member the contract names,
+  recomputed self-digest, symlink rule, driver keys and contamination, anchor coverage over both conventions, phase coverage,
+  source-time monotonicity, ten-member identity agreement across roots); Boundary IV's **publishing half** complete (the
+  contract's 28 fields in `REQUIRED_MEASUREMENTS`' units and shapes with per-group approved closed-sample citations and
+  disk-verified readback; `require_gate(report, "task8_live")` green; the report **binds** to a runtime descriptor and
+  **refuses** a mismatched one; render-twice byte-identical with a single publish; all four canonical documents named by the
+  definition, returned and vouched for by the receipt); the owner's five corrections answered, including the two where my own
+  claims were wrong; a re-review packet on disk with size and sha256; and Boundary V advanced until the fake port carries a
+  case through all nine phases, both release contracts and both retreat segments under the runner's own validators.
+- **Verification:** 55 + 87 + 52 + 109 + 53 + 57 + 79 + 40 targeted tests across eleven suites, no full gate (owner's
+  instruction), the last two runs green on both sides (79 aggregator-side, 40 teleop-side).
+- **Why this stretch ends here rather than continuing:** the remaining Boundary IV work and the recording half of Boundary V
+  both depend on **one design answer** - which document is the authoritative runtime head-search descriptor - and the second
+  half also needs an authorised live stack. That condition has been unchanged since CP-1131 and is the reason the goal is
+  reported blocked rather than merely incomplete.
+- **Nothing unsafe or unrecoverable was done:** no push, no stack started, no hardware touched, no evidence deleted, no owner
+  line ever staged, and my one unfinished test file left untracked rather than committed red.
