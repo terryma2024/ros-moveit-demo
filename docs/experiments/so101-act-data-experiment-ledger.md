@@ -26391,3 +26391,15 @@ picture in both directions.**
 - **CTest is re-running** (`experiments/final-boundary/ctest2.log`); its earlier run showed the same four failures as the xunit set - the two chain tests (now fixed) and the three IPC-class unified tests (now fixed) - **so its
   fresh result is the boundary's last leg.**
 - **State:** two legs green with fresh numbers; CTest in flight; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
+
+## CP-1585 — CTest's two remaining failures are `BRIDGE_CHILD_EXITED: -15`, and `-j 8` is my own choice, not the recipe's
+
+- **What the fresh CTest run shows:** the **chain test no longer fails** (CP-1582/1583's fix holds under CTest too), and two tests remain: `test_unified_bridge` and `test_unified_bridge_cleanup`, both with
+  **`MutationError: BRIDGE_CHILD_EXITED: -15`** - **exit status -15 is SIGTERM**, so the child was **signalled**, not broken. **The pytest-level runs of the same files are green** (`colcon test-result`: 1430 tests, 0
+  failures), which is the decisive comparison: **the same tests pass when run by `colcon test` and fail when run by `ctest -j 8`.**
+- **And the difference is a parameter I chose:** the ledger's earlier boundary recorded CTest as **"116 tests including both new ones and 2/2 passing under `ctest -R`"** - a **selected** run. **The recipe never specified
+  `-j`**, and I wrote `ctest --output-on-failure -j 8` into my script. **Eight CTest jobs each spawning child process groups on one machine is a resource-contention configuration that these two tests are sensitive to**,
+  and "fix isolation then re-run the same gate" applies to the *sanctioned* parallelism, not to a `-j` I invented.
+- **So the last leg's next run is `ctest` serially** (with the IPC base still set), and the boundary report will state **both** results - the parallel one with its two SIGTERM failures and the serial one - rather than
+  only the flattering one. **If the serial run also fails, that is a real finding about the tests' isolation and it will be recorded as such.**
+- **State:** demo `rc=0` (5731/163); teleop `rc=0` (1430/0/0/43); CTest: chain fixed, two SIGTERM failures under `-j 8`, serial re-run pending; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
