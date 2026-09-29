@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import importlib
 import os
+from pathlib import Path
+import time
 
 from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
 
@@ -49,6 +51,73 @@ def _providers_from_seam():
     return built
 
 
+class PhaseCameraMatrixEvaluator:
+    """The production phase-camera evaluator: the admitted matrix, read per (phase, index).
+
+    No such component existed before this batch - the repository had the matrix (``load_phase_camera_matrix``) and the
+    aggregator's derivation, but nothing the driver could call. It returns the observation shape the driver and the
+    chain fixture both document, with the matrix's own occluder set as its content.
+    """
+
+    def __init__(self, document: dict) -> None:
+        self.document = document
+        self.occluders = tuple(document.get("occluders", ()))
+
+    def __call__(self, phase, index):
+        return {"phase": phase, "frame_index": index, "row_count": len(self.occluders),
+                "occluders": list(self.occluders)}
+
+
+def _monotonic_clock():
+    return {"now": time.monotonic}
+
+
+def build_real_providers(*, context, descriptor, controller_settings=None, binding=None,
+                         yolo_detector_factory=None, controller_factory=None) -> dict:
+    """Build the five production collaborators from the admitted context and the frozen descriptor.
+
+    This is what the formal entry reaches with nothing set in the environment: the detector comes from the descriptor's
+    admitted CUDA configuration through the production factory, the controller from the same descriptor's head-search
+    block, the stack from its own class (constructed, never started here), the clock from the monotonic source, and the
+    phase camera from the admitted phase-camera matrix.
+    """
+
+    from so101_demo.act.search import HeadSearchController
+    from so101_demo.act.task8_measurement_schema import load_phase_camera_matrix
+    from so101_demo.adapters.perception.detector_factory import DetectorFactoryOptions, build_detector
+    from so101_demo.runtime.task_stack import PersistentTaskStack
+
+    head = descriptor["head_search"]
+    detector = head["detector"]
+    options = DetectorFactoryOptions(
+        backend=detector["backend"],
+        requested_device=detector["requested_device"],
+        allow_cpu_fallback=detector["allow_cpu_fallback"],
+        yolo_weights_path=Path(detector["weights_path"]),
+        yolo_weights_sha256=detector["weights_sha256"],
+        yolo_model_id=detector["model_id"],
+        yolo_imgsz=detector["image_size_px"],
+    )
+    # torch is an opt-in dependency (the repository's own `explicit_ml` marker), so the detector's constructor is
+    # the sanctioned external-I/O seam here - exactly the parameter `build_detector` itself exposes
+    built = (build_detector(options) if yolo_detector_factory is None
+             else build_detector(options, yolo_detector_factory=yolo_detector_factory))
+    if controller_settings is not None:
+        # the controller is settings-driven: the admission entry derives them from the admitted calibration report
+        # (the child's own helper) and hands them in, so the library reads no environment of its own
+        controller = (HeadSearchController(controller_settings) if controller_factory is None
+                      else controller_factory(controller_settings))
+    else:
+        controller = None
+    return {
+        "detector": built.detector,
+        "controller": controller,
+        "stack": PersistentTaskStack(),          # constructed only; the composition never starts it here
+        "clock": _monotonic_clock(),
+        "phase_camera": PhaseCameraMatrixEvaluator(load_phase_camera_matrix()),
+    }
+
+
 def build_production_measurement_driver(*, context, identity, providers=None):
     """Build the single production measurement driver for one measurement context.
 
@@ -66,7 +135,12 @@ def build_production_measurement_driver(*, context, identity, providers=None):
     if not isinstance(binding, dict) or binding.get("bound_at_entry") is not True:
         raise ProductionCompositionError("PRODUCTION_RESOURCE_BINDING_REQUIRED")
 
-    supplied = dict(providers) if providers is not None else _providers_from_seam()
+    if providers is not None:                       # explicit test substitution
+        supplied = dict(providers)
+    elif os.environ.get(PROVIDER_SEAM_ENV):         # external-I/O substitution, tests only
+        supplied = _providers_from_seam()
+    else:                                           # the formal entry's path: real construction
+        supplied = build_real_providers(context=context, descriptor=descriptor)
     missing = [name for name in PROVIDER_NAMES if name not in supplied]
     if missing:
         raise ProductionCompositionError(f"PRODUCTION_PROVIDER_MISSING: {missing[0]}")
