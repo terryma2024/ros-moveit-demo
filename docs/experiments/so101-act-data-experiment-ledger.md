@@ -17067,3 +17067,18 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Still ahead, untouched: the publishing half** - real measured values published rather than written as PASS, the four
   canonical documents, a real 28-field `TASK8_READY`, render-twice byte comparison with a single publish, on-disk readback
   of the sample path and hash, then `require_gate(report, "task8_live")` and `validate_head_search_binding()`.
+
+## CP-1098 — Publishing half, first check: values are values (characterization, not a fix)
+
+- **Wrote the RED for the review's "measurements must not be written as PASS" and it passed immediately:** every published
+  measurement keeps its **unit**, cites the **sample** it came from (`sample_path`, `sample_sha256`), and its **value** is
+  numeric rather than a verdict string, while the PASS/FAIL verdicts sit in `checks` where the schema puts them. So this
+  requirement **already held**; the test is a **characterization** that now guards it, and I am labelling it that way
+  rather than dressing it up as a fix.
+- **GREEN: 35 passed, rc=0**, scratch `<R>/scratch/r694.<n>` with `TMPDIR` verified through the exact test interpreter;
+  log `beh-r694-red.log` (named for the attempt, though it was green).
+- **What the publishing half still needs, itemised from the review's own list:** the four **canonical documents** rendered
+  from approved closed-sample builders; a real **28-field `TASK8_READY`**; **render twice for the same immutable batch and
+  compare bytes**, publishing only once; **readback from disk** of the sample path and hash; then `require_gate(report,
+  "task8_live")` and `validate_head_search_binding()`. Each needs its own RED, and the render-twice/publish-once pair is
+  the one most likely to need a fixture addition rather than a rule.
