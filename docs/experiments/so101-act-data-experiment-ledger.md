@@ -16727,3 +16727,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Evidence:** scratch `<R>/scratch/r678.<n>` with `TMPDIR` verified through the exact test interpreter; log
   `beh-r678.log`. **HEAD remains red for `test/test_act_task8_calibration_aggregator.py`**, with five failures instead of
   twelve, and the remaining work named above.
+
+## CP-1079 — Migration nearly done: 26 passed / 1 failed, and the last one is named
+
+- **Fixed this round:** the two fixtures that write `batch.json` **by hand** still used the pre-unification shape
+  (aggregator's `_sealed_batch`, contract's `test_closed_batch_accepts_an_indexed_batch...`), so the strict validator
+  refused them as `BATCH_INVALID`. Both now carry `anchors` and `batch_sha256` - the shape the production seal writes.
+- **Result: 26 passed / 1 failed** across the two modules, from 5 failed / 22 passed one round earlier, and from
+  **12 failed / 3 passed** where this migration started (CP-1076).
+- **The one remaining failure is named, and it is a fixture, not production code:**
+  `test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest` fails with
+  `MEASUREMENT_CONTRACT_IDENTITY_INVALID` because its `_identities()` fixture predates the **ten-member identity** that my
+  Boundary I work made mandatory at the CLI (`require_v2_identity`) and because the CLI now also requires the
+  **`--context`** document (CP-1063). Fixing it means giving that fixture the ten members and passing a context.
+- **One gap this exposed and I am recording rather than leaving implicit:** the validator checks `batch_sha256`'s
+  **format** but does not recompute the document's self-digest, so a hand-built batch can pass with a placeholder digest.
+  That is worth a follow-up RED inside Boundary IV - the seal computes the digest, so the validator should verify it.
+- **Evidence:** scratch `<R>/scratch/r679.<n>` with `TMPDIR` verified through the exact test interpreter; log
+  `beh-r679.log`. **HEAD is red for one test in that module** until the identities fixture is migrated.
