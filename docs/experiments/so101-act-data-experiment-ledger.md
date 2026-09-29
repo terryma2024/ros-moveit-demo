@@ -24049,3 +24049,23 @@ not an inference of mine.**
 - **Evidence retained** in `experiments/gate7-p15-boundary/`: `README.txt` (the summary above), `rebuild.log`, `demo-gate.log` (the mis-invocation),
   `demo-gate-root.log` (canonical), `teleop-gate.log`, `demo-ctest.log`, `teleop-ctest-new.log`, `scratch-path.txt`, `ipc-base.txt`.
 - **State:** no stack, no MuJoCo, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted; the ~300 GB of deletion candidates untouched.
+
+## CP-1451 — The packet now carries P1-5's delivery, the boundary numbers and the one scope question
+
+- **`handoffs/20260930-task7-onward/task8-astra-rereview-packet.md` grew from 15268 to 22000 bytes** (sha256
+  `71ce937aa26cd2d6b3dcbd84d3b973b22d6769247cf85a73e893e6d4e58b7e68`) with a second addendum that records, in the review's own terms:
+  - **P1-5's delivery**: the fixture no longer inherits `FakePort` or its monkeypatched seal; it runs the **production port**, whose seal is **inherited**,
+    with the real child attaching the case's own window and recorder - listed by commit (`9c6c5ca4`, `25012e6e`, `05d109d5`, `33d4fec1`, `3b0f4e86`);
+  - **the third production defect**, with the two key sets that prove it (a three-key grid sample against a 24-key recorder rule) and the fix's
+    justification (the missing fields belong to the readback adapter, so the port reports `None` and the owner of those fields records);
+  - **what is asserted and against which production code**: the nine grid samples over all nine phases; the real `run_pick_place_case` publishing the row;
+    the trusted translator and the aggregator's own reader accepting it (proven by where the reader stops); and **all four negatives**, each refused by
+    production code with the error it actually raises;
+  - **the boundary**: fresh scratch with verified temps, IPC base 0700, `-n 8`, benchmark excluded, **rebuild rc=0**, **demo rc=0 - 5651 passed / 163
+    skipped**, **teleop rc=0 - 1266 passed / 43 skipped**, **CTest 116 tests including both new ones and 2/2 passing under `ctest -R`**, plus the retained
+    mis-invocation so the record is not flattering;
+  - **the one scope question**, stated as a question: the review's full-case assertions (FINAL_CHECK, release epoch, sealed artifact, both receipts as
+    full-case evidence) cannot be produced because the port provisions **SEARCH only** by its own docstring and a **prefix** case carries **no** sealed
+    artifact by rule - so **does a prefix (SEARCH) case satisfy item 5 with the reduced assertion set, or does item 5 require provisioning the later
+    phases?**
+- **State:** nothing pushed, nothing deleted, no self-approval; the next step is the independent GPT-6 Astra/High review of this packet.
