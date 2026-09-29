@@ -15370,3 +15370,33 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   (test venv) and one unresolved `sys.path` question; the child IPC socket path question remains with the owner; Task 10
   blocked until the 17 search values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware;
   formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1026 — The repository has its own gate runner, and that is what Task 9 must use
+
+- **The `tools` import that produced 8 collection errors was the clue, and following it found the sanctioned entry point:**
+  only one test module imports `tools` - `test/test_pytest_full_gate_runner.py`, via
+  `from tools.so101_pytest_gate import SplitError, emit_colcon_split` - and `tools/` lives at the **repository root**, not
+  inside the package. So those errors were never a package defect; they were the runner's own tests being invoked by a
+  pytest that had no reason to put the repo root on `sys.path`.
+- **`tools/so101_pytest_gate.py` is described in its own first line as the "Deterministic file-sharded runner for the
+  ordinary SO-101 pytest gate"**, and its interface matches what this task has been trying to assemble by hand:
+  - `--workers` (type int, **default 8** - the `min(8, nproc)` rule),
+  - **`--evidence-root` (required)** and **`--run-id` (required)** - the registered evidence root and run identity,
+  - `--python` (default `sys.executable`, so the interpreter can be the test venv carrying xdist and MuJoCo),
+  - `--timeout-s`, `--timings`, `--expected-source-commit`, `--repo-root`,
+  - and a documented **`SERIAL_MODULES`** tuple with per-module reasons - `test_parallel_batch_resources.py`
+    "preserves the established first-module ordering for process/resource probes" - which is how the project handles the
+    legitimate exceptions to parallelism instead of abandoning the parallel gate.
+- **This supersedes my improvised invocations for Task 9.** The gate is not "`colcon test` with `--pytest-args`" (which
+  cannot supply xdist to the demo package, CP-1023, and which the demo package cannot register per module anyway,
+  CP-1025) and not an ad-hoc `pytest -n 8` (which cannot see `tools/` and does not emit the gate's evidence). It is this
+  runner, invoked with the registered evidence root, a run id, `--workers 8`, and the test venv as `--python`.
+- **What that means concretely for the remaining work:** Task 9 becomes one documented command whose own design covers
+  sharding, serial exceptions, timeouts, evidence and JUnit - and whose results can be compared against
+  `--expected-source-commit`. The demo package's interpreter problem dissolves because `--python` is mine to point at the
+  venv that has xdist and MuJoCo; the teleop registration gap is already fixed (CP-1024); and the child IPC socket
+  question remains the one genuine environment conflict still needing the owner.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9 now has a named, sanctioned runner to invoke rather than three improvised substitutes; Task 10
+  blocked until the 17 search values are reviewed. No package-gate claim yet - the first run of this runner has not
+  happened - and no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
