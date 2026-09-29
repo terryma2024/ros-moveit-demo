@@ -263,6 +263,54 @@ class _Boundary:
             max_source_wait_s=probe.max_wait, poll_interval_s=probe.poll,
             monotonic=time.monotonic, sleep=time.sleep, clock_ns=time.monotonic_ns)
         observation = segment.run(request, reset_epoch=self.reset_epoch)
+        # P1-5: the four proofs the expert route's registration reads. Their construction follows
+        # `test_act_visible_approach_expert_route.py` (the suite that already builds three of them), with two
+        # corrections this drive established: `selected_source_sha256` is the FROZEN source's own hash, computed with
+        # the production freezer, and the native window digest is COMPUTED from the snapshots rather than `"c" * 64`.
+        if getattr(self, "attach_proofs", False):
+            import dataclasses as _dc
+
+            from so101_demo.adapters.act.pick_place_search_native_ingress import native_ingress_digest
+            from so101_demo.adapters.act.selected_approach_candidate import freeze_selected_search_source
+
+            frozen = freeze_selected_search_source(observation, max_skew_s=self.max_skew)
+            digest = frozen["observation_sha256"]
+            scene = observation.physical_readback["scene"]
+            marker = observation.physics_step_fence
+            stop_wall_s = max(observation.physical_readback["source_received_wall_s"].values())
+            reference_hash = "a" * 64
+            event_hash = "b" * 64
+            snapshots = {kind: {"role": kind, "owner_generation": self.owner_generation,
+                                "ingress_sequence": index + 1,
+                                "last_ingress_monotonic_ns": 1, "observed_monotonic_ns": 2,
+                                "received_monotonic_ns": 3, "command_authority": False}
+                         for index, kind in enumerate(("arm", "gripper", "neck"))}
+            common = {"selected_source_sha256": digest, "stop_confirmed_wall_s": stop_wall_s,
+                      "command_authority": False, "eligible_for_collection": False}
+            observation = _dc.replace(
+                observation,
+                stationary_physics_proof={
+                    **common, "selected_physics_step": frozen["physics_step"],
+                    "model_qpos": tuple(scene["qpos"]), "model_qvel": tuple(scene["qvel"]),
+                    "physics_step_fence": marker, "controller_interval_proof_required": True},
+                stationary_reference_proof={
+                    **common, "reference_window_sha256": reference_hash,
+                    "selected_sim_time_ns": 1_200_000_000, "bridge_sim_time_ns": 1_100_000_000,
+                    "owner_goal_interval_proof_required": True},
+                local_owner_goal_proof={
+                    **common, "reference_window_sha256": reference_hash,
+                    "control_event_window_sha256": event_hash, "owner_generation": self.owner_generation,
+                    "controller_native_ingress_proof_required": True},
+                native_controller_ingress_proof={
+                    **common, "reference_window_sha256": reference_hash,
+                    "control_event_window_sha256": event_hash, "owner_generation": self.owner_generation,
+                    "latest_source_receipt_monotonic_ns": 1,
+                    "ingress_sequence_by_controller": {kind: snapshots[kind]["ingress_sequence"]
+                                                       for kind in snapshots},
+                    "native_snapshots": snapshots,
+                    "native_ingress_window_sha256": native_ingress_digest(snapshots),
+                    "commit_window_ingress_recheck_required": True},
+            )
         raw = observation.physical_readback
         print("[probe] readback keys:", sorted(raw))
         print("[probe] world session/epoch:", raw["world"].simulation_session_id, raw["world"].reset_epoch)

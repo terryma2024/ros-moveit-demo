@@ -32758,3 +32758,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   members, and the two coherence conditions - and the construction pattern exists in the suite that already builds
   three of the four.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
   re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1869 — The four proofs are built, behind a switch, following the template with three corrections
+
+- **What the boundary now does when asked (`attach_proofs`), read against the template it follows:**
+  ```python
+  frozen = freeze_selected_search_source(observation, max_skew_s=self.max_skew)
+  digest = frozen["observation_sha256"]                      # (1) the FROZEN source's own hash
+  marker = observation.physics_step_fence
+  stop_wall_s = max(observation.physical_readback["source_received_wall_s"].values())
+  snapshots = {kind: {"role": kind, "owner_generation": self.owner_generation,
+                      "ingress_sequence": index + 1, …, "command_authority": False}
+               for index, kind in enumerate(("arm", "gripper", "neck"))}
+  common = {"selected_source_sha256": digest, "stop_confirmed_wall_s": stop_wall_s,
+            "command_authority": False, "eligible_for_collection": False}
+  observation = replace(observation,
+      stationary_physics_proof={**common, "model_qpos": tuple(scene["qpos"]),
+                                "model_qvel": tuple(scene["qvel"]),
+                                "physics_step_fence": marker, "controller_interval_proof_required": True, …},
+      stationary_reference_proof={**common, "reference_window_sha256": reference_hash, …},
+      local_owner_goal_proof={**common, …, "controller_native_ingress_proof_required": True},
+      native_controller_ingress_proof={**common, …, "native_snapshots": snapshots,
+          "native_ingress_window_sha256": native_ingress_digest(snapshots),        # (2) COMPUTED, not "c"*64
+          "commit_window_ingress_recheck_required": True})
+  ```
+  **and the three corrections against the template are deliberate:**
+  | the template | here |
+  | --- | --- |
+  | `"native_ingress_window_sha256": "c" * 64` | **`native_ingress_digest(snapshots)`** - the production function, because the registration compares them |
+  | `digest` from the test's own constant | **`freeze_selected_search_source(observation, max_skew_s=…)`** - the production freezer, because every proof's `selected_source_sha256` is checked against the source the registration freezes |
+  | `model_qpos`/`model_qvel` written as literals | **taken from the observation's own scene**, because the physical proof is checked against the physics the scene reports |
+- **Which leaves the wiring, and only the wiring:** the boundary needs `attach_proofs` set, plus `max_skew` (the route's, which the harness already passes to the factory as `motion["max_skew_s"]`) and `owner_generation` (the ticket's first element). **Then the registration's four-proof check has everything it reads.**
+- **State:** **P1-5 in progress: the four proofs exist, gated behind `attach_proofs` so no existing test changes behaviour, and the three attributes they need are named.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
