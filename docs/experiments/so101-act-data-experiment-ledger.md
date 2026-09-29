@@ -22511,3 +22511,20 @@ not an inference of mine.**
   next round reads it and supplies gate seven the same way.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1357 — Gate seven is a whole physical-evidence surface, and the cheap honest route is reuse
+
+- **Read (`pick_place_search_port.py:215-244`):** the port's `_search_evidence` demands, in order, a real `PickPlaceSearchObservation`, a
+  `validate_search_result`-approved `search_result`, a `physical_readback` whose key set is **exactly**
+  `{world, scene, contact, observation, reference, source_stamps_s, source_received_wall_s}`, a `source_received_wall_s` whose own key set is
+  exactly `{world, scene, contact, head, wrist, arm, neck}` with finite non-negative values, a real **`SimulationEvidence`** `world` matching
+  the request's session, the boundary's `reset.receipt.new_epoch`, a step `>= 1`, `paused is False`, `truncated is False` and
+  `object_state.body == "plastic_cup"` - **and the function continues past what this read covered**, with `scene`, `contact`, `observation` and
+  `reference` still to satisfy, plus `boundary.reset.sources.readback.max_skew`.
+- **So the boundary is not a stub, it is a physical-evidence producer.** Writing one from scratch would be a large fabrication - **and the
+  repository already has an honest precedent: the owner's chain test drives the same runner through the same phases, so its evidence builders
+  exist and are importable.** The ledger's own note on the owner's Boundary V work is the guide: **imported, not forked.**
+- **Therefore the next step is to find those builders and reuse them in `_Boundary`** rather than hand-rolling a second, drifting copy of the
+  physical evidence - **the same "one definition" discipline the batch has applied to the validator and the seal.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
