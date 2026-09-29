@@ -28791,3 +28791,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Why that matters for the fix:** a route injected into the port bypasses the port's own `expert_route_factory`, so the case's APPROACH plan is built from a different object with its own notion of the times - **and the contract's window is checked against the prefix the boundary is handed, not against whoever built the route.** The next probe is therefore narrow and one line: **print what `_route` carries** (its observation/start/target times) beside the prefix's `observation_time_s` and the header stamp, on the failing path only.
 - **And the honest statement of where P1-4 stands:** the grid's sequence is green and the case seals on the production path; **one mechanism remains - the APPROACH window on the path where a route is injected** - and the three stale expectations from CP-1687/1719 follow it.
 - **State:** **P1-4: grid green, sealing green, one injected-route mechanism plus three stale expectations outstanding**; P1-5's joined chain waits behind it (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1721 — The failure is isolated to the injected-route path, and both fixes were right for their own reason
+
+- **After making the boundary's prefix the shared object AND having the runner test's injected route reuse it, the run is unchanged:**
+  ```
+  4 failed, 7 passed
+     port:806                     -> the wrapped TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution   (the runner test)
+     sealed_raw_sources:56        -> each capture must name its own raw record
+     sealed_artifact:69           -> ten samples: nine phases, two retreat segments
+     sealed_artifact:109          -> the retreat is two segments of one phase
+  ```
+  **And the contrast that isolates it is the valuable part:** the **probe on `_sealed_case` prints `origin=1.45 first=1.552 header=1.5 ok=True` and seals fine**, while the runner test - same fixture, same runner - refuses at APPROACH. **The single difference is the injected `port._expert_route`.**
+- **Both edits stand on their own:** "one construction site" is right whether or not it moves this failure (CP-1699's rule), and the runner test reusing the shared plan is right for the same reason. **Neither was a fix aimed at a symptom; the failure simply lives elsewhere.**
+- **The next probe is therefore about the route's own contract, not the fixture's clock:** `_Route.__init__` is called with the plan, and the route then participates in `execute_approach` - so the one-line probe is **what the route holds after `__init__`** (does it keep the plan by reference, derive its own times, or require `time_axis` values it was never given?), printed beside the prefix's `observation_time_s` and the header stamp on that path only.
+- **And a plain statement of cost, for the record rather than for sympathy:** P1-4's **production** half has been committed since CP-1685/1688; its **fixture** half has now taken roughly thirty checkpoints, each moving a real defect and each recorded. **The grid's sequence is green and the case seals on the production path.** What remains is one injected-route mechanism and three stale expectations - **all four named**, none of them a resource or safety boundary.
+- **State:** **P1-4: grid green, sealing green, one injected-route mechanism plus three stale expectations outstanding**; P1-5's joined chain waits behind it (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.

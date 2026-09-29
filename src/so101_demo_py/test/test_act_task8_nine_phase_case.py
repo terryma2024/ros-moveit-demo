@@ -339,6 +339,10 @@ def _full_case_port(tmp_path):
     # the executor on a copy that the refresh never reached, which is how a shared quantity turns into two.
     wide_prefix = _wide_prefix(prefix)
     _reset_case_clock()          # this case gets its own sequence, not the previous test's
+    # and the boundary's own prefix IS that object: a consumer building anything from `boundary.prefix` otherwise
+    # gets a FRESH copy (the runner test's injected route did), whose window the refresh can never reach - the same
+    # "one construction site" defect as CP-1699, one level further out
+    boundary.prefix = wide_prefix
     from test_act_task8_search_port import observation
 
     observed = observation()
@@ -626,7 +630,10 @@ def test_the_runner_runs_the_whole_case_and_reports_which_phases_completed(tmp_p
     # the closed position is a positive joint value (the port refuses zero by name): closing moves the gripper joint
     # towards its closed limit, it does not mean "no value"
     _route = _Route.__new__(_Route)
-    _route.__init__(_wide_prefix(boundary.prefix))
+    # the SHARED plan, not a fresh copy of it: `_wide_prefix` returns a new dict, and a route built from a copy has a
+    # window the readback's refresh can never reach (`APPROACH_HEADER_STAMP_INVALID`), which is CP-1699's defect
+    # appearing a third time - this time in the test that injects the route
+    _route.__init__(boundary.prefix)
     port._expert_route = _route
     port.bind_case_targets(gripper_closed_rad=0.2, close_duration_s=0.4,
                            motion_template=_template(), motion_duration_s=0.4)
