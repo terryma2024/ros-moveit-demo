@@ -11342,3 +11342,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; the user's dirty paths are untouched apart from CP-861's one-token fix; formal accepted
   0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-864 (f91a55d5) — Ruling 1 landed and GREEN (10 passed); full gate relaunched
+
+- **The correction is complete and verified:** `test_act_source_provenance.py` + the new
+  `test_act_source_provenance_registry.py` together report **10 passed, rc=0** (`beh-registry-green5.log`).
+  Every artefact now declares the overlay that **owns** it; the vendored `mujoco_ros2_control_plugin` is owned by
+  the **dependency** overlay, installs at its own package's path
+  `mujoco_ros2_control/lib/libmujoco_ros2_control.so`, and names real submodule sources under
+  `third_party/mujoco_ros2_control/` - never `so101_mujoco_support`'s plugin source, and nothing is relocated
+  between packages.
+- **Shape change propagated deliberately:** roles are 5-tuples, recorded roles carry `overlay`, and
+  `_ROLE_FIELDS` gained that field for the `verbatim_install` and `compiled` kinds only; external roles keep
+  their `loaded_path`/`loaded_sha256`/`version` shape **and are still recorded**, which the verifier's role-set
+  check requires. `build_`/`verify_source_provenance` accept `dependency_overlay` and fail closed with
+  `SOURCE_PROVENANCE_DEPENDENCY_OVERLAY_REQUIRED`; the CLI gained `--dependency-overlay`.
+- **Two self-inflicted detours, both recorded:** my first patch deleted three neighbouring definitions
+  (`_EXTERNAL_RUNTIMES`, `_TOP_LEVEL`, `_ROLE_FIELDS`) because I parsed *after* writing, and my recovery step
+  then **reverted the CLI change** by restoring that file from HEAD - which is why the first commit attempt was
+  blocked by the four-file guard with only three staged. Both are exactly the reason the guards exist, and every
+  edit since parses **before** writing.
+- **Next:** the package/full gate on this corrected tree (ruling 3 requires green gate evidence before anything
+  is frozen for Task 8L; the earlier 5580-collected/28-failure run predates both this correction and CP-861's typo
+  fix), then Task 8L provenance rebuilt from Step 1 in a **new** run subroot with `--dependency-overlay`, then
+  ruling 2's five-key identities document and pre-measurement contract binding.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
+  `collection_*\) NOT_PROVISIONED.
