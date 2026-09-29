@@ -27710,3 +27710,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | 1 teleop `errors=1` | a **CTest placeholder** for a differently-named result file, not a failing case |
   **Not one of them was a defect in the code under test, and every one of them looked like a test failure until the number was read.**
 - **State:** **item 7's boundary is COMPLETE**; the packet and index must now carry it **in place of the supersession banner**; then the one independent GPT-6 Astra/High re-review the owner asked for; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1659 — Item 8's packet and index now carry the real boundary; the re-review is the owner's step
+
+- **The packet (35862 bytes, sha256 begins `cea6063421802343`) now opens Addendum 3's region with the RE-RUN banner** - the three legs, their numbers and their scratch paths - and **no longer says the boundary is superseded**, because it is not: it was
+  re-measured on code that had stopped changing. **The banner also keeps the withdrawal of the `Testing/20260929-1252` citation on the record**, and gains an **Addendum 4** stating the three decisions with their commits and evidence, the three fixtures the identity comparison caught, and **what is explicitly NOT claimed**
+  (no live stack, no hardware, counters still 0/0/0, `formal_episode_eligible: True` is not evidence a task was performed, and a test-suite boundary is not a release).
+- **The index (sha256 begins `248977b100ae3241`) carries the packet's new size and hash, and the whole-index path-matched audit reports:**
+  ```
+  checked: 26, mismatched: 0, missing: 0
+  ```
+  **So the evidence set is internally consistent again after a change to a hashed artefact** - the step that CP-1615/1616, CP-1637 and CP-1638 each had to learn.
+- **What remains is the one thing I must not do myself:** the **independent GPT-6 Astra / High re-review** the owner asked for as item 8's second half. **This session does not self-approve**, and the AGENTS.md model rules put that review with an independent
+  reviewer. **The packet is ready for it.**
+- **State:** **items 1-8 all have their outcomes recorded**; the boundary is green; the re-review is the single outstanding step and it is the owner's to arrange; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or
+  stack; no hardware; no live stack; P2 live not started.
