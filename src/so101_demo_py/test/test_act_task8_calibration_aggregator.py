@@ -24,6 +24,7 @@ from so101_demo.act.task8_measurement_contract import (
 
 PACKAGE = Path(__file__).resolve().parents[1]
 TEMPLATE = PACKAGE / "config/act/task8-calibration-measurement-contract-v1.json"
+TEMPLATE_V2 = Path(__file__).resolve().parents[1] / "config/act" / "task8-calibration-measurement-contract-v2.json"
 ANCHORS = ("default", "left", "forward")
 
 
@@ -221,9 +222,10 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
     from so101_demo.cli import act_measure_task8_calibration as measure
 
     identities = tmp_path / "identities.json"
-    # two fixtures on purpose: the binder wants the members its template binds, the CLI wants the ten-member identity
+    # one schema, not two: the CLI's ten-member identity comes from a v2 template bind, so the bound contract and the
+    # identities file the CLI checks against it are the same schema by construction
     identities.write_text(json.dumps(_cli_identities()))
-    bound = bind_measurement_contract(TEMPLATE, _identities(), tmp_path / "bound.json")
+    bound = bind_measurement_contract(TEMPLATE_V2, _cli_identities(), tmp_path / "bound.json")
     ledger = tmp_path / "ledger.md"
     driver_module = tmp_path / "driver.py"
     driver_module.write_text(
