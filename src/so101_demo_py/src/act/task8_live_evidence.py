@@ -653,9 +653,17 @@ class CaseEvidenceDriver:
         routes them, so the readback and the evidence window stay independently testable.
         """
 
+        # The end-effector position is MuJoCo output and it arrives with the measurements, so the driver FORWARDS it:
+        # the readback adapter refuses a frame without it ("a frame without it must not be recorded as if it had one"),
+        # and a driver that kept it to itself made every real capture fail with READBACK_END_EFFECTOR_REQUIRED while
+        # holding the very value the adapter was asking for.
+        position = measurements.get("end_effector_position_m") if isinstance(measurements, dict) else None
+        if position is None:
+            raise ValueError("TASK8_DRIVER_END_EFFECTOR_REQUIRED")
         fields = adapter.capture_evidence_fields(captured,
                                                  support_distance_max_m=support_distance_max_m,
-                                                 raw_records=raw_records)
+                                                 raw_records=raw_records,
+                                                 end_effector_position_m=position)
         self.observe(fields, phase=phase, frame=frame, contact=contact,
                      measurements=measurements, event=event)
 
