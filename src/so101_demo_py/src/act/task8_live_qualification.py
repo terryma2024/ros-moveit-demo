@@ -209,3 +209,70 @@ def build_task8_qualified_report(task8_ready_report: Path, preparation_receipt: 
     temporary.write_bytes(json.dumps(document, sort_keys=True, indent=2).encode() + b"\n")
     os.replace(temporary, output)
     return output
+
+
+# --- protocol v2 (Task 8): the five live-only fields -------------------------------------------------------
+# Each field's extrema direction is fixed by the approved plan: the occlusion window and the cup support distance
+# take the maximum across the five runs, while the three stability/distance fields take the minimum. The cup support
+# distance additionally has a raw rule: when a run carries the frames before its first open in the release epoch,
+# the value is derived from the three consecutive 10 Hz samples immediately preceding it and reported as
+# `max(0, d_signed)` - never from a summary.
+
+LIVE_ONLY_FIELDS = ("grasp_occlusion_window_s", "cup_support_distance_m", "release_stable_s",
+                    "retreat_distance_m", "placement_stable_s")
+LIVE_EXTREMA = {"grasp_occlusion_window_s": max, "cup_support_distance_m": max,
+                "release_stable_s": min, "retreat_distance_m": min, "placement_stable_s": min}
+LIVE_UNITS = {"grasp_occlusion_window_s": "s", "cup_support_distance_m": "m", "release_stable_s": "s",
+              "retreat_distance_m": "m", "placement_stable_s": "s"}
+_IDENTITY_KEYS = ("session_id", "contact_policy_fingerprint", "phase_camera_matrix_sha256")
+
+
+def _support_from_frames(run: dict) -> float:
+    """The plan's raw rule for the cup support distance, applied only when the run carries its own frames."""
+
+    frames = run.get("support_frames")
+    if not frames:
+        return float(run["cup_support_distance_m"])
+    epoch = run.get("release_epoch")
+    pre_open = [frame for frame in frames
+                if frame.get("release_epoch") == epoch and frame.get("phase") == "RELEASE"
+                and frame.get("before_first_open") is True]
+    if len(pre_open) < 3:
+        raise ValueError("SUPPORT_FRAMES_REQUIRED: three pre-open frames are needed")
+    window = pre_open[-3:]
+    for earlier, later in zip(window, window[1:]):
+        if abs((later["source_stamp"] - earlier["source_stamp"]) - 0.1) > 0.01:
+            raise ValueError("SUPPORT_FRAMES_NOT_CONSECUTIVE: the three samples must be one 10 Hz step apart")
+    for frame in window:
+        contacts = frame.get("active_contacts") or ()
+        if not ({"bottom_collision", "table_collision"} <= set(contacts)):
+            raise ValueError("SUPPORT_CONTACT_REQUIRED: bottom_collision and table_collision must both be active")
+        if frame.get("pose_stable") is not True or frame.get("velocity_stable") is not True:
+            raise ValueError("SUPPORT_STABILITY_REQUIRED: pose and velocity must both be stable")
+    # the reported distance is the signed distance floored at zero
+    return max(0.0, max(float(frame["signed_distance_m"]) for frame in window))
+
+
+def derive_live_measurements(full_runs, contract) -> dict:
+    """Derive the five live-only fields from five sealed independent FULL runs."""
+
+    runs = list(full_runs)
+    if len(runs) != 5:
+        raise ValueError(f"FIVE_RUNS_REQUIRED: exactly five runs, found {len(runs)}")
+    for key in _IDENTITY_KEYS:
+        values = {run.get(key) for run in runs}
+        if len(values) != 1 or None in values:
+            raise ValueError(f"IDENTITY_MISMATCH: {key} differs across runs")
+    for run in runs:
+        if not run.get("sample_path") or not run.get("sample_sha256"):
+            raise ValueError("SEALED_SAMPLE_REQUIRED: every run needs a sealed sample path and hash")
+    derived = {}
+    for field in LIVE_ONLY_FIELDS:
+        extrema = LIVE_EXTREMA[field]
+        if field == "cup_support_distance_m":
+            values = [_support_from_frames(run) for run in runs]
+        else:
+            values = [float(run[field]) for run in runs]
+        derived[field] = {"value": extrema(values), "unit": LIVE_UNITS[field],
+                          "runs": [run["run_index"] for run in runs]}
+    return derived
