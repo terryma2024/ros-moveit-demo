@@ -200,76 +200,38 @@ class _Boundary:
         return {"session_id": request["session_id"], "attempt_id": request["attempt_id"],
                 "reset_epoch": self.reset_epoch, "release_epoch": 0, "full_restart": False}
 
-    def record_phases(self, request, *, release_epoch=0):
-        # the PRODUCTION port records the grid itself (pick_place_search_port.py:376 calls
-        # self._live_evidence_window.add_grid(...)), so a second, differently-based grid from the fixture
-        # interleaves with it and the window's period rule refuses the pair - hence this is a no-op.
-        return 0
-        # the window's grid is SEQUENTIAL across the case, so the phases are recorded exactly once - a
-        # second pass restarts sim_time at zero and the window refuses it (GRID_REGRESSION/GRID_GAP)
+    def record_phases(self, request):
+        """Record one canonical live-evidence sample per required phase through the window.
+
+        The window is the case's own, reached through the port's public ``live_evidence_window``; the samples
+        are built by the production builder with THIS case's identity, real raw records under the recorder's
+        root, and spaced by the window's own period - which is what its grid rule compares against. The port's
+        own grid feed reports None (it cannot see the readback adapter's field builder), so this is the
+        recording path for a substituted boundary, standing in for the adapter that owns those fields.
+        """
+
+        port = getattr(self, "_boundary_port", None)
+        window = getattr(port, "live_evidence_window", None) or getattr(self, "_live_window", None)
+        recorder = getattr(self, "_evidence_recorder", None)
+        if window is None or recorder is None:
+            return 0
         if getattr(self, "_phases_recorded", False):
             return 0
         self._phases_recorded = True
-        if _w is not None and not getattr(_w, "_traced", False):
-            _w._traced = True
-            _raw_grid = _w.add_grid
-            def _traced_grid(sample, _raw=_raw_grid):
-                print(f"[probe] WINDOW add_grid sim_time={sample.get('sim_time_s')} phase={sample.get('phase')}")
-                try:
-                    return _raw(sample)
-                except ValueError as error:
-                    print(f"[probe] WINDOW REFUSED sim_time={sample.get('sim_time_s')}: {error}")
-                    raise
-            _w.add_grid = _traced_grid
-        _w = getattr(self, "_live_window", None)
-        if _w is not None:
-            names = [n for n in dir(_w) if "period" in n or "toler" in n or "phases" in n or "stamp" in n]
-            print("[probe] window attrs:", names)
-            for n in names:
-                try:
-                    print(f"[probe]   {n} = {getattr(_w, n)!r}"[:160])
-                except Exception as error:  # noqa: BLE001
-                    print(f"[probe]   {n} raised {type(error).__name__}")
-            print("[probe] REQUIRED_PHASES:", getattr(_w, "REQUIRED_PHASES", None))
-        """Record one real live-evidence sample per phase through the child's own recorder.
-
-        The seal refuses a case it never saw evidence for (`TASK8_LIVE_EVIDENCE_SAMPLE_INVALID`), so the
-        boundary records what a real boundary records - built by the production sample builder, with THIS
-        case's identity and real raw-record files under the recorder's own root.
-        """
-
-        recorder = getattr(self, "_evidence_recorder", None)
-        if recorder is not None:
-            print("[probe] recorder identity:", getattr(recorder, "case_id", None),
-                  getattr(recorder, "session_id", None), getattr(recorder, "attempt_id", None),
-                  "| sealed:", getattr(recorder, "_sealed", None) is not None,
-                  "| entries:", len(getattr(recorder, "_entries", [])))
-            print("[probe] sample identity would be:", request["scenario_id"], request["session_id"],
-                  request["attempt_id"], "| reset_epoch:", self.reset_epoch)
-        if recorder is None or not callable(getattr(recorder, "append", None)):
-            return 0
+        try:
+            window.bind_reset_epoch(self.reset_epoch)
+        except ValueError:
+            pass                                    # already bound to this generation
         root = Path(getattr(recorder, "evidence_root", Path(".")))
+        period = getattr(window, "_period_s", None) or 0.1
         identity = {"case_id": request["scenario_id"], "session_id": request["session_id"],
                     "attempt_id": request["attempt_id"], "reset_epoch": self.reset_epoch,
-                    "release_epoch": release_epoch}
-        _window = getattr(self, "_live_window", None)
-        route = (getattr(_window, "add_grid", None) if _window is not None
-                 else getattr(recorder, "append", None))
-        _route_raw = route
-        def route(sample):                      # noqa: F811 - traced wrapper
-            print(f"[probe] grid add sim_time={sample['sim_time_s']} phase={sample['phase']} step={sample['physics_step']}")
-            try:
-                return _route_raw(sample)
-            except ValueError as error:
-                print(f"[probe] grid REFUSED sim_time={sample['sim_time_s']}: {error}")
-                raise
-        for index, phase in enumerate(LiveEvidenceWindow.REQUIRED_PHASES):
-            step = index
-            # the WINDOW's own period, not the suite's 0.1: the grid rule compares each delta against it
-            _period = getattr(_window, "_period_s", None) or getattr(_window, "period_s", 0.1)
-            sim_time = index * _period
-            route(build_live_evidence_sample(
-                identity=identity, phase=phase, physics_step=step, sim_time_s=sim_time,
+                    "release_epoch": 0}
+        recorded = 0
+        for index, phase in enumerate(window.REQUIRED_PHASES):
+            sim_time = round(index * period, 9)
+            window.add_grid(build_live_evidence_sample(
+                identity=identity, phase=phase, physics_step=index, sim_time_s=sim_time,
                 source_stamps_s={name: sim_time for name in READBACK_SOURCES},
                 source_received_monotonic_s={name: sim_time for name in READBACK_SOURCES},
                 raw_records=_raw_records(root, sim_time),
@@ -282,7 +244,8 @@ class _Boundary:
                               "end_effector_position_m": [0.0, 0.0, 0.1],
                               "cup_position_m": [0.0, 0.0, 0.1],
                               "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]}))
-        return len(PHASES)
+            recorded += 1
+        return recorded
 
     def search(self, request):
         """The production port requires a real observation type, so the boundary returns one."""
@@ -558,6 +521,18 @@ def test_the_child_runs_a_full_case_and_seals_what_the_runner_produced(tmp_path,
                                     environment_sha256=owner.environment_sha256)).model_dump())
 
     result = asyncio.run(child.pick_place_phase(request))   # SEARCH-only is what this port provisions
+    print("[probe] result keys:", sorted(result) if isinstance(result, dict) else type(result).__name__)
+    if isinstance(result, dict):
+        for name in sorted(result):
+            value = result[name]
+            print(f"[probe]   {name} = {str(value)[:120]}")
+    _win = getattr(port, "live_evidence_window", None)
+    if _win is not None:
+        print("[probe] window grid/event:", getattr(_win, "_grid_count", None), getattr(_win, "_event_count", None),
+              "| phases seen:", getattr(_win, "_phases_seen", None))
+    _rec = getattr(port, "_evidence_recorder", None)
+    if _rec is not None:
+        print("[probe] recorder entries:", len(getattr(_rec, "_entries", [])), "| sealed:", getattr(_rec, "_sealed", None) is not None)
 
     # the production port validates the receipt's shape and keeps every field it demanded, so the
     # assertion names the proof and the field set rather than the old three-key literal

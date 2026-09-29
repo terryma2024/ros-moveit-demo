@@ -23927,3 +23927,30 @@ not an inference of mine.**
   require either a provisioned port or the reviewer's agreement that the fixture's scope is SEARCH.**
 - **State:** the production patch and the fixture are committed together now that the focused test is green; no stack, no CUDA, no actuators, no
   hardware; nothing pushed, nothing deleted; the ~300 GB of deletion candidates untouched.
+
+## CP-1445 — The prefix/full distinction, read from the code: a SEARCH-only case has NO live-evidence artifact BY DESIGN
+
+- **Read (`pick_place_case_execution.py`), and it decides what P1-5's assertions can even be:**
+  - `_CASE = re.compile(r"(?:prefix|full)-[0-9]{2}\Z")` - **prefix cases are a first-class, named kind**;
+  - the published row sets `"live_evidence_path": (result["live_evidence_artifact"] or {}).get("path", "")` and
+    `"live_evidence_sha256": (result["live_evidence_artifact"] or {}).get("sha256", "0" * 64)` with the comment *"a prefix case has none, and says so
+    with the zero digest"*;
+  - before publishing, the entry runs the case through `worker.run_pick_place(...)`, requires the result shape, requires
+    `_require_live_evidence_readback(result["live_evidence_artifact"], case)`, then requires **stack and child retirement receipts**, and only then
+    `_publish_new(journal_path, row)`.
+- **And the port says why:** `PickPlaceSearchPhasePort`'s own docstring is *"Expose only SEARCH while later physical phases remain unprovisioned"*, and
+  its `run_phase` refuses every other phase with `TASK8_PHASE_NOT_PROVISIONED`. **So in this repository a FULL case cannot be performed at all today, and
+  a PREFIX case is defined to carry no sealed artifact.**
+- **Which makes the reviewer's seven indexed assertions partly unsatisfiable as written**, and that is a scope question, not a fixture gap: *the
+  gripper-open command event, three adjacent support rows in one release epoch, SEARCH and FINAL_CHECK, and both retirement receipts* all presuppose a
+  full case; **only the row-shaped assertions (status, completed_phases, the artifact rule, and the retirement receipts the runner already produces) can
+  be made from a prefix case.**
+- **What I can still do, and will, without weakening anything:** drive a **prefix case** through the real `pick_place_case_execution` entry with the
+  campaign/owner/worker collaborators substituted - so the real code publishes a real journal row, with the retirement receipts it insists on - and then
+  feed that row to the trusted path (`case_row_to_journal_row` and the aggregator) and assert exactly what it accepts and refuses. **That is "let the
+  real case/campaign write its journal, and feed it directly to the trusted aggregator" within the phases this repository actually provisions.**
+- **The precise question this raises for the review, to be put in the next packet:** does the reviewer accept a **prefix (SEARCH) case** as P1-5's
+  evidence - with the seven assertions reduced to what a prefix case can carry - or does P1-5 require provisioned later phases, which is a separate
+  production build (the port's docstring calls them "unprovisioned")?
+- **State:** the focused child fixture passes with 9 grid samples recorded and all nine phases seen through the case's own window; changes remain
+  uncommitted until their focused tests are green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
