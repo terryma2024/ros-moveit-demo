@@ -19012,3 +19012,32 @@ not an inference of mine.**
   the **three adjacent 10 Hz support rows in one epoch** and the **journal path and hash** - which the child/owner path is what
   produces.
 - **State:** goal active (revision 51, cap 1000); HEAD `6ff70526`; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1187 — The existing child test uses the very shortcut the owner forbids, so it cannot be the model
+
+- **Read the body of `test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8` (lines 214-250) expecting a
+  model to copy, and found something that needs saying plainly:**
+  ```python
+  driver = object.__new__(RclpyActionDriver)
+  driver._node = driver._executor = driver._thread = None
+  driver._act_artifacts = binding
+  driver._act_model = SimpleNamespace(opt=SimpleNamespace(timestep=0.002))
+  driver._act_contact_pairs = object()
+  driver._act_cancelled = threading.Event()
+  ...
+  ```
+  That is **`object.__new__` plus hand-filled private state** - the exact pattern the owner's item 4 prohibits for Boundary V
+  ("no `object.__new__`, no hand-filled `_ready`, no direct `finish`"). The test is a legitimate owner file written for its own
+  purpose (proving provisioning order), and I am **not** proposing to change it; the finding is that **it is not a template my
+  test may copy**, and CP-1186's conclusion that it was "compliant" was wrong - corrected here.
+- **What that means for Boundary V's child step, and it is now a specific question rather than a copy-paste:** the driver must
+  be constructed **through its real constructor**, with ROS itself stubbed the way that test already stubs it
+  (`monkeypatch.setattr(rclpy, "init"/"create_node"/"ok"/"shutdown", ...)`, `SingleThreadedExecutor`, `RosBrokerDriver`,
+  `PickPlaceRosEvidence`, `PickPlaceHazardDispatcher`, and the `maybe_provision_pick_place_port` seam). Those stubs are the
+  external I/O the plan allows; the constructor call is what item 4 demands instead of `object.__new__`.
+- **So the next attempt is concrete:** instantiate `RclpyActionDriver` with its real signature under those monkeypatches, then
+  set `_pick_place_port` (or let the provisioner supply it), `_act_artifacts` and `_act_hashes` **as the constructor and the
+  provisioner intend**, and call `_run_pick_place`. If the real constructor turns out to need something a test cannot provide
+  without ROS, **that is a finding about the production seam worth reporting rather than a reason to reach for
+  `object.__new__`.**
+- **State:** goal active (revision 51, cap 1000); HEAD `242b4550`; staged 0; no full suite, no push, no stack, no hardware.
