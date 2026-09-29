@@ -289,11 +289,19 @@ def create_process_layout(
     physical_name = hashlib.sha256(identity_input).hexdigest()[:width]
     root = run_root / physical_name
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
-    tmp_dir = root / "tmp"
+    # A test module reaches its shared task root as ``Path(TMPDIR).parents[2]`` (the controller reservation client does
+    # exactly that, so distinct runs get private socket directories under one ``root/ipc``), so this process's scratch is
+    # placed three levels below its own root: ``root/scratch/<unique-run-id>/tmp``. The id is derived from the same
+    # identity as ``physical_name``, so one process cannot collide with another's scratch, and every directory is created
+    # explicitly with mode 0700 on a previously nonexistent path.
+    scratch_id = hashlib.sha256(identity_input + b"\0scratch").hexdigest()[:12]
+    scratch_root = root / "scratch"
+    scratch_run = scratch_root / scratch_id
+    tmp_dir = scratch_run / "tmp"
     ros_home = root / "ros-home"
     ros_log_dir = root / "ros-log"
-    for directory in (tmp_dir, ros_home, ros_log_dir):
-        directory.mkdir(mode=0o700)
+    for directory in (scratch_root, scratch_run, tmp_dir, ros_home, ros_log_dir):
+        directory.mkdir(mode=0o700, exist_ok=False)
     return ProcessLayout(
         name=name,
         root=root,

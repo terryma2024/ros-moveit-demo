@@ -241,7 +241,8 @@ def test_compact_layout_preserves_existing_directory_on_collision(tmp_path: Path
     run_root.mkdir()
     layout = create_process_layout(run_root, "shard-01", process_id_chars=4)
     assert len(layout.root.name) == 4
-    assert layout.tmp_dir.parent == layout.root
+    # the scratch sits three levels below the process root, which is the depth a case's socket root relies on
+    assert layout.tmp_dir.parent.parent.parent == layout.root
     sentinel = layout.root / "retained.json"
     sentinel.write_bytes(b'{"retained":true}\n')
     with pytest.raises(FileExistsError):
@@ -383,3 +384,33 @@ def test_emit_colcon_split_keeps_nested_and_parametrised_identity(tmp_path):
     parallel = json.loads((tmp_path / "out/parallel-nodeids.json").read_text())
     assert parallel == [node_ids[1]]
     assert serial_module in coverage["serial_modules"]
+
+
+def test_process_layout_tmpdir_is_three_levels_below_its_own_root(tmp_path):
+    """A case's socket path is derived from ``TMPDIR.parents[2]``, so the layout must place it there.
+
+    The per-process root stays the shard's private root, and each run gets its own
+    previously-nonexistent ``root/scratch/<id>/tmp`` at mode 0700, so two runs under one root share only ``root/ipc``.
+    """
+
+    from tools.so101_pytest_gate import create_process_layout
+
+    run_root = tmp_path / "scratch" / "run-0929-01"
+    run_root.mkdir(mode=0o700, parents=True)   # the gate creates the run root before any layout
+    layout = create_process_layout(run_root, "collection")
+    for name in ("TMPDIR", "TMP", "TEMP"):
+        value = Path(layout.environment[name])
+        assert value == layout.tmp_dir
+        assert value.name == "tmp"
+        assert value.parent.parent.parent == layout.root, value
+        assert value.parent.parent.parent == layout.root
+        assert value.parent.parent.parent.parent == run_root, "the shard root stays private to this run"
+        assert oct(value.stat().st_mode & 0o777) == "0o700"
+    assert not (run_root / "tmp").exists(), "no shallower tmp directory may be left behind"
+
+    second = create_process_layout(run_root, "shard-02")
+    assert second.tmp_dir != layout.tmp_dir
+    assert second.root != layout.root
+    # both runs reach the same ipc root through parents[2], which is what makes their sockets private but co-located
+    assert second.tmp_dir.parents[2] == second.root
+    assert second.tmp_dir.parents[2] != layout.tmp_dir.parents[2]
