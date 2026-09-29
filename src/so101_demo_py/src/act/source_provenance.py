@@ -23,33 +23,40 @@ _SHA = re.compile(r"[0-9a-f]{64}\Z")
 #: kind semantics: verbatim_install copies bytes unchanged; compiled records a build receipt;
 #: external_runtime records the loaded path, its hash and a version string.
 _ROLE_SPECS = (
+    # (role, kind, source_rel, install_rel, overlay): `overlay` names the install root that OWNS the artefact, so
+    # the provenance describes what the runtime actually loads. A `dependency` role is produced by its own package
+    # in the dependency overlay and keeps that package's own lib directory; nothing is relocated between packages.
     ("command_broker", "verbatim_install",
      "src/so101_demo_py/src/adapters/act/command_broker.py",
-     "so101_demo_py/lib/python3.12/site-packages/so101_demo/adapters/act/command_broker.py"),
+     "so101_demo_py/lib/python3.12/site-packages/so101_demo/adapters/act/command_broker.py", "worktree"),
     ("task8_runner", "verbatim_install",
      "src/so101_demo_py/src/act/task8.py",
-     "so101_demo_py/lib/python3.12/site-packages/so101_demo/act/task8.py"),
+     "so101_demo_py/lib/python3.12/site-packages/so101_demo/act/task8.py", "worktree"),
     ("teleop_child", "verbatim_install",
      "src/so101_teleop/so101_teleop/unified/ros_child.py",
-     "so101_teleop/lib/python3.12/site-packages/so101_teleop/unified/ros_child.py"),
+     "so101_teleop/lib/python3.12/site-packages/so101_teleop/unified/ros_child.py", "worktree"),
     ("teleop_case_owner", "verbatim_install",
      "src/so101_teleop/so101_teleop/unified/bridge.py",
-     "so101_teleop/lib/python3.12/site-packages/so101_teleop/unified/bridge.py"),
+     "so101_teleop/lib/python3.12/site-packages/so101_teleop/unified/bridge.py", "worktree"),
     ("controller_config", "verbatim_install",
      "src/so101_demo_py/config/mujoco/ros2_controllers.yaml",
-     "so101_demo_py/share/so101_demo_py/config/mujoco/ros2_controllers.yaml"),
+     "so101_demo_py/share/so101_demo_py/config/mujoco/ros2_controllers.yaml", "worktree"),
     ("simulation_evidence_plugin", "compiled",
      "src/so101_mujoco_support/src/simulation_evidence_plugin.cpp",
-     "so101_mujoco_support/lib/libso101_simulation_evidence_plugin.so"),
+     "so101_mujoco_support/lib/libso101_simulation_evidence_plugin.so", "worktree"),
     ("broker_owned_controller_plugin", "compiled",
      "src/so101_mujoco_support/src/broker_owned_trajectory_controller.cpp",
-     "so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so"),
+     "so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so", "worktree"),
+    # the vendored plugin is built by its OWN package (third_party/mujoco_ros2_control/mujoco_ros2_control,
+    # `add_library(mujoco_ros2_control SHARED ...)`), installed into that package's lib directory in the
+    # dependency overlay, and loaded from there at runtime
     ("mujoco_ros2_control_plugin", "compiled",
-     "src/so101_mujoco_support/src/simulation_evidence_plugin.cpp",
-     "so101_mujoco_support/lib/libmujoco_ros2_control.so"),
-    ("ros_runtime", "external_runtime", None, None),
-    ("model_weights", "external_runtime", None, None),
+     "third_party/mujoco_ros2_control/mujoco_ros2_control/src",
+     "mujoco_ros2_control/lib/libmujoco_ros2_control.so", "dependency"),
+    ("ros_runtime", "external_runtime", None, None, "external"),
+    ("model_weights", "external_runtime", None, None, "external"),
 )
+
 
 #: external runtimes are named by their real load site, never by a source-tree stand-in
 _EXTERNAL_RUNTIMES = {
@@ -61,9 +68,9 @@ _TOP_LEVEL = ("schema_version", "kind", "repository_head", "submodules", "calibr
               "runtime_roles")
 _ROLE_FIELDS = {
     "verbatim_install": {"logical_name", "artifact_kind", "source_path", "source_sha256",
-                         "installed_path", "installed_sha256"},
+                         "installed_path", "installed_sha256", "overlay"},
     "compiled": {"logical_name", "artifact_kind", "source_path", "installed_path",
-                 "installed_sha256", "build_receipt_path", "build_receipt_sha256"},
+                 "installed_sha256", "build_receipt_path", "build_receipt_sha256", "overlay"},
     "external_runtime": {"logical_name", "artifact_kind", "loaded_path", "loaded_sha256",
                          "version"},
 }
@@ -71,7 +78,7 @@ _RECEIPT_FIELDS = ("sources", "headers", "cmake_arguments", "compiler", "linker"
                    "dependency_sha256", "output_sha256")
 
 
-def runtime_role_specs() -> tuple[tuple[str, str, str | None, str | None], ...]:
+def runtime_role_specs() -> tuple[tuple[str, str, str | None, str | None, str], ...]:
     """The closed registry, so tests and callers can enumerate it without editing it."""
 
     return _ROLE_SPECS
@@ -113,6 +120,7 @@ def _submodules(source_root: Path) -> dict:
 
 
 def build_source_provenance(source_root: Path, install_overlay: Path, *,
+                              dependency_overlay: Path | None = None,
                             calibration_identity=None) -> dict:
     """Describe every registered runtime role as it exists in this tree and overlay."""
 
@@ -124,7 +132,10 @@ def build_source_provenance(source_root: Path, install_overlay: Path, *,
     if _COMMIT.fullmatch(source_commit) is None or _SHA.fullmatch(config_sha256) is None:
         raise ValueError("SOURCE_PROVENANCE_CALIBRATION_IDENTITY_INVALID")
     roles = []
-    for logical_name, artifact_kind, source_rel, install_rel in _ROLE_SPECS:
+    for logical_name, artifact_kind, source_rel, install_rel, overlay in _ROLE_SPECS:
+        if overlay == "dependency" and dependency_overlay is None:
+            raise ValueError("SOURCE_PROVENANCE_DEPENDENCY_OVERLAY_REQUIRED")
+        install_overlay = Path(dependency_overlay) if overlay == "dependency" else Path(install_overlay)
         if artifact_kind == "verbatim_install":
             source_path = source_root / source_rel
             installed_path = install_overlay / install_rel
@@ -134,6 +145,7 @@ def build_source_provenance(source_root: Path, install_overlay: Path, *,
                 "logical_name": logical_name, "artifact_kind": artifact_kind,
                 "source_path": source_rel, "source_sha256": _digest(source_path),
                 "installed_path": str(installed_path), "installed_sha256": _digest(installed_path),
+                "overlay": overlay,
             })
         elif artifact_kind == "compiled":
             installed_path = install_overlay / install_rel
@@ -146,6 +158,7 @@ def build_source_provenance(source_root: Path, install_overlay: Path, *,
                 "installed_sha256": _digest(installed_path),
                 "build_receipt_path": str(receipt_path),
                 "build_receipt_sha256": _digest(receipt_path),
+                "overlay": overlay,
             })
         else:
             loaded_path, version = _EXTERNAL_RUNTIMES[logical_name]
@@ -163,7 +176,8 @@ def build_source_provenance(source_root: Path, install_overlay: Path, *,
         "runtime_roles": sorted(roles, key=lambda role: role["logical_name"]),
     }
     return verify_source_provenance(document, source_root=source_root,
-                                    install_overlay=install_overlay)
+                                    install_overlay=install_overlay,
+                                    dependency_overlay=dependency_overlay)
 
 
 def canonical_bytes(document: dict) -> bytes:
@@ -190,7 +204,8 @@ def write_source_provenance(document: dict, output: Path) -> Path:
     return output
 
 
-def verify_source_provenance(document: dict, *, source_root: Path, install_overlay: Path) -> dict:
+def verify_source_provenance(document: dict, *, source_root: Path, install_overlay: Path,
+                             dependency_overlay: Path | None = None) -> dict:
     """Re-derive every registered role and reject any drift, in a canonical document."""
 
     if type(document) is not dict or tuple(sorted(document)) != tuple(sorted(_TOP_LEVEL)):
