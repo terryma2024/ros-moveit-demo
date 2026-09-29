@@ -11181,3 +11181,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-859 — The identities document is the Task 8 preparation receipt
+
+- **Answer found by searching the schemas, which is where it should have started:**
+  `config/act/task8-preparation-receipt-schema.json:237` declares `act_profile_sha256` and `:259` lists it among
+  the **required** fields, alongside the other four identities. That schema is the one this task generated in its
+  Task 8P3 work, and its identity block is exactly the five keys the measurement contract binds - so the
+  "identities document" the calibration measurement consumes **is the Task 8 preparation receipt**, not a
+  free-standing file anyone has to invent.
+- **Writers and readers now unambiguous in `src/`:** the receipt is *consumed* by
+  `act/task8_measurement_contract.py:23` (as `--identities`) and by `act/task8_artifact_bundle.py:28` (as the
+  bundle's identity set), and its five values come from the derivations already established - the provenance
+  document's digest, `runtime_config_sha256` from `_digest_regular_file(--runtime-config)`,
+  `anchors_sha256` from the anchors document, `contact_policy_fingerprint` supplied from
+  `core/policy.py`'s `TaskPolicyFingerprint`, and the ACT profile digest returned by
+  `installed_calibration_identity()` (= `0aef56df…`, agreed across three generations).
+- **Three of my own claims were corrected across CP-856/857/858/859**, and the pattern is the lesson: I searched
+  for *digest names* in `src/` and concluded "no producer", when the answer was in the **schemas** and in the
+  **CLI that computes them**. Every correction is recorded in this ledger rather than quietly overwritten.
+- **What this leaves:** the receipt's writer is the run-preparation path that admission consumes (the Task 8P3
+  flow: `UnifiedWorkloadService.start(spec)` verifies the receipt's schema, full file set, hashes and policy), and
+  the campaign that produces the report and bundle follows it. Two things still require the user: the overlay
+  reading (CP-849/850) and the calibration-report ordering (CP-858) - both of which decide whether a fresh
+  measurement precedes or follows the receipt.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
