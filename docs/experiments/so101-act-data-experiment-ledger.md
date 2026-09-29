@@ -21754,3 +21754,18 @@ not an inference of mine.**
   composition now exposes it too.
 - **State:** P1-1's two tests are uncommitted while the pair is red; ledger current; **no stack was started** (the stack object is
   constructed, nothing more); no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1314 — P1-1: the detector half works; the controller wants a `Contract`, not the raw block
+
+- **After giving the fake detector `cold_start_latency_ms` (what `build_detector`'s latency helper reads), the detector half of
+  `build_real_providers` succeeds** and the failure moves one collaborator along:
+  `so101_demo.act.contracts.ContractError: FIELDS_INVALID` **raised while constructing `HeadSearchController(head)`** - because the
+  controller takes a **`Contract`** (`act/contracts.py`), not the descriptor's raw `head_search` mapping. **The fix is the same shape as
+  everything else in this batch: read the contract layer and build the controller through it, rather than handing it a dictionary that
+  merely contains the right keys.**
+- **Progress on P1-1, stated plainly:** the formal-entry test (no seam) is **green**; the positive test now proves the detector factory
+  was reached with the descriptor's own device and CUDA policy (`requested_device == "cuda"`, `allow_cpu_fallback is False`), which is
+  the reviewer's "cannot prove detector construction from the admitted CUDA configuration" answered by construction; and the remaining
+  fault is one collaborator's argument type.
+- **State:** P1-1's tests are uncommitted while the pair is red; ledger current; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
