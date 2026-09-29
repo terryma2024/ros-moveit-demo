@@ -15933,3 +15933,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   single failing module awaits the (b1)/(b2) choice (CP-1035); Task 10 blocked until the 17 search values are reviewed.
   No runtime, no formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*`
   NOT_PROVISIONED.
+
+## CP-1046 — The ordering fix, as two concrete options with a recommendation
+
+- **The problem, restated in one line:** the driver's identity carries `reset_epoch`, the epoch only exists after the
+  case's reset, and the plan wants the recorder attached before the runner runs. Freezing the epoch at attachment time
+  records the wrong identity - silently, in every sample.
+- **Option (i) - attach the recorder after the reset is witnessed.** The bind moves from `ros_child.py:505` to wherever
+  the reset receipt arrives, so the driver is constructed with the epoch the case actually observes. Faithful to the
+  epoch's origin and needs no change to `CaseEvidenceDriver`'s API. Its cost: the recorder is attached later than the
+  plan's wording suggests, so any observation between SEARCH's start and the reset witness is not recorded - acceptable
+  only if that window is provably empty, which I have not shown.
+- **Option (ii) - attach where the plan says, and let the identity's epoch be bound when it is witnessed.** The window's
+  identity is already a dict supplied at construction (`LiveEvidenceWindow(recorder, identity=…, period_s=…,
+  tolerance_s=…)`), so a small, explicit `rebind_reset_epoch(epoch)` on the window - refusing a second rebind, exactly
+  like the port's one-shot binds - reconciles the two requirements: the recorder is attached before the runner (as the
+  plan says) and the identity carries the epoch the case really performed. Its cost: one more piece of mutable state,
+  which is why it needs its own test rather than an argument.
+- **Recommendation: (ii), with (i) as the fallback if the identity is meant to be immutable.** (ii) satisfies both stated
+  requirements and makes the late binding explicit and testable instead of implicit; (i) is simpler but silently drops
+  whatever happens before the reset witness, and "silently drops evidence" is the one outcome the whole Task 8 protocol
+  exists to prevent. **This one is a design decision, so I am putting it to the owner rather than picking it** - the
+  session has already learned that a plausible-looking choice made alone at the end of a long stretch is how the wrong
+  thing gets committed.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller is complete on the port side and, on the
+  child side, fully specified except for this ordering choice; Task 9's single failing module awaits the (b1)/(b2) choice
+  (CP-1035); Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
