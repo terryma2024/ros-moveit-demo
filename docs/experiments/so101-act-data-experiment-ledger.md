@@ -11369,3 +11369,33 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
   `collection_*\) NOT_PROVISIONED.
+
+## CP-865 — Package/full gate PASS on the corrected tree (ruling 3 satisfied)
+
+- **The plan's package/full gate is green.** Run `beh-r435b`, repo runner
+  `python -m tools.so101_pytest_gate --workers 8 --process-id-chars 4 --evidence-root <registered root>
+  --run-id beh-r435b --python <test-venv>/bin/python --repo-root <worktree> --expected-source-commit
+  56a023fecf803c846d38fda4e7d909c23223b43d --allow-dirty --timeout-s 900` returned **gate rc=0** with
+  **`"result": "PASS"`**.
+- **Collection is exact:** `actual_count 5590` equals `expected_count 5590`, with
+  `collection_sha256 b45934d6764e0fc75aef7fafec3eb3ee170e72051957573e3fd7246c3bc87ca3` and a valid node manifest.
+- **Every shard returned 0:** shard-03 `812 tests, 0 errors, 0 failures, 53 skipped`; shard-04 `772, 0, 0, 27`;
+  shard-05 `674, 0, 0, 36`; shard-06 `658, 0, 0, 7`; shard-07 `533, 0, 0, 1`; shard-08 `542, 0, 0, 33`; the
+  serial lane `286, 0 errors, 0 failures, 2 skipped`; the collection process itself `0/0`. `warnings_total` 4.
+- **The 28 failures are gone** because both causes were addressed: CP-861's one-token typo fix and CP-864's
+  registry correction. No failure was excluded, no collection range was narrowed, and `allowed_dirty_paths` is
+  empty - the gate ran against the working tree as-is with the user's dirty paths present.
+- **Cleanup was verified:** `all_children_reaped: true` and `owned_processes_remaining: []`, so the gate left no
+  processes behind. `total_elapsed_s 117.68` with 8 workers on a fresh verified NVMe scratch (`scratch-r435b.*`).
+- **What this satisfies:** ruling 3's condition for proceeding - the plan's package/full gate now has green
+  evidence on the corrected tree, so the controlled source work may be frozen and Task 8L may begin. It does
+  **not** by itself authorise skipping any later gate.
+- **Next, in the plan's order:** create a **new** Task 8L run subroot under this same evidence root (old
+  `runtime-task8l-gen2` kept untouched), rebuild **Step 1 provenance** there with
+  `act_build_task8_source_provenance --install-overlay <worktree install> --dependency-overlay <dependency root>`,
+  then ruling 2's ordering: the five-key `measurement-identities.json` built from production rules,
+  `bind_measurement_contract()` **before** any measurement, a fresh MuJoCo measurement, offline aggregation to a
+  new `TASK8_READY` report, then artifact preparation, live, and `QUALIFIED`.
+- **Boundaries:** no runtime composed yet, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered,
+  no ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
