@@ -16480,3 +16480,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the real phase camera, the live search, the fixed non-contact arm probe, CameraInfo/TF/raw rows per anchor, real
   session/reset/attempt readback, and generation-scoped single-flight cleanup with contamination on cleanup failure -
   each of which then needs its own RED. **No production code has been changed for Boundary II yet.**
+
+## CP-1067 — Boundary II, first piece: the nine-phase replay is wired (RED then GREEN)
+
+- **RED was CP-1066's zero-call assertion** (`nine phases per anchor, saw 0`), and the fix is the first half of Boundary
+  II's substance: each anchor now runs the **nine design phases** at the **2 ms** private cadence through the real phase
+  camera and writes one provenance row per phase (`phase-NN-<name>`), carrying stamp, receive monotonic, session, reset
+  epoch, attempt, physics step, the period and the camera's observation. The phases come from one place
+  (`_PHASES` in the driver, matching the window's `REQUIRED_PHASES`), so the coverage matrix and the replay cannot drift.
+- **The strongest finding of this piece came from the failures my fix caused, not from the fix itself:** five pre-existing
+  tests broke with `['default'] != ['default','left','forward']` - the run aborted on its first anchor because the shared
+  test helper injected a phase camera returning **`{"verdict": "PASS"}`**, which the raw layer's
+  `FORBIDDEN_OUTPUT_TOKENS` rule **correctly refused** (`VERDICT_LEAK_IN_RAW_RECORD`). So the old wiring assumed a camera
+  that judges; the working contract is a camera that **reports rows**. The helper now returns
+  `{"phase": …, "frame_index": …, "row_count": 0}` and the rule stands unchanged.
+- **GREEN: 8 passed, rc=0**, scratch `<R>/scratch/r668b.<n>` with `TMPDIR` verified through the exact test interpreter;
+  RED log `beh-r667-red3.log`, first GREEN attempt `beh-r668.log` (5 failed - the finding above), final `beh-r668b.log`.
+- **Boundary II remaining, each needing its own RED:** live search and the fixed non-contact arm probe; CameraInfo/TF raw
+  rows; real session/reset/attempt readback instead of synthesized identities; per-anchor **FULL_RESTART** semantics; and
+  generation-scoped single-flight cleanup with a kept cleanup receipt and contamination on cleanup failure.
