@@ -30786,3 +30786,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress; its entry point, its obligations and its substitutable-looking-but-required pieces are
   named. P1-1 through P1-4 are CLOSED.** The demo RED's clean re-measurement, P1-6, the final gate and the re-review
   packet remain.
+
+## CP-1808 — P1-5's exact remainder: the child harness provisions SEARCH only, and the aggregator join is absent
+
+- **What already exists and passes, so the finding is not "nothing runs the chain":**
+  `so101_demo_py/test/test_act_task8_full_case_joined_chain.py` calls the **production `run_pick_place_case`** with
+  **one substitution - the process/stack owner** - and its own words are precise about what that means: *"the child
+  process is the seam, the runner is not"*. Its four negatives are derived by corrupting that same chain. **`3 passed`,
+  rc 0, CP-1806.**
+- **And what the fifth review now requires beyond it, read off the code rather than inferred:**
+  | the verdict asks | what exists |
+  | --- | --- |
+  | run the real `run_pick_place_case` | **yes** - both the joined-chain file and `test_task8_child_driven_case.py:743` |
+  | real **child** → runner → port | **only for PREFIX cases**: my own `test_act_task8_full_case_chain.py` is `xfail(strict=True)` because *"this harness provisions SEARCH only (`ChildPort`), so a full case is refused by name at APPROACH - `TASK8_PHASE_NOT_PROVISIONED: APPROACH: expert_route`"* |
+  | trusted campaign → journal → **actual aggregator** | **the journal join is real; `aggregate_task8_calibration` does not appear in the joined-chain file at all** - the ACT measurement aggregator is reached by the formal-entry chain (P1-2, CP-1795), not by the pick-place case chain |
+- **So P1-5's remainder is one missing capability and one missing join, and neither is a convenience:**
+  1. **the child harness must provision the phases a FULL case walks** - `PickPlaceSearchPhasePort`'s `ChildPort`
+     subclass answers SEARCH, and APPROACH is refused by name because a real expert route would have to exist for it;
+     **that refusal is the child being honest, not the test being lazy**;
+  2. **the case's sealed evidence must reach `aggregate_task8_calibration`** - the same actual aggregator P1-2 made
+     reachable - rather than stopping at the journal row's digests.
+- **And my own `xfail(strict=True)` is doing exactly what it was written to do:** it fails the suite the moment the full
+  case starts passing, **which is the signal to delete the duplicate chain rather than keep two.** So the work is
+  ordered: extend the child harness to the full case's phases, then join its evidence to the aggregator, then **remove
+  the xfail and the duplicate** in the same change - not before.
+- **State:** **P1-5 in progress with its remainder named as a capability plus a join. P1-1 through P1-4 CLOSED.** The
+  demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
