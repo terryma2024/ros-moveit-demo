@@ -26615,3 +26615,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Why this matters more than the one row:** the index exists so a reviewer can re-derive every number. **A stale cross-reference is exactly the failure mode it is meant to prevent**, and the fact that
   the check caught it - and that the check is cheap enough to run after every edit - is the argument for running it every time rather than once before a review.
 - **State:** packet, index and ledger agree; the three compliant legs stand as recorded in CP-1591/1592/1594; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; goal active.
+
+## CP-1597 — The independent review is proposed and launched, on the model the repository's rules require
+
+- **Availability was checked rather than assumed:** `codex exec -m gpt-6-astra -c model_reasoning_effort="high" -s read-only --ephemeral … "Reply with exactly MODEL_OK"`
+  returned **`MODEL_OK`** (the log records 4,334 tokens). **So the independent GPT-6 Astra / High reviewer is available, and its unavailability did not have to be reported as a limitation.**
+- **The request** (`handoffs/20260930-task7-onward/task8-astra-rereview3-request.md`, 2823 bytes, sha256 begins `c1699a1cdefd9f1e`) asks the reviewer to:
+  1. read the ledger's **CP-1560..CP-1596**, the **packet** (with Addendum 3 and the correction banner) and the **evidence index** (whose every row carries a size and sha256 prefix it may re-derive);
+  2. test the five P1 findings and P2, the three-leg boundary with its **per-leg fresh scratch** and fail-closed tempdir equality assertion, and the **correction** that retracted the shared-scratch runs;
+  3. return a **verdict per item**, any claim the evidence does not support, whether **"seven indexed assertions read from the records"** and **"four negatives"** are satisfied **as written or whether my reading is weaker than the finding intended**, whether
+     the re-run boundary is **compliant evidence**, the single most important thing to fix next, and a final line **APPROVED** or **CHANGES_REQUIRED**;
+  4. with the standing constraints restated: **read-only, no stack, no simulator, no GPU, no actuator, no hardware, no edits, no commits.**
+- **The invocation, recorded exactly as run:** `codex exec -m gpt-6-astra -c model_reasoning_effort="high" -s read-only --ephemeral -C <worktree> -o handoffs/…/task8-astra-rereview3-reply.md "<the request>"`,
+  with stdout captured to `handoffs/20260930-task7-onward/task8-astra-rereview3.log`. **The reviewer is a separate model in a read-only, ephemeral session - this agent neither performs the review nor pre-empts its verdict.**
+- **State:** the review is running; the reply and the log will be recorded verbatim (or summarised with their hashes) when it lands. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; P2's live half not started; goal
+  active.
