@@ -17853,3 +17853,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   into a chain that is already proven end to end.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's decisions still
   open: the authoritative descriptor document (CP-1131/CP-1134) and authorisation for one live stack for the recording half.
+
+## CP-1136 — Boundary V's seam identified: the composition is proven, the case's internals are not
+
+- **Read the four green tests rather than assuming what they cover.** They are:
+  `test_gate_accepts_no_caller_supplied_proof` (the composition is a coroutine from
+  `so101_teleop.unified.pick_place_full_restart_campaign`), `test_admitted_campaign_routes_through_the_production_composition`
+  (the real campaign and per-case entries are called, with the admitted journal root), `test_each_case_gets_a_fresh_owner_bound_to_the_admitted_spec`
+  (a fresh `PickPlaceCaseOwner` per case, all bound to the admitted spec), and `test_unavailable_composition_still_admits_nothing`
+  (no requests, no lifecycle starts or finishes, no journal written).
+  **So the composition and admission halves are genuinely proven, and none of the case's own artefacts is**: no SEARCH row, no
+  release open event, no 10 Hz support rows, no FINAL_CHECK, no sealed-artifact readback, no retirement, no journal hash.
+- **The seam is already available and does not need inventing:** these tests import `Lifecycle`, `Worker` and `prepared`
+  from `test_act_task8_live_cli`, so the admission fixtures, the fake worker and the lifecycle recorder are all in place -
+  Boundary V's test is an extension of this file, not a new harness.
+- **What its RED must assert, in the plan's own terms:** an admitted case routed through the production entry produces SEARCH
+  rows from the real path, observes the release open event, shows **three adjacent 10 Hz support rows in the same epoch**,
+  reaches FINAL_CHECK, reads its sealed artifact back, has a confirmed retirement, and records a journal path and hash -
+  with only external ROS/MuJoCo/controller/process I/O faked, and **no** `object.__new__`, hand-filled `_ready` or direct
+  `finish` call.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The next round writes that
+  test against the helpers this checkpoint names.
