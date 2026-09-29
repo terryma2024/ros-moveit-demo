@@ -33082,3 +33082,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   method cannot return, and the next read resolves which object is which.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1881 — Fresh bytecode ruled out; the paradox needs one identity check
+
+- **The stale-cache hypothesis is refuted, and cheaply:**
+  ```
+  find: two cached versions of test_task8_child_driven_case (59510 bytes Sep 30 02:10; 78706 bytes Sep 29 20:27)
+  run with PYTHONPYCACHEPREFIX=<fresh dir>:   VISIBLE_APPROACH_SOURCE_SCOPE_CHANGED   (identical)
+  and the method IS in the source:  test_task8_child_driven_case.py:539  def current_epoch(self): …
+  ```
+  **so the loaded class is the file that was edited, the method is where it should be, and a fresh bytecode cache changes
+  nothing.**
+- **Which leaves the one hypothesis that fits all four observations at once:** the `broker` the scope check receives is
+  **not** the `CommandBroker` this mount built and printed - **the registration is called as
+  `reset.broker._prefix_source_port.register(reset.broker, self, self._expert_route, ticket, …)` from the PORT
+  (`pick_place_search_port.py:670`), so `reset` is `self.boundary.reset` as the PORT sees it.** **If the child, or the
+  port's own construction, built a boundary whose `reset.broker` is a different object than the one the mount set, then
+  every observation is consistent: my print described the mount's broker, the scope check asked a different one, and the
+  `True` came from that other object's blanket `__getattr__`.**
+- **And the check is one line:** inside a wrapped `register`, print
+  `reset.broker is <the mount's broker>` and `reset.broker.driver is broker.driver`. **Two identities, one run, and the
+  answer decides between "the mount writes to a boundary the port does not use" and "the port's boundary is the mount's
+  and something else is going on".**
+- **State:** **P1-5 in progress with the paradox reduced to an identity question between the mount's broker and the port's
+  `boundary.reset.broker`, and the check that answers it written down.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
