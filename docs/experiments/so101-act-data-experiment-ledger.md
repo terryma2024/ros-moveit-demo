@@ -18988,3 +18988,27 @@ not an inference of mine.**
   `ros_child._run_pick_place`.
 - **State:** goal active (revision 51, cap 1000); HEAD `964f9712`; staged 0; log `beh-r797.log`; no full suite, no push, no
   stack, no hardware.
+
+## CP-1186 — The child construction pattern already exists, and it is compliant with the owner's prohibition
+
+- **Found the model to follow, in a file written earlier in this task:**
+  `src/so101_teleop/test/teleop/test_act_ros_child.py::test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8`
+  builds the child and injects both seams the way the plan allows:
+  ```python
+  monkeypatch.setattr(ros_child, "maybe_provision_pick_place_port", provision_port, raising=False)
+  ...
+  driver._act_artifacts = binding
+  ```
+  So the child is driven with a **stubbed provisioner** and **bound artifacts** rather than by `object.__new__` or hand-filled
+  state - which is exactly the pattern item 4 requires, and it means my child-driven Boundary V test is a **variation** of an
+  existing, admitted test rather than a new harness.
+- **Also located, and worth not re-deriving:** the child's own test module supplies `ActDriver` (line 27), a `request(...)`
+  builder (line 42) and a `runtime(driver)` helper (line 64), plus `qualified_report(tmp_path)` (line 90) for the calibration
+  evidence the child reads - so the fixtures my test needs are in that module, the same way the chain fixtures were in the
+  evidence module.
+- **The plan for the next round, in three steps:** read that test's body (lines 148-250) to see how it provisions the port and
+  the artifacts; drive **my** runner-answering fake port through `_run_pick_place` in the same way, so the child builds and
+  binds the `CaseEvidenceDriver` window itself; then assert the three artefacts still outstanding - the **release open event**,
+  the **three adjacent 10 Hz support rows in one epoch** and the **journal path and hash** - which the child/owner path is what
+  produces.
+- **State:** goal active (revision 51, cap 1000); HEAD `6ff70526`; staged 0; no full suite, no push, no stack, no hardware.
