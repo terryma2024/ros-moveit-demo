@@ -20103,3 +20103,24 @@ not an inference of mine.**
   - which also means **re-verifying item 1's GREEN** (CP-1229) under the same corrected method.
 - **State:** HEAD `1341bd5e` plus this checkpoint; the probe print is still in the test file and comes out with it; no stack, no
   hardware, nothing deleted, nothing pushed.
+
+## CP-1233 — The sync did land, so the earlier failure is not a stale-file story and one re-probe decides it
+
+- **`cmp` says the build copy and the `src/` copy of `task8_artifact_bundle.py` are byte-identical (both 14245 bytes)**, so the
+  copy I made before the last test run **did** take effect, and the module that run imported - if it imported the build tree -
+  already called the extracted shape validator. **Therefore the `DID NOT RAISE` on a five-key `head_search` is not explained by a
+  stale file**, and my earlier framing of CP-1232 was incomplete: the build tree was stale when the probe ran, but it was current
+  when the test failed.
+- **What that leaves, and they are only two candidates:**
+  1. the test's import resolves to a **third** location - the installed `install/so101_demo_py/lib/python3.12/site-packages` copy,
+     which the probe did not print because the probe ran before the sync and I have not re-probed since;
+  2. the mutation in case (a) does not produce the document I think it does, so the rule is being handed a four-key `head_search`
+     and correctly refusing nothing.
+- **One re-probe decides which, and it is the same print as before** - `__code__.co_filename`, the document's key sets **as the rule
+  receives them**, and now also whether `validate_head_search_shape` appears in the imported function's source. That is the first
+  action of the next round, before anything else in the batch.
+- **Consequence for the batch, stated once and taken seriously:** until that print resolves, **no test result in this revision batch
+  is evidence about the source** - including item 1's GREEN at CP-1229, which must be re-verified under the corrected method. I would
+  rather carry that caveat forward than let a green line stand on an unknown import path.
+- **State:** HEAD `dbb405e8` plus this checkpoint; probe print still in the test file; no stack, no hardware, nothing deleted,
+  nothing pushed.
