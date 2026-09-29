@@ -410,7 +410,9 @@ def test_a_sequence_phase_produces_evidence_the_runner_accepts():
 
     assert seen == ["CLOSE"], "the boundary executed exactly the phase asked for"
     # the boundary receives the SEARCH evidence this port validated and froze, which the sequence phases prepare from
-    assert set(handoff_seen) == {"observed", "selected_source"}, sorted(handoff_seen)
+    # the handoff carries the frozen SEARCH evidence AND the case's admitted motion targets and support distance
+    assert set(handoff_seen) == {"observed", "selected_source", "gripper_closed_rad", "close_duration_s",
+                                 "support_distance_max_m"}, sorted(handoff_seen)
     assert phase_document["phase"] == "CLOSE"
     assert phase_document["session_id"] == SESSION and phase_document["attempt_id"] == ATTEMPT
     assert phase_document["reset_epoch"] == 2 and phase_document["release_epoch"] == 0
