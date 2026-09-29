@@ -113,6 +113,12 @@ def require_runtime_descriptor(runtime: object) -> None:
     Shared by the bundle, which binds the file, and the measurement entry, which consumes the parsed document from its
     context - so the two boundaries cannot drift into two implementations of the same rule.
     """
+    # Astra item 2: the device policy alone is not a shape check - the production head-search validator is the one
+    # authority for the document's closed structure, so the shared rule reuses it rather than approximating it
+    from so101_demo.act.head_search_binding import validate_head_search_shape
+
+    validate_head_search_shape(runtime)
+
 
     if (type(runtime) is not dict or set(runtime) != {"schema_version", "head_search"}
             or runtime["schema_version"] != 1 or type(runtime["head_search"]) is not dict):
