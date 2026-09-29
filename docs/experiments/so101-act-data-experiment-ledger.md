@@ -21633,3 +21633,32 @@ not an inference of mine.**
   | phase camera | **no adapter class exists** - the module offers `load_phase_camera_matrix(...)` and `derived_phase_camera_checks(...)`, so this collaborator is a matrix-driven evaluator whose expected call shape must be read from the driver's own use of it |
 - **So the GREEN is a real composition, not a rename:** the factory must take the **admitted context and the frozen descriptor**, build those five collaborators from them (including the CUDA device the descriptor names, with no CPU fallback), and be reachable **without** any environment seam - while the seam stays available for tests at the **external I/O** level only. **The next reads are the driver's use of `phase_camera` and the detector factory's build entry**, and then the composition is written.
 - **State:** the P1-1 RED is **uncommitted while red** per the owner's rule; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup still unauthorised and untouched; nothing deleted, nothing pushed.
+
+## CP-1309 — P1-1's GREEN is now fully specified by reading, and the descriptor supplies the detector
+
+- **The two interfaces, read:**
+  ```python
+  # the driver consumes the phase camera as a CALLABLE (driver:134)
+  observation = self.phase_camera(phase, index)
+
+  # and the detector comes from the production factory, which verifies artifacts and builds exactly one detector
+  @dataclass(frozen=True, slots=True)
+  def build_detector(options: DetectorFactoryOptions, *,
+                     yolo_detector_factory: Callable[..., DetectorPort] = YoloSegDetector,
+                     grounded_detector_factory: Callable[..., DetectorPort] = GroundedSamDetector) -> BuiltDetector
+  ```
+  with `DetectorFactoryOptions(backend, requested_device, allow_cpu_fallback, yolo_weights_path, yolo_weights_sha256,
+  yolo_model_id, yolo_imgsz, ...)`.
+- **And every one of those fields is exactly what the frozen descriptor's `detector` block carries** - `backend`, `weights_path`,
+  `weights_sha256`, `model_id`, `image_size_px`, `requested_device`, `allow_cpu_fallback` - **so the composition can build the real
+  detector from the admitted context alone**, which is precisely what the reviewer asked for ("consume the admitted context and frozen
+  descriptor"; "cannot prove detector construction from the admitted CUDA configuration"). **`build_detector` even takes its detector
+  constructors as parameters**, so a test can substitute at that external seam while the composition's own checks - artifact
+  verification, device policy, one-detector-only - stay under test.
+- **The composition's five providers, each with a real source:** detector ← `build_detector(...)` fed from the descriptor · stack ←
+  `runtime/task_stack.py` `PersistentTaskStack` · controller ← `act/search.py` `HeadSearchController` · phase camera ← a callable over
+  `load_phase_camera_matrix(...)`'s matrix, matching the driver's `(phase, index)` call shape · clock ← monotonic.
+- **So the write is now mechanical rather than exploratory:** replace the provider-seam requirement with real construction from the
+  context, keep `SO101_TASK8_PROVIDER_SEAM` as an external-I/O substitution for tests only, and let P1-1's RED flip.
+- **State:** P1-1's RED is uncommitted while red; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup untouched;
+  nothing deleted, nothing pushed.
