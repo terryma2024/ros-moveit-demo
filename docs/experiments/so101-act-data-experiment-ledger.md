@@ -27772,3 +27772,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And it is worth saying what this changes about the v3 boundary:** **not the verdict** - v3's teleop leg reported **0 failures** and this correction does not touch that - **only the size of the corpus behind it.** The three green legs of the v4
   boundary are unaffected, and the packet never quoted 1432 (checked: it does not appear there).
 - **State:** the correction is recorded and discoverable; the re-review request already carries the measured form; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1663 — And CP-1613's own row proves it: its pytest total does not add up to its CTest total
+
+- **Reading the row the correction sits in, rather than only the number being corrected:**
+  ```
+  | **CTest failures** | **0** - `colcon test-result`: **1432 tests, 0 errors, 0 failures, 43 skipped**
+  |                     (pytest totals: **1272 passed / 43 skipped**) |
+  | **created: 8/8 workers banners** | **117** - one per registered test |
+  | **colcon per-test xunit files** | **117** under `build/so101_teleop/test_results/so101_teleop/` |
+  ```
+  **The same row reports 1272 passed and 43 skipped - 1315 cases - beside a CTest total of 1432.** **The two cannot describe the same run**, and the row even records **117 tests** and **117 xunit files** in its own next lines. **So the contradiction was visible in the record the whole time**, and what
+  CP-1661/1662 add is only the measurement that says which of the two is the run's own.
+- **That is worth one line because of how often this batch has met it:** a number beside another number that disagree is a **check available for free**, and CP-1613's row contained one. **The batch's habit of reading the artefact rather than the summary is what eventually
+  caught it - three checkpoints later, and only because a re-run made the discrepancy impossible to ignore.**
+- **State:** the correction is recorded, corroborated from the original row, and discoverable in place; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
