@@ -30540,3 +30540,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   follow from the run's own case**, which is where the next work goes. **Task-list statuses are unchanged, so they are
   not re-stated.** P1-2 and P1-3 CLOSED; P1-1 second half GREEN; the demo RED's clean re-measurement, P1-4, P1-5, P1-6
   and the final gate remain.
+
+## CP-1800 — P1-1's first half, third value: the target is the cup the scene actually has
+
+- **`target_from_model` added to `task8_bottom_io.py`:** reads the `plastic_cup` body's **world pose from the model** and
+  its radius as the **largest half-extent across the geoms attached to that very body**. The probe that led here is
+  worth recording: the cup is a **free body** in this scene -
+  ```
+  bodies containing 'cup': ['plastic_cup']      geoms containing 'cup': []
+  body plastic_cup: world_pos=[0.02, -0.28, 0.165]   free=True
+  ```
+  - so its pose is a property of the run rather than a constant, and its size belongs to the body's geoms rather than to
+  a name that happens to contain "cup".
+- **Against the seam, which returns the same fixed value every time:** `{"position_m": [0.10, 0.10, 0.02],
+  "radius_m": 0.03}` - **while the scene's cup is at `[0.02, -0.28, 0.165]`.** Both differences are asserted in the test
+  explicitly, because that contrast is what makes this a fix.
+- **Evidence: `11 passed` in the module's own file**, now including:
+  1. the target's pose equals `data.xpos[plastic_cup]` to `1e-12`, and its radius the body's own largest half-extent;
+  2. **it is not the seam's invented constant** - position and radius both;
+  3. **moving the free cup moves the target** (`joints_rad` writing the free joint's `qpos`), so it follows the run;
+  4. a missing target body is refused by name.
+- **Where P1-1's first half now stands - four of the six seam substitutions have production counterparts:**
+  | value | state |
+  | --- | --- |
+  | `occluder_geometry` | **done** (CP-1797, from the model's geoms) |
+  | `frame_source` | **done** (CP-1799, the model's own headless renders) |
+  | `target` | **done** (this checkpoint, the cup's own body) |
+  | `yolo_detector_factory` | **already real** - `build_real_providers` uses the descriptor's admitted CUDA block |
+  | `client` | next: the real MuJoCo/ROS client `pick_place_child_port`'s wiring uses |
+  | `phase_path(phase)` | next: the run's own trajectory per phase |
+- **State:** **P1-1's first half is two values from complete, and each landed with a test that asserts the model's answer
+  rather than the seam's.** P1-2 and P1-3 CLOSED; P1-1 second half GREEN; the demo RED's clean re-measurement, P1-4,
+  P1-5, P1-6 and the final gate remain. **Task-list statuses are unchanged, so they are not re-stated.**

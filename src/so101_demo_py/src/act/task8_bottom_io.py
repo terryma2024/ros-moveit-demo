@@ -133,3 +133,44 @@ class ModelFrameSource:
     def __exit__(self, *_exception):
         self.close()
         return False
+
+
+def target_from_model(scene_path, *, body: str = "plastic_cup", class_id: str = "plastic_cup",
+                      joints_rad=None) -> dict:
+    """What the camera is looking for: the cup's own pose and size, read from the model.
+
+    The seam's `target()` returns a fixed `{"position_m": [0.10, 0.10, 0.02], "radius_m": 0.03}` regardless of where
+    the cup actually is - and the cup is a FREE body in this scene (`plastic_cup`, `free=True`), so its pose is a
+    property of the run rather than a constant. The radius comes from the geoms attached to that very body, so it is
+    the size the scene gives the object rather than a number chosen to make a projection look reasonable.
+    """
+
+    import mujoco
+
+    scene = Path(scene_path)
+    if not scene.is_file():
+        raise BottomIOError(f"BOTTOM_IO_SCENE_MISSING: {scene}")
+    model = mujoco.MjModel.from_xml_path(str(scene))
+    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, body)
+    if body_id < 0:
+        raise BottomIOError(f"BOTTOM_IO_TARGET_BODY_MISSING: {body}")
+    data = mujoco.MjData(model)
+    if joints_rad is not None:
+        values = [float(value) for value in joints_rad]
+        if len(values) > model.nq:
+            raise BottomIOError(f"BOTTOM_IO_JOINTS_TOO_MANY: {len(values)} > {model.nq}")
+        data.qpos[:len(values)] = values
+    mujoco.mj_forward(model, data)
+
+    extents = [float(value) for index in range(model.ngeom) if model.geom_bodyid[index] == body_id
+               for value in model.geom_size[index]]
+    if not extents:
+        raise BottomIOError(f"BOTTOM_IO_TARGET_GEOM_MISSING: {body}")
+    return {
+        "class_id": class_id,
+        "position_m": [float(value) for value in data.xpos[body_id]],
+        # the largest half-extent across the body's own geoms: the conservative reading, for the same reason the
+        # occluders use it - a smaller radius would under-report what the camera is looking for
+        "radius_m": max(extents),
+        "body": body,
+    }
