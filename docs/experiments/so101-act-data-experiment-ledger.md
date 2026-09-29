@@ -12005,3 +12005,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   three-file list.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-890 — Task 3 committed (phase-camera replay, live continuity, projection, occlusion)
+
+- **Implemented `act/task8_phase_camera.py`** and committed it with the aggregator hook and its test module
+  (`feat(act): enforce task8 phase camera coverage`, guard `staged=3 check_rc=0`):
+  - **three time axes kept separate**: `evaluate_live_continuity` refuses replay-shaped input outright
+    (`INVALID` with a `REPLAY_ROWS` reason, detected by a median spacing at or below 5 ms or by missing live
+    identity fields), so a replay result can satisfy geometric feasibility but can never be reported as live
+    continuity;
+  - **the matrix must cover all nine approved phases** (SEARCH, APPROACH, ALIGN, DESCEND, GRASP, LIFT, TRANSPORT,
+    PLACE, FINAL_CHECK) for both cameras - a matrix missing any phase fails by name rather than silently checking
+    fewer things;
+  - **live continuity** rejects crossing session / reset epoch / attempt, an unknown phase or camera, a group owner
+    outside arm/gripper, visible fraction below the phase's floor, out-of-frame fraction above its ceiling, a bbox
+    centre outside the phase bounds, and a source gap beyond the phase's limit;
+  - **projection** is deterministic and ROS-free: far/behind, the near-plane margin (inclusive at exactly 1e-6 m),
+    and degenerate focal length/size/margin all refused, with top-left fill into `[0, width-1] x [0, height-1]`;
+  - **occlusion** permits only the five approved group-0 visual geoms - `table_visual`, a collision geom,
+    background and any unknown owner are refused.
+- **Aggregator hook added** (`derived_phase_camera_checks`) reporting the two axes under **different keys**, and a
+  test that proves the same replay rows give `PASS` replay coverage while live continuity stays `INVALID` - the
+  plan's own wording enforced in code.
+- **Verified:** phase-camera plus aggregator modules **45 passed, rc=0** (`beh-task3-green3.log`).
+- **One premise of mine corrected:** my first matrix-missing-phase test expected a FAIL that the evaluator could
+  not produce while it validated rows only against the supplied matrix; completeness is now enforced against the
+  approved phase list, which is what the plan actually requires.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
