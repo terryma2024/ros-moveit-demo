@@ -1058,3 +1058,21 @@ def test_live_extractors_bind_each_rule_to_its_supplied_evidence():
         live_extractors(occluded=lambda f: True, release_stable=lambda f: True,
                         placement_stable=lambda f: True, retreat_qualifying=lambda f: True,
                         cup_collision_geom="")
+
+
+def test_the_world_distance_fallback_is_opt_in_and_not_the_default():
+    from so101_demo.act.task8_live_qualification import support_distance_from_frames
+
+    def frame(stamp, *, distance=None, contacts=()):
+        entry = {"phase": "RELEASE", "release_epoch": 7, "before_first_open": True, "source_stamp": stamp,
+                 "contacts": list(contacts)}
+        if distance is not None:
+            entry["cup_support_distance_m"] = distance
+        return entry
+
+    world_only = [frame(1.0, distance=0.002), frame(1.1, distance=0.004), frame(1.2, distance=0.001)]
+    # without the opt-in the rule still insists on real contact, exactly as the design's row states
+    with pytest.raises(ValueError, match="SUPPORT_CONTACT_REQUIRED"):
+        support_distance_from_frames(world_only, cup_collision_geom="cup_a_bottom_collision")
+    assert support_distance_from_frames(world_only, cup_collision_geom="cup_a_bottom_collision",
+                                        allow_world_distance=True) == pytest.approx(0.004)
