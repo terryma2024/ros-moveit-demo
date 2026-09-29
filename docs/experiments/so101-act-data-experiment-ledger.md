@@ -33829,3 +33829,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and it can live under the evidence root rather than `/tmp`.**
 - **State:** **P1-6 in progress; the full 117-item serial CTest is re-running under exactly this environment.** **Task-list
   statuses: P1-6 in_progress, the other six pending, none completed.**
+
+## CP-1906 — Serial CTest is GREEN: 117/117, rc 0, under the environment CP-1905 established
+
+- **The gate the verdict requires to be all green, run on the frozen tree with nothing else changed:**
+  ```
+  scratch      = R/scratch/r3/tmp            (tempdir VERIFIED inside it)
+  socket base  = R/ipc                        (63 bytes, under the evidence root - not /tmp)
+  ctest -N     : 117
+  ctest -j1    : 100% tests passed, 0 tests failed out of 117        ctest rc=0
+  log          : R/scratch/r3/run/ctest-serial.log
+  ```
+  **and the three that failed in every earlier attempt (`test_unified_bridge`, `test_unified_bridge_cleanup`,
+  `test_unified_two_channel`) pass in this environment** - verified first as a targeted 3-test run (`100% tests passed,
+  0 tests failed out of 3`, rc 0) and then in the full serial run.
+- **Which makes the earlier "114/117 with three classified environment failures" obsolete:** it was not an unsolvable rule
+  conflict (CP-1902, retracted in CP-1905), it was **a missing short IPC socket base**, and the child's own limit of **103**
+  bytes (`child_runtime.py:332`) is what named it.
+- **State:** **P1-6 in progress: serial CTest green; the teleop full-module gate over `test/` and the demo package gate
+  with a MuJoCo-capable interpreter are the remaining two, then the configure/build + generated-CTest check.** **Task-list
+  statuses: P1-6 in_progress, six pending, none completed.**
