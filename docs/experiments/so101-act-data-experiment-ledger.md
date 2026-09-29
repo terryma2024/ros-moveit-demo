@@ -24911,3 +24911,23 @@ picture in both directions.**
   `current_snapshot` from real machinery (the tests substitute them), and the same for the seven phases after it; then the nine-phase case reaching
   FINAL_CHECK, the seal, the full-case journal, and the seven indexed assertions with their four negatives.
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1494 — APPROACH's production inventory: three pieces wired, one missing, one boundary method to write
+
+**Measured, not assumed - every claim below is a constructor or caller that exists (or does not):**
+
+| piece | production state |
+| --- | --- |
+| `VisibleApproachExpertRoute` | **wired**: the port builds it in `begin` through `expert_route_factory` and validates its manifest against the policy fingerprint |
+| `TrustedVisibleApproachSource` | **wired**: it is the broker's `_prefix_source_port`, and `trusted_visible_approach_source.py:66` is the only production caller of `broker.issue_prefix_source(...)` |
+| `CommandBroker.issue_prefix_source(*, ticket, prefix, source, source_kind, ...)` | **exists** (`command_broker.py:86`) and is what permits a prefix's execution |
+| `PickPlaceApproachPathScreen` | **NOT constructed anywhere in production** - the only construction is `test_act_pick_place_approach_path_screen.py:107`. **Its `inspect(goals, prefix)` needs `self.search_port.validated_search_observation()`**, so its construction belongs next to the expert route's, in the child-port builder |
+| the boundary's `execute_approach` | **does not exist**: the method the port now calls by name has to be written |
+- **So the remaining APPROACH work is exactly two things, and both are small now that the port side is done:** (1) construct the path screen in the child-port builder with the
+  search port and the broker's pieces, and (2) write `execute_approach(prepared, request)` in the boundary to issue the prefix source, let the broker execute the prefix, ask the
+  screen for the `PathProof`, capture the current snapshot, and report the eight gates from readback. **The tests substitute the motion and the readback - which is precisely the
+  I/O the review allows replacing - and the port side already refuses by name if any of it is missing.**
+- **Honest state of P1-4:** the **port side is done for all nine phases** (SEARCH, APPROACH's own prepare/qualify path, and one shared rule for the other seven); the
+  **boundary side is what remains** - and it is the same shape for every phase: execute through the broker/motion, inspect, capture, report gates. **This is a subsystem, and the
+  ledger is mapping it rather than pretending it is nearly finished.**
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
