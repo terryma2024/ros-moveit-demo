@@ -27430,3 +27430,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ```
 - **State:** item 1's context half done with its CLI half awaiting CP-1635; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope parked as a patch awaiting CP-1620;
   items 5 and 6 closed and independently confirmed; item 7 pending the code settling. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1642 — The tree is settled and green wherever a decision is not required; the rest is blocked on three owner decisions
+
+- **The confirmation run, on the clean tree and a fresh scratch:**
+  ```
+  142 passed   (nine-phase case, sealed artifact, live evidence, calibration admission, live qualification,
+                search port, case documents - 51 s)
+  ```
+  and, from the previous round, **`83 passed`** across the six measurement suites. **So nothing in the tree is red, and every commit this batch made is covered by a green focused set.**
+- **And this is the point at which the remaining work genuinely depends on decisions rather than on effort.** The three, each with its evidence and its options already recorded:
+  1. **CP-1612 - the release-epoch seal rule:** the seal requires every entry's epoch to EQUAL the identity's, while a case's samples legitimately span the release boundary (0 before RELEASE, 1 after). Options: change the rule to
+     "non-decreasing, last equals identity" (one line, blast radius named), re-stamp earlier samples (**falsifies capture time - not proposed**), or seal one artefact per epoch (cleaner semantics, larger change).
+  2. **CP-1620 - where the cleanup proof is required:** for every `CLOSED` batch (strongest; **25+ sealing fixtures to complete, already written and parked as `experiments/gate8-remediation/pending-cleanup-proof-scope.patch`**), or only at the measurement entry's
+     close-out (narrower, satisfies the P2 finding but not batches sealed by other tools).
+  3. **CP-1635 - who supplies the per-run identity:** `session_id`/`attempt_id` are created by the measurement run and `search_start_rad` is derived from the anchors, so either **the driver passes them into the composition** or **the entry pre-allocates the
+     run identity at admission**. The context now carries the fields (committed); **which of the two wires them is the decision.**
+- **And item 7 waits on all three by its own terms:** the re-run boundary must happen "仅在上述代码与证据链修复完成的集成边界" - so re-running it now would measure code that is about to change, which is exactly the reuse this batch has refused twice.
+- **State:** the batch is **blocked on those three decisions**; the goal is also **paused and disarmed**, and `update_goal(resume)` is refused by the tool ("the model cannot resume a paused goal; the user must resume it"). **Nothing is pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.**
