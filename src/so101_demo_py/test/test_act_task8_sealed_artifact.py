@@ -79,7 +79,13 @@ def test_the_index_chains_to_complete_canonical_records(tmp_path):
         assert (record["case_id"], record["session_id"], record["attempt_id"]) == (SCENARIO, SESSION, ATTEMPT)
         assert (record["reset_epoch"], record["release_epoch"]) == (index["identity"]["reset_epoch"],
                                                                    index["identity"]["release_epoch"])
-        assert len(record) == 24, "the canonical sample: no more and no fewer keys"          # 5
+        # the canonical sample is a KEY SET, not a count: the recorder itself refuses any other set, and a 24-key
+        # record with one key swapped would satisfy a length check while failing the contract (the review's point)
+        from so101_demo.act.task8_live_evidence import _SAMPLE_KEYS
+
+        assert set(record) == set(_SAMPLE_KEYS), (
+            f"the canonical key set: missing {sorted(set(_SAMPLE_KEYS) - set(record))}, "
+            f"unexpected {sorted(set(record) - set(_SAMPLE_KEYS))}")                              # 5
 
 
 def test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period(tmp_path):
