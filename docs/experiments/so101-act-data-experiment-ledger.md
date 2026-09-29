@@ -28514,3 +28514,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | the **signature** | the prefix to be frozen at signing |
 - **The resolution is a projected instant, and it satisfies all three:** the fixture can compute the **next** sample's time from its own counter (`count + 1`) **without advancing it**, use that to place the prefix's window, sign, and let the next sampling readback land exactly on it. **The sequence stays one; the window is ahead by construction; the signature freezes what will be executed.**
 - **State:** **P1-4 production pieces 1-3 committed; APPROACH chain closed; the grid's gap CLOSED by one sequence; the plan's window needs the projected instant**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1704 — The window is GREEN and the grid sees one instant twice: `GRID_REGRESSION`
+
+- **Both probes at once, which is what made the picture complete:**
+  ```
+  GRID   t=1.4   delta=None  phase=SEARCH
+  WINDOW origin=1.35 first=1.452 header=1.4 ok=True      <- the plan's window PASSES
+  GRID   t=1.4   delta=0.0   phase=APPROACH
+  -> ValueError TASK8_LIVE_EVIDENCE_GRID_REGRESSION
+  ```
+  **So the fixture's single sequence is now correct for the window and has stopped advancing between samples**: APPROACH's sample reports the same instant SEARCH's did, and the grid - whose rule is "consecutive samples are exactly one period apart, never backwards" - refuses it.
+- **And the reason is narrowed to one question, which is the next probe rather than another patch:** the port builds each sample from `canonical(observed.physical_readback, ...)`, where `observed` is `self._current_observation(observed, request)` - **so the sample's time is whatever that readback carries**. Either that readback is the fresh one (and the counter is not advancing where the fixture thinks it is), or it is the cached observation (and the port is stamping samples with an older instant). **Printing the sample's own `physics_step` beside its `sim_time_s` at `_grid_sample` answers it in one line.**
+- **Where the migration stands, honestly:** the APPROACH chain is **closed** (CP-1701), the plan's **window** is green (this entry), the **axis** and the **snapshot** are green (CP-1700), and the grid's sequence is **the one thing left** - with its failure now a **regression** (no advance) rather than a **gap** (too much advance), i.e. the clock is being consumed by something other than the samples.
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: everything green except the grid's per-sample advance**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
