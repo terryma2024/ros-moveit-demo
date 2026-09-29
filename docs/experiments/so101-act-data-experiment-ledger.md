@@ -21662,3 +21662,20 @@ not an inference of mine.**
   context, keep `SO101_TASK8_PROVIDER_SEAM` as an external-I/O substitution for tests only, and let P1-1's RED flip.
 - **State:** P1-1's RED is uncommitted while red; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup untouched;
   nothing deleted, nothing pushed.
+
+## CP-1310 — P1-1's GREEN needs three more constructor reads, and they are named
+
+- **My composition is 89 lines and its shape is known:** `_providers_from_seam()` (lines 31-49) raises
+  `PRODUCTION_PROVIDERS_UNAVAILABLE` when `SO101_TASK8_PROVIDER_SEAM` is unset, and `build_production_measurement_driver` (line 52)
+  takes `providers=None`, falling through to that seam at line 69. **The GREEN is to insert a real construction in front of it:**
+  explicit `providers` (tests) → seam (external I/O substitution) → **real construction from the admitted context and frozen
+  descriptor**, which is what the formal entry must reach with nothing set.
+- **The detector half is fully specified** (CP-1309): `DetectorFactoryOptions(backend, requested_device, allow_cpu_fallback,
+  yolo_weights_path, yolo_weights_sha256, yolo_model_id, yolo_imgsz)` built straight from the descriptor's `detector` block, then
+  `build_detector(options)` whose `yolo_detector_factory`/`grounded_detector_factory` parameters are the sanctioned test seam.
+- **Three constructors remain, and each is one read:** `PersistentTaskStack` (`runtime/task_stack.py:352`) - what it needs to be
+  constructed for a real scene; `HeadSearchController` (`act/search.py:9`); and the phase-camera callable's real form, where the
+  candidate is a matrix loaded by `load_phase_camera_matrix(...)` and adapted to the driver's `(phase, index)` call shape - with the
+  chain test's `lambda phase, index: {...}` as the documented observation shape.
+- **State:** P1-1's RED is uncommitted while red; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup untouched;
+  nothing deleted, nothing pushed.
