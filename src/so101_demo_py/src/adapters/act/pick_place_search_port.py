@@ -398,6 +398,9 @@ class PickPlaceSearchPhasePort:
         if root is None:
             raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw_records_root")
 
+        for name in ("wrist_rgb_ok", "contact_ok", "released", "placement_stable"):
+            if name not in evidence:
+                raise PickPlaceSearchPortError(f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: phase:{name}")
         raw_records = self._write_raw_records(observed, root)
         fields = canonical(raw, support_distance_max_m=threshold, raw_records=raw_records)
         if not isinstance(fields, dict):
@@ -409,18 +412,26 @@ class PickPlaceSearchPhasePort:
                     "attempt_id": request["attempt_id"], "reset_epoch": self.boundary.reset.receipt.new_epoch,
                     "release_epoch": 0}
         try:
+            found = observed.search_result.get("found")
+            if found is not True:
+                raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: wrist_target_visible")
             return build_live_evidence_sample(
                 identity=identity, phase=phase, physics_step=fields["physics_step"],
                 sim_time_s=fields["sim_time_s"], source_stamps_s=fields["source_stamps_s"],
                 source_received_monotonic_s=fields["source_received_monotonic_s"],
                 raw_records=raw_records, holding_state=fields["holding_state"],
-                frame={"wrist_frame_valid": fields["wrist_frame_valid"],
-                       "wrist_target_visible": fields["wrist_target_visible"]},
-                contact={"observation_valid": fields["contact_observation_valid"],
+                # the recorder wants the frame and contact groups; each member is taken from the component that
+                # actually observed it: the canonical derivation for the physics aggregates, the PHASE DOCUMENT for
+                # the release-epoch-relative facts (which the derivation deliberately does not provide), the phase's
+                # own wrist-RGB verdict for frame validity, and the validated search result for target visibility
+                frame={"wrist_frame_valid": evidence["wrist_rgb_ok"],
+                       "wrist_target_visible": found},
+                contact={"observation_valid": evidence["contact_ok"],
                          "bilateral_contact": fields["bilateral_contact"],
                          "no_fingertip_contact": fields["no_fingertip_contact"],
-                         "cup_supported": fields["cup_supported"], "released": fields["released"],
-                         "placement_stable": fields["placement_stable"]},
+                         "cup_supported": fields["cup_supported"],
+                         "released": evidence["released"],
+                         "placement_stable": evidence["placement_stable"]},
                 measurements={"cup_support_distance_m": fields["cup_support_distance_m"],
                               "end_effector_position_m": fields["end_effector_position_m"],
                               "cup_position_m": fields["cup_position_m"],

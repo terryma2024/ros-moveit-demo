@@ -6,10 +6,19 @@ must supply joint addresses from the compiled, content-bound MuJoCo model.
 
 from __future__ import annotations
 
+import copy
 import math
 import time
 
 from so101_demo.act.contracts import finite, identifier, sha256
+from so101_demo.act.execution import bounded_positions
+from so101_demo.act.joints import ACT_JOINTS, ARM_JOINTS
+
+
+def _finite(value) -> bool:
+    import math
+
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 class PickPlaceReadbackError(RuntimeError):
@@ -61,6 +70,10 @@ class PickPlacePhysicalReadback:
             model, expected_model_sha256=expected_model_sha256,
             expected_mujoco_version=expected_mujoco_version,
         )
+        import mujoco
+        self.joint_dofs = tuple(int(model.jnt_dofadr[
+            mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name)
+        ]) for name in ACT_JOINTS)
         self.max_skew = finite(max_source_skew_s)
         self.max_wall_age = finite(max_wall_age_s)
         self.joint_tolerance = finite(joint_tolerance_rad)
@@ -390,30 +403,73 @@ class PickPlacePhysicalReadback:
         )
 
 
-    def capture_evidence_fields(self, captured, *, support_distance_max_m, raw_records):
-        """The canonical per-frame fields one capture() can supply, for CLOSE..FINAL_CHECK.
+    def capture_evidence_fields(self, captured, *, support_distance_max_m, raw_records,
+                               end_effector_position_m=None):
+        """The adapter's entry point: the module-level derivation below, which touches no adapter state."""
 
-        The physics aggregates come from the world evidence (never from a label); the step, sim time,
-        both stamp maps and the caller's dereferenceable raw records complete the frame. The
-        release-epoch-relative fields are the phase sequence's business, not this method's.
-        """
+        return capture_evidence_fields(captured, support_distance_max_m=support_distance_max_m,
+                                       raw_records=raw_records,
+                                       end_effector_position_m=end_effector_position_m)
 
-        from so101_demo.act.task8_live_evidence import derive_frame_aggregates
 
-        if type(captured) is not dict or set(captured) != {
-                "world", "scene", "contact", "observation", "reference", "source_stamps_s",
-                "source_received_wall_s"}:
-            raise PickPlaceReadbackError("READBACK_CAPTURE_INVALID")
-        world = captured["world"]
-        aggregates = derive_frame_aggregates(world, support_distance_max_m=support_distance_max_m)
-        step = getattr(world, "simulation_step", None)
-        at_s = getattr(world, "simulation_time_s", None)
-        if type(step) is not int or step < 0 or not math.isfinite(at_s) or at_s < 0:
-            raise PickPlaceReadbackError("READBACK_CAPTURE_INVALID")
-        return {**aggregates, "physics_step": step, "sim_time_s": at_s,
-                "source_stamps_s": dict(captured["source_stamps_s"]),
-                "source_received_monotonic_s": dict(captured["source_received_wall_s"]),
-                "raw_records": dict(raw_records)}
+def capture_evidence_fields(captured, *, support_distance_max_m, raw_records,
+                           end_effector_position_m=None):
+    """The canonical per-frame fields one capture() can supply, for CLOSE..FINAL_CHECK.
+
+    The physics aggregates come from the world evidence (never from a label); the step, sim time,
+    both stamp maps and the caller's dereferenceable raw records complete the frame. The
+    release-epoch-relative fields are the phase sequence's business, not this method's.
+    """
+
+    from so101_demo.act.task8_live_evidence import derive_frame_aggregates
+
+    if type(captured) is not dict or set(captured) != {
+            "world", "scene", "contact", "observation", "reference", "source_stamps_s",
+            "source_received_wall_s"}:
+        raise PickPlaceReadbackError("READBACK_CAPTURE_INVALID")
+    world = captured["world"]
+    aggregates = derive_frame_aggregates(world, support_distance_max_m=support_distance_max_m)
+    step = getattr(world, "simulation_step", None)
+    at_s = getattr(world, "simulation_time_s", None)
+    if type(step) is not int or step < 0 or not math.isfinite(at_s) or at_s < 0:
+        raise PickPlaceReadbackError("READBACK_CAPTURE_INVALID")
+    # the end-effector position is MuJoCo output, so the caller that holds the model supplies it; the recorder
+    # requires it, and a frame without it must not be recorded as if it had one
+    position = end_effector_position_m
+    if (not isinstance(position, (list, tuple)) or len(position) != 3
+            or any(not _finite(value) for value in position)):
+        raise PickPlaceReadbackError("READBACK_END_EFFECTOR_REQUIRED")
+    # the recorder's canonical vocabulary is seven sources, while the synchronizer's audit covers the four sensor
+    # streams - so the three physics sources are stamped from their OWN documents here, which the capture already
+    # validated against each other. For their receive time the capture records none: the scene carries its own
+    # monotonic bounds, and world/contact are validated to be within the readback skew of it, so the scene's receipt
+    # is used for all three and named as such rather than invented per source.
+    scene_document = captured["scene"]
+    contact_document = captured["contact"]
+    scene_receipt_ns = scene_document["clock_interval_end_monotonic_ns"]
+    # the scene's monotonic bound is nanoseconds: an int in the real capture, and accepted as a finite number here
+    # rather than pinned to one Python type
+    if (not isinstance(scene_receipt_ns, (int, float)) or isinstance(scene_receipt_ns, bool)
+            or not _finite(float(scene_receipt_ns)) or float(scene_receipt_ns) <= 0):
+        # the refusal names what it saw: "invalid" alone cost a diagnostic round when this was first hit
+        raise PickPlaceReadbackError(
+            f"READBACK_CAPTURE_INVALID: scene clock {type(scene_receipt_ns).__name__}={scene_receipt_ns!r}")
+    physics_stamps = {"world": float(getattr(world, "simulation_time_s")),
+                      "scene": float(scene_document["simulation_time_s"]),
+                      "contact": float(contact_document["simulation_time_s"])}
+    if len(set(physics_stamps.values())) > 1 and \
+            max(physics_stamps.values()) - min(physics_stamps.values()) > 0:
+        pass                                  # their agreement is _search_evidence's rule, not this function's
+    stamps = {**dict(captured["source_stamps_s"]), **physics_stamps}
+    received = {**dict(captured["source_received_wall_s"]),
+                **{name: scene_receipt_ns / 1e9 for name in physics_stamps}}
+    return {**aggregates, "physics_step": step, "sim_time_s": at_s,
+            "end_effector_position_m": list(position),
+            "source_stamps_s": stamps,
+            "source_received_monotonic_s": received,
+            "raw_records": dict(raw_records)}
+
+
 
 
 # Legacy Python API for version-one pick-place callers.
