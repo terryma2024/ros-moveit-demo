@@ -20830,3 +20830,28 @@ not an inference of mine.**
   batch paid for writing before reading.
 - **State:** HEAD `c01b3fc0` plus this checkpoint; item 5's fixture unwritten; items 1-4 complete and committed; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1268 — The binder's contract, so the fixture's artifact directory is determined rather than invented
+
+- **`ActArtifactBinding` (in `act_artifacts.py`), read:**
+  ```python
+  _ENV_PREFIX = "SO101_ACT_ARTIFACT_"
+  class ActArtifactBinding:
+      evidence_root: Path
+      paths: tuple[tuple[str, Path], ...]        # built from _PATHS
+      hashes: tuple[tuple[str, str], ...]        # built from _HASHED
+      policy_fingerprint: str
+      # from_environment() reads, under the prefix:
+      #   EVIDENCE_ROOT, POLICY_FINGERPRINT, <NAME>_PATH (for _PATHS), <NAME>_SHA256 (for _HASHED)
+      # verify_environment(environment) -> ActArtifactBinding   (the entry the child calls)
+      # and to_environment() writes the same names back out - so the binding round-trips through its own variables
+  ```
+  **So item 5's fixture is now fully determined:** create an artifact directory holding the `_PATHS` members with **real contents and
+  matching sha256s**, export `SO101_ACT_CAMPAIGN_ID` plus the `SO101_ACT_ARTIFACT_*` names (or let `to_environment()` produce them,
+  which is the honest path since it is the same code the admission side uses), construct the child, and let **its** constructor verify
+  and bind - after which `_act_hashes` exists and the request payload can be built from `binding.hashes`.
+- **What is left to read, and it is small:** the `_PATHS` and `_HASHED` member names, and `verify_environment`'s body (line 92 onwards)
+  to know exactly what it checks - file existence, digest equality, or both - because the fixture must satisfy it rather than work
+  around it. **Two greps, then the fixture.**
+- **State:** HEAD `ee72440d` plus this checkpoint; item 5's fixture unwritten but no longer uncertain; items 1-4 complete and committed;
+  no stack, no hardware, nothing deleted, nothing pushed.
