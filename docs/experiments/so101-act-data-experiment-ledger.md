@@ -23535,3 +23535,14 @@ not an inference of mine.**
   committed, green and ready to submit as they stand.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1421 — The appending lives in `CaseEvidenceDriver`, driven by the port's `record_evidence`
+
+- **Read:** the child **constructs** `CaseEvidenceDriver(case_id=request.payload["scenario_id"], ...)` at `ros_child.py:518` and does not append
+  anything itself - **so the recorder is fed by the production port's `record_evidence` hook**, which is on the port's public surface (the probe at
+  CP-1348 listed it) and which my substituted run never triggers. **That is why the seal refuses an unfed case, and it is a one-call gap in the
+  fixture rather than a missing capability.**
+- **The call sites are printed above**, so the next round wires the boundary to feed that hook the same way the production segment does - **and the
+  samples it feeds are the ones the seven indexed assertions will read, which is exactly where the reviewer's second half begins.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
