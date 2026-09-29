@@ -19083,3 +19083,25 @@ not an inference of mine.**
   it. Both are defensible and they differ in what the reviewer sees, so this goes to the owner rather than being chosen
   silently - the same discipline as the descriptor decision at CP-1131.
 - **State:** goal active (revision 51, cap 1000); HEAD `2c6e9e4a`; staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1190 — The rows now model the case's release, and the last assertion is one alignment away
+
+- **What changed and why it was needed:** my port's rows were built by the chain fixture's `_sample`, whose `contact` block is
+  one fixed set - so no row could ever show the gripper opening. `_record` now builds its rows with
+  `build_live_evidence_sample` directly, varying `holding_state` and the contact block by phase: **held and not released**
+  before RELEASE, **open, supported and untouched by the fingertips** from RELEASE onward. That is the honest way to assert a
+  release open event - modelling the case rather than adding an assertion that happens to pass, which is what CP-1185 said this
+  artefact would require.
+- **Two fixture errors on the way, both mine and both recorded:** the sealed entries are not the nested sample I hand the
+  window (so the released flag must be read from either shape), and `sample["contact"]` does not exist on the built document -
+  which is what pushed the row construction up into the builder where it belongs.
+- **The failure is now at my own assertion (line 222)**, which is the release-epoch/adjacent-rows check; the row modelling and
+  the seal are working. So Boundary V stands at **six of seven artefacts green** with one assertion to align:
+  | artefact | state |
+  | --- | --- |
+  | SEARCH rows, FINAL_CHECK, sealed readback, confirmed retirement | ✅ CP-1185 |
+  | release open event modelled in the rows | ✅ rows record it (assertion being aligned) |
+  | three adjacent 10 Hz support rows in one epoch | ⏳ same assertion |
+  | journal path and hash | ⏳ child/owner path - **the decision at CP-1189 is with the owner** |
+- **State:** goal active (revision 51, cap 1000); HEAD `41803c12`; staged 0; logs `beh-r798` … `beh-r800`; no full suite, no
+  push, no stack, no hardware.
