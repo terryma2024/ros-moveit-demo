@@ -18695,3 +18695,19 @@ not an inference of mine.**
   CP-1162 did for the bundle fixture. The **controlled-config-hash** case needs the contract loader's `expected_hashes` path,
   which is a different boundary (the contract, not the descriptor) and gets its own RED.
 - **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1173 — Item 3, third case: an opaque digest is refused because it proves nothing
+
+- **Landed with its negative test in one commit:** a `--context` that carries `runtime_config_sha256` but **no** parsed
+  `runtime_descriptor` is now refused as **`MEASUREMENT_RUNTIME_DESCRIPTOR_REQUIRED`**. The rule follows §4.2's own words -
+  preparation accepts only content the production validator can parse - and it is the difference between provenance **about**
+  a file and provenance **of** the configuration actually measured.
+- **The migration this could have demanded turned out to be nil, and I checked rather than assumed:** a grep for `"--context"`
+  across `src/so101_demo_py/test/` matches **one** file, my own descriptor test, whose contexts already carry a descriptor.
+  So no other fixture needed changing - which is exactly the check CP-1162's bundle fixture taught me to run first.
+- **GREEN: 64 passed, rc=0** across the runtime-descriptor, aggregator, measurement-contract, live-CLI and artifact-bundle
+  suites (`beh-r779.log`), fresh NVMe scratch, `TMPDIR` verified through the exact test interpreter.
+- **Item 3 stands at three of four:** opaque-digest-only ✅ (this checkpoint), descriptor disagreement ✅ (CP-1172), unindexed
+  descriptor ✅ (CP-1172). **Remaining:** the controlled-config-hash case, which belongs to the contract loader's
+  `expected_hashes` boundary rather than to the descriptor, and therefore gets its own RED.
+- **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
