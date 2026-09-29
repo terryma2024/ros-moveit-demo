@@ -32114,3 +32114,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   planning scene, the readback members and the tolerances, and the neck index is the next value to correct - from the
   model, not from a constant.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and
   the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1848 — CP-1847's index hypothesis was REFUTED, and the real cause is named by the same method
+
+- **The instrumented neck check answered in four lines:**
+  ```
+  [neckdiag] neck_qpos=0  len(qpos)=8
+  [neckdiag] qpos[0]=0.0  qpos[6]=0.0
+  [neckdiag] result neck_yaw_rad=0.1
+  [neckdiag] sweep.step_s=0.5  tolerance=0.002
+  ```
+  **so the index is not the cause at all:** the scene's qpos is **zero at both 0 and 6**, the sweep checker answers `True`
+  and has its `step_s`, and the tolerance is positive. **The disagreement is `abs(0.0 - 0.1) = 0.1 > 0.002`** - the search
+  result claims a neck yaw of `0.1` rad **that the scene it read does not have.**
+- **Which refutes CP-1847's hypothesis in the same breath as confirming the method.** CP-1847 reasoned that a fixture
+  hardcoding `neck_qpos = 0` while the ACT scene's neck is joint 6 would explain the refusal; **the diagnostic shows both
+  indices hold `0.0`, so the index was never the problem.** The hypothesis was plausible, cheap to state, and wrong - and
+  it was refuted by printing the two numbers it depended on rather than by arguing about them. **That is the third time
+  this drive has used "instrument the guard, run, let the unprinted or printed value name itself", and the score is now
+  two confirmations (CP-1845) and one refutation (this one) - which is the method working in both directions.**
+- **And the real inconsistency is a fixture one, with the production meaning to hand:** the scene's `qpos` is the physics
+  state, the result's `neck_yaw_rad` is the neck yaw reported for the same instant, **and the two must agree within the
+  admitted tolerance** - so a `_Scene()` that is all zeros while the result says `0.1` is the double disagreeing with
+  itself. **Where to correct it is a question about which side is the fiction: the result's `0.1` or the scene's
+  zeros.**
+- **State:** **P1-5 in progress with the neck refusal's cause identified as a fixture self-disagreement (`0.1` vs `0.0`),
+  CP-1847's index hypothesis retracted, and the diagnostic removed from the source as before.** P1-1 through P1-4
+  CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
+  statuses are unchanged, so they are not re-stated.**
