@@ -12629,3 +12629,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   fixture defect, not a production defect.
 - **State:** Task 7 in progress at a WIP commit naming its own red suite; Tasks 1-6 committed and green; no runtime,
   no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-917 — Task 7's live-evidence suite GREEN (37 passed); the module work is complete
+
+- **The last failure is fixed and the reasoning is now visible in the code it touched.** That test asserted a grid
+  sample before CLOSE is refused - true only under the replaced CLOSE-only gate. Since SEARCH through CLOSE are all
+  required phases now, the probe uses `IDLE`, a phase **outside** the tuple, which preserves the intent ("a sample
+  cannot open the window from nowhere") while matching the v2 contract; the rest of the test then drives **all nine
+  required phases** in order and seals. Comment text was updated to match.
+- **Verified:** `test_act_task8_live_evidence.py` reports **37 passed, rc=0** (`beh-task7-green6.log`), and the
+  broader focused set - live evidence, phase camera and the deterministic renderer - reports
+  **rc=0** (`beh-task7-green7.log`).
+- **Committed as a real feature commit**, not a WIP: `feat(act): require the nine live evidence phases and
+  correlate release open`, covering the nine-phase window with its SEARCH entry point, `correlate_release_open`'s
+  same-epoch / raw-ref / indexed-ref / three-consecutive-rows rules and summary refusal, and the audit camera's
+  exclusion from ACT observations.
+- **Accountability for the stretch:** all four failures cleared between CP-913 and CP-917 were **test or fixture
+  defects** - an assertion encoding the replaced gate (twice), and my own guessed builder fixture (identity, then
+  frame/contact/measurements key sets) - found by reading the code's own contract. No production validation was
+  weakened to make a test pass, and the ledger records the two WIP commits whose messages state their red suites so
+  the intermediate history cannot be mistaken for a regression.
+- **Remaining in Task 7:** the plan's steps 3-4 - provision the recorder through the real `PickPlaceCaseOwner` and
+  child startup receipt, bind it in `ros_child._run_pick_place()` before `PickPlaceRunner`, open at SEARCH, seal only
+  after FINAL_CHECK, read the returned `live_evidence_artifact` back before the journal row, and add
+  `src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py` keeping the real chain end to end.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
