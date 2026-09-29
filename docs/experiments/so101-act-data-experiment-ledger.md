@@ -17031,3 +17031,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   **publishing half** - real measured values published rather than written as PASS, the four canonical documents, a real
   28-field `TASK8_READY`, render-twice byte comparison with a single publish, on-disk readback of the sample path and hash,
   then `require_gate(report, "task8_live")` and `validate_head_search_binding()`.
+
+## CP-1096 — The cross-root identity RED needs the same one-schema fixture as CP-1082
+
+- **Attempted the RED and it stopped on a fixture, not on the assertion:** `KeyError: 'contract_sha256'` - the aggregator
+  entry reads that key off the contract it is given, and `load_contract_v2()` does not carry it. So the test needs a
+  **bound** v2 contract (the `bind_measurement_contract(TEMPLATE_V2, identities, …)` shape CP-1082 established), and, more
+  importantly, the batches it aggregates must carry **that contract's** identity - because the entry already compares each
+  batch's `measurement_contract_sha256` against the bound contract. A fixture that hard-codes `"a" * 64` can never satisfy
+  that, which is why the "vary one member" experiment needs the fixture to **take its identity from the bound contract**
+  first.
+- **Reverted, so the suite stays green:** 33 passed restored (`beh-r692-restored.log`), scratch `<R>/scratch/r692b.<n>`
+  with `TMPDIR` verified through the exact test interpreter; the failed attempt is `beh-r692-red.log`.
+- **What the next attempt needs, in order:** (1) bind a v2 contract once per test and hand `_sealed_batch` its identities;
+  (2) then vary exactly one member between two batches; (3) then assert `CALIBRATION_IDENTITY_MISMATCH` from the entry,
+  which today compares provenance across roots and the contract per batch but **not** the ten members across roots.
+- **State:** Boundary IV's index work is complete apart from this one comparison; the publishing half is untouched. The
+  suite is green at **33 passed**, HEAD `925ca90b` plus this checkpoint.
