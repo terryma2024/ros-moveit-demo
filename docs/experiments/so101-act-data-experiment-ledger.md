@@ -13058,3 +13058,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7's module, runner baseline and port (attachment plus grid feed) all
   green; the user's six in-flight files intact; Tasks 8-10 untouched; no runtime, no package gate, no push, no
   evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-935 — How the owner reaches the window, and the one piece this path still needs
+
+- **Read the owner's construction path** (`pick_place_case_owner.py`): `self.child_launch` is set from the child launch
+  record and then `ports = await self.child_owner.start(context, launches, artifacts=artifacts)` with
+  `self.worker = ports[0]`; `self.context`, `self.worker`, `self.stack` and `self.child_launch` are all initialised to
+  `None` in `__init__` and populated during `start`. So the owner **already holds the port object** as
+  `self.worker` - the same object that now owns `_live_evidence_window` - which means the failure seal needs no new
+  plumbing through the child startup receipt after all; it needs a public accessor on the port.
+- **Three small pieces, in order, now that the path is known:**
+  1. `pick_place_search_port.py`: expose the window publicly (`live_evidence_window` property) rather than have callers
+     reach for `_live_evidence_window`, so the owner depends on an interface instead of a private name;
+  2. the window/recorder: provide an explicit **invalid-seal** entry point for the failure path. `seal()` alone is not
+     usable there - it validates that the window reached FINAL_CHECK, which by definition a failed run did not - so
+     the failure path needs its own named operation rather than a misused success seal;
+  3. `PickPlaceCaseOwner._retire`: before the child retirement step (`if not self._child_retired:` /
+     `await self.child_owner.stop_owned()`), invalid-seal the window reached through `self.worker` when it exists and
+     is open, idempotently, so both `finish()` and `retire_failed_start()` are covered by one insertion.
+- **Discipline for the next edit:** `pick_place_case_owner.py` is **user-dirty**, so per the rules adopted in CP-930 /
+  CP-932 my change there must not be staged with `git add <file>` - it stays uncommitted in their file until their
+  work lands, or is staged hunk-wise only.
+- **State:** Tasks 1-6 committed and green; Task 7's module, runner baseline and port (attachment plus grid feed) all
+  green at **81 passed**; the user's six in-flight files intact; Tasks 8-10 untouched; no runtime, no package gate, no
+  push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
