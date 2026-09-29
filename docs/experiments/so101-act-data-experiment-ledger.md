@@ -19641,3 +19641,29 @@ not an inference of mine.**
   about the code.
 - **State:** HEAD `c3e7da87` plus this checkpoint; staged 0; every log, JUnit file, scratch and IPC base retained as deletion
   candidates; no push, no MuJoCo stack, no hardware.
+
+## CP-1214 — Why all three colcon attempts failed, found in the recorded build environment
+
+- **The recorded build environment says the package was built with the venv first on `PATH`:**
+  ```
+  PATH=/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin:...
+  PYTHONPATH=<worktree>/build/so101_demo_py:<worktree>/install/so101_demo_py/lib/python3.12/site-packages:...
+  ```
+  So the *build* used `test-venv`. The *test* step nonetheless collects with an interpreter that cannot import `mujoco`, and that
+  explains all three attempts at once: **`colcon test` runs pytest through `sys.executable` - the Python executing colcon,
+  which is the system one - and it rewrites `PYTHONPATH` from this recorded file**, so my `PATH` prefix (attempt 3) could not
+  affect it and my `PYTHONPATH` export (attempt 2) was overwritten before pytest started. Neither is a fixable-by-argument
+  situation; the interpreter has to be right for the process that runs colcon.
+- **The two real routes, neither of which I have taken:**
+  1. **run colcon under an interpreter that can import the package's dependency** - i.e. have `colcon` itself available to
+     `test-venv` (install it there, or run it from a python that has both colcon and `mujoco`);
+  2. **add the venv's site-packages to the recorded build environment** so the test step's rewritten `PYTHONPATH` includes it -
+     a one-line change to a **build artefact** that the next build regenerates, which is why it is a workaround rather than a fix.
+  Route 1 is the honest one and it changes the environment rather than the evidence; route 2 is cheap but edits generated state.
+  Both are outside "run the gate again", so this goes back to the owner rather than being improvised - the same discipline that
+  has held all stretch.
+- **What is proven and unaffected by this:** the ordinary package scope passes **5638 tests with 0 failures under pytest-xdist**
+  on a fresh scratch and fresh IPC base (CP-1211), and the authorised fixture fix is RED→GREEN (CP-1210). The package gate's
+  blocker is an interpreter mismatch in the `colcon` runner, not a defect in the code under test.
+- **State:** HEAD `b8b12891` plus this checkpoint; staged 0; all three colcon logs, both xdist artefacts, every scratch and IPC
+  base retained as deletion candidates; no push, no MuJoCo stack, no hardware.
