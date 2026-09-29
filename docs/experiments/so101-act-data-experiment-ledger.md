@@ -13565,3 +13565,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
   set 244); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
   gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-956 — Real-owner retirement test written from the completed specification: 5 of 6 cases green
+
+- **Wrote the retirement-path case into the chain test**, exercising the **real** `PickPlaceCaseOwner._retire` with
+  every double built to the specification recorded in CP-949/951/952/953/954/955: a workload-service double, a child
+  owner double writing a child `cleanup-receipt.json` (no socket or ready files present), a stack double writing the
+  stack receipt with `physical_stop_confirmed`/`graph_clear`, an async `final_clear_probe` returning `True`,
+  `artifact_binding` as a callable, `require_startup_proof=False`, real `OwnerKey`s (`pid/pgid/started_ticks/
+  argv_sha256/environment_sha256`), and a real open window carrying one SEARCH grid sample. The assertions are the two
+  that matter: both receipts exist and all three retirement flags are set, and the open window ends with
+  `_invalid_reason == "OWNER_RETIRE"` and refuses further grid samples.
+- **Measured: 5 passed, 1 failed** (`beh-task7-owner2.log`). The failure is
+  `AttributeError: 'types.SimpleNamespace' object has no attribute 'finish'`, raised before any of the retirement
+  assertions ran - so the fixture never reached `_retire`.
+- **What that error most likely means, and the exact next check:** the `fix`...`finish` call is reaching a
+  `SimpleNamespace` rather than the real owner, which suggests the symbol imported as
+  `so101_teleop.unified.pick_place_case_owner.PickPlaceCaseOwner` is not the class holding `finish`, or that
+  `PickPlaceCaseOwner(...)` returned an unexpected object. The next step is one read: confirm the class's `finish` is
+  defined on the object that module exports (and that no wrapper or alias shadows it), then re-run. Everything else in
+  the case is already in place.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
+  set 244, chain file 5 of 6); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no
+  runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.

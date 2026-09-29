@@ -174,3 +174,84 @@ def test_an_unfinished_window_blocks_the_seal_rather_than_passing_silently(tmp_p
     with pytest.raises(ValueError):
         port.seal_live_evidence({"scenario_id": "full-01", "session_id": "session-1",
                                  "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 7})
+
+
+# --- the retirement path through the REAL owner ------------------------------------------------------------
+
+def _owner_key(pid: int):
+    from so101_teleop.unified.contracts import OwnerKey
+
+    return OwnerKey(pid=pid, pgid=pid, started_ticks=pid * 10, argv_sha256="a" * 64,
+                    environment_sha256="b" * 64)
+
+
+def _receipt(root: Path, key, *, stack: bool, session_id=None, ros_domain_id=None) -> None:
+    payload = {"leader_pid": key.pid, "pgid": key.pgid, "started_ticks": key.started_ticks,
+               "argv_sha256": key.argv_sha256, "group_clear": True}
+    if stack:
+        payload.update(session_id=session_id, ros_domain_id=ros_domain_id,
+                       physical_stop_confirmed=True, graph_clear=True)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "cleanup-receipt.json").write_bytes(json.dumps(payload).encode())
+
+
+def test_the_real_owner_invalid_seals_an_open_window_before_child_retirement(tmp_path):
+    """Exercises the real `PickPlaceCaseOwner._retire`, so the uncommitted retirement-path insertion is covered."""
+
+    import asyncio
+    from types import SimpleNamespace
+
+    from so101_teleop.unified.pick_place_case_owner import PickPlaceCaseOwner
+
+    recorder, window = _sealed_chain(tmp_path)
+    child_key, stack_key = _owner_key(11), _owner_key(12)
+    child_root, stack_root = tmp_path / "child", tmp_path / "stack"
+
+    # the window is open (one SEARCH sample only), so retirement must invalid-seal it rather than seal it
+    evidence_root = tmp_path / "open-evidence"
+    evidence_root.mkdir()
+    open_recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
+                                              session_id="session-1", attempt_id="attempt-1")
+    open_window = LiveEvidenceWindow(open_recorder, identity=_identity(), period_s=PERIOD_S)
+    open_window.add_grid(_sample(evidence_root, phase="SEARCH", step=0, sim_time=0.0))
+
+    child = SimpleNamespace(mujoco_session_id="session-1", ros_domain_id=3, socket_root=str(child_root))
+    stack = SimpleNamespace(launch=SimpleNamespace(evidence_root=str(stack_root)), owner=stack_key,
+                            process=object())
+    port = SimpleNamespace(live_evidence_window=open_window)
+
+    async def cancel(_request):
+        return {"stopped_confirmed": True}
+
+    async def stop_owned():
+        _receipt(child_root, child_key, stack=False)
+
+    async def stop():
+        _receipt(stack_root, stack_key, stack=True, session_id="session-1", ros_domain_id=3)
+
+    async def final_clear_probe(_domain):
+        return True
+
+    port.cancel = cancel
+    child_owner = SimpleNamespace(stop_owned=stop_owned)
+    stack.stop = stop
+    owner = PickPlaceCaseOwner(SimpleNamespace(), child_owner, stack_factory=lambda *a: stack,
+                               final_clear_probe=final_clear_probe, artifact_binding=lambda *a: {},
+                               require_startup_proof=False)
+    owner._ready = True
+    owner.context = SimpleNamespace()
+    owner.worker = port
+    owner.child_launch = child
+    owner.stack = stack
+    owner.child_owner_key = child_key
+    owner.stack_owner_key = stack_key
+
+    asyncio.run(owner.finish(attempt_id="attempt-1"))
+
+    assert owner._child_retired is True and owner._stack_retired is True and owner._final_clear is True
+    assert (child_root / "cleanup-receipt.json").is_file() and (stack_root / "cleanup-receipt.json").is_file()
+    # the open window was invalid-sealed with the retirement reason, before the child was retired
+    assert getattr(open_window, "_sealed", False) is True
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_SEALED"):
+        open_window.add_grid(_sample(evidence_root, phase="APPROACH", step=1, sim_time=PERIOD_S))
+    assert getattr(open_window, "_invalid_reason", None) == "OWNER_RETIRE"
