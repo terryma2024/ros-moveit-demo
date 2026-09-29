@@ -22094,3 +22094,24 @@ not an inference of mine.**
 - **State:** P1-3's production half, the schema fix and all of P1-3's own tests are green; this is the last fixture in the batch's P1-3
   group; changes remain uncommitted while it is red; no stack, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
   nothing pushed.
+
+## CP-1334 — Astra re-review P1-3 is GREEN: the entry reads the seal back, and a real defect came with it
+
+- **`124 passed, rc=0`** across seven suites (`p13-green15.log`).
+- **Against the reviewer's finding** ("the driver returns an INVALID sealed batch on acquisition/cleanup failure, but the CLI ignores the
+  returned status, appends VALID, and returns zero"): the entry now reads the seal back, has the schema validate **path, identity and
+  closure**, and on a terminal status other than `CLOSED` appends **`measurement INVALID: <error_code>`** and **returns 1**, leaving the
+  evidence in place; a `CLOSED` seal still appends `VALID` and returns 0.
+- **And the requirement exposed a genuine production defect, which is now fixed:** the validator allowed only
+  `_BATCH_REQUIRED | {cleanup, contamination}` while the driver writes `error_code` on every INVALID seal - **so no INVALID batch could ever
+  be validated**, and the readback P1-3 demands would have been impossible. `error_code` is now allowed **only** for a non-`CLOSED` status,
+  leaving CLOSED exactly as strict as before.
+- **Fixtures were strengthened, never the checks:** the marker seals are gone; a schema-valid CLOSED seal helper writes the **nine phase
+  rows** with **alphabetically increasing** source stamps (the validator sorts by file name) and indexes its **whole closure**; the contract
+  suite's entry test asserts the refusal **by name**; and the seam test expects the refusal a provider stand-in legitimately earns while
+  still asserting that the seam ran.
+- **Two traps worth recording:** an assertion of the form `"VALID" not in line` is wrong because **`INVALID` contains `VALID`** - the outcome
+  must be checked as a **token**; and the test's `assert recorded.exists()` is the one that proves the seam ran, so the refusal had to be
+  expected **around** the call rather than by weakening anything.
+- **State:** committed with seven suites green; build copies synced; no stack started, no CUDA, no actuators, no hardware; cleanup
+  untouched; nothing deleted, nothing pushed.
