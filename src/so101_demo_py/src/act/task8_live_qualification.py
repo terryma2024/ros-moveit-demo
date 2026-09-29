@@ -331,15 +331,31 @@ def _span_s(samples) -> float:
     return max(stamps) - min(stamps)
 
 
-def retreat_distance_m(samples) -> float:
-    """The displacement of the end effector across the RADIAL_RETREAT samples of one run."""
+def retreat_distance_m(frames, *, qualifying) -> float:
+    """The design's `retreat_distance_m` rule: the radial displacement from the placed cup at the first qualifying
+    RADIAL_RETREAT readback.
 
-    retreat = sorted((sample for sample in samples if sample.get("phase") == "RADIAL_RETREAT"),
-                     key=lambda sample: sample["sim_time_s"])
-    if len(retreat) < 2:
-        raise ValueError("RETREAT_SAMPLES_REQUIRED: two RADIAL_RETREAT samples are needed")
-    first, last = retreat[0]["end_effector_position_m"], retreat[-1]["end_effector_position_m"]
-    return sum((later - earlier) ** 2 for earlier, later in zip(first, last)) ** 0.5
+    The radial distance is the horizontal distance between the end effector and the cup at each frame; the reported
+    value is how far that distance has grown by the **first** frame whose clearance, contact and pose predicates all
+    hold together. A run with no such readback is refused, as its design row requires ("每次必须出现 qualifying
+    readback"), and the predicate is supplied by the caller because it is read from the raw records rather than from
+    the sample keys.
+    """
+
+    retreat = sorted((frame for frame in frames if frame.get("phase") == "RADIAL_RETREAT"),
+                     key=lambda frame: frame["source_stamp"])
+    if not retreat:
+        raise ValueError("RETREAT_SAMPLES_REQUIRED: no RADIAL_RETREAT frame in this run")
+
+    def radial(frame) -> float:
+        cup, effector = frame["cup_position_m"], frame["end_effector_position_m"]
+        return ((effector[0] - cup[0]) ** 2 + (effector[1] - cup[1]) ** 2) ** 0.5
+
+    baseline = radial(retreat[0])
+    for frame in retreat:
+        if qualifying(frame) is True:
+            return radial(frame) - baseline
+    raise ValueError("RETREAT_QUALIFYING_READBACK_REQUIRED: no frame satisfied clearance, contact and pose stability")
 
 
 def placement_stable_s(samples) -> float:
