@@ -14306,3 +14306,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
   candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-984 — Task 8's code side is complete; the remaining piece is where the raw records are written
+
+- **Searched for the writer of the raw record files the samples reference, and it is not in the non-dirty source:**
+  `task8_live_evidence.py` validates and stores the `raw_records` **references** (`{relative_path, sha256}`) on each
+  sample and `append` enforces them, but nothing under `src/so101_demo_py/src` except an unrelated benchmark reporter
+  writes files with a `relative_path` field. So the concrete container shape of a raw record - what a `contact` or
+  `wrist` record actually holds, and under which key its pair list sits - is produced by code I have not read, most
+  likely in the port or driver layer, some of which is **user-dirty** and therefore off-limits to read-and-rewrite
+  without care.
+- **What that means for the remaining Task 8 work, stated precisely:** the five production extractors need two
+  things - the record's container key for its pair list, and the wrist record's occlusion fields. Neither is known, and
+  both are exactly the kind of thing this session has repeatedly caught me guessing, so they are **not** being
+  guessed. The good news is that the code side is already built to accept them: `live_extractors` takes the predicates
+  and the collision geom from the caller, `make_raw_reader` resolves and verifies any indexed record by name, and
+  `build_task8_qualified_report` performs the full weld once extractors exist.
+- **Two honest routes for the next session, in order of preference:** (1) read the port/driver path that writes the
+  records (including any user-dirty file, read-only) and write the extractors to its real shape, then a test that
+  drives the 33-field path end to end; or (2) if that writer turns out to be part of the user's in-flight work,
+  record the boundary and let the wiring land with it rather than duplicating it.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation, collection,
+  raw-access, extractor and weld layers green at 49 across two suites, with the production extractors blocked only on
+  an unread container shape rather than on any missing capability; Tasks 9-10 untouched; the goal is armed with a
+  756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
+  candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
