@@ -13375,3 +13375,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7 green at every increment with the plan's Step-4 command at **53
   passed**; the three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no
   package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-949 — The real owner's `start()` contract enumerated; the chain fixture is now mechanical
+
+- **Read `PickPlaceCaseOwner.start()` and it lists exactly what the full-chain fixture must double** (nothing more,
+  nothing less):
+  1. `self.workload_service.start(spec, allow_existing=False)` returning a context with `workload_kind == "task8_full"`,
+     `worker_count == 1`, `evidence_root` equal to `spec.payload["evidence_root"]`, plus `campaign_id` and
+     `execution_generation` that the child launch must match;
+  2. `spec.kind == "task8_full"` and `spec.payload["children"]` holding exactly one dict that `ActChildLaunch(**item)`
+     accepts, whose `campaign_id` and `execution_generation` match the context;
+  3. `self.artifact_binding(spec.payload, context)`;
+  4. `self.child_owner.start(context, launches, artifacts=...)` returning exactly one port whose `.launch` is that
+     child and whose `.client.owner` is an `OwnerKey` - which is what `_retire` later re-checks in
+     `retire_failed_start` (`PICK_PLACE_CASE_STACK_OWNER_INVALID` when the stack owner key disagrees);
+  5. `self.stack_factory(context, child)` returning a stack with `launch.evidence_root` (used to derive the campaign,
+     child and stack roots for the scope checks) and, for retirement, `.owner` and `.process`.
+- **With that enumerated, the fixture is mechanical:** four doubles (`workload_service`, `artifact_binding`,
+  `child_owner`, `stack_factory`), a `spec` shaped as above, a real port carrying the recorder and window as
+  `self.worker`, and then the real `run_pick_place_case()` - after which the test asserts both the journal row's
+  artifact path/digest and a window left `INVALID` with reason `OWNER_RETIRE`.
+- **Why the enumeration mattered more than an early attempt:** the owner validates its collaborators' *identity*
+  relationships (campaign, generation, owner key), so a fixture that merely looks plausible fails at a scope check -
+  and one that passes those checks but uses a fake owner, as CP-948 showed, would prove nothing about `_retire`.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment with the plan's Step-4 command at **53
+  passed**; three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
+  gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
