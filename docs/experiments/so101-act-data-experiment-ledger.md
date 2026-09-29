@@ -26916,6 +26916,10 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 | signal | value |
 | --- | --- |
 | **CTest failures** | **0** — `colcon test-result`: **1432 tests, 0 errors, 0 failures, 43 skipped** (pytest totals: **1272 passed / 43 skipped**) |
+  > **CORRECTED (CP-1662):** the `1432 tests` in this row is a **CUMULATIVE** reading from
+  > `build/so101_teleop`'s accumulating result base, not one run's count. The same tool against a single run's
+  > own base reports **117** - the registered CTest tests - and that run's 117 `xunit` suites hold **1311
+  > pytest cases**. The value is kept here as recorded; the restatement is CP-1662.
 | **`created: 8/8 workers` banners** | **117** — one per registered test, captured because the run used `--ctest-args -V` |
 | **colcon per-test xunit files** | **117** under `build/so101_teleop/test_results/so101_teleop/` |
 | **scratch + IPC base** | `tempdir assertion OK: <root>/scratch/final-boundary-v3c-teleop-20260929-212804/tmp`; `ipc base: /tmp/s101-v3c-ipc-967462 (mode 700)` |
@@ -27753,3 +27757,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** the request and its index row carry the measured form; the boundary stands (117/117 CTest, 1311 cases, 0
   failures); goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no
   hardware; no live stack; P2 live not started.
+
+## CP-1662 — CP-1613's `1432 tests` is a CUMULATIVE reading, and it is restated here rather than deleted
+
+- **What CP-1661 measured, applied to the earlier claim:** the same tool against two result bases gives
+  ```
+  colcon test-result --test-result-base experiments/v4a/teleop-results   ->  117 tests, 0 errors, 0 failures, 0 skipped
+  colcon test-result --test-result-base build/so101_teleop              ->  1432 tests, 0 errors, 0 failures, 43 skipped
+  ```
+  **and `build/so101_teleop` is the accumulating base - the one every earlier run read.** So **CP-1613's "1432 tests" was never one run's count**: a single run's own base reports **117 registered CTest tests**, and aggregating
+  that run's **117 `xunit` suites gives 1311 pytest cases** (with 43 skips visible only in the aggregate).
+- **The correction is placed where the claim is, not in a footnote:** an inline marker sits immediately after the CP-1613 row, **keeps the value as recorded**, and points here. **The old number is preserved rather than overwritten** - the same
+  treatment this batch gave the `Testing/20260929-1252` citation and the two stale index rows.
+- **And it is worth saying what this changes about the v3 boundary:** **not the verdict** - v3's teleop leg reported **0 failures** and this correction does not touch that - **only the size of the corpus behind it.** The three green legs of the v4
+  boundary are unaffected, and the packet never quoted 1432 (checked: it does not appear there).
+- **State:** the correction is recorded and discoverable; the re-review request already carries the measured form; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
