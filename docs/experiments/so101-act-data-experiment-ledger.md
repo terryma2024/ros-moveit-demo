@@ -30460,3 +30460,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1's first half is scoped to six named substitutions with named production counterparts, and the
   faithful-substitution rule is recorded from the seam's own history.** P1-1 second half GREEN, P1-2 and P1-3 CLOSED;
   the demo RED's clean re-measurement, P1-4, P1-5, P1-6 and the final gate remain.
+
+## CP-1797 — P1-1's first half begins with the substitution that is provably not the model's answer
+
+- **New production module `src/so101_demo_py/src/act/task8_bottom_io.py`:** `occluder_geometry_from_model(scene_path,
+  names=None, *, joints_rad=None)` reads each admitted occluder's **world pose from the model after a forward pass**
+  (`data.geom_xpos`), its half-extents and geom type, and reports the largest half-extent as the evaluator's
+  `radius_m` - **deliberately the conservative reading**, because a smaller radius under-reports an occluder and that is
+  the direction which hides a real occlusion. `joints_rad` optionally poses the arm first, which matters because these
+  geoms are gripper-mounted.
+- **And it is the right one to start with, because the seam's substitute is provably a different scene:**
+  ```
+  the seam, for every occluder:   position_m=[0.02, 0.0, 0.10]   radius_m=0.005
+  the model, measured:
+      fixed_fingertip_pad_visual     world_pos=[0.020398, -0.362268, 0.449138]
+      gripper_visual_00              world_pos=[0.020833, -0.300873, 0.465543]
+      gripper_visual_01              world_pos=[0.020801, -0.305671, 0.446926]
+      jaw_visual_00                  world_pos=[0.020541, -0.325182, 0.475560]
+      moving_fingertip_pad_visual    world_pos=[0.020517, -0.372081, 0.463216]
+  ```
+  **A visibility decision made against the seam's numbers is a decision about a scene that does not exist** - which is
+  what P1-1 means by the formal entry not being able to produce its own bottom I/O.
+- **Evidence:** `5 passed` over the new module's own file, and the assertions are the interesting part:
+  1. every admitted occluder's reported pose equals `data.geom_xpos` to `1e-12`, and its radius the model's largest
+     half-extent;
+  2. **the geometry is not the seam's invented value** - asserted explicitly, with the reason in the test's own words;
+  3. posing the arm moves the gripper-mounted occluders, so the values are a function of the run rather than constants;
+  4. a missing geom and a missing scene are each **refused by name**.
+- **State:** **P1-1's first half has its first production provider (occluder geometry, from the model); the remaining
+  five named in CP-1796 are next** - the camera frames, the client, the phase path and the target. **Task-list statuses
+  are unchanged this round**, so they are not re-stated for the sake of a no-op. P1-2 and P1-3 CLOSED; P1-1 second half
+  GREEN; the demo RED's clean re-measurement, P1-4, P1-5, P1-6 and the final gate remain.
