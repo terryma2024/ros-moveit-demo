@@ -17562,3 +17562,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Next, surgically:** find which document the binding passes into `search.py`'s config (its own fixture satisfies the
   relation, which is why its suite passes), then give the v2 fixture the same relation **without** changing the shape of
   the raw record.
+
+## CP-1122 — GREEN: item 5 complete, the published report binds to a runtime descriptor
+
+- **`validate_head_search_binding(runtime, report)` returns a binding for a report the aggregator actually published.**
+  The traceback told the truth about what that call does: beyond validating the report it checks the descriptor's schema
+  and weights digest, compares the report against the **sample it cites**, **constructs the runtime search controller** to
+  prove the configuration is usable (`head_search_binding.py:197` → `search.py:11` → its relation checks), and re-checks
+  the measured values. Getting there needed the published values to satisfy the search-config relations - a strictly
+  increasing `vertical_bounds_px`, a `coarse_step_rad` within half the horizontal field of view, and a valid
+  `lock_valid_neck_rad` interval - while the **raw evidence the comparators read keeps its own shape**, which is exactly
+  the distinction CP-1121 recorded after my first attempt broke three tests by changing the evidence instead.
+- **GREEN: 53 passed, rc=0** across the aggregator, contract and head-search binding modules, scratch
+  `<R>/scratch/r728.<n>` with `TMPDIR` verified through the exact test interpreter; the step-by-step logs are
+  `beh-r723` … `beh-r728` and the definitive traceback is `beh-r725.log`.
+- **What the review asked for on this point now holds end to end:** a v2 batch yields a report that (a) is the contract's
+  28 fields in their declared units and shapes with approved closed-sample citations and disk-verified readback, (b) passes
+  `require_gate(report, "task8_live")` with the five ready checks PASS and release/retreat UNMEASURED, and (c) **binds** to
+  the runtime head-search descriptor it was measured under. The one thing still outstanding from item 5 is its **negative**
+  direction - a mismatched pairing must still be refused - which is a small addition now that the positive path is real.
+- **Evidence:** no full suite was run, per the owner's instruction; nothing weakened, `REQUIRED_CHECKS` is untouched,
+  nothing was deleted, and no push, stack or hardware was involved.
