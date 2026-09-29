@@ -13453,3 +13453,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   three user-dirty files carry my additive, uncommitted changes with the `_retire` insertion confirmed present;
   Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-952 — The retirement receipt's contract recorded; the chain fixture's reconnaissance is complete
+
+- **Read `_retirement_receipt` and the fixture's last unknown is now specified.** `root/cleanup-receipt.json` must be a
+  regular file (opened `O_NOFOLLOW`), at most 1 MiB, holding JSON whose values match the `OwnerKey` **by value and by
+  type**:
+  - always: `leader_pid == owner.pid`, `pgid == owner.pgid`, `started_ticks == owner.started_ticks`,
+    `argv_sha256 == owner.argv_sha256`, and `group_clear is True`;
+  - for the **child** receipt (`stack=False`): the root must **not** contain the normal socket, the safety socket or
+    the ready file - they have to be absent, not merely ignored;
+  - for the **stack** receipt (`stack=True`): additionally `session_id` and `ros_domain_id` matching what the owner
+    passes, plus `physical_stop_confirmed is True` and `graph_clear is True`.
+  A mismatch is raised as `TASK8_RETIREMENT_RECEIPT_INVALID`, so the fixture's `stop_owned` and `stop` doubles have to
+  write receipts that satisfy this - which is the honest choice, since patching `_retirement_receipt` would weaken
+  exactly what the chain test is meant to prove.
+- **Reconnaissance is therefore complete for the full-chain fixture:** the `start()` collaborator contract (CP-949),
+  the retirement sequence including my insertion's position (CP-951), and now the receipt shape. The single remaining
+  detail is `OwnerKey`'s constructor signature, after which the fixture is mechanical: four doubles, a `spec`, an
+  `OwnerKey`, receipts written per the above, a real port carrying the recorder and window, and then the real
+  `run_pick_place_case()`.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
+  set 244); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
+  gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
