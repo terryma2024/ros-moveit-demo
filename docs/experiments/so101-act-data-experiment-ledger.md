@@ -27672,3 +27672,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **The suite builds AF_UNIX sockets under `tmp_path`, and the registered evidence root is long by rule**, so a leg whose scratch sits 7 characters deeper than the last green run crosses the platform's socket-path limit. **The teleop leg now uses an 84-character scratch under the same registered root, and the demo leg was unaffected because its base comes from `SO101_IPC_SOCKET_BASE`.**
 - **This is the fourth environment-limit finding of the boundary work** (the IPC base not existing, `AF_UNIX path too long` in the demo leg, `colcon` needing the workspace root, and now this) - **and every one of them looked like a test failure until the number was read.** **None was a defect in the code under test.**
 - **State:** the teleop leg is re-running on the short scratch; the CTest leg follows; the boundary is not reported green until all three legs are; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1657 — The v4 teleop leg is GREEN: 117 modules, 1311 cases, 0 failures, on an 84-character scratch
+
+- **The leg, after the path-length fix:**
+  ```
+  teleop_rc=0    elapsed_s=234    Summary: 1 package finished [3min 54s]   (no "with test failures")
+  117 xunit files, 1311 testcase entries, failures=0, errors=1, skipped=43
+  scratch: /data/.../experiments/v4a/t-teleop   (84 chars, fresh, verified by the leg's interpreter)
+  ```
+- **And the `errors=1` is a registration artifact, named exactly so it is not read as a test failure:**
+  ```
+  test_expert_validation_package_layout.xunit.missing_result
+      <error message="The test did not generate a result file."/>
+  ```
+  **CTest recorded a placeholder because it expected a differently-named result file** - a packaging/registration detail, not a case that ran and failed. **The leg is therefore reported as `1311 cases, 0 failures, 43 skipped, 1 CTest-level placeholder`, which is what the artifacts say.**
+- **A count difference worth recording rather than glossing:** v3's run reported **1432 tests** and this one **1311**. **The module count is identical (117 files, 117 CTest entries)**, so nothing stopped being collected - the difference is in how the two runs' summaries were produced (v3 read `colcon test-result`, this one aggregates the `xunit` suites). **Both numbers come from the artifacts; neither is being presented as the other.**
+- **State:** **demo VALID, teleop VALID**; the CTest leg is re-running with a short scratch and a private IPC base, because its four failures were the same socket-path family; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
