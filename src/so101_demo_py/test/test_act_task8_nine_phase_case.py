@@ -244,6 +244,16 @@ def _case_window(tmp_path, *, case_id):
     return recorder, window
 
 
+def _wide_prefix(prefix):
+    # The contract puts every target on a grid: `t == observation_time_s + delay + interval * (i + 1)`. Widening the
+    # window therefore means DECLARING the wider interval, not inventing a free-standing time - a target of 60.0 s
+    # is refused by name (PREFIX_TIME_GRID_INVALID) because it is not on the grid the document implies.
+    # the delay is a fixed convention (0.1 s exactly - any other value is PREFIX_FIRST_TARGET_DELAY_INVALID), and the
+    # target sits on the declared grid: origin + delay + interval * 1
+    interval, delay = 0.002, 0.1
+    return {**prefix, "target_interval_s": interval, "first_target_delay_s": delay,
+            "target_times_s": (prefix["observation_time_s"] + delay + interval,)}
+
 def _open_limit(screen):
     """The gripper's open position, read from the model's own joint range - the same source the boundary uses."""
 
@@ -321,7 +331,9 @@ def _full_case_port(tmp_path):
         if clock["base"] is None:
             clock["base"] = raw["world"].simulation_time_s
         clock["count"] += 1
-        moment = clock["base"] + 0.1 * clock["count"]
+        # the readback's clock must stay INSIDE the prefix's window (the goal stamp is taken from it), while the GRID's
+        # cadence - one period per sample - is imposed by the add_grid wrapper below. Two different clocks on purpose.
+        moment = clock["base"] + 0.002 * (1 + clock["count"] % 40)
         stamps = {name: moment for name in ("head", "wrist", "arm", "neck")}
         return {**raw,
                 "world": dataclasses.replace(raw["world"], simulation_time_s=moment),
@@ -364,7 +376,10 @@ def _full_case_port(tmp_path):
         ownership=SimpleNamespace(ticket=lambda *parts: (7, "owner-key", "act", SESSION, ATTEMPT)),
         prefix_executor=_PrefixExecutor(prefix, _proof_snapshot(screen.path_checker)),
         _prefix_source_port=SimpleNamespace(register=lambda *args, **kwargs: None),
-        issue_prefix_source=lambda **kwargs: _receipt(prefix, (7, "owner-key", "act", SESSION, ATTEMPT)))
+        # the receipt is issued against the prefix the caller actually passes down: signing a different (narrower)
+        # prefix is what raised PATH_SOURCE_RECEIPT_INVALID, because the prover compares the digest it is handed
+        issue_prefix_source=lambda **kwargs: _receipt(kwargs["prefix"],
+                                                      (7, "owner-key", "act", SESSION, ATTEMPT)))
     boundary.reset.act_context = {"lease_token": "lease-1"}
     boundary.reset.receipt = SimpleNamespace(new_epoch=2)
     boundary.screen = screen
@@ -389,7 +404,11 @@ def _full_case_port(tmp_path):
     port.bind_startup_receipt({"schema_version": 1, "session_id": SESSION,
                                "stack_owner": {"pid": 1}, "child_owner": {"pid": 2}})
     route = _Route.__new__(_Route)
-    route.__init__(prefix)
+    # the prefix's window is the trajectory's timing, and this case's clock advances one period per sample so
+    # the grid can satisfy the recorder: a window ending at 1.4 s falls behind the case's own clock and every
+    # APPROACH goal stamp is refused (APPROACH_HEADER_STAMP_INVALID). This opens it wide enough for the run.
+
+    route.__init__(_wide_prefix(prefix))
     port._expert_route = route
     # the WINDOW is bound here, and with it the case's admitted support distance: the distance
     # travels with the evidence attachment, not with the case targets (CP-1550)
@@ -425,7 +444,11 @@ def _case_capture(sources, prefix, boundary):
     readings.append(index)
     raw = sources.capture(prefix["attempt_id"], after_step=0)
     step = raw["world"].simulation_step + 1 + index
-    moment = raw["world"].simulation_time_s + 0.01 * (1 + index)
+    # the capture's clock stays inside the prefix's window too: the APPROACH goal stamp is taken from THIS readback, and
+    # a clock that drifts past the window is refused by name (APPROACH_HEADER_STAMP_INVALID). The step keeps advancing,
+    # which is what the phase rules need; the time wraps within the window, and the GRID's cadence comes from the
+    # add_grid wrapper rather than from either clock.
+    moment = raw["world"].simulation_time_s + (0.002 * (1 + index % 40))
 
     from so101_demo.core.simulation.types import ContactEvidence
 
@@ -492,7 +515,7 @@ def test_the_runner_runs_the_whole_case_and_reports_which_phases_completed(tmp_p
     # the closed position is a positive joint value (the port refuses zero by name): closing moves the gripper joint
     # towards its closed limit, it does not mean "no value"
     _route = _Route.__new__(_Route)
-    _route.__init__(boundary.prefix)
+    _route.__init__(_wide_prefix(boundary.prefix))
     port._expert_route = _route
     port.bind_case_targets(gripper_closed_rad=0.2, close_duration_s=0.4,
                            motion_template=_template(), motion_duration_s=0.4)
