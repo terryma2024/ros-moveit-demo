@@ -26284,3 +26284,17 @@ picture in both directions.**
   - the **forwarding test asserts membership** rather than an exact list, because the port now also forwards the grid sample it builds for the phase - **which is the change this batch made on purpose.**
 - **State:** `test_act_task8_live_evidence.py` green at 42 passed; the boundary is still not complete - **19 failures remain in the measurement driver's `runtime_descriptor` fixture** (ledger line 21865) - and the teleop gate
   and CTest have not been run for this boundary yet. Nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
+
+## CP-1578 — All 24 boundary failures are cleared, and the driver suite's descriptors were the nineteen
+
+- **`21 passed`** for `test_act_task8_measurement_driver.py` and **`42 passed`** for `test_act_task8_live_evidence.py` - **so the first final-boundary run's 24 failures are all cleared**, and the re-run of the module gate is
+  in flight (`experiments/final-boundary/demo2.log`).
+- **The nineteen were exactly what the ledger said they were, three times over:** the strengthened shared rule checks the **detector block's contents**, so a fixture that omits the thread and software-version members is refused
+  by name (`HEAD_SEARCH_CONFIG_INVALID`) rather than admitted. **Three literals** in the driver suite were stubs; all three now carry the same **eleven** members the production document does - the completion already applied to
+  the admission, bundle and descriptor fixtures.
+- **And the five were one production defect and four fixture lags, in that order of importance.** The defect: `CaseEvidenceDriver.observe_capture` held the end-effector in `measurements` and never forwarded it, so
+  **every real capture through the driver would have failed while the driver held the value the adapter demanded.** The lags: the attachment's three members, the seal's incremented release epoch, the readback's three
+  physics stamps, and one assertion that now expects the grid sample the port deliberately forwards.
+- **What the boundary has taught this batch, in one sentence:** the focused sets were green, the nine-phase case sealed, the artifact read back from its records - **and a defect that would have failed every real capture sat
+  underneath all of it**, visible only to the full gate. **That is the argument for the boundary existing, and it is why the boundary result is not a formality.**
+- **State:** the module gate's re-run is in flight; the teleop gate and CTest have not been run for this boundary; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
