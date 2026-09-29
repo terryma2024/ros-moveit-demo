@@ -95,14 +95,30 @@ def _regular_digest(path: Path, code: str) -> str:
     return hashlib.sha256(_regular_bytes(path, code)).hexdigest()
 
 
+
+def validate_head_search_shape(runtime: dict) -> dict:
+    """The production head-search shape, in one place, so every entry enforces the same closed document.
+
+    Astra finding 2: the measurement bundle's shared descriptor rule checked the device policy but not the document's
+    shape, so a descriptor with an unknown field or a malformed camera/motion block passed a check that the production
+    binding would have refused. Both paths now call this.
+    """
+
+    if type(runtime) is not dict or set(runtime) != {"schema_version", "head_search"} or runtime["schema_version"] != 1:
+        raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
+    descriptor = runtime["head_search"]
+    if type(descriptor) is not dict or set(descriptor) != {"schema_version", "detector", "camera", "motion"}:
+        raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
+    for name in ("detector", "camera", "motion"):
+        if type(descriptor[name]) is not dict:
+            raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
+    return descriptor
+
+
 def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearchBinding:
     """Fail closed before ROS or model construction on an unqualified pairing."""
     try:
-        if type(runtime) is not dict or set(runtime) != {"schema_version", "head_search"} or runtime["schema_version"] != 1:
-            raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
-        descriptor = runtime["head_search"]
-        if type(descriptor) is not dict or set(descriptor) != {"schema_version", "detector", "camera", "motion"} or descriptor["schema_version"] != 1:
-            raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
+        descriptor = validate_head_search_shape(runtime)
         detector, camera, motion = (descriptor[name] for name in ("detector", "camera", "motion"))
         if (type(detector) is not dict or set(detector) != {
                 "backend", "weights_path", "weights_sha256", "model_id", "image_size_px",
