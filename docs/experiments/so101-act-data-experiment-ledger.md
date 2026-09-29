@@ -27139,3 +27139,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   Both are the same piece of work: **prove the full case -> journal -> trusted aggregator chain through production qualification, with the seven CP-1488 meanings and four negatives that the chain itself refuses** - which is item 3 proper, and it is
   unstarted.
 - **State:** item 3's first point closed; items 5 and 6 closed and independently confirmed; item 4's CLI half green with all five scenarios, its cleanup scope awaiting CP-1620; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1626 — Item 3, second point verified: the cadence assertion tests the recorder's rule, not the source's
+
+- **The review's sentence:** *"Cadence is checked after the fixture rewrites timestamps; it does not establish source-record cadence."* **Verified in two reads, and it is right:**
+  1. **the fixture rewrites the stamp:** `_stamped_add_grid` computes `stamp = base + 0.1 * (grid_count + 1)` and hands `{**sample, "sim_time_s": stamp}` to the recorder, so **the period the recorder checks is one this fixture IMPOSED**;
+  2. **and the conflict that forces it is a contract constraint, not laziness:** `contracts.py:86-90` fixes the prefix's default interval at `0.1` but **requires exactly `0.002` if `target_interval_s` is declared** - so a case clock bounded by the prefix's window **cannot** step the `0.1 s` the recorder requires. **A real MuJoCo run has no such conflict: its clock is free.**
+- **What was therefore wrong was not the test but its IMPRESSION, and that is what this entry fixes:** assertion 7's docstring now says plainly that it checks **the recorder's rule** through a fixture-imposed clock, **why that cannot be otherwise in the substituted runtime** (the 0.002 s
+  contract grid versus the 0.1 s recorder cadence), **and that source-record cadence becomes provable only on the production qualification path** - which is item 3's remaining work.
+- **And the general shape is worth one line, because this batch has now met it four times:** a check that passes while establishing something other than what its name suggests. `rc` was not a verdict (CP-1611), a JUnit path was a resource (CP-1610),
+  an artefact was matched by cell shape rather than by path (CP-1615), "VALID" was a substring of "INVALID" (CP-1621), and now cadence was the fixture's own stamp. **Each correction was to name precisely what the check establishes.**
+- **State:** item 3's first two points are closed as *verified* - one fixed (the key set) and one **correctly scoped** (the cadence); the third and largest (negatives that break the published chain through production qualification refusal) is the item's body of work and is unstarted. Item 1 verified; item 2 two-thirds green with the epoch-rule decision open
+  (CP-1612); item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1627 — Item 3's body, scoped from the production API rather than estimated
+
+- **The production qualification path exists and is fully named (`act/task8_live_qualification.py`):**
+  `validate_case_journals` -> `collect_live_runs` -> `derive_live_measurements` / `build_qualified_measurements` -> `build_task8_qualified_report`, with `make_raw_reader`, `live_extractors` and `record_live_extractors` as the readback side. **One existing test file drives them**
+  (`test/test_act_task8_live_qualification.py`), so item 3 is a matter of **driving the chain through these functions with the seven meanings and four negatives**, not of inventing a path.
+- **And `validate_case_journals` states the requirements the review's seven meanings map onto, which makes the test's shape concrete:**
+  ```
+  validate_case_journals(case_root, manifest, *, identities, manifest_document_sha256) -> tuple[dict, ...]
+    "Load and re-check all fourteen case journals under one case root.
+     Each journal must be a complete row (evidence plus BOTH retirement receipts), bound to this bundle's identity,
+     with a prefix carrying NO live-evidence artifact and a full carrying one.
+     A missing, foreign or incomplete journal refuses the whole qualification."
+  ```
+  - **fourteen journals**, addressed as `<case_root>/task8-live/cases/<case-id>.json`, with the case list from `require_campaign_cases(manifest)` (**nine prefix + five full**);
+  - **both retirement receipts** on every row - the review's "two retirement receipts";
+  - **bound to the bundle's identity** through `require_case_row_matches_bundle(identities=..., manifest_document_sha256=...)` - the review's "artifact/journal digests";
+  - **a prefix row carries no live-evidence artifact and a full row carries one** - the review's "SEARCH" and "FINAL_CHECK" halves.
+- **So the four negatives the review wants are four refusals of THIS function**: a **missing** journal, a row sealed under a **wrong** epoch/identity, a row **missing a retirement receipt**, and a **tampered** digest - **each of which must refuse the whole qualification rather than produce a report.** And the seven meanings are properties of the rows it accepts.
+- **Where the work stands:** item 3's first two points are closed (CP-1625 the key set, CP-1626 the cadence's true scope); **this is the third and largest, now scoped to production functions with an existing fixture to build on.**
+- **State:** item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
