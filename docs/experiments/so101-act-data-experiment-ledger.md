@@ -21398,3 +21398,22 @@ not an inference of mine.**
   not that the case actually ran under a verified contact policy**, which is the part Astra's item 5 named first.
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no live stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1296 — Collection risk cleared: the teleop directory still collects cleanly with the new file present
+
+- **Checked because it protects the integration boundary rather than because it was interesting:** my uncommitted fixture imports helpers from
+  a **sibling test module** (`_write_policy`, `_calibration` from `test_act_campaign_admission`), which would be a collection error for
+  the whole package gate if that import failed in the gate's context. **It does not:**
+  ```
+  src/so101_teleop/test/teleop → 1141 tests collected, no errors
+  ```
+  So the new file is safe to leave in the tree while red, and the gate that follows this batch will not fail on its account.
+- **State of the revision batch, for the record:** items 1-4 complete and committed with 30 / 89 / 88 / 3 tests green respectively; item 5's
+  fixture is written, drives the real child entry, and has been accepted by eight successive production checks - the artifact binding,
+  the descriptor shape, the weights digest, the calibration provenance, the report format, the head-search sample, the bound-hash
+  comparison and the policy document pair - before stopping at the one that needs a **compiled MuJoCo model of the real scene**.
+- **And that is where the owner's decision sits (CP-1294/CP-1295):** compile `assets/mujoco/act/scene.xml` in the fixture (compile only -
+  no stack, no stepping, no CUDA work) and finish item 5 as Astra specified it, or scope the fixture to the child's pre-binding path and
+  accept that it proves less. **Both are ready to implement; neither should be chosen by me.**
+- **State:** HEAD `c0430f7f` plus this checkpoint; the fixture **uncommitted while red**; no live stack, no hardware, nothing deleted,
+  nothing pushed.
