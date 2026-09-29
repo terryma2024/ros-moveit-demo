@@ -21612,3 +21612,24 @@ not an inference of mine.**
 - **The task list was updated before any code change, as instructed**, listing P1-1 through P1-5, the single final integration boundary, the packet/ledger correction and the further independent review - and the goal was resumed (now revision 61, active).
 - **Constraints in force for this batch:** no Task 10, no live MuJoCo, no `runtime-task8l-gen4`, no CUDA, no actuators, no hardware; **cleanup is not authorised** - all classified deletion candidates stay; no push; every dirty/user file and all evidence preserved; **focused RED/GREEN per item, one full integration boundary only after all five are GREEN.**
 - **State:** HEAD `fe6b6fb5` plus this checkpoint; nothing else changed yet in this batch; nothing deleted, nothing pushed.
+
+## CP-1308 — P1-1's RED is proven, exactly as the reviewer described it
+
+- **RED, at the formal entry with no seam** (`p11-red.log`):
+  ```
+  test_the_formal_entry_composes_real_providers_without_any_seam  ->  FAILED
+  PRODUCTION_PROVIDERS_UNAVAILABLE
+  ```
+  The test calls the **formal CLI** with `--driver` omitted and `SO101_TASK8_PROVIDER_SEAM` explicitly deleted, and asserts that
+  neither `PRODUCTION_PROVIDERS_UNAVAILABLE` nor `PRODUCTION_PROVIDER_SEAM_INVALID` is the outcome. **It fails today for the reason the
+  reviewer gave: the composition exists, but the only way to fill it is a test seam, so the formal entry has no production path.**
+- **Recon for the GREEN, read rather than assumed - the real adapters exist and are named:**
+  | collaborator | real source found |
+  | --- | --- |
+  | stack | `runtime/task_stack.py:352` `PersistentTaskStack` |
+  | detector | `adapters/perception/detector_factory.py` - a `BuiltDetector` produced from `DetectorFactoryOptions` (backend, requested device, CPU fallback, weights/model fields validated there) |
+  | controller | `act/search.py:9` `HeadSearchController` |
+  | clock | a monotonic clock (the driver only needs `now`) |
+  | phase camera | **no adapter class exists** - the module offers `load_phase_camera_matrix(...)` and `derived_phase_camera_checks(...)`, so this collaborator is a matrix-driven evaluator whose expected call shape must be read from the driver's own use of it |
+- **So the GREEN is a real composition, not a rename:** the factory must take the **admitted context and the frozen descriptor**, build those five collaborators from them (including the CUDA device the descriptor names, with no CPU fallback), and be reachable **without** any environment seam - while the seam stays available for tests at the **external I/O** level only. **The next reads are the driver's use of `phase_camera` and the detector factory's build entry**, and then the composition is written.
+- **State:** the P1-1 RED is **uncommitted while red** per the owner's rule; ledger current; no live stack, no CUDA, no actuators, no hardware; cleanup still unauthorised and untouched; nothing deleted, nothing pushed.
