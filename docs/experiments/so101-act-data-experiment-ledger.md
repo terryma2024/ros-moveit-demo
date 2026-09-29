@@ -18510,3 +18510,25 @@ not an inference of mine.**
   descriptor whose `head_search` disagrees with the weights/model/device/CUDA policy recorded elsewhere, a changed controlled
   config hash, and a batch that does **not** index the descriptor each fail closed.
 - **State:** goal active (revision 51, cap 1000); HEAD `64370c2a`, staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1164 — RED proven at the §6 boundary: the measurement entry ignores its context's descriptor
+
+- **The RED, and it reaches the assertion rather than a fixture error:** `Failed: DID NOT RAISE <class 'ValueError'>`
+  from `test/test_act_task8_measurement_runtime_descriptor.py`, which builds a real bound v2 contract (the CP-1082 shape),
+  a ten-member identities file, a driver module and a context document whose `runtime_descriptor` sets
+  `allow_cpu_fallback: true`, then invokes `act_measure_task8_calibration`. **The entry proceeds**, because it reads
+  `--context` for its own fields and never looks at a descriptor - the gap CP-1163 specified.
+- **One iteration recorded rather than hidden:** the first attempt pointed `--contract` at a nonexistent file and failed
+  with `MEASUREMENT_CONTRACT_MISSING` - the **wrong boundary**, refused before the descriptor could matter, so it was not
+  counted. Supplying a bound contract made the test measure what it claims to.
+- **This is the §6 rule being enforced where the design puts it.** The context docstring already says resource binding
+  happens once at the entry and travels in the context; the descriptor is a controlled input of exactly that kind, so the
+  entry is the right place for the CUDA policy check and the context is the right carrier - not a path that later components
+  re-read.
+- **The GREEN, next round, in the order the ledger already specifies:** factor the descriptor's document-level validation so
+  the **one** implementation from CP-1162 serves both the bundle and this entry (no second implementation); add the
+  descriptor to `CalibrationMeasurementContext` as canonical payload + path + sha256; have the CLI build it from the same
+  document; then the driver registers and seals it and the aggregator reads it back from the closed index.
+- **GREEN evidence so far, unchanged:** 27 passed across the runtime-config binding, artifact bundle, alias and manifest
+  suites (CP-1162). RED logs `beh-r767.log` (wrong boundary) and `beh-r768.log` (the RED).
+- **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
