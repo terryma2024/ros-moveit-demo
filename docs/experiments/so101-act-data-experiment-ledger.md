@@ -22462,3 +22462,20 @@ not an inference of mine.**
   check is relaxed. **The next read is the fifteen lines around 152**, which will say exactly which fields the reset proof must carry.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1354 — Gate five satisfied exactly, gate six named; and an honest pace assessment
+
+- **Gate five, fixed from the code rather than guessed:** the production port requires the reset proof to be a dict whose key set is
+  **exactly** `{session_id, attempt_id, reset_epoch, release_epoch, full_restart}`, with `reset_epoch` an `int >= 1`, `release_epoch == 0`
+  and `full_restart is False`, and with the session and attempt matching the request. **The fixture now returns exactly that** - its previous
+  helper copied the whole request, which is why the key set was wrong.
+- **Gate six, named by the same mechanism:** the very next contract is `ValueError: search observation type` - the production port validates
+  the **shape of what the boundary's `search` returns**, whose requirement is printed above. **This is the sixth contract, and the pattern has
+  not varied once: production names it, the fixture supplies it, nothing is relaxed.**
+- **Honest pace assessment, because it belongs in the record and not only in prose to the owner:** P1-5's first half has cost six rounds,
+  one production contract per round, and the second half - driving `run_pick_place_case()`, feeding the **trusted aggregator**, then the
+  **seven indexed assertions** and **four negatives** - is the larger part. **At the current rate the item is reachable within this batch's
+  remaining budget, but only if the remaining contracts are taken in the same way: read the requirement, supply it, one round each - no
+  guessing, which is what made the middle of this batch expensive.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
