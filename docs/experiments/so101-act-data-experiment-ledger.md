@@ -26217,3 +26217,23 @@ picture in both directions.**
 - **The next steps are the ones the plan names:** the **final integration boundary** (a fresh NVMe scratch, the exact interpreter check, one full xdist run per module, CTest), then the ledger/packet/evidence-index
   update, then the **independent GPT-6 Astra / High review** - which this agent may not perform or pre-empt.
 - **State:** the focused sets are green (58 demo-side, 41 projection, 3 CLI gates, 3 campaign); no new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1574 — The first final-boundary run: 24 failed, 5707 passed, 163 skipped - and all 24 are mine, none are new
+
+- **The boundary parameters, as used (not as remembered):** 32 CPUs, **`-n 8`**, fresh scratch
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/final-boundary-20260929-201359/tmp` with the resolved tempdir printed by the exact interpreter, benchmark excluded, **`demo_rc=1`, 114 s**,
+  JUnit at `experiments/final-boundary/demo-junit.xml`.
+- **The result, quoted:** `24 failed, 5707 passed, 163 skipped` - **so the module gate does NOT pass, and the boundary is not complete.**
+- **And the attribution, which is the useful part: all 24 are this batch's own debt, and none is a new regression:**
+  | count | refusal | where it comes from |
+  | --- | --- | --- |
+  | **19** | `HEAD_SEARCH_CONFIG_INVALID` in `test_act_task8_measurement_driver` | **already recorded in this ledger** (line 21865): *"nineteen of its tests now fail my strengthened rule with `HEAD_SEARCH_CONFIG_INVALID`. Its `runtime_descriptor` literal"* is a stub, and the strengthened production rule is the one that is right |
+  | **2** | `TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: support_distance_max_m` | the port's grid feed now runs on paths whose test doubles never bound the case's admitted support distance |
+  | **2** | `READBACK_END_EFFECTOR_REQUIRED` | the same shape: a double that composes a capture without the end-effector the readback adapter requires |
+  | **1** | `'_Boundary' object has no attribute 'reset'` | the port reads `boundary.reset.receipt.new_epoch` for the seal's identity, so a double without `reset` is no longer a boundary |
+- **So the remaining work before the boundary can pass is bounded and named:** complete the measurement driver's `runtime_descriptor` fixture to the production shape (19), and give the live-evidence doubles the three
+  things the port now legitimately asks of a boundary (5). **Neither is a code defect; both are the same "the fixture must honour the contract" work this batch has done at every layer.**
+- **What is NOT claimed:** the boundary is not green, the packet is not updated, and no review has been requested. **The gate numbers above are this run's, not the earlier batch's** (5651/1266) - the ledger's
+  instruction not to reuse old numbers is why the first line of this entry is the scratch path and the exit code.
+- **State:** the focused sets remain green; nothing deleted, nothing pushed; the 3415 scratch trees, 495 experiment dirs and 87 evidence files under the registered root are **all retained** (measured this round: `/data`
+  1.9 T total, 1.3 T available, 29% used).
