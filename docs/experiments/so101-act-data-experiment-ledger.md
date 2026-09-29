@@ -26817,3 +26817,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **socket-base usage** (each pytest process - or each test - must derive its own directory rather than sharing one base), not in the gate's parallelism, and the same 8-worker gate must be re-run afterwards.
 - **State:** item 5 **verified, diagnosed, mechanised and now red for a named, fixable isolation reason**. Item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal,
   worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1607 — The isolation defect is fixed RED->GREEN, and the same eight-worker gate is re-running
+
+- **The RED reproduced the gate's own failure, without any stack:**
+  ```
+  test_teleop_ipc_worker_root_isolation.py -> 1 failed
+  FileExistsError: [Errno 17] File exists: '.../pytest-of-matianyi/pytest-0/t...'
+  ```
+  by calling `conftest.pytest_configure` twice with one base and one worker name, which is the situation `colcon test`
+  creates across its ~30 registered pytest processes.
+- **The fix, at the conftest, with the reason recorded in the code:** the worker root becomes
+  `Path(base) / f"{worker}-{os.getpid()}"` - **unique per process as well as per xdist worker**, which is what the shared-base
+  case needs.
+- **GREEN, twice:** the new test `1 passed`, **and the four socket-heavy teleop files pass under a real `-n 8` (`23 passed`)** -
+  so the fix holds under actual parallelism rather than only in the unit case. Committed (`e51e34a8`).
+- **And the same parallel gate is now re-running on a fresh scratch** (`scratch/final-boundary-v3b-teleop-20260929-212327/tmp`)
+  with a **fresh 0700 IPC base** (`/tmp/s101-v3b-ipc-951865`) and a **new JUnit path** (`experiments/final-boundary-v3/teleop-junit2.xml`),
+  keeping the proven `PYTEST_ADDOPTS="-n 8 --junit-xml=..."` mechanism and `--ctest-args -V` so the `created: 8/8 workers`
+  banners are captured as the parallelism proof.
+- **State:** item 5 is **fixed and re-running**; item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
