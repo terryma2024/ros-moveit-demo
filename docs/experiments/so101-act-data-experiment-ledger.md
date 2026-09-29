@@ -29330,3 +29330,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and the relaunch then ran with the corrected scratch. **Verified: exactly one leg running** (`timeout` + `colcon`, 33 s elapsed), scratch `v5a/t-teleop`, and `teleop.log` growing.
 - **Also worth recording so the freeze stays honest:** the canon for this boundary will be a **new** `Test.xml` under the new root's `teleop-results`; the v4 file (`…/Testing/20260929-1419/Test.xml`, 662025 bytes, `eb1130b8b7f8420e`) **stays untouched** as the artefact P2 froze.
 - **State:** **leg 1 green, leg 2 running with a fresh short scratch, leg 3 next**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1748 — Leg 2's failure was an EMPTY CTest run: the result base did not exist
+
+- **The evidence, and it took three reads to see because two of them were red herrings:**
+  ```
+  teleop_rc=1   "Errors while running CTest"   "1 package had test failures"
+  build/so101_teleop/Testing/Temporary/LastTest.log   (121 bytes)
+      Start testing: Sep 30 00:18 CST
+      ----------------------------------------------------------
+      End testing:   Sep 30 00:18 CST          <- NOT ONE TEST RAN
+  ctest -N  ->  Total Tests: 117                <- and CTest can see all 117
+  ```
+  **So the leg reported failure while executing nothing**, and the reason is visible in the script: `colcon test … --test-result-base $ROOT/teleop-results`, **and that directory did not exist** - `ls -d` on it failed, and the xunit files were nowhere to be found. **CTest refuses to run when its result base is missing**, and colcon reports the refusal as a package failure.
+- **Which is a boundary-script defect rather than a product defect, and it is now fixed the same way the scratch was:** the script creates its result base before running
+  ```
+  mkdir -m 0700 -p $ROOT/teleop-results
+  ```
+  and leg 2 is re-running with that fix, a **fresh short scratch** (`experiments/v5a/t-teleop2`, `teleop2.log`) and the same `PYTEST_ADDOPTS="-n 8"`.
+- **And the two red herrings are worth the line, because both looked like real failures:** `--rerun-failed` (a CTest hint that reads as "tests failed") and `1 package had test failures` (colcon's summary of the same refusal). **The artefact that settles it is the 121-byte log with nothing between Start and End** - which is the batch's rule again: read the artefact, not the summary.
+- **State:** **leg 1 green; leg 2 re-running with a result base that exists; leg 3 (serial CTest) after it**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
