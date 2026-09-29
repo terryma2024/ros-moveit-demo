@@ -12403,3 +12403,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   exists to remove.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-907 — CORRECTION: the Task 3 phase list was inferred, not transcribed, and is now fixed
+
+- **What went wrong.** CP-890 asserted "the approved nine phases (SEARCH, APPROACH, ALIGN, DESCEND, GRASP, LIFT,
+  TRANSPORT, PLACE, FINAL_CHECK)". That tuple was **my inference**, not a transcription: the approved design's
+  phase-camera coverage table (section 6) and the approved plan's Task 7 step both name
+  **`SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, RADIAL_RETREAT, FINAL_CHECK`**, exactly and
+  identically, and the repository's own `src/core/domain.py` carries `MICRO_LIFT` and `RADIAL_RETREAT` as phase
+  members while `src/backends/mujoco/qualified_phases/micro_lift.py` exists by that name. My earlier checkpoint
+  therefore recorded a claim the sources do not support.
+- **Blast radius, checked rather than assumed.** The invented names lived in two places only: the
+  `APPROVED_PHASES` constant in `act/task8_phase_camera.py` and the `PHASES` tuple in its test module. The
+  controlled input I created for Task 3, `config/act/task8-phase-camera-matrix-v1.json`, carries
+  `"phases": []` - **no invented name leaked into the matrix or any other evidence artefact**. Nothing was
+  generated or measured against the wrong list, so no evidence needs invalidating on this account.
+- **Fix:** both files now carry the design/plan tuple, with the source cited in the code comment; committed as
+  `fix(act): use the design's nine phase names in phase-camera coverage` (guard `staged=2 check_rc=0`).
+- **Verified:** the phase-camera and measurement-contract suites report **40 passed, rc=0**
+  (`beh-task7-phasefix.log`) under the corrected names.
+- **Why this is recorded as a correction rather than a quiet edit:** the ledger is append-only precisely so a claim
+  like CP-890's can be seen to have been wrong. The lesson carried into Task 7 is the same one the independent
+  review taught: transcribe the approved source, and cite it, rather than reconstruct it from memory.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
