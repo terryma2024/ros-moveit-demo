@@ -30690,3 +30690,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   two requirements are exactly CP-1803's pair: an event must carry its own `kind`/`reason` into the sealed evidence, and
   the sealed document must describe its own grid. **The GREEN is the next edit.** P1-1, P1-2 and P1-3 CLOSED; the demo
   RED's clean re-measurement, P1-5, P1-6 and the final gate remain.
+
+## CP-1805 — P1-4 GREEN: the sealed evidence names its edges and describes its own grid
+
+- **The three edits, and the seal's new description:**
+  | edit | effect |
+  | --- | --- |
+  | the recorder's entry now carries `"kind"`, and an event carries `"reason"` | a reader of the SEALED samples can tell a grid point from an event and knows which edge the event was |
+  | `append(sample, *, kind, reason=None)`; `add_grid` passes `kind="grid"`, `add_event` passes `kind="event", reason=reason` | **the two call sites name what they are, so the reason can no longer live only in the live window's state** |
+  | `seal` writes a `grid` block | `{"count", "first_sim_time_s", "last_sim_time_s", "period_s", "event_count"}` - **the packet's proposal 1, satisfied by the document rather than by a reader's recomputation** |
+- **And one defect of my own, caught by the tests rather than by review:** I referenced `self._period_s` inside the
+  **recorder's** `seal`, but **the period belongs to the WINDOW** - so `AttributeError` broke my RED *and* the joined
+  chain's own seal. The fix follows the codebase's existing convention rather than inventing one:
+  `Task8LiveEvidenceRecorder.seal(identity, *, period_s=None)`, with the window passing `self._period_s` - **the same
+  shape `validate_evidence_grid(samples, *, period_s, tolerance_s)` already uses.** The first run after the fix:
+  ```
+  10 passed     live_evidence_events  full_case_joined_chain  nine_phase_case   (39.63 s - the chain seals real batches)
+  ```
+- **What the RED now holds, with no test weakened:** an event appended with a reason is identifiable as that event in
+  the sealed document; the sealed document reports its grid's count, edges and period; **and the existing discipline -
+  gap, duplicate and regression all refused - is still asserted in the same file**, so the fix cannot have traded it
+  away.
+- **State:** **P1-4 is GREEN with a RED that went from 2-failed to passing on the production recorder, and the
+  downstream joined chain seals and passes unchanged. Task-list statuses: P1-4 stays `in_progress` until its
+  production-boundary evidence is recorded** (the sampler is exercised through the runner's own
+  `seal_live_evidence`, which the joined-chain test does - that is the boundary trace to capture next). P1-1, P1-2 and
+  P1-3 CLOSED; the demo RED's clean re-measurement, P1-5, P1-6 and the final gate remain.
