@@ -29396,3 +29396,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And each fix is the same shape as the finding it belongs to:** a module the gate would skip (CP-1711's family), a count written as a literal (CP-1728's family), and an epoch written as a literal (CP-1679's family). **Three literals, three suites, all found by the boundary rather than by the focused runs** - which is the argument for having run it.
 - **The freeze is deliberately unfrozen for these three, and the ledger says so:** they are the work's own fallout, they are in scope, and the leg is re-run at the **same `-n 8`** afterwards rather than the failures being waived.
 - **State:** **leg 1 green; leg 2's three failures fixed with focused evidence; leg 2 re-running; leg 3 (serial CTest) after it**; P1-1 … P1-5 and P2 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1752 — Boundary leg 2 (teleop) PASSED, verified from its own xunit
+
+- **The leg:**
+  ```
+  teleop_rc=0  elapsed_s=235  scratch=…/experiments/v5a/t-teleop3  resolved=<same, fail-closed check passed>
+  ```
+  **and the canonical numbers, parsed from the 117 xunit files it wrote:**
+  ```
+  files=117  cases=1315  failures=0  errors=0  skipped=43
+  ```
+  **1315 cases and 43 skipped are the same figures P2 decoded from the canonical `Test.xml`** - so this boundary leg reproduces the v4 canonical counts **on the new run root**, with **zero failures**.
+- **And the three fixes are what took it from `rc=1` to `rc=0`** (CP-1751): a missing registration, a literal count, and a literal epoch. **None of the three was reachable from the demo leg or the eleven-suite set**, which is the whole argument for the boundary.
+- **Leg 3 (serial CTest) launched**, with its own corrections: a **fresh short scratch** (`experiments/v5a/t-ctest`, 84-char class) and its own private IPC base (`/tmp/s101-v5-ctest`), running `ctest -V` **serially** - the script's own comment records why: *"-j 8 makes test_unified_bridge\* contend for the process group"*.
+- **State:** **legs 1 and 2 green on the new root; leg 3 running; then the boundary record, the packet update and a further independent review**; P1-1 … P1-5 and P2 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
