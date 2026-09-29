@@ -233,3 +233,71 @@ def test_the_measurement_cli_requires_a_context_document_separate_from_the_ident
             "--ledger", str(tmp_path / "ledger.md")]
     with pytest.raises(ValueError, match="MEASUREMENT_CONTEXT_REQUIRED"):
         main(argv)
+
+
+def _bound_contract(tmp_path):
+    """A bound v2 contract plus the identities file that matches it - the pair the CLI's admission requires."""
+
+    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, KIND, SCHEMA_VERSION_V2,
+                                                          _contract_sha256)
+
+    identities = {name: "a" * 64 for name in IDENTITIES_V2}
+    identities["source_commit"] = "0" * 40
+    document = {"schema_version": SCHEMA_VERSION_V2, "kind": KIND, "identities": identities,
+                "source_hashes": {"anchors": "b" * 64}, "bound_files": {"anchors": "config/act/anchors.yaml"},
+                "measurements": {}, "support": {}}
+    document["contract_sha256"] = _contract_sha256(document)
+    contract_path = tmp_path / "contract.json"
+    contract_path.write_text(json.dumps(document))
+    identities_path = tmp_path / "identities.json"
+    identities_path.write_text(json.dumps(identities))
+    return contract_path, identities_path
+
+
+def test_the_cli_is_the_only_batch_seal_owner(tmp_path, monkeypatch):
+    """One seal owner: a driver writes raw evidence, the CLI closes the batch - and a driver that seals first wins.
+
+    The rule the review asks for, asserted behaviourally rather than by documentation: whichever side seals, the batch
+    carries exactly one seal and the later attempt is refused by name.
+    """
+
+    import sys
+    from so101_demo.cli.act_measure_task8_calibration import main
+
+    contract_path, identities_path = _bound_contract(tmp_path)
+    driver_dir = tmp_path / "drivers"
+    driver_dir.mkdir()
+    (driver_dir / "raw_driver.py").write_text(
+        "from pathlib import Path\n"
+        "def run(contract, batch_root):\n"
+        "    root = Path(batch_root)\n"
+        "    root.mkdir(parents=True, exist_ok=True)\n"
+        "    (root / 'raw.json').write_text('{\"row\": 1}')\n")
+    # the CLI hands the driver the *bound contract document*, not a path
+    (driver_dir / "sealing_driver.py").write_text(
+        "import sys\n"
+        "from pathlib import Path\n"
+        "sys.path.insert(0, str(Path(__file__).resolve().parents[0]))\n"
+        "from raw_driver import run as write_raw\n"
+        "from so101_demo.act.task8_measurement_contract import close_measurement_batch, require_v2_identity\n"
+        "def run(contract, batch_root):\n"
+        "    write_raw(contract, batch_root)\n"
+        "    close_measurement_batch(Path(batch_root), require_v2_identity(contract['identities']))\n")
+    monkeypatch.syspath_prepend(str(driver_dir))
+
+    batch_root = tmp_path / "batch"
+    ledger = tmp_path / "ledger.md"
+    assert main(["--contract", str(contract_path), "--identities", str(identities_path),
+                 "--batch-root", str(batch_root), "--ledger", str(ledger),
+                 "--driver", "raw_driver:run"]) == 0
+    sealed = json.loads((batch_root / "batch.json").read_text())
+    assert sealed["status"] == "CLOSED"
+    assert "raw.json" in sealed["files"], "the driver's raw evidence is sealed by the CLI"
+    assert ledger.read_text().count("VALID") == 1
+
+    # a driver that seals the same batch on its own makes the CLI's later close refuse, by name
+    other_root = tmp_path / "batch-two"
+    with pytest.raises(ValueError, match="MEASUREMENT_BATCH_ALREADY_CLOSED"):
+        main(["--contract", str(contract_path), "--identities", str(identities_path),
+              "--batch-root", str(other_root), "--ledger", str(tmp_path / "ledger-two.md"),
+              "--driver", "sealing_driver:run"])
