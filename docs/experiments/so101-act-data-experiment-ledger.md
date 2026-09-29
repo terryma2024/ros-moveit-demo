@@ -28562,3 +28562,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Which is the same shape this batch has now recorded five times:** *a name is not an identity.* `hasattr(cls, "__call__")` was not the class's interface (CP-1669), a length was not a key set (CP-1625), a substring was not an equality (CP-1621), a rule found in a file was not a module function (CP-1695), a shared value constructed twice became two (CP-1699) - **and now a counter that increments where I read it but not where the capture reads it.**
 - **The next probe is three lines and settles it:** print `id(nine._case_clock)` at the capture and `id(_case_clock)` inside `_current_readback`, together with `id(boundary.current_readback)` against `id(_current_readback)`. **If the ids differ, the fix is one assignment; if they match, the counter is being reset elsewhere** - and the fixture does re-create `_case_clock = {"count": 0}` at module scope (line 502), which is worth checking against the closure's own binding.
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration one identity check from the last link**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1707 — The hook was on the wrong object; with it in place the clock advances and only the gap's MECHANISM is left
+
+- **What the REFRESH probe showed:**
+  ```
+  REFRESH hook=PickPlaceSearchBoundary.current_readback  count=0  sim=1.4   <- the PRODUCTION method
+  REFRESH hook=_full_case_port.<locals>._current_readback count=1 sim=1.5   <- after attaching it to the port's boundary
+  REFRESH ... count=2 sim=1.6
+  REFRESH ... count=3 sim=1.7
+  REFRESH ... count=4 sim=1.8
+  top: ValueError TASK8_LIVE_EVIDENCE_GRID_GAP
+  ```
+  **The fixture had assigned its `current_readback` to a boundary object the port does not hold** (`_full_case_port`'s own), so the production method ran instead and returned a cached readback - which is why two phases reported one instant. **Attaching it to `port.boundary` fixed that in one line, and the clock now advances by exactly one period per sample.**
+- **And the remaining `GRID_GAP` now has a measured mechanism rather than a guess:** the port requests **four** readbacks (count 1→4) and the grid receives **fewer** samples, because `_phase_instants` returns **one instant per phase** when the phase reports no search iterations. **Readbacks that are not samples advance the clock and open a gap.**
+- **Which is CP-1702's option 1, now with evidence instead of an inference:** *"every readback is a sample"* - the literal reading of the design's "continuously at 10 Hz" - is the shape that makes the grid's sequence and the readback's sequence the same object. **The change is small and local: the port emits a grid sample for each readback it asks for, instead of counting instants per phase.**
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: the hook fixed, the clock advancing per sample, and the last change is the port's sampling granularity**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
