@@ -28944,3 +28944,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ```
   **My first attempt tried to derive the number inline** (`== len(port._phase_instants("SEARCH", port._validated_search_observation, {}))`) and failed on a second assertion (`every grid sample is an entry`) - because this suite's `recorder` and the window's own `_recorder` are not the same object, so equating them asserted something about the FIXTURE rather than about the feed. **The rule the old literal was approximating - how many instants a phase has, and that the grid advances one period per sample - is checked in the nine-phase suite, where the whole case runs**; here the honest claim is that the feed recorded and the window counted. **`32 passed` for that suite.**
 - **State:** **P1-4's eleven-suite set is expected green with the confirming run in flight**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1729 — P1-4 IS COMPLETE: eleven suites, 151 passed
+
+- **The confirming run:**
+  ```
+  151 passed in 99.93s
+  nine_phase_case  sealed_artifact  sealed_raw_sources  live_epoch_and_edges  search_port
+  live_evidence    measurement_driver  calibration_aggregator  identity_contract_end_to_end
+  phase_camera_measurement  formal_measurement_entry
+  ```
+  **Every suite of the P1-4 scope, green, with the epoch work, the identity contract, the phase-camera measurement, the formal entry and the one-clock fixture all in the same run.**
+- **What P1-4 asked for and what is now in the tree, by half:**
+  | the finding | what closed it |
+  | --- | --- |
+  | live-evidence epoch and the 10 Hz cadence | `FINAL_RELEASE_EPOCH`, the seal **comparing** the terminal identity, the port stamping each phase from its own rule (CP-1679/1680) |
+  | "10 Hz sampling" | the port samples **once per instant the phase reports**, with the edge additions recorded **beside** the grid and each naming its reason (CP-1685/1687) |
+  | the capture naming | the capture carries the phase, the step, **the instant and the sample's position** - so no two samples share a raw record (CP-1688/1723) |
+  | the fixture must not rewrite timestamps | **one monotonic source clock**, no wrapper, one construction site for the plan, and **no readback without a sample** (CP-1689 … 1722) |
+  | fixtures must not carry stale expectations | the four the finding predicted, each restated as the rule it approximated (CP-1727/1728) |
+- **And the honest cost, for the packet:** P1-4's fixture half took roughly forty checkpoints, and **every one of them moved a real defect** - including three that were the *same* defect in new places ("a shared value constructed twice": the prefix, the boundary's prefix, and the test's injected route) and one that was a **test collaborator outliving its reason** (CP-1722, the most expensive single item). **The lesson worth carrying forward is not the count; it is that a fixture with three module globals has three ways to leak, and a substituted collaborator that bypasses its own constructor is not a measurement.**
+- **State:** **P1-4 complete (production and fixture halves, eleven suites green); P1-5's joined chain is next, with its RED committed and its first half already passing** (the production runner seals, `run_pick_place_case` publishes, only the owner is substituted); boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
