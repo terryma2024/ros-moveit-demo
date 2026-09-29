@@ -17663,3 +17663,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary IV's remaining work, unchanged and named:** the live driver wiring that records the descriptor and raw
   evidence at measurement time (CP-1117, needs an authorised runtime - the question is with the owner), and then
   Boundary V's production-chain test. Nothing weakened, nothing deleted, no push, no stack, no hardware.
+
+## CP-1127 — The third missing link: one canonical document was published under a private name
+
+- **RED, clean, and the same enumerate-then-check technique found it:** the aggregation's published set was
+  `['aggregation-receipt.json', 'calibration-report.json', 'head-search-qualification.json', 'task8-ready-support.json']`
+  while the module's **own** `DOCUMENTS` tuple - the definition the render path and every other consumer reads - names the
+  third document **`task8-ready-calibration.json`**. So one of the four canonical documents was published under a name
+  **no definition in the tree uses**.
+- **Fixed:** the aggregation now writes `DOCUMENTS[2]` and `DOCUMENTS[3]`, so the names come from the definition rather
+  than being restated, and a new test asserts the published set equals `DOCUMENTS` **exactly**.
+- **GREEN: 109 passed, rc=0 across seven suites** - aggregator, contract, head-search binding, calibration render,
+  calibration, calibration admission, artifact bundle - run in one targeted invocation with a fresh NVMe scratch,
+  `<R>/scratch/r737.<n>` and `TMPDIR` verified through the exact test interpreter; RED `beh-r736-red.log`, GREEN
+  `beh-r737.log`.
+- **Three rounds, three real gaps, one technique:** enumerate what a publication contains and check that every other
+  definition accounts for it. CP-1124 (the support sample was not **returned**), CP-1126 (the receipt did not **vouch**
+  for it), CP-1127 (the report was **named** wrongly). All three were invisible to `require_gate`, which validates the
+  report's contents and never the publication's identity as a set. Item 1 is now a **review** rather than a hunt: the four
+  documents exist, are named by the definition, are returned, and are vouched for.
+- **Boundary IV's remaining work, unchanged:** the live driver wiring that records the descriptor and raw evidence at
+  measurement time (CP-1117 - needs an authorised runtime, question with the owner), then Boundary V's production-chain
+  test. Nothing weakened, nothing deleted, no push, no stack, no hardware.
