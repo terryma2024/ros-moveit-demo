@@ -24188,3 +24188,16 @@ not an inference of mine.**
   the qualification rule itself states what a bounded case cannot (CP-1457).
 - **State:** committed with the focused file green (`7 passed`); the packet is unchanged this round, so its digest stays
   `7de92953cc5033c99d35e793729dc51752773f35ee91692fcebee79581f171fe`; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1460 — The production skip contract is pinned at the unit level, not only end to end
+
+- **Why this was worth doing:** the change that stopped the SEARCH port handing a **three-key** document to a **24-key** recorder was proven only **end to
+  end** (the child fixture). A reviewer is entitled to ask what happens to that behaviour if the end-to-end fixture is edited - and nothing at the unit
+  level would have caught its removal. **It is now pinned in the port's own test file** (`src/so101_demo_py/test/test_act_task8_search_port.py`, **12
+  passed**), against a boundary with **no `capture_evidence_fields`** - i.e. exactly the production situation:
+  - the SEARCH phase **completes** with a window attached (before the change this raised `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID`, always);
+  - the window's grid stays **empty** and the recorder's entries stay **empty** - no partial sample is ever handed over;
+  - `_grid_sample(...)` **reports `None`**, documented as "this port cannot fill the frame", rather than a document the recorder must refuse.
+- **And the count delta is recorded rather than implied:** this adds one test to the **demo** package, whose boundary figure was **5651 passed / 163
+  skipped**; the file itself is green (`12 passed`) and, as with CP-1455, **I did not re-run the whole gate** - the plan allows one integration boundary.
+- **State:** committed; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
