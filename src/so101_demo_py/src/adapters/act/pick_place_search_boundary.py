@@ -138,6 +138,16 @@ class PickPlaceSearchBoundary:
         goal_id = executor.submit(ticket, prefix, permit)
         wait(ticket, goal_id)
 
+        # two documents, two consumers: the READBACK carries the robot's state (the goals' held row) and the phase's
+        # facts, while the PROOF's snapshot is the executor's own - the document the checker is run against, produced by
+        # the snapshot port the paired execution owns (CP-1509). Taking one for the other was four KeyErrors' worth of
+        # evidence that they are not the same document.
+        snapshot_port = getattr(executor, "snapshot", None)
+        if not callable(snapshot_port):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: prefix_executor.snapshot")
+        proof_snapshot = snapshot_port(ticket, goal_id)
+        if type(proof_snapshot) is not dict:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: proof snapshot")
         snapshot = self.reset.sources.capture(request["attempt_id"])
         observation = snapshot.get("observation")
         if not isinstance(observation, dict) or not isinstance(observation.get("state"), (list, tuple)) \
@@ -155,11 +165,20 @@ class PickPlaceSearchBoundary:
 
         from so101_demo.act.path_proof import PathProver, RelativePathRequest
 
+        # the request's time axis is the CASE's own clock (`bridge <= observation < start < first target`), so the two
+        # times come from the execution layer that knows them - passing monotonic() here was a value I guessed, and the
+        # builder refused it, which is exactly what the builder is for
+        axis = getattr(executor, "time_axis", None)
+        if not callable(axis):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: prefix_executor.time_axis")
+        measured = axis(ticket, goal_id)
+        if type(measured) is not dict or set(measured) != {"bridge_time_s", "start_time_s"}:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: time axis")
         path_request = RelativePathRequest.from_source_receipt(
-            prefix, receipt=receipt, bridge_time_s=finite(self.reset.sources.monotonic()),
-            start_time_s=finite(self.reset.sources.monotonic()))
+            prefix, receipt=receipt, bridge_time_s=finite(measured["bridge_time_s"]),
+            start_time_s=finite(measured["start_time_s"]))
         proof = PathProver(screen.path_checker).prove(
-            path_request, snapshot, ticket=ticket, reset_epoch=self.reset.receipt.new_epoch,
+            path_request, proof_snapshot, ticket=ticket, reset_epoch=self.reset.receipt.new_epoch,
             policy_fingerprint=prover_identity["policy_fingerprint"],
             profile_sha256=prover_identity["profile_sha256"],
             contact_scope_sha256=prover_identity["contact_scope_sha256"],

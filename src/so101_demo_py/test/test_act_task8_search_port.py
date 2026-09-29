@@ -495,7 +495,7 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document(tmp_pat
     # the broker's ownership ticket (external process identity) and the contact policy's fingerprint
     port.boundary.reset.act_context = {"lease_token": "lease-1"}
     port.boundary.reset.broker = SimpleNamespace(
-        ownership=SimpleNamespace(ticket=lambda *parts: (1, 2) + tuple(parts[1:])),
+        ownership=SimpleNamespace(ticket=lambda *parts: (1, "owner-key") + tuple(parts[1:])),
         _prefix_source_port=_PrefixSource())
     port.boundary.reset.sources.contact_pairs.fingerprint = "policy-fingerprint"
     port._expert_route = _Route()
@@ -553,7 +553,7 @@ def test_approach_refuses_by_name_when_the_route_or_the_execution_is_missing():
 
     port.boundary.reset.act_context = {"lease_token": "lease-1"}
     port.boundary.reset.broker = SimpleNamespace(
-        ownership=SimpleNamespace(ticket=lambda *parts: (1, 2) + tuple(parts[1:])),
+        ownership=SimpleNamespace(ticket=lambda *parts: (1, "owner-key") + tuple(parts[1:])),
         _prefix_source_port=_PrefixSource())
     port.boundary.reset.sources.contact_pairs.fingerprint = "policy-fingerprint"
     port._expert_route = _Route()
