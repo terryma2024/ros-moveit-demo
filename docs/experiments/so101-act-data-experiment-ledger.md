@@ -17119,3 +17119,19 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   else in Boundary IV's index half remains green, and no rule was weakened to make this pass.
 - **Evidence:** scratch `<R>/scratch/r696.<n>` with `TMPDIR` verified through the exact test interpreter; log
   `beh-r696-red.log`.
+
+## CP-1101 — 17 → 21, and the seven support fields come from a v2 contract the test does not use
+
+- **Landed half the fix and measured the other half:** the aggregator now folds the batch's `camera_measurements` into
+  the published report with the same sample citation, which took the report from **17 to 21** fields. The support fields
+  did not follow, and the reason is exact rather than mysterious: `contract.get("support", {})` is **empty for the v1
+  bound contract these tests use** - the aggregator's own comment says so ("a v1 bound contract carries no support
+  section") - so extending the fixture with `sorted(contract.get("support", {}))` added nothing.
+- **So the remaining seven need a v2 contract in that test**, which is the same one-schema shape this boundary kept
+  arriving at (CP-1082 bound the measure test from `TEMPLATE_V2`; CP-1097 gave the identity test a bound v2 contract).
+  The honest next step is therefore: give this test a bound v2 contract, let the fixture write its support fields with
+  **the units that contract declares** rather than a blanket `"rad"`, and expect the report to reach the contract's 28.
+- **State: 1 failed / 18 passed** in that module, the failure being CP-1100's proven RED, now reading `21 == 28` instead of
+  `17 == 28`. Five of the eleven missing fields are accounted for and the fix for the rest is named.
+- **Evidence:** scratch `<R>/scratch/r697.<n>` with `TMPDIR` verified through the exact test interpreter; log
+  `beh-r697.log`; the earlier state `beh-r696-red.log`.
