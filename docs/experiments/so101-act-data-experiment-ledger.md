@@ -26680,3 +26680,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   refusal. **The next actions are one check each** - find whether the qualification path requires the identity *from the context* (and if so, where the contract says so), and identify what the CLI is supposed to hand the composition as its `io_client` - **and neither is guessed at.**
 - **State:** remediation list visible in the task list with this item's verification status; goal still **paused+disarmed** (the tool refuses a model-initiated resume) while this session continues; nothing pushed, nothing deleted; no new session, goal, worktree
   or stack; no hardware, no live stack; P2 live not started.
+
+## CP-1600 — The review's integrity finding is REPRODUCED here, and the reproduction is sharper than the charge
+
+- **I re-ran the nine-phase case and read its sealed artifact back, sample by sample, and the defect is not subtle:**
+  ```
+  samples: 10   (SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, RADIAL_RETREAT, RADIAL_RETREAT, FINAL_CHECK)
+  every sample's raw_records: {'arm': 'raw/arm.json', 'contact': 'raw/contact.json', 'head': 'raw/head.json',
+                               'neck': 'raw/neck.json', 'scene': 'raw/scene.json', ...}
+  distinct paths per source:  arm 1 of 10 · contact 1 of 10 · head 1 of 10 · neck 1 of 10 · scene 1 of 10
+                              world 1 of 10 · wrist 1 of 10
+  every sample's release_epoch: 0 - including RELEASE and FINAL_CHECK
+  ```
+- **So the charge is confirmed, and the shape is worse than "digests do not match":** the references are **not merely stale, they are IDENTICAL** - every phase points at the **same seven file names** (`raw/<source>.json`), so the sealed
+  artifact **claims ten phases of raw evidence while naming one file per source**, and any later capture that writes those names **overwrites** what an earlier phase recorded. **The sealed artifact therefore cannot support a per-phase claim about its own raw
+  sources**, and the review's "45 of 70 references do not match" is the digest-level symptom of this.
+- **And the second half stands too:** every sample **and** the sealed identity carry `release_epoch = 0`, so **RELEASE and FINAL_CHECK are stamped with the pre-release epoch** - the batch's own CP-1555/CP-1558 work made the phase *documents* carry the
+  incremented epoch, and the **sealed evidence did not follow**. **The published artifact identity therefore disagrees with the case it describes.**
+- **What this means for the remediation, and it is the owner's item 2 exactly:** the raw records a capture produces must be **immutable and uniquely named per capture**, so no phase can overwrite another's evidence; the seal and the qualification must
+  **fail closed** when a per-sample raw source does not match; and the **release epoch must be consistent between the case and the artifact identity**. **This is a real defect in what this batch seals, found by an independent reviewer and now reproduced
+  here - the honest statement is that the batch's earlier confidence in the sealed artifact was misplaced.**
+- **State:** remediation item 2 moved from "verify" to **reproduced**; item 1 verified in CP-1599; the rest of the list is untouched so far. **The goal is still paused+disarmed** - the tool refuses a model-initiated resume even after the user's `/goal resume`
+  message reached this session, so the transition appears to need the TUI's own affordance. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live not started.
