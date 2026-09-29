@@ -403,9 +403,17 @@ class ChildPort(PickPlaceSearchPhasePort):
     recorder. The former FakePort seal (a class attribute monkeypatched by the chain test) is gone.
     """
 
-    def __init__(self, *, session_id="session-item5"):
+    def __init__(self, *, session_id="session-item5", expert_route_factory=None, route_motion=None):
         self.boundary = _Boundary(session_id=session_id)
-        super().__init__(self.boundary)
+        # P1-5 (rereview 5): the PRODUCTION port accepts an expert route factory, and the production child port
+        # (`pick_place_child_port.py:147`) always passes one - `VisibleApproachExpertRoute` over a
+        # `SelectedApproachCandidate`. This subclass left it out, which is why a FULL case was refused by name at
+        # APPROACH (`TASK8_PHASE_NOT_PROVISIONED: APPROACH: expert_route`). It is forwarded now, so a caller that has
+        # the admitted values can drive a full case while a SEARCH-only caller behaves exactly as before.
+        # `route_motion` is NOT a port parameter - the production builder turns it into the APPROACH screen's path
+        # checker and wires that separately (`pick_place_child_port.py:170-181`), so only the factory is forwarded here.
+        super().__init__(self.boundary, expert_route_factory=expert_route_factory)
+        self.route_motion = route_motion
         self.receipt = None
 
     def bind_live_evidence(self, window, *, support_distance_max_m=None, raw_records_root=None):
@@ -442,8 +450,9 @@ class FakeBroker:
 
 
 def _prepare_child_case(tmp_path, monkeypatch, *, case_id="case-05", campaign_id="campaign-item5",
-                        session_id="session-item5", attempt_id="attempt-item5",
-                        worker_id="item5-child"):
+                         expert_route_factory=None, route_motion=None,
+                         session_id="session-item5", attempt_id="attempt-item5",
+                         worker_id="item5-child"):
     """Build the real child, its substituted port and the phase request - parameterised for reuse.
 
     The ids are the only thing a second caller has to change: the case-execution harness runs cases named
@@ -458,7 +467,8 @@ def _prepare_child_case(tmp_path, monkeypatch, *, case_id="case-05", campaign_id
     # the chain test's port builds its rows from its own fixture identity, and the production recorder refuses
     # samples naming another case - so the fixture supplies this case's identity to that builder (fixture code,
     # not production code, and the sample builder itself stays the production one)
-    port = ChildPort(session_id=session_id)
+    port = ChildPort(session_id=session_id, expert_route_factory=expert_route_factory,
+                     route_motion=route_motion)
     # the rows must carry the epochs the port is actually at, since the runner advances release_epoch as the case
     # proceeds - so the builder reads the live port rather than a constant
     monkeypatch.setattr(chain, "_identity", lambda: {"case_id": case_id, "session_id": session_id,
@@ -963,7 +973,9 @@ def test_the_case_evidence_is_indexed_and_a_tampered_raw_record_is_refused(tmp_p
         measurements={"cup_support_distance_m": 0.01, "end_effector_position_m": [0.0, 0.0, 0.1],
                       "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_RAW_RECORD_INVALID"):
-        recorder.append(sample)
+        # P1-4: `append` now takes the sample's KIND - the recorder's sealed entry records whether it was a grid point
+        # or an event, and an event carries the reason it was taken - so a direct caller names it.
+        recorder.append(sample, kind="grid")
 
 
 def test_a_campaign_of_prefixes_alone_cannot_qualify():

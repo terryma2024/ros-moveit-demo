@@ -30875,3 +30875,39 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the aggregator join, then the xfail and the duplicate chain are removed in the same change.** P1-1 through P1-4
   CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1811 — P1-5's wiring, half done: the factory reaches the port, and a regression of mine is fixed
+
+- **The edit (`test_task8_child_driven_case.py`, which is clean and in HEAD, so it is mine to change):**
+  ```python
+  class ChildPort(PickPlaceSearchPhasePort):
+      def __init__(self, *, session_id="session-item5", expert_route_factory=None, route_motion=None):
+          self.boundary = _Boundary(session_id=session_id)
+          super().__init__(self.boundary, expert_route_factory=expert_route_factory)   # the factory IS a port parameter
+          self.route_motion = route_motion                                            # route_motion is NOT
+  ```
+  and `_prepare_child_case(..., expert_route_factory=None, route_motion=None, …)` forwards both. **A SEARCH-only caller
+  behaves exactly as before** (both default to `None`), **and a caller holding the admitted values can now drive a full
+  case.**
+- **And a mistake worth recording because the code caught it:** my first version passed `route_motion` to
+  `super().__init__` too - but the port's signature is
+  ```python
+  def __init__(self, boundary, *, expert_route_factory=None, evidence_recorder=None, live_evidence_window=None)
+  ```
+  **`route_motion` belongs to the BUILDER, which turns it into the APPROACH screen's path checker and wires that
+  separately** (`pick_place_child_port.py:170-181`). So the port takes the factory and the harness holds the motion for
+  the checker wiring - **the next increment, not a parameter to guess at.**
+- **Evidence: `7 passed, 1 xfailed`** across the teleop child-driven suite and my full-case module - **the xfail still
+  holds, which is the honest signal that the full case is not yet driven end to end.**
+- **And running the teleop suite found a regression of mine that three other files had not:**
+  ```
+  test_task8_child_driven_case.py:976  TypeError: Task8LiveEvidenceRecorder.append() missing … 'kind'
+  ```
+  **CP-1805 changed `append(sample)` to `append(sample, *, kind, reason=None)`** and this test calls the recorder
+  directly; its four-file run never touched the teleop suite. The caller now names its kind, with the reason in a
+  comment. **So the focused cadence is not bookkeeping: a signature change reached a caller three files away, and the
+  next suite run found it.**
+- **State:** **P1-5 half wired - the production expert-route factory reaches the port, and the route-motion checker
+  wiring plus the aggregator join remain, after which the xfail and the duplicate chain are removed together.** P1-1
+  through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**
