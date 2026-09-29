@@ -17082,3 +17082,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   compare bytes**, publishing only once; **readback from disk** of the sample path and hash; then `require_gate(report,
   "task8_live")` and `validate_head_search_binding()`. Each needs its own RED, and the render-twice/publish-once pair is
   the one most likely to need a fixture addition rather than a rule.
+
+## CP-1099 — Publishing half, second check: a repeated render is byte-identical (characterization again)
+
+- **The RED for "render twice, compare bytes, publish once" passed immediately:** rendering the same immutable batch into
+  the same publication root names the same documents, produces **identical bytes**, and leaves **no extra or duplicated
+  file** behind. So the determinism the review asks for **already held**, and this is the **third characterization** in
+  Boundary IV - after the symlink rule (CP-1085) and the values-not-verdicts check (CP-1098).
+- **That is worth stating plainly rather than burying:** three of the requirements I expected to have to implement were
+  already met, and each is now **pinned** against future refactors. The pattern in this boundary is that the *rules I
+  added* were the ones that were missing (entry validation, the canonical key set, digest recomputation, anchor and phase
+  coverage, source-time monotonicity, cross-root identity) while several *properties the review named* were already true
+  and only lacked tests.
+- **GREEN: 36 passed, rc=0**, scratch `<R>/scratch/r695.<n>` with `TMPDIR` verified through the exact test interpreter;
+  log `beh-r695-red.log` (named for the attempt, though green).
+- **Publishing half still open:** the four **canonical documents** from approved closed-sample builders; a real
+  **28-field `TASK8_READY`**; **readback from disk** of the sample path and hash; then `require_gate(report,
+  "task8_live")` and `validate_head_search_binding()`. Each needs its own RED, and each is a check on the aggregator's
+  output rather than a change to the index, which makes them the cheapest remaining pieces of this boundary.
