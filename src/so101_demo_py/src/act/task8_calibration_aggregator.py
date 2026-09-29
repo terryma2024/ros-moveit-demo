@@ -184,7 +184,9 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     source_provenance_sha256 = provenances.pop()
     contract_sha256 = contract["contract_sha256"]
     for batch, identity in batches:
-        if identity.get("contract_sha256") != contract_sha256:
+        # the identity names the contract it was measured under as measurement_contract_sha256; contract_sha256 is the
+        # bound document's own key, and reading the wrong one made every batch look foreign
+        if identity.get("measurement_contract_sha256") != contract_sha256:
             raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
     thresholds = contract["thresholds"]
     checks = {
