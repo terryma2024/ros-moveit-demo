@@ -26120,3 +26120,20 @@ picture in both directions.**
      fighting.
 - **And one more production-facing fix came out of it:** the receipt is now **signed against the prefix the boundary actually receives**, which is what `PATH_SOURCE_RECEIPT_INVALID` had been saying.
 - **State:** P1-1..P1-4 complete and committed; the focused set green. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1568 — P2's components located: the seal fixture, the projection that consumes it, and the ten-field identity
+
+- **P1-4 is complete (CP-1567), so this round is P2's reconnaissance - and it found the pieces rather than a blank page:**
+  | P2 element | where it lives |
+  | --- | --- |
+  | a sealed attempt | `test/teleop/validation_seal_fixture.make_sealed_attempt(worker_root, identity, *, succeeded=...)` - creates an `AttemptWorkspace`, writes the attempt result, a real PNG and the perception input, then **seals** |
+  | what consumes the seal | `test_expert_validation_campaign_layout_projection.py` and `test_expert_validation_production_projection.py` - **the projection/ledger layer**, which is where a verdict and a ledger row come from |
+  | the **ten-field identity** | `act/task8_measurement_schema.py` holds `MEMBERS` - the identity the review asks to compare **exactly** |
+  | the CLI surface | `so101_teleop/expert_validation/main.py`, with `production.py`'s `close()` and `store.py`'s `close()` |
+  | the verdict vocabulary | `expert_validation/{campaign_layout,journal_layout,production}.py` all carry verdicts |
+- **So the three scenarios the review names are tests of THAT chain:** a **corrupted seal** (the sealed workspace's bytes no longer match its seal), **cleanup contamination** (something left in the
+  workspace after the seal), and a **foreign identity** (a seal whose ten fields do not match the case being projected). **Each must produce a terminal verdict, a non-zero exit and a ledger row that says INVALID** -
+  and the fixture above is what builds their inputs.
+- **And the same pattern holds as at every other layer in this batch:** the components exist and are exercised separately; **what P2 asks for is the chain driven end to end with its refusals named**, which is a
+  test rather than a subsystem.
+- **State:** P1-1..P1-4 complete and committed; the focused set green; no new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
