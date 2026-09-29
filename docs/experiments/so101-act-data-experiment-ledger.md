@@ -33612,3 +33612,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   revert cost only the six-and-five line edits it had just made.**
 - **State:** **P1-1 through P1-6 CLOSED; the demo package gate is being re-measured with the fix in place, and the P1-4
   blast radius is recorded as a finding for the packet.** **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1898 — The demo package gate is GREEN with the changes in place
+
+- **The post-change measurement, same interpreter, same xdist width, same environment as every run in this drive:**
+  ```
+  cd src/so101_demo_py
+  $R/test-venv/bin/python -m pytest -q -p no:cacheprovider -n 8 test/
+      5793 passed, 163 skipped, 4 warnings in 120.74s (0:02:00)      rc=0
+  ```
+  **so with the option-2 production change, the deletion of the duplicate chain, the three `_Route` doubles extended,
+  and the seventeen stale recorder callers fixed, the whole `so101_demo_py` test directory passes - and the count rose
+  from the 5764 this ledger last recorded because the tree has gained tests since that figure.**
+- **Two figures now exist for this package in this ledger, and they mean different things:**
+  | run | result | what it covers |
+  | --- | --- | --- |
+  | earlier | 5764 passed, 163 skipped, rc 0 | **before P1-4**, when the recorder had no `kind` parameter |
+  | **now** | **5793 passed, 163 skipped, rc 0** | **after P1-1 through P1-6**, with every change above |
+- **State:** **P1-1 through P1-6 CLOSED and the demo package gate green; the teleop suite and the serial CTest are the
+  remaining re-measurements before the packet is final.** **Task-list statuses are unchanged, so they are not re-stated.**
