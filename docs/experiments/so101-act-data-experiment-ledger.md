@@ -28039,3 +28039,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Next (P1-3 GREEN):** give the evaluator the geometry it must consume (trajectory, target, camera, occluders) and make it project per sample at the admitted period, retaining inputs and results; then the driver's private replay must hand it the run's real trajectory and target rather than a bare `(phase, index)` pair, and the design 4.4
   coverage - **three anchors, the complete phase path, 2 ms sampling** - becomes the driver's own count rather than a label.
 - **State:** **P1-3 RED in place**; the task list keeps P1-3 in-progress; boundary unchanged and not re-claimed (the next boundary needs a new run root); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1675 — P1-3 half done: the evaluator MEASURES; the driver does not yet give it the geometry
+
+- **What is green, and it is the verdict's own test condition:** `4 passed` in `test_act_task8_phase_camera_measurement.py` and `72 passed` across the six affected suites (evaluator, composition contract, runtime descriptor, formal entry, measurement driver, aggregator).
+  | the verdict asks | what the evaluator now does |
+  | --- | --- |
+  | changing the **target** changes the observation | pinhole projection of the target's own position and radius, per sample |
+  | changing the **camera** changes the observation | the admitted block's pose, panned by the sample's **neck joint** (`NECK_JOINT_INDEX = 6`, the same joint the search binding reads) |
+  | changing an **occluder** changes the observation | each named occluder's **own geometry** is tested against the camera-target segment - **not** a row count, which is exactly the echo the verdict refuses |
+  | per-sample inputs **and** results retained | every sample carries `joints_rad`, `neck_rad`, the camera pose, `bbox_px`, `visible`, `occluded_by` |
+  | sampled at the admitted period | `ADMITTED_PERIOD_S = 0.002` named once; the count follows the path's duration |
+- **And the half that is NOT done, stated so it cannot be mistaken for closed:** the **driver still calls `self.phase_camera(phase, index)`** with no geometry, so a production replay reports `geometry_state: "ABSENT"` and an empty sample list. **That is deliberately distinguishable from a measurement** - the marker exists so the absent case
+  cannot masquerade as one - **but it is not the measurement the design requires.** The wiring is: the driver hands the private replay the run's trajectory (the phase path it commands, sampled at 2 ms) and the target (from the admitted binding), and a production run that reaches the
+  replay **without** them should refuse by name rather than seal an `ABSENT` observation.
+- **Why it is split rather than rushed:** the remaining piece changes what the **driver** records inside a sealed batch, and the verdict's execution order puts focused RED/GREEN at each boundary - so the driver's wiring gets its own RED (a run whose replay must carry `MEASUREMENT`), not a quiet edit inside this one.
+- **State:** **P1-3 in progress (evaluator green, driver wiring next)**; the task list keeps P1-3 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
