@@ -33560,3 +33560,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-6 is satisfied for the teleop package; the remaining items are the demo RED's clean re-measurement, the
   final freeze gate on a fresh run root, and the re-review packet.** P1-1 through P1-5 CLOSED. **Task-list statuses are
   updated to match, and their content is unchanged.**
+
+## CP-1896 — A gate invocation error, classified before it could be mistaken for RED
+
+- **The first package gate failed in 0.47 s, and the reason is the invocation, not the code:**
+  ```
+  colcon test --packages-select so101_demo_py --pytest-args "-q -p no:cacheprovider -n 8"   -> rc=4
+  ERROR: usage: __main__.py [options] [file_or_dir] [file_or_dir] [...]
+  __main__.py: error: unrecognized arguments: - -p no:cacheprovider -n 8
+  ```
+  **so colcon split the argument string and pytest was handed a bare `-`** - **and this repository's own rule applies
+  exactly here:** *"Do not count a test as RED unless the intended test or code boundary actually ran."* **It did not run:
+  nothing was collected, nothing failed.**
+- **The gate is therefore run directly, with the same interpreter and the same xdist width the earlier gates used:**
+  ```
+  cd src/so101_demo_py
+  $R/test-venv/bin/python -m pytest -q -p no:cacheprovider -n 8 test/
+  ```
+  **with `TMPDIR`/`TMP`/`TEMP` under the task's evidence root and `MUJOCO_GL=egl`** - the same environment every other run
+  in this drive used.
+- **State:** **P1-1 through P1-6 CLOSED; the post-change gates are running, and their results will be appended to the
+  packet rather than summarised ahead of them.** **Task-list statuses are unchanged, so they are not re-stated.**
