@@ -60,19 +60,27 @@ def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=Tru
     if with_dispatch:
         broker.dispatch = lambda ticket_, kind, goal: (calls.append(("dispatch", kind, goal)), 42)[1]
 
+    scene_state = {"attached": True}
     boundary = SimpleNamespace(
         reset=SimpleNamespace(receipt=SimpleNamespace(new_epoch=2), sources=sources, broker=broker,
                               act_context={"lease_token": "lease-1"}),
         # the release phases read the gripper's open position from the MODEL's own joint range, so the stub carries
         # the fixture's real screen - the same MuJoCo model the rest of this suite uses
-        approach_screen=screen)
+        approach_screen=screen,
+        # the release detaches the cup from MoveIt BEFORE the gripper opens (the repository's own rule), so the stub
+        # carries a stateful planning scene - the same shape the composite's is
+        # the scene is STATEFUL: it holds the cup until the detach, and the detach is read back - a stub that always
+        # reports attached is refused by name ("planning scene still attached"), which is how this shape was settled
+        planning_scene=SimpleNamespace(is_attached=lambda: scene_state["attached"],
+                                       detach=lambda: scene_state.update(attached=False)))
     if with_ik:
         boundary.motion_target_joints = lambda target: (calls.append(("ik", target)) or (0.5,) * 5)
     # the boundary's own bookkeeping, which a release increments and a set-down records
     boundary._release_epoch, boundary._set_down_step = 0, None
     boundary._gate_facts = PickPlaceSearchBoundary._gate_facts   # a staticmethod: assigned, not bound
     for name in ("sequence_phase", "sequence_facts", "_checked_aggregates", "_motion_facts", "_release_facts",
-                 "_gripper_open_rad"):
+                 "_gripper_open_rad",
+                     "detach_moveit", "planning_attached"):
         setattr(boundary, name, MethodType(getattr(PickPlaceSearchBoundary, name), boundary))
     return (boundary, ticket, capture,
             _template() if with_template else None,
