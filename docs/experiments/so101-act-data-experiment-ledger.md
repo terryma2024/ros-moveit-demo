@@ -15639,3 +15639,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `TMPDIR`-depth assumption in the module's own fixture with an exact exception to cite; Task 10 blocked until the 17
   search values are reviewed. No formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1035 — Read the fixture's intent, and my recommendation (a) was wrong: `parents[2]` is deliberate
+
+- **Read the whole function, not just the failing line, and it changes the conclusion:**
+  ```python
+  def socket_path():
+      task_root = Path(os.environ["TMPDIR"]).parents[2]
+      ipc_root = task_root / "ipc"
+      ipc_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+      parent = Path(tempfile.mkdtemp(prefix="res-", dir=ipc_root))
+      return parent / f"p{uuid.uuid4().hex[:8]}.sock"
+  ```
+  Walking **up** two levels from the per-run `TMPDIR` is how the module reaches a **task root shared by every scratch run**,
+  so that distinct runs get distinct *private* socket directories **under one shared `ipc/` root**. That is exactly what
+  the module's other test asserts - `test_distinct_scratch_runs_never_share_private_socket_directory` sets two different
+  `TMPDIR`s and compares the resulting parents - so the depth assumption is **intentional semantics, not a defect**.
+- **Which means the fix I recommended is the harmful one.** Replacing the derivation with a module-scoped temporary
+  directory would give each run its own root and **break the property that test exists to protect**. I am withdrawing
+  option (a) and correcting the record rather than quietly picking the other option: a wrong recommendation left standing
+  in a ledger is worse than an admitted reversal.
+- **The real requirement, stated exactly:** `TMPDIR` must sit at the **documented scratch depth** -
+  `<task-root>/scratch/<test-run-id>/tmp`, whose `parents[2]` is the task root. My earlier focused runs satisfied it by
+  accident (`$R/scratch/<id>/tmp` → `parents[2]` = the registered evidence root, a task root). **The gate does not**:
+  it creates per-process tmp at `<evidence-root>/gate-rNNN/scratch/rNNN/<shard>/tmp`, so `parents[2]` lands on
+  `gate-rNNN/scratch`, which is not a task root - and the module then builds its `ipc/` root one level too deep and fails
+  at `assert ready.wait(1)` because its server thread cannot bind where the client expects.
+- **So the open item is about the gate's tmp depth, not the module's robustness** - and it is a change to repository
+  tooling (`tools/so101_pytest_gate.py`'s per-process directory layout) or to how `--evidence-root` is passed, either of
+  which the owner should choose. Nothing in this task's code is involved, and the module's own semantics are sound.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's single failing module is now understood *correctly* - its requirement is the documented scratch
+  depth, which the gate's own tmp layout does not reproduce; Task 10 blocked until the 17 search values are reviewed.
+  No formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
