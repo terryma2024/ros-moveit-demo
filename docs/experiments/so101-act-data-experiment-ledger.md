@@ -23248,3 +23248,21 @@ not an inference of mine.**
   wrong; my enumeration of the check is incomplete, and reading is the only fix for that.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1403 — FOUND IT, and my own `cut` hid it for eight rounds: the port requires a real `SimulationEvidence`
+
+- **The condition, uncut (`pick_place_search_port.py:239`):**
+  ```python
+  or not isinstance(world, SimulationEvidence)
+  ```
+  **`world` must be a real `SimulationEvidence`, not a `SimpleNamespace`** - and the segment suite's `_raw` builds exactly a `SimpleNamespace`. That
+  single line is the whole `physical readback scope` refusal, and **it sits at the TOP of the disjunction, which is why every condition I probed
+  below it passed while the port still refused.**
+- **And why I missed it for so long: every one of my reads of this file piped through `cut -c1-112` or `-c1-118`,** which truncated the longer
+  condition lines - **the isinstance line survived, but I was reading the conditions I expected to see rather than the file's own list, and the
+  truncated view made that easier.** The uncut read took one call and answered it immediately. **That lesson is worth more than the fix.**
+- **The fix, next:** build the rows' `world` as a real **`SimulationEvidence`** (its field list is printed above) instead of a `SimpleNamespace`,
+  keeping the identity stamps and the live receipts the earlier rounds established. **Then the scene/contact/observation checks below it are the
+  ones already satisfied.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
