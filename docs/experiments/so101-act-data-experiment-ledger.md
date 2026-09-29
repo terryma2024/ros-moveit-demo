@@ -11052,3 +11052,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-854 — Addendum to CP-853: the identity set lives in the Task 8 artefact bundle
+
+- **Located the exact carrier after CP-853 was written, so the record is corrected rather than left vague:**
+  `act/task8_artifact_bundle.py:28` names the identity tuple ending
+  `("…", "contact_policy_fingerprint", "act_profile_sha256")`, and `act/task8_live_evidence.py:295`/`:320`
+  declare the same vocabulary (`source_provenance_sha256`, `runtime_config_sha256`,
+  `contact_policy_fingerprint`, …) with `:625` writing
+  `"contact_policy_fingerprint": identities["contact_policy_fingerprint"]`. Both modules are the ones this task
+  already built, so the five digests the measurement contract binds are **assembled by the artefact bundle**,
+  whose identities the live qualification then reads (`task8_live_qualification.py:181`).
+- **Consequence for ordering, which I will read before acting rather than assume:** provenance is built (CP-851)
+  and already carries a `calibration_identity`; the bundle is what records all five identities. So the ladder's
+  measurement may be intended to follow an initial bundle assembly from provenance plus the calibration report,
+  rather than precede it. The next step is to read `task8_artifact_bundle.py`'s assembly and the report step, and
+  follow the order the code enforces - not to synthesise the two digests to make the measurement run out of turn.
+- **Boundaries unchanged:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate
+  lowered; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
