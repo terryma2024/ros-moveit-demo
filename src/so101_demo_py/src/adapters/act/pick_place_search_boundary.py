@@ -24,6 +24,13 @@ def _scene_port(node, timeout_s):
     return RosTaskScenePort(node, "mujoco", timeout_s)
 
 
+#: which admitted motion state each sequence phase aims at - resolved by the production pick resolver, so the phase's
+#: target is validated and workspace-checked before anything is dispatched. Module level, because the mapping belongs
+#: to the phases rather than to one boundary instance.
+PHASE_MOTION_STATES = {"MICRO_LIFT": "MICRO_LIFT", "TRANSPORT": "LIFT", "ALIGN": "MOVE_ABOVE_PLACE",
+                       "RADIAL_RETREAT": "RETREAT"}
+
+
 class PickPlaceSearchBoundary:
     """Run one reset and one SEARCH using the admitted child's broker."""
 
@@ -292,6 +299,12 @@ class PickPlaceSearchBoundary:
             # validator is given yet: reporting `released` from the aggregates alone would be a weaker claim than the
             # runner's predicate asks for, so the phase refuses by name until it can be established properly
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}: release evidence")
+        if phase in ("MICRO_LIFT", "TRANSPORT", "ALIGN"):
+            # the lifted phases must show the cup held clear of the table, which is what their flags mean and what the
+            # runner's predicates require - a necessary condition, mirrored from it so a contradiction fails here
+            if (facts["holding_state"] != "HOLDING" or facts["bilateral_contact"] is not True
+                    or facts["micro_lift_confirmed"] is not True or facts["cup_off_table"] is not True):
+                raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: the cup is not held clear")
         if phase in ("APPROACH",) and (facts["bilateral_contact"] is not False
                                        or facts["no_fingertip_contact"] is not True):
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: premature contact")
@@ -311,16 +324,11 @@ class PickPlaceSearchBoundary:
             return self._close_facts(request, gripper_closed_rad=gripper_closed_rad,
                                      close_duration_s=close_duration_s,
                                      support_distance_max_m=support_distance_max_m)
-        if phase in self._PHASE_MOTION_STATES:
+        if phase in PHASE_MOTION_STATES:
             return self._motion_facts(phase, request, motion_template=motion_template,
                                       motion_duration_s=motion_duration_s,
                                       support_distance_max_m=support_distance_max_m)
         raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
-
-    #: which admitted motion state each sequence phase aims at - resolved by the production pick resolver, so the
-    #: phase's target is validated and workspace-checked before anything is dispatched
-    _PHASE_MOTION_STATES = {"MICRO_LIFT": "MICRO_LIFT", "TRANSPORT": "LIFT", "ALIGN": "MOVE_ABOVE_PLACE",
-                            "RADIAL_RETREAT": "RETREAT"}
 
     def _motion_facts(self, phase, request, *, motion_template, motion_duration_s, support_distance_max_m):
         """Aim a phase at its admitted motion target and establish its facts from the readback.
@@ -348,7 +356,8 @@ class PickPlaceSearchBoundary:
 
         from so101_demo.act.joints import ARM_JOINTS
         from so101_demo.core.dynamic_pick import CupPoseSample, resolve_motion_targets
-        from so101_demo.core.dynamic_pick_policy import State
+        from so101_demo.core.domain import State      # the enum lives with the domain, not with the policy document
+        from so101_demo.core.task_geometry import Pose7
 
         before = self.reset.sources.capture(request["attempt_id"])
         observation = before.get("observation")
@@ -358,15 +367,19 @@ class PickPlaceSearchBoundary:
         state = before["world"].object_state
         sample = CupPoseSample(frame_id="world", source_stamp_ns=max(1, int(observation["sim_time_s"] * 1e9)),
                                received_monotonic_s=finite(self.reset.sources.monotonic()),
-                               pose_world=tuple(state.position_world) + tuple(state.orientation_xyzw))
-        target = resolve_motion_targets(sample, motion_template).for_state(State[self._PHASE_MOTION_STATES[phase]])
+                               pose_world=Pose7(tuple(state.position_world) + tuple(state.orientation_xyzw)))
+        target = resolve_motion_targets(sample, motion_template).for_state(State[PHASE_MOTION_STATES[phase]])
         row = tuple(ik(target))
-        if len(row) != len(ARM_JOINTS):
+        names = tuple(ARM_JOINTS[:5])
+        if len(row) != len(motion_template.arm_joint_names) or len(row) != len(names):
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: ik row")
-        goal = {"joint_names": ARM_JOINTS,
+        goal = {"joint_names": names,
                 "header_stamp_s": finite(observation["sim_time_s"]),
                 "time_from_start_s": (0.0, finite(motion_duration_s)),
-                "positions": (tuple(finite(value) for value in observation["state"][:6]),
+                # the arm port's names are the five arm joints, so the first row is those five values: sending six
+                # would make the wire refuse the goal for a row/name mismatch, and sending the gripper's value with
+                # the arm's names would be worse - it would command the wrong joint
+                "positions": (tuple(finite(value) for value in observation["state"][:5]),
                               tuple(finite(value) for value in row))}
         ticket = broker.ownership.ticket(self.reset.act_context["lease_token"], "act",
                                          request["session_id"], request["attempt_id"])
