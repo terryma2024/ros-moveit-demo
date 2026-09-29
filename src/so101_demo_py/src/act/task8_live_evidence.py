@@ -472,6 +472,7 @@ class LiveEvidenceWindow:
         self._tolerance_s = tolerance_s
         self._opened = False
         self._sealed = False
+        self._invalid_reason = None
         self._last_grid_s = None
         self._phases_seen = []
         self._grid_count = 0
@@ -526,6 +527,20 @@ class LiveEvidenceWindow:
         self._event_count += 1
         self._note_phase(sample.get("phase"))
         self._recorder.append(sample)
+
+    def invalidate(self, reason: str) -> dict:
+        """Close an open window as invalid.
+
+        A run that never reached FINAL_CHECK must not seal as evidence, so the failure path calls this instead of
+        `seal()`: it marks the window closed, keeps the counts for the receipt, and is idempotent.
+        """
+
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("TASK8_LIVE_EVIDENCE_INVALID_REASON_REQUIRED")
+        self._invalid_reason = reason
+        self._sealed = True
+        return {"status": "INVALID", "reason": reason,
+                "grid_count": self.grid_count, "event_count": self.event_count}
 
     def seal(self) -> dict:
         if not self._opened:

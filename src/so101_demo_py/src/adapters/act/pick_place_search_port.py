@@ -279,6 +279,12 @@ class PickPlaceSearchPhasePort:
             "placement_stable": False, "retreat_stable": False,
         }
 
+    @property
+    def live_evidence_window(self):
+        """The window this port records into, or None - public so callers need not touch a private name."""
+
+        return self._live_evidence_window
+
     def _grid_sample(self, phase: str, observed, evidence: dict) -> dict:
         """One grid sample taken from the port's own readback - never synthesised by a caller."""
 
