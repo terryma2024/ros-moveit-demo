@@ -16499,3 +16499,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary II remaining, each needing its own RED:** live search and the fixed non-contact arm probe; CameraInfo/TF raw
   rows; real session/reset/attempt readback instead of synthesized identities; per-anchor **FULL_RESTART** semantics; and
   generation-scoped single-flight cleanup with a kept cleanup receipt and contamination on cleanup failure.
+
+## CP-1068 — Boundary II, second piece: single-flight, generation-scoped cleanup with a kept receipt
+
+- **RED on both halves:** a failed anchor sealed INVALID **without any cleanup receipt**, and a stack whose `cleanup`
+  raised surfaced as a bare `RuntimeError: CLEANUP_REFUSED` - no receipt, no contamination, no evidence.
+- **The fix:** `_cleanup_once(context, anchor)` performs the cleanup **exactly once** for this case's own generation and
+  returns `(receipt, contamination)`. The receipt records the anchor and **the generation the cleanup was requested for**
+  (so a stale generation cannot be mistaken for the current one), plus `CONFIRMED` with the stack's result or `REFUSED`
+  with the error type and message. A refusal becomes contamination, the batch seals **INVALID**, and nothing is raised -
+  so a failed cleanup cannot take the evidence down with it. The sealed document now carries `cleanup` and
+  `contamination` on both the success and failure paths, and the success path seals INVALID rather than CLOSED if
+  cleanup was refused.
+- **The duplicate-definition hazard recurred in my own test file and was caught by running the suite, not by review:** my
+  new helper `_context(tmp_path, …)` **shadowed** the file's pre-existing `_context()` at line 60, so five unrelated tests
+  failed with `TypeError: _context() missing 1 required positional argument: 'tmp_path'`. Renamed to
+  `_measurement_context`, and the file now reports **no duplicate top-level definitions**. This is CP-978/CP-995 for the
+  third time: appending a helper next to an existing one of the same name is the cheapest way to break a suite.
+- **GREEN: 10 passed, rc=0**, scratch `<R>/scratch/r669c.<n>` with `TMPDIR` verified through the exact test interpreter;
+  RED log `beh-r669-red.log`, the collision GREEN `beh-r669-green.log` (5 failed - the finding above), final
+  `beh-r669-green2.log`.
+- **Boundary II remaining, each needing its own RED:** live search and the fixed non-contact arm probe; CameraInfo/TF raw
+  rows; real session/reset/attempt readback instead of synthesized identities; and explicit per-anchor **FULL_RESTART**
+  semantics.
