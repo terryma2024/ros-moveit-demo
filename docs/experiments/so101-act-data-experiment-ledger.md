@@ -11848,3 +11848,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   not block writing or testing them.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-883 — Task 2 RED established (pure formula module)
+
+- **Test file created:** `test/test_act_task8_measurement_formulas.py` - the documented interfaces
+  (`compute_head_search_fields`, `compute_support_fields`, `build_head_closed_sample`,
+  `build_support_closed_sample`, `FORMULA_IDS`), a per-field parametrisation over all **28** contract fields
+  asserting each formula ID equals the contract's own `formula_id`, the head closed sample's **exact key set**
+  (the ten names from the plan), the rule that sample measurement maps hold **bare values** while report entries
+  carry exactly `{value, unit, sample_path, sample_sha256}` with a real file at that path, and the adversarial
+  requirement that boolean labels (`qualified`, `target_in_view`, `contact_ok`, `stop_confirmed`) are **refused**
+  as formula inputs with `RAW_EVIDENCE_REQUIRED`.
+- **RED run:** `python -m pytest -q -p no:cacheprovider test/test_act_task8_measurement_formulas.py
+  test/test_act_task8_calibration_aggregator.py`, **exit code 1, elapsed 1 s**, fresh verified NVMe scratch
+  `scratch-r472.5POT`, result **36 failed, 11 passed** (`beh-task2-red.log`) - the failures are the new
+  formula-module tests plus the missing import, while the 11 passes are the existing aggregator tests, which
+  confirms the new file did not disturb them.
+- **Task 1 is committed and intact** (`5d8668c4` code, `5f39fccb` checkpoint), with the candidate's 17 values,
+  three `neck_start_rad` starts and safe interval the only pending approval.
+- **Next:** implement `act/task8_measurement_formulas.py` from the staged design rows - explicit formula IDs
+  matching contract v2, per-field configured limit, observed summary, reported value and raw references for the
+  aggregation receipt - plus the per-field boundary-pass and single-point-violation cases the plan requires, then
+  re-run for GREEN and commit with the plan's four-file list.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
