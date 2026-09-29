@@ -32941,3 +32941,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   model-length `qpos`/`qvel` - either by using the production `SceneState` or by making the stand-in return what
   `validate` requires.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
   re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1876 — There are TWO readbacks in the harness, and the observation's is the segment's own
+
+- **Found by looking where the observation's `physical_readback` is actually assembled:**
+  ```python
+  # test_task8_child_driven_case.py:196 (inside the boundary's search)
+      readback=SimpleNamespace(max_skew=0.01, joint_tolerance=0.5),
+  ```
+  **so the segment the boundary builds carries its OWN readback double** - **while the port's `reset.sources.readback` is
+  the one I supplied** (CP-1843/1846). **Two objects, two readers:** the observation's `physical_readback` comes from the
+  segment's, **and the port's scope check reads `sources.readback.max_skew` off the one I built.**
+- **And the scene the segment gets is the fixture's `_Scene`** (`scene = _Scene()` in the boundary's search, CP-1849) -
+  **which defines `apply_task_scene`/`observe_task_scene` and nothing else.** So the frames the readback walks
+  (`pick_place_readback.py:111`) are not coming from it either, **and the chain from "the frame with the int `qvel`" back
+  to its producer has now been followed through five layers without landing on a single construction site.**
+- **Which is the honest state to record, and the reason for recording it rather than pushing on:** P1-5's production half
+  is proven (two production defects found and fixed), **and the remainder is a chain of test doubles - the segment
+  suite's `_Sources`/`_Scene`/`_Adapter`, the harness's `_ChildSources`/`_Boundary`/`FakeBroker`, and the probe's own
+  `readback` namespace - each written for its own suite, none of them ever driven together through the port.** **Each
+  layer has been read and named; what remains is to construct the whole set for the port's contract rather than to keep
+  discovering them one refusal at a time, which is CP-1850's option 2 and is now clearly the smaller of the two paths.**
+- **State:** **P1-5 in progress with its production half proven and its fixture half mapped: five layers of doubles, each
+  named, and the remaining work is to construct them once against the port's contract.** P1-1 through P1-4 CLOSED. The
+  demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
+  unchanged, so they are not re-stated.**
