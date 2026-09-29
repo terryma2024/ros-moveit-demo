@@ -22636,3 +22636,19 @@ not an inference of mine.**
   four negatives.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1364 — The doubles are named, and P1-5's boundary wiring is now an import list
+
+- **Read from `src/so101_demo_py/test/test_act_task8_search_segment.py`:** `_geometry()` (a real `TaskGeometry`), `_raw(step, *, x=-0.08,
+  fingertips=(), sim_time_s=None, ...)` (the physical readback with its world), `_locked(*, timestamp=2.0)` (the adapter's locked decision),
+  `_request()` (a valid request), **`class _Sources`** with `capture(self, attempt_id, *, after_step)`, **`class _Scene`**, **`class _Adapter`**
+  whose `neck_port` is `SimpleNamespace(stop_and_confirm=self.stop_and_confirm)`, and **`_segment(sources, adapter, scene, *, guard=..., clock=...)`**
+  - a ready-made production-segment builder.
+- **So P1-5's next write is small and specific:** import those doubles and have `_Boundary.search` return
+  `_segment(_Sources(), _Adapter(), _Scene()).run(request, reset_epoch=<the proof's epoch>)` - **production segment, substituted
+  collaborators, no fabricated evidence, no forked fixture.** That is the reviewer's "replace only ROS/MuJoCo/controller/process I/O" applied
+  literally, using builders that already exist and are already tested by four of that file's own cases.
+- **And it removes the estimate correction's last unknown:** the physical readback, the proofs and the observation all come from
+  `build_live_evidence_sample`/the segment's own construction rather than from my hand.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
