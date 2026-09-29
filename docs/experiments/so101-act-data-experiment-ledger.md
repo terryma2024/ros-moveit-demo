@@ -19953,3 +19953,25 @@ not an inference of mine.**
   **not** satisfy the production path, so the seam cannot be mistaken for the wiring.
 - **State:** HEAD `5579580f` plus this checkpoint; staged 0; no source changed yet in this batch; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1227 — Item 1's first RED attempt passed for the wrong reason; the fixture call was mine to fix
+
+- **What happened, in order, because the sequence is the lesson:**
+  1. I added a test asserting that a CLI run **without** `--driver` does not fail with `PRODUCTION_DRIVER_WIRING_PENDING`,
+     reusing the existing file's `_invoke` after adding an optional `driver=` parameter that omits the seam.
+  2. It **passed** - which is not a GREEN, it is a **bad assertion**: "not this particular error" is satisfied by *any* other
+     failure, and my test never established that the production path was reached. **CP-1202's lesson, third repetition in this
+     stretch: assert the presence of the right path, not the absence of one wrong message.**
+  3. A probe showed what actually happens: `TypeError: 'PosixPath' object is not subscriptable` - which is **my** fixture misuse,
+     not the CLI's behaviour. `_context_document(...)` does not hand back what I assumed, so the run never got as far as the
+     driver factory at all.
+- **What the next attempt needs first, and it is one read:** the bodies of `_context_document` and `_invoke` (their first lines are
+  printed above), so the RED passes the context in the shape those helpers actually produce. **Only then does a failure inside the
+  CLI mean anything about item 1.**
+- **The RED to write, restated so it cannot pass vacuously:** with `--driver` omitted, the CLI must reach a **real
+  `Task8MujocoMeasurementDriver`** built by the single production composition - asserted by observing the composition's own
+  effects (the driver receives the five collaborators, the stack is built once, the CUDA policy holds), **not** by the absence of a
+  message. And a `--driver`-injected fake must not satisfy that path.
+- **State:** HEAD `a2bed149` plus this checkpoint; staged 0; the added test and `_invoke` parameter are **uncommitted in the working
+  tree while red-for-the-wrong-reason** (the owner's rule for new tests); no source change yet; no stack, no hardware, nothing
+  deleted, nothing pushed.
