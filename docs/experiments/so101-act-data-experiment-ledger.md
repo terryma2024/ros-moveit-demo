@@ -11982,3 +11982,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Verified at the commit:** **82 passed, rc=0** across the formula and aggregator modules.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-889 — Task 3 RED established (phase-camera replay, live coverage, projection, occlusion)
+
+- **Test file created:** `test/test_act_task8_phase_camera.py` covering the plan's named requirements - the three
+  documented interfaces, all **nine phases** SEARCH through FINAL_CHECK with **both** cameras, and the rejections
+  the plan lists: replay rows stitched into live continuity (must be `INVALID` with a `REPLAY_ROWS` reason), the
+  100 ms source gap, crossing session / reset epoch / attempt, a wrong group owner, out-of-frame fraction above
+  0.02, visible fraction below 0.80, and a bbox centre outside `[4,635]x[4,475]`; plus the projection rules
+  (near-plane clip, far/behind rejection, zero denominator, the **exact 1e-6 m margin accepted**, top-left fill)
+  and the occlusion rules (the five allowed group-0 visual geoms permitted; `table_visual`, a collision geom,
+  background and an unknown owner rejected).
+- **RED run:** `python -m pytest -q -p no:cacheprovider test/test_act_task8_phase_camera.py
+  test/test_act_task8_calibration_aggregator.py`, **exit code 1, elapsed 1 s**, fresh verified NVMe scratch
+  `scratch-r481.tz1h`, result **30 failed, 14 passed** (`beh-task3-red.log`); the 14 passes are the aggregator's
+  existing tests, confirming the new file disturbs nothing.
+- **Task 2 is committed** (`8abb47f6` code, `24003a93` checkpoint) with 82 focused tests green, and the plan's
+  Task 6 owns the aggregator's call-site swap and fixture rewrite.
+- **Next:** implement `act/task8_phase_camera.py` from the staged verbatim design section 6 - the three time axes,
+  the replay grid, visible-area and occlusion definitions, nine phases with both cameras, the five allowed
+  occluders, and deterministic ROS-free projection/rasterisation - then run GREEN and commit with the plan's
+  three-file list.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
