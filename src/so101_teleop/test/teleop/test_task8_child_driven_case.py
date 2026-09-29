@@ -819,3 +819,27 @@ def test_a_campaign_of_prefixes_alone_cannot_qualify():
     duplicate = dict(complete, case_journal_sha256=[digests[0]] * 14)
     with pytest.raises(ValueError, match="TASK8_QUALIFICATION_JOURNAL_DUPLICATE"):
         validate_campaign_summary(duplicate)
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "EXP-519 (CP-1467/CP-1470): in production the live-evidence route is wired only as far as attaching the "
+    "window - the driver's observe, observe_capture and seal have no caller - so a case that does NOT feed the "
+    "window itself records no samples. This marker is a strict xfail ON PURPOSE: it keeps the hole executable "
+    "and visible without pretending the suite is green about it, and it turns XPASS the moment the feed is "
+    "wired, which forces whoever lands EXP-519 to remove the marker and assert the real thing."))
+def test_the_production_evidence_route_still_has_no_feeder(tmp_path, monkeypatch):
+    """Assert the hole rather than only describing it: with the fixture's stand-in disabled, nothing feeds.
+
+    ``record_phases`` is the fixture standing in for a production feeder that does not exist, so disabling it is
+    what makes this test describe production rather than the harness. When EXP-519 lands - grids AND events
+    through the driver route - this test must be replaced by one that asserts the samples themselves.
+    """
+
+    monkeypatch.setattr(_Boundary, "record_phases", lambda self, request: 0)
+    child, request, port = _prepare_child_case(tmp_path, monkeypatch)
+
+    result = asyncio.run(child.pick_place_phase(request))
+
+    assert result["status"] == "PASSED", "the phase still completes - the hole is the evidence, not the phase"
+    window = port.live_evidence_window
+    assert window._grid_count > 0, "production must feed the window through the driver route, not only attach it"
