@@ -75,7 +75,7 @@ def test_the_nine_phase_chain_seals_and_reads_back(tmp_path):
     seen = []
     for step, phase in enumerate(PHASES):
         sample = _sample(evidence_root, phase=phase, step=step, sim_time=step * PERIOD_S)
-        recorder.append(sample)
+        recorder.append(sample, kind="grid")
         window.add_grid(sample)
         seen.append(sample["phase"])
     assert seen == list(PHASES), "every phase is observed in order"
@@ -157,7 +157,7 @@ def _sealed_chain(tmp_path):
     window.bind_reset_epoch((_identity())["reset_epoch"])
     for step, phase in enumerate(PHASES):
         sample = _sample(evidence_root, phase=phase, step=step, sim_time=step * PERIOD_S)
-        recorder.append(sample)
+        recorder.append(sample, kind="grid")
         window.add_grid(sample)
     return recorder, window
 
