@@ -16593,3 +16593,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary II remaining: the live search through the port.** The detector and controller calls per geometry sample
   approximate it but are not the search path; wiring the real search depends on the stack exposing it, and the composition
   of those adapters is the launch entry's job - the structural item that also has to be defined deliberately.
+
+## CP-1073 — Boundary II complete: the live search runs per anchor and its raw iterations are kept
+
+- **RED on both halves:** the search never ran (`[] == ['default','left','forward']`), and a stack without a search path
+  still sealed a batch.
+- **The fix:** each anchor runs the live search with **one fixed request** (`SEARCH_REQUEST`, identical for every anchor
+  and generation so the anchors stay comparable), writes `search.json` carrying the search's **own raw iterations** and
+  termination reason plus the full provenance set, and refuses by name as
+  **`MEASUREMENT_SEARCH_REQUIRED: <anchor>: <ErrorType>`** when the surface is missing, raises, or reports no
+  iterations. Nine doubles grew the surface.
+- **GREEN: 19 passed, rc=0**, scratch `<R>/scratch/r674b.<n>` with `TMPDIR` verified through the exact test interpreter;
+  RED `beh-r674-red.log`, GREEN `beh-r674-green.log`.
+- **Boundary II's seven pieces are therefore landed**, each RED first: the nine-phase 2 ms replay through the real phase
+  camera (`b1b4e805`); single-flight generation-scoped cleanup with a kept receipt and contamination on refusal
+  (`0362e0ab`); real session/reset/attempt readback with a named refusal (`3355a21a`); the lifecycle stamped on every row
+  with the launch/close ordering pinned (`65c9aa4e`); the fixed non-contact arm probe with a named contact refusal
+  (`70ccdf0c`); CameraInfo and TF rows with `MEASUREMENT_CAMERA_REQUIRED` (`feacf9fa`); and the live search with
+  `MEASUREMENT_SEARCH_REQUIRED` (this commit).
+- **What Boundary II has NOT established, stated plainly:** the driver is exercised only against doubles. `production_driver()`
+  still refuses loudly (`PRODUCTION_DRIVER_WIRING_PENDING`) until the launch entry supplies `stack`, `clock`, `detector`,
+  `controller` and `phase_camera` - so the **composition of real adapters** remains the structural item, and it is the one
+  part of Boundary II that cannot be finished or verified without the launch entry and, for a real measurement, a live
+  stack.
