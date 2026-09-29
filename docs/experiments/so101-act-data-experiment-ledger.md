@@ -13352,3 +13352,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **The session's ledger runs CP-872 through CP-947**, including the approval checkpoint, each task's RED and GREEN
   evidence, the phase-list correction (CP-907), the aggregator deviations (CP-906), the displaced-work incident and
   its repair (CP-930, CP-931), and the operational rules added to the handoff (CP-932).
+
+## CP-948 — The full-chain test must build a REAL owner; the existing fake cannot exercise `_retire`
+
+- **Checked the obvious shortcut before spending effort on it, and it is a false green:** importing `_prepared` from
+  `test_task8_case_execution.py` and running the real `run_pick_place_case()` against it would **not** test my
+  retirement-path insertion, because `_prepared` supplies a **fake** owner - it appends `start`/`execute`/`finish` to
+  an events list. The insertion lives in the real `PickPlaceCaseOwner._retire`, so a fake owner would let the test
+  pass while proving nothing about the code under test.
+- **What the test therefore needs:** a **real** `PickPlaceCaseOwner` whose launch and child-owner collaborators are
+  faked - the plan's own wording ("keep `run_pick_place_case()`, owner start/finish, child `_run_pick_place()`,
+  `PickPlaceRunner`, artifact validation and journal publication real; replace only external ROS topics,
+  MuJoCo/controller I/O and process launch with deterministic fakes"). Concretely the real owner needs its
+  `child_owner`, `stack` (with `launch.evidence_root`, `owner`, `process`) and `child_launch` collaborators to be
+  doubles that satisfy `_retire`'s scope checks, plus a real port carrying the recorder and window so the seal and the
+  invalid seal both have something to act on.
+- **Why this is recorded instead of attempted:** that is a substantial fixture, and building it in the last of this
+  session's room would risk exactly what the last few rounds have been spent avoiding - a test that passes for the
+  wrong reason. The design is now precise enough that building it is mechanical: real owner, faked launch/child,
+  real port and window, real `run_pick_place_case`, then assert both the journal row's artifact path and digest and a
+  window left `INVALID` with reason `OWNER_RETIRE`.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment with the plan's Step-4 command at **53
+  passed**; the three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no
+  package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
