@@ -273,9 +273,16 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
         # would let a report claim a configuration nobody measured under
         # the sealed descriptor wins; a batch that claims a different one in its payload is refused rather than published
         if sealed_descriptor is not None:
-            if isinstance(readings.get("head_search"), dict) and readings["head_search"] != sealed_descriptor:
+            # Astra re-review P1-4: the payload records the INNER head-search block while the seal is the WHOLE
+            # {schema_version, head_search} document, so the two are compared at ONE layer - and every sealed
+            # descriptor is validated by the same complete production rule the binding uses.
+            from so101_demo.act.head_search_binding import validate_head_search_shape
+
+            validated = validate_head_search_shape(sealed_descriptor)
+            claimed = readings.get("head_search")
+            if isinstance(claimed, dict) and claimed != validated:
                 raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
-            sample_document["head_search"] = sealed_descriptor["head_search"]
+            sample_document["head_search"] = validated
         # Astra item 4: the SEALED descriptor is the only authority. The former fallback let a
         # measurements.json block stand in for a missing seal, which is the second authority the review refused
         else:
