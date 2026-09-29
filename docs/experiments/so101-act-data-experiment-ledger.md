@@ -28655,3 +28655,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Which sharpens P1-5 to a single sentence:** *the joined chain has never carried a sealed artifact.* Everything downstream of an artifact - the aggregator, the seven facts, the index, the four negatives - has therefore only ever been exercised against fixtures that **build** the artifact rather than against one the production code **sealed**.
 - **And it makes the RED's first slice unambiguous:** the same test, the same seam, **a full case** (`pick_place_full` → `_run_pick_place(request, mode="full")`), so that `row["live_evidence_path"]` names a real file, `row["completed_phases"]` is a real phase list, and the aggregator has something production made. **The child's entry is read and named:** `ros_child.py:579 pick_place_full` requires `request.operation == "task8_full"`, and `task8_full` is its v1 alias; `child_runtime.py:171-174` dispatches `task8_full` to `self.driver.task8_full`; and **the only tests that mention `task8_full` are payload-encoding tests** (`test_act_worker_port.py:115-136`) - **the driver path itself is never run.**
 - **State:** **P1-5 narrowed to "the joined chain has never carried a sealed artifact", with the child's full-case entry read and the only-encoding-tests fact recorded**; P1-4's fixture granularity remains open (CP-1708); the task list carries them; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1713 — The full cases were there all along, declared by the manifest's own builder
+
+- **Read, not inferred (`src/so101_demo_py/src/act/pick_place_validation_manifest.py`, the real module behind the 185-byte shim `task8_manifest.py`):**
+  ```
+  ANCHOR_NAMES      = ("default", "left", "forward")
+  FULL_ANCHOR_ORDER = ("default", "left", "forward", "default", "left")
+
+  def _prefix_cases():
+      return [{"case_id": f"prefix-{i:02d}", "mode": "phase_prefix",
+               "anchor": "default", "stop_after": phase, "lifecycle": "FULL_RESTART"}
+              for i, phase in enumerate(PickPlaceRunner.PHASES, 1)]
+
+  def _full_cases():
+      return [{"case_id": f"full-{i:02d}", "mode": "full",
+               "anchor": anchor, "stop_after": None, "lifecycle": "FULL_RESTART"}
+              for i, anchor in enumerate(FULL_ANCHOR_ORDER, 1)]
+
+  build_task8_live_manifest = build_pick_place_validation_manifest      # line 157, the alias the tests import
+  ```
+  **So a frozen manifest already contains five FULL cases (`full-01` … `full-05`), `full-01` being `anchor="default"`, `stop_after=None`, `lifecycle="FULL_RESTART"`** - and the case the RED must run is therefore **already frozen by production**, not something the test has to invent. **This is the same shape as the batch's recurring lesson: the thing I was about to build already existed, and the tests were pointing at the smaller of the two lists.**
+- **And it disposes of the one remaining uncertainty in the RED:** the teleop harness's `_prepared(tmp_path, case_id="full-01", …)` fixture writes **this** manifest, so `_preflight` will find `full-01` in `planned_cases` without the test constructing a case; the only substitution left is the **worker**, exactly as the prefix chain test does - with `child.pick_place_full(request)` (which requires `request.operation == "task8_full"`) in place of `child.pick_place_phase(request)`.
+- **Which fixes the RED's first slice completely:** same fixtures, same seam, case `full-01`; then `row["live_evidence_path"]` must name a real sealed file whose digest reads back, `row["completed_phases"]` must be the runner's own phase list, and **the aggregator finally has something production sealed** to consume.
+- **State:** **P1-5's RED is fully specified against code (frozen full cases, child entry, seam) and ready to write**; P1-4's fixture granularity remains open (CP-1708); the task list carries them; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
