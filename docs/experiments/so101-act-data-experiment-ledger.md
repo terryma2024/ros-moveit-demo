@@ -23518,3 +23518,20 @@ not an inference of mine.**
   P1-5 documented, re-approve P1-5 as its own round - is the one I would still choose if the decision were mine.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1420 — My sample is exonerated, so the failing `append` is the child's own driver - and a handoff plan the cap cannot erase
+
+- **The probe, run against the production module itself:** the recorder's constructor is `(*, case_id, evidence_root, session_id, attempt_id)`;
+  my sample's **key set equals `_SAMPLE_KEYS`**; the three vectors are **lists of lengths 3, 3 and 4**; the raw-record keys equal **exactly
+  `_SOURCES`**; and the record file **exists under the root**. **So the sample I build passes every rule CP-1419 enumerated - which means the
+  `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID` refusal is not coming from my recording call.**
+- **The remaining candidate, and it fits the evidence:** the **child's own `CaseEvidenceDriver`** appends samples as the case runs, sourced from the
+  port's evidence hooks - and my substituted boundary never feeds those hooks, so **the child appends a sample of its own that is invalid**. **The
+  next read is the child's appending path in `ros_child.py`**, which is where the seven indexed assertions will read their evidence from anyway.
+- **And a handoff plan, written now so that a round cap cannot lose it:** if this batch ends before P1-5 is green, the next session's P1-5 starts
+  from **`git status` on this worktree** (the fixture changes are uncommitted by design), reads CP-1403 to CP-1420 in order, and resumes at the
+  child's evidence-appending path - **with everything already established: the production port, the inherited real seal, the production segment,
+  the queued scenario, the identity plumbing, the whole evidence validation, and the recorder that refuses an unfed case.** **Items 1-4 are
+  committed, green and ready to submit as they stand.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
