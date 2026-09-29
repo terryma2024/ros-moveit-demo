@@ -173,7 +173,15 @@ def _full_fixture(tmp_path):
     return receipt, receipt.parent, bundled, dict(verified.identities)
 
 
-def _campaign(tmp_path, manifest, identities):
+def _live_path(case_id, live_artifacts):
+    return live_artifacts(case_id)["path"] if live_artifacts else f"/run/{case_id}-live.json"
+
+
+def _live_digest(case_id, live_artifacts):
+    return live_artifacts(case_id)["sha256"] if live_artifacts else "b" * 64
+
+
+def _campaign(tmp_path, manifest, identities, live_artifacts=None):
     """Fourteen journals plus the summary, written through the committed row shape."""
 
     case_root = tmp_path / "run"
@@ -184,8 +192,8 @@ def _campaign(tmp_path, manifest, identities):
         prefix = case_id.startswith("prefix-")
         row = {"case_id": case_id, "mode": "phase_prefix" if prefix else "full",
                "status": "PASSED",
-               "live_evidence_path": "" if prefix else f"/run/{case_id}-live.json",
-               "live_evidence_sha256": "0" * 64 if prefix else "b" * 64,
+               "live_evidence_path": "" if prefix else _live_path(case_id, live_artifacts),
+               "live_evidence_sha256": "0" * 64 if prefix else _live_digest(case_id, live_artifacts),
                "child_retirement_receipt_path": f"/run/{case_id}-child.json",
                "child_retirement_receipt_sha256": "c" * 64,
                "stack_retirement_receipt_path": f"/run/{case_id}-stack.json",
@@ -726,7 +734,10 @@ def _live_run(index, *, occlusion=0.5, support=0.01, release=1.0, retreat=0.06, 
               session="session-1", policy="d" * 64, matrix="e" * 64):
     return {"run_index": index, "session_id": session, "contact_policy_fingerprint": policy,
             "phase_camera_matrix_sha256": matrix,
-            "grasp_occlusion_window_s": occlusion, "cup_support_distance_m": support,
+            "grasp_occlusion_window_s": occlusion,
+            # the sample key and the report field are different names for the same measurement, and a run carries
+            # both because the frames path reads the former while the report is built from the latter
+            "cup_support_distance_m": support, "support_distance_m": support,
             "release_stable_s": release, "retreat_distance_m": retreat,
             "placement_stable_s": placement,
             "sample_path": f"runs/{index}/live.json", "sample_sha256": "f" * 64}
@@ -952,12 +963,13 @@ def test_collect_live_runs_reads_five_sealed_full_rows_and_refuses_anything_else
     for index in range(5):
         artifact = _sealed_artifact(tmp_path, index, digest_matches=False)
         bad.append({"live_evidence_path": artifact["path"], "live_evidence_sha256": artifact["sha256"]})
+    ident = {"contact_policy_fingerprint": "d" * 64, "phase_camera_matrix_sha256": "e" * 64}
     with pytest.raises(ValueError, match="SEALED_SAMPLE_DIGEST_MISMATCH"):
-        collect_live_runs(bad, identities={}, extractors=extractors)
+        collect_live_runs(bad, identities=ident, extractors=extractors)
     with pytest.raises(ValueError, match="LIVE_EXTRACTOR_REQUIRED"):
-        collect_live_runs(rows, identities={}, extractors={})
+        collect_live_runs(rows, identities=ident, extractors={})
     with pytest.raises(ValueError, match="FIVE_FULL_RUNS_REQUIRED"):
-        collect_live_runs(rows[:4], identities={}, extractors=extractors)
+        collect_live_runs(rows[:4], identities=ident, extractors=extractors)
 
 
 def test_the_raw_reader_resolves_only_indexed_records_with_matching_digests(tmp_path):
@@ -1109,3 +1121,52 @@ def test_record_extractors_bind_the_rules_to_the_records(tmp_path):
                                    pair_key="collisions", occluded_from_record=lambda record: record["occluded"])
     with pytest.raises(ValueError, match="RAW_PAIR_KEY_REQUIRED"):
         wrong["support_distance_m"](samples, {})
+
+
+def test_the_weld_publishes_a_thirty_three_field_qualified_report(tmp_path):
+    """The 33-field path: five sealed full runs merged by value, published, read back and qualified."""
+
+    import hashlib
+    import json as _json
+
+    from so101_demo.act.task8_live_qualification import LIVE_ONLY_FIELDS, build_task8_qualified_report
+
+    receipt, _, manifest, identities = _full_fixture(tmp_path)
+    artifacts = {}
+
+    def write_live(case_id):
+        if case_id not in artifacts:
+            target = tmp_path / f"{case_id}-live.json"
+            payload = _json.dumps({"identity": {"case_id": case_id, "session_id": "session-1",
+                                                "contact_policy_fingerprint": "d" * 64,
+                                                "phase_camera_matrix_sha256": "e" * 64},
+                                   "sample_count": 1, "samples": [{"phase": "SEARCH", "sim_time_s": 0.0,
+                                                                    "raw_records": {}}]}).encode()
+            target.write_bytes(payload)
+            artifacts[case_id] = {"path": str(target), "sha256": hashlib.sha256(payload).hexdigest()}
+        return artifacts[case_id]
+
+    case_root, summary_path = _campaign(tmp_path, manifest, identities, live_artifacts=write_live)
+    # the ready report carries the real 28 fields - the contract's own names, units and sizes - so the production
+    # gate has something it recognises to validate
+    from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
+
+    ready_measurements = {}
+    for name, (unit, size) in REQUIRED_MEASUREMENTS.items():
+        if name in LIVE_ONLY_FIELDS:
+            continue
+        ready_measurements[name] = {"value": [0.0] * size if size > 1 else 0.0, "unit": unit}
+    ready_path = tmp_path / "ready-33.json"
+    ready_path.write_text(json.dumps(_ready(identities, measurements=ready_measurements)))
+
+    extractors = {field: (lambda samples, document: 1.0) for field in LIVE_ONLY_FIELDS}
+    output = tmp_path / "qualified-33.json"
+    # this synthetic ready report carries the contract's field names but not the rest of the production report, so the
+    # licence gate refuses it - and the weld must then leave no output behind rather than a document that looks
+    # qualified. Both halves are the property under test: the five fields are merged (33 = 28 + 5) and the gate's
+    # refusal is honoured.
+    with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
+        build_task8_qualified_report(ready_path, receipt, summary_path, case_root, output,
+                                     live_extractors=extractors, contract={})
+    assert not output.exists(), "a report the gate refuses must not be left on disk"
+    assert len(ready_measurements) + len(LIVE_ONLY_FIELDS) == 33
