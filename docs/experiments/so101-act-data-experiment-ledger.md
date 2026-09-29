@@ -14957,3 +14957,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   caller's address and seam contract are now recorded; Task 9's gate requirements are pinned; Task 10 stays blocked
   until the 17 search values are independently designed and reviewed. No runtime, no package gate, no push, no evidence
   deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1011 — FINDING: the teleop package is not green on this branch, independently of my work
+
+- **Ran the teleop package's gate-shaped command for the first time - the whole `test/teleop` scope under
+  `pytest-xdist -n 8`, on this host's 32 logical CPUs, from a fresh verified NVMe scratch whose `tempfile.gettempdir()`
+  was confirmed to resolve inside it - and it is not green:**
+  **21 failed, 1076 passed, 42 skipped, rc=1** (`beh-r603-xdist.log`, 18.91 s).
+- **The failures are not mine and not a parallelism artefact, established by two discriminators:**
+  1. **they are in files I have never touched** - `test_unified_bridge.py` (7), `test_unified_bridge_cleanup.py` (7),
+     `test_unified_two_channel.py` (6), `test_controller_reservation_paths.py` (1);
+  2. **running one of them serially reproduces the same failures** - `test_unified_bridge.py` alone gives
+     **7 failed, 2 passed, rc=1** (`beh-r603-serial.log`), so they are not caused by worker contention, ports or
+     shared scratch, which was the first hypothesis worth excluding;
+  3. and `git status --short` reports **no modification** to `unified/bridge.py`, `unified/child_runtime.py` or
+     `test_unified_bridge.py`, so the failing path is the **committed** state of the branch, neither the owner's
+     in-flight work nor mine.
+- **The failure mode is one shape repeated:** `so101_teleop.unified.contracts.MutationError: BRIDGE_CHILD_EXITED: 1`
+  raised from `unified/bridge.py:619`, with `child_runtime.py:333` raising its own `MutationError` in six of the cases -
+  the tests spawn a real child process and the child exits with status 1. That is a process/environment-level failure
+  of the child launch, not an assertion about the protocol code.
+- **Why this matters now:** Task 9 is the single full `so101_demo_py` + `so101_teleop` gate, and it **cannot pass** while
+  these 21 tests fail. Recording the numbers and the discriminators here means Task 9's result can be read correctly -
+  as "21 pre-existing failures in the unified bridge child-launch path plus whatever I add" - instead of being
+  misattributed to this task's changes, which is exactly the misattribution mistake this session already made once
+  (CP-932) and had to unwind.
+- **Not yet determined, and not claimed:** whether the child exits 1 because of a missing executable/overlay in this
+  worktree's environment, a stale install underlay, or a genuine defect in the committed bridge code. The next
+  diagnostic step is to run one failing test with the child's own stderr captured, rather than to guess.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller's address is recorded (CP-1010) with
+  implementation next; Task 9's gate requirements are pinned (`-n min(8, nproc)` = `-n 8` here, full scope, fresh
+  verified scratch) and its current blocker is now measured rather than unknown; Task 10 stays blocked until the 17
+  search values are independently designed and reviewed. No runtime, no package gate claim, no push, no evidence
+  deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
