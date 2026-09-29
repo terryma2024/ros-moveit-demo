@@ -24549,3 +24549,22 @@ picture in both directions.**
   keep green tests that encode the very gap the review found** - that would be re-introducing P1-2 to make a suite pass.
 - **State:** the P1-2 code change and its new test file stay **uncommitted** while the wider set is red, per this batch's rule; the ledger checkpoint is
   committed alone. P1-1 remains green and committed (`99881b9d`). No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1477 — P1-2 is GREEN: one complete validator, both entries, and the fixtures that hid the gap are fixed as data
+
+- **RED retained:** `experiments/gate8-p12/red-1.log` - **9 failed, 9 passed** - nine malformed descriptors accepted by the measurement entry and refused by
+  the binding. **That split was the finding.**
+- **GREEN:** `experiments/gate8-p12/green-5.log` - **81 passed** across the new shared-descriptor file, the binding's own tests, the aggregator and the
+  admission suite.
+- **What changed:** `validate_head_search_shape` now carries the **complete** rule - closed key sets, types and value bounds for `detector`, `camera` and
+  `motion`, **copied verbatim from the binding rather than invented** - so `require_runtime_descriptor` (measurement) and `validate_head_search_binding`
+  (binding) enforce exactly the same document rule; **report pairing stays in the binding** (weights digest, calibration status/provenance, sample document
+  equality, controller config) and its own tests prove it is still a separate concern.
+- **And the fix to the 22 pre-existing failures was data, not rule:** they passed only because the weak path let their **partial descriptors** through. The
+  admission context fixture and the aggregator's `_complete_inner_block` now carry every member the production document does (threads and software
+  versions included), and the aggregator's batch fixture seals **this module's own complete `_descriptor()`** instead of a partial inline literal. **I did not
+  relax the validator to keep them green - that would have re-introduced the review's finding to make a suite pass.**
+- **Method note:** three of the four fixture edits were done by matching braces in the source rather than retyping the literal, after two hand-written
+  anchors failed - the file's exact whitespace is not something to guess at.
+- **State:** committed. P1-2 done; next is P1-3 (SEARCH evidence must not silently be `None`, route (a)). No new session, goal, worktree or stack; nothing
+  pushed, nothing deleted; no hardware.
