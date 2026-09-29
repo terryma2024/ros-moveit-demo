@@ -27,8 +27,13 @@ READBACK_SOURCES = _SOURCES
 
 
 def _identity():
+    # P1-4: the release epoch is CREATED at the release, so the samples this fixture builds must end in the epoch the
+    # port itself will seal with (`FINAL_RELEASE_EPOCH`) - a literal like 7 is the value no case ever reaches, and the
+    # seal compares the last entry against the identity rather than trusting it
+    from so101_demo.act.task8_live_evidence import FINAL_RELEASE_EPOCH
+
     return {"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
-            "reset_epoch": 4, "release_epoch": 7}
+            "reset_epoch": 4, "release_epoch": FINAL_RELEASE_EPOCH}
 
 
 def _raw_records(root: Path, sim_time: float) -> dict:
