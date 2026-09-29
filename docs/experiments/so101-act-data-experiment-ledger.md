@@ -16978,3 +16978,19 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   provenance, time reversal (needs stamps in the index), phase coverage (needs a declared phase set), and then the whole
   publishing half. None of the open items is a one-line rule, and each needs its writer-and-validator pairing, which is
   now the established pattern of this boundary.
+
+## CP-1093 — Phase coverage enforced, and this time no fixture broke
+
+- **RED, clean:** a batch holding **eight of the nine** phase rows for **every** anchor validated -
+  `Failed: DID NOT RAISE` - because the closure check compares files present against files listed and never asks which
+  phases they cover. The missing phase in the fixture is RELEASE, the one whose absence a report would most like to hide.
+- **The rule, and why it cost nothing:** when an anchor is evidenced the way the **driver** writes it
+  (`anchors/<anchor>/phase-NN-<name>.json`), the index now requires all **nine** phases and refuses a missing one as
+  **`BATCH_PHASE_MISSING`**; anchors evidenced through the **aggregator's** per-topic convention carry no phase dimension
+  and are untouched. Scoping the rule by convention is exactly what CP-1088's map made possible - the previous two
+  attempts at index rules each broke fixtures because they assumed one convention for the whole tree.
+- **GREEN: 32 passed, rc=0** with **no fixture migration needed** (`beh-r690-green.log`), scratch
+  `<R>/scratch/r690b.<n>` with `TMPDIR` verified through the exact test interpreter; RED `beh-r690-red.log`.
+- **Boundary IV's index work now stands at:** entry validates first, canonical shape, self-digest, symlink, contamination,
+  anchor coverage, phase coverage, contract-vs-bound. **Still open:** identity agreement across roots beyond provenance,
+  time reversal (needs stamps in the index), and the publishing half.
