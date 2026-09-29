@@ -20,7 +20,8 @@ class PickPlaceSearchPortError(RuntimeError):
 class PickPlaceSearchPhasePort:
     """Expose only SEARCH while later physical phases remain unprovisioned."""
 
-    def __init__(self, boundary, *, expert_route_factory=None, evidence_recorder=None) -> None:
+    def __init__(self, boundary, *, expert_route_factory=None, evidence_recorder=None,
+                 live_evidence_window=None) -> None:
         if (not callable(getattr(boundary, "begin", None))
                 or not callable(getattr(boundary, "search", None))
                 or not callable(getattr(boundary, "safe_stop", None))
@@ -33,6 +34,8 @@ class PickPlaceSearchPhasePort:
         self.boundary = boundary
         self._expert_route_factory = expert_route_factory
         self._evidence_recorder = evidence_recorder
+        # the window this case's frozen 10 Hz grid is recorded into; fed only from the port's own readback
+        self._live_evidence_window = live_evidence_window
         self._expert_route = None
         self._startup_receipt = None
         self._request = None
@@ -162,6 +165,10 @@ class PickPlaceSearchPhasePort:
             "reset_epoch": request["reset_epoch"],
             "release_epoch": request["release_epoch"],
         }
+        window = self._live_evidence_window
+        if window is not None:
+            # seal the window first: a window that cannot be sealed must not leave a sealed recorder behind
+            window.seal()
         return recorder.seal(identity)
 
     def _search_evidence(self, observed: PickPlaceSearchObservation,
