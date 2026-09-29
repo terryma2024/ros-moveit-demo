@@ -29153,3 +29153,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **Zero mismatches over 19 references - while the verdict says its parser yielded 46.** The index's rows come in four widths (15 four-field, 35 five-field, 33 six-field, 5 seven-field), so **my auditor reads only one of the shapes**: the next step is to widen it to every row that carries a path with a size and a digest, then re-run until the count matches the reviewer's 46 and the mismatch count stays at zero.
 - **Still to correct, and it is the verdict's own sentence:** the packet's line 340 says *"117 xunit files, **1311 cases**, 0 failures, 43 skipped"* while the canonical `Test.xml` decodes to **1272 passed + 43 skipped = 1315 pytest cases**, and `1432 = 1315 pytest cases + 117 CTest entries` **is not** evidence of cross-run accumulation. **That correction, and the freeze/read-back of the canonical evidence copy, follow the widened audit.**
 - **State:** **P2 in progress: two of two known-stale rows corrected and verified; the audit widened next, then the counts**; P1-1 … P1-5 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1739 — P2's audit, widened and green: 37 references verified against the files on disk
+
+- **The widened auditor, and what it covers now:**
+  ```
+  references parsed: 37
+  mismatches: 0
+  ```
+  It pairs the **path** cell (the longest path-like cell, which is the fix that mattered - my first version took the
+  artefact-NAME cell and reported fifteen files "MISSING" that were there all along) with the 16-hex digest and the size,
+  resolves both path forms (absolute, and relative to the evidence root), and re-hashes every file.
+- **And the count against the verdict's 46, stated rather than smoothed:** the index has **88 table rows**, of which **61 carry a path**; the auditor verifies the **37** that carry a path *and* a digest. **The remaining rows are not unverified by choice** - they simply do not state a digest to check - and closing that difference (or showing that the reviewer's 46 counts rows this auditor cannot use) is the next step before the counts are corrected.
+- **What is already true after this round:** **every reference the index states a size and a digest for matches the file on disk**, including the two rows corrected in CP-1738 - **so the "two mismatches" the verdict found are gone and nothing new appeared.**
+- **Still to do for P2:** reconcile 37 with the reviewer's 46; correct the counts (packet:340's `1311` → 1272 passed + 43 skipped = **1315**, with `1432 = 1315 + 117` named as a sum and not as accumulation); **freeze and read back the canonical evidence copy**.
+- **State:** **P2 in progress with its index audit green and its count correction next**; P1-1 … P1-5 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
