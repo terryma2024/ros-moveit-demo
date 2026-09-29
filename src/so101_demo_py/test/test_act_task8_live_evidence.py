@@ -684,3 +684,83 @@ def test_published_case_row_translates_into_the_journal_row_shape():
     with pytest.raises(ValueError, match="TASK8_CASE_ROW_INVALID"):
         case_row_to_journal_row({"case_id": "full-01"}, identities=identities,
                                 manifest_document_sha256="9" * 64)
+
+
+# --- protocol v2 additions (Task 7): nine phases, row provenance, release correlation ----------------------
+
+V2_PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE", "RADIAL_RETREAT",
+             "FINAL_CHECK")
+V2_ROW_KEYS = {"head_rgb_ref", "wrist_rgb_ref", "head_camera_info_ref", "wrist_camera_info_ref",
+               "head_segmentation_ref", "wrist_segmentation_ref", "head_depth_ref", "wrist_depth_ref",
+               "joint_receipt", "tf_receipt", "reference_receipt", "physics_receipt",
+               "session_id", "reset_epoch", "attempt_id", "phase", "source_stamp", "receive_monotonic_s",
+               "digests"}
+
+
+def test_the_window_requires_exactly_the_designs_nine_phases():
+    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+
+    assert LiveEvidenceWindow.REQUIRED_PHASES == V2_PHASES
+
+
+def test_every_ten_hz_row_carries_the_required_provenance():
+    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+
+    row = build_live_evidence_sample(identity={"session_id": "s", "reset_epoch": 1, "attempt_id": "a"},
+                                     phase="SEARCH", physics_step=0, monotonic_s=0.0,
+                                     head={"rgb_ref": "h.png", "camera_info_ref": "h.json",
+                                           "segmentation_ref": "hs.png", "depth_ref": "hd.npy"},
+                                     wrist={"rgb_ref": "w.png", "camera_info_ref": "w.json",
+                                            "segmentation_ref": "ws.png", "depth_ref": "wd.npy"},
+                                     receipts={"joint": {}, "tf": {}, "reference": {}, "physics": {}})
+    assert V2_ROW_KEYS <= set(row), sorted(V2_ROW_KEYS - set(row))
+
+
+def test_the_task_camera_may_not_appear_in_act_observations():
+    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+
+    with pytest.raises(ValueError, match="TASK_CAMERA_NOT_AN_OBSERVATION"):
+        build_live_evidence_sample(identity={"session_id": "s", "reset_epoch": 1, "attempt_id": "a"},
+                                   phase="SEARCH", physics_step=0, monotonic_s=0.0,
+                                   head={"rgb_ref": "h.png"}, wrist={"rgb_ref": "w.png"},
+                                   receipts={}, task_camera={"rgb_ref": "t.png"})
+
+
+def _release_fixture(rows_suffix=0):
+    return [{"phase": "RELEASE", "source_stamp": 1.0 + 0.1 * index, "receive_monotonic_s": 1.0 + 0.1 * index,
+             "release_epoch": 7, "cup_pose": [0.1, 0.2, 0.3], "cup_velocity": [0.0, 0.0, 0.0]}
+            for index in range(4)]
+
+
+def test_release_correlation_needs_three_consecutive_preceding_rows_and_a_same_epoch_open():
+    from so101_demo.act.task8_live_evidence import correlate_release_open
+
+    rows = _release_fixture()
+    open_event = {"operation": "gripper_open", "release_epoch": 7, "source_stamp": 1.45,
+                  "command_ref": "raw/controller/open.json"}
+    result = correlate_release_open(rows, open_event, period_s=0.1)
+    assert result["support_rows"] == 3 and result["verdict"] == "PASS"
+    with pytest.raises(ValueError, match="RELEASE_EPOCH_MISMATCH"):
+        correlate_release_open(rows, {**open_event, "release_epoch": 8}, period_s=0.1)
+    with pytest.raises(ValueError, match="RAW_REF_REQUIRED"):
+        correlate_release_open(rows, {**open_event, "command_ref": None}, period_s=0.1)
+
+
+def test_release_correlation_refuses_a_gap_a_summary_and_an_unindexed_mask():
+    from so101_demo.act.task8_live_evidence import correlate_release_open
+
+    gapped = _release_fixture()
+    gapped[1]["source_stamp"] = 1.35                       # not consecutive at 10 Hz
+    with pytest.raises(ValueError, match="SUPPORT_ROWS_NOT_CONSECUTIVE"):
+        correlate_release_open(gapped, {"operation": "gripper_open", "release_epoch": 7, "source_stamp": 1.45,
+                                        "command_ref": "raw/open.json"}, period_s=0.1)
+    with pytest.raises(ValueError, match="SUMMARY_ONLY_SUBSTITUTE"):
+        correlate_release_open(_release_fixture(), {"operation": "gripper_open", "release_epoch": 7,
+                                                    "source_stamp": 1.45, "command_ref": "raw/open.json",
+                                                    "summary": "opened"}, period_s=0.1)
+    with pytest.raises(ValueError, match="UNINDEXED_REF"):
+        correlate_release_open(_release_fixture(), {"operation": "gripper_open", "release_epoch": 7,
+                                                    "source_stamp": 1.45,
+                                                    "command_ref": "raw/open.json",
+                                                    "mask_ref": "raw/mask.png"},
+                               period_s=0.1, indexed=("raw/open.json",))

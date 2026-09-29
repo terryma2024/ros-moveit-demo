@@ -12447,3 +12447,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   tree holds only the user's 30 modified + 12 untracked files apart from the preserved one-token
   `Pairs.fingerprint` fix; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-909 — Task 7 RED established (live-evidence producer, nine phases, release correlation)
+
+- **Tests appended to `test/test_act_task8_live_evidence.py`** (a clean, plan-named *Modify* target - not user-dirty)
+  covering the plan's Steps 1 and 2: `LiveEvidenceWindow.REQUIRED_PHASES` must be exactly
+  `SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, RADIAL_RETREAT, FINAL_CHECK`; every 10 Hz row
+  must carry head/wrist RGB, CameraInfo, segmentation and depth references, the joint/TF/reference/physics
+  receipts, session/reset/attempt, phase, source and receive timestamps and digests; the **Task camera may not
+  appear in ACT observations** (`TASK_CAMERA_NOT_AN_OBSERVATION`); and release correlation must take the first
+  gripper-open event of the **same release epoch** with the three immediately preceding rows consecutive at 10 Hz,
+  refusing an open event from another epoch (`RELEASE_EPOCH_MISMATCH`), a missing raw reference
+  (`RAW_REF_REQUIRED`), a non-consecutive support run (`SUPPORT_ROWS_NOT_CONSECUTIVE`), any summary-only substitute
+  (`SUMMARY_ONLY_SUBSTITUTE`) and an unindexed ref (`UNINDEXED_REF`).
+- **RED run:** `python -m pytest -q -p no:cacheprovider test/test_act_task8_live_evidence.py` -> **exit code 1,
+  elapsed 1 s**, result **5 failed, 32 passed** (`beh-task7-red.log`). The first failure already localises the work:
+  the existing `LiveEvidenceWindow.REQUIRED_PHASES` begins at `CLOSE` and omits `SEARCH`, so the required change is
+  the window's phase tuple and the row/release contracts, not a rewrite of the recorder.
+- **Verified context:** the three Task 7 source/config files this task modifies
+  (`act/task8_live_evidence.py`, `config/act/task8-live-evidence-schema.json`, `test/test_act_task8_live_evidence.py`)
+  are all **clean** in git, so the plan's *Modify* targets are available without touching user work.
+- **Next:** implement the nine-phase window, the row provenance fields, the Task-camera exclusion and
+  `correlate_release_open`, then Steps 3-4 - provision the recorder through the real `PickPlaceCaseOwner` and child
+  startup receipt, bind it in `ros_child._run_pick_place()` before `PickPlaceRunner`, open at SEARCH and seal only
+  after FINAL_CHECK, read the artifact back before the journal row, and add the production-chain test that keeps the
+  real `run_pick_place_case()`, owner, child, runner, validation and journal path.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
