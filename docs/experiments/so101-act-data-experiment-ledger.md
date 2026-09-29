@@ -22734,3 +22734,17 @@ not an inference of mine.**
   `monotonic`/`sleep`/`clock_ns`, so the fixture can pass the real ones and keep the rest substituted.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1371 — The clock seam is a FROZEN list, which is why the fence still refuses
+
+- **Diagnosis of my own fix:** passing `clock=[time.monotonic()]` cannot work, because `_segment` treats that value as a **constant**
+  (`clock = [10.0] if clock is None else clock`, read as `clock[0]`) - so the segment's `monotonic()` is frozen at construction while
+  `stopped_wall_s` comes from a real stop confirmation taken **later**. The fence then refuses on `sent < stopped_wall_s`, which is a **test
+  clock** problem, not a production one.
+- **The fix is to stop using that convenience:** the production constructor takes the clock functions directly
+  (`monotonic=time.monotonic, sleep=time.sleep, clock_ns=time.monotonic_ns`), so the fixture builds
+  `PickPlaceSearchSegment(sources, adapter, scene, geometry, ..., monotonic=time.monotonic, clock_ns=time.monotonic_ns)` with the **same
+  imported doubles** and the same substituted verifiers `_segment` supplies. **Live clock, substituted I/O, no relaxed check** - and the
+  doubles stay imported rather than forked.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
