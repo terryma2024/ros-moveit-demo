@@ -21255,3 +21255,31 @@ not an inference of mine.**
   fake-heavy fixture would have passed six rounds ago and proved nothing.**
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1289 — The binder's wrapper unmasked: the three policy checks pass, so the fault is in the comparison
+
+- **`verify()`'s tail, read in full:**
+  ```python
+  proposal = _regular_json(paths["proposal"]); receipt = _regular_json(paths["activation_receipt"])
+  try:
+      verify_disabled_proposal(proposal)
+      verify_activation(proposal["payload"], receipt)
+      if (proposal["policy_fingerprint"] != self.policy_fingerprint
+              or receipt["policy_fingerprint"] != self.policy_fingerprint
+              or receipt["evidence_root"] != str(self.evidence_root)):
+          raise ValueError("ACT_POLICY_BINDING_INVALID")
+  except (KeyError, TypeError, ValueError) as error:
+      raise ValueError("ACT_ARTIFACT_BINDING_INVALID") from error
+  ```
+  **so the code I have been chasing is a wrapper** - every policy fault is reported as `ACT_ARTIFACT_BINDING_INVALID`, which is why six
+  rounds of reading kept landing on the same message.
+- **And the probe separates them:** calling `verify_disabled_proposal(proposal)`, `verify_activation(proposal["payload"], receipt)` and
+  the fingerprint comparison **directly, on the admission helper's own documents, all pass.** So the fault is in the **three comparisons
+  inside the `if`** - the proposal's fingerprint against the binding's, the receipt's fingerprint against the binding's, or the
+  **receipt's `evidence_root` against `str(self.evidence_root)`**, which is the one I have never printed and the likeliest, since the
+  helper records the path it was given while the binding holds a `Path` that may stringify differently.
+- **One print of those three values in the fixture settles it**, and that is the next action - a print, not a redesign. **The lesson,
+  recorded because it cost several rounds: when a production check wraps its causes into one code, reproduce the inner checks directly
+  before reading more.**
+- **State:** the fixture is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing deleted, nothing
+  pushed.
