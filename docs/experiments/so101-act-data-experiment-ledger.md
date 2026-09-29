@@ -22190,3 +22190,17 @@ not an inference of mine.**
   comparison plus the shared validation, both of which the reviewer asked for by name.
 - **State:** P1-4's source and test changes uncommitted while its two tests are red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1339 — Both P1-4 failures have one likely cause: a single root does not reach the block under test
+
+- **The two messages, read:** the positive test fails with `KeyError: 'head_search_qualification'` (the aggregation produced no such output) and
+  the negative fails with `DID NOT RAISE`. **Those two together are the signature of the head-search block never running** - not of a wrong
+  comparison. A single hand-built root evidently does not qualify for that stage, while the existing positive test feeds **one root through
+  `_v2_batch`** and reaches it (its own `outputs["head_search_qualification"]` works at line 176).
+- **So the fix is the fixture's shape, not the production code:** give both new tests the same multi-root construction the existing positive
+  uses (a `_v2_batch` root alongside my hand-built payload root), so the qualification stage actually executes and **then** the comparison
+  under review decides the outcome. **The production change (one-layer comparison + shared validation) stays exactly as written.**
+- **And the positive's assertion should name the published file rather than a dict key**: the aggregator writes
+  `head-search-qualification.json` under the output root (line 283 in the code reviewed above), which is a stable assertion.
+- **State:** P1-4's source and test changes uncommitted while these two are red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
