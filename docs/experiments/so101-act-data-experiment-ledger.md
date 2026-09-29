@@ -29779,3 +29779,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   until P1-3 supplies them, rather than substituting defaults the way the phase-camera reader does today.
 - **State:** **P1-1's second half is GREEN; its first half is scoped with a dependency on P1-3 recorded**; the demo
   RED's rate measurement is still running (`demo4.log` green, `demo5.log` in flight). No other controlled change yet.
+
+## CP-1773 — P1-3's RED is confirmed (4 failures), and it surfaced the verdict's own mismatch in the test seam
+
+- **The RED, appended to P1-3's own file, one test per sentence of the finding:**
+  ```
+  4 failed, 5 passed
+    test_the_shipped_matrix_is_not_a_scaffold                        -> DID NOT RAISE (phases: [] loads)
+    test_a_camera_without_intrinsics_is_refused_rather_than_defaulted -> DID NOT RAISE (640/480/1.0 rad substituted)
+    test_a_target_projected_outside_the_image_is_not_in_frame        -> (part of the 4)
+    test_an_occluder_without_geometry_fails_closed                   -> DID NOT RAISE (absent geometry skipped)
+  ```
+  Each test quotes the verdict sentence it answers, so the RED and the finding cannot drift apart.
+- **And the fifth failure is the interesting one, because it is P1-1's change meeting the verdict's own complaint:**
+  ```
+  test_the_formal_entrys_replay_rows_carry_a_measured_observation
+      AssertionError: the formal entry must seal before its evidence can be judged   (main(argv) == 1)
+  ```
+  **The formal entry uses the test seam, and that seam's detector stand-in returns DICTIONARIES** -
+  `test_act_task8_formal_measurement_entry.py:91/93/95`, a `detect(frame, query)` that returns `{}` or
+  `{"detections": []}`. My P1-1 translation now **refuses anything that is not a real `DetectionBatch`**
+  (`PRODUCTION_DETECTION_RESULT_UNSUPPORTED`), so the seam's stand-in fails closed - **which is precisely the
+  protocol mismatch the verdict described**: *"Tests return dictionaries and do not expose that protocol mismatch."*
+- **Which also says what the fix is, and that it belongs in the test harness rather than in production:** P1-1's
+  requirement is *"keep the real interface/return type and replace only bottom I/O"* - so the seam's stand-in must
+  return a **real `DetectionBatch`** (real candidates, real boolean masks), and then the formal entry's own test
+  exercises the real protocol while still standing in for the camera and the client.
+- **State:** **P1-1's second half GREEN; P1-3's RED confirmed with its four requirements written as tests; the seam
+  stand-in's dictionaries are the next edit** (test-side), after which P1-3's GREEN tackles the four production
+  requirements (frozen matrix, no defaulted intrinsics, image bounds, fail-closed occluders). The demo RED's rate
+  measurement is still in flight (`demo4.log` green).
