@@ -25612,3 +25612,21 @@ picture in both directions.**
   refusal naming the next piece.** With ~405 rounds left there is room for it plus the seal, the journal, the seven indexed assertions with their four negatives, then P2 and the final boundary.
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test is uncommitted while it is red, per this batch's rule. No new session,
   goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1537 — What APPROACH needs inside the port, and why the port's own test takes a shortcut it cannot
+
+- **Where it stands (`experiments/gate8-p14/app.log`):** SEARCH still passes in the same run; APPROACH now gets past the route lookup and stops on
+  **`AttributeError: 'function' object has no attribute 'register'`** wrapped as `TASK8_SEARCH_EVIDENCE_INVALID` - **the next named piece**.
+- **Two facts read out of the port, and they are the whole of the next step:**
+  1. the port **builds** its route through `self._expert_route_factory(request)` and then **checks the type**: `isinstance(self._expert_route, VisibleApproachExpertRoute)`
+     plus the manifest's policy fingerprint (`:223-225`). **A stub route therefore cannot pass through the factory** - and the port's own APPROACH test sidesteps this by assigning
+     `port._expert_route` **directly**, which is legitimate there because the factory branch is what performs the check;
+  2. and line **`:551`** shows the route being passed alongside the **live-evidence window** into the approach path, which is where the missing `register` lives. **The window binding is
+     the other half of what a full case needs, and it is the same binding P1-3 built for SEARCH.**
+- **So the next round is two bindings, both of which already exist in some form in this batch's tests:** a **real route object assigned directly** (the same shortcut the port's
+  APPROACH test takes, and for the same reason) and the **live-evidence window** bound with its admitted support distance and raw-record root (P1-3's own attachment). **Neither is new
+  code; both are wiring the composite double.**
+- **And the pattern is worth stating plainly, because it is the fourth time this stretch:** every refusal so far has named the next piece - `expert_route`, then `register`, each one line of
+  wiring rather than a redesign. **That is what a fail-closed interface is supposed to feel like when it is being completed.**
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test is uncommitted while red, per this batch's rule. No new session,
+  goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
