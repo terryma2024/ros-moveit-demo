@@ -28314,3 +28314,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And that means the conflation is in how the fixture builds the prefix, not in the grid:** the header stamp comes from **the run's current time** (the readback), which is correct in production - a prefix is a plan issued fresh, milliseconds after its own observation - while **the fixture creates ONE prefix and then runs a whole case against it**, so the run's clock walks out of the plan's window.
 - **The fixture fix, therefore:** build the prefix **from the current readback time** where the APPROACH plan is issued (a fresh plan per issue, as production does), and let the capture clock stay the case's monotonic sequence. **Two clocks, two jobs - and the wrap disappears without either being rewritten.**
 - **State:** **P1-4 pieces 1-3 working; piece 4's clock landed; the prefix must be built from the current readback** and the expectation restatements follow; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1692 — The prefix refresh is not enough: the RECEIPT is what the APPROACH path validates
+
+- **Still `APPROACH_HEADER_STAMP_INVALID` after re-issuing the prefix dict**, and the fixture shows why in its own first lines:
+  ```
+  test_act_task8_nine_phase_case.py:43
+      def _receipt(prefix, ticket):
+          from so101_demo.act.prefix_source import SOURCE_KEYS, PrefixSourceAuthority
+          authority = PrefixSourceAuthority(..., max_prefix_age_s=10.0, monotonic=lambda: 1.36)
+          source = {... "physics_step": 9, "simulation_time_s": prefix["observation_time_s"], ...}
+          return authority.issue(ticket=ticket, prefix=prefix, source=source, source_kind="EXPERT_ROUTE")
+  ```
+  **The prefix travels inside a SIGNED RECEIPT issued by `PrefixSourceAuthority`**, whose `source` block carries `simulation_time_s` = the prefix's observation time **at issue time**, and whose `monotonic` is a **frozen literal** (`lambda: 1.36`). So mutating the prefix dict afterwards changes neither the receipt's own record nor the age the authority would compute - **the APPROACH path validates against the receipt, and the receipt is a statement about the moment it was issued.**
+- **That is a design fact rather than a fixture defect, and it is the same shape as the live-evidence identity:** a signed statement about a case's start cannot be edited afterwards - which is why my refresh had no effect and why **the honest change is to issue the receipt where the plan is issued** (per readback, with a monotonic source that advances), not to mutate a document behind a signature.
+- **And the two clocks the fixture now needs are exactly the two production has:** the **capture clock** (one monotonic sequence for the grid) and the **authority's monotonic clock** (advancing, for prefix age) - with the prefix's window met by re-issuing the receipt from the current observation, as production does.
+- **State:** **P1-4 pieces 1-3 working; piece 4's clock landed; the prefix must be re-issued WITH its receipt** and the expectation restatements follow; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
