@@ -16940,3 +16940,19 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State, unchanged from CP-1089 and repeated so it cannot be missed: HEAD is red for these six tests (6 failed / 25
   passed)**, the rule causing it is the one the review asks for, and the migration above is the honest way to close it.
   No rule was weakened to make a fixture pass, and none will be.
+
+## CP-1091 — The six-fixture migration is closed: 31 passed, and HEAD is green again
+
+- **Done the honest way, per CP-1090's plan:** the fixtures became **schema-true by construction** rather than the rule
+  being weakened. The shared `_sealed_batch` writes and indexes one per-anchor `sync/<anchor>.json` per declared anchor;
+  the hand-built contract batches do the same through a small helper; and the self-digest test's production-sealed batch
+  gains real anchor evidence before it tampers with the digest.
+- **My own anchor-coverage test keeps under-covering on purpose** - that is the rule it proves - and my first pass had
+  accidentally applied the helper to it, so the correction is recorded rather than silently folded in.
+- **GREEN: 31 passed, rc=0** (`beh-r689b.log`), scratch `<R>/scratch/r689b.<n>` with `TMPDIR` verified through the exact
+  test interpreter. **HEAD is green again**: the six-failure state disclosed at CP-1089/CP-1090 is cleared, and the red
+  suites this boundary has had to disclose have each been closed by making the fixtures true rather than the checks
+  weaker - the identity migration (CP-1082), the batch keys (CP-1079), the digests (CP-1084), and now the anchors.
+- **Boundary IV still ahead:** missing **phase** coverage, mixed contract across roots, time reversal; then the publishing
+  half - real measured values, the four canonical documents, a real 28-field `TASK8_READY`, render-twice byte comparison
+  with a single publish, on-disk readback, `require_gate(report, "task8_live")` and `validate_head_search_binding()`.
