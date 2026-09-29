@@ -17685,3 +17685,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundary IV's remaining work, unchanged:** the live driver wiring that records the descriptor and raw evidence at
   measurement time (CP-1117 - needs an authorised runtime, question with the owner), then Boundary V's production-chain
   test. Nothing weakened, nothing deleted, no push, no stack, no hardware.
+
+## CP-1128 — The rename's consumers checked before moving on, and the receipt is genuinely read
+
+- **Followed the receipt's readers rather than assuming nobody reads it:** `pick_place_validation_manifest.py` consumes the
+  whole set of receipt digest keys (`calibration_report_sha256`, `head_search_qualification_sha256`, and now
+  `task8_ready_support_sha256`), and it does **not** hard-code the report's filename - a grep for
+  `calibration-report.json` in that module returns nothing. So CP-1127's rename to the canonical name cannot have broken
+  it, and CP-1126's added digest is a key that path already reads.
+- **Verified by running its tests rather than reasoning about them:** all four manifest suites -
+  `test_act_contact_diagnostic_manifest.py`, `test_act_task8_manifest.py`, `test_dynamic_manifest_semantics.py`,
+  `test_geometry_manifest.py` - pass, **53 passed** in one targeted invocation
+  (`beh-r739.log`), scratch `<R>/scratch/r739.<n>` with `TMPDIR` verified through the exact test interpreter.
+- **Why that matters for the boundary:** the receipt is not decoration - a downstream validation manifest consumes it -
+  which is exactly why CP-1124/1126/1127 were real defects and not tidiness. A publication whose receipt did not name a
+  document it wrote, or named the report something no definition uses, would have surfaced downstream as a manifest error
+  rather than as an obvious failure.
+- **Running totals for this boundary's verification, all targeted:** 55 + 87 + 52 (CP-1125), 109 across seven suites
+  (CP-1127), and 53 manifest tests here - no full suite, per the owner's instruction. Nothing weakened, nothing deleted,
+  no push, no stack, no hardware.
+- **Still with the owner:** authorisation for one live stack so the driver wiring can record the descriptor and raw
+  evidence at measurement time (CP-1117); that is the only remaining piece of Boundary IV, and it is also Boundary II's
+  outstanding composition item.
