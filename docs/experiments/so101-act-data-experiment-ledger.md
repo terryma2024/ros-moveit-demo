@@ -12500,3 +12500,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   cite its source, rather than against the interface that would be convenient.
 - **State:** Task 7 RED stands at **5 failed, 32 passed**; Tasks 1-6 committed; no runtime, no package gate, no
   push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-911 — Task 7 WIP: the window now opens at SEARCH; the suite is red and that is recorded, not hidden
+
+- **Landed in this round:** `LiveEvidenceWindow.REQUIRED_PHASES` is now the design's nine phases
+  (`SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, RADIAL_RETREAT, FINAL_CHECK`) and its
+  docstring states that the window opens at SEARCH and seals only after FINAL_CHECK; and the three
+  signature-dependent tests are rewritten against the **real** keyword-only interface of
+  `build_live_evidence_sample`, asserting that the produced row cites every raw record and its identity and that
+  the audit camera never appears in ACT observations.
+- **The suite is red and this is stated plainly:** `test/test_act_task8_live_evidence.py` stands at **7 failed,
+  30 passed** (`beh-task7-red2.log`). The failure classes are `TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN`,
+  `TASK8_LIVE_EVIDENCE_IDENTITY_INVALID`, and the still-absent `correlate_release_open`. Extending the window's
+  phase tuple changes when a window may record and seal, so the module's open/record/seal flow, its existing tests
+  and the runner wiring must move **together** - doing them piecemeal is what produced this intermediate state.
+- **Committed as an explicit WIP** (`wip(act): open the task8 live evidence window at SEARCH (suite red, task 7 in
+  progress)`) rather than reverted, so the work is preserved and the history says out loud that the suite is red at
+  this commit. Task 9's full package gate is the meaningful integration boundary; no gate has been run and no
+  runtime started.
+- **Resume plan, in order:** (1) implement `correlate_release_open(rows, open_event, *, period_s, indexed)` with the
+  epoch, three-consecutive-rows, raw-ref, indexed-ref and summary-refusal rules its tests assert; (2) move the
+  window's open/record/seal flow to SEARCH and update its existing tests to the same tuple; (3) Steps 3-4 of the
+  plan - provision the recorder through the real `PickPlaceCaseOwner` and child startup receipt, bind it in
+  `ros_child._run_pick_place()` before `PickPlaceRunner`, read the artifact back before the journal row, and add
+  `test_task8_live_evidence_production_chain.py`.
+- **Boundaries unchanged:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
