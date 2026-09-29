@@ -26702,3 +26702,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   here - the honest statement is that the batch's earlier confidence in the sealed artifact was misplaced.**
 - **State:** remediation item 2 moved from "verify" to **reproduced**; item 1 verified in CP-1599; the rest of the list is untouched so far. **The goal is still paused+disarmed** - the tool refuses a model-initiated resume even after the user's `/goal resume`
   message reached this session, so the transition appears to need the TUI's own affordance. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live not started.
+
+## CP-1601 — RED established for the raw-source integrity defect, and the construction site is named
+
+- **The defect's production site, read rather than guessed:** `adapters/act/pick_place_search_port.py:524-541` writes each raw record as
+  ```
+  payload = json.dumps(_raw_document(document), ...).encode()
+  target = directory / f"{name}.json"                                  # a CONSTANT name per source
+  descriptor = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)   # O_TRUNC overwrites
+  records[name] = {"relative_path": f"raw/{name}.json", "sha256": sha256(payload)}
+  ```
+  **So the name is constant per source, the open truncates whatever a previous phase wrote there, and each sample keeps the digest of what IT wrote - which is why the file on disk later disagrees with the sample that names it.**
+  That single block explains the review's "45 of 70 references do not match" and this worktree's reproduction (CP-1600) exactly.
+- **And a RED test now pins the three properties the artifact must have** (`test/test_act_task8_sealed_raw_sources.py`, run against the nine-phase case):
+  ```
+  3 failed
+  - test_every_sample_names_its_own_raw_sources            -> "each capture must name its own raw record: ..."
+  - test_every_samples_recorded_digest_still_matches_the_bytes_it_names
+  - test_the_sealed_identity_carries_the_epoch_the_case_ended_with
+  ```
+  **Log: `experiments/gate8-remediation/red-raw-sources.log`.** The test is deliberately **not committed while it is red** - the batch's rule is to commit a file when it is green - **so it is fixed and committed together
+  with the GREEN in the next step.**
+- **What the GREEN must do, in the order the properties are asserted:**
+  1. **name each capture's raw records uniquely** - so no phase can overwrite another's evidence;
+  2. **refuse to write over an existing record** (`O_EXCL` rather than `O_TRUNC`), so a collision is a **named refusal** rather than silent data loss;
+  3. **carry the release epoch the case ended with** into the sealed samples and the sealed identity, consistent with the phase documents this batch already fixed (CP-1555/1558).
+- **State:** item 2 of the remediation list is now **RED-established and localized**; item 1 verified (CP-1599); the rest untouched. Goal still paused+disarmed (tool refuses a model-initiated resume). Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no
+  hardware, no live stack; P2 live not started.
