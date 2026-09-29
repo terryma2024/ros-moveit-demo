@@ -67,8 +67,11 @@ def main(argv=None) -> int:
             from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
 
             _document = json.loads(args.context.read_text())
-            if "runtime_descriptor" in _document:
-                require_runtime_descriptor(_document["runtime_descriptor"])
+            # section 4.2: a digest is not a descriptor. A context that carries only a hash of the runtime config cannot
+            # prove which configuration was measured, so it is refused rather than accepted as opaque provenance
+            if "runtime_descriptor" not in _document:
+                raise ValueError("MEASUREMENT_RUNTIME_DESCRIPTOR_REQUIRED")
+            require_runtime_descriptor(_document["runtime_descriptor"])
         if args.driver:
             _load_driver(args.driver)(contract, args.batch_root)      # test-only injection
         else:
