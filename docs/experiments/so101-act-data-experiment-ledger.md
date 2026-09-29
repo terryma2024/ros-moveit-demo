@@ -16357,3 +16357,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `broker_generation`, `resource_binding`) still ride **inside** the identity mapping the CLI reads, and
   `task8_live_evidence.py` still has three `seal` entry points. Boundary III's 15 configured inputs are **not** needed
   for these and are not being used to block them.
+
+## CP-1062 — Boundary I, second piece: the RED is being driven to the intended break (not there yet)
+
+- **Target:** runtime/admission inputs (`measurement_plan_sha256`, `safe_interval_rad`, `candidate_sha256`,
+  `policy_sha256`, `controller_generation`, `broker_generation`, `resource_binding`) must come from a **context
+  document**, not from the identity mapping - the CLI currently reads them out of the identities file.
+- **The RED and its three iterations, recorded because the iterations are the evidence that the fixture is honest:**
+  1. placeholder paths -> `FileNotFoundError` - an incidental failure, **not** the intended interface break, so it was
+     not accepted as RED (the agreed rule: only the expected break counts);
+  2. the repository's v2 contract -> `KeyError: 'identities'`: that file is an **unbound template** with no digest
+     bindings, which `load_measurement_contract` refuses by design, so it could never reach the context boundary either;
+  3. a **bound v2 contract built in the test** from the loader's own rules (`_V2_BOUND_KEYS`, `SCHEMA_VERSION_V2`, `KIND`,
+     `_contract_sha256`) plus an identities file carrying the contract's ten members -> the run now gets **past contract
+     loading** and fails with `KeyError: 'contract_sha256'` inside the CLI's own use of the document.
+- **Where that leaves the RED:** closer, and honest about it - it now exercises the real loader and the real CLI path,
+  but it has not yet reached the intended `MEASUREMENT_CONTEXT_REQUIRED` break, so **no fix has been written for this
+  piece**. The next step is to read the CLI's `KeyError` origin (the traceback line, not a guess) and finish driving the
+  RED to the context boundary before changing any production code.
+- **Evidence:** commands, rc, elapsed, scratch and tempfile proof for each iteration are in
+  `experiments/gate6-batch3-py-gate/beh-r663*.log`, with `TMPDIR` verified through the exact test interpreter inside
+  `<R>/scratch/r663b/r663c.*`. The test file is committed with the boundary-I first piece; this iteration is unstaged.
