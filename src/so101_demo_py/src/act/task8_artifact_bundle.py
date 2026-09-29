@@ -106,6 +106,24 @@ def _publish_receipt(document: dict, target: Path) -> Path:
 
 
 
+
+def require_runtime_descriptor(runtime: object) -> None:
+    """The one reading of a runtime descriptor: shape plus the CUDA policy section 4.2 requires.
+
+    Shared by the bundle, which binds the file, and the measurement entry, which consumes the parsed document from its
+    context - so the two boundaries cannot drift into two implementations of the same rule.
+    """
+
+    if (type(runtime) is not dict or set(runtime) != {"schema_version", "head_search"}
+            or runtime["schema_version"] != 1 or type(runtime["head_search"]) is not dict):
+        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID")
+    detector = runtime["head_search"].get("detector")
+    if type(detector) is not dict:
+        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID")
+    if detector.get("allow_cpu_fallback") is not False or detector.get("requested_device") != "cuda":
+        raise ValueError("TASK8_PREPARATION_CUDA_REQUIRED")
+
+
 def _require_runtime_descriptor(runtime_path: Path, calibration_path: Path) -> None:
     """Approved preparation design section 4.2: the runtime config is parsed, never bound as opaque bytes.
 
@@ -119,14 +137,7 @@ def _require_runtime_descriptor(runtime_path: Path, calibration_path: Path) -> N
         runtime = json.loads(runtime_path.read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID") from error
-    if (type(runtime) is not dict or set(runtime) != {"schema_version", "head_search"}
-            or runtime["schema_version"] != 1 or type(runtime["head_search"]) is not dict):
-        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID")
-    detector = runtime["head_search"].get("detector")
-    if type(detector) is not dict:
-        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID")
-    if detector.get("allow_cpu_fallback") is not False or detector.get("requested_device") != "cuda":
-        raise ValueError("TASK8_PREPARATION_CUDA_REQUIRED")
+    require_runtime_descriptor(runtime)
     # the full runtime/report pairing is the aggregator's check (measurement design section 8, proven at CP-1122);
     # demanding a fully bound report here would make every bundle fixture carry a measured calibration, which is a
     # different decision taken at a different boundary

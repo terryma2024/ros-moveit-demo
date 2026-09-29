@@ -48,7 +48,7 @@ def _invoke(tmp_path, context):
     identities.write_text(json.dumps(_cli_identities()))
     context_path = tmp_path / "context.json"
     context_path.write_text(json.dumps(context))
-    driver = tmp_path / "driver.py"
+    driver = tmp_path / "descriptor_driver.py"
     driver.write_text("def fill(contract, root):\n"
                       "    import json, pathlib\n"
                       "    root = pathlib.Path(root)\n"
@@ -57,7 +57,7 @@ def _invoke(tmp_path, context):
     sys.path.insert(0, str(tmp_path))
     return measure.main(["--contract", str(bound),
                          "--identities", str(identities), "--batch-root", str(tmp_path / "batch"),
-                         "--ledger", str(tmp_path / "ledger.md"), "--driver", "driver:fill",
+                         "--ledger", str(tmp_path / "ledger.md"), "--driver", "descriptor_driver:fill",
                          "--context", str(context_path)])
 
 
