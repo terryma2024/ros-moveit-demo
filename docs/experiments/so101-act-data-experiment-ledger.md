@@ -19805,3 +19805,41 @@ not an inference of mine.**
   packet-verification logs, every scratch and IPC base retained as **deletion candidates, nothing deleted**; no push, no MuJoCo
   stack, no hardware; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED; the 17 provisional
   values still `null` with `requires_approved_value: true`.
+
+## CP-1221 — The package/colcon pytest-xdist gate is GREEN: 5801 tests, 0 errors, 0 failures, 163 skipped
+
+- **Decision (a) applied exactly as authorised, then the boundary run once:**
+  ```ini
+  [tool:pytest]
+  # the gate-runner test imports tools/ from the repository root, so the root is on sys.path for the package's own
+  # test run; relative to this file, never an absolute machine path
+  pythonpath =
+      ../..
+  testpaths =
+      test
+  ```
+  **Relative, no absolute machine path, no test import touched, nothing skipped.**
+- **Minimal collect-only/readback first, as instructed:**
+  | check | result |
+  | --- | --- |
+  | `--collect-only -q test/test_pytest_full_gate_runner.py` from the package root | **42 tests collected** (was a collection error) |
+  | `tools.so101_pytest_gate` resolves inside the worktree | **True** |
+  | ordinary scope | **5801/5813 collected, 12 deselected** |
+  | benchmark still outside the ordinary scope | ✅ the only `benchmark_test` match is the repository's **own** test named `test_low_frequency_benchmark_tests_are_outside_default_package_suite`, i.e. the partition rule asserting itself |
+- **The formal package gate, every condition the owner set:**
+  | condition | value |
+  | --- | --- |
+  | registered evidence root, previously nonexistent NVMe scratch | `scratch/pkg-1790667922` |
+  | `TMPDIR`/`TMP`/`TEMP` verified through the exact interpreter | ✅ `temp proof ok` |
+  | fresh real 0700 short IPC base | `/tmp/s101-pkg-407937`, `mode=700` |
+  | colcon run with `test-venv` as `sys.executable` | ✅ `…/test-venv/bin/python`, `xdist 3.8.0` |
+  | workers = `min(8, CPU)` | **8** (CPU 32) via `--pytest-args "-n 8"` |
+  | provenance | head `f18bf602`, 45 dirty paths, `setup.cfg` sha256 prefix `e7391902bd15` |
+  | **result** | **rc=0, 107 s; `colcon test-result` rc=0 → "5801 tests, 0 errors, 0 failures, 163 skipped"** |
+  Evidence: `experiments/gate6-batch3-py-gate/pkg-gate.log` and `pkg-gate-result.log`.
+- **Why this closes item 5:** the package gate the owner required is green with `pytest-xdist` at 8 workers over the ordinary
+  `so101_demo_py` scope, and the numbers agree with CP-1211's standalone xdist run (5638 passed + 163 skipped = 5801). Per the
+  owner's instruction the standalone full xdist was **not** repeated, and no scope was reduced and nothing was serialised to get
+  here. **Decision (c) was left alone**: no child fixture was added, and the owner/child choice goes to the reviewer.
+- **State:** HEAD `f18bf602` plus the `setup.cfg` commit and this checkpoint; staged 0; all five earlier colcon failures, this
+  gate's logs, both xdist artefacts and every scratch and IPC base retained as deletion candidates; no push, no stack, no hardware.
