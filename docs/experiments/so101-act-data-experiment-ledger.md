@@ -27361,3 +27361,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   with a fourth failed attempt.
 - **What that leaves, stated plainly:** the index's **path-matched whole-index audit** reports **26 rows checked, 1 mismatched** - that row - and everything else verifies. **No claim of a clean audit is made for this round.**
 - **State:** the supersession is recorded where a reviewer will see it; the one stale row and the audit are the next step. Item 1's context half is done with its CLI half awaiting CP-1635; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1638 — The index is clean again, and the fix needed a different tool rather than a better pattern
+
+- **One literal line replacement did what four programmatic attempts could not:**
+  ```
+  before: | 31987 | `fe029a4e34c90b75
+  after:  | 32915 | `6236c84d4d707149
+  whole-index path-matched audit -> checked: 26, mismatched: 0, missing: 0
+  index sha256: ebc6be01e34bbcda
+  ```
+  **So the index is clean for the first time since the packet gained its supersession banner**, and the row's staleness - created by that banner, caught by the audit, and left visible in CP-1637 rather than papered over - is closed.
+- **The tooling lesson, worth keeping because it cost four attempts:** I read the row correctly (including printing it raw with `cat -A`), wrote four Python matchers against it, and **each failed to match while reporting no error** - the last two printed `rows updated: 0` and were
+  believed. **The fix was to stop improving the pattern and use a different tool**: `sed -i '68s/…/…/'`, verified before and after by reading the same line. **When a check keeps failing on text you have already read correctly, change the instrument, not the expression** - the
+  same shape as CP-1592's "is the build stale?" and CP-1626's "what does this check actually establish?"
+- **And with this, the queued corrections from CP-1622/1623 are all delivered:** the packet says the legs are superseded and withdraws the CTest citation; the index says the same and its rows all verify. **The one thing neither file yet carries is the re-run boundary itself, which
+  cannot exist until the three open decisions are made and the code stops changing.**
+- **State:** the evidence set (packet, index, ledger) is **internally consistent and audited** for the first time since the third review; item 1's context half is done with its CLI half awaiting CP-1635; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched pending the code settling. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
