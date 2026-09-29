@@ -188,6 +188,7 @@ so101_add_pytest_test(test_task8_child_driven_case test/teleop/test_task8_child_
   so101_add_pytest_test(test_unified_safety test/teleop/test_unified_safety.py)
   so101_add_pytest_test(test_unified_ipc test/teleop/test_unified_ipc.py)
   so101_add_pytest_test(test_unified_bridge test/teleop/test_unified_bridge.py)
+  so101_add_pytest_test(test_teleop_ipc_worker_root_isolation test/teleop/test_teleop_ipc_worker_root_isolation.py)
   so101_add_pytest_test(test_unified_bridge_cleanup test/teleop/test_unified_bridge_cleanup.py)
   so101_add_pytest_test(test_unified_two_channel test/teleop/test_unified_two_channel.py)
   so101_add_pytest_test(test_unified_parents test/teleop/test_unified_parents.py)
