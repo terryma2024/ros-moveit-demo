@@ -23266,3 +23266,16 @@ not an inference of mine.**
   ones already satisfied.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1404 — The anchor misses again, and the ledger already named this exact failure mode
+
+- **What happened:** I wrote the `SimulationEvidence` insertion against the text I *believed* the capture method contained (`raw = _raw(self._step)`)
+  and the search found **no such line at all** - so nothing was inserted, the assertion/IndexError aborted the script, and the file is untouched.
+  **This is CP-1330's and CP-1324's failure mode verbatim: editing from memory of the file rather than from the file.** The grep above prints the
+  real `_raw(` call sites, which is what the next attempt anchors on - or, better, what it inserts relative to by **position** in that method.
+- **Where the actual work stands:** the diagnosis is firm and unchanged - **the port requires a real `SimulationEvidence`** (its line 239), the
+  segment suite's `_raw` returns a `SimpleNamespace`, and that single `isinstance` at the top of the disjunction explains every refusal since
+  CP-1390. **The fix is a fifteen-field construction at the one call site the grep names, and it is the last thing between this item and a
+  completed `search`.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
