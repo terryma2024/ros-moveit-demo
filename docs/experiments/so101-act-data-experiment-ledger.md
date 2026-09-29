@@ -23975,3 +23975,21 @@ not an inference of mine.**
   (3) assert the published row's own fields, then the aggregator's verdict on it.
 - **State:** no source change this round; the focused child fixture remains green (CP-1444/1445); no stack, no CUDA, no actuators, no hardware; nothing
   pushed, nothing deleted.
+
+## CP-1447 — P1-5's case half is GREEN: the production entry runs the real child and publishes the row
+
+- **`2 passed`** for the child-driven fixture. The second test is the reviewer's ask in its achievable form: **only the worker seam is substituted**, and
+  the production `run_pick_place_case(spec, "prefix-01", owner, journal)` does everything else itself - preflight, `PickPlaceValidationCampaign`
+  freeze check, request assembly, `_require_result`, `_require_live_evidence_readback`, the retirement-receipt requirement, and `_publish_new`.
+- **Asserted from the published row (not from my own expectations):** `case_id == "prefix-01"`, `mode == "phase_prefix"`, `status == "PASSED"`,
+  `stopped_confirmed is True`, `completed_phases == ["SEARCH"]`, `eligible_for_formal_collection is False`,
+  **`live_evidence_path == ""` with `live_evidence_sha256 == "0"*64`** (the production rule for a prefix case), **both retirement receipt paths are real
+  files**, and the harness's own lifecycle is `["start", "execute", "finish"]`.
+- **The refactor that made it possible:** the fixture's setup became `_prepare_child_case(tmp_path, monkeypatch, *, case_id, campaign_id, session_id,
+  attempt_id, worker_id)` - 59 lines parameterised - and the boundary and port now **learn their session from the constructor** instead of hardcoding
+  the first fixture's `session-item5`, which is what the port's startup-receipt check compares against.
+- **What remains for P1-5, precisely:** feed this published row to the trusted path (`case_row_to_journal_row` with the bundle identities, then the
+  aggregator) and assert its verdict; then the four negatives; then the single integration boundary; then the packet. **And the scope question from
+  CP-1445 stands for the review: a prefix case carries no sealed artifact by production rule, so the seven assertions the review listed are satisfied
+  only in the row-shaped subset until later phases are provisioned.**
+- **State:** committed with both tests green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
