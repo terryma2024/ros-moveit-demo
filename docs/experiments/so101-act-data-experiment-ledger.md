@@ -32205,3 +32205,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   obstacles are fixture inconsistencies in shared test doubles - a scope decision that is being surfaced rather than
   taken unilaterally.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
   re-review packet remain waiting on it.
+
+## CP-1851 — The SEARCH phase's evidence passes: one value was the whole neck refusal
+
+- **One value, changed in the fixture that owned it, and the port accepted the phase:**
+  ```
+  test_act_task8_search_segment.py:53   "neck_yaw_rad": 0.1   ->   0.0
+  segment suite (its owner):   17 passed
+  full-case drive:             run_phase -> pick_place_search_port.py:666   (was :358, then :398, then :402)
+  ```
+  **`_search_evidence` is now satisfied end to end** - schema, receipt, **physical-readback scope** (the one-model-hash
+  coherence across scene/pairs/checker), Planning Scene, the readback's calibrated members, the tolerances, **and the neck
+  check** - **so the production port has accepted a SEARCH evidence document produced by the full case.**
+- **And the fix was where CP-1849's rule said it would be:** the audit reports what was measured, the scene is the
+  physics state, **and `0.1` was the only value in the tree claiming a neck the physics never had** - every other suite's
+  locked result carries `0.0` (`test_act_task8_search_port.py:83`,
+  `test_act_task8_production_composition_contract.py:107`, `test_act_task8_measurement_runtime_descriptor.py:235`).
+  **So this was not a judgement call: the fixture was the outlier, and its own 17 tests still pass.**
+- **Which also settles CP-1850's scope question in the cheapest way it could have been settled:** no shared fixture was
+  restructured, no second harness was built, and no check was relaxed - **one number that disagreed with the rest of the
+  tree was corrected, with the owning suite's tests as the evidence that it was safe to correct.**
+- **And the drive moved on:** `run_phase` now reads an `act_context` off something the harness supplies
+  (`pick_place_search_port.py:666`), **the same kind of named member as the ones before it - and the first refusal that
+  comes after the phase evidence is complete.**
+- **State:** **P1-5 in progress: the port accepts a full case's SEARCH evidence, and the drive is past the check that has
+  occupied it since CP-1843.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
+  re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**

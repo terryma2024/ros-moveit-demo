@@ -50,7 +50,10 @@ def _raw(step, *, x=-0.08, fingertips=(), sim_time_s=None,
 def _locked(*, timestamp=2.0):
     return {"found": True, "status": "TARGET_LOCKED", "bearing_rad": 0.0,
             "frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
-            "neck_yaw_rad": 0.1, "confidence": 0.9, "timestamp": timestamp,
+            # P1-5: the port's own neck check compares this with `scene["qpos"][neck_index]` within the admitted joint
+            # tolerance. Every other suite's locked result carries 0.0 and this fixture's readback qpos is zeros, so
+            # 0.1 was the one value in the tree claiming a neck the physics never had.
+            "neck_yaw_rad": 0.0, "confidence": 0.9, "timestamp": timestamp,
             "attempt_id": "attempt-1"}
 
 
