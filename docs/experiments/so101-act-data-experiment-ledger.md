@@ -27277,3 +27277,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the fix's shape is therefore not a design question:** the context must carry **the calibration report**, **`session_id`/`attempt_id`**, and **`search_start_rad`**; the CLI must build the context with them (they exist in its inputs: the manifest names the calibration report, the
   identities document and the request carry the ids, and the descriptor carries the search's start); and the composition contract test already asserts the rest of the path. **The RED that proves it is the same test class the batch already uses: build the context the way the CLI does and require the controller to be built.**
 - **State:** item 1 **settled with four named fields** (composition verified green, context fields missing); item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1633 — Item 1's RED, and the reason the defect survived: the existing test duck-types the very component that is broken
+
+- **The RED, four cases, all failing for the right reason (`experiments/gate8-remediation/red-p11-context.log`):**
+  ```
+  4 failed
+  test_the_formal_context_carries_every_field_the_controller_path_reads[calibration_report]
+  ... [session_id] ... [attempt_id] ... [search_start_rad]
+  ```
+  Each builds the **real** `CalibrationMeasurementContext` the way the CLI builds it, adds the field the production controller path reads, and asks the context to carry it. **It cannot: the type takes twelve fields and none of these four is among them.**
+- **And the reading that explains why this survived a green contract test - which is the most useful sentence in this entry:**
+  ```
+  test_act_task8_production_composition_contract.py:112
+      context = type("Context", (), document)()      # a DUCK-TYPED namespace
+  ```
+  **The test that proves the production composition runs builds its own context type instead of the production one**, so it never exercises the type the CLI constructs - and `_admitted_controller_config` reads `calibration_report`, `session_id`, `attempt_id` and
+  `search_start_rad` **through `getattr`**, which a namespace satisfies and the real context cannot. **The test asserted the composition path while substituting the component whose fields were missing** - the review's item 1 exactly, and the same family as every
+  substitution this batch has had to re-examine (CP-1626, CP-1629).
+- **So the GREEN is two edits, both already named:** the four fields on `CalibrationMeasurementContext`, and the CLI building them from inputs it already has (the manifest names the calibration report; the request and identities carry the two ids; the
+  descriptor carries the search's start). **Then the formal-path test must use the REAL context, or the defect can return unseen.**
+- **State:** item 1 **RED established**; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently
+  confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
