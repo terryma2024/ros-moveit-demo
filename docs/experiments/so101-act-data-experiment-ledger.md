@@ -22602,3 +22602,20 @@ not an inference of mine.**
   nine phases deterministically - **no wall-clock waiting, no stack, and the same discipline the repository already uses elsewhere.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1362 — The run loop read: what each substituted collaborator must actually answer
+
+- **Read (`pick_place_search_segment.py:163-196`):** `run` validates the request (`session_id`/`attempt_id` identifiers, an int
+  `deadline_ns`, an int `reset_epoch >= 1`), then loops on
+  `raw, geometry = self._next(request, reset_epoch, cursor)`, `cursor = raw["world"].simulation_step`, `self._sync_scene(...)`,
+  `self._guard(request)`, `decision = self.adapter.tick(safe_observe=True)`, `validate_search_result(decision)`,
+  `self.adapter.neck_port.stop_and_confirm()`, `self._post_stop_interval(...)`, and finally builds the `PickPlaceSearchObservation`.
+- **So the substituted `adapter` is small and its contract is explicit:** `tick(safe_observe=True)` must return a **dict** that
+  `validate_search_result` accepts with the request's `attempt_id` and `found is True` (and a `timestamp` the code compares against simulated
+  time), and `adapter.neck_port.stop_and_confirm()` must return the real `True`. **Everything the segment then records is built by production
+  code from those answers.**
+- **One read remains to finish the picture:** `self._next(...)`, which turns `sources` into `raw["world"]` (a real `SimulationEvidence`) and
+  the geometry - **so the `sources` substitute is defined by what `_next` asks of it**, and I read it next rather than inventing a sources
+  shape.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
