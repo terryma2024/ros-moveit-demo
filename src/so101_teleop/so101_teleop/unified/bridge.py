@@ -271,7 +271,7 @@ class ActWorkerPort:
             # "the cup is supported" is derived from it and the payload schema requires it
             "support_distance_max_m",
             # the case's admitted gripper target travels with the request for the same reason (CP-1514)
-            "gripper_closed_rad",
+            "gripper_closed_rad", "close_duration_s",
         })
         session_id, attempt_id, deadline_ns = self._base(request, fields=fields)
         if request["contact_policy_fingerprint"] != self.context.contact_policy_fingerprint:
@@ -289,6 +289,7 @@ class ActWorkerPort:
             "scenario_id": request["scenario_id"],
             "support_distance_max_m": request["support_distance_max_m"],
             "gripper_closed_rad": request["gripper_closed_rad"],
+            "close_duration_s": request["close_duration_s"],
             "manifest_sha256": self.context.manifest_sha256,
             "runtime_config_sha256": self.context.runtime_config_sha256,
             "contact_policy_fingerprint": self.context.contact_policy_fingerprint,

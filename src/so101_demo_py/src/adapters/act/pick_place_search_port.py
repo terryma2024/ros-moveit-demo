@@ -107,7 +107,7 @@ class PickPlaceSearchPhasePort:
         return freeze_selected_search_source(
             self.validated_search_observation(), max_skew_s=max_skew_s)
 
-    def bind_case_targets(self, *, gripper_closed_rad=None) -> None:
+    def bind_case_targets(self, *, gripper_closed_rad=None, close_duration_s=None) -> None:
         """Bind the case's admitted motion targets once, before the port begins.
 
         The evidence attachment carries the case's evidence parameters (the support threshold); this carries the ones
@@ -120,7 +120,11 @@ class PickPlaceSearchPhasePort:
         if (type(gripper_closed_rad) not in (int, float) or isinstance(gripper_closed_rad, bool)
                 or not finite(gripper_closed_rad) > 0):
             raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: gripper_closed_rad")
+        if (type(close_duration_s) not in (int, float) or isinstance(close_duration_s, bool)
+                or not finite(close_duration_s) > 0):
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: close_duration_s")
         self._gripper_closed_rad = float(gripper_closed_rad)
+        self._close_duration_s = float(close_duration_s)
 
     def bind_startup_receipt(self, receipt: dict) -> None:
         if (self._startup_receipt is not None or self._begun
@@ -634,7 +638,11 @@ class PickPlaceSearchPhasePort:
         execute = getattr(self.boundary, "sequence_phase", None)
         if not callable(execute):
             raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
-        handoff = {"observed": observed, "selected_source": selected_source}
+        handoff = {"observed": observed, "selected_source": selected_source,
+                   # the case's admitted motion targets travel with the call, as the support threshold does
+                   "gripper_closed_rad": getattr(self, "_gripper_closed_rad", None),
+                   "close_duration_s": getattr(self, "_close_duration_s", None),
+                   "support_distance_max_m": getattr(self, "_support_distance_max_m", None)}
         try:
             facts = execute(phase, request, **handoff)
         except PickPlaceSearchPortError:

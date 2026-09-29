@@ -277,6 +277,56 @@ class PickPlaceSearchBoundary:
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: premature contact")
         return facts
 
+    def sequence_phase(self, phase, request, *, observed, selected_source,
+                       gripper_closed_rad=None, close_duration_s=None, support_distance_max_m=None):
+        """Execute one sequence phase and report its facts - or refuse by name.
+
+        The port calls this for every phase but SEARCH, which has its own path. Each phase's execution goes through the
+        broker's own public boundary (a kind and a goal), exactly as the prefix pair does, and the facts are then
+        established from the readback by `sequence_facts`, never reported by a caller.
+        """
+
+        if phase == "CLOSE":
+            return self._close_facts(request, gripper_closed_rad=gripper_closed_rad,
+                                     close_duration_s=close_duration_s,
+                                     support_distance_max_m=support_distance_max_m)
+        raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
+
+    def _close_facts(self, request, *, gripper_closed_rad, close_duration_s, support_distance_max_m):
+        """Close the gripper to the case's admitted target and establish CLOSE's facts from the readback."""
+
+        for name, value in (("gripper_closed_rad", gripper_closed_rad), ("close_duration_s", close_duration_s)):
+            if value is None:
+                raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {name}")
+        broker = self.reset.broker
+        dispatch = getattr(broker, "dispatch", None)
+        if not callable(dispatch):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: CLOSE: broker.dispatch")
+        driver = getattr(broker, "driver", None)
+        wait = getattr(driver, "wait", None)
+        if not callable(wait):
+            # the wait policy belongs to the execution layer; inventing a poll loop here would be a policy nobody set
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: CLOSE: driver.wait")
+        from so101_demo.act.joints import ARM_JOINTS
+
+        ticket = broker.ownership.ticket(self.reset.act_context["lease_token"], "act",
+                                         request["session_id"], request["attempt_id"])
+        before = self.reset.sources.capture(request["attempt_id"])
+        observation = before.get("observation")
+        if not isinstance(observation, dict) or not isinstance(observation.get("state"), (list, tuple)) \
+                or len(observation["state"]) != 8:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: CLOSE: observation")
+        goal = {"joint_names": ARM_JOINTS[5:],
+                "header_stamp_s": finite(observation["sim_time_s"]),
+                "time_from_start_s": (0.0, finite(close_duration_s)),
+                "positions": ((finite(observation["state"][5]),), (finite(gripper_closed_rad),))}
+        gid = dispatch(ticket, "gripper", goal)
+        wait(gid)
+        after = self.reset.sources.capture(request["attempt_id"])
+        if support_distance_max_m is None:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: support_distance_max_m")
+        return self.sequence_facts("CLOSE", after, request, support_distance_max_m=support_distance_max_m)
+
     def search(self, request: dict):
         if self._request is None:
             raise PickPlaceSearchBoundaryError("TASK8_BEGIN_REQUIRED")
