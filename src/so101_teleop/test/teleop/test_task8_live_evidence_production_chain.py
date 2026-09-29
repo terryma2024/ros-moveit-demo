@@ -235,7 +235,11 @@ def test_the_real_owner_invalid_seals_an_open_window_before_child_retirement(tmp
     port.cancel = cancel
     child_owner = SimpleNamespace(stop_owned=stop_owned)
     stack.stop = stop
-    owner = PickPlaceCaseOwner(SimpleNamespace(), child_owner, stack_factory=lambda *a: stack,
+    async def released(*_args, **_kwargs):
+        return None
+
+    workload = SimpleNamespace(finish=released, stop=released, release=released)
+    owner = PickPlaceCaseOwner(workload, child_owner, stack_factory=lambda *a: stack,
                                final_clear_probe=final_clear_probe, artifact_binding=lambda *a: {},
                                require_startup_proof=False)
     owner._ready = True
