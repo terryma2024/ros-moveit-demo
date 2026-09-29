@@ -31,7 +31,7 @@ def endpoint_bytes(path):
 class CommandBroker:
     def __init__(self,driver,*,ownership,simulation_session_id=None,prefix_executor=None,
                  prefix_source_authority=None,prefix_source_port=None,control_events=None,
-                 reservation_port=None,authority=None):
+                 reservation_port=None,authority=None,bound_authority_session=None):
         if (prefix_source_authority is None) != (prefix_source_port is None):
             raise ValueError('PREFIX_SOURCE_CONFIG_INVALID')
         if prefix_source_authority is not None and (
@@ -46,6 +46,17 @@ class CommandBroker:
             if type(authority) is not BrokerAuthorityComposition:
                 raise TypeError('BROKER_AUTHORITY_INVALID')
         self.authority=authority
+        if bound_authority_session is not None:
+            # strict identity, not duck typing: the session must own exactly the
+            # authority and the reservation client this broker dispatches through
+            from so101_demo.adapters.act.broker_authority_wiring import BoundAuthoritySession
+            if type(bound_authority_session) is not BoundAuthoritySession:
+                raise TypeError('BROKER_BOUND_SESSION_INVALID')
+            if authority is not bound_authority_session.composition:
+                raise TypeError('BROKER_BOUND_SESSION_AUTHORITY_MISMATCH')
+            if reservation_port is not bound_authority_session.reservation_port:
+                raise TypeError('BROKER_BOUND_SESSION_PORT_MISMATCH')
+        self._bound_authority_session=bound_authority_session
         if reservation_port is not None and (
                 not all(callable(getattr(reservation_port, name, None))
                         for name in ('arm_generation', 'reserve', 'close_generation'))
@@ -105,9 +116,38 @@ class CommandBroker:
             # no broker lock is held here: run any reserved-failure cleanup unlocked
             self._drain_cleanup_once(self._pending_token_snapshot())
 
+    def bind_measurement_plan(self,sha256):
+        """Bind the calibration measurement plan hash this broker will accept arm probes against."""
+        self.measurement_plan_sha256=sha256
+        return sha256
+
+    def _require_calibration_authority(self,ticket,kind,goal):
+        """The calibration role submits only a byte-matching arm probe or an adapter-signed receipt.
+
+        The production owner is untouched: for every other role this is a no-op, so the existing submit path keeps
+        its semantics. For the calibration role the restricted capability set applies first, then the plan hash or
+        the receipt, so a caller cannot reach the generic non-ACT path by another name.
+        """
+        owner=ticket[2]
+        if owner!='calibration':
+            return True
+        self.ownership.require_capability(owner,kind)
+        plan=getattr(self,'measurement_plan_sha256',None)
+        if kind=='arm_probe':
+            if plan is None or not isinstance(goal,dict) or goal.get('plan_sha256')!=plan:
+                raise PermissionError('MEASUREMENT_PLAN_MISMATCH: calibration arm probe must byte-match the plan')
+            return True
+        if kind=='neck_target':
+            receipt=goal.get('receipt') if isinstance(goal,dict) else None
+            if getattr(receipt,'signed_by',None)!=ticket[0]:
+                raise PermissionError('CALIBRATION_BINDING_REQUIRED: neck target needs the adapter receipt')
+            return True
+        raise PermissionError(f'CALIBRATION_OPERATION_REFUSED: {kind}')
+
     def _dispatch_locked(self,ticket,kind,goal,*,trusted_search_neck=False):
         with self._lock,self.ownership.authorized(*ticket[1:]):
             self.ownership.require_ticket(ticket)
+            self._require_calibration_authority(ticket,kind,goal)
             self._post_reset_ticket=None
             self.control_events.record('submit_begin',generation=ticket[0],owner=ticket[2],
                                        session_id=ticket[3],attempt_id=ticket[4],detail=kind)
@@ -651,7 +691,7 @@ class CommandBroker:
                 return response
             if operation in ('reset_world','pause','switch_controllers','finish_reset'):
                 with self._lock:
-                    self.tick()
+                    self.tick()          # reset transactions keep their own ordering
                     with self.ownership.authorized(*scope) as ticket:
                         if request['owner']=='act':raise PermissionError('RESET_OWNER_INVALID')
                         if operation!='pause' and self._reset_ticket!=ticket:
@@ -813,7 +853,8 @@ class LocalBrokerConnection:
             if self._closed:
                 return
             self._closed = True
-            self.broker.disconnect(self._connection_id)
+        # the broker disconnect performs controller/ROS cleanup: never under this lock
+        self.broker.disconnect(self._connection_id)
 
 
 class UnixBrokerServer:

@@ -7,7 +7,12 @@ import time
 
 from .contracts import finite, identifier
 
-OWNERS=frozenset(('act','teacher','teleop','recovery'))
+OWNERS=frozenset(('act','teacher','teleop','recovery','calibration'))
+#: the calibration role is deliberately restricted: it may probe the arm, command bounded neck targets of its own
+#: admission, and stop/retire - never release the gripper or touch the Recorder. Roles absent from this table keep
+#: their existing (unrestricted) semantics, so the production owner=act binding is unchanged.
+CALIBRATION_CAPABILITIES=frozenset(('arm_probe','neck_target','stop','retire'))
+CAPABILITIES={'calibration':CALIBRATION_CAPABILITIES}
 
 
 class Ownership:
@@ -30,6 +35,16 @@ class Ownership:
                               owner=prior[1] if prior else None,
                               session_id=prior[2] if prior else None,
                               attempt_id=prior[3] if prior else None,detail=self._state)
+
+    def require_capability(self, owner, operation):
+        """Refuse an operation a restricted role was never granted."""
+
+        granted = CAPABILITIES.get(owner)
+        if granted is None:
+            return True
+        if operation not in granted:
+            raise PermissionError(f'CAPABILITY_NOT_GRANTED: {owner} may not {operation}')
+        return True
 
     def _expire(self):
         if self._expires is not None and self._monotonic()>=self._expires:
