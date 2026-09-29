@@ -28007,3 +28007,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   (`with_name`, not `with_suffix` - the latter moved the file name along with the module name and the test read a path nothing wrote).
 - **Evidence:** `204 passed` across the fifteen affected suites (the four P1-2 files plus measurement driver, CLI terminal state, composition contract, runtime descriptor, per-run wiring, formal contexts, live evidence, live qualification, sealed artifact, release-epoch boundary and calibration admission).
 - **State:** **P1-2 complete**; the task list moves P1-2 to done and P1-3 to in-progress; boundary unchanged and not re-claimed (**two controlled source changes have now occurred, so the next boundary needs a new run root**); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1674 — P1-3 verified and its RED in place: the phase camera echoes configuration and cannot receive geometry
+
+- **The finding, read against the code - all three of its claims hold:**
+  ```
+  task8_production_composition.py:115-136
+      class PhaseCameraMatrixEvaluator:
+          def __init__(self, document: dict) -> None:
+              self.document = document
+              self.occluders = tuple(document.get("occluders", ()))
+          def __call__(self, phase, index):
+              camera = self.document.get("camera", {})
+              return {"phase": phase, "frame_index": index, "row_count": len(self.occluders),
+                      "occluders": list(self.occluders),
+                      "camera": {"frame_id": ..., "width_px": ..., "height_px": ...},
+                      "matrix_sha256": self.document.get("matrix_sha256")}
+  ```
+  **Every field is read from the admitted document, and `phase`/`index` are echoed labels.** There is **no channel for a trajectory, a target bbox, a projection or a visibility result**, so the observation is a function of the **configuration** alone -
+  moving the cup, the camera or an occluder **cannot** change it. **And the driver calls it once per phase while labelling the row `period_s = PRIVATE_REPLAY_PERIOD_S = 0.002`** (`task8_measurement_driver.py:21,132-139`), so the design's *"2 ms projected sampling"* is a claim about **one sample per phase**.
+- **The RED (`test_act_task8_phase_camera_measurement.py`), `4 failed` - all four for the same honest reason:**
+  ```
+  TypeError: PhaseCameraMatrixEvaluator.__init__() got an unexpected keyword argument 'trajectory'
+  ```
+  **The evaluator cannot even be handed the geometry whose effect the verdict wants tested**, which is a stronger statement of the finding than a same-output comparison would be: there is nothing to compare, because the inputs do not exist.
+- **The four cases, which together are the verdict's completion condition:**
+  1. **moving the target** changes the observation;
+  2. **moving the camera** changes the observation;
+  3. **moving an occluder** changes the observation (compared against a **geometry** change, not against a row count - the current output's `row_count`/`occluders` would change with the list, and that is exactly the "echoed configuration" the verdict refuses to accept);
+  4. **the phase path is sampled at the admitted period**, with the sample count following the path's duration and **each sample retaining its input (`joints_rad`) and its result (`bbox_px`, `visible`)** - so a reader can re-derive the projection instead of trusting a summary.
+- **Next (P1-3 GREEN):** give the evaluator the geometry it must consume (trajectory, target, camera, occluders) and make it project per sample at the admitted period, retaining inputs and results; then the driver's private replay must hand it the run's real trajectory and target rather than a bare `(phase, index)` pair, and the design 4.4
+  coverage - **three anchors, the complete phase path, 2 ms sampling** - becomes the driver's own count rather than a label.
+- **State:** **P1-3 RED in place**; the task list keeps P1-3 in-progress; boundary unchanged and not re-claimed (the next boundary needs a new run root); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
