@@ -25928,3 +25928,22 @@ picture in both directions.**
   carries** - a small, well-defined change and the last thing between this case and a sealed artifact.
 - **State:** P1-1..P1-3 green and committed; the corrections above committed with the focused set green; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1557 — The grid's clock rule, read: consecutive samples must be exactly one period apart
+
+- **The rule, read rather than guessed (`task8_live_evidence.py:204-209`):**
+  ```
+  delta = stamp - previous
+  if delta <= 0:                      raise ValueError("TASK8_LIVE_EVIDENCE_GRID_REGRESSION")
+  if abs(delta - period_s) > tolerance_s: raise ValueError("TASK8_LIVE_EVIDENCE_GRID_GAP")
+  ```
+  with the window's own `period_s = 0.1` and `tolerance_s = 0.01` - **so consecutive grid samples must be 0.10 s apart, within a hundredth.**
+- **The two errors in this round were the two halves of that rule, and each fix moved the run to the other half:** the retreat sample first carried the **cached SEARCH instant** (the same time as every earlier
+  sample → **regression**), and now, with a fresh readback, the sample's time does not land exactly one period after the previous one → **gap**.
+- **And the shape of the fix is now clear, which is why the round ends here rather than with another edit:** the port feeds the grid **once per phase**, so the **substituted world's clock must step exactly one
+  period per phase** - not by a fixed amount per capture, which the phases' varying numbers of captures turn into a variable gap. **The fixture needs a per-grid-sample clock (an instance counter the port's own
+  `_grid_sample` call advances), and the boundary's `current_readback` is the natural place for it because it is the component that owns the readback.**
+- **What is nonetheless true and tested:** the nine phases verify, the seal runs, the retreat's grid sample is stamped and checked like every phase, and the recorder is attached. **The last obstacle is a fixture clock,
+  not a contract, and its rule is written above in three lines.**
+- **State:** P1-1..P1-3 green and committed; every production correction committed except the `current_readback` capability and the retreat sample's readback replacement, which are in the tree; the full-case test
+  remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
