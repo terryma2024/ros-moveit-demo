@@ -15481,3 +15481,38 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   obstacle a provenance-origin rule that must be read before it can be satisfied or waived; Task 10 blocked until the 17
   search values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1030 — Root cause of the provenance refusal: my own ledger commit raced the run
+
+- **Read the rule, then compared its four inputs against the run's own manifest, and the refusal is mine:**
+  `_read_manifest` (around `tools/so101_pytest_gate.py:399-426`) requires **all** of:
+  1. `python_executable` same-file as `--python`;
+  2. **`so101_demo_origin` resolving inside the expected cwd** (the repo root);
+  3. `cwd` equal to the repo root;
+  4. **`source_commit` equal to `--expected-source-commit`**.
+- **Three of the four held on this dirty worktree, and the fourth is the whole story:**
+  | field | manifest | expected | verdict |
+  | --- | --- | --- | --- |
+  | `so101_demo_origin` | `.../build/so101_demo_py/so101_demo/__init__.py` | inside the worktree | ✅ |
+  | `cwd` | the worktree root | the worktree root | ✅ |
+  | `python_executable` | the test venv | the test venv | ✅ |
+  | `source_commit` | **`cfb7e64d…`** | **`15e3647e…`** | ❌ |
+- **Why it differs: I committed CP-1027 while the gate was running.** The gate records the commit it observes at
+  collection time, my ledger checkpoint landed in between, and the manifest therefore named a commit that did not exist
+  when I passed `--expected-source-commit`. The refusal was correct behaviour by the tool reacting to **my own
+  interference**, not a policy state and not the owner's dirty work.
+- **Two consequences worth stating plainly:**
+  1. **The owner's 43 uncommitted paths do NOT block Task 9.** Every provenance input the tool checks passed with them
+    present - origin, cwd and interpreter are all about *where* code came from, not whether the tree is clean - so the
+    gate can run as a diagnostic on this worktree, and CP-1028's "policy state" reading was wrong.
+  2. **The operating rule for every future gate run:** commit the ledger **after** the gate finishes, never during it,
+    and pass the commit the run will actually observe.
+- **Also settled by this read, and it retires the demo-interpreter worry for the gate path:** the gate runs pytest
+  itself with `--python` (the venv that has xdist 3.8.0 and MuJoCo 3.12.0) from the repo root, which is why a shard
+  collected **5754 of 5766** ordinary tests. `colcon test` was never the gate; CP-1023's finding stands as a reason not
+  to use it, not as a blocker.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's gate is now fully understood - runner, interpreter, provenance rule, and the one operating mistake
+  that made the first run refuse - and a clean re-run with no intervening commits is the next action; Task 10 blocked
+  until the 17 search values are reviewed. No package-gate claim yet, no push, no evidence deleted, no hardware; formal
+  0/0/0; `collection_*` NOT_PROVISIONED.
