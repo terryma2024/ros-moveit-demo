@@ -19,7 +19,10 @@ BATCH_KIND = "task8_calibration_batch"
 BATCH_STATUSES = ("CLOSED", "INVALID")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SOURCE_COMMIT = re.compile(r"[0-9a-f]{40}\Z")
-_BATCH_KEYS = frozenset({"schema_version", "kind", "status", "identity", "files"})
+# the one canonical batch document: exactly what the production seal writes, so the writer and the validator cannot
+# disagree about the shape of a sealed batch (they did: the seal wrote anchors and its own digest, the validator allowed
+# five keys, and every sealed batch was refused as BATCH_INVALID)
+_BATCH_KEYS = frozenset({"schema_version", "kind", "status", "identity", "files", "anchors", "batch_sha256"})
 _ROOT = Path(__file__).resolve().parents[2]
 _CONFIG = _ROOT / "config/act"
 
@@ -163,6 +166,8 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
     identity = MeasurementIdentity.require(recorded.get("identity"))
     files = recorded.get("files")
     if type(files) is not dict:
+        raise ValueError("BATCH_INVALID")
+    if _SHA256.fullmatch(str(recorded.get("batch_sha256"))) is None:
         raise ValueError("BATCH_INVALID")
     found = _regular_files(root)
     if set(found) != set(files):
