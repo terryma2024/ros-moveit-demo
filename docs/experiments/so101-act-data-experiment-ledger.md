@@ -13664,3 +13664,33 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   Tasks 9-10 untouched; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
   candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED; gen3 retained and ineligible, gen4 reserved for Task 10.
+
+## CP-960 — Task 8: `derive_live_measurements` implemented and green (25 passed)
+
+- **Committed `feat(act): derive the five task8 live-only fields from five sealed runs`** (`19dac1c6`) with the module
+  and its test, guard `staged=2 check_rc=0`.
+- **What the implementation enforces:** exactly **five** runs (`FIVE_RUNS_REQUIRED`); a single
+  `session_id` / `contact_policy_fingerprint` / `phase_camera_matrix_sha256` across all of them
+  (`IDENTITY_MISMATCH`); and a **sealed sample path and hash on every run** (`SEALED_SAMPLE_REQUIRED`), so a summary
+  can never stand in for evidence.
+- **The plan's fixed extrema, implemented as data rather than as branches:** maximum for
+  `grasp_occlusion_window_s` and `cup_support_distance_m`; minimum for `release_stable_s`, `retreat_distance_m` and
+  `placement_stable_s`.
+- **The cup support distance's raw rule is implemented, not approximated:** when a run carries its own
+  `support_frames`, the value comes from the **three consecutive 10 Hz samples immediately before the first open in
+  the same release epoch** (`SUPPORT_FRAMES_REQUIRED`, `SUPPORT_FRAMES_NOT_CONSECUTIVE`), requiring both
+  `bottom_collision` and `table_collision` active with a stable pose and velocity
+  (`SUPPORT_CONTACT_REQUIRED`, `SUPPORT_STABILITY_REQUIRED`), and is reported as `max(0, d_signed)`.
+- **One defect of my own found by running:** my expected minimum for `placement_stable_s` was the fixture's default
+  (1.0) rather than the minimum of the five values I had actually supplied (1.2). The expectation was corrected to the
+  fixture's real minimum - the implementation was right and the test was wrong, which is the direction that matters.
+- **Verified: 25 passed, rc=0** (`beh-task8-green2.log`).
+- **Task 8 is not finished:** `build_task8_qualified_report(...)` - the **immutable 33-field** report that copies the 28
+  ready measurements **by value**, adds exactly these five entries, recomputes checks, writes a new report, reads it
+  back and calls `require_qualified(report)` without ever mutating the ready report in place - is still to implement,
+  together with the rejection tests the plan lists for it (a report that has not passed `require_qualified()`,
+  discontinuous frame stamps, an allowed distance without real contact).
+- **State:** Tasks 1-7 complete and green (Step-4 command 53, broader set 244, chain file 16); Task 8's derivation green
+  at 25; Tasks 9-10 untouched; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts
+  and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal
+  0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained and ineligible, gen4 reserved for Task 10.
