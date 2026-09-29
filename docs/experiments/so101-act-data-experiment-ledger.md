@@ -25836,3 +25836,18 @@ picture in both directions.**
   failing clause, and the same technique that has now settled six questions in this stretch.**
 - **State:** P1-1..P1-3 green and committed; the three corrections committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed,
   nothing deleted; no hardware.
+
+## CP-1551 — The probes found a real defect in the retreat capability, and narrowed the run to its last blocker
+
+- **`54 passed`** in the focused set, and the defect is committed: **the port delegates `run_retreat_segment` with keywords (the request positional, direction and distance named) while the boundary's
+  signature took direction and distance positionally BEFORE the request** - so every delegation raised *"got multiple
+  values for argument"*. **That is a production bug, not a fixture problem, and it would have failed on the first retreat segment of any real case.** The signature now matches how every other capability is called.
+- **What the probes established, each by reading rather than guessing:** the **RELEASE** document is correct and **the runner accepts it** (`EMPTY`, `released`, supported, no fingertip contact, epoch 0);
+  the **FINAL_CHECK** document is correct and **accepted** (`placement_stable` and `retreat_stable` both established from the settled cup against the place target). **So two of the last three phases are proven by
+  the runner's own verifier inside the substituted runtime.**
+- **And two probe artifacts were cleared, which is their own kind of progress:** the deployed probe needed the case's `scenario_id` (the grid sample reads it) and **both** the case-targets and
+  live-evidence bindings - **the admitted support distance travels with the evidence attachment, not with the targets.**
+- **Where the run stands now:** the port's `begin` builds the route from the **factory** (an assignment before the run is replaced - which is why the earlier attempts lost it) and then reads `manifest` on the
+  candidate, which my double does not yet satisfy. **That is the last named blocker, and the next action is to read that line of `begin` and provide exactly what it reads.**
+- **State:** P1-1..P1-3 green and committed; every production fix committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed,
+  nothing deleted; no hardware.
