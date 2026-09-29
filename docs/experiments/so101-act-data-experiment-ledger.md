@@ -32294,3 +32294,41 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   666 is the only reader of `reset.act_context`, and the next question is whether the lease can be acquired in this
   harness.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
   remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1854 — The lease IS obtainable in-process: `LocalBrokerConnection.acquire(...)`
+
+- **The question CP-1853 left open is answered by the same file, and the answer is that no socket is needed:**
+  ```python
+  # command_broker.py
+  class LocalBrokerConnection:                       # an in-process connection, no unix endpoint
+      def acquire(self, owner, session_id, attempt_id):
+          context = dict(owner=owner, session_id=session_id, attempt_id=attempt_id)
+          context['lease_token'] = self.request('acquire', context)['lease_token']
+          return context
+  ```
+  **and production already uses exactly this for the ACT path:**
+  ```python
+  # ros_child.py
+  self._act_reset_connection = LocalBrokerConnection(self._act_command_broker)
+  ```
+  **So the broker the harness built through `build_bound_act_broker` can mint a lease locally, through the production
+  class, with the production call** - `connection.acquire(owner, session_id, attempt_id)` - **and the context it returns is
+  the shape `reset.act_context` is read as** (`context["lease_token"]`, and the port passes `request["session_id"]` /
+  `request["attempt_id"]` back into `ownership.ticket(...)`).
+- **Which resolves CP-1853's fork in favour of the faithful branch, on evidence rather than on preference:** there is no
+  need to invent a token **and** no need for the lease IPC to be served, **because production's own ACT path acquires its
+  lease through an in-process connection to the very broker object the harness already holds.** The remaining question is
+  only who the `owner` argument should be - **and production answers that too, since the child acquires on behalf of the
+  owner it was started for.**
+- **So the next edit is small and entirely production-shaped:**
+  ```python
+  from so101_demo.adapters.act.command_broker import LocalBrokerConnection
+  connection = LocalBrokerConnection(broker)
+  reset.act_context = connection.acquire(owner=…, session_id="session-298", attempt_id="full-01")
+  ```
+  **after which `run_phase`'s registration block has all four of its requirements, and the registrar will validate the
+  ticket against the driver's epoch, the simulation session, the armed generation and the stopped state - refusing if the
+  harness's driver state does not support it, which is the check doing its job rather than an obstacle.**
+- **State:** **P1-5 in progress with the expert-route registration's last requirement sourced from production itself; the
+  `acquire` call is the next edit.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate
+  and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
