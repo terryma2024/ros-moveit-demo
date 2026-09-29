@@ -22239,3 +22239,22 @@ not an inference of mine.**
   payload that claims a different configuration.
 - **State:** P1-4's source and test changes uncommitted while its two tests are red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1342 — Astra re-review P1-4 is GREEN: one layer, one validator
+
+- **`99 passed, rc=0`** across five suites (`p14-green7.log`).
+- **Against the reviewer's finding** ("`:276` compares `measurements.json.head_search` with the entire `{schema_version, head_search}` sealed
+  descriptor. A normal equal payload can therefore fail."): the aggregator now validates the sealed descriptor with
+  **`validate_head_search_shape`** - the one complete production rule P1-2 strengthened - and compares the payload's claim against that
+  **validated inner block**, so both sides are at one canonical layer and **every sealed descriptor passes the same rule the binding uses**.
+  The published sample carries the validated block.
+- **The RED took three attempts and each failure was informative:** the first omitted the payload document (so the block never ran - the
+  *same* gap as the reviewer's finding, one layer up); the second hit `CLOSED_JSON_EXISTS` because the repository's closed-write rule
+  **forbids rewriting** `measurements.json`, so the payload root is now **built once** from a seeded root rather than rewritten; and the
+  third needed the helper's own import. **The production change itself never changed across those attempts** - only the fixture that proves
+  it did.
+- **Also settled here:** a second comparison site exists at `aggregator.py:208`
+  (`identity["measurement_contract_sha256"] == contract["contract_sha256"]`), so a hand-built batch identity must name the contract it was
+  measured under; the new tests do.
+- **State:** committed with five suites green; build copy synced; no stack started, no CUDA, no actuators, no hardware; cleanup untouched;
+  nothing deleted, nothing pushed.
