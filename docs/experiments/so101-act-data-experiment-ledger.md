@@ -23117,3 +23117,19 @@ not an inference of mine.**
   the port wants, named by the port itself.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1395 — Two contract holes closed, one wrapped check left - and the banked lesson says how to open it
+
+- **Closed this round, both named by production:** the boundary's reset needed a **`receipt.new_epoch`** (the port reads
+  `self.boundary.reset.receipt.new_epoch`), and `reset.sources` needed a **`readback.max_skew`**. Both were one-line additions to the substituted
+  doubles, both surfaced as plain `AttributeError`s from the port, and neither required touching production.
+- **And then the refusal became `physical readback scope`** - the check I read in full at CP-1391, which is a disjunction of roughly fifteen
+  conditions behind **one** error code. **My own banked lesson from earlier in this project says exactly what to do with that: when a production
+  check wraps many causes into one code, reproduce the inner checks directly instead of guessing which one failed.** I have already guessed once
+  (the `setdefault` bug, which was real and is fixed) and I am not going to guess again.
+- **So the next step is a probe, not an edit:** import the port's own key sets and a built row, then evaluate each condition of that disjunction in
+  the same order the port does and print the first one that is false - `set(scene) == SCENE_KEYS`, `set(contact) == FRAME_KEYS`,
+  `world.object_state.body`, the fingertip contacts being falsy, the `timestamp` range, the session/epoch/step/sim-time agreements, the two
+  `skew` comparisons and the `model_sha256` cross-check. **One run names the failing condition; that is worth more than three more edits.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
