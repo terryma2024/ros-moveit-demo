@@ -26630,3 +26630,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   with stdout captured to `handoffs/20260930-task7-onward/task8-astra-rereview3.log`. **The reviewer is a separate model in a read-only, ephemeral session - this agent neither performs the review nor pre-empts its verdict.**
 - **State:** the review is running; the reply and the log will be recorded verbatim (or summarised with their hashes) when it lands. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; P2's live half not started; goal
   active.
+
+## CP-1598 — The independent review returned CHANGES_REQUIRED, and its first two claims verify against the code
+
+- **The reply** (`handoffs/20260930-task7-onward/task8-astra-rereview3-reply.md`, **9170 bytes**, sha256 begins `8bd5191f867576f4`) was produced by `gpt-6-astra` at reasoning effort `high` in a read-only, ephemeral session
+  against **HEAD `aec24d42`**, and its verdicts are:
+  | item | verdict |
+  | --- | --- |
+  | P1-1 composition -> measurement | **FAIL** |
+  | P1-2 shared descriptor validator | **PASS** (for the specified schema/value corrections) |
+  | P1-3 SEARCH evidence / window feed | **PARTIAL** |
+  | P1-4 (and the earlier P1-5 full chain) | **FAIL** |
+  | P2 CLI terminal close-out | **FAIL** |
+  | corrected integration boundary | **FAIL overall** (teleop leg did not run with eight workers) |
+  | retraction of the shared-scratch runs (CP-1589) | **PASS** |
+- **Its single most concrete finding, and the one that matters most:** it **recursively verified the retained sealed artifact** and reports that the **ten sample-file digests match but 45 of 70 raw-source references do not** - for the
+  first nine samples, `arm`, `contact`, `neck`, `scene` and `world` references point at the **same** files, so later phases **overwrite** what earlier phases recorded; and **every sample and the sealed identity carry release epoch 0**,
+  including RELEASE and FINAL_CHECK. **If that is accurate it is a real integrity defect in what this batch seals**, and it is the owner's item 2.
+- **The owner ordered verification before action, and the first two checks are done - both supported by the code:**
+  1. **the formal CLI's context is short of fields the review says are required:** `act_measure_task8_calibration.py:83` builds
+     `CalibrationMeasurementContext(...)`, and the class's own `__init__` (`task8_calibration_admission.py:77-80`) takes **twelve** keyword arguments - `generation`, `contract_sha256`, `measurement_plan_sha256`, `safe_interval_rad`,
+     `candidate_sha256`, `policy_sha256`, `driver_source_sha256`, `controller_generation`, `broker_generation`, `evidence_root`, `resource_binding`, `runtime_descriptor` - **and not one of them carries a calibration report or a
+     measurement identity.** **So the review's P1-1 claim is consistent with the code as read; what remains to establish is whether the identity is required *through the context* or travels by another route**, which is the next check rather
+     than an assumption;
+  2. **`build_real_providers(*, context, descriptor, binding=None, io_client=None, ...)`** (`task8_production_composition.py:202`) - **`io_client` is a keyword defaulting to `None`**, so the claim that the default composition path
+     omits it is about the **caller**, which is the next check.
+- **State:** the review is recorded; **the goal is PAUSED and DISARMED and `update_goal(action=resume)` is refused with "the model cannot resume a paused goal; the user must resume it"** - so the goal needs the **user** to
+  resume it in the TUI, while this session continues to work the remediation list. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live not started.
