@@ -32499,3 +32499,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `FakeBroker` answered `True`/a function - and the remaining work is an ACT-aware driver, whose two honest
   constructions are named.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
   re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1860 — The production driver is `ros_broker`'s, and a double for it already exists in the tree
+
+- **CP-1859's option 1 is not a new construction to invent - the repo already contains the pattern, again:**
+  ```
+  adapters/act/ros_broker.py:249      def current_epoch(self):
+  adapters/act/ros_broker.py:382      def prepare_goal(self, kind, goal):
+  test/teleop/test_act_ros_child.py:191   def prepare_goal(self, kind, goal):
+  test/teleop/test_act_ros_child.py:194   def send_prepared(self, goal_id, kind, goal, goal_uuid):
+  ```
+  **so the driver `CommandBroker` calls is `ros_broker.py`'s class** - the ROS action client - **and `test_act_ros_child.py`
+  already carries a hand-written double that answers `prepare_goal`/`send_prepared` for the ACT path.**
+- **Which is the third time this drive has found its next step already written somewhere in the repository** (the gate-6
+  fixtures for the broker, CP-1827; the segment suite's doubles for the sources, CP-1842; now this) **- and it is worth
+  noting as a property of the codebase rather than as luck:** every production collaborator the ACT chain needs has a
+  test somewhere that stands in for it, **because the chain was built incrementally with tests at each seam.** What was
+  missing was never a substitution; **it was driving them all at once, through the port, in one case - which is exactly
+  what P1-5 is.**
+- **So the next edit is small and precedented:** make the harness's driver answer the ACT-related calls the way
+  `test_act_ros_child.py`'s double does - **identifiers where identifiers are expected, from the fixtures' own
+  identities** - rather than `FakeBroker`'s blanket `True`. **The double's own 20 lines are the specification.**
+- **State:** **P1-5 in progress: the driver the broker needs is `ros_broker`'s, its test double exists and is the
+  specification, and the next edit makes the harness's driver ACT-aware in that shape.** P1-1 through P1-4 CLOSED. The
+  demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
+  unchanged, so they are not re-stated.**
