@@ -412,6 +412,70 @@ class PickPlaceSearchBoundary:
                 "cup_supported": aggregates["cup_supported"],
                 "fresh": True, "planning_attached": self.planning_attached(request)}
 
+    def run_retreat_segment(self, direction, distance_m, request, *, motion_template, motion_duration_s,
+                            support_distance_max_m):
+        """One retreat step from the CURRENT tool pose along an admitted direction - three seams, each named.
+
+        The runner asks for two segments ("radial" 0.01 m, "vertical" 0.06 m), and neither the meaning of a direction
+        name nor the tool's current pose can be read from the interface snapshot. Both are therefore seams this method
+        refuses without: **inventing an axis convention would silently decide which way the arm retreats**, and that is
+        a decision for the runtime that owns the geometry, not for this component.
+        """
+
+        tcp = getattr(self, "tool_pose", None)
+        if not callable(tcp):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment: tool_pose")
+        axis = getattr(self, "retreat_axis", None)
+        if not callable(axis):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment: retreat_axis")
+        ik = getattr(self, "motion_target_joints", None)
+        if not callable(ik):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment: ik")
+        for name, value in (("motion_template", motion_template), ("motion_duration_s", motion_duration_s)):
+            if value is None:
+                raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment: {name}")
+        broker = self.reset.broker
+        dispatch = getattr(broker, "dispatch", None)
+        if not callable(dispatch):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment: broker.dispatch")
+        wait = getattr(getattr(broker, "driver", None), "wait", None)
+        if not callable(wait):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment: driver.wait")
+
+        from so101_demo.act.joints import ARM_JOINTS
+        from so101_demo.ports.evidence import PoseEvidence
+
+        distance = finite(distance_m, nonnegative=True)
+        unit = tuple(finite(value) for value in axis(direction))
+        if len(unit) != 3:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: run_retreat_segment: axis")
+        before = self.reset.sources.capture(request["attempt_id"])
+        observation = before.get("observation")
+        if not isinstance(observation, dict) or not isinstance(observation.get("state"), (list, tuple)) \
+                or len(observation["state"]) != 8:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: run_retreat_segment: observation")
+        current = tcp(request)
+        target = PoseEvidence(tuple(float(current.position_m[index]) + unit[index] * distance for index in range(3)),
+                              tuple(float(value) for value in current.orientation_xyzw))
+        row = tuple(ik(target))
+        names = tuple(ARM_JOINTS[:5])
+        if len(row) != len(names):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: run_retreat_segment: ik row")
+        goal = {"joint_names": names,
+                "header_stamp_s": finite(observation["sim_time_s"]),
+                "time_from_start_s": (0.0, finite(motion_duration_s)),
+                "positions": (tuple(finite(value) for value in observation["state"][:5]),
+                              tuple(finite(value) for value in row))}
+        ticket = broker.ownership.ticket(self.reset.act_context["lease_token"], "act",
+                                         request["session_id"], request["attempt_id"])
+        wait(dispatch(ticket, "arm", goal))
+        after = self.reset.sources.capture(request["attempt_id"])
+        if support_distance_max_m is None:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: support_distance_max_m")
+        return self.sequence_facts("RADIAL_RETREAT", after, request,
+                                   support_distance_max_m=support_distance_max_m,
+                                   motion_template=motion_template)
+
     def planning_attached(self, request):
         """Whether MoveIt still has the cup attached - READ from the planning scene, never assumed."""
 
