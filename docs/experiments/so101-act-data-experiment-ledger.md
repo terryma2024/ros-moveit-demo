@@ -16890,3 +16890,14 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   **writers** actually produce - the driver's `anchors/<anchor>/<name>.json`, and whatever the aggregator's fixtures and
   the canonical documents use - and then the fixtures and the rule move together. Until that convention is read rather
   than assumed, this dimension stays open, and I am not going to guess it a second time.
+
+## CP-1088 — The layout is read now, and it is two conventions, not one
+
+- **The read CP-1087 demanded, done from the sources:**
+  | role | paths under a batch root |
+  | --- | --- |
+  | the **driver** (`task8_measurement_driver.py:197`) | `anchors/<anchor>/<name>.json` - one directory per anchor, holding that anchor's `search`, `probe`, `camera-info`, `tf` and `geometry-NN` rows |
+  | the **aggregator** (`task8_calibration_aggregator.py:66-203`) | `fov/<anchor>.json`, `search/<anchor>.json`, `sync/<anchor>.json`, `collision.json`, `execution.json`, `cleanup-receipt.json`, `measurements.json` - one file per topic, keyed by anchor where the topic is per-anchor |
+  So the tree has **two conventions on purpose**: the driver records per anchor, and the aggregator consumes per topic. My reverted rule assumed only the first and would have rejected every batch the aggregator's own fixtures build.
+- **What that means for the anchor x phase x source index, stated as a design rather than a patch:** the coverage rule has to be expressed over **both** conventions - the aggregator's per-topic files give the anchor dimension for `fov`, `search` and `sync`, and the driver's per-anchor rows give the phase and source dimensions (nine phase rows, ten geometry rows, one probe, one camera-info and one tf row per anchor). A rule that only knows one of them is wrong in one direction or the other, which is exactly what the last two rounds demonstrated in both directions.
+- **State:** the anchor-coverage RED stands proven and unlanded (`Failed: DID NOT RAISE`), the suite is at **30 passed / 1 failed** with that test as the failure, and the paired change now has the information it lacked. Nothing was guessed into the validator this round; the map above is read from the writers and readers themselves.
