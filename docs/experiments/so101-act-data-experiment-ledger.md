@@ -25507,3 +25507,17 @@ picture in both directions.**
   `release_preflight`, `run_retreat_segment`, then the full nine-phase case, the seal (`seal_live_evidence`'s contract is also documented by the double), the journal and the seven indexed assertions
   with their four negatives.**
 - **State:** P1-1..P1-3 green and committed; nine phases, the policy wiring and the Planning Scene capabilities committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1530 — The readback validator is shared, so the runner's other two documents cannot be weaker
+
+- **`45 passed`** after `sequence_facts`'s scope, stamp and contact validation moved into **`_checked_aggregates(phase, snapshot, request, *, support_distance_max_m)`**, which returns the frame
+  aggregates and the world.
+- **Why the extraction is the right move rather than tidiness:** the runner asks for **two more documents** - the **set-down** document (`_SET_DOWN_KEYS`) and the **release preflight**
+  (`_RELEASE_KEYS`) - and **neither is one of the nine phases' evidence.** Written separately they would each need their own copy of the scope, stamp and contact rules, and **the second copy is
+  always the weaker one.** With one implementation, a set-down document can only be produced from a readback that passed exactly the checks the phases' documents pass.
+- **And the phase tests bind it on their stubs**, so if a future phase document needs the aggregates the binding is already there and the stubs stay honest.
+- **Next:** `set_down` (the aggregate facts plus a controller-stop seam, refused by name when absent), `release_preflight` (the same facts plus `fresh`, established by comparing physics steps
+  against the set-down's own, and the planning scene's attachment state), and `run_retreat_segment` (a motion step from a current-TCP seam through the same IK seam the motion phases use).
+  **Then the nine-phase case runs end to end**, and the seal, the journal and the seven indexed assertions with their four negatives follow.
+- **State:** P1-1..P1-3 green and committed; nine phases, the policy wiring, the Planning Scene capabilities and this extraction committed. No new session, goal, worktree or stack; nothing pushed,
+  nothing deleted; no hardware.
