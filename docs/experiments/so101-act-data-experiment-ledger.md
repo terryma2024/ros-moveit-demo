@@ -31945,3 +31945,56 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `readback` supplied - and the answer recorded in the code, either way.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1843 — The scope check's full requirements, and the conclusion they force: one sources object, shared
+
+- **`_search_evidence`'s scope check (`pick_place_search_port.py:330-358`) validates the readback the segment produces:**
+  ```python
+  world, scene, contact = raw["world"], raw["scene"], raw["contact"]
+  reset_epoch = self.boundary.reset.receipt.new_epoch
+  sources = self.boundary.reset.sources
+  skew = finite(sources.readback.max_skew)
+  if (result["found"] is not True or result["attempt_id"] != request["attempt_id"]
+          or not isinstance(world, SimulationEvidence)
+          or world.simulation_session_id != request["session_id"] or world.reset_epoch != reset_epoch
+          or world.simulation_step < 1 or world.paused is not False or world.truncated is not False
+          or world.object_state.body != "plastic_cup"
+          or world.left_fingertip_contacts or world.right_fingertip_contacts
+          or not 0 <= result["timestamp"] <= world.simulation_time_s
+          or type(scene) is not dict or set(scene) != SCENE_KEYS
+          or scene["simulation_session_id"] != world.simulation_session_id
+          or scene["reset_epoch"] != reset_epoch or scene["simulation_step"] != world.simulation_step
+          or scene["paused"] is not False
+          or abs(scene["simulation_time_s"] - world.simulation_time_s) > skew
+          or scene["model_sha256"] != sources.contact_pairs.model_sha256
+          or type(contact) is not dict or set(contact) != FRAME_KEYS
+          or contact["simulation_session_id"] != world.simulation_session_id
+          or contact["reset_epoch"] != reset_epoch or contact["physics_step"] != world.simulation_step
+          or abs(contact["simulation_time_s"] - world.simulation_time_s) > skew):
+      raise ValueError("physical readback scope")
+  ```
+  **so the readback is not a stub: it is a `SimulationEvidence` plus a scene document plus a contact document, all
+  agreeing on session, epoch, step and time within the readback's own `max_skew`, and the scene's `model_sha256` must
+  equal `sources.contact_pairs.model_sha256`** - the value I bound to the CHECKER's hash (CP-1818), which is why that
+  part was already right.
+- **And the conclusion the check forces is the one CP-1842 predicted, now with evidence:** the evidence documents come
+  from the **readback the segment builds** - and in the harness the segment is built inside `_Boundary.search` with a
+  `sources` that lives only for that call:
+  ```python
+  sources = _ChildSources(session_id=request["session_id"], reset_epoch=self.reset_epoch)
+  …
+  segment = PickPlaceSearchSegment(sources, adapter, scene, probe.geometry, …)
+  ```
+  **so the port's `reset.sources` and the boundary's per-search `sources` are TWO objects, while production has ONE:**
+  ```python
+  # ros_child.py:311, built once for the whole child
+  self._act_sources = PickPlaceRosEvidence(self._node, broker, model=self._act_model, …)
+  ```
+  **That difference is the defect in the harness, not in the port:** with two sources, the port validates a readback
+  produced by machinery hanging off a different object than the one it reads `readback.max_skew` and `contact_pairs`
+  from. **The faithful repair is therefore for the boundary to build its sources ONCE - as production does - and let
+  both the port and the segment use that same instance.**
+- **State:** **P1-5 in progress; the drive is inside `run_phase`, the scope check has named every document it wants, and
+  the repair is a single-object change in the harness's boundary that mirrors production's `self._act_sources`.** P1-1
+  through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**
