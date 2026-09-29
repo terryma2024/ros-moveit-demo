@@ -12914,3 +12914,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   files byte-for-byte untouched; Tasks 1-6 committed and green; Tasks 8-10 untouched; no runtime, no package gate, no
   push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained and ineligible,
   gen4 reserved for Task 10.
+
+## CP-929 — The port has real sim time; the window edit's anchors are located
+
+- **Read the port's structure to place the window edit, and it confirms the corrected design.** In
+  `src/adapters/act/pick_place_search_port.py` (312 lines, clean - not user-dirty):
+  - line 23: `def __init__(self, boundary, *, expert_route_factory=None, evidence_recorder=None)` with
+    `self._evidence_recorder = evidence_recorder` at line 35 - so a window can be attached exactly the way the
+    recorder already is;
+  - line 172: `raw = observed.physical_readback` inside `_search_evidence`, the readback with
+    `world/scene/contact/observation/reference` and the source stamp/receipt maps;
+  - lines 219 and 231: the port already validates **`sim_time_s`** - `observation["sim_time_s"] !=
+    world.simulation_time_s` and `reference["requested_sim_time_s"] != world.simulation_time_s` - which is precisely
+    the honest grid timestamp source the runner could not provide;
+  - line 275: `def run_phase(self, phase, request)` is the per-phase entry where a validated phase can be handed to
+    the window.
+- **Edit shape, ready to apply:** (1) accept a `live_evidence_window=None` keyword in `__init__` beside
+  `evidence_recorder` and store it; (2) in `run_phase`, after the phase's evidence has been validated and just before
+  it is returned, add one grid sample carrying the phase and the observation's own `sim_time_s` and the evidence's
+  `physics_step` - so the first SEARCH phase opens the window and no sample is ever synthesised by a caller;
+  (3) extend `seal_live_evidence` so the window is sealed together with the recorder, in that order, so a window
+  failure cannot leave a sealed recorder behind; (4) keep the runner's existing success-path seal untouched.
+- **State:** Task 7's module green (37 / 76); the wiring design corrected and now anchored in a clean file; the
+  user's six in-flight files byte-for-byte untouched; Tasks 1-6 committed and green; Tasks 8-10 untouched; no
+  runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
