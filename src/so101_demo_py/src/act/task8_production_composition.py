@@ -170,7 +170,8 @@ class MeasurementControllerAdapter:
                 "status": command.get("status")}
 
 
-def _admitted_controller_config(*, context, descriptor):
+def _admitted_controller_config(*, context, descriptor, session_id=None, attempt_id=None,
+                              search_start_rad=None):
     """The controller's 18-field config, from the admitted calibration and this measurement's identity.
 
     Astra re-review #3, finding 1: the composition used to leave `controller=None` unless a `controller_settings`
@@ -186,20 +187,23 @@ def _admitted_controller_config(*, context, descriptor):
     if not isinstance(calibration, dict):
         raise ProductionCompositionError("PRODUCTION_CALIBRATION_REPORT_REQUIRED")
     admitted = validate_head_search_binding(descriptor, calibration)
+    # CP-1635: the per-run values arrive as ARGUMENTS. They are produced by the run - the ids belong to the case being
+    # measured and the search start is derived from its reset targets - so a context built at admission cannot carry
+    # them, and reading them from one refused the formal path at its first check. The refusals are unchanged in
+    # substance and in name: a missing value still fails closed rather than being defaulted.
     identity = {}
-    for name in ("session_id", "attempt_id"):
-        value = getattr(context, name, None)
+    for name, value in (("session_id", session_id), ("attempt_id", attempt_id)):
         if not isinstance(value, str) or not value:
             raise ProductionCompositionError(f"PRODUCTION_MEASUREMENT_IDENTITY_REQUIRED: {name}")
         identity[name] = value
-    start = getattr(context, "search_start_rad", None)
-    if type(start) not in (int, float):
+    if type(search_start_rad) not in (int, float):
         raise ProductionCompositionError("PRODUCTION_MEASUREMENT_IDENTITY_REQUIRED: search_start_rad")
     return admitted.search_config(session_id=identity["session_id"], attempt_id=identity["attempt_id"],
-                                  search_start_rad=float(start))
+                                  search_start_rad=float(search_start_rad))
 
 
 def build_real_providers(*, context, descriptor, binding=None, io_client=None,
+                         session_id=None, attempt_id=None, search_start_rad=None,
                          yolo_detector_factory=None, controller_factory=None) -> dict:
     """Build the five production collaborators from the admitted context and the frozen descriptor.
 
@@ -231,7 +235,8 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
              else build_detector(options, yolo_detector_factory=yolo_detector_factory))
     # never None, and never a second source: the config is built from the admitted calibration and this
     # measurement's identity, and any missing piece raises a named refusal (Astra re-review #3, finding 1)
-    config = _admitted_controller_config(context=context, descriptor=descriptor)
+    config = _admitted_controller_config(context=context, descriptor=descriptor, session_id=session_id,
+                                           attempt_id=attempt_id, search_start_rad=search_start_rad)
     if controller_factory is not None:
         controller = controller_factory(config)
     else:
@@ -253,7 +258,8 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
     }
 
 
-def build_production_measurement_driver(*, context, identity, providers=None):
+def build_production_measurement_driver(*, context, identity, providers=None,
+                                        session_id=None, attempt_id=None, search_start_rad=None):
     """Build the single production measurement driver for one measurement context.
 
     Every rule below is the composition's own, and none of them can be satisfied by injecting a driver instead.
@@ -275,7 +281,8 @@ def build_production_measurement_driver(*, context, identity, providers=None):
     elif os.environ.get(PROVIDER_SEAM_ENV):         # external-I/O substitution, tests only
         supplied = _providers_from_seam()
     else:                                           # the formal entry's path: real construction
-        supplied = build_real_providers(context=context, descriptor=descriptor)
+        supplied = build_real_providers(context=context, descriptor=descriptor, session_id=session_id,
+                                        attempt_id=attempt_id, search_start_rad=search_start_rad)
     missing = [name for name in PROVIDER_NAMES if name not in supplied]
     if missing:
         raise ProductionCompositionError(f"PRODUCTION_PROVIDER_MISSING: {missing[0]}")
