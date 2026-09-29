@@ -24164,3 +24164,15 @@ not an inference of mine.**
   campaign the repository can actually run **cannot** qualify, and the missing half is exactly the five full cases whose phases are not provisioned. **A
   reader of the packet no longer has to take my word for the limitation; the qualification code enforces it.**
 - **State:** committed with the focused file green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1458 — The packet now carries the bound, and its digest is restated because it changed
+
+- **Appended to `task8-astra-rereview-packet.md`:** the trusted qualification rule's own demand (PASSED, nine prefixes, five consecutive fulls, fourteen
+  unique journal digests) and the refusals the focused fixture asserts against it - `TASK8_QUALIFICATION_FULLS_NOT_CONSECUTIVE` for a campaign of prefixes
+  alone, `..._CASE_COUNT_INVALID`, `..._NOT_PASSED`, `..._JOURNAL_DUPLICATE`. **The limitation in item 5 is therefore stated by production code in the same
+  document the reviewer reads, not only in the ledger.**
+- **The packet's digest changed with the append**, and the new one is stated below and in my report - **a superseded digest quoted without its replacement is
+  exactly the kind of unreachability this batch was scolded for earlier, so it is restated rather than left to drift.**
+- **State:** nothing pushed, nothing deleted, no self-approval; the review request stands with the digest below.
+
+*(Packet size 23306 bytes, sha256 `7de92953cc5033c99d35e793729dc51752773f35ee91692fcebee79581f171fe` as of this checkpoint.)*
