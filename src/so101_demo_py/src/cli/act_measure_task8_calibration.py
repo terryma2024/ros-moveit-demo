@@ -45,16 +45,18 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     from so101_demo.act.task8_measurement_contract import (
-        close_measurement_batch, load_measurement_contract,
+        close_measurement_batch, load_measurement_contract, require_v2_identity,
     )
     from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
 
     identities = json.loads(args.identities.read_text())
     contract = load_measurement_contract(args.contract, expected_hashes=identities)
-    identity = {"source_provenance_sha256": identities["source_provenance_sha256"],
-                "contract_sha256": contract["contract_sha256"]}
-    _append_ledger(args.ledger, "PLANNED", identity, "admission verified")
-    _append_ledger(args.ledger, "RUNNING", identity, "measurement starting")
+    # the batch is sealed with the contract's ten-member identity; the ledger line keeps its own two-field shape
+    identity = require_v2_identity(identities)
+    ledger_identity = {"source_provenance_sha256": identity["source_provenance_sha256"],
+                       "contract_sha256": contract["contract_sha256"]}
+    _append_ledger(args.ledger, "PLANNED", ledger_identity, "admission verified")
+    _append_ledger(args.ledger, "RUNNING", ledger_identity, "measurement starting")
     try:
         if args.driver:
             _load_driver(args.driver)(contract, args.batch_root)      # test-only injection
@@ -74,10 +76,10 @@ def main(argv=None) -> int:
             from so101_demo.act.task8_measurement_driver import production_driver
             production_driver().run(context, args.batch_root)
     except BaseException as error:
-        _append_ledger(args.ledger, "INVALID", identity, f"driver failed: {type(error).__name__}")
+        _append_ledger(args.ledger, "INVALID", ledger_identity, f"driver failed: {type(error).__name__}")
         raise
     sealed = close_measurement_batch(args.batch_root, identity)
-    _append_ledger(args.ledger, "VALID", identity, f"sealed {sealed}")
+    _append_ledger(args.ledger, "VALID", ledger_identity, f"sealed {sealed}")
     print(sealed)
     return 0
 

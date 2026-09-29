@@ -61,8 +61,11 @@ def test_bound_contract_carries_the_frozen_thresholds(tmp_path, identities):
 
 def test_batch_close_is_one_way_and_identity_bound(tmp_path):
     root = tmp_path / "batch"
-    identity = {"source_provenance_sha256": "a" * 64, "contract_sha256": "b" * 64,
-                "session_id": "s", "reset_epoch": 1, "attempt_id": "attempt-1"}
+    # the batch carries the contract's ten-member identity: the schema that admitted the measurement seals it
+    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+
+    identity = {name: "a" * 64 for name in IDENTITIES_V2}
+    identity["source_commit"] = "0" * 40
     sealed = close_measurement_batch(root, identity)
     assert Path(sealed).is_file()
     with pytest.raises(ValueError):
@@ -177,3 +180,23 @@ def test_closed_batch_accepts_an_indexed_batch_and_rejects_closure_violations(tm
     target.symlink_to(raw)
     with pytest.raises(ValueError, match="BATCH_PATH_INVALID"):
         validate_closed_batch(root)
+
+
+def test_closing_a_batch_refuses_an_identity_that_is_not_the_contract_identity(tmp_path):
+    """Boundary I: the sealed batch must carry the contract's ten-member identity, not whatever the caller held.
+
+    The CLI today seals with a two-key mapping it builds for its ledger line, so this asserts the schema boundary the
+    contract already defines: an identity that is not ``IDENTITIES_V2`` cannot close a batch.
+    """
+
+    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, close_measurement_batch,
+                                                          require_v2_identity)
+
+    batch = tmp_path / "batch"
+    batch.mkdir()
+    two_key = {"source_provenance_sha256": "a" * 64, "contract_sha256": "b" * 64}
+    assert tuple(sorted(IDENTITIES_V2)) != tuple(sorted(two_key)), "the fixture must not be a valid identity"
+    with pytest.raises(ValueError, match="MEASUREMENT_BATCH_IDENTITY_INVALID"):
+        close_measurement_batch(batch, two_key)
+    with pytest.raises(ValueError, match="MEASUREMENT_CONTRACT_IDENTITY_INVALID"):
+        require_v2_identity(two_key)
