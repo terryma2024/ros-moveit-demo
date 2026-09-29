@@ -19684,3 +19684,32 @@ not an inference of mine.**
   17 provisional values still null, formal 0/0/0, and Boundary V's child step still an open owner decision.
 - **State:** HEAD `9c8ef7c6` plus this checkpoint; staged 0; the packet sits beside v1 and the two earlier packets, all retained;
   no push, no stack, no hardware.
+
+## CP-1216 — The venv-interpreter route works: `mujoco` is importable now, and the real error is `tools`
+
+- **Attempt 4 changed the environment honestly and changed the error:**
+  ```bash
+  test-venv/bin/python -c "from colcon_core.command import main; main()" test --packages-select so101_demo_py
+  ```
+  The venv already sees `colcon_core` (it is a `--system-site-packages` venv), so this runs colcon **with the venv as
+  `sys.executable`** - exactly the interpreter selection CP-1214 identified as the real lever. **`No module named 'mujoco'` is
+  gone.**
+- **And colcon's own per-package log names what is actually left:**
+  ```
+  log/latest_test/so101_demo_py/stdout_stderr.log:8:  collected 0 items / 1 error
+  ...:44:  E   ModuleNotFoundError: No module named 'tools'
+  ```
+  So the remaining blocker is the one this task identified early on and then stopped hitting because the sanctioned runners set
+  the root correctly: **pytest's `sys.path` does not include the repository root, and several of the package's tests import
+  `tools.so101_pytest_gate` from there.** It is a path/collection issue, not a failing assertion, and nothing about it is
+  specific to my changes.
+- **The fix is known and does not need a source edit:** pytest ≥ 7 supports the `pythonpath` ini option, and `PYTEST_ADDOPTS` is
+  honoured by pytest itself (unlike `PYTHONPATH`, which colcon rewrites from its recorded build environment, CP-1214). So the
+  next attempt is `PYTEST_ADDOPTS="-o pythonpath=<worktree root>"` on the same venv-interpreter colcon invocation - one command,
+  no file changed, and if it works the package gate is green for the first time. **If it does not, the honest fallback is that
+  the package gate needs a repository-level `pythonpath` setting, which is the owner's file to change.**
+- **Where the four attempts now stand:** 1-3 failed on `mujoco` (wrong interpreter, wrongly blamed on PATH/PYTHONPATH); 4 fixed
+  the interpreter and exposed the real error; the fifth is specified exactly. **This is a diagnosis completed, not a gate passed**
+  - and it is the last thing between this task and its first green package gate.
+- **State:** HEAD `0a38cd31` plus this checkpoint; staged 0; all four colcon logs, the per-package log, the xdist artefacts,
+  every scratch and IPC base retained as deletion candidates; no push, no MuJoCo stack, no hardware.
