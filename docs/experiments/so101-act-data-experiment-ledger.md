@@ -24931,3 +24931,22 @@ picture in both directions.**
   **boundary side is what remains** - and it is the same shape for every phase: execute through the broker/motion, inspect, capture, report gates. **This is a subsystem, and the
   ledger is mapping it rather than pretending it is nearly finished.**
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1495 — The screen needs a checker, and the checker needs physics configuration that is not plumbed yet
+
+- **Read, exactly:** `PickPlaceApproachPathScreen(*, search_port, sources, broker, path_checker, cancelled)` requires a `path_checker` whose `check_path(prefix, snapshot)`
+  is callable **and whose `model_sha256` equals the sources'** - and the production implementations exist in `adapters/act/physics.py`:
+  `MujocoPathChecker(model_path, *, protected_roots, cup_joint, gripper_body, path_step_s, path_clearance_m, ...)` and its process wrapper
+  `MujocoPathProcess(*, check_timeout_s, start_timeout_s, **configuration)`.
+- **Which means the remaining APPROACH wiring is not just "construct the screen":** the **child-port builder must receive the physics configuration** (model path, protected
+  roots, cup joint, gripper body, path step and clearance, check/start timeouts) to build the checker. **`build_pick_place_child_search_port(...)` does not take those today**, and
+  inventing defaults for them would be exactly the sin this batch keeps finding - a value nobody admitted.
+- **So the next concrete step is a plumbing one, and it has a natural source:** the same admitted bundle that already supplies the manifest, the calibration report and the
+  binding. **The builder should take the physics configuration from the admitted document, and refuse by name when it is absent** - then construct the checker, then the
+  screen, then hand both to the boundary.
+- **Honest trajectory for P1-4, stated so nobody has to guess:** the **port side of all nine phases is done**; the **boundary side** needs, per phase, the same three things -
+  execution through the broker/motion, an inspection authority, and the gates from readback. **APPROACH is the pattern-setter and is two steps from complete (plumb the physics
+  configuration; write `execute_approach`); the seven phases after it reuse the shared document rule and mostly need their own execution and predicate wiring.** With ~450 goal
+  rounds left and P2 plus the final boundary and the review still ahead, **that is feasible at this pace but it is the batch's critical path - and if the owner prefers an earlier
+  review, the honest milestone to review would be APPROACH end-to-end plus the pattern it establishes.**
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
