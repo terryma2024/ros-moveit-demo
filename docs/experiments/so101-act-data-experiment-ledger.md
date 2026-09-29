@@ -24111,3 +24111,14 @@ not an inference of mine.**
 - **Why this shape and not the sealed artifact:** a bounded (prefix) case is defined **not** to seal (CP-1445), so the index plus the bytes it names is
   the strongest evidence this case can carry - **and it is now asserted rather than assumed.**
 - **State:** committed with the focused file green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1455 — Two numbers kept honest: a one-test delta after the boundary, and a measurement I stopped on purpose
+
+- **The boundary was run once and its figures stand as run** (demo 5651/163, teleop 1266/43, CTest 116 with 2/2 on the new tests). **After it**, the
+  focused child-driven file gained one test (CP-1454's indexed-evidence assertions and raw-record tamper negative), so the teleop count is now **1267**.
+  **The file was re-run green (`6 passed`); I did not re-run the whole gate**, because the plan allows a single integration boundary and a recorded
+  one-test delta is more honest than a quietly re-rolled gate. **The evidence index now says exactly this, in the same file as the boundary figures.**
+- **And a measurement I stopped on purpose:** the full `du` of the 291 GB scratch tree was killed rather than left running. It would have produced a
+  refresh of a number the record already carries (**3101 trees, 1538 older than a day, ~291 GB at CP-1306**), at the cost of a multi-minute IO-heavy scan
+  of a shared NVMe. **No evidence was involved; the tree counts and the CP-1306 total are what a cleanup decision needs.**
+- **State:** nothing pushed, nothing deleted, cleanup still unauthorised and untouched; no stack, no CUDA, no actuators, no hardware.
