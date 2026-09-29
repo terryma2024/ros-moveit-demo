@@ -33769,3 +33769,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1 through P1-6 CLOSED; the gates are measured (demo 3/3 green, teleop 1109 passed, joined chain 3 passed,
   serial CTest 114/117 with three classified environment failures); the re-review packet carries every number.** **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1904 — The `colcon test` package gate cannot run here, and the reason is one line
+
+- **The properly-formed invocation, and what it actually did:**
+  ```
+  colcon test --packages-select so101_demo_py --event-handlers console_direct+      rc=2
+      collected 0 items / 1 error
+      E   ModuleNotFoundError: No module named 'mujoco'
+      Failed   <<< so101_demo_py [1.27s, exited with code 2]
+  ```
+  **so `colcon test` ran pytest with an interpreter that has no `mujoco`** - not the task's test interpreter
+  (`$R/test-venv/bin/python`, which has it). **This is an environment fact about this machine, not a test failing**, and
+  it is the same class as CP-1896's argument error: **the boundary never ran.**
+- **And the summary line that followed is not about this run, which is worth recording because it looks like evidence:**
+  ```
+  colcon test-result --all --verbose
+      build/so101_teleop/test_results/… : … tests, 0 errors, 0 failures
+      Summary: 1433 tests, 1 error, 4 failures, 43 skipped
+  ```
+  **those xunit files are a PREVIOUS teleop run's, still on disk** - so the summary mixes another run's results with this
+  one's single collection error. **The honest statement of this gate: it did not run.**
+- **Which is why the demo package's gate in this drive is the direct pytest run**, same interpreter and same xdist width,
+  **green three consecutive times** (CP-1898, CP-1903): **5793 passed, 163 skipped, rc 0.**
+- **State:** **P1-1 through P1-6 CLOSED; every gate is measured or classified, and the packet carries the numbers and the
+  classifications.** **Task-list statuses are unchanged, so they are not re-stated.**
