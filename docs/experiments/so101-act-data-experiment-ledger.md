@@ -12755,3 +12755,33 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7 module work complete and green (37 module, 76 focused set); Tasks 1-6 committed and green;
   Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-922 — Task 7 wiring: the runner already owns step-ordered evidence; the recorder should ride it
+
+- **Read the runner's in-flight diff (46 added lines) and it settles the integration design.** The user has:
+  - added `physics_step` to `_EVIDENCE_KEYS` and `_RELEASE_KEYS` and a **monotonic step rule** - `_verify_phase` now
+    takes `after_step` and raises `PHASE_EVIDENCE_INVALID` when `type(step) is not int or step <= after_step`, and
+    returns the accepted step so the next phase must advance beyond it;
+  - added a `set_down(request)` method to `PickPlaceExecutionPort` with its own exact key set `_SET_DOWN_KEYS` and
+    `SET_DOWN_EVIDENCE_INVALID` when the shape, scope, step monotonicity, `holding_state == "HOLDING"` or any of the
+    eleven required booleans fail;
+  - tightened hold verification with `evidence["cup_supported"] is False` alongside the existing
+    bilateral-contact, micro-lift and cup-off-table requirements.
+- **Consequence for Task 7:** the runner is exactly where the live-evidence window belongs. It already owns the
+  phase order, the per-phase step counter and the gates, so:
+  1. the window opens when the runner verifies **SEARCH** - the same place the approved plan says the runner opens it;
+  2. each verified phase yields the grid sample the recorder consumes, and the runner's monotonic
+     `physics_step` is precisely the ordering the recorder's frozen 10 Hz grid needs, so no second counter is
+     introduced;
+  3. the first gripper-open controller event is recorded through `correlate_release_open` with the release epoch
+     the runner already threads, and the window seals **after FINAL_CHECK** is verified - not before;
+  4. the port must supply `set_down` evidence, so `pick_place_child_port.py` (42 added lines, next to read) is where
+     that method and the artifact return are wired.
+- **Design settled, edits not started:** no production file outside my own Task 7 module has been modified, so the
+  user's six in-flight files remain byte-for-byte untouched. The remaining reads are `pick_place_child_port.py` and
+  the port-side `set_down`/artifact path, after which the edits are small and localised: window ownership in the
+  runner, `set_down` evidence in the port, the recorder reached from the child startup receipt, and the seal inside
+  `PickPlaceCaseOwner._retire` before the child retirement step (CP-921).
+- **State:** Task 7 module complete and green (37 module / 76 focused set); Tasks 1-6 committed and green; Tasks 8-10
+  untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
