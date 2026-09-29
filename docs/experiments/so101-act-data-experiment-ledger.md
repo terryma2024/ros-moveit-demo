@@ -13134,3 +13134,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `pick_place_case_owner.py` and `pick_place_case_execution.py` each carry one additive, uncommitted insertion;
   Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-938 — The journal-row readback is verified in both directions (10 passed)
+
+- **Updated the fixture rather than the rule, exactly as CP-937 said it would be.** In the user-dirty
+  `test_task8_case_execution.py` (a plan-named *Modify* target, left uncommitted per the CP-930/CP-932 rules) the
+  full-case fixture now writes a real sealed file and computes its sha256, so the artifact genuinely reads back byte
+  for byte.
+- **Added the negative case the requirement implies:** a full case whose artifact bytes disagree with its recorded
+  digest must be refused with `TASK8_LIVE_EVIDENCE_READBACK_MISMATCH`, **and the journal must not exist afterwards** -
+  asserted with `assert not journal.exists()`, which is the property that matters ("never publish a case PASS until
+  its evidence reads back").
+- **Verified: 10 passed, rc=0** for the teleop case-execution suite (`beh-task7-exec2.log`), covering both
+  directions: a matching artifact publishes the row, a mismatching one is refused before publication.
+- **Task 7 status:** module green (37 / 76), runner baseline 14, port attachment plus grid feed 81, retirement-path
+  seal 40, journal-row readback 10. **One item remains: the production-chain test**
+  (`src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py`), which must keep `run_pick_place_case()`,
+  owner start/finish, child `_run_pick_place()`, `PickPlaceRunner`, artifact validation and journal publication real
+  while replacing only external ROS topics, MuJoCo/controller I/O and process launch with fakes - and observe SEARCH
+  rows, the release open event with three pre-open support rows, FINAL_CHECK, sealed artifact readback, confirmed
+  retirement and the final journal path/hash.
+- **Uncommitted by design:** `pick_place_case_owner.py`, `pick_place_case_execution.py` and
+  `test_task8_case_execution.py` each carry my additive changes in the user's dirty set; they stay uncommitted until
+  the user's own work lands, so nothing of theirs is captured by my commits. `staged` has been 0 at every checkpoint
+  since.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
