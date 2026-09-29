@@ -28383,3 +28383,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And my probe printed nothing because it searched `path_proof`'s module functions for the verdict string - while the rule is a METHOD on the receipt's owner.** That is the same mistake in a new place: **a name found in a file is not a name at the level you assume**, exactly as `hasattr(cls, "__call__")` was not a class's own interface (CP-1669) and a length was not a key set (CP-1625).
 - **What has already been established about this link, so the next probe is narrow:** the fixture **does** issue its receipt with the **refreshed** prefix (probe: `RECEIPT origin=1.65 id=...`, issued **once**), so the prefix half is right; **the four clauses above are what remain to be read**, by patching the **class** rather than the module.
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: window green, receipt clause unidentified**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1696 — The clause is `receipt.prefix_sha256 != prefix_sha256(checked)`, and the reason is a refresh that outlives the signature
+
+- **The site, found by elimination rather than by another patch:** the probe on `RelativePathRequest.require_source_freshness` printed **nothing**, so that method is not on this path; among the four sites that raise `PATH_SOURCE_RECEIPT_INVALID`, one raises `PermissionError` (not our `ValueError`) and the remaining two are the same block:
+  ```
+  path_proof.py:153
+      if (not isinstance(receipt, PrefixSourceReceipt)
+              or receipt.source_kind not in SOURCE_KINDS
+              or receipt.prefix_sha256 != prefix_sha256(checked)     # <<<
+              or receipt.sequence != checked['sequence']
+              ...):
+          raise ValueError('PATH_SOURCE_RECEIPT_INVALID')
+  path_proof.py:166
+          if issue_time < max(times):
+              raise ValueError('source order')  -> wrapped into the same name
+  ```
+- **So the receipt must name the digest of the prefix being executed - and the fixture refreshes its prefix on EVERY readback while the receipt is issued ONCE.** The probe showed the receipt carrying the refreshed origin (`RECEIPT origin=1.65`), which is why the prefix half looked right; **but the next readback moves the prefix again, and the signature is left naming the previous one.**
+- **Which closes the chain's logic and names the fix precisely:** the prefix may move **only until** it is signed, or **the signature must be re-issued with the plan**. Production does the second - a plan is prepared, its prefix signed, and executed - and the fixture signs once and then keeps moving the document. **The refresh must not outlive the signature.**
+- **And it says what the fixture's shape should be:** issue the receipt **inside** the plan preparation (where the header stamp is taken), so the prefix the receipt names is the prefix that is executed, and let the **capture clock** stay the case's monotonic sequence. **Two clocks, one signature, no rewriting.**
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: window green, and the receipt must be signed with the plan rather than before it**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
