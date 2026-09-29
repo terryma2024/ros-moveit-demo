@@ -26061,3 +26061,16 @@ picture in both directions.**
   repository's own guards, not of assertions this file invents.**
 - **This is the last piece of P1-4**, and the test that carries it is the next action; after it, P2, the final integration boundary, and the review.
 - **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1564 — The sealed-artifact test is written; APPROACH's stamp check needs one probe, not another edit
+
+- **The test exists and its shape is the one CP-1563 specified:** `test_act_task8_sealed_artifact.py` runs the nine-phase case, seals it, and then makes **seven assertions read from the artifact** -
+  the artifact's digest (through the **production** `_require_live_evidence_readback`), the sample count, the per-record digest chain, the case identity and epochs on every record, the **24-key canonical
+  shape**, the phase coverage with `RADIAL_RETREAT` twice, and the one-period cadence - plus **four negatives** (a tampered artifact, a missing artifact, a foreign identity, an edited record).
+- **And it currently fails on `APPROACH_HEADER_STAMP_INVALID`, which is a fixture-clock conflict rather than a new defect:** the case's clock must advance one period per grid sample (the recorder's rule), while
+  the APPROACH goals' header stamp must fall **inside the prefix's own window** - and the fixture's prefix ends at 1.4 s. **Widening the route's prefix did not change the outcome, which means the prefix that
+  `execute_approach` actually receives is not the object I widened** - and that is precisely the kind of question this stretch has learned to answer with a probe instead of a fourth edit.
+- **The probe, so the next round is one command:** print, inside a run, `prepared["prefix"]["observation_time_s"]`, `prepared["prefix"]["target_times_s"]`, and the stamp the goals builder is given (the capture's
+  `sim_time_s`) at the moment `execute_approach` runs. **Two values and a comparison, and the fix is then obvious rather than guessed.**
+- **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed; the sealed-artifact test is uncommitted while it is red, per this batch's rule. No new session, goal, worktree
+  or stack; nothing pushed, nothing deleted; no hardware.
