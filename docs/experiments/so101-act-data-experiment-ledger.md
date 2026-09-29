@@ -21132,3 +21132,30 @@ not an inference of mine.**
   five failures, is a perfectly good way to finish this.
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1283 — Both policy contracts read in full; what the fixture must construct is now a closed list
+
+- **`verify_disabled_proposal` continues past the third condition:**
+  ```python
+  if item["counts"] != {name: {"offline": 20, "live": 5} for name in REGIMES}:
+      raise ValueError("proposal cohort counts are incomplete")
+  for name in REGIMES:
+      row = ...
+      if not isinstance(row, dict) or row.get(name) != 5 or sum(row.values()) != 5:
+          raise ValueError("proposal live confusion matrix is incomplete")
+  ```
+  **so the proposal carries a real cohort shape: per-regime counts of 20 offline and 5 live, and a live confusion matrix whose row for
+  that regime sums to exactly 5 with 5 on the diagonal.**
+- **And `verify_activation`'s first conditions:**
+  ```python
+  approved = _exact(receipt, _RECEIPT_KEYS, "activation receipt")     # exact key set
+  if _sha(approved["policy_fingerprint"], ...) != fingerprint:  raise ValueError("fingerprint mismatch")
+  if _sha(approved["source_evidence_sha256"], ...) != payload[...]: raise ValueError("evidence mismatch")
+  _nonempty(approved["approved_by"], "approved_by")
+  ```
+  so the receipt is a **closed** document naming the same fingerprint and evidence hash, with a non-empty approver.
+- **Three names remain to read - `REGIMES`, `_RECEIPT_KEYS`, and the payload's own exact key set (`policy_fingerprint` canonicalises it,
+  so it is `_exact`-checked somewhere) - and then the fixture constructs the pair.** This is a real but bounded piece of test support:
+  a small cohort, not a measurement.
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
+  deleted, nothing pushed.
