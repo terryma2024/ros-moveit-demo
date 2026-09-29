@@ -28295,3 +28295,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the reason it is one family rather than four bugs is a masking that the code chose:** port:802 wraps **any** exception from `execute(...)` into that name - "APPROACH: execution" - **so the underlying cause does not reach the traceback.** The neighbouring handler in the same file does the opposite, and says why: *"this port's own refusal already names the missing piece (P1-3's FIELDS_REQUIRED); wrapping it into SEARCH_EVIDENCE_INVALID would hide which contract
   failed"*. **Here it does hide it**, so the next step is to surface the cause - run that path directly, or read what `execute(...)` needs - **rather than guess at the four failures.**
 - **State:** **P1-4 pieces 1-3 working, piece 4's clock landed, one masked APPROACH refusal and the expectation restatements outstanding**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1691 — The next cause, and it is a real contract constraint rather than a fixture slip
+
+- **Reading the cause instead of guessing worked twice in one round:**
+  ```
+  cause[0]: ContractError PREFIX_INVALID            -> the widened window had 600 times and ONE positions row
+  cause[0]: ValueError APPROACH_HEADER_STAMP_INVALID -> and then the header rule itself
+  ```
+  The first is fixed (`positions` is widened to match the times, row for row). **The second is a genuine constraint:**
+  ```
+  pick_place_approach_goals.py:35
+      if not targets or not observed < header_stamp_s < targets[0]:
+          raise ValueError("APPROACH_HEADER_STAMP_INVALID")
+  ```
+  **The goal header's stamp must fall strictly between the prefix's `observation_time_s` and its FIRST target** - and the contract fixes the first target at `observation_time_s + 0.1 + 0.002`
+  (`first_target_delay_s` is exactly 0.1, `target_interval_s` exactly 0.002). **So the window is ~0.102 s wide and cannot be widened**, which is precisely why the fixture used to wrap its capture clock: the wrap was not laziness, it was the only way to keep the stamp inside a fixed 0.1 s window while the grid demanded 0.1 s per sample.
+- **And that means the conflation is in how the fixture builds the prefix, not in the grid:** the header stamp comes from **the run's current time** (the readback), which is correct in production - a prefix is a plan issued fresh, milliseconds after its own observation - while **the fixture creates ONE prefix and then runs a whole case against it**, so the run's clock walks out of the plan's window.
+- **The fixture fix, therefore:** build the prefix **from the current readback time** where the APPROACH plan is issued (a fresh plan per issue, as production does), and let the capture clock stay the case's monotonic sequence. **Two clocks, two jobs - and the wrap disappears without either being rewritten.**
+- **State:** **P1-4 pieces 1-3 working; piece 4's clock landed; the prefix must be built from the current readback** and the expectation restatements follow; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
