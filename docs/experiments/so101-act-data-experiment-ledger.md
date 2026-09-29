@@ -27172,3 +27172,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **So the four negatives the review wants are four refusals of THIS function**: a **missing** journal, a row sealed under a **wrong** epoch/identity, a row **missing a retirement receipt**, and a **tampered** digest - **each of which must refuse the whole qualification rather than produce a report.** And the seven meanings are properties of the rows it accepts.
 - **Where the work stands:** item 3's first two points are closed (CP-1625 the key set, CP-1626 the cadence's true scope); **this is the third and largest, now scoped to production functions with an existing fixture to build on.**
 - **State:** item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1628 — Item 3's third point closed: all four negatives break the chain through production code
+
+- **The review's sentence:** *"the 'foreign identity' and 'edited record' negatives merely catch a test-local `AssertionError`, rather than demonstrating production qualification refusal."* **`4 passed`, and both are replaced:**
+  | negative | refusal now | whose |
+  | --- | --- | --- |
+  | tampered artifact | `TASK8_LIVE_EVIDENCE_READBACK_MISMATCH` | `_require_live_evidence_readback` (production, unchanged) |
+  | missing artifact | `TASK8_LIVE_EVIDENCE_READBACK_MISSING` | `_require_live_evidence_readback` (production, unchanged) |
+  | **foreign identity** | **`TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH`** | **`Task8LiveEvidenceRecorder.seal`** - the component that owns a case's identity |
+  | **edited record** | **refused by `Task8LiveEvidenceRecorder.append`** | the recorder that validates every sample it accepts |
+- **And one small production rule surfaced while writing them, worth knowing because it is a real precondition:** a recorder refuses an `evidence_root` that is not an existing absolute directory
+  (`TASK8_LIVE_EVIDENCE_ROOT_INVALID`), so the cases create theirs first. **That is the same class as the fixture lags of CP-1577 - the production code telling the fixture what it must provide.**
+- **So item 3's three review points are all handled:** the key set is asserted exactly (CP-1625), the cadence claim is **correctly scoped** and its limitation explained (CP-1626), and the negatives are **production refusals** (this entry).
+  **What remains of the item is the chain itself** - the fourteen journals driven through `validate_case_journals` with both retirement receipts and the seven meanings the review listed - which CP-1627 scoped to that function and its existing fixture.
+- **State:** item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3's points handled with the chain test remaining; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
