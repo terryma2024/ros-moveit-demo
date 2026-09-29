@@ -23637,3 +23637,18 @@ not an inference of mine.**
 - **Handoff state, final for this batch:** items 1-4 committed and green; P1-5 uncommitted by design with its first half proven up to the recorder
   append; the ledger's CP-1420 plan remains the entry point for a fresh round.
 - **State:** no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1429 — The recipe is PROVEN against a real recorder, so the failing append belongs to the child's own path
+
+- **Run, not reasoned:** `Task8LiveEvidenceRecorder(case_id="case-05", evidence_root=<tmp>, session_id="session-item5",
+  attempt_id="attempt-item5")` accepts my sample - **`append OK`** - with the identity, the stamps over `_SOURCES`, the raw records under its own
+  root and the three vectors exactly as my `record_phases` builds them. **So my recording code is correct against the real recorder type and
+  identity.**
+- **Which relocates the refusal definitively:** something else appends a sample in this run, and it is the **child's own evidence path** - the
+  `CaseEvidenceDriver`/`record_evidence` machinery that builds a sample from what the port's phases report. **Since the port's phase document is
+  built from MY substituted boundary's data, the child's own recording is the last place an invalid shape can come from, and it is also exactly
+  where the seven indexed assertions will read their evidence.**
+- **So the handoff's next read is the child's recording trigger and the fields it sources**, and the fixture-side recording is not a suspect any more -
+  **that is a real narrowing won by running rather than by reading, which is the fifth time this item has paid for a probe.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
