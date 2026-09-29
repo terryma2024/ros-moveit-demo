@@ -23063,3 +23063,21 @@ not an inference of mine.**
 - **And the key sets are importable** (`SCENE_KEYS`, `FRAME_KEYS`) exactly as `READBACK_SOURCES` was, **so the fixture builds to the production vocabulary instead of a copy of it** - the rule this whole item has followed and the reason the remaining work is mechanical.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1392 — The observation contract wants real images, and that is a legitimate substitution
+
+- **Read (`act/contracts.py:55-69`):** `validate_observation` requires `session_id`, `attempt_id`, `sim_time_s`, a `state` **8-vector** with
+  `state[6]**2 + state[7]**2 == 1` (the neck quaternion), and for `head` and `wrist` a **real `numpy.ndarray`** with `dtype == uint8` and
+  `shape == (480, 640, 3)` - i.e. the port's evidence path reaches all the way to the camera frames.
+- **So the fixture must produce arrays, not dictionaries - and that is exactly the substitution the reviewer sanctions:** cameras are I/O, and a
+  test may stand in for them. `numpy.zeros((480, 640, 3), dtype=numpy.uint8)` satisfies the shape and dtype the validator checks, and the neck
+  quaternion is satisfied by a normalised pair. **No production check is weakened; the fixture simply supplies what a camera would.**
+- **And the key sets the port compares against come from the production modules** (`SCENE_KEYS`, `FRAME_KEYS` are defined in the adapters, and
+  `READBACK_SOURCES` in the live-evidence module), **so the build is against the production vocabulary rather than a copy of it** - which is why
+  the remaining work is mechanical even though it is broad: rows without fingertip contacts, a `scene` and `contact` document matching the world,
+  `sources.contacts`/`contact_pairs`, and `observation`/`reference` documents carrying real arrays.
+- **A budget note, because it is honest to state it:** this is roughly six more rounds of fixture work, then the case-level evidence
+  (aggregator, seven assertions, four negatives) and the integration boundary - **which fits the rounds remaining, and is why I am continuing
+  rather than proposing to stop short.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
