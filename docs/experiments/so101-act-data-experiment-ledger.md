@@ -32966,3 +32966,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   named, and the remaining work is to construct them once against the port's contract.** P1-1 through P1-4 CLOSED. The
   demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
   unchanged, so they are not re-stated.**
+
+## CP-1877 — The four proofs PASS: the refusal is now the source port's scope check
+
+- **The `qvel` fix cleared everything before it, and the drive advanced three checks in one round:**
+  ```
+  trusted_visible_approach_source.py:55  in register
+  trusted_visible_approach_source.py:32  in _scope
+      ValueError("VISIBLE_APPROACH_SOURCE_SCOPE_CHANGED")
+  ```
+  **so the native-ingress proof, the four-proof structural check and the expert route's preparation all passed** - the
+  registration is now at its **scope** check, which compares the live broker/driver state with the frozen source:
+  ```python
+  broker.ownership.require_ticket(ticket)
+  epoch = broker.driver.current_epoch()
+  if (ticket[2:] != ("act", source["session_id"], source["attempt_id"])
+          or broker.simulation_session_id != source["session_id"]
+          or broker._armed_generation != ticket[0]
+          or broker.driver.stopped() is not True
+          or type(epoch) is not dict
+          or epoch.get("session_id") != source["session_id"]
+          or epoch.get("reset_epoch") != source["reset_epoch"]):
+      raise ValueError("VISIBLE_APPROACH_SOURCE_SCOPE_CHANGED")
+  ```
+- **And the most likely failing one is named, because I built it that way:** `FakeBroker(session_id=…, reset_epoch=0)` -
+  **its `current_epoch()` returns `reset_epoch: 0`, while the source the registration froze carries the live epoch**
+  (the boundary's own `reset_epoch`, which the run advances). **So the seam needs the case's own session and epoch rather
+  than the defaults I gave it** - the same "supply it from where production supplies it" rule as every other fix here.
+- **And the round is worth recording for how much it moved:** three registered checks passed (native ingress, the four
+  proofs, the route's preparation) **on the strength of one malformed value - the `qvel` that the scene builder's
+  `{key: 0 for key in SCENE_KEYS}` fill left as an int.** **That single int had been blocking four proofs' worth of
+  progress**, which is exactly why the instrumented reads were worth their rounds.
+- **State:** **P1-5 in progress: the four proofs pass, the registration is at the scope check, and the seam needs the
+  case's own session and epoch.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and
+  the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
