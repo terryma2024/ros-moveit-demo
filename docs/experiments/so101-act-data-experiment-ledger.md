@@ -21353,3 +21353,30 @@ not an inference of mine.**
   fixture builds its proposal from the installed payload. **One read, then the write.**
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1294 — The child's construction path requires a **compiled MuJoCo model** of the real scene
+
+- **Read from the loader's body (lines 65-100):**
+  ```python
+  if not isinstance(model, mujoco.MjModel):        raise ValueError("compiled model required")
+  if not scene.is_absolute() or ".." in scene.parts or not scene.is_file():
+                                                   raise ValueError("scene path invalid")
+  verify_activation(payload, receipt, expected_scene_sha256=hashlib.sha256(scene.read_bytes()).hexdigest(), ...)
+  if payload["allowed_other_contact_bodies"] != ["table"]:
+                                                   raise ValueError("unsupported other contact bodies")
+  ...  # then it inspects the compiled model's own geometry:
+       # plastic_cup*_collision, table_collision, gripper, jaw ...
+  ```
+  **So `load_installed_phase_contact_allowlist` demands a compiled `mujoco.MjModel`, a real scene file whose sha256 it verifies, a
+  payload that allows exactly `["table"]` as other contact bodies, and named collision geometry in the model itself.** That is why my
+  synthetic policy could never satisfy it: the check is not about the document, it is about the **model and the scene**.
+- **What this means for item 5, stated plainly:** the child's constructor path touches MuJoCo - not a running stack, but a **compiled
+  model**. My reading of the owner's boundary is that *"do not authorise the live MuJoCo stack"* forbids **starting the stack** (the
+  single-stack production measurement), not compiling a model inside a test process, since the fixture never steps the simulation, never
+  binds CUDA work and never opens an actuator. **But that reading is mine, and the difference matters enough to state rather than
+  assume** - so it goes into the closing question rather than into a silent decision.
+- **Two routes if the reading is accepted:** compile the repository's real scene with `mujoco.MjModel.from_xml_path(...)` in the fixture
+  and build the proposal payload from it; or, if the owner prefers no MuJoCo at all in this boundary, item 5's fixture must drive the
+  child's **pre-binding** path instead, which would be a real reduction in what it proves and therefore needs the owner's agreement.
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
+  deleted, nothing pushed.
