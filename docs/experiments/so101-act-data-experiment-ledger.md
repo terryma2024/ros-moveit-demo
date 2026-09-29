@@ -20603,3 +20603,18 @@ not an inference of mine.**
   touching, and `_report` stays alone**, which is what CP-1255 correctly insisted on for a different reason.
 - **State:** aggregator source + `_v2_batch` edits uncommitted while red; suite at `15 failed / 13 passed`; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1257 — One fixture edit took item 4 from 15 failures to 4
+
+- **`15 failed / 13 passed` → `4 failed / 24 passed`** with a single change to `batch_factory`: it now writes `runtime-descriptor.json`
+  before sealing, and the production seal records every raw file hash, so the descriptor lands in the index - which is exactly what
+  the aggregator now requires. **CP-1256's "one fixture, one edit" was right, and the two rounds spent discovering it were the cost
+  of not reading the fixture first.**
+- **The four that remain are named in this round's evidence, and they fall into two classes:**
+  1. **the CLI-seal test**, whose assertion is `(batch / "batch.json").is_file()` - it **encodes the old seal owner** (the entry sealing)
+     and is the same class as the one already rewritten in the contract suite (CP-1250). It has to assert the corrected ownership.
+  2. **three tests whose batches come from somewhere else** - a `CALIBRATION_DESCRIPTOR_MISSING` and a regex mismatch expecting
+     `CALIBRATION_IDENTITY_MISMATCH` - i.e. batches built outside `batch_factory` (the `_sealed_batch` builder at line 261 or an inline
+     construction), which need the same descriptor treatment.
+- **State:** the aggregator source change, `_v2_batch`'s descriptor default and the `batch_factory` descriptor are all **uncommitted
+  while red**; build tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
