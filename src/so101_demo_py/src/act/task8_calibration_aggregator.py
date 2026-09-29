@@ -242,8 +242,12 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     if sample is not None and support_names:
         from so101_demo.act.task8_measurement_formulas import build_support_closed_sample
 
+        # the support closed sample takes bare values, while the published report carries unit-bearing entries
+        def _bare(entry):
+            return entry.get("value") if isinstance(entry, dict) else entry
+
         support_document = build_support_closed_sample(
-            support={name: readings["measurements"][name] for name in sorted(support_names)
+            support={name: _bare(readings["measurements"][name]) for name in sorted(support_names)
                      if name in readings["measurements"]},
             source_commit=next(iter(batches))[1]["source_commit"],
             config_sha256=next(iter(batches))[1]["config_sha256"],

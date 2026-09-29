@@ -426,7 +426,7 @@ def test_every_cited_sample_reads_back_from_disk_with_its_recorded_hash(tmp_path
     # a v2 bound contract, because only it carries the support section the seven remaining fields come from
     contract = json.loads(Path(bind_measurement_contract(
         TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
-    batch = batch_factory(tmp_path, contract)
+    batch = _v2_batch(tmp_path / "batch", contract)
     outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
     document = json.loads(Path(outputs["calibration_report"]).read_text())
     measurements = document["measurements"]
@@ -493,12 +493,22 @@ def _valid_evidence(contract):
         "velocity_limit_rad_s": ({"samples": [{"dt_s": 0.01, "dq_rad": [0.0] * 6}]}, [1.0] * 6),
         "acceleration_limit_rad_s2": ({"samples": [{"dt_s": 0.01, "dq_rad": [0.0] * 6}]}, [1.0] * 6),
         "path_step_s": ([0.0, 0.002, 0.004, 0.006], 0.01),
-        "coarse_step_rad": ({"steps_rad": [0.05, 0.05, 0.01]}, 0.06),
-        "search_timeout_s": ({"elapsed_s": [0.5, 1.0]}, 5.0),
-        "horizontal_fov_rad": ({"model_rad": 1.0, "measured_rad": 1.0, "tolerance_rad": 0.1}, 0.1),
-        "acceleration_limit_rad_s2": ({"samples": [{"dt_s": 0.01, "dq_rad": [0.0] * 6},
-                                                   {"dt_s": 0.01, "dq_rad": [0.0] * 6},
-                                                   {"dt_s": 0.01, "dq_rad": [0.0] * 6}]}, [1.0] * 6),
+        # read from the implementations: search_timeout_s takes per-anchor start/terminal stamps, coarse_step_rad
+        # takes the accumulator before and after each step, and acceleration samples are time_s/position_rad pairs
+        # every non-final step equals the configured limit and the final remainder is positive and bounded
+        "coarse_step_rad": ([{"coarse_accumulator_before": 0.0, "coarse_accumulator_after": 0.06},
+                             {"coarse_accumulator_before": 0.06, "coarse_accumulator_after": 0.12},
+                             {"coarse_accumulator_before": 0.12, "coarse_accumulator_after": 0.13,
+                              "final": True}], 0.06),
+        "search_timeout_s": ([{"anchor": anchor, "started_monotonic_s": 0.0, "terminal_monotonic_s": 0.5}
+                              for anchor in ("default", "left", "forward")], 5.0),
+        "horizontal_fov_rad": ({"frames": [{"fx": fx, "cx": 320.0, "width": 640, "height": 480,
+                                           "fovy_rad": fovy}], "model_fov_rad": 2 * math.atan(320.0 / fx),
+                                  "tolerance_rad": 0.2}, 0.2),
+        # distinct velocities a half-limit apart, so the observed acceleration stays inside the configured limit
+        "acceleration_limit_rad_s2": ({"samples": [{"time_s": 0.0, "position_rad": [0.0] * 6},
+                                                   {"time_s": 0.01, "position_rad": [0.001] * 6},
+                                                   {"time_s": 0.02, "position_rad": [0.00205] * 6}]}, [1.0] * 6),
         "path_clearance_m": ({"rows": [{"signed_distance_m": 0.05}]}, 0.01),
     }
     for field, (payload, limit) in fill.items():
