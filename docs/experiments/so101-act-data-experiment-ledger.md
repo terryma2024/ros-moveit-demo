@@ -28215,3 +28215,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   1. `test_act_task8_search_port.py:327` asserts `window._grid_count == 1` after a phase - **"exactly one sample per phase" is precisely what the finding removed**;
   2. and the suite's `TASK8_LIVE_EVIDENCE_GRID_GAP` shows the fixture's clock does not advance by the frozen period **across phases** - **which is piece 4, and it is now blocking rather than optional.**
 - **State:** **P1-4 pieces 1-2 green and committed; piece 3's mechanism implemented, its instants' source and two stale expectations outstanding; piece 4 now blocking**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1686 — The instants' source is the CANONICAL FIELDS, and the phase document's own key list says so
+
+- **The evidence, read as a key list rather than inferred:** `_search_evidence` returns the **phase document** -
+  ```
+  phase, session_id, attempt_id, reset_epoch, release_epoch, physics_step, planning_ok, controller_reference_ok,
+  joint_feedback_ok, contact_ok, mujoco_ok, planning_scene_ok, head_rgb_ok, wrist_rgb_ok, manual_intervention,
+  moveit_recovery, holding_state, bilateral_contact, micro_lift_confirmed, cup_off_table, cup_supported, released,
+  no_fingertip_contact, placement_stable, retreat_stable
+  ```
+  - and **`sim_time_s` is not among them**; neither are the search's iterations. **Those live in the CANONICAL FIELDS** the boundary derives (`canonical_evidence(...)`, whose dict the port's `_grid_sample` already consumes: `physics_step`, `sim_time_s`, the per-source stamps, the contact facts, the cup's pose).
+- **So my `_phase_instants(phase, evidence)` looked in the wrong dict** - it was handed the phase document, which is the *facts* half, while the instants are in the *readback* half. **The code said so by omission and I had not read the key list.**
+- **The fix is therefore a plumbing change rather than a new source of truth:** derive the canonical fields **once per emission**, hand them to `_phase_instants` for the instants and to the sample builder for the content, and the search's iterations - which the boundary's fields carry when the run has them - become the phase's sampled instants at the frozen period.
+- **And one more hardcoded epoch was found in passing, correctly so:** `_search_evidence` writes `"release_epoch": 0` for the SEARCH phase document. **That one is right** - SEARCH precedes the release - and it is worth distinguishing from the defect CP-1679 fixed, which was the *sample identity* claiming 0 for every phase including the post-release ones.
+- **State:** **P1-4 pieces 1-2 green; piece 3's mechanism in, its plumbing identified to the key level; piece 4 blocking**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
