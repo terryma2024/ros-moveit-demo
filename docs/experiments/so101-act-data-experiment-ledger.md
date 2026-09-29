@@ -11658,3 +11658,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   test for GREEN and commit with the plan's file list.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-874 — Task 1 partial GREEN: schema module and matrix landed (3 failed, 6 passed)
+
+- **Implemented so far (uncommitted, pending Step 4 GREEN):** `act/task8_measurement_schema.py` with the closed
+  `MeasurementIdentity` (ten members, `source_commit` as 40-hex and the rest as 64-hex),
+  `write_closed_json` (canonical bytes, atomic `os.link`, refuses an existing target),
+  `load_contract_v2`, `load_phase_camera_matrix` (refusing any occluder list other than the approved five),
+  `BatchIndex` and `validate_closed_batch` - which compares the recursive regular-file set to `batch.json.files`
+  **before** opening any raw file, rejects symlinks and traversal, then verifies every digest; plus
+  `config/act/task8-phase-camera-matrix-v1.json` carrying the approved occluders and marked
+  `SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION`.
+- **Focused run:** **3 failed, 6 passed** (was 5 failed, 4 passed at CP-873), rc=1, log
+  `beh-task1-partial.log`. The identity, occluder and part of the closure coverage now pass.
+- **Remaining for Step 4 GREEN:** the v2 measurement contract document (21 + 7 entries with `unit`,
+  `source_kind`, `comparator`, `formula_id`, `window`, `threshold_source`, `failure_code`) and the search
+  candidate/policy documents, all of which must be **transcribed from the approved design** sections 3.1, 4, 5, 6
+  rather than paraphrased - plus one correction to my own test, whose last closure case rewrites a raw file with
+  different bytes and therefore correctly trips `BATCH_CLOSURE_INVALID` before the symlink case can be reached.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
