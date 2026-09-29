@@ -21805,3 +21805,18 @@ not an inference of mine.**
   **P1-1's tests then assert the real classes, the descriptor-driven detector options, and the settings-driven controller.**
 - **State:** P1-1's tests uncommitted while the pair is red; ledger current; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1317 — What the settings helper gates on, and where P1-1's test legitimately draws the line
+
+- **Read: `bound_act_source_settings(report, *, timestep_s)`** refuses unless the report passes
+  `require_gate(report, "pick_place_validation")` (or `formal_collection` for a QUALIFIED report) and carries measured
+  `max_age_s`, `max_skew_s` and `stop_velocity_rad_s` within tight ranges, with `0 < timestep <= 0.01` and `timestep * 1.5 < age`.
+  **So the real controller settings come from a gated calibration report, which only a real admission produces** - and the child gets
+  them through the same binding the composition is now being given.
+- **Therefore the boundary for P1-1's positive test:** the composition's contract is **"settings in, controller out"**, and the gate
+  belongs to the report layer, which the admission suite already exercises. **The composition test supplies a complete settings mapping
+  and asserts the controller was built from it; the CLI test asserts the production branch loads the binding and derives the settings
+  when a campaign is admitted.** That keeps each test at the layer it can actually prove, instead of a demo test reaching across a
+  package boundary for a gated report.
+- **State:** P1-1's tests uncommitted while the pair is red; ledger current; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
