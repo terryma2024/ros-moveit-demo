@@ -116,7 +116,7 @@ class PickPlaceSearchBoundary:
             raise PickPlaceSearchBoundaryError("TASK8_EVIDENCE_FIELDS_INVALID") from error
 
 
-    def execute_approach(self, prepared, request, *, prover_identity, ticket, support_distance_max_m):
+    def execute_approach(self, prepared, request, *, prover_identity, ticket, support_distance_max_m, source=None):
         """Execute one APPROACH prefix through the broker and return the proof, the snapshot and the facts.
 
         The chain is made of production calls, not of an abstraction: the trusted source produces the source document,
@@ -131,10 +131,8 @@ class PickPlaceSearchBoundary:
             raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: screen")
         broker = self.reset.broker
         executor = getattr(broker, "prefix_executor", None)
-        source_port = getattr(broker, "_prefix_source_port", None)
         for name, piece, method in (("prefix_executor", executor, "approve_with_source"),
-                                    ("prefix_executor.submit", executor, "submit"),
-                                    ("prefix_source_port", source_port, None)):
+                                    ("prefix_executor.submit", executor, "submit")):
             if piece is None or (method is not None and not callable(getattr(piece, method, None))):
                 raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: APPROACH: {name}")
         wait = getattr(executor, "wait_for", None)
@@ -143,8 +141,14 @@ class PickPlaceSearchBoundary:
 
         prefix = prepared["prefix"]
         # the source kind is the route's own, and the two digests come from the preparation rather than from defaults
+        # the source document is the case's FROZEN selected source, built by production code from the SEARCH
+        # observation (`freeze_selected_search_source`) and handed down by the port. The earlier version of this method
+        # called a producer that does not exist in that role - the port registers the prefix, and the source comes from
+        # the same observation the route prepared against (CP-1538).
+        if source is None:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: selected_source")
         receipt = broker.issue_prefix_source(
-            ticket=ticket, prefix=prefix, source=source_port(ticket), source_kind="EXPERT_ROUTE",
+            ticket=ticket, prefix=prefix, source=source, source_kind="EXPERT_ROUTE",
             source_artifact_sha256=prepared["source_artifact_sha256"],
             contact_policy_fingerprint=prepared["policy_fingerprint"])
         permit = executor.approve_with_source(ticket, prefix, receipt)

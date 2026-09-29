@@ -3,6 +3,7 @@
 from dataclasses import replace
 from types import SimpleNamespace
 
+import re
 import numpy as np
 import json
 
@@ -499,9 +500,12 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document(tmp_pat
             calls.append(("qualify", prepared["kind"], proof, current_snapshot))
             return {"ok": True}
 
-    def execute_approach(prepared, request, *, prover_identity, ticket, support_distance_max_m):
+    def execute_approach(prepared, request, *, prover_identity, ticket, support_distance_max_m, source=None):
         calls.append(("execute", prepared["kind"], prover_identity["expected_samples"], ticket[2:],
                       support_distance_max_m))
+        # the source document the boundary issues the receipt from is the case's FROZEN SELECTED SOURCE, built by the
+        # port from the SEARCH observation - so the stub records it rather than accepting anything
+        calls.append(("source", source["observation_sha256"] if isinstance(source, dict) else None))
         return {"proof": "PROOF", "current_snapshot": {"step": 21},
                 "facts": _sequence_facts(21, holding_state="EMPTY")}
 
@@ -529,7 +533,11 @@ def test_approach_prepares_qualifies_and_the_runner_accepts_the_document(tmp_pat
     search = port.run_phase("SEARCH", request())
     approach = port.run_phase("APPROACH", request())
 
-    assert [call[0] for call in calls] == ["prepare", "execute", "qualify"], calls
+    # the port prepares, hands the boundary its frozen selected source, executes and qualifies - in that order
+    assert [call[0] for call in calls] == ["prepare", "execute", "source", "qualify"], calls
+    digest = calls[2][1]
+    assert isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest), \
+        "the port handed down the frozen selected source's own observation digest"
     assert calls[1][2] == 701, "the prover identity's expected_samples comes from the route's manifest"
     assert calls[1][3] == ("act", SESSION, ATTEMPT), "and the ticket names this case"
     assert calls[1][4] == 0.02, "the case's ADMITTED support distance travels with the call"
