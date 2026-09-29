@@ -22,13 +22,24 @@ def main(argv=None) -> int:
     parser.add_argument("--output-root", type=Path, required=True)
     args = parser.parse_args(argv)
 
-    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.calibration import require_gate
+    from so101_demo.act.task8_calibration_aggregator import (
+        publish_task8_calibration, render_task8_calibration,
+    )
     from so101_demo.act.task8_measurement_contract import load_measurement_contract
 
+    if len(args.batch_roots) != 1:
+        raise ValueError("ONE_V2_SEALED_BATCH_REQUIRED: one batch carries exactly three anchors")
     identities = json.loads(args.identities.read_text())
     contract = load_measurement_contract(args.contract, expected_hashes=identities)
-    outputs = aggregate_task8_calibration(tuple(args.batch_roots), contract, args.output_root)
-    print(outputs["aggregation_receipt"])
+    # render against the caller's real output root, so every sample_path is absolute and stable before publishing
+    rendered = render_task8_calibration(args.batch_roots[0], contract, args.output_root)
+    published = publish_task8_calibration(rendered, args.output_root)
+    report = json.loads(rendered["head-search-qualification.json"])
+    # the published report must satisfy the production gate: an unqualified dataset fails here rather than
+    # producing a quiet artefact, and the runtime binding check belongs with the live producer in Task 7
+    require_gate(report, "task8_live")
+    print(published)
     return 0
 
 

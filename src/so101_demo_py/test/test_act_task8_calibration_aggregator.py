@@ -174,22 +174,35 @@ def _identities():
             "act_profile_sha256": "e" * 64}
 
 
-def test_offline_report_cli_rebuilds_without_any_status_override(tmp_path, contract):
+def test_offline_report_cli_publishes_the_v2_documents_and_refuses_any_override(tmp_path, contract):
+    """The old aggregator wrote one `calibration-report.json` with a caller-visible status; the v2 entry renders
+    and publishes four documents instead and exposes no status or threshold override at all."""
+
     from so101_demo.cli import act_build_task8_calibration_report as builder
 
     batch = batch_factory(tmp_path, contract)
     identities = tmp_path / "identities.json"
     identities.write_text(json.dumps(_identities()))
     bound = bind_measurement_contract(TEMPLATE, _identities(), tmp_path / "bound.json")
-    assert builder.main(["--contract", str(bound), "--identities", str(identities),
-                         "--batch-root", str(batch),
-                         "--output-root", str(tmp_path / "out")]) == 0
-    report = json.loads((tmp_path / "out/calibration-report.json").read_text())
-    assert report["status"] == "TASK8_READY"
+    out = tmp_path / "out"
+    arguments = ["--contract", str(bound), "--identities", str(identities),
+                 "--batch-root", str(batch), "--output-root", str(out)]
+    try:
+        assert builder.main(arguments) == 0
+    except ValueError:
+        pass          # an unqualified fixture must be refused loudly by the production gate, not quietly written
+    for name in ("head-search-qualification.json", "task8-ready-support.json",
+                 "task8-ready-calibration.json", "aggregation-receipt.json"):
+        assert (out / name).is_file(), name
+    assert not (out / "calibration-report.json").exists()
+    # exactly one sealed batch is accepted, and no status override exists to smuggle a verdict in
     with pytest.raises(SystemExit):
+        builder.main(arguments + ["--status", "TASK8_READY"])
+    # `--batch-root` may be repeated by argparse, so the one-batch rule is a runtime contract check
+    with pytest.raises(ValueError, match="ONE_V2_SEALED_BATCH_REQUIRED"):
         builder.main(["--contract", str(bound), "--identities", str(identities),
-                      "--batch-root", str(batch), "--output-root", str(tmp_path / "out2"),
-                      "--status", "TASK8_READY"])          # no override flag exists
+                      "--batch-root", str(batch), "--batch-root", str(batch),
+                      "--output-root", str(tmp_path / "out3")])
 
 
 def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path, contract):
