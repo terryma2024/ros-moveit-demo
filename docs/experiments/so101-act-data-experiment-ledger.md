@@ -28773,3 +28773,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Which is exactly the set CP-1687 predicted** (*"four expectations to restate with piece 4"*), now reached with the mechanism green behind it: **the grid's sequence is one period per sample, the case seals, and the three failures that remain are assertions written for a case that had one sample per phase.**
 - **And the reset taught its own lesson twice in two rounds, which is worth the line:** clearing module-level fixture state is not one edit - `count` had to be re-established (`KeyError: 'count'`), and the **plan** had to be cleared too, because a previous test's `prefix_signed = True` froze the next case's prefix before it was refreshed, so its ~0.102 s window was stale and APPROACH refused by name. **A fixture with three globals has three ways to leak.**
 - **State:** **P1-4's grid sequence green, the case seals, and four named items remain: one mechanism (APPROACH at port:806) and the three stale expectations**; P1-5's joined chain waits behind it (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1720 — The difference between the test that fails and the probe that seals is one injected member
+
+- **Reading the two paths side by side, the failing test and the passing probe differ in exactly one line:**
+  ```
+  test_the_runner_runs_the_whole_case_and_reports_which_phases_completed   (line 620)
+      port, _events, boundary, _prefix = _full_case_port(tmp_path)
+      port._expert_route = _route                       # <<< the injected route
+      port.bind_case_targets(...)
+
+  _sealed_case  (used by the probe AND by the sealed-artifact tests)
+      port, _calls, _boundary, _prefix = _full_case_port(tmp_path)
+      port.bind_case_targets(...)                       # no injected route
+  ```
+  **And the probe on the `_sealed_case` path now reports `origin=1.45 first=1.552 header=1.5 ok=True` and `sealed fine`** - i.e. the fixture's window arithmetic is *correct* for that path. So the remaining failure is about the **injected route**, not about the clock the reset fixed.
+- **Why that matters for the fix:** a route injected into the port bypasses the port's own `expert_route_factory`, so the case's APPROACH plan is built from a different object with its own notion of the times - **and the contract's window is checked against the prefix the boundary is handed, not against whoever built the route.** The next probe is therefore narrow and one line: **print what `_route` carries** (its observation/start/target times) beside the prefix's `observation_time_s` and the header stamp, on the failing path only.
+- **And the honest statement of where P1-4 stands:** the grid's sequence is green and the case seals on the production path; **one mechanism remains - the APPROACH window on the path where a route is injected** - and the three stale expectations from CP-1687/1719 follow it.
+- **State:** **P1-4: grid green, sealing green, one injected-route mechanism plus three stale expectations outstanding**; P1-5's joined chain waits behind it (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
