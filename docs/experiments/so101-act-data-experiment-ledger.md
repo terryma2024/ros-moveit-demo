@@ -29669,3 +29669,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **frozen, indexed, audited, launchable; the review is the owner's next action and there is no work of
   mine left that does not either change code (not authorised) or repeat a verification already recorded.** The goal
   stays active because the review and its outcome are the plan's last step.
+
+## CP-1769 — Rereview 5 received (CHANGES_REQUIRED), and the new demo RED's reproduction evidence
+
+- **The verdict, read in full and digest-verified:** `handoffs/20260930-task7-onward/task8-astra-rereview5-verdict.md`,
+  **8361 bytes, sha256 `cd25c8ca7081d834cb8917dc521069b47b9ab8f0fc04e6a88c4ce69612cd5c0d`** - matching what the owner
+  stated. **P2 is closed** (counts, index/freeze read-back, digest audit consistent); **P1-1 … P1-5 remain open** (P1-2's
+  identity comparison repaired, its driver→aggregator chain not), and **P1-6 and a new demo-gate RED are added.**
+  **Task list updated first, as the verdict's execution order requires** (P1-1 … P1-6, the demo RED, the
+  production-boundary verification per finding, the final freeze gate and the re-review packet, each with its
+  completion condition), and the owner's executor handoff recorded: **dst is the only writer.**
+- **The owner's own goal-resume instruction could not be executed from here:** `update_goal(action="resume")` is
+  refused with *"the model cannot resume a paused goal; the user must resume it"* - **the goal is still
+  `phase: paused, activation: disarmed` (revision 71), and the resume affordance is TUI-side.** Work continues
+  regardless; only the automatic continuation rounds are affected.
+- **The new demo RED, reproduced and then narrowed - and the honest result is that it does NOT reproduce in focused conditions:**
+  | attempt | result |
+  | --- | --- |
+  | full demo gate, run 1 (`demo.log`) | **1 failed**, 5763 passed, 163 skipped, `demo_rc=1` |
+  | full demo gate, run 2 (`demo2.log`) | 5764 passed, `demo_rc=0` |
+  | full demo gate, run 3 (`demo3.log`) | **1 failed**, 5763 passed, 163 skipped, `demo_rc=1` |
+  | **12 focused runs of that file at `-n 8`** | **0 failures** (`experiments/gate8-remediation/red-demo-repro.log`) |
+  | **6 runs of that file plus three heavy suites at `-n 8`** | **0 failures**, `74 passed` each (`…/red-demo-load.log`) |
+  **Always the same test and the same assertion:** `test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations`,
+  line 67, *"the revoker must eventually complete"* - **so it is load-dependent, and the load it needs is the full
+  gate's, two orders of magnitude beyond 74 tests.**
+- **And the reading that explains it, from the test's own structure:** the worker thread enters
+  `owner_is_active_probe()`, which sets `entered` and then waits **inside the probe** (`revoked.wait(0.3)`); the main
+  thread waits for `entered`, **starts the revoker**, then does `worker.join(10.0)` - **and ignores what `join`
+  returns** - before asserting `revoked.is_set()`. So the assertion does not depend on the worker finishing, nor on
+  the revoker having been *scheduled*; **under full-gate pressure it is a scheduling race with an unchecked handshake**.
+  That is a defect in the test's design rather than in the admission logic it probes - **and CP-1745 already measured
+  the same test passing serially and in its own file.**
+- **State:** **the verdict's order is being followed: task list first (done), then the demo RED's focused reproduction
+  and root cause (this entry), then P1-1 … P1-6 each as a focused RED→GREEN.** The RED is being fixed on evidence and
+  **not by re-running to green**; no controlled production change has been made yet.
