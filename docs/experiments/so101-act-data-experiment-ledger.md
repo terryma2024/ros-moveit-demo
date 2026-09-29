@@ -32462,3 +32462,40 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   identifier was expected, and the next read names the attribute.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1859 — The path found: identifiers come FROM the driver, and `FakeBroker` answers everything the same way
+
+- **The broker asks its driver for identifiers, which is what CP-1858's function was doing in `identifier`:**
+  ```python
+  command_broker.py:156   gid = identifier(self.driver.submit(kind, goal))
+  command_broker.py:210   if identifier(self.driver.send_prepared(gid, kind, goal, goal_uuid)) != gid: …
+  command_broker.py:184   gid = identifier(gid)
+  ```
+  **and the driver here is `FakeBroker`:**
+  ```python
+  class FakeBroker:
+      """The ROS/process seam: the child must not start a real broker inside a test."""
+      def stop(self, *args, **kwargs): return True
+      def __getattr__(self, name):                     # every other broker call answers harmlessly
+          def _call(*args, **kwargs): return True
+          return _call
+  ```
+  **whose `__getattr__` returns a callable for every name and whose calls return `True`** - so a value the production
+  driver would return as a goal id arrives as `True`, and one the broker reads without calling arrives as a function.
+  **`identifier` refuses both, correctly.**
+- **Which reclassifies this refusal for the last time, and the classification matters:** `FakeBroker` is documented as
+  *"the ROS/process seam: the child must not start a real broker inside a test"* - **it was written for the PREFIX path,
+  where the child never asks its driver for a goal id.** On the ACT path the broker does exactly that, **so a seam that
+  answers every question with `True` cannot carry the ACT chain** - **not because the check is wrong, but because the
+  driver is answering questions it was never taught.**
+- **So the drive has reached the boundary this work has been circling since CP-1825:** the faithful branch needs a
+  **driver** that answers the ACT-related calls - `submit`, `send_prepared`, `prepare_goal`, `goal_state`, `stopped`,
+  `current_epoch` - **the way a ROS action client does**, with identifiers where identifiers are expected. **Two honest
+  ways to get one:** extend `FakeBroker` into an ACT-aware driver (**answering those calls with real shapes from the
+  fixtures' own identities**), or drive the case with the production driver over a substituted ROS layer. **The first is
+  smaller and keeps the substitution at the I/O boundary; the second is what the verdict's "real child" would mean
+  literally.**
+- **State:** **P1-5 in progress; the acquire refusal is fully explained - the broker asked its driver for an identifier and
+  `FakeBroker` answered `True`/a function - and the remaining work is an ACT-aware driver, whose two honest
+  constructions are named.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
+  re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
