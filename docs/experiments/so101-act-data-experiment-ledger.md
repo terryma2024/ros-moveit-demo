@@ -19878,3 +19878,20 @@ not an inference of mine.**
   reused generation would silently contaminate the measurement it is supposed to make honest. The check is also the cheapest possible form of it - two `ls` patterns.
 - **State:** HEAD `bf01f558` plus this checkpoint; staged 0; both existing generations and every scratch tree retained; no push, no
   stack, no hardware.
+
+## CP-1224 — No non-gated work remains; the wait is on the independent Astra verdict
+
+- **Checked honestly rather than assumed, three rounds running (814-816):** items 1-5 are complete with both gates green, item 6 is
+  honoured, the packet and its superseded versions are on disk with size and sha256 readback, and Task 10's entry conditions are
+  verified read-only (CP-1223: `gen4` does not exist and must be created). **Everything left is gated on one of two things that
+  are not mine to decide or run:**
+  1. **the independent GPT-6 Astra / High implementation re-review**, whose verdict gates Task 10 - the owner's own instruction was
+     to stop at that boundary and wait for the local reviewer, and the repository's task-model table forbids substituting another
+     model if it is unavailable (which then has to be reported as a limitation);
+  2. **decision (c)**, Boundary V's child-driven fixture, which the owner explicitly deferred to the reviewer at CP-1220 and I have
+     not expanded.
+- **What I did instead of idling, in order:** re-verified the packet's cited suites after every later edit (CP-1219), verified the
+  committed state and deliverables (round 814), and read-only-checked Task 10's preconditions (CP-1223). Each was bounded,
+  reversible and produced evidence. **I am stopping rather than inventing a fifth thing**, because the next real actions - starting a
+  MuJoCo/CUDA stack or widening Boundary V - are exactly the two the owner fenced off.
+- **State:** HEAD `f97dc3fa`; staged 0; ledger current; every artefact retained; no push, no stack, no hardware.
