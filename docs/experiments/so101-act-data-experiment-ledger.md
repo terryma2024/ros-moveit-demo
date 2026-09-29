@@ -12325,3 +12325,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   commit.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-904 — Task 6: deterministic render/publish GREEN (22 passed)
+
+- **Implemented in `act/task8_calibration_aggregator.py`:** `render_task8_calibration(batch_root, contract,
+  publication_root)` emits canonical bytes for exactly the four documents and writes nothing;
+  `publish_task8_calibration(rendered, publication_root)` writes exactly those bytes atomically (temp file, fsync,
+  `os.replace`) plus each receipt field's sample file, refusing a sample path that is not absolute or whose digest
+  does not match. Validation refuses a batch that is not one CLOSED three-anchor v2 batch: wrong kind or status
+  (`CALIBRATION_BATCH_NOT_CLOSED`), a malformed identity, anchors not in canonical order (`ANCHOR_ORDER`, which is
+  what catches time reversal), or a missing/empty index. Only names present in `batch.json.files` are read, each
+  digest verified as it is read (`BATCH_DIGEST_MISMATCH`), and an absolute or `..` path is rejected outright - so an
+  unindexed file cannot influence a result.
+- **Field verdicts are recomputed** through the Task 2 formulas per anchor and combined so a field passes only when
+  every anchor that measured it passes; a field with no raw record anywhere stays `UNMEASURED` rather than
+  defaulting to a pass.
+- **Contract identity:** a bound contract uses its own hash; an **unbound template is identified by the digest of its
+  exact bytes**, so the rendering is still deterministic and self-describing when the caller passes the template -
+  this was the one defect found while running (four `KeyError: 'contract_sha256'` failures), fixed by deriving the
+  identity instead of assuming a bound document.
+- **Verified:** the new render suite plus the existing aggregator tests report **22 passed, rc=0**
+  (`beh-task6-green2.log`).
+- **Remaining for Task 6's four-file commit:** point `cli/act_build_task8_calibration_report.py` at render/publish
+  and run `require_gate(report, "task8_live")` plus `validate_head_search_binding(runtime, report)` against the
+  files that now exist, replace the aggregator's labelled helpers at its call site, and update
+  `test_act_calibration.py`.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
