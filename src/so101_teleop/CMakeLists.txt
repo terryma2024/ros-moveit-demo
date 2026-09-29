@@ -106,7 +106,6 @@ so101_add_pytest_test(test_task8_case_runner_chain test/teleop/test_task8_case_r
 so101_add_pytest_test(test_task8_child_driven_case test/teleop/test_task8_child_driven_case.py)
 # P1-5's full-case chain: registered so the gate actually collects it - the registration check
 # refuses a module the gate would skip, which is how this line was found
-so101_add_pytest_test(test_act_task8_full_case_chain test/teleop/test_act_task8_full_case_chain.py)
   so101_add_pytest_test(test_launch_contract test/test_launch_contract.py)
   so101_add_pytest_test(test_tile_ai_station_guis test/test_tile_ai_station_guis.py)
   so101_add_pytest_test(test_ai_station_x11 test/test_ai_station_x11.py)

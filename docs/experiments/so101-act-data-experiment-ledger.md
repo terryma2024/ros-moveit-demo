@@ -33467,3 +33467,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   duplicate chain in the teleop harness exists only to be deleted (its strict xfail says exactly that), and the remaining
   P1-5 work is the packet's own evidence framing.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6,
   the final freeze gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1893 — The duplicate chain is deleted, and its own reason is the authority
+
+- **What was removed, and why nothing was lost:**
+  ```
+  git rm src/so101_teleop/test/teleop/test_act_task8_full_case_chain.py
+  src/so101_teleop/CMakeLists.txt:  -so101_add_pytest_test(test_act_task8_full_case_chain test/teleop/…)
+  ```
+  **its own strict xfail said what to do with it:** *"This stays strict so that it fails the suite the moment it starts
+  passing, which is the signal to delete it rather than keep two chains."* **And the chain that passes is the production
+  one (CP-1892: three tests, four corruption negatives, 28.64 s).**
+- **What deliberately stayed:** the harness module `test_task8_child_driven_case.py`. **Only the deleted file imported it**
+  (checked across both test trees), **so it is now unused** - but it also carries work that is not duplicated anywhere else:
+  the ACT-aware driver (CP-1862), the live-epoch reader (CP-1882), the four proofs (CP-1869) and the adoption of the
+  production boundary's methods (CP-1891). **Deleting it is a judgement about what the packet still needs, so it is
+  recorded as a deletion CANDIDATE with that reason rather than removed in the same breath** - **and its own committed
+  history keeps every line of it recoverable.**
+- **State:** **P1-5 is closed by the passing production suite, and the duplicate is gone; the next gates are the CTest
+  reconfigure that must now show one chain rather than two (P1-6), the demo RED's clean re-measurement, the final freeze
+  gate and the re-review packet.** P1-1 through P1-4 CLOSED. **Task-list statuses are unchanged, so they are not
+  re-stated.**
