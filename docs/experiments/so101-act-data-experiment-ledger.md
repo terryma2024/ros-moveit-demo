@@ -11872,3 +11872,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   re-run for GREEN and commit with the plan's four-file list.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-884 — Task 2 structural core GREEN (47 passed); the 28 numeric formulas remain
+
+- **Implemented `act/task8_measurement_formulas.py`** with the plan's documented interfaces
+  (`compute_head_search_fields`, `compute_support_fields`, `build_head_closed_sample`,
+  `build_support_closed_sample`, plus `FORMULA_IDS` and `build_field_report`) and, deliberately, these
+  properties:
+  - **`FORMULA_IDS` is read from the frozen contract v2** rather than duplicated in code, so the contract stays
+    the single source of truth and the per-field equality test cannot drift;
+  - **`require_raw_inputs` refuses labels**: `qualified`, `target_in_view`, `contact_ok`, `stop_confirmed` and any
+    `*_ok` key raise `RAW_EVIDENCE_REQUIRED`, and an empty payload raises it too;
+  - **closed samples carry bare values** (a nested dict for any field raises `CLOSED_SAMPLE_VALUE_INVALID`) with
+    the exact key sets, and `build_field_report` writes one file per field, citing `value`, `unit`,
+    `sample_path` and `sample_sha256` so a later re-check is possible.
+- **Verified:** `test_act_task8_measurement_formulas.py` + `test_act_task8_calibration_aggregator.py` together
+  report **47 passed, rc=0** (`beh-task2-green1.log`).
+- **Stated plainly so the checkpoint is not read as more than it is: the 28 numeric formulas are NOT yet
+  implemented.** `_FORMULAS` is still empty, so `compute_head_search_fields` / `compute_support_fields` raise
+  `FORMULA_NOT_IMPLEMENTED` for any real field. The GREEN above covers the module contract, the contract-driven
+  formula IDs, the label refusal, the closed-sample shapes and the field report - not the arithmetic. The plan's
+  Task 2 Step 1 also requires one boundary-pass and one single-point-violation case **per field**, which land with
+  each formula.
+- **Next:** implement the formulas field by field from the staged design rows in
+  `handoffs/20260929-measurement-protocol-v2-approved/contract-source/` (the verbatim cells give each formula,
+  window, comparator and failure condition), adding each field's two cases, then run GREEN again and commit with
+  the plan's four-file list.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
