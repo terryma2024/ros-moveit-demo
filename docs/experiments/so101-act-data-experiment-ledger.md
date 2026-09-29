@@ -28692,3 +28692,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **The child's full-case driver runs, reaches APPROACH, and the port this harness supplies provisions SEARCH only** - because `_prepare_child_case`'s `ChildPort` is built for a **prefix** case (`stop_after="SEARCH"`, and the fixture's own comment says *"the port provisions SEARCH; the child supports the prefix"*). **So the joined chain cannot carry a sealed artifact because no port in this harness provisions a full case** - which is P1-5 stated as a failure rather than as a reading.
 - **Where the full-case port already exists, and it is not in this package:** `so101_demo_py/test/test_act_task8_nine_phase_case.py::_full_case_port` provisions all nine phases with the production composition (`PhaseCameraMatrixEvaluator`, the per-instant sampling the P1-4 work added) and its scope checks pass. **The GREEN therefore has a known destination rather than a design to invent:** the teleop harness must obtain a port that provisions the full case - either by driving that production composition from this side, or by a seam that lets the demo fixture's port be used here without copying it.
 - **State:** **P1-5 has a committed RED whose boundary runs and fails for the finding's own reason**; P1-4's fixture granularity remains open (CP-1708); the task list carries them; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1715 — The GREEN's destination is a production builder, and the one thing a full case needs comes from the manifest
+
+- **Read, and it answers the RED's failure completely:**
+  ```
+  pick_place_child_port.py:29   def build_pick_place_child_search_port(...)          # the production builder
+  pick_place_child_port.py:38   port = PickPlaceSearchPhasePort(boundary, expert_route_factory=expert_route_factory)
+  pick_place_child_port.py:39   # "APPROACH's inspection authority is built only when the caller supplies the ADMITTED
+                                #  route motion ... A SEARCH-only caller therefore gets no screen and
+                                #  `execute_approach` refuses by name; a full case must pass the admitted document,
+                                #  which is the only source for those values."
+  pick_place_child_port.py:40   route_motion: dict | None = None
+  calibration_motion.py:61      def route_motion_configuration(manifest)             # <- where route_motion comes from
+  ```
+  **So the module the teleop harness lacks is not a missing feature but a missing CALL:** production already builds the port that provisions the full case, and the admitted route motion it needs is derived from **the manifest the case is already frozen by** (`route_motion_configuration(manifest)`). **The test fixture's `ChildPort` subclasses the port and provisions SEARCH alone - which is why the RED failed at APPROACH, by name, exactly as that comment predicts.**
+- **And it settles the GREEN's shape, with no new production code required:** the teleop side must obtain its port from `build_pick_place_child_search_port(...)` with `route_motion=route_motion_configuration(manifest)` and only the bottom external I/O substituted - the same substitution the demo side's `_full_case_port` already performs for its nine-phase fixture. **Whichever side assembles it, the port is production's, not a test's.**
+- **State:** **P1-5's RED is committed and its GREEN has a named destination in production code**; P1-4's fixture granularity remains open (CP-1708); the task list carries them; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
