@@ -23760,3 +23760,18 @@ not an inference of mine.**
   (`_live_window` forwarded alongside the recorder, `add_grid` used when present and `append` otherwise). **No production code was touched.**
 - **State:** the outcome line is captured above for the next read; changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware;
   nothing pushed, nothing deleted.
+
+## CP-1437 — The samples now REACH the window, and the window's own grid rule is the last refusal
+
+- **Milestone, and it is the one P1-5's first half was waiting for:** after routing through the window (`_live_window` forwarded, `add_grid` used)
+  and iterating **`LiveEvidenceWindow.REQUIRED_PHASES`**, the recorder and window **accept the call path and validate the samples themselves** - the
+  refusal is now `TASK8_LIVE_EVIDENCE_GRID_GAP`, **a window rule rather than a shape failure.** The fixture is finally feeding the case's own
+  evidence machinery.
+- **And the rule is precise:** the window admits grid samples only on its own phase list **and its own period** - the live-evidence suite's test uses
+  `physics_step=index`, `sim_time_s=index * 0.1`, but the child's driver constructs the window with **its** period (its `period_s`/`tolerance_s`
+  arguments), so the fixture must use the **driver's** period rather than the suite's numbers. **That is the next edit, and it is a parameter read
+  rather than a shape hunt.**
+- **Two rounds remain.** The edit above is safe and compiles; the runs are deterministic and fast (0.7 s). **If the cap ends first, this is the
+  exact resumption point: the ledger CP-1403 to CP-1437 in order, then the driver's window period.**
+- **State:** changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted; the ~300 GB of
+  deletion candidates untouched.
