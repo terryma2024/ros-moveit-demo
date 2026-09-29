@@ -24826,3 +24826,19 @@ picture in both directions.**
   rather than by a test I wrote to agree with myself.
 - **State:** P1-1, P1-2 and P1-3 are green and committed (HEAD `89d12b8c`). No new session, goal, worktree or stack; nothing pushed, nothing deleted; no
   hardware.
+
+## CP-1489 — P1-4 stage 1: the unprovisioned sequence refuses by name
+
+- **`28 passed`** for the port's own file (`experiments/gate8-p14/stage1.log`), after adding the five protocol methods the runner calls
+  (`set_down`, `detach_moveit`, `planning_attached`, `release_preflight`, `run_retreat_segment`) and naming the phase in `run_phase`'s refusal:
+  **every unprovisioned path now raises `TASK8_PHASE_NOT_PROVISIONED: <method|phase>`** instead of an `AttributeError` or a silent nothing.
+- **Why this is stage 1 rather than a formality:** with the phases being built one at a time, **the difference between "not built yet" and "built and
+  passing" has to be a name, not an absence.** The repository's own history is the argument: a three-key document and an `is not None` guard were both
+  absences that looked like behaviour.
+- **Tests are parametrized over the five methods and the eight phases**, each asserted against its own name - so when APPROACH is implemented, its case must
+  be removed from that list deliberately rather than quietly disappearing.
+- **Next:** APPROACH - the first phase, using the machinery that already exists (`VisibleApproachExpertRoute.prepare/qualify`,
+  `SelectedApproachCandidate.prepare`, `PickPlaceApproachPathScreen.inspect`, and the port's own `validated_search_observation` /
+  `selected_prefix_source` handoff), driven by the runner's `_verify_phase` rather than by a test written to agree with itself.
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress with stage 1 done. No new session, goal, worktree or stack; nothing pushed, nothing deleted;
+  no hardware.
