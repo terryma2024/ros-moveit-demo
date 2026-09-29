@@ -27984,3 +27984,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **Reading 1 keeps the aggregator's rule and puts the check at admission; reading 2 changes the aggregator.** Both are defensible; **reading 1 is what the code's own comment describes** ("the contract's own name for itself"), and it is the one whose blast radius can be measured before editing: every fixture that admits an identity with a placeholder member
   would have to declare the real digest, which is mechanical and countable.
 - **State:** **P1-2 RED in place**; the task list keeps P1-2 in-progress; boundary unchanged and not re-claimed (P1-1's controlled change already means the next boundary needs a new run root); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1673 — P1-2 GREEN: reading 1 is mathematically impossible, and that is what settled the rule
+
+- **The RED named two readings (CP-1672); the code chose between them, and the argument is not a preference:**
+  ```
+  contract_sha256 = H(document \ {contract_sha256})        and     document contains identities
+  identities contains IDENTITY_CONTRACT_MEMBER
+  =>  IDENTITY_CONTRACT_MEMBER == H(document \ {contract_sha256})  is a HASH FIXED POINT
+  ```
+  **An identity member can never equal the bound document's self-digest**, because it lives inside the very document the digest is computed over. **So the consistent rule is the other one:** the batch carries the **identity the contract
+  admitted** - which the bound document already carries verbatim in its `identities` field, and which `load_measurement_contract` **already requires** to equal the caller's mapping (`task8_measurement_contract.py:161-163`). **One rule, already stated twice in the tree; the aggregator was the layer stating a different one.**
+- **What changed:**
+  | where | before | after |
+  | --- | --- | --- |
+  | `task8_measurement_contract` | two similar names, no statement of which is which | **`BOUND_DOCUMENT_DIGEST_KEY`** (integrity, never an identity) and **`IDENTITY_CONTRACT_MEMBER`**, plus `bound_document_digest()` and `admitted_identity()` |
+  | `task8_calibration_aggregator` | compared the batch's member against the document's self-digest | compares it against **the admitted member**; a V1 contract - five-member identity, no contract member - is handled explicitly, since its only self-name is the document digest |
+  | the aggregation receipt | carried the (now removed) local under the name `contract_sha256` | names the **contract document** it aggregated, with the distinction written beside it |
+  | `batch_factory`, `_v2_batch` and one more site | rewrote the member to the document digest | **state their schema's own rule**, which is what the verdict means by removing the rewrite |
+- **And the verdict's end-to-end requirement is now a test, not a claim:** `test_act_task8_identity_contract_end_to_end.py` runs the **formal entry** - no `--driver`, no provider seam - and hands the batch it seals **straight to `aggregate_task8_calibration`**, requiring that it is not refused as foreign; **the foreign-contract negative re-seals the same evidence under an identity naming `"f"*64` and requires the refusal.** Both are green.
+- **Two harness defects of my own surfaced on the way and are fixed rather than worked around:** the seam module name is now **unique per run** (`importlib.import_module` caches by name, so a fixed name handed a later test the earlier test's module), and the recorded marker file keeps a **fixed name beside** the unique module
+  (`with_name`, not `with_suffix` - the latter moved the file name along with the module name and the test read a path nothing wrote).
+- **Evidence:** `204 passed` across the fifteen affected suites (the four P1-2 files plus measurement driver, CLI terminal state, composition contract, runtime descriptor, per-run wiring, formal contexts, live evidence, live qualification, sealed artifact, release-epoch boundary and calibration admission).
+- **State:** **P1-2 complete**; the task list moves P1-2 to done and P1-3 to in-progress; boundary unchanged and not re-claimed (**two controlled source changes have now occurred, so the next boundary needs a new run root**); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
