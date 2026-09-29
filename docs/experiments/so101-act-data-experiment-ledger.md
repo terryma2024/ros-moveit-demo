@@ -20994,3 +20994,21 @@ not an inference of mine.**
   preceding eight checkpoints are mostly reads rather than code.**
 - **State:** HEAD `5e0bd7cc` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten; no stack, no hardware,
   nothing deleted, nothing pushed.
+
+## CP-1276 — The last three names, and the fixture's field set is now exhaustive
+
+- **Read:** `_ActPayload` declares **no fields of its own** (only the frozen/closed config), so `_PickPlacePayload`'s five are
+  the complete payload; the child's constructor is
+  `RclpyActionDriver(*, broker=None, owner: OwnerKey | None = None, stop_timeout_s=None, accept_timeout_s=None, [pick_place_port |
+  task8_port], act_hashes=None, startup_proof_consumer=None)`; and `OwnerKey` is a plain class in `contracts.py:53`, whose members are
+  printed above - the values `_StackOwner`'s four fields must be built from.
+- **So the fixture's inputs are exhaustive and named:** seven artefact files whose digests come from their own bytes, an
+  `ActArtifactBinding` built from those, the environment written by the binding's own `environment()`, `SO101_ACT_CAMPAIGN_ID`, the
+  chain test's `FakePort`, a startup consumer returning a receipt, `owner` from `local_owner(...)`, and an `IpcRequest(operation=
+  "task8_full", payload=_PickPlacePayload(...), deadline_ns=<future>)` whose hash fields are the binding's digests and whose
+  `stack_owner` describes the same owner the child was given.
+- **No further reads are needed.** The next round writes `test_task8_child_driven_case.py` in the teleop test directory (where the
+  child and the reusable port both live), runs it, and reads whatever precondition it fails at - which is exactly what the
+  eight-precondition list exists for.
+- **State:** HEAD `ad8c2f38` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten and fully specified; no
+  stack, no hardware, nothing deleted, nothing pushed.
