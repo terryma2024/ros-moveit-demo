@@ -25753,3 +25753,21 @@ picture in both directions.**
   table. **The world double resolves it the only self-consistent way (the grasp is modelled as clear of the table), and the question is already recorded for the reviewer; nothing here hides it.**
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1546 — Three rules read this round, and the refactor they imply
+
+- **Read, not guessed (CP-1545's instruction), and each one settles a question the guesses could not:**
+  1. **`_SET_DOWN_KEYS` has SEVENTEEN keys**: scope, `physics_step`, `holding_state`, `cup_supported`, `bilateral_contact`, `controller_stopped`, then **`controller_reference_ok`,
+     `joint_feedback_ok`, `planning_attached`, `contact_ok`, `mujoco_ok`, `planning_scene_ok`, `head_rgb_ok`, `wrist_rgb_ok`** - my `set_down` produced **nine**. `_RELEASE_KEYS` has nine and my
+     preflight document already matches it exactly;
+  2. and the runner requires **all eleven flags to be literally `True`**, which means the **eight gates** must be **established** in the set-down document too - not asserted by me, and not omitted;
+  3. **`derive_frame_aggregates` makes `HOLDING` and the frame's `supported` mutually exclusive by construction** (`if bilateral and not supported: holding = "HOLDING"`), while the runner's set-down **and**
+     preflight both require `holding_state == "HOLDING"` **and** `cup_supported is True`. **So the two "supported" notions are different, and the difference is now documented in the code:** the frame's
+     `supported` asks whether the cup still rests on the **world**; the release documents' `cup_supported` asks whether the cup **is not going to fall**, which is true when the gripper holds it.
+     `set_down` and `release_preflight` now report the second: `bilateral_contact or aggregates["cup_supported"]`.
+- **The refactor this implies, and the reason it is the right one:** `set_down` needs the **same eight gates** `sequence_facts` establishes, so the gate construction must be **extracted into one
+  helper** both call - **duplicating it would create the second, weaker copy this batch has already been bitten by twice** (the unvalidatable sealed batch, and the readback validator).
+- **And the honest state of the run:** SEARCH, APPROACH and CLOSE pass inside the nine-phase case; RELEASE's set-down is refused because its document is **missing the eight gates**, which is a wiring gap
+  this round *identified by reading* rather than a contract contradiction - **and the "impossible pair" I briefly believed I had found was my own conflation of two names for two different questions.**
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed (including the support-notion fix); the full-case test remains uncommitted while red, per this batch's rule.
+  No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
