@@ -23197,3 +23197,22 @@ not an inference of mine.**
   one place where the row the port sees is the row I can see.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1400 — The in-boundary probe found it: the receipt and the boundary disagreed by one epoch
+
+- **The probe's four lines, verbatim:**
+  ```
+  [probe] readback keys: ['contact', 'observation', 'reference', 'scene', 'source_received_wall_s', 'source_stamps_s', 'world']
+  [probe] world session/epoch: session-item5 2      <- the ROW says 2
+  [probe] scene diff: []                            <- key sets exact
+  [probe] contact diff: []
+  [probe] paused/truncated/body: False False plastic_cup
+  ```
+  **So the readback the port validates is complete and correctly keyed, and its `world.reset_epoch` is 2 - while the port compares it against
+  `boundary.reset.receipt.new_epoch`, which my fixture had built as 1.** `begin` advances the boundary's epoch **after** the receipt is
+  constructed, so the two drifted by exactly one, and that single comparison was the whole `physical readback scope` refusal.
+- **The fix moves them together:** `begin` now writes the advanced epoch back into `self.reset.receipt.new_epoch`, so the row and the receipt
+  cannot disagree. **No production check was touched, and the probe that found it was three lines inside my own boundary - the fifth time in this
+  item that a counter or a print beat an inference.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
