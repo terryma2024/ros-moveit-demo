@@ -12114,3 +12114,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `test_act_task8_search_binding.py` with generation-carrying expectations.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-894 — Task 4: broker-side calibration enforcement in place (32 passed)
+
+- **`adapters/act/command_broker.py` extended:** `bind_measurement_plan(sha256)` records the plan hash the broker
+  will accept, and `_require_calibration_authority(ticket, kind, goal)` is now called at the top of
+  `_dispatch_locked`'s authorized block. For the calibration role it applies the restricted capability set first,
+  then accepts **only** a byte-matching `arm_probe` (`MEASUREMENT_PLAN_MISMATCH` otherwise) or a `neck_target`
+  carrying a receipt signed for the current generation (`CALIBRATION_BINDING_REQUIRED` otherwise). For every other
+  role the gate is a no-op, so the production submit path is untouched - and the test asserts exactly that.
+- **Verified:** the admission/binding module plus `test_act_control_event_timeline.py` and
+  `test_act_task8_search_binding.py` report **32 passed, rc=0** (`beh-task4-green5.log`).
+- **Two of my own test defects found and fixed, not worked around:** the unknown-operation case expected the
+  operation message while the capability gate legitimately fires first (the test now names the capability), and my
+  fake ticket had the wrong field order - the broker's tuple is `(generation, lease_token, owner, session_id,
+  attempt_id)`, so my first version put `calibration` at the token position and the gate silently treated the
+  caller as a non-calibration role.
+- **Remaining for Task 4's nine-file commit:** keep resource binding in `cli/act_command_broker.py`'s entry and
+  pass the context through; wire the reservation and owner factory through `runtime/launch_composition.py`; carry
+  the admission generation on every acquire, state, command, feedback, stop, retire and cleanup event; and update
+  the two modified test modules with generation-carrying expectations.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
