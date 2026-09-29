@@ -13816,3 +13816,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); the goal
   is armed with a 756-round budget; no runtime, no package gate, no push, no evidence deleted, no hardware; formal
   0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-966 — The sample key set read: which of the five values come from samples and which need raw records
+
+- **Read `_SAMPLE_KEYS` and a sealed sample carries exactly 25 keys:** `case_id`, `session_id`, `attempt_id`,
+  `reset_epoch`, `release_epoch`, `physics_step`, `sim_time_s`, `phase`, `source_stamps_s`,
+  `source_received_monotonic_s`, `raw_records`, `holding_state`, `wrist_frame_valid`, `wrist_target_visible`,
+  `contact_observation_valid`, `bilateral_contact`, `no_fingertip_contact`, `cup_supported`, `released`,
+  `placement_stable`, `cup_support_distance_m`, `end_effector_position_m`, `cup_position_m`, `cup_orientation_xyzw`
+  (with `_SOURCES` = world, scene, contact, head, wrist, arm, neck for the stamp/receipt/record maps, and `_VECTORS`
+  fixing the three vector lengths).
+- **That settles how each of the five live-only values is derived, and where:**
+  | Field | Source within the run |
+  | --- | --- |
+  | `placement_stable_s` | the `sim_time_s` span over which `placement_stable is True` across the FINAL_CHECK samples |
+  | `release_stable_s` | the equivalent stability span over the RELEASE samples |
+  | `retreat_distance_m` | the displacement in `end_effector_position_m` across the RADIAL_RETREAT samples |
+  | `cup_support_distance_m` | the three consecutive pre-open RELEASE samples' `cup_support_distance_m`, floored at zero - but the **exact `bottom_collision`/`table_collision` contact evidence is not a sample key**, so it must come from the sample's `raw_records` (the contact record, whose `relative_path`/`sha256` the recorder already indexes) |
+  | `grasp_occlusion_window_s` | likewise not a sample key: the legitimate gripper-occlusion stretch must be computed from the wrist records referenced in `raw_records` |
+- **So `collect_live_runs` has two layers rather than one:** the three stability/distance fields from the samples
+  directly, and the occlusion window plus the support contact proof from the indexed raw records each sample points at
+  (verified by digest, as the recorder's own reader does). That is the complete specification for the last Task 8
+  step; no further interface is unknown.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation and merge
+  layers green at 27 with this two-layer collection step outstanding; Tasks 9-10 untouched; the goal is armed with a
+  756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
+  candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
