@@ -30626,3 +30626,41 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   by name; its evidence is 18 passing tests across four files.** The remaining work is P1-4, P1-5, P1-6, the demo RED's
   clean re-measurement and the final gate. P1-2 and P1-3 CLOSED; P1-1 second half GREEN. **Task-list statuses are
   unchanged, so they are not re-stated.**
+
+## CP-1803 — P1-4's anatomy: the reason an event happened lives outside the sample that recorded it
+
+- **Read from `task8_live_evidence.py`, and the finding is structural rather than a missing branch:**
+  ```python
+  _SAMPLE_KEYS = (
+      "case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
+      "sim_time_s", "phase", "source_stamps_s", "source_received_monotonic_s", "raw_records",
+      "holding_state", "wrist_frame_valid", "wrist_target_visible", "contact_observation_valid",
+      "bilateral_contact", "no_fingertip_contact", "cup_supported", "released",
+      "placement_stable", "cup_support_distance_m", "end_effector_position_m", "cup_position_m",
+      "cup_orientation_xyzw",
+  )                                                                                    # 24 keys, no `kind`, no `reason`
+  ```
+  and
+  ```python
+  def add_event(self, sample: dict, reason: str = None) -> None:
+      """Append an edge sample; it never counts as a grid point, and it says WHICH edge it is."""
+      …
+      if reason is not None and reason not in ("command", "release", "contact"): …
+  ```
+  **So the reason is accepted, validated, and then kept in `self._event_reasons` - the window's own state - rather than
+  in the sample.** A reader of the sealed per-sample evidence therefore cannot tell which edge a given event sample was,
+  and `event_reasons` is a property of the live object rather than of what was sealed. **That is precisely "event
+  reasons are not sealed."**
+- **And the parts that ARE already disciplined, recorded so the RED does not restate them:** `add_grid` enforces the
+  frozen cadence from SEARCH onwards and refuses a gap, a duplicate or a regression; `add_event` refuses an unknown
+  reason by name; both refuse to append after `seal`. **So P1-4 is not "the sampler has no discipline" - it is that the
+  discipline's outcome (which edge this was, and what the grid's own edges and count are) does not travel with the
+  sealed evidence.**
+- **Which makes P1-4's RED a small, checkable pair:**
+  1. **a sample appended by `add_event(sample, reason=...)` must still be identifiable as that event when the SEALED
+     evidence is read back** - today the sample has no field for it;
+  2. **the sealed evidence must describe its own grid** - its edges and its count - **rather than requiring a reader to
+     recompute them from the samples**, which is the packet's proposal 1 and is a blocker for P1-4/P1-5 rather than a
+     future enhancement.
+- **State:** **P1-4 in progress, its RED specified as the two checks above; P1-1, P1-2 and P1-3 CLOSED.** The demo RED's
+  clean re-measurement, P1-5, P1-6 and the final gate remain.
