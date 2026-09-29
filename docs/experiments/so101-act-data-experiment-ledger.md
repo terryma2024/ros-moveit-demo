@@ -25205,3 +25205,16 @@ picture in both directions.**
   establishes the facts, and the runner's verifier judges the document). **Remaining: the seven phases after it, the nine-phase case reaching FINAL_CHECK, the seal, the full-case journal, and
   the seven indexed assertions with their four negatives.** Each of those phases now has a template rather than a blank page.
 - **State:** P1-1..P1-3 green and committed; APPROACH committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1512 — The facts validator is phase-aware, which is the last shared piece the seven phases needed
+
+- **`47 passed`** after `approach_facts` became **`sequence_facts(phase, snapshot, request, *, support_distance_max_m)`**: the eight gates are established exactly as before (from the
+  readback, never accepted), while each phase's **own** predicates are checked as **necessary** conditions mirrored from the runner - CLOSE must show a bilateral grasp and no
+  fingertip-free state, APPROACH must show the opposite - and **the runner stays the only judge** of whether a phase passed.
+- **Why this is the right shape rather than duplicating the runner:** the runner's `_verify_phase` remains the single authority (CP-1491's rule), while this validator's job is to
+  **refuse a contradiction early** and to name what is missing. Two checks that agree with the judge are a guard; a second judge would be a second source of truth.
+- **And the chain test's stub now mirrors the signature and asserts it is told the phase**, so a future phase cannot quietly be established with another phase's rules.
+- **What the seven remaining phases need, per phase, is now exactly three things:** an execution path in the boundary (through the broker's dispatch, as APPROACH does), the
+  phase's own entry in this validator, and a focused test that lets the runner judge the document. **CLOSE is next** - it needs the gripper dispatch and the bilateral-grasp
+  predicate, both of which are already named here.
+- **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
