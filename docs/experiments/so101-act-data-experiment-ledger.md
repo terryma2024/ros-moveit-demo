@@ -14398,3 +14398,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries held:** no runtime started, no package gate run, nothing pushed, no evidence deleted, no hardware
   touched; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained and
   ineligible with gen4 reserved for Task 10.
+
+## CP-988 — The support rule's weaker-evidence path is explicit and refused by default (50 passed)
+
+- **`support_distance_from_frames` gained `allow_world_distance=False`.** The design's row requires a real active
+  contact for the exact collision pair in each of the three pre-open frames, so that remains the **default** and a
+  frame without the pair is refused (`SUPPORT_CONTACT_REQUIRED`). When a caller genuinely has no contact records, the
+  opt-in lets the frame's own world-derived `cup_support_distance_m` - the value CP-985 traced to
+  `derive_frame_aggregates`, computed from world evidence rather than from a label - stand in, and the test proves the
+  fallback is **never** taken by default.
+- **Why the flag rather than silently preferring whichever is available:** the two are not equivalent evidence. The
+  pair distance proves support contact; the world aggregate does not. Making the weaker path require an explicit
+  argument keeps that difference visible in every call site that takes it - the same reasoning that put the extractors
+  behind an explicit parameter.
+- **Verified: 50 passed, rc=0** (`beh-r580.log`) across the live-qualification and Task 8 runner suites.
+- **State:** Tasks 1-7 complete and green; Task 8's code side complete and green at 50, with the caller-side predicate
+  binding outstanding; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the
+  17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package
+  gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
