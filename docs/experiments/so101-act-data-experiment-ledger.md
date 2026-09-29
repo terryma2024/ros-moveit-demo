@@ -29216,3 +29216,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ```
   **Every reference that states a size and a digest matches the file on disk**, including the four re-synced rows. **The widening to the 46 rows that state a digest (CP-1740) is still outstanding**, as is the canonical copy's freeze/read-back.
 - **State:** **P2: three stale statements and a fourth site corrected; the audit green at 37/0; the auditor widening and the freeze/read-back remain**; P1-1 … P1-5 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1742 — P2 IS COMPLETE: counts decoded from the canonical XML, index 46/0, canonical copy frozen and read back
+
+- **The counts, decoded from the canonical evidence itself rather than quoted:**
+  ```
+  experiments/v4a/teleop-results/so101_teleop/Testing/20260929-1419/Test.xml   (662025 bytes, ctest-3.28.3)
+      CTest <Test> elements: 117
+      decoded across them:   passed=1272  skipped=43  failed=0
+      passed + skipped = 1315
+  ```
+  **So the verdict's three figures are reproduced from the artifact:** 117 CTest outputs, **1315 pytest cases** (1272 passed + 43 skipped), zero failures - and **`1432 = 1315 pytest cases + 117 CTest entries` is a SUM of two levels, not cross-run accumulation**, which is what the packet now says.
+- **The audit, widened to both digest widths (16-hex and the full 64-hex rows):**
+  ```
+  rows stating a digest (16 or 64 hex): 46
+  mismatches: 0
+  ```
+  **46 is exactly the number the verdict's parser reported, and every one of them matches the file on disk** - including the four rows re-synced to the corrected packet, and **including the two the verdict found mismatching.**
+- **And the canonical copy is frozen and read back** (`experiments/task9-package-gate-canonical-freeze.txt`, 971 bytes):
+  ```
+  OK     36458 b0bb2bc784c5f624  handoffs/20260930-task7-onward/task8-astra-rereview-packet.md
+  OK      8604 f7443b35919dcd85  handoffs/20260930-task7-onward/task8-astra-rereview4-verdict.md
+  OK     17580 a13c35bf78605720  experiments/task9-package-gate-evidence-index.md
+  OK    662025 eb1130b8b7f8420e  experiments/v4a/teleop-results/so101_teleop/Testing/20260929-1419/Test.xml
+  read-back: every frozen entry reproduces
+  ```
+  **An independent check on the way:** the verdict file's digest `f7443b35919dcd85…` is **what this ledger recorded when the verdict was first read**, so the freeze confirms both the file and the earlier reading.
+- **State:** **P1-1 … P1-5 and P2 all complete. What remains is the code freeze and ONE complete integration boundary on a NEW run root** (fresh NVMe scratch per leg with TMPDIR/TMP/TEMP verified by that interpreter, MuJoCo-only, CUDA/no CPU fallback, W2 then exact-W8/40, no W4/W6, serial CTest), **then the packet and a further independent GPT-6 Astra / High review**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
