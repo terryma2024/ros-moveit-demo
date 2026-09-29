@@ -24151,3 +24151,16 @@ not an inference of mine.**
 - **Constraints still in force:** no live stack, no MuJoCo run, no CUDA, no actuators, no hardware; no push; nothing deleted and no cleanup (the ~300 GB
   of classified deletion candidates are retained); the owner's dirty work untouched; no self-approval of any review; formal accepted
   Train/Validation/Offline Test still **0/0/0** and `collection_*` **NOT_PROVISIONED**; Task 10 and `runtime-task8l-gen4` deliberately not started.
+
+## CP-1457 — The trusted qualification gate states the bound itself, in its own errors
+
+- **Read (`task8_live_qualification.py:38-64`):** `validate_campaign_summary(summary, *, prefix_count=9, full_count=5)` requires exactly
+  `{status, prefix_count, consecutive_full_count, case_journal_sha256}`, `status == "PASSED"`, **nine prefixes**, **five consecutive fulls**, and one
+  **unique** 64-hex digest per case (14 of them) - each condition with its own refusal code.
+- **Asserted against it (`7 passed` in the focused file):** a complete summary is **accepted**; a run of **prefixes alone** is refused with
+  `TASK8_QUALIFICATION_FULLS_NOT_CONSECUTIVE`; nine digests instead of fourteen with `TASK8_QUALIFICATION_CASE_COUNT_INVALID`; a non-`PASSED` status with
+  `TASK8_QUALIFICATION_NOT_PASSED`; and repeated digests with `TASK8_QUALIFICATION_JOURNAL_DUPLICATE`.
+- **Why this is worth having:** it is the honest **bound** on this fixture's evidence, **stated by the trusted gate rather than by me** - the bounded
+  campaign the repository can actually run **cannot** qualify, and the missing half is exactly the five full cases whose phases are not provisioned. **A
+  reader of the packet no longer has to take my word for the limitation; the qualification code enforces it.**
+- **State:** committed with the focused file green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
