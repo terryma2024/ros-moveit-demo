@@ -18229,3 +18229,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   is a case whose SEARCH rows, release event and FINAL_CHECK come from real code - which is the whole point of Boundary V.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   remain open and independent.
+
+## CP-1153 — The case now runs to completion, and the runner refuses to finish without sealed live evidence
+
+- **The release-epoch reading was the bug, and it came from the loop rather than from any validator:** at `phase == "RELEASE"`
+  the runner first calls `_set_down` then `_release_preflight`, **then falls into the `else` branch** and calls
+  `run_phase("RELEASE")` with **`release_epoch += 1` already applied** - so the RELEASE phase's evidence must carry
+  `release_epoch == 1`, and the retreat and final check carry that epoch onward. My fixture said `0`. With the progression
+  modelled, **RELEASE passes and `run_retreat_segment` is finally called** (`retreat:radial: release_epoch=1 step=11`).
+- **One more gate flag:** the retreat's evidence needed `contact_ok=True` like every other phase's, and then the whole case
+  ran through the production validator: nine phases, the set-down, the preflight, the two retreat segments.
+- **And then the runner refused to finish: `LIVE_EVIDENCE_SEAL_UNAVAILABLE`.** That is not a gap in my fixture - it is the
+  production code refusing to complete a case whose **live evidence was never sealed**. The window the seal needs is created
+  by the **child** (`CaseEvidenceDriver` + `attach(evidence.window)`, CP-1140), and my test drives `PickPlaceRunner` directly,
+  so there is nothing to seal. **So the next step is exactly the integration the plan describes: route this same fake port
+  through the child instead of the bare runner**, and the seal becomes real.
+- **That is the best possible place for this test to be standing:** the fake port now carries a case through every phase and
+  both release contracts, and the only thing left is the evidence path - which is the thing Boundary V exists to assert.
+  The runner's own refusal is the proof that the assertions will be about real artefacts.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  remain open and independent.
