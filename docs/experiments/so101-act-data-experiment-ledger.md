@@ -13187,3 +13187,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   file is untracked and its two failing cases are fixture defects, not production ones; the user's dirty files carry
   my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted,
   no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-940 — Chain test: raw-record contract satisfied; two of my own premises corrected
+
+- **Read the recorder's actual contract instead of guessing again, and it worked:** `source_stamps_s`,
+  `source_received_monotonic_s` and `raw_records` must all carry **exactly** the recorder's own `_SOURCES` keys, and
+  each raw record must be `{"relative_path": <relative, no "..", not absolute>, "sha256": <digest>}`. The fixture now
+  imports `_SOURCES` from the module (so it cannot drift from the schema) and writes a real file per source with its
+  own digest. `TASK8_LIVE_EVIDENCE_SOURCE_MISSING` and `..._RAW_RECORD_INVALID` are both gone.
+- **Two remaining failures are my own premises, diagnosed rather than patched around:**
+  1. `KeyError: 'phase'` - my test assumes the sample dict returned by `build_live_evidence_sample` exposes the phase
+     under that name; the fix is to read the builder's returned keys and use them, which is the same rule applied
+     one level further in;
+  2. `DID NOT RAISE ValueError` in the invalid-seal case - I asserted that an invalidated **window** prevents
+     `recorder.seal()`, but the recorder is deliberately independent of the window's state; the coupling lives in the
+     **port**, which seals (or invalidates) both. The assertion belongs at the port level, or should assert the
+     window's own state instead of borrowing the recorder's.
+- **Value kept from this round:** the fixture now matches a contract read from the source twice over (the `_SOURCES`
+  identity and the raw-record shape), and the recorder's requirements are documented here in one place.
+- **State:** Task 7's module, runner baseline, port, retirement path and journal readback remain green; this test file
+  is untracked with two premise defects outstanding; the user's dirty files carry my additive, uncommitted changes;
+  Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
