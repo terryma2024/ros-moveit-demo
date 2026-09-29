@@ -25661,3 +25661,16 @@ picture in both directions.**
   case identity against the case being driven, which is the next named piece rather than a structural gap.
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; **the interface correction and the full-case test are uncommitted while red**, per this batch's rule. No
   new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1540 — The interface correction is in, and three tests now describe the real contract
+
+- **`67 passed`** across the nine focused demo-side files, committed as `adda872d`.
+- **What changed, and it is a correction rather than an addition:** `execute_approach` takes the case's **frozen selected source** (built by production code - `freeze_selected_search_source` -
+  from the same SEARCH observation the route prepared against) and **refuses by name** (`APPROACH: selected_source`) when it is absent. **The registrar (`_prefix_source_port.register(...)`) stays where it belongs:
+  in the port, which is the component that has the route.**
+- **And the three tests that had encoded my invented contract were rewritten rather than loosened:** the port test's stub accepts the source and asserts the port hands down a **real observation
+  digest** (a 64-hex value, not the one this test would have chosen); the chain test passes a source document built to the **authority's own field set**; and a **new refusal case** proves the method will
+  not build a source from something adjacent. **Loosening the production code to keep the old tests passing would have preserved the assumption and hidden the discovery.**
+- **The full-case run stands where CP-1539 left it** - SEARCH passing inside the run, and the next named piece being the live-evidence window's case identity (`TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH`).
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed, including this correction; the full-case test remains uncommitted while red, per this batch's rule.
+  No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
