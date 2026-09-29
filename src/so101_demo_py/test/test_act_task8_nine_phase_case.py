@@ -201,10 +201,36 @@ class _PrefixExecutor:
         return None
 
     def time_axis(self, ticket, goal_id):
-        return {"bridge_time_s": 1.30, "start_time_s": 1.32}
+        """The two times the path's axis needs, taken from the prefix being EXECUTED.
+
+        P1-4 piece 4: they used to be the literals `1.30`/`1.32` while the case's clock now runs to about 1.7 s, so the
+        observed axis `bridge <= observation < start < first target` could not hold - a fixed value for a quantity that
+        belongs to the run. Reading them from the plan keeps the axis true by construction.
+        """
+
+        origin = self._prefix.get("observation_time_s") if isinstance(self._prefix, dict) else None
+        if not isinstance(origin, (int, float)) or isinstance(origin, bool):
+            return {"bridge_time_s": 1.30, "start_time_s": 1.32}
+        return {"bridge_time_s": origin - 0.05, "start_time_s": origin + 0.05}
 
     def snapshot(self, ticket, goal_id):
-        return self._snapshot
+        """The document the checker hashes, with the two times taken from the SAME plan the axis reports.
+
+        P1-4 piece 4: the checker refuses a snapshot whose `controller_start_time_s` / `controller_bridge.time_s`
+        differ from the request's axis (`PATH_SOURCE_TIME_CHANGED`) - and those were the literals 1.32 / 1.30 while the
+        case's clock now runs past 1.7 s. Two hardcoded times for quantities that belong to the run: they come from
+        the plan here, exactly as `time_axis` does, so the two cannot disagree.
+        """
+
+        origin = self._prefix.get("observation_time_s") if isinstance(self._prefix, dict) else None
+        if not isinstance(origin, (int, float)) or isinstance(origin, bool):
+            return self._snapshot
+        document = dict(self._snapshot)
+        document["controller_start_time_s"] = origin + 0.05
+        bridge = dict(document.get("controller_bridge") or {})
+        bridge["time_s"] = origin - 0.05
+        document["controller_bridge"] = bridge
+        return document
 
 
 def _proof_snapshot(checker):
@@ -253,8 +279,19 @@ def _wide_prefix(prefix):
     # the delay is a fixed convention (0.1 s exactly - any other value is PREFIX_FIRST_TARGET_DELAY_INVALID), and the
     # target sits on the declared grid: origin + delay + interval * 1
     interval, delay = 0.002, 0.1
+    # P1-4 piece 4: the window must cover the CASE, because the capture clock is now monotonic and is no longer
+    # wrapped to stay inside it. The contract puts every target on the declared grid and refuses more than 600 of
+    # them (`PREFIX_SAMPLE_BUDGET`), so 600 is the widest window this contract allows - 0.1 + 1.2 = 1.3 s.
+    count = 600
+    origin = prefix["observation_time_s"]
+    # and the POSITIONS must match the times row for row: widening the window without widening the rows is
+    # `PREFIX_INVALID`, which the APPROACH path reported as a wrapped "execution" failure until the cause was read
+    rows = tuple(prefix["positions"])
+    if not rows:
+        raise ValueError("the fixture's prefix carries no positions to widen")
     return {**prefix, "target_interval_s": interval, "first_target_delay_s": delay,
-            "target_times_s": (prefix["observation_time_s"] + delay + interval,)}
+            "target_times_s": tuple(origin + delay + interval * (index + 1) for index in range(count)),
+            "positions": tuple(rows[index % len(rows)] for index in range(count))}
 
 def _open_limit(screen):
     """The gripper's open position, read from the model's own joint range - the same source the boundary uses."""
@@ -269,6 +306,23 @@ def _open_limit(screen):
     return high if abs(high) >= abs(low) else low
 
 
+def _issue_prefix_source(*, ticket, prefix, source, **kwargs):
+    """Refresh the prefix to THIS plan's observation, sign it, and freeze it.
+
+    The two requirements meet here and nowhere else: the receipt names `prefix_sha256(checked)`, so the prefix must not
+    move after signing - and the header stamp (the readback's `sim_time_s`) must fall inside the prefix's ~0.102 s
+    window, so the prefix must be current AT signing. The boundary hands down the case's frozen selected source, built
+    from the SEARCH observation, so its own time is the plan's observation: refreshing from it and then signing is what
+    production does (a plan is prepared, its prefix signed, and executed), and it is the only shape that satisfies both.
+    """
+
+    # the prefix was refreshed by the last readback (with a LEAD, so the window can contain the header the boundary
+    # takes from its OWN next capture); this seam therefore does not move it again - it signs what will be executed
+    receipt = _receipt(prefix, ticket if isinstance(ticket, tuple) else (7, "owner-key", "act", SESSION, ATTEMPT))
+    _case_capture.prefix_signed = True
+    return receipt
+
+
 def _full_case_port(tmp_path):
     """ONE case's runtime: the real model and its readback, plus the four members the SEARCH path needs.
 
@@ -280,6 +334,11 @@ def _full_case_port(tmp_path):
 
     boundary, calls, _capture, _request = _case()
     screen, prefix, _goals, _checks, sources, _driver, _owner, _events, _qpos, _qvel = physical_inputs()
+    # P1-4 piece 4: ONE construction site for the plan. The executor (which reports the path's time axis), the route
+    # (which executes it) and the readback (which refreshes it) must all hold the SAME object - building it twice left
+    # the executor on a copy that the refresh never reached, which is how a shared quantity turns into two.
+    wide_prefix = _wide_prefix(prefix)
+    _reset_case_clock()          # this case gets its own sequence, not the previous test's
     from test_act_task8_search_port import observation
 
     observed = observation()
@@ -329,13 +388,17 @@ def _full_case_port(tmp_path):
     clock = {"count": 0, "base": None}
 
     def _current_readback(request):
-        raw = _case_capture(sources, prefix, boundary)
-        if clock["base"] is None:
-            clock["base"] = raw["world"].simulation_time_s
+        # the counter advances BEFORE the capture: `_case_capture` reads it to stamp the readback, so advancing it
+        # afterwards meant two phases saw the same instant (measured: step 4 -> 7 with `sim_time_s` fixed at 1.4,
+        # which the grid refuses as a regression)
         clock["count"] += 1
-        # the readback's clock must stay INSIDE the prefix's window (the goal stamp is taken from it), while the GRID's
-        # cadence - one period per sample - is imposed by the add_grid wrapper below. Two different clocks on purpose.
-        moment = clock["base"] + 0.002 * (1 + clock["count"] % 40)
+        _case_clock["count"] += 1
+        raw = _case_capture(sources, prefix, boundary)
+        # P1-4 piece 4: ONE clock. This readback used to compute its own - `0.002 * (1 + count % 40)`, wrapping every
+        # 40 readbacks - while `_case_capture` advanced a different one and the grid wanted 0.1 s per sample. **Three
+        # clocks, and the fixture's own comment called two of them "on purpose".** The readback now carries the time
+        # `_case_capture` produced, so the source clock, the grid's cadence and the plan's window are one sequence.
+        moment = raw["world"].simulation_time_s      # the instant this sample carries, from the one sequence
         stamps = {name: moment for name in ("head", "wrist", "arm", "neck")}
         return {**raw,
                 "world": dataclasses.replace(raw["world"], simulation_time_s=moment),
@@ -346,6 +409,9 @@ def _full_case_port(tmp_path):
                 "source_stamps_s": stamps, "source_received_wall_s": dict(stamps)}
 
     boundary.current_readback = _current_readback
+    # and on the boundary the PORT actually holds: the probe showed `PickPlaceSearchBoundary.current_readback` (the
+    # production method) being called instead, which returned a cached readback - so the clock never advanced and two
+    # phases reported one instant (`GRID_REGRESSION`). One object, named once (CP-1699's family again).
     # the readback's own tolerance and skew: the substituted runtime supplies them, as the port suite's own double does
     boundary.reset.sources.readback.joint_tolerance = 0.002
     boundary.reset.sources.readback.max_skew = 0.02
@@ -376,12 +442,17 @@ def _full_case_port(tmp_path):
         dispatch=lambda ticket, kind, goal: (_world.note_dispatch(kind, goal), 7)[1],
         driver=SimpleNamespace(wait=lambda gid: None),
         ownership=SimpleNamespace(ticket=lambda *parts: (7, "owner-key", "act", SESSION, ATTEMPT)),
-        prefix_executor=_PrefixExecutor(prefix, _proof_snapshot(screen.path_checker)),
+        # the WIDENED prefix, the same object the route executes against: the executor reads its time axis from the plan
+        # it is running, and handing it the narrow one made it fall back to fixed literals (P1-4 piece 4)
+        prefix_executor=_PrefixExecutor(wide_prefix, _proof_snapshot(screen.path_checker)),
         _prefix_source_port=SimpleNamespace(register=lambda *args, **kwargs: None),
         # the receipt is issued against the prefix the caller actually passes down: signing a different (narrower)
         # prefix is what raised PATH_SOURCE_RECEIPT_INVALID, because the prover compares the digest it is handed
-        issue_prefix_source=lambda **kwargs: _receipt(kwargs["prefix"],
-                                                      (7, "owner-key", "act", SESSION, ATTEMPT)))
+        # P1-4 piece 4: signing the prefix FREEZES it. The receipt names `prefix_sha256(checked)`, so a prefix that
+        # moves after the signature stops matching the prefix being executed - `PATH_SOURCE_RECEIPT_INVALID` - and the
+        # refresh below is therefore bounded by this moment, exactly as production bounds it (a plan is prepared, its
+        # prefix signed, and then executed).
+        issue_prefix_source=_issue_prefix_source)
     boundary.reset.act_context = {"lease_token": "lease-1"}
     boundary.reset.receipt = SimpleNamespace(new_epoch=2)
     boundary.screen = screen
@@ -410,7 +481,10 @@ def _full_case_port(tmp_path):
     # the grid can satisfy the recorder: a window ending at 1.4 s falls behind the case's own clock and every
     # APPROACH goal stamp is refused (APPROACH_HEADER_STAMP_INVALID). This opens it wide enough for the run.
 
-    route.__init__(_wide_prefix(prefix))
+    route.__init__(wide_prefix)
+    # and THIS is the object a case executes against: the widened prefix the route holds, not the narrow one it came
+    # from - refreshing the wrong dict was why the header stamp kept failing (the check reads the prefix it is given)
+    _case_capture.prefix = wide_prefix
     port._expert_route = route
     # the WINDOW is bound here, and with it the case's admitted support distance: the distance
     # travels with the evidence attachment, not with the case targets (CP-1550)
@@ -419,17 +493,18 @@ def _full_case_port(tmp_path):
     # consecutive samples to be exactly one period apart, so the sample's stamp is set from the window's own count. In a
     # real case that clock is MuJoCo's, and it has to satisfy the same rule - which is a property of the recorder, not
     # of this fixture.
-    _grid_clock = {"base": None}
-
-    def _stamped_add_grid(sample):
-        if _grid_clock["base"] is None:
-            _grid_clock["base"] = sample["sim_time_s"]
-        stamp = _grid_clock["base"] + 0.1 * (window.grid_count + 1)
-        return real_add_grid({**sample, "sim_time_s": stamp})
-
-    real_add_grid = window.add_grid
-    window.add_grid = _stamped_add_grid
+    # P1-4 piece 4: the add_grid wrapper is GONE. It stamped every sample one period apart because the port produced
+    # one sample per phase from a clock that could not advance; the port now samples at the frozen period from the
+    # readback's own monotonic clock, so the cadence is a property of the acquisition and nothing is rewritten here.
+    # (the widened registration above is the one that matters: this line used to overwrite it with
+    #  the narrow prefix, so the refresh updated a dict no route executes against)
+    port.boundary.current_readback = _current_readback
     return port, calls, boundary, prefix
+
+
+#: one clock for the whole case: `count` advances once per capture, `capture_base` is set from the
+#: first readback's own simulated time (P1-4 piece 4)
+_case_clock = {"count": 0}
 
 
 def _case_capture(sources, prefix, boundary):
@@ -445,12 +520,32 @@ def _case_capture(sources, prefix, boundary):
     index = len(readings)
     readings.append(index)
     raw = sources.capture(prefix["attempt_id"], after_step=0)
+    # `_case_clock` is ONE accumulator for the case: the world's own simulated time advances by whatever the physics
+    # did, while the frozen grid requires consecutive samples exactly one period apart - so the capture clock is this
+    # sequence, and the readback's other fields follow the world as before.
+    if "capture_base" not in _case_clock:
+        _case_clock["capture_base"] = raw["world"].simulation_time_s
+    moment_index = _case_clock["count"]      # advanced by the SAMPLING readback, not by every capture
     step = raw["world"].simulation_step + 1 + index
-    # the capture's clock stays inside the prefix's window too: the APPROACH goal stamp is taken from THIS readback, and
-    # a clock that drifts past the window is refused by name (APPROACH_HEADER_STAMP_INVALID). The step keeps advancing,
-    # which is what the phase rules need; the time wraps within the window, and the GRID's cadence comes from the
-    # add_grid wrapper rather than from either clock.
-    moment = raw["world"].simulation_time_s + (0.002 * (1 + index % 40))
+    # P1-4 piece 4: ONE monotonically increasing source clock, and no rewriting. The capture's time advances by the
+    # frozen period per sample, for the whole case - the prefix window is widened to cover it instead of the clock
+    # being wrapped to fit the window, which is what made the cadence a property of the fixture rather than of the run.
+    moment = _case_clock["capture_base"] + (0.1 * (1 + moment_index))
+    # and the PREFIX is re-issued with every readback, because that is what a prefix IS: a plan issued from the
+    # current observation. The contract fixes its window at `observation_time_s + 0.1 + 0.002` (~0.102 s), and the
+    # header stamp must fall strictly inside it - so a plan left behind by a case that has since run for a second is
+    # refused by name (`APPROACH_HEADER_STAMP_INVALID`). Re-issuing is what production does; this keeps the plan fresh
+    # instead of wrapping the clock to fit an old one.
+    prefix_document = getattr(_case_capture, "prefix", None)
+    if isinstance(prefix_document, dict) and not getattr(_case_capture, "prefix_signed", False):
+        # the CURRENT instant: the boundary takes the header from its own capture, which reports this same moment (the
+        # counter is advanced by the sampling readback before the capture runs). Projecting one step ahead put the
+        # window's start PAST the header - measured: origin 1.45 against header 1.40 - so the plan is placed around the
+        # instant it will actually be executed at.
+        origin = moment - 0.05
+        prefix_document["observation_time_s"] = origin
+        prefix_document["target_times_s"] = tuple(
+            origin + 0.1 + 0.002 * (index + 1) for index in range(len(prefix_document["target_times_s"])))
 
     from so101_demo.core.simulation.types import ContactEvidence
 
@@ -503,9 +598,18 @@ def _case_capture(sources, prefix, boundary):
 
 _case_capture.readings = []
 _case_capture.world = None
+# the one sequence is per CASE, not per process: module-level state carried this case's clock into the next one,
+# which is why a single case sealed cleanly while the suite failed (measured: one case -> ten samples exactly one
+# period apart and `sealed fine`; the same case inside the suite -> TASK8_LIVE_EVIDENCE_GRID_GAP)
+_case_clock["count"] = 0
 
 
-_case_capture.readings = []
+def _reset_case_clock():
+    """Start a fresh sequence for the case that is about to run."""
+
+    _case_clock.clear()
+    _case_clock["count"] = 0        # `clear()` alone left the reader below with no key at all (KeyError: 'count')
+    _case_capture.readings = []
 
 
 def test_the_runner_runs_the_whole_case_and_reports_which_phases_completed(tmp_path):
