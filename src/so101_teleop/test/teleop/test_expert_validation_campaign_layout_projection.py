@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -1045,3 +1046,80 @@ def test_a_retry_binding_that_names_no_selection_or_a_mismatched_digest_refuses(
     assert read_selection_binding(
         _campaign_upstream_binding(batch_root, RETRY_BATCH_ID, RETRY_CAMPAIGN_ID)
     )["original_catalog_sha256"] == SHA_CATALOG
+
+
+# --- Astra P2: the three scenarios that must end in a refusal, a non-zero exit and an INVALID ledger row -----------
+
+
+def _projection_refusal(call):
+    """Run a projection that must refuse, and return the refusal's own words.
+
+    The assertion in each scenario below is WHICH refusal names it, not merely that something failed - so the helper
+    returns the message and the tests match it.
+    """
+
+    try:
+        call()
+    except Exception as error:                     # noqa: BLE001 - the refusal's type varies by layer
+        message = f"{type(error).__name__}: {error}"
+        print("[refusal]", message[:200])
+        return message
+    raise AssertionError("the projection completed where it had to refuse")
+
+
+def test_a_corrupted_seal_refuses_the_projection(tmp_path):
+    """Scenario 1: the sealed workspace's bytes no longer match the digest the journal committed."""
+
+    batch_root, sealed_by_point = _write_coordinator_batch(tmp_path)
+    sealed, digest = next(iter(sealed_by_point.values()))
+    manifest = sealed.path / "attempt_result_manifest.json"
+    original = manifest.read_bytes()
+    # the seal marks its files read-only, so breaking the seal means breaking that protection first - which is exactly
+    # what the scenario models, and its existence is a fact worth having in the test
+    os.chmod(manifest, 0o600)
+    manifest.write_bytes(original + b"\n")
+
+    service, store, _root = _service(tmp_path)
+    try:
+        message = _projection_refusal(lambda: service.get_campaign(CAMPAIGN_ID))
+    finally:
+        store.close()
+    # READ, not guessed: all three scenarios are refused by the campaign projection's own code, and the finding that
+    # they SHARE one name is recorded in the ledger rather than hidden by three differently-worded assertions
+    assert "UPSTREAM_PROJECTION_INVALID" in message, message
+
+
+def test_cleanup_contamination_refuses_the_projection(tmp_path):
+    """Scenario 2: something left inside the sealed workspace after the seal."""
+
+    batch_root, sealed_by_point = _write_coordinator_batch(tmp_path)
+    sealed, _digest = next(iter(sealed_by_point.values()))
+    os.chmod(sealed.path, 0o700)                    # the sealed workspace is read-only too
+    (sealed.path / "left-behind.tmp").write_bytes(b"a file that was not there when the workspace was sealed")
+
+    service, store, _root = _service(tmp_path)
+    try:
+        message = _projection_refusal(lambda: service.get_campaign(CAMPAIGN_ID))
+    finally:
+        store.close()
+    assert "UPSTREAM_PROJECTION_INVALID" in message, message
+
+
+def test_a_foreign_identity_refuses_the_projection(tmp_path):
+    """Scenario 3: a sealed attempt whose identity is not the case being projected."""
+
+    batch_root, sealed_by_point = _write_coordinator_batch(tmp_path)
+    sealed, _digest = next(iter(sealed_by_point.values()))
+    # change ONE of the attempt's identity fields in its own recorded request, which is what the projection compares
+    accepted = sealed.path / "pose_accepted.json"
+    os.chmod(accepted, 0o600)
+    document = json.loads(accepted.read_bytes())
+    document["request"]["point_id"] = "another-point"
+    accepted.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+
+    service, store, _root = _service(tmp_path)
+    try:
+        message = _projection_refusal(lambda: service.get_campaign(CAMPAIGN_ID))
+    finally:
+        store.close()
+    assert "UPSTREAM_PROJECTION_INVALID" in message, message
