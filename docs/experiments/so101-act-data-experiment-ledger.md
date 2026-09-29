@@ -27823,3 +27823,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The packet's historical numbers were checked as well and are honestly framed:** CP-1472's `5651 demo / 1266 teleop / 116 CTest` appear only in the earlier addenda, Addendum 3 carries *"the batch's numbers … are deliberately not reused"*, the withdrawal of
   `Testing/20260929-1252` is stated, and the RE-RUN banner carries the current three legs. **The 116 → 117 difference is explained in the packet by the registration this batch committed.**
 - **State:** the packet is reference-verified and internally consistent; the re-review request stands; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1666 — Weakness 1 is a CHOICE the fixture makes, and the alternative is now costed
+
+- **CP-1626 concluded that the demo fixture cannot establish source-record cadence because the prefix's grid is contractually 0.002 s. Reading the contract's default clause changes that from a wall into a price:**
+  ```
+  contracts.py:86-90
+      interval = .1                                  <- the DEFAULT
+      if "target_interval_s" in value:
+          interval = finite(value["target_interval_s"])
+          if interval != .002:
+              raise ContractError("PREFIX_TARGET_INTERVAL_INVALID")
+  ```
+  **The 0.002 s grid applies only when a prefix DECLARES `target_interval_s`; the default is 0.1 s - the recorder's own period.** And the demo fixture **declares** it
+  (`test_act_task8_nine_phase_case.py:247-254`, `_wide_prefix`), which is precisely why its clock cannot step 0.1 s and why the stamp has to be rewritten.
+- **So the honest statement is not "this cannot be established" but "this fixture chose the grid that prevents it".** A prefix **without** the key lets a case clock satisfy the recorder's cadence **from the world clock**, bounded by the contract's own
+  sample budget (`len(times) > 600` when the key is present). **The cost is a wider prefix window and a re-done fixture; the benefit is a cadence claim that is measured rather than imposed.**
+- **And that is what the review request now asks**, in place of an open question: *resolve weakness 1 by re-doing the fixture on the
+  default 0.1 s grid, or accept the current bounded assertion?* **A reviewer can answer a costed choice; an open question just comes back.**
+- **State:** the request is updated and its index row re-stamped; **weakness 2 remains the genuine "the substitution cannot express it" case** (its port reports one epoch while the runner verifies per phase); goal
+  **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
