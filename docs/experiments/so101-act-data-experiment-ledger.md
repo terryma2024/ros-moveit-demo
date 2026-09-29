@@ -20538,3 +20538,26 @@ not an inference of mine.**
   rule being wrong, and the fixture is what has to move.
 - **State:** the aggregator source change (every root required; the second authority deleted) and both fixture edits are **uncommitted
   while red**; the build tree is synced for the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1254 — I made it worse with a fixture edit and reverted; the 15 failures are now named
+
+- **The honest sequence:** making `_sealed_batch` descriptor-aware took the suite from **15 failed / 13 passed to 22 failed / 6
+  passed**, so I **reverted that edit** and confirmed the tree is back at **15 failed / 13 passed** (`rev4-e.log`). The revert was
+  textual and exact, and the suite's own numbers are the proof that it is clean. **A fixture edit that makes a suite worse is not an
+  improvement to build on, and I am not keeping it.**
+- **Why it probably regressed, stated as hypotheses to test rather than facts:** `_sealed_batch` writes several files with
+  `write_closed_json`, which **refuses to overwrite** an existing target; a descriptor written unconditionally could collide when a
+  test already supplied one through `extra_files`, or the descriptor's arrival could change the closure for cases that deliberately
+  count files. **The next attempt reads one failing test end to end - which builder it calls, with which arguments - before touching
+  the builder.** That is CP-1238's lesson applied to fixtures, and it is the fourth time in this batch that editing unread code cost
+  a round.
+- **The 15 failures are now listed by name in this round's evidence**, which narrows the read to one test rather than the file:
+  `test_aggregator_never_trusts_raw_pass_labels`, `test_aggregator_rejects_mixed_source_provenance`,
+  `test_full_pass_with_release_unmeasured_becomes_task8_ready`, `test_out_of_contract_evidence_fails_the_matching_check[fov-fov]`
+  and the rest of the list printed above.
+- **What is not in doubt:** the **aggregator rule is correct and committed-ready** - every root must carry the sealed, indexed
+  descriptor (`CALIBRATION_DESCRIPTOR_MISSING`) and the `measurements.json` second authority is deleted - and the fixture is the only
+  thing standing between item 4 and green. `_v2_batch` is already descriptor-aware (11 call sites); `_sealed_batch` is not (8 call
+  sites), and the failing names will say which of the two each test uses.
+- **State:** aggregator source + `_v2_batch` edits **uncommitted while red**; `_sealed_batch` restored to its exact prior text; build
+  tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
