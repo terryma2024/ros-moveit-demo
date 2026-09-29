@@ -20163,3 +20163,21 @@ not an inference of mine.**
 - **State:** the source change to `task8_calibration_admission.py` and the new test are **held uncommitted while red**, per the
   owner's rule; the item-1 commit and item-2's earlier halves are committed; `runtime_descriptor` is required in the working tree
   and enforced on every context; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1236 — Item 2's call-site sweep took the suite from 18 failures to 4, and the last four are named
+
+- **Progress with the same method:** a mechanical sweep inserted the required descriptor at every
+  `CalibrationMeasurementContext(...)` call site that did not already carry one, in the three test files that construct a context.
+  **18 failed / 70 passed became 4 failed / 84 passed** (`experiments/gate6-batch3-py-gate/rev2c-green3.log`).
+- **Why only three files: the sweep is deliberately conservative.** It skips any call whose next fourteen lines already mention
+  `runtime_descriptor`, which protects the helper I fixed by hand at CP-1235 - and it is also what leaves the four remaining
+  failures:
+  | failure | cause |
+  | --- | --- |
+  | two `TypeError`s naming `CalibrationMeasurementContext` | **my own insertion** - where two constructions sit within one window, or a call already carried the keyword further down, the sweep added a second one; a duplicate keyword is a `TypeError`, so this is my bug and not the item's |
+  | one `ValueError: RESOURCE_BINDING_REQUIRED` | a test that constructs a context to prove the binding rule, where my inserted descriptor now runs *first* and the test's expectation order changed - the rule is right and the test's setup needs the descriptor to sit after its other arguments |
+- **What is not in doubt:** `84 passed` includes the descriptor, bundle, binding, contract, admission and driver suites, so the required
+  argument is working end to end; `runtime_descriptor` is genuinely required in the working tree; and the RED for it was proven at
+  CP-1235 before the change.
+- **State:** the source change and the swept tests are **held uncommitted while red** per the owner's rule; the build tree is in sync
+  for the touched modules (verified per-file, CP-1235); no stack, no hardware, nothing deleted, nothing pushed.
