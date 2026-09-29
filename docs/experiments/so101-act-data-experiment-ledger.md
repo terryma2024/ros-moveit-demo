@@ -13233,3 +13233,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   and artifact-lifecycle chain test all green; the user's dirty files carry my additive, uncommitted changes;
   Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-942 — The plan's Task 7 verification command passes (51 passed)
+
+- **Ran the plan's own Step-4 command** - `src/so101_demo_py/test/test_act_task8_live_evidence.py`,
+  `src/so101_teleop/test/teleop/test_task8_case_execution.py`,
+  `src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py` - from the worktree root with the test
+  interpreter, `TMPDIR/TMP/TEMP` set to the fresh verified scratch `scratch-r535.8A2L` and bytecode writing disabled:
+  **51 passed, rc=0, elapsed 1 s** (`beh-task7-step4.log`).
+- **All Task 7 increments green together:** module 37 (76 with phase camera and renderer), runner baseline 14, port
+  attachment plus grid feed 81, retirement-path invalid seal 40, journal-row readback 10, artifact-lifecycle chain
+  test 13 - and now the plan's own combined command at 51.
+- **Handoff updated** with the consolidated Task 7 status: what is committed, which three files carry my additive
+  changes **uncommitted** inside the user's dirty set (with the explicit instruction not to `git add` them whole), and
+  the one genuinely remaining piece - the full-chain test through the teleop fixtures keeping `run_pick_place_case()`,
+  owner start/finish, `ros_child._run_pick_place()`, `PickPlaceRunner`, artifact validation and journal publication
+  real while faking only external ROS topics, MuJoCo/controller I/O and process launch.
+- **State:** Tasks 1-6 committed and green; Task 7 substantially complete with the artifact lifecycle proven end to
+  end; Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED; gen3 retained and ineligible, gen4 reserved for Task 10.
