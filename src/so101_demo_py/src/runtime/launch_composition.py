@@ -2345,6 +2345,10 @@ def _configured_task_station_actions(context):
             from ..act.calibration import require_qualified
             require_qualified(json.loads(report.read_text()))
             broker_options += ["--calibration-report", str(report)]
+            context_path = LaunchConfiguration("act_calibration_context").perform(context)
+            if context_path:
+                # the entry-bound calibration context travels to the launched broker, which binds the plan hash
+                broker_options += ["--calibration-context", str(context_path)]
         timing_keys=("act_submit_lead_s","act_accept_timeout_s","act_stop_timeout_s","act_permit_ttl_s")
         timing=[LaunchConfiguration(key).perform(context) for key in timing_keys]
         if any(timing):
@@ -2573,6 +2577,7 @@ def build_task_station_launch_description(*, act_profile: bool = False) -> Launc
                DeclareLaunchArgument("act_broker_socket", default_value=[LaunchConfiguration("task_evidence_root"), "/ipc/a"]),
                DeclareLaunchArgument("act_calibration_mode", default_value="true", choices=("true", "false")),
                DeclareLaunchArgument("act_calibration_report", default_value=""),
+               DeclareLaunchArgument("act_calibration_context", default_value=""),
                DeclareLaunchArgument("act_motion_calibration_manifest", default_value=""),
                DeclareLaunchArgument("act_contact_diagnostic_manifest", default_value=""),
                DeclareLaunchArgument("act_visible_approach_manifest", default_value=""),

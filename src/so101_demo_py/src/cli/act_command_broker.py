@@ -22,6 +22,7 @@ def main(arguments=None):
     parser.add_argument('--lease-timeout-s',type=float,required=True)
     parser.add_argument('--calibration-report',type=Path)
     parser.add_argument('--calibration-mode',action='store_true')
+    parser.add_argument('--calibration-context',type=Path)
     parser.add_argument('--motion-calibration-manifest',type=Path)
     parser.add_argument('--contact-diagnostic-manifest',type=Path)
     parser.add_argument('--visible-approach-manifest',type=Path)
@@ -133,6 +134,13 @@ def main(arguments=None):
     driver=broker=server=provisions=motion_guard=None
     stop=None
     try:
+        calibration_context=None
+        if options.calibration_mode and options.calibration_context:
+            from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+            calibration_context=CalibrationMeasurementContext(
+                **json.loads(options.calibration_context.read_text()))
+            if calibration_context.generation!=options.session_id:
+                raise ValueError('CALIBRATION_CONTEXT_GENERATION_MISMATCH')
         driver=RosBrokerDriver(node,stop_velocity_rad_s=speed,max_age_s=age)
         provisions=ControllerReservationProvisions.publish(os.environ,options.session_id)
         reservation_port=ControllerReservationClient(
@@ -141,6 +149,8 @@ def main(arguments=None):
         broker=CommandBroker(driver,ownership=Ownership(lease_timeout_s=options.lease_timeout_s),
                              simulation_session_id=options.session_id,
                              reservation_port=reservation_port)
+        if calibration_context is not None:
+            broker.bind_measurement_plan(calibration_context.measurement_plan_sha256)
         if motion_manifest is not None:
             from so101_demo.adapters.act.calibration_motion import RosCalibrationMotionGuard
             motion_guard=RosCalibrationMotionGuard(node,driver,broker,motion_manifest,evidence_root=Path(options.socket).parent)
