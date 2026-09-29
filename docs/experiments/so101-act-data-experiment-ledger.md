@@ -20618,3 +20618,19 @@ not an inference of mine.**
      construction), which need the same descriptor treatment.
 - **State:** the aggregator source change, `_v2_batch`'s descriptor default and the `batch_factory` descriptor are all **uncommitted
   while red**; build tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1258 — Down to 3 failures, and the last two are not the fixture's fault
+
+- **Progress, in numbers, all from fixture edits:** `15 → 4 → 11 → 3` failures as I (a) gave `batch_factory` a descriptor,
+  (b) retried `_sealed_batch` descriptor-awareness, (c) made that write **idempotent** - the retry collapsed with
+  `CLOSED_JSON_EXISTS` because that builder is called twice on one root, which was exactly the hypothesis CP-1254 recorded and could
+  not then confirm. Now **`3 failed / 25 passed`** (`rev4-i.log`).
+- **And the remaining two `KeyError: 'head_search'` are mine, in the aggregator, not in the fixture:** I made the fixture accept both
+  descriptor shapes and the error did not move, so the missing key is read from the **published sample** - i.e. from the block I edited
+  at CP-1252 when I deleted the second authority. **The region is printed above** (the `if sealed_descriptor is not None:` block and
+  whatever my `else: raise` insertion did to its structure), and verifying that **is the next read** - my own edit, from four rounds
+  ago, is the prime suspect rather than the tests.
+- **The third failure is the CLI-seal test**, still asserting `(batch / "batch.json").is_file()` - the old owner in test form, to be
+  rewritten as it was in the contract suite (CP-1250).
+- **State:** aggregator source `_v2_batch`/`batch_factory`/`_sealed_batch` edits all **uncommitted while red**; build tree synced for
+  the aggregator; no stack, no hardware, nothing deleted, nothing pushed.
