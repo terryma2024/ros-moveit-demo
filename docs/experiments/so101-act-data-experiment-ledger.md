@@ -32680,3 +32680,40 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   that proof has both a production builder and existing test constructions to follow.** P1-1 through P1-4 CLOSED. The demo
   RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so
   they are not re-stated.**
+
+## CP-1867 — The template, read in full, with the one correction the harness must make
+
+- **`test_act_visible_approach_expert_route.py` builds the native-ingress proof in twelve lines, and that is the shape:**
+  ```python
+  native = {
+      "selected_source_sha256": digest,
+      "reference_window_sha256": reference_hash,
+      "control_event_window_sha256": event_hash,
+      "owner_generation": TICKET[0], "stop_confirmed_wall_s": stop_wall_s,
+      "latest_source_receipt_monotonic_ns": 10_000_000_000,
+      "ingress_sequence_by_controller": {kind: snapshot["ingress_sequence"] for kind, snapshot in snapshots.items()},
+      "native_snapshots": snapshots, "native_ingress_window_sha256": "c" * 64,
+      "commit_window_ingress_recheck_required": True,
+      "command_authority": False, "eligible_for_collection": False,
+  }
+  observed = replace(observed, stationary_physics_proof=physical, stationary_reference_proof=references,
+                     local_owner_goal_proof=owner, native_controller_ingress_proof=native)
+  ```
+- **And the one correction, which is the whole difference between that test and this drive:**
+  `"native_ingress_window_sha256": "c" * 64` is a **placeholder** - the test's own suite never runs the registration
+  check that compares it with `native_ingress_digest(native["native_snapshots"])` (CP-1865). **So the template is right in
+  its twelve members and wrong in that one value, and the harness must compute it:**
+  ```python
+  "native_ingress_window_sha256": native_ingress_digest(snapshots)     # not "c" * 64
+  ```
+  **which is exactly the discipline this work has applied throughout** - CP-1863's `hazard_reason` was a value
+  production reads and the fixture answered with a method; CP-1851's `neck_yaw_rad` was `0.1` where every other suite
+  said `0.0`; **and here a placeholder hash survives in a suite that never compares it.** In all three cases the fixture
+  was internally consistent **for the tests it was written for**, and became wrong only when the whole chain ran.
+- **So the next edit is this construction, in the harness, with real snapshots and the real digest** - and the fixtures'
+  snapshots have to come from the segment's own evidence rather than from a dict written to satisfy the two fields the
+  check reads.
+- **State:** **P1-5 in progress: the native-ingress proof's template is read, its one placeholder identified, and the edit
+  that follows is specified down to the value that must be computed rather than asserted.** P1-1 through P1-4 CLOSED. The
+  demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
+  unchanged, so they are not re-stated.**
