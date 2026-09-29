@@ -25358,3 +25358,19 @@ picture in both directions.**
 - **And the aggregate tension stays where it belongs:** from MICRO_LIFT onward the cup is off the table, so `HOLDING` means what the runner's contract says it means; **only CLOSE (CP-1518) needs a
   decision that is not mine to make.**
 - **State:** P1-1..P1-3 green and committed; SEARCH, APPROACH and CLOSE committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1521 — The motion phases aim at admitted targets, and the phase flags are established rather than asserted
+
+- **`42 passed`** across the CLOSE test, the port, the APPROACH execution and the path screen.
+- **`_motion_facts` is the shape CP-1520 predicted, and it is three pieces of which only the middle is external:**
+  1. the target from **`resolve_motion_targets(sample, template).for_state(...)`** - validated and workspace-checked by that production code, with the cup sample built from the readback's own `object_state`;
+  2. the joint row from **an IK seam this method names and refuses without** - turning a TCP pose into joint positions is a solver's job, not a guess;
+  3. the facts from the phase-aware validator, after the dispatch through the broker's `arm` kind and the wait through the driver's own.
+- **And the phase flags stopped being `False` literals.** `cup_off_table`, `micro_lift_confirmed`, `released`, `placement_stable` and `retreat_stable` are now **established from the same readback the gates come from** -
+  off the table means not supported; lifted means the aggregates call it `HOLDING`. **That is exactly why MICRO_LIFT onwards agrees with the aggregate rules while CLOSE needed its own care (CP-1518): the
+  aggregates' definition of HOLDING is precisely "held and off the table".**
+- **`RELEASE`, `RADIAL_RETREAT` and `FINAL_CHECK` refuse by name** until they are given the release epoch's evidence and the place target's tolerances - **because reporting `released` from the aggregates alone
+  would be a weaker claim than the runner's predicate asks for, and a weaker claim that looks like a pass is the failure mode this batch exists to prevent.**
+- **Next:** the MICRO_LIFT test with a real `DynamicPickTemplate` and a stub IK, judged by the runner - then TRANSPORT and ALIGN follow the same path, and the release phases need their epoch evidence designed.
+- **State:** P1-1..P1-3 green and committed; SEARCH, APPROACH and CLOSE committed; MICRO_LIFT/TRANSPORT/ALIGN implemented, MICRO_LIFT's test next. No new session, goal, worktree or stack; nothing pushed,
+  nothing deleted; no hardware.
