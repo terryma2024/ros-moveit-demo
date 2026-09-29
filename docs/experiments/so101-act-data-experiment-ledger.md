@@ -15889,3 +15889,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   side, with its port side already committed and tested; Task 9's single failing module awaits the (b1)/(b2) choice
   (CP-1035); Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no
   evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1044 — A negative result worth recording: the epoch is not where I predicted
+
+- **Looked for the reset boundary's epoch accessor in the two places CP-1043 pointed, and neither has it:**
+  - there is no `src/adapters/act/pick_place_reset_boundary.py`, so my assumed path for the class was wrong;
+  - `ros_child.py`'s only epoch is **`service_epoch`** from `CHILD_SERVICE_EPOCH_ENV` (`:660-683`), which is the child's
+    **service identity**, a different concept from a simulation reset epoch.
+- **What that rules out, cleanly:** the driver's `reset_epoch` cannot be taken from the child's service identity, and it is
+  not sitting in `ros_child.py` at all. Combined with CP-1043's finding that it is validated as simulation evidence
+  (`core/grasp_outcome.py`, `core/contact_policy.py`), the value has to come from the **reset witness** the simulation
+  side produces - which means the next read is the reset boundary class itself, at whatever path actually defines it
+  (the grep for `class PickPlaceResetBoundary` above is that lookup, run rather than guessed).
+- **Why this is recorded as a result rather than hidden:** it is the second time in three rounds that a predicted location
+  was empty, and both times the cheap check - a grep for the symbol, not for the file I expected - is what caught it. The
+  ledger's value here is that the next round starts from "read the class, wherever it lives" instead of from my
+  assumption about where it lived.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller's port side is committed and tested, and its
+  child side is now down to reading one class definition to find how a reset epoch is witnessed; Task 9's single failing
+  module awaits the (b1)/(b2) choice (CP-1035); Task 10 blocked until the 17 search values are reviewed. No runtime, no
+  formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
