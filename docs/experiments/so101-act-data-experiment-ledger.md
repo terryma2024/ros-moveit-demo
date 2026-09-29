@@ -17746,3 +17746,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   other shape with `HEAD_SEARCH_CONFIG_INVALID` and I do not want to test the wrong document.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The recording half of the
   hand-off remains the only piece that needs the owner's authorisation for a live stack.
+
+## CP-1131 — The call site cannot be wired yet: the runtime config is an opaque digest, and no descriptor document exists anywhere
+
+- **Read the entry before writing the call, and the premise of CP-1130 did not hold:** `act_prepare_pick_place_validation.py` uses
+  `--runtime-config` **only** as `runtime_config_sha256=_digest_regular_file(args.runtime_config)` - an opaque file whose
+  digest goes into provenance. It never parses it, and it is not the binding's
+  `{"schema_version": 1, "head_search": {detector, camera, motion}}` document. So "the entry already takes both documents"
+  was true of the **filenames** and false of the **shapes**, and the one-call-site plan does not survive contact with it.
+- **What is actually missing, stated once and completely:** nowhere in the production path does a **runtime head-search
+  descriptor document** exist. It is not written by the measurement driver (CP-1117), it is not parsed by the preparation
+  entry (this checkpoint), and the binding that would consume it has no caller (CP-1129). The recording half, the transport
+  and the checking half are all absent together - which is exactly what the user's Correction 3 said about the Task 1
+  contract never reaching the Task 5/6/7 production path, and it is why my last three rounds kept finding one missing link
+  after another: they are links of a chain that was never built.
+- **So the honest next step is a decision, not a patch, and I am not going to invent it:** *which document is the
+  authoritative runtime head-search descriptor, and where is it produced?* The candidates visible in the tree are (a) a new
+  document emitted by the launch path from the same configuration the detector/camera/motion are constructed from, bound by
+  digest into the batch at measurement time and into the preparation entry at check time, or (b) an extension of the
+  existing opaque `--runtime-config` file, parsed rather than only digested, whose `head_search` block the binding then
+  validates. Both are real designs; they differ in who owns the file and what the review should see. Choosing silently would
+  put a fabricated provenance document into the protocol, which is the one thing this boundary exists to prevent.
+- **What I can still do without that decision, and will:** keep verifying the artefacts that do exist (the four documents,
+  the receipt, the manifest consumers), and prepare the RED for the check so that the moment the descriptor's source is
+  named, the change is one call site plus one fixture - not a redesign.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware.
