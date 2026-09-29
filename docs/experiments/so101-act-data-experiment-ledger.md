@@ -14258,3 +14258,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   and raw-access layers green at 34; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval
   outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no
   runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-982 — The five extractors are bound to their evidence (35 passed)
+
+- **Implemented `live_extractors(*, occluded, release_stable, placement_stable, retreat_qualifying,
+  cup_collision_geom, support_frames=None)`:** it assembles the five field extractors that `collect_live_runs` needs,
+  wiring each rule to the predicate that supplies its raw evidence - the occlusion predicate (which must accept only
+  CLOSE..RELEASE frames whose occluder owner is an approved group-0 visual geom), the two stability predicates, the
+  retreat qualifier, and the case cup's bottom collision geom, with an optional frame builder for the support rule.
+  Every one of the five rules reads evidence the sample keys do not carry, so passing it in explicitly is what keeps
+  the requirement visible at the call site; the factory refuses an unnamed collision geom
+  (`CUP_COLLISION_GEOM_REQUIRED`).
+- **Two of my own fixture expectations were wrong and were corrected against the rules' actual behaviour**, each in a
+  way that confirmed the implementation: my retreat fixture had the gripper *leaving* the cup on the first frame
+  rather than starting at it (so the baseline was already displaced), and I expected the support rule's
+  `SUPPORT_CONTACT_REQUIRED` where it correctly refuses earlier with `SUPPORT_FRAMES_REQUIRED` - no window, no distance.
+- **Verified: 35 passed, rc=0** (`beh-task8-green22.log`).
+- **Remaining in Task 8:** the final welding - call `collect_live_runs` with these extractors, pass the runs through
+  `derive_live_measurements` and `build_qualified_measurements` inside `build_task8_qualified_report`, write the
+  document, read it back and call `require_qualified(report)`; plus the production extractors that read the raw contact
+  and wrist records through `make_raw_reader`.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation, collection,
+  raw-access and extractor layers green at 35; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one
+  approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval);
+  no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
