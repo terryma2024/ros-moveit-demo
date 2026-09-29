@@ -20358,3 +20358,25 @@ not an inference of mine.**
   closure exact, `anchors` a non-empty list, `batch_sha256` from the **contract's** canonicalisation, written with `write_closed_json`,
   and the CLI's second seal removed with its `INVALID`/cleanup semantics kept.
 - **State:** HEAD `2c3a8a19` plus this checkpoint; no source changed yet for item 3; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1245 — Item 3 mid-rewrite: the RED is proven, 7 tests pass, and two named causes remain
+
+- **RED proven at the true boundary first:** driving the **real** driver's `run(...)` with fake collaborators and handing its output
+  to `validate_closed_batch` raised **`BATCH_INVALID`** (`rev3-red.log`) - the stray `index` key and the missing `batch_sha256`,
+  exactly as CP-1242 predicted. **No `rglob`, no hand-built document, no second seal.**
+- **Then the rewrite, in the driver:** `identity` is now a required constructor argument validated by
+  `MeasurementIdentity.require` (the ten-member document travels CLI → composition → driver instead of being invented);
+  `_seal` builds the schema's document (`BATCH_KIND`, keys from `_BATCH_REQUIRED`, the passed identity, `anchors` as a list),
+  adds `batch_sha256` computed with **the contract's `_canonical`** (CP-1244), and writes it with the schema's `write_closed_json`;
+  and `run` now **indexes `runtime-descriptor.json`** so the closure can be exact. The hand-rolled `O_EXCL`/`fsync`/`os.link` block
+  is gone. `19 failed / 2 passed` became **`14 failed / 7 passed`**.
+- **Two causes remain, both named, neither guessed:**
+  1. `KeyError: 'index'` - the **existing** driver tests read `batch["index"]`, the private provenance table the old seal wrote. It is
+     **not** a legal key under `_BATCH_KEYS`, so the rewrite cannot simply keep it: **the provenance rows need an indexed home of
+     their own** (a file the batch's `files` map names), and where that home is has to be read from the schema and the aggregator
+     rather than chosen by me. This is the one design question item 3 still has.
+  2. three `TypeError`s - further `Task8MujocoMeasurementDriver(...)` constructions in the same test file that my `_driver` patch
+     did not touch (the count is printed above), i.e. the same call-site sweep item 2 needed, done by hand this time.
+- **State:** the driver source changes are **uncommitted while red**; the test file is parse-verified; the build-tree copy of the
+  driver has been synced for this round and **must be re-synced after any further `src/` edit**; no stack, no hardware, nothing
+  deleted, nothing pushed.
