@@ -21159,3 +21159,27 @@ not an inference of mine.**
   a small cohort, not a measurement.
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1284 — Every key set the policy pair needs, and the fixture is now pure writing
+
+- **Read from `contact_policy.py`:**
+  ```python
+  _PAYLOAD_KEYS = frozenset({"schema_version", "policy_id", "thresholds", "evaluation",
+      "allowed_other_contact_bodies", "mujoco_version", "model_sha256", "scene_sha256",
+      "motion_policy_sha256", "source_evidence_sha256", "collector_sha256", "live_collector_sha256",
+      "analyzer_sha256", "config_sha256"})
+  _THRESHOLD_KEYS = frozenset({"minimum_bilateral_force_n", "maximum_compression_distance_m",
+      "maximum_safe_force_n", "maximum_hold_linear_speed_m_s", "minimum_stable_hold_duration_s"})
+  _EVALUATION_KEYS = frozenset({"maximum_observation_age_s", "minimum_consecutive_samples"})
+  _RECEIPT_KEYS = frozenset({"policy_fingerprint", "source_evidence_sha256", "approved_by",
+      "approval_reference", "approved_at", "evidence_root"})
+  ```
+  and `REGIMES` is the tuple at `contact_calibration.py:22`.
+- **So the fixture's policy support is now fully determined:** a payload with exactly those fourteen keys (thresholds and evaluation
+  themselves closed), a proposal whose `status` is `DISABLED`, whose `policy_fingerprint` is **computed by the production function**
+  from that payload, whose `source_evidence_sha256` repeats the payload's, and whose cohort counts and per-regime live confusion rows
+  match the shapes the validator demands; and a receipt with exactly the six receipt keys naming the same fingerprint and evidence.
+- **Nothing is left to read.** The next round writes that support into `test_task8_child_driven_case.py`, runs it, and reads whatever
+  condition it names next - which is how the last six failures have been resolved, each one inside a production check.
+- **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
+  deleted, nothing pushed.
