@@ -24,6 +24,9 @@ class FakeStack:
         self.launched, self.closed, self.cleanups = [], [], []
         self.fail_on = fail_on
 
+    def readback(self, anchor):
+        return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
+
     def launch(self, anchor):
         self.launched.append(anchor)
         if anchor == self.fail_on:
@@ -147,6 +150,9 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
         def __init__(self):
             self.launched, self.closed, self.cleaned = [], [], []
 
+        def readback(self, anchor):
+            return {"session_id": f"session-{anchor}", "reset_epoch": 1, "attempt_id": f"attempt-{anchor}"}
+
         def launch(self, anchor):
             self.launched.append(anchor)
 
@@ -262,3 +268,64 @@ def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
     document = json.loads(Path(sealed).read_text())
     assert document["status"] == "INVALID"
     assert "contaminat" in json.dumps(document).lower(), "a failed cleanup is recorded as contamination"
+
+
+def test_rows_carry_the_stack_readback_rather_than_a_synthesized_identity(tmp_path):
+    """Boundary II: session, reset epoch and attempt come from the stack's readback, not from the anchor ordinal."""
+
+    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+
+    class Stack:
+        def launch(self, anchor):
+            pass
+
+        def readback(self, anchor):
+            return {"session_id": f"session-{anchor}", "reset_epoch": 7, "attempt_id": f"attempt-{anchor}"}
+
+        def close(self, anchor):
+            pass
+
+        def cleanup(self, anchor, generation):
+            return {"cleaned": anchor}
+
+    class Clock:
+        def monotonic(self):
+            return 0.0
+
+    driver = Task8MujocoMeasurementDriver(
+        stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
+        controller=lambda command: {"accepted": True},
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+    batch = tmp_path / "batch"
+    driver.run(_measurement_context(tmp_path), batch)
+    row = json.loads((batch / "anchors/default/geometry-00.json").read_text())
+    assert row["session_id"] == "session-default"
+    assert row["reset_epoch"] == 7
+    assert row["attempt_id"] == "attempt-default"
+
+
+def test_a_stack_without_readback_is_refused_by_name(tmp_path):
+    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+
+    class Stack:
+        def launch(self, anchor):
+            pass
+
+        def close(self, anchor):
+            pass
+
+        def cleanup(self, anchor, generation):
+            return {"cleaned": anchor}
+
+    class Clock:
+        def monotonic(self):
+            return 0.0
+
+    driver = Task8MujocoMeasurementDriver(
+        stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
+        controller=lambda command: {"accepted": True},
+        phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0})
+    sealed = driver.run(_measurement_context(tmp_path), tmp_path / "batch")
+    document = json.loads(Path(sealed).read_text())
+    assert document["status"] == "INVALID"
+    assert "READBACK" in json.dumps(document), "a stack that cannot report its identity fails closed by name"

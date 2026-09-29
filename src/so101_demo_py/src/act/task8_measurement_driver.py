@@ -47,10 +47,12 @@ class Task8MujocoMeasurementDriver:
         root.mkdir(parents=True, exist_ok=True)
         anchors, failure = [], None
         for ordinal, anchor in enumerate(ANCHORS):
-            identity = {"session_id": f"{context.generation}-{anchor}", "reset_epoch": ordinal + 1,
-                        "attempt_id": f"attempt-{ordinal + 1}", "anchor": anchor}
+            identity = {"anchor": anchor}
             try:
                 self.stack.launch(anchor)
+                # the session, reset epoch and attempt are the stack's own readback: an ordinal is not an identity,
+                # and a stack that cannot report them fails closed before a single row is written
+                identity = self._read_identity(anchor)
                 self._acquire(root, anchor, identity, ordinal)
             except Exception as error:                      # a failed anchor stops every later anchor
                 failure = (anchor, identity, type(error).__name__, str(error))
@@ -83,6 +85,24 @@ class Task8MujocoMeasurementDriver:
             return ({"requested": requested, "status": "REFUSED", "error": type(error).__name__,
                      "message": str(error)}, f"CLEANUP_REFUSED: {type(error).__name__}")
         return ({"requested": requested, "status": "CONFIRMED", "result": result}, None)
+
+    def _read_identity(self, anchor: str) -> dict:
+        """Read this anchor's real session, reset epoch and attempt from the stack, or fail closed by name."""
+
+        readback = getattr(self.stack, "readback", None)
+        if not callable(readback):
+            raise ValueError("MEASUREMENT_READBACK_REQUIRED: the stack cannot report session, reset epoch and attempt")
+        report = readback(anchor)
+        if type(report) is not dict:
+            raise ValueError("MEASUREMENT_READBACK_REQUIRED: readback is not a mapping")
+        identity = {"anchor": anchor, "session_id": report.get("session_id"),
+                    "reset_epoch": report.get("reset_epoch"), "attempt_id": report.get("attempt_id")}
+        for name in ("session_id", "attempt_id"):
+            if not isinstance(identity[name], str) or not identity[name]:
+                raise ValueError(f"MEASUREMENT_READBACK_REQUIRED: {name}")
+        if type(identity["reset_epoch"]) is not int or identity["reset_epoch"] < 0:
+            raise ValueError("MEASUREMENT_READBACK_REQUIRED: reset_epoch")
+        return identity
 
     def _acquire(self, root: Path, anchor: str, identity: dict, ordinal: int) -> None:
         """Record ten geometry samples and one raw frame per phase - all provenance, no judgement."""
