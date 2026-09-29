@@ -23729,3 +23729,15 @@ not an inference of mine.**
 - **The one question that unblocks everything:** whether to submit items 1-4 now (with P1-5 documented as above) and re-approve P1-5 as its own
   round, or to continue the tail first. **The ledger's recommendation is to submit now** - CP-1397, CP-1414, CP-1419 and CP-1428 all say the same
   thing, and the arithmetic has only become clearer since.
+
+## CP-1435 — Neither evidence hook has a caller inside the two packages, which sharpens the handoff
+
+- **Searched, both hooks:** `CaseEvidenceDriver.observe` is defined but **called nowhere** in `so101_teleop/so101_teleop` or `so101_demo_py/src`
+  (only the unrelated `goal.observe()` in `safety.py` and the child's `bind_live_evidence` attach appear), and `PickPlaceSearchPhasePort.record_evidence`
+  likewise has only its definition (CP-1421). **So in the real stack the caller of both sits outside these two packages** - the files that mention
+  them are printed above - **and the fixture's job is therefore to stand in for that caller, not to find a missing production path.**
+- **Which makes P1-5's remaining first-half work unambiguous:** the substituted boundary (or the test driving the child) must build the readback
+  `fields` and call the driver's `observe(...)` itself - **the same relationship a real stack's operator or action server has to the port.** With
+  `event=True` for the gripper-open command, that also creates the event record the reviewer's first assertion reads.
+- **State:** HEAD is this checkpoint's commit; step 1's changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing
+  pushed, nothing deleted.
