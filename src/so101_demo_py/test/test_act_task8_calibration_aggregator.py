@@ -641,3 +641,24 @@ def test_a_v2_render_is_byte_identical_when_repeated_and_publishes_once(tmp_path
     assert {name: Path(path).read_bytes() for name, path in second.items()} == snapshot
     assert sorted(str(path.relative_to(out)) for path in Path(out).rglob("*") if path.is_file()) == listing
     assert len(snapshot) == 4, f"the four canonical documents, saw {sorted(snapshot)}"
+
+
+def test_the_receipt_vouches_for_every_document_the_aggregation_publishes(tmp_path):
+    """Boundary IV item 1: the receipt is the index of a publication, so no document may be missing from it."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _v2_batch(tmp_path / "batch", contract)
+    outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
+    receipt = json.loads(Path(outputs["aggregation_receipt"]).read_text())
+
+    import hashlib as _hashlib
+    digests = set(receipt[key] for key in receipt if key.endswith("_sha256") and isinstance(receipt[key], str))
+    for name, path in outputs.items():
+        if name == "aggregation_receipt":
+            continue
+        assert _hashlib.sha256(Path(path).read_bytes()).hexdigest() in digests, \
+            f"the receipt vouches for {name}"
