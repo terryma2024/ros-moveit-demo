@@ -25,6 +25,21 @@ from .pick_place_search_segment import PickPlaceSearchObservation
 #: `world`, `scene` and `contact` are the capture's own documents; the synchronizer's observation carries the head and
 #: wrist frames and the arm/neck state vector (`synchronizer.py:83-91`), so the four streams are recorded from what the
 #: capture actually measured rather than from a name that has no document.
+#: the closed evidence document the runner accepts for a phase (its own _EVIDENCE_KEYS); a test asserts the two sets
+#: are equal, so this mirror cannot drift without a failure
+_PHASE_EVIDENCE_KEYS = frozenset({
+    "phase", "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
+    "planning_ok", "controller_reference_ok", "joint_feedback_ok", "contact_ok",
+    "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok",
+    "manual_intervention", "moveit_recovery", "holding_state", "bilateral_contact",
+    "micro_lift_confirmed", "cup_off_table", "cup_supported", "released",
+    "no_fingertip_contact", "placement_stable", "retreat_stable",
+})
+_SEQUENCE_PHASES = ("APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN",
+                    "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")
+_PHASE_GATES = ("planning_ok", "controller_reference_ok", "joint_feedback_ok", "contact_ok",
+                "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok")
+
 _RAW_DOCUMENTS = ("world", "scene", "contact", "head", "wrist", "arm", "neck")
 
 
@@ -483,8 +498,15 @@ class PickPlaceSearchPhasePort:
             self._stop_or_raise("TASK8_PHASE_SCOPE_MISMATCH", request)
             raise PickPlaceSearchPortError("TASK8_PHASE_SCOPE_MISMATCH")
         if phase != "SEARCH":
-            self._stop_or_raise("TASK8_PHASE_NOT_PROVISIONED", request)
-            raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
+            # the eight sequence phases share one path: the boundary executes, the port validates and stamps scope
+            if phase not in _SEQUENCE_PHASES:
+                self._stop_or_raise("TASK8_PHASE_NOT_PROVISIONED", request)
+                raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
+            try:
+                return self._sequence_evidence(phase, request)
+            except BaseException:
+                self._stop_or_raise("TASK8_PHASE_NOT_PROVISIONED", request)
+                raise
         if self._searched:
             raise PickPlaceSearchPortError("TASK8_SEARCH_ALREADY_STARTED")
         self._searched = True
@@ -536,6 +558,40 @@ class PickPlaceSearchPhasePort:
 
     def run_retreat_segment(self, *args, **kwargs):
         raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment")
+
+    def _sequence_evidence(self, phase: str, request: dict) -> dict:
+        """Assemble one sequence phase's evidence from the boundary's own facts, or refuse by name.
+
+        The split is the one SEARCH already proves (CP-1490): the boundary EXECUTES the phase and reports what it
+        observed; the port stamps the scope, refuses anything incomplete, and hands the document to the runner, whose
+        `_verify_phase` remains the only judge of the per-phase semantics.
+        """
+
+        execute = getattr(self.boundary, "sequence_phase", None)
+        if not callable(execute):
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
+        try:
+            facts = execute(phase, request)
+        except PickPlaceSearchPortError:
+            raise
+        except Exception as error:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}") from error
+        if type(facts) is not dict:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: not a mapping")
+        document = {"phase": phase, "session_id": request["session_id"], "attempt_id": request["attempt_id"],
+                    "reset_epoch": self.boundary.reset.receipt.new_epoch, "release_epoch": 0, **facts}
+        if set(document) != _PHASE_EVIDENCE_KEYS:
+            raise PickPlaceSearchPortError(
+                f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: keys {sorted(set(_PHASE_EVIDENCE_KEYS) ^ set(document))}")
+        if any(document[gate] is not True for gate in _PHASE_GATES):
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: gate")
+        if document["manual_intervention"] is not False or document["moveit_recovery"] is not False:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: intervention")
+        if document["holding_state"] not in ("EMPTY", "HOLDING"):
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: holding unknown")
+        if type(document["physics_step"]) is not int:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: step")
+        return document
 
     def safe_stop(self, reason: str, request: dict) -> bool:
         return self.boundary.safe_stop(reason, request) is True

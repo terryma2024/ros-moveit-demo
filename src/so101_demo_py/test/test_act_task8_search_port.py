@@ -354,3 +354,78 @@ def test_the_unprovisioned_sequence_phases_refuse_by_their_own_name(phase):
 
     with pytest.raises(PickPlaceSearchPortError, match=f"TASK8_PHASE_NOT_PROVISIONED: {phase}"):
         port.run_phase(phase, request())
+
+
+# --- P1-4: the sequence phases, judged by the RUNNER's own verifier -----------------------------------------
+
+def _sequence_facts(step, **overrides):
+    """The facts a boundary reports for one sequence phase: everything but the scope the port stamps."""
+
+    facts = {"physics_step": step, "planning_ok": True, "controller_reference_ok": True,
+             "joint_feedback_ok": True, "contact_ok": True, "mujoco_ok": True,
+             "planning_scene_ok": True, "head_rgb_ok": True, "wrist_rgb_ok": True,
+             "manual_intervention": False, "moveit_recovery": False, "holding_state": "EMPTY",
+             "bilateral_contact": False, "micro_lift_confirmed": False, "cup_off_table": False,
+             "cup_supported": True, "released": False, "no_fingertip_contact": True,
+             "placement_stable": False, "retreat_stable": False}
+    facts.update(overrides)
+    return facts
+
+
+def test_the_port_mirrors_the_runners_evidence_key_set_exactly():
+    """One mirror, checked: the port's closed key set must equal the runner's own, or a drift is a failure here."""
+
+    from so101_demo.act.pick_place_runner import PickPlaceRunner
+    from so101_demo.adapters.act.pick_place_search_port import _PHASE_EVIDENCE_KEYS
+
+    assert _PHASE_EVIDENCE_KEYS == PickPlaceRunner._EVIDENCE_KEYS
+
+
+def test_an_approach_phase_produces_evidence_the_runner_accepts():
+    """APPROACH through the port, judged by `PickPlaceRunner._verify_phase` rather than by this test's opinion."""
+
+    from so101_demo.act.pick_place_runner import PickPlaceRunner
+    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPortError
+
+    port, _events = fixture()
+    seen = []
+
+    def sequence_phase(phase, request):
+        seen.append(phase)
+        return _sequence_facts(20 + len(seen))
+
+    port.boundary.sequence_phase = sequence_phase
+    bind(port)
+    port.begin(request())
+    search = port.run_phase("SEARCH", request())
+    approach = port.run_phase("APPROACH", request())
+
+    assert seen == ["APPROACH"], "the boundary executed exactly the phase asked for"
+    assert approach["phase"] == "APPROACH"
+    assert approach["session_id"] == SESSION and approach["attempt_id"] == ATTEMPT
+    assert approach["reset_epoch"] == 2 and approach["release_epoch"] == 0
+
+    # the judge is the runner's own verifier, driven offline (its _scope is a staticmethod and its key set a class
+    # attribute), so a document only passes if the runner would have accepted it in a real run
+    runner = PickPlaceRunner(port)
+    step = runner._verify_phase("APPROACH", approach, request(), reset_epoch=2, release_epoch=0,
+                                after_step=search["physics_step"])
+    assert step == approach["physics_step"] > search["physics_step"]
+
+
+def test_a_sequence_phase_with_a_false_gate_or_a_missing_key_is_refused_by_name():
+    """Fail closed before the runner sees it: an incomplete document names what is wrong."""
+
+    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPortError
+
+    port, _events = fixture()
+    answers = {"gate": _sequence_facts(21, contact_ok=False),
+               "keys": {key: value for key, value in _sequence_facts(21).items() if key != "released"}}
+    port.boundary.sequence_phase = lambda phase, request: answers.pop(next(iter(answers)))
+    bind(port)
+    port.begin(request())
+
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_PHASE_EVIDENCE_INVALID: APPROACH: gate"):
+        port.run_phase("APPROACH", request())
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_PHASE_EVIDENCE_INVALID: APPROACH: keys"):
+        port.run_phase("APPROACH", request())
