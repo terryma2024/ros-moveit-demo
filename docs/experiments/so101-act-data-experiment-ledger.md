@@ -32142,3 +32142,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   CP-1847's index hypothesis retracted, and the diagnostic removed from the source as before.** P1-1 through P1-4
   CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1849 — Both sides of the neck disagreement are named, with their files
+
+- **The trace, from the refusal backwards:**
+  ```
+  pick_place_search_port.py:399   abs(neck - result["neck_yaw_rad"]) > tolerance
+  pick_place_readback.py:188      measured = (*observation["state"][:6], audit["neck_yaw_rad"])
+  ```
+  **so the result's `neck_yaw_rad` is the readback's `audit["neck_yaw_rad"]` - a value the FIXTURE supplies** - while
+  `neck` is `scene["qpos"][sweep.neck_qpos]`, and **both the scene and the audit come from the segment suite's doubles**:
+  ```
+  src/so101_demo_py/test/test_act_task8_search_segment.py      <- `_Scene`, `_Adapter`, `_locked`, `_raw`, the audit
+  src/so101_teleop/test/teleop/test_task8_child_driven_case.py <- `_ChildSources(_Sources)`, `_Boundary`, `_segment` use
+  ```
+  with the teleop harness inserting the segment suite's directory on `sys.path` (its own convention, CP-1829).
+- **And the reason the doubles can disagree at all is the finding P1-5 has been circling for many rounds:** the segment
+  suite's tests exercise **the segment**, where `audit["neck_yaw_rad"]` and the scene's qpos need only satisfy the
+  segment's own rules - **the PORT's `_search_evidence` neck check has never been applied to them.** So a fixture whose
+  audit says `0.1` while its scene is all zeros was never wrong *for its own suite*; **it becomes wrong the moment the
+  chain is driven through the port, which is exactly what no test had done.**
+- **Which is why the repair belongs where the port's contract lives, and it is small either way:** the two values must
+  agree within `sources.readback.joint_tolerance` (0.002 rad), so either the audit reports the neck the scene holds
+  (**zeros**) or the scene holds the neck the audit reports (**0.1**). **The production meaning decides it:** `qpos` is
+  the physics state and the audit is what was measured from it, **so the physics state is the authority and the audit
+  should report it** - unless the audit's `0.1` is itself the more faithful value, which reading the two builders will
+  settle.
+- **State:** **P1-5 in progress; the neck refusal's two sides are named with their files and the deciding rule is stated
+  (the scene is the physics state, the audit reports it).** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
