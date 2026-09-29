@@ -231,7 +231,17 @@ class Task8MujocoMeasurementDriver:
             if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
                 x1, y1, x2, y2 = (float(value) for value in bbox)
                 boxes.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2, "accepted": True})
-        measurements = {field: boxes for field in measurements_section} if boxes else {}
+        from so101_demo.act.task8_measurement_formulas import DOCUMENT_EVIDENCE_FIELDS
+
+        measurements = {}
+        if boxes:
+            for field in measurements_section:
+                if field in DOCUMENT_EVIDENCE_FIELDS:
+                    # this family reads a document: the principal point beside the boxes it is measured against
+                    measurements[field] = {
+                        "K02": float((detection or {}).get("image_width", 0)) / 2.0, "bboxes": boxes}
+                else:
+                    measurements[field] = boxes
         configured = {field: entry.get("configured_limit")
                       for field, entry in measurements_section.items() if isinstance(entry, dict)}
         return {"measurements": measurements, "configured": configured}

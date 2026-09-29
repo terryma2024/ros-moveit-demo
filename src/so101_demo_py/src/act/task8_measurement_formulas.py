@@ -160,6 +160,13 @@ def _limit(raw: dict, field: str):
     return configured[field]
 
 
+#: fields whose formula reads its evidence as a DOCUMENT (`evidence["K02"]`, `evidence["bboxes"]`) rather than as a
+#: list. P1-2 (rereview 5) needed this because a driver cannot present one shape for both families; the tuple is
+#: asserted against the formulas' own behaviour by `test_act_task8_measurement_formulas_shapes.py`, so it is a
+#: declaration that cannot drift from the code it describes.
+DOCUMENT_EVIDENCE_FIELDS = ("center_deadband_px",)
+
+
 def _evidence(raw: dict, field: str):
     evidence = raw["measurements"].get(field)
     if evidence is None:
