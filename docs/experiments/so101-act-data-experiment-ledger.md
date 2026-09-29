@@ -27657,3 +27657,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | **CTest** | not yet run (serial, as the owner requires) | **NO** |
   **The boundary is therefore NOT reported as green.** Two legs are outstanding: the teleop failures must be understood and fixed or explained, and the serial CTest leg has not run.
 - **State:** item 7 continues with concrete next steps; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1656 — The teleop leg's two failures were socket-path LENGTH, and the numbers say so
+
+- **The two failing tests, read from the 117 per-test result files (`1315 tests, 2 failures, 0 errors`):**
+  1. `test_act_ros_child` - **`ValueError: CONTROLLER_RESERVATION_SOCKET_PATH_TOO_LONG`**, with `tmp_path` under the leg's scratch;
+  2. `test_expert_validation_retry_owner_reconcile` - `assert 'RETRY_OWNER_ACTIVE' == 'VALIDATION_RECOVERY_REQUIRED'`, a second symptom of the same environment limit rather than a behaviour change.
+- **And the cause is measurable, which is why the fix is a path and not a code change:**
+  ```
+  v4 leg scratch : /data/.../experiments/final-boundary-v4-20260929-220050/teleop-scratch/tmp   124 chars
+  v3 leg scratch : /data/.../experiments/final-boundary-v3c-teleop-20260929-212804/tmp          117 chars   <- passed
+  new short scratch: /data/.../experiments/v4a/t-teleop                                          84 chars
+  ```
+  **The suite builds AF_UNIX sockets under `tmp_path`, and the registered evidence root is long by rule**, so a leg whose scratch sits 7 characters deeper than the last green run crosses the platform's socket-path limit. **The teleop leg now uses an 84-character scratch under the same registered root, and the demo leg was unaffected because its base comes from `SO101_IPC_SOCKET_BASE`.**
+- **This is the fourth environment-limit finding of the boundary work** (the IPC base not existing, `AF_UNIX path too long` in the demo leg, `colcon` needing the workspace root, and now this) - **and every one of them looked like a test failure until the number was read.** **None was a defect in the code under test.**
+- **State:** the teleop leg is re-running on the short scratch; the CTest leg follows; the boundary is not reported green until all three legs are; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
