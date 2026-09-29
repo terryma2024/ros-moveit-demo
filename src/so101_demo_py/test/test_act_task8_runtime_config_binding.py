@@ -43,5 +43,5 @@ def test_a_runtime_config_that_allows_cpu_fallback_is_refused(tmp_path):
 
     inputs = _inputs(tmp_path)
     _write(Path(inputs.runtime_config), _runtime_document(cpu_fallback=True))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="TASK8_PREPARATION_CUDA_REQUIRED"):
         prepare_task8_bundle(inputs, tmp_path / "bundle")
