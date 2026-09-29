@@ -28909,3 +28909,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | `test_the_index_chains_to_complete_canonical_records` | `sample_count == len(samples)` **and** the count is the case's own (ten grid + ten events), not the literal 10 |
   | `test_the_indexed_phases_…` | the cadence is checked on the grid entries via `validate_evidence_grid`, which is the function that exists for exactly that |
 - **State:** **P1-4: the artifact's contract is untouched, the three restatements are specified against measured values, and one packet proposal is recorded**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1727 — Four suites fully green: P1-4's fixture half has landed
+
+- **The run, after the three restatements were written against what the artifact carries:**
+  ```
+  14 passed in 96.95s
+  test_act_task8_nine_phase_case.py  test_act_task8_sealed_raw_sources.py
+  test_act_task8_sealed_artifact.py  test_act_task8_live_epoch_and_edges.py
+  ```
+  **All four green, including the P1-4 RED file itself** (`live_epoch_and_edges`: the per-phase epoch, the terminal identity, and *"the port feeds EDGE events beside the frozen grid"*).
+- **What the three restatements say, each as the rule it was approximating:**
+  | was | now |
+  | --- | --- |
+  | "each capture must name its own raw record" over **every entry** | **per PHASE** - the index also lists the case's edge additions, which name their grid sample's capture by design |
+  | `sample_count == len(samples) == 10` | **the case's own count**: `sample_count == len(samples)`, the entries cover exactly the runner's phases, and the retreat's second segment is on top |
+  | the cadence over **every entry's** stamps (with a docstring describing a fixture wrapper that no longer exists) | **the grid's cadence** with the edge additions folded in, and a docstring that now describes the one-clock fixture piece 4 built |
+- **And the whole migration in one line:** the fixture now runs **one monotonic source clock, no timestamp rewriting, one construction site for the plan, and no readback without a sample** - and the case it drives **records ten grid samples exactly one period apart, ten edge additions beside them, and seals.**
+- **State:** **P1-4's fixture half green on its four suites; the wider eleven-suite set is running**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.

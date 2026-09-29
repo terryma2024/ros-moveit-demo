@@ -46,17 +46,22 @@ def test_every_sample_names_its_own_raw_sources(tmp_path):
     """A constant name per source means one phase overwrites another's evidence."""
 
     index, artifact = _sealed(tmp_path)
-    per_source = {name: [] for name in SOURCES}
+    # The rule is PER PHASE - "a constant name per source means one phase overwrites another's evidence" - and the
+    # sealed index now also carries the case's edge additions, which name the grid sample's capture by design
+    # (`add_event`: "it never counts as a grid point"). So the check is that the case's PHASES do not share a
+    # capture, which is what the measurement supports: one grid sample per phase, each with its own file.
+    per_source = {name: {} for name in SOURCES}
     for entry in index["samples"]:
         record = json.loads((artifact.parent / entry["relative_path"]).read_bytes())
         for name in SOURCES:
-            per_source[name].append((record["raw_records"][name])["relative_path"])
+            per_source[name].setdefault(record["phase"], (record["raw_records"][name])["relative_path"])
 
-    duplicates = {name: paths for name, paths in per_source.items() if len(set(paths)) != len(paths)}
-    assert not duplicates, (
-        "each capture must name its own raw record: "
-        + ", ".join(f"{name} has {len(set(paths))} distinct path(s) for {len(paths)} samples"
-                    for name, paths in duplicates.items()))
+    shared = {name: phases for name, phases in
+              ((name, [phase for phase, path in by_phase.items()
+                       if list(by_phase.values()).count(path) > 1]) for name, by_phase in per_source.items())
+              if phases}
+    assert not shared, (
+        "each phase must name its own raw record: " + ", ".join(f"{name}: {sorted(phases)}" for name, phases in shared.items()))
 
 
 def test_every_samples_recorded_digest_still_matches_the_bytes_it_names(tmp_path):
