@@ -20855,3 +20855,31 @@ not an inference of mine.**
   around it. **Two greps, then the fixture.**
 - **State:** HEAD `ee72440d` plus this checkpoint; item 5's fixture unwritten but no longer uncertain; items 1-4 complete and committed;
   no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1269 — The last unknowns are closed; item 5's fixture recipe is complete
+
+- **Read:**
+  ```python
+  _HASHED = ("source", "manifest", "runtime_config", "collection_config", "calibration_report")
+  _PATHS  = _HASHED + _POLICY
+  def verify_environment(cls, environment): binding = cls.from_environment(environment); binding.verify(); return binding
+  def environment(self) -> dict[str, str]: ...     # writes EVIDENCE_ROOT, POLICY_FINGERPRINT, <NAME>_PATH, <NAME>_SHA256
+  def read_hashed_json(self, name): ...            # refuses any name outside _HASHED
+  ```
+  **`_POLICY`'s members are printed above**, which was the last name I did not have.
+- **So the fixture's recipe, fully determined and with no invention left in it:**
+  1. write the hashed artefacts - `source`, `manifest`, `runtime_config`, `collection_config`, `calibration_report` - plus the policy
+     members and the evidence root, **with real contents**;
+  2. build `ActArtifactBinding(root, paths, hashes, fingerprint)` from those real files (its own dataclass), so the digests come from
+     the bytes rather than from a literal;
+  3. take `binding.environment()` and set every variable it returns, plus `SO101_ACT_CAMPAIGN_ID` - **using the binder's own writer is
+     what keeps the fixture honest, because it is the same code the admission side uses to publish the binding**;
+  4. construct the child with the port, the startup consumer and nothing else faked: its constructor calls
+     `verify_environment`, which calls `verify()`, so the fixture must satisfy the real check rather than bypass it;
+  5. the request payload's hash keys come from `binding.hashes`, and the assertions come from the returned dict and the sealed,
+     indexed records.
+- **Item 5 therefore has no open questions left: the entry, the eight preconditions, the runner hand-off, the two stops, the two async
+  entry points, the loading entry and now the artefact contract have all been read.** The next round writes the fixture, and the only
+  judgement left is the one CP-1266 recorded - reuse the chain test's `FakePort` rather than define a second port contract.
+- **State:** HEAD `8a626fea` plus this checkpoint; items 1-4 complete and committed; item 5's fixture unwritten and fully specified; no
+  stack, no hardware, nothing deleted, nothing pushed.
