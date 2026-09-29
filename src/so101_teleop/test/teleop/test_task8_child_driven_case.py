@@ -745,6 +745,16 @@ def test_the_case_evidence_is_indexed_and_a_tampered_raw_record_is_refused(tmp_p
     assert {entry["reset_epoch"] for entry in entries} == {port.boundary.reset_epoch}
     assert {entry["release_epoch"] for entry in entries} == {0}
 
+    # the reviewer's "adjacent rows" property, at the scope this case has: the indexed sim times advance by
+    # exactly the window's period, so the rows are adjacent in the frame history rather than merely ordered
+    period = port.live_evidence_window._period_s
+    tolerance = port.live_evidence_window._tolerance_s
+    stamps = [entry["sim_time_s"] for entry in entries]
+    deltas = [round(later - earlier, 9) for earlier, later in zip(stamps, stamps[1:])]
+    assert deltas and all(delta > 0 for delta in deltas), "the indexed rows advance, never repeat"
+    assert all(abs(delta - period) <= tolerance for delta in deltas), \
+        f"every adjacent pair is one period apart: {deltas}"
+
     # tamper negative at the evidence layer: a raw record whose bytes were changed is refused by append
     root = Path(recorder.evidence_root)
     identity = {"case_id": request.payload["scenario_id"], "session_id": request.session_id,
