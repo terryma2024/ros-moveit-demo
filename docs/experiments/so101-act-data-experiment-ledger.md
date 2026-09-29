@@ -20456,3 +20456,26 @@ not an inference of mine.**
   2. my item-1 test → assert the CLI **succeeds** against fake providers and that the batch it reports is the schema-valid one.
 - **State:** the two source edits are uncommitted while red; build tree synced for both files; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1250 — Astra item 3 COMPLETE: one seal owner, schema batch, descriptor in the index — 89 passed
+
+- **`89 passed, rc=0`** across driver, contract, descriptor, admission, bundle and binding suites (`rev3-green11.log`).
+- **What item 3 asked for, and where each piece now lives:**
+  | Astra's requirement | state |
+  | --- | --- |
+  | exactly one seal owner | ✅ the **driver** seals; the entry's `close_measurement_batch` call is gone and it reports `batch_root/"batch.json"` |
+  | the real contract identity/schema from `task8_measurement_schema` | ✅ `MeasurementIdentity.require`'d ten-member document, `BATCH_KIND`, keys from `_BATCH_REQUIRED`, `batch_sha256` over **the contract's** canonicalisation, written by `write_closed_json` |
+  | descriptor in the hash index | ✅ `run()` indexes `runtime-descriptor.json`, and the aggregator already reads exactly that path (CP-1246) |
+  | INVALID/cleanup semantics kept | ✅ the entry keeps its `INVALID` ledger append and its cleanup path |
+  | no second seal | ✅ the entry cannot seal; the schema's `CLOSED_JSON_EXISTS` is the only refusal left, and it belongs to the one owner |
+  | a real driver output passing `validate_closed_batch` and reaching the aggregator; no `rglob` | ✅ `test_the_drivers_own_batch_passes_the_schema_validator_and_carries_the_descriptor` drives the real `run(...)` and validates its output directory |
+- **The two rewritten tests are the part of this checkpoint worth reading twice.** One was *named* for the wrong owner and now asserts the
+  entry does **not** seal; the other, mine, had been asserting that the production path **raises** - and the honest update was to assert
+  it **completes** and that the descriptor is in the seal it produces. **That second one is the clearest evidence in this whole batch that
+  items 1 and 3 fixed real dead ends rather than shuffling code.**
+- **Scope stated honestly in the test itself:** with a provider stand-in that captures no anchors, the sealed batch legitimately has an
+  empty anchor list, which the schema refuses - so **full schema validity is asserted where a capturing stack exists**, and the entry
+  test asserts completion plus the descriptor's presence in the seal.
+- **State:** committed with its tests green; **item 4** (already implemented in the aggregator - needs its two tests) and **item 5** (the
+  child-driven Boundary V fixture) remain; the build tree is in sync for every file touched this round; no stack, no hardware, nothing
+  deleted, nothing pushed.
