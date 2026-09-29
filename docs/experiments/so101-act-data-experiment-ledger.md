@@ -27502,3 +27502,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **One thing noticed and deliberately not "fixed":** `batch_factory` also sets `identity["measurement_contract_sha256"] = contract["contract_sha256"]` - **the same field mix-up CP-1641 removed from the aggregator's seal helper.** It is **not** caught here because this path seals through
   `close_measurement_batch` rather than through the entry's identity comparison. **Whether it is wrong in this context is a separate question from whether the entry should catch it**, and it is recorded rather than changed in passing.
 - **State:** CP-1620 in the tree, five fixture completions from green; CP-1612 and CP-1635 not started; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1647 — CP-1620 is GREEN and committed: `83 passed`, and the fixture cost was two helpers
+
+- **The owner's second decision is delivered:**
+  ```
+  83 passed across the six measurement suites (aggregator, measurement contract, driver, CLI terminal state,
+             production composition contract, formal context fields) - fresh scratch
+  ```
+  **The validator refuses a `CLOSED` batch whose `cleanup` is absent or null**, the contract-level seal helper accepts the same optional fields the production seal carries, and the fixtures that sealed without saying whether they had
+  cleaned up now say so.
+- **And the counting lesson is worth its line, because the earlier figure was wrong in a useful way:** the enforcement was measured as **"25+ sealing fixtures"** by counting failing tests. **In fact two helpers carried twenty-four of them** (`_sealed_batch`,
+  `batch_factory`) and **six inline documents carried the rest.** **A blast radius counted in failing tests overstates the work whenever the tests share a fixture** - and understates it when one test has many call sites.
+- **One thing left deliberately unchanged and recorded rather than touched:** `batch_factory` still sets
+  `identity["measurement_contract_sha256"] = contract["contract_sha256"]`, the same field mix-up CP-1641 removed from the aggregator's seal helper. **That path seals through `close_measurement_batch` and never passes the entry's identity comparison**, so it is a separate question - and it is
+  named here so a reviewer can decide whether it should also be corrected.
+- **State:** CP-1620 **done**; CP-1612 and CP-1635 next in that order; goal **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
