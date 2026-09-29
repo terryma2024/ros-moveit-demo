@@ -32434,3 +32434,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   or the admission block, the admission block's three fields are known good, and the next instrumented read must patch a
   bound reference or sit inside the function.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the
   final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1858 — The culprit named: a `FakeBroker.__getattr__` function reached `identifier`
+
+- **Wrapping the BOUND `identifier` names - the thing CP-1857 said a definition-patch could not reach - produced the
+  answer in one line:**
+  ```
+  [iddiag] so101_demo.act.ownership.identifier refused <function FakeBroker.__getattr__.<locals>._call at 0x…> (function)
+  command_broker.py:843: PermissionError: ID_INVALID
+  ```
+  **So the value that failed `identifier`'s "must be a non-empty string" rule is a FUNCTION - one synthesised by the
+  harness's own `FakeBroker.__getattr__`** - and the refusal is correct: a callable is not an identifier.
+- **And that reclassifies the refusal, which is why it is worth stating plainly:** the broker asked its **driver** for
+  something, the driver is `FakeBroker`, **and `FakeBroker.__getattr__` answers every attribute with a callable** - so a
+  member the production driver would return as a string came back as a function, travelled into `Ownership`'s identity
+  check, and was refused. **This is a fixture that answers questions it was never taught to answer** - the same shape as
+  CP-1838's `clock_ns=None` and CP-1784's empty `DetectionBatch`, but now on the *substituted driver* rather than on a
+  collaborator's argument.
+- **Which makes the next question concrete and bounded:** *which* attribute the acquire path reads off the driver - the
+  `__getattr__` wrapper means it could be any name - **so the next instrumented read is on `FakeBroker.__getattr__`
+  itself, printing the name it was asked for.** That and the two lines around it will say whether the fixture should
+  return a real value for that name (**the likely answer, since a driver does have identities**) or whether the acquire
+  path should not be reading it at all.
+- **And the diagnostics are removed again**, from the pre-diagnostic copy, so the suite carries no scaffolding - **four
+  instrumented reads, four answers, one of them a lesson about name binding (CP-1857) and three of them the cause.**
+- **State:** **P1-5 in progress; the acquire refusal is traced to a callable the substituted driver returned where an
+  identifier was expected, and the next read names the attribute.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
