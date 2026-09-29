@@ -26453,3 +26453,17 @@ pick the flattering number.**
   retention** (3415 scratch trees / 1611 older than a day, 495 experiment directories, 87 files - **all retained, nothing deleted, moved or compressed**).
 - **State:** packet and index updated; ledger current through this entry; **the next action is the independent GPT-6 Astra / High review, which this agent may not perform or pre-empt.** Nothing pushed, nothing deleted; no new
   session, goal, worktree or stack; no hardware.
+
+## CP-1588 — A self-audit of the packet, and one paraphrased number corrected
+
+- **The audit, run as a check rather than a formality:**
+  - **every artefact row in the evidence index verifies: 11 rows checked, 0 mismatched, 0 missing** (size and sha256 prefix re-computed from the files on disk);
+  - the packet's **`5731 passed`** appears **verbatim** in `demo2.log`; its **`1430 tests, 0 errors, 0 failures, 43 skipped`** appears **verbatim** in `teleop-test-result.txt`;
+  - and its CTest line did **not** appear verbatim, because CTest prints **`100% tests passed, 0 tests failed out of 116`** and the packet had paraphrased it as "100% passed, 0 failed out of 116".
+- **Fixed, because a packet's numbers are the thing a reviewer will re-derive:** the line now quotes the log exactly and says so - *"quoted from `ctest3.log`, not paraphrased"*. **The lesson is small and worth keeping: quote
+  the tool, do not retype it.**
+- **Why this round did the audit at all:** with P1-1..P1-4 and P2's testable half complete, the boundary green and the packet written, **the remaining work needs either a different model (the independent GPT-6 Astra / High review) or
+  the owner's authorisation (a live acceptance run for P2's second half).** Neither is something this agent may self-supply - so the useful in-scope work is to make the evidence being handed over **verifiable**, and that is what
+  this audit and this correction did.
+- **State:** packet and index updated and audited; ledger current; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack, no CUDA, no actuators. **The batch is at the boundary described
+  in the question below, and the goal stays active.**
