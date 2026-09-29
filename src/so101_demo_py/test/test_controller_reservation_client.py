@@ -18,15 +18,32 @@ from so101_demo.adapters.act.controller_reservation_client import ControllerRese
 
 
 def socket_path():
-    task_root = Path(os.environ["TMPDIR"]).parents[2]
-    ipc_root = task_root / "ipc"
-    ipc_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    """A private socket path under the short IPC base when one is offered, else three levels above TMPDIR.
+
+    The base is honoured only when it is safe - absolute, an existing real directory, and private to its owner - so an
+    unusable value fails closed instead of silently falling back to a path that cannot host a unix socket (AF_UNIX
+    payloads are limited to 107 bytes, which a long evidence root exhausts).
+    """
+
+    base = os.environ.get("SO101_IPC_SOCKET_BASE")
+    if base:
+        ipc_root = Path(base)
+        if not ipc_root.is_absolute() or ipc_root.is_symlink() or not ipc_root.is_dir():
+            raise RuntimeError("SO101_IPC_SOCKET_BASE_INVALID")
+        if ipc_root.stat().st_mode & 0o077:
+            raise RuntimeError("SO101_IPC_SOCKET_BASE_NOT_PRIVATE")
+    else:
+        task_root = Path(os.environ["TMPDIR"]).parents[2]
+        ipc_root = task_root / "ipc"
+        ipc_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # a fresh private directory per call, so no two calls - or two concurrent runs - share an endpoint
     parent = Path(tempfile.mkdtemp(prefix="res-", dir=ipc_root))
     return parent / f"p{uuid.uuid4().hex[:8]}.sock"
 
 
 def test_distinct_scratch_runs_never_share_private_socket_directory(
         monkeypatch, tmp_path):
+    monkeypatch.delenv("SO101_IPC_SOCKET_BASE", raising=False)     # this case is about the TMPDIR-derived layout
     first = tmp_path / "first" / "run-0928-001" / "tmp"
     second = tmp_path / "second" / "run-0928-001" / "tmp"
     monkeypatch.setenv("TMPDIR", str(first))
@@ -340,3 +357,39 @@ def test_expired_commit_window_stops_before_connecting():
         with pytest.raises(TimeoutError, match="CONTROLLER_RESERVATION_WINDOW_EXPIRED"):
             client.reserve((5, 0, "act", "session", "attempt"), "arm", goal(),
                            "11111111-1111-1111-1111-111111111111")
+
+
+def test_the_short_ipc_base_is_preferred_and_each_call_gets_its_own_directory(monkeypatch, tmp_path):
+    """With a safe short base set, sockets live under it - and never share a directory between calls."""
+
+    base = tmp_path / "ipc-base"
+    base.mkdir(mode=0o700)
+    monkeypatch.setenv("SO101_IPC_SOCKET_BASE", str(base))
+    first, second = socket_path(), socket_path()
+    assert first.parent.parent == second.parent.parent == base, "every socket lives under the offered base"
+    assert first.parent != second.parent, "each call gets its own private directory"
+    # the length budget is the owner's other case's business: this test's base sits under pytest's own tmp_path
+
+
+def test_an_unsafe_short_ipc_base_fails_closed(monkeypatch, tmp_path):
+    """A missing, non-private or symlinked base is refused rather than created or accepted."""
+
+    missing = tmp_path / "absent"
+    monkeypatch.setenv("SO101_IPC_SOCKET_BASE", str(missing))
+    with pytest.raises(RuntimeError, match="SO101_IPC_SOCKET_BASE_INVALID"):
+        socket_path()
+    assert not missing.exists(), "the base is never created for the caller"
+
+    loose = tmp_path / "loose"
+    loose.mkdir(mode=0o755)
+    monkeypatch.setenv("SO101_IPC_SOCKET_BASE", str(loose))
+    with pytest.raises(RuntimeError, match="SO101_IPC_SOCKET_BASE_NOT_PRIVATE"):
+        socket_path()
+
+    real = tmp_path / "real"
+    real.mkdir(mode=0o700)
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    monkeypatch.setenv("SO101_IPC_SOCKET_BASE", str(link))
+    with pytest.raises(RuntimeError, match="SO101_IPC_SOCKET_BASE_INVALID"):
+        socket_path()
