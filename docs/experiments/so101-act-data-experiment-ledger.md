@@ -14571,3 +14571,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   with the runner suite); Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding
   (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no
   package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-995 — The duplicate-definition hazard recurred in the test module, and is cleared (51 passed)
+
+- **Ran the hygiene check CP-978 established as a rule - list top-level definitions and look for repeats - across the
+  four files this session has edited most, and it caught the hazard again, this time in a test module:**
+  `test_qualified_measurements_copy_by_value_and_add_exactly_five`,
+  `test_a_ready_field_that_is_already_live_only_is_refused`, `_sample_row` and
+  `test_retreat_distance_is_radial_from_the_cup_at_the_first_qualifying_readback` were each defined **twice** in
+  `test/test_act_task8_live_qualification.py`, a consequence of my repeated appends.
+- **All four pairs were byte-identical**, so the later copy was pure dead code and removing it loses nothing - but the
+  same mechanism produced CP-978's *non*-identical pair in the production module, where the older, wrong definition won
+  and silently broke a corrected signature. Checking rather than assuming is what distinguishes the two cases.
+- **The production modules are clean:** `task8_live_qualification.py`, `task8_live_evidence.py` and
+  `pick_place_search_port.py` each report **no duplicate top-level definitions**.
+- **Verified: 51 passed, rc=0** afterwards (`beh-r589b.log`) across the live-qualification and Task 8 runner suites, so
+  the removal changed no behaviour.
+- **State:** Tasks 1-7 module work complete and green; Task 8's code side complete and green; the driver remains the one
+  dependency; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17
+  candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate,
+  no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
