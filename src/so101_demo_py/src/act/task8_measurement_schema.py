@@ -29,7 +29,33 @@ _BATCH_REQUIRED = frozenset({"schema_version", "kind", "status", "identity", "fi
 # the driver adds its cleanup receipt and contamination verdict; nothing else may appear, so the shape stays exact
 _BATCH_KEYS = _BATCH_REQUIRED | {"cleanup", "contamination"}
 _ROOT = Path(__file__).resolve().parents[2]
-_CONFIG = _ROOT / "config/act"
+
+
+def _config_root() -> Path:
+    """Where the admitted documents live: the INSTALLED package's share first, the source tree second.
+
+    `parents[2]` is `src/so101_demo_py` in the source layout, but `lib/python3.12/site-packages` once the package is
+    installed - so the installed entry could not find its own admitted matrix and refused the whole formal path with
+    `PHASE_CAMERA_MATRIX_INVALID` (P1-1: the formal entry runs from the installed tree, so this is the loader it hits).
+    The share directory is where ament puts `config/`, and `_load` still refuses a symlink, so an install that symlinked
+    it is refused rather than silently accepted.
+    """
+
+    candidates = []
+    try:
+        from ament_index_python.packages import get_package_share_directory
+
+        candidates.append(Path(get_package_share_directory("so101_demo_py")) / "config" / "act")
+    except Exception:                                    # no ament index (plain source run): fall through
+        pass
+    candidates.append(_ROOT / "config" / "act")
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return candidates[-1]
+
+
+_CONFIG = _config_root()
 
 
 class MeasurementIdentity:
