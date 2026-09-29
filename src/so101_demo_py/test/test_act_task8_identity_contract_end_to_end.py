@@ -59,15 +59,36 @@ def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_pa
     report = aggregate_task8_calibration([batch_root], contract, output_root)
     assert isinstance(report, dict) and report, "the aggregator returns a report rather than raising"
 
-    # real output: a field-verdict set recomputed from the sealed raw records, and a report document on disk
-    verdicts = report.get("field_verdicts") or report.get("verdicts") or {}
-    assert verdicts, f"the aggregator recomputed measurements from the sealed batch: {sorted(report)}"
-    recomputed = [field for field, value in verdicts.items() if value != "UNMEASURED"]
-    assert recomputed, (
-        "and at least one field was recomputed from raw evidence rather than declared UNMEASURED: "
-        f"{verdicts} (seal names {declared[:16]}…, bound document's self-digest is {bound_self[:16]}…)")
+    # real output: the published documents on disk
     written = sorted(path.name for path in output_root.rglob("*.json"))
     assert written, f"the aggregation published its documents: {output_root}"
+
+    # and the field verdicts RECOMPUTED from the sealed raw records - `derive_field_verdicts` is the aggregator's own
+    # entry point for exactly that ("Per-root, per-field verdicts recomputed from the sealed batch's raw records")
+    from so101_demo.act.task8_calibration_aggregator import derive_field_verdicts
+
+    per_root = derive_field_verdicts([batch_root], contract)
+    assert per_root, "the aggregator recomputed verdicts for the sealed batch"
+    verdicts = next(iter(per_root.values()))
+    assert verdicts, "and at least one field is reported"
+
+    # the owner's disposition (CP-1789): a field whose THRESHOLD is not approved reports UNMEASURED rather than a
+    # comparison against a limit that does not exist
+    from so101_demo.act.task8_measurement_schema import load_contract_v2
+
+    contract_v2 = load_contract_v2()
+    pending = [field for field, entry in contract_v2["measurements"].items()
+               if entry.get("configured_limit") is None]
+    assert pending, "the candidate config's search values are still pending approval"
+    assert all(verdicts.get(field) == "UNMEASURED" for field in pending if field in verdicts), (
+        "an unapproved threshold must not produce a pass: "
+        f"{ {field: verdicts.get(field) for field in pending if field in verdicts} }")
+
+    # and the field whose threshold is NOT a pending config value - the camera FOV, sourced from the model - is
+    # measured rather than UNMEASURED, which is what makes this a chain and not a blanket refusal
+    assert verdicts.get("horizontal_fov_rad") not in (None, "UNMEASURED"), (
+        f"the FOV field is measured against the model's own camera: {verdicts.get('horizontal_fov_rad')!r} "
+        f"(seal names {declared[:16]}…, bound document's self-digest is {bound_self[:16]}…)")
 
 
 def test_a_batch_naming_another_contract_is_still_refused(tmp_path, monkeypatch):

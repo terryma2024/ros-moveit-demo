@@ -384,6 +384,14 @@ def derive_field_verdicts(roots, contract: dict) -> dict:
                     # a field with no raw record is explicitly UNMEASURED - never a silent pass
                     verdicts[field] = "UNMEASURED"
                     continue
+                if field not in (raw.get("configured") or {}):
+                    # P1-2 (rereview 5), owner's disposition: a field whose THRESHOLD is not approved is UNMEASURED
+                    # too. The search values in `task8-calibration-search-candidate-v1.json` are
+                    # `{"requires_approved_value": true, "value": null}`, so there is nothing to compare against and
+                    # inventing a limit is exactly what this work must not do - same vocabulary, same refusal to
+                    # report a pass that was never measured.
+                    verdicts[field] = "UNMEASURED"
+                    continue
                 verdicts[field] = compute_field(field, raw, contract)["verdict"]
         per_root[str(root)] = verdicts
     return per_root

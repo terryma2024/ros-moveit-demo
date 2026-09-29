@@ -30269,3 +30269,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   RED refuses instead of being swallowed; and the formulas are reached field by field.
 - **State:** **P1-2 stopped at its limit side on a recorded approval, with the question put to the owner; P1-3 CLOSED;
   P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.**
+
+## CP-1790 — The owner's disposition works, and my guard for it is one word too broad
+
+- **What now passes, with the owner's chosen disposition implemented:**
+  ```
+  1 failed, 1 passed      (was: 1 failed with the aggregator refusing outright)
+  ```
+  | the RED asserts | result |
+  | --- | --- |
+  | `aggregate_task8_calibration` returns a report, and publishes documents on disk | **passes** - the aggregator no longer refuses |
+  | `derive_field_verdicts` recomputes per-field verdicts from the sealed raw records | **passes** - it returns verdicts |
+  | every field whose threshold is a pending config value reports `UNMEASURED` | **passes** - the disposition is in |
+  | the camera-FOV field is **measured**, because its threshold is the model's own | **fails** - and the reason is my own guard |
+- **The guard I wrote:**
+  ```python
+  if field not in (raw.get("configured") or {}):
+      verdicts[field] = "UNMEASURED"
+  ```
+  and the driver omits any field whose `configured_limit` is `None`. **But `horizontal_fov_rad`'s limit is `None` too** -
+  the contract simply sources it elsewhere (`threshold_source: "模型 FOV + tolerance"`) - **so the guard marks a field
+  UNMEASURED whose threshold exists and is not pending at all.**
+- **The discriminator is therefore `threshold_source`, not the absence of a limit:** `"config"` means "a pending search
+  value", anything else names a source that already exists. **The fix is one condition, and it is the difference
+  between "this threshold is not approved" and "this threshold is not a config value".**
+- **State:** **P1-2's chain now runs end to end (report + documents + recomputed verdicts + pending fields UNMEASURED)
+  with one over-broad guard left to narrow.** P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean
+  re-measurement; P1-4, P1-5, P1-6 remain.
