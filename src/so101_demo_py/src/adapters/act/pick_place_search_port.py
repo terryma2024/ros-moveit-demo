@@ -484,7 +484,7 @@ class PickPlaceSearchPhasePort:
             raise PickPlaceSearchPortError("TASK8_PHASE_SCOPE_MISMATCH")
         if phase != "SEARCH":
             self._stop_or_raise("TASK8_PHASE_NOT_PROVISIONED", request)
-            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED")
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
         if self._searched:
             raise PickPlaceSearchPortError("TASK8_SEARCH_ALREADY_STARTED")
         self._searched = True
@@ -516,6 +516,26 @@ class PickPlaceSearchPhasePort:
             self._validated_search_observation = None
             self._stop_or_raise("TASK8_SEARCH_ABORT", request)
             raise PickPlaceSearchPortError("TASK8_SEARCH_EVIDENCE_INVALID") from error
+
+    # --- the rest of the sequence, provisioned one phase at a time (Astra re-review #3, finding 4) -------------
+    # The runner calls five more protocol methods besides run_phase, and eight more phases besides SEARCH. Until each
+    # is implemented it refuses by NAME, so an unimplemented path can never be mistaken for a completed one - which is
+    # exactly what the previous behaviour (an AttributeError, or a phase that silently returned nothing) allowed.
+
+    def set_down(self, *args, **kwargs):
+        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: set_down")
+
+    def detach_moveit(self, *args, **kwargs):
+        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: detach_moveit")
+
+    def planning_attached(self, *args, **kwargs):
+        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: planning_attached")
+
+    def release_preflight(self, *args, **kwargs):
+        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: release_preflight")
+
+    def run_retreat_segment(self, *args, **kwargs):
+        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment")
 
     def safe_stop(self, reason: str, request: dict) -> bool:
         return self.boundary.safe_stop(reason, request) is True

@@ -329,3 +329,28 @@ def test_an_attachment_without_the_support_threshold_is_refused_by_name(tmp_path
     port, _events = fixture()
     with pytest.raises(Exception, match="TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: support_distance_max_m"):
         port.bind_live_evidence(window)            # deliberately no support_distance_max_m: refused at attach
+
+
+# --- P1-4: the unprovisioned sequence refuses BY NAME, one phase at a time -----------------------------------
+
+@pytest.mark.parametrize("method", ["set_down", "detach_moveit", "planning_attached",
+                                    "release_preflight", "run_retreat_segment"])
+def test_the_unprovisioned_protocol_methods_refuse_by_name(method):
+    """The runner calls five more methods than SEARCH implements, and each must fail closed with its own name."""
+
+    port, _events = fixture()
+    with pytest.raises(PickPlaceSearchPortError, match=f"TASK8_PHASE_NOT_PROVISIONED: {method}"):
+        getattr(port, method)({"session_id": SESSION, "attempt_id": ATTEMPT})
+
+
+@pytest.mark.parametrize("phase", ["APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN",
+                                   "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK"])
+def test_the_unprovisioned_sequence_phases_refuse_by_their_own_name(phase):
+    """And a phase that is not built yet says WHICH phase, so a staged build cannot look finished."""
+
+    port, _events = fixture()
+    bind(port)
+    port.begin(request())
+
+    with pytest.raises(PickPlaceSearchPortError, match=f"TASK8_PHASE_NOT_PROVISIONED: {phase}"):
+        port.run_phase(phase, request())
