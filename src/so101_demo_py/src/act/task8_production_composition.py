@@ -199,6 +199,12 @@ class PhaseCameraMatrixEvaluator:
         self.trajectory = trajectory
         self.target = target
         self.occluder_geometry = dict(occluder_geometry or {})
+        # P1-3 (rereview 5): an admitted occluder without geometry must be refused WHEN THE EVALUATOR IS BUILT, not
+        # only when a particular target happens to project - otherwise a measurement can pass through this evaluator
+        # with the visibility question silently unanswerable (`_occluded`'s own check still guards the call).
+        for name in self.occluders:
+            if not isinstance(self.occluder_geometry.get(name), dict):
+                raise ProductionCompositionError(f"PHASE_CAMERA_OCCLUDER_GEOMETRY_REQUIRED: {name}")
         declared = period_s if period_s is not None else document.get("period_s")
         self.period_s = float(declared) if declared is not None else self.ADMITTED_PERIOD_S
 

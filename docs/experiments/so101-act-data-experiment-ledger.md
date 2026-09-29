@@ -29981,3 +29981,41 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   2 ms), and the next work is the sampler plus the matrix builder, with its RED already standing
   (`test_the_shipped_matrix_is_not_a_scaffold`).** No stack is live; nothing was started for this read beyond a
   compile.
+
+## CP-1780 — P1-3 CLOSED: the matrix is sampled from the headless model, and all four requirements hold
+
+- **The sampler, new and production (`src/so101_demo_py/src/act/task8_phase_camera_sampler.py`):**
+  `sample_phase_camera_geometry(...)` resets, steps the model **headless at `model.opt.timestep`** and records each
+  sampled pose; the reported geometry is the per-component median of those samples, **cross-checked against the frozen
+  model at the protocol's own tolerance** (`PHASE_CAMERA_SAMPLE_FOV_MISMATCH` if they disagree). It refuses by name:
+  fewer than ten samples (`…SAMPLE_COUNT_TOO_LOW`), a missing scene, no anchors, a camera the scene does not have
+  (`…CAMERA_MISSING`), and non-increasing stamps. `build_phase_camera_matrix(...)` assembles the frozen document.
+- **The frozen matrix, generated rather than written by hand:**
+  ```
+  config/act/task8-phase-camera-matrix-v1.json         4590 bytes, sha256(16) 582008ce8cc010fc
+      status=FROZEN   period_s=0.002   cameras=[head_camera, wrist_camera]
+      phases=[SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, RADIAL_RETREAT, FINAL_CHECK]
+      head camera: 640x480, horizontal_fov_rad=1.312106748
+      sample counts: default 10, left 10, forward 10
+  ```
+  **with an evidence copy outside the repo at `experiments/v5a/matrix-v1.json`** (4590 bytes, identical payload), as the
+  evidence rules require. **The numbers came from sampling; they were not transcribed from the design or the XML** -
+  which is what the design forbids in its own words.
+- **The loader now refuses what used to pass:** `PHASE_CAMERA_MATRIX_NOT_FROZEN: <status>`,
+  `PHASE_CAMERA_MATRIX_PHASES_REQUIRED`, and `PHASE_CAMERA_INTRINSICS_REQUIRED: <field>` - so a scaffold can no longer
+  be loaded and have its missing fields invented downstream.
+- **And the fourth requirement, occluders, was completed at the right moment:** the check moved to **construction**,
+  because `_occluded` only ran when a target happened to project - a measurement could otherwise pass through with the
+  visibility question silently unanswerable.
+- **The result, across the five files this touches:**
+  ```
+  20 passed
+  phase_camera_measurement  phase_camera_sampler  formal_measurement_entry
+  detector_raw_evidence     identity_contract_end_to_end
+  ```
+  **The `BATCH_ANCHOR_MISSING` is gone**: the formal entry seals again, because the matrix it loads is now a real,
+  frozen, sampled document instead of a scaffold whose fields were being invented.
+- **State:** **P1-1 second half GREEN; P1-3 CLOSED with a real sampled matrix. Remaining: P1-2's driver→aggregator
+  chain, P1-4's acquisition-time sampling and sealed reasons, P1-5's real child→campaign chain, P1-6's registration
+  read-back, and the demo RED's clean re-measurement once code stops moving.** Two fixtures from CP-1777's list are
+  resolved by this work (`BATCH_ANCHOR_MISSING` and the occluder order); the rest follow their own findings.

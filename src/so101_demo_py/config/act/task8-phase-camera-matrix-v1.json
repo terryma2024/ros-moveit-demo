@@ -1,5 +1,191 @@
 {
- "schema_version": 1,
+ "anchor_geometry": {
+  "default": {
+   "head_camera": {
+    "focal_px": [
+     415.69219381653056,
+     415.69219381653056
+    ],
+    "frame_id": "head_camera",
+    "height_px": 480,
+    "horizontal_fov_rad": 1.3121067481206794,
+    "position_m": [
+     -0.06,
+     0.06,
+     0.4299186
+    ],
+    "principal_point_px": [
+     320.0,
+     240.0
+    ],
+    "rpy_rad": [
+     0.9272952180016123,
+     0.0,
+     3.141592653589793
+    ],
+    "sample_count": 10,
+    "width_px": 640
+   },
+   "wrist_camera": {
+    "focal_px": [
+     219.91948176418163,
+     219.91948176418163
+    ],
+    "frame_id": "wrist_camera",
+    "height_px": 480,
+    "horizontal_fov_rad": 1.9373597234180084,
+    "position_m": [
+     0.020615204174508246,
+     -0.2575420022036443,
+     0.5016518184822647
+    ],
+    "principal_point_px": [
+     320.0,
+     240.0
+    ],
+    "rpy_rad": [
+     0.09922582808366154,
+     -1.3712079355472346,
+     -1.9690389362098608
+    ],
+    "sample_count": 10,
+    "width_px": 640
+   }
+  },
+  "forward": {
+   "head_camera": {
+    "focal_px": [
+     415.69219381653056,
+     415.69219381653056
+    ],
+    "frame_id": "head_camera",
+    "height_px": 480,
+    "horizontal_fov_rad": 1.3121067481206794,
+    "position_m": [
+     -0.06,
+     0.06,
+     0.4299186
+    ],
+    "principal_point_px": [
+     320.0,
+     240.0
+    ],
+    "rpy_rad": [
+     0.9272952180016123,
+     0.0,
+     3.141592653589793
+    ],
+    "sample_count": 10,
+    "width_px": 640
+   },
+   "wrist_camera": {
+    "focal_px": [
+     219.91948176418163,
+     219.91948176418163
+    ],
+    "frame_id": "wrist_camera",
+    "height_px": 480,
+    "horizontal_fov_rad": 1.9373597234180084,
+    "position_m": [
+     0.020615204174508246,
+     -0.2575420022036443,
+     0.5016518184822647
+    ],
+    "principal_point_px": [
+     320.0,
+     240.0
+    ],
+    "rpy_rad": [
+     0.09922582808366154,
+     -1.3712079355472346,
+     -1.9690389362098608
+    ],
+    "sample_count": 10,
+    "width_px": 640
+   }
+  },
+  "left": {
+   "head_camera": {
+    "focal_px": [
+     415.69219381653056,
+     415.69219381653056
+    ],
+    "frame_id": "head_camera",
+    "height_px": 480,
+    "horizontal_fov_rad": 1.3121067481206794,
+    "position_m": [
+     -0.06,
+     0.06,
+     0.4299186
+    ],
+    "principal_point_px": [
+     320.0,
+     240.0
+    ],
+    "rpy_rad": [
+     0.9272952180016123,
+     0.0,
+     3.141592653589793
+    ],
+    "sample_count": 10,
+    "width_px": 640
+   },
+   "wrist_camera": {
+    "focal_px": [
+     219.91948176418163,
+     219.91948176418163
+    ],
+    "frame_id": "wrist_camera",
+    "height_px": 480,
+    "horizontal_fov_rad": 1.9373597234180084,
+    "position_m": [
+     0.020615204174508246,
+     -0.2575420022036443,
+     0.5016518184822647
+    ],
+    "principal_point_px": [
+     320.0,
+     240.0
+    ],
+    "rpy_rad": [
+     0.09922582808366154,
+     -1.3712079355472346,
+     -1.9690389362098608
+    ],
+    "sample_count": 10,
+    "width_px": 640
+   }
+  }
+ },
+ "camera": {
+  "focal_px": [
+   415.69219381653056,
+   415.69219381653056
+  ],
+  "frame_id": "head_camera",
+  "height_px": 480,
+  "horizontal_fov_rad": 1.3121067481206794,
+  "position_m": [
+   -0.06,
+   0.06,
+   0.4299186
+  ],
+  "principal_point_px": [
+   320.0,
+   240.0
+  ],
+  "rpy_rad": [
+   0.9272952180016123,
+   0.0,
+   3.141592653589793
+  ],
+  "sample_count": 10,
+  "width_px": 640
+ },
+ "cameras": [
+  "head_camera",
+  "wrist_camera"
+ ],
  "kind": "task8_phase_camera_matrix",
  "occluders": [
   "fixed_fingertip_pad_visual",
@@ -8,8 +194,86 @@
   "jaw_visual_00",
   "moving_fingertip_pad_visual"
  ],
- "phases": [],
- "cameras": ["head_camera", "wrist_camera"],
- "coverage_source": "docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md",
- "status": "SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION"
+ "period_s": 0.002,
+ "phases": [
+  {
+   "anchors": [
+    "default",
+    "left",
+    "forward"
+   ],
+   "phase": "SEARCH"
+  },
+  {
+   "anchors": [
+    "default",
+    "left",
+    "forward"
+   ],
+   "phase": "APPROACH"
+  },
+  {
+   "anchors": [
+    "default",
+    "left",
+    "forward"
+   ],
+   "phase": "CLOSE"
+  },
+  {
+   "anchors": [
+    "default",
+    "left",
+    "forward"
+   ],
+   "phase": "MICRO_LIFT"
+  },
+  {
+   "anchors": [
+    "default",
+    "left",
+    "forward"
+   ],
+   "phase": "TRANSPORT"
+  },
+  {
+   "anchors": [
+    "default",
+    "left",
+    "forward"
+   ],
+   "phase": "ALIGN"
+  },
+  {
+   "anchors": [
+    "default",
+    "left",
+    "forward"
+   ],
+   "phase": "RELEASE"
+  },
+  {
+   "anchors": [
+    "default",
+    "left",
+    "forward"
+   ],
+   "phase": "RADIAL_RETREAT"
+  },
+  {
+   "anchors": [
+    "default",
+    "left",
+    "forward"
+   ],
+   "phase": "FINAL_CHECK"
+  }
+ ],
+ "sample_counts": {
+  "default": 10,
+  "forward": 10,
+  "left": 10
+ },
+ "schema_version": 1,
+ "status": "FROZEN"
 }
