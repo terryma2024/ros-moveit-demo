@@ -935,8 +935,11 @@ def test_collect_live_runs_reads_five_sealed_full_rows_and_refuses_anything_else
     from so101_demo.act.task8_live_qualification import LIVE_ONLY_FIELDS, collect_live_runs
 
     extractors = {field: (lambda samples, document: 0.5) for field in LIVE_ONLY_FIELDS}
-    rows = [{"live_evidence_artifact": _sealed_artifact(tmp_path, index)} for index in range(5)]
-    rows.append({"live_evidence_artifact": None})                     # the nine prefix rows carry none
+    rows = []
+    for index in range(5):
+        artifact = _sealed_artifact(tmp_path, index)
+        rows.append({"live_evidence_path": artifact["path"], "live_evidence_sha256": artifact["sha256"]})
+    rows.append({"live_evidence_path": "", "live_evidence_sha256": ""})   # the nine prefix rows carry none
     runs = collect_live_runs(rows, identities={"contact_policy_fingerprint": "d" * 64,
                                                "phase_camera_matrix_sha256": "e" * 64},
                              extractors=extractors)
@@ -945,8 +948,10 @@ def test_collect_live_runs_reads_five_sealed_full_rows_and_refuses_anything_else
     assert runs[0]["sample_sha256"] and Path(runs[0]["sample_path"]).is_file()
 
     # a mismatched digest, a missing extractor and fewer than five full rows are each refused
-    bad = [{"live_evidence_artifact": _sealed_artifact(tmp_path, index, digest_matches=False)}
-           for index in range(5)]
+    bad = []
+    for index in range(5):
+        artifact = _sealed_artifact(tmp_path, index, digest_matches=False)
+        bad.append({"live_evidence_path": artifact["path"], "live_evidence_sha256": artifact["sha256"]})
     with pytest.raises(ValueError, match="SEALED_SAMPLE_DIGEST_MISMATCH"):
         collect_live_runs(bad, identities={}, extractors=extractors)
     with pytest.raises(ValueError, match="LIVE_EXTRACTOR_REQUIRED"):
