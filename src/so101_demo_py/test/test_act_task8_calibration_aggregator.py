@@ -136,7 +136,9 @@ def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED",
     close_measurement_batch(root, identity,
                             status=(status_field or
                                     ("INVALID" if declared_status == "INVALID"
-                                     else "CLOSED")))
+                                     else "CLOSED")),
+                            # a CLOSED batch must carry its cleanup proof; the validator requires presence, not shape
+                            cleanup={"group_clear": True})
     return root
 
 
@@ -342,7 +344,10 @@ def _sealed_batch(root, payload, identities=None, extra_files=None,
         files[f"sync/{anchor}.json"] = hashlib.sha256(synced.read_bytes()).hexdigest()
     from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
 
+    # a CLOSED batch must CARRY its cleanup proof: the validator requires presence, because a seal that does not say
+    # whether the workspace was cleaned is the state the review's item 4 was about
     document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity, "files": files}
     document["batch_sha256"] = hashlib.sha256(_seal_canonical(document)).hexdigest()
     write_closed_json(Path(root) / "batch.json", document)

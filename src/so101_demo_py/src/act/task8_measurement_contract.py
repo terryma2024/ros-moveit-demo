@@ -166,7 +166,8 @@ def load_measurement_contract(path: Path, *, expected_hashes: dict) -> dict:
     return document
 
 
-def close_measurement_batch(root: Path, identity: dict, *, status: str = "CLOSED") -> Path:
+def close_measurement_batch(root: Path, identity: dict, *, status: str = "CLOSED", cleanup=None,
+                            contamination=None, error_code=None) -> Path:
     """Seal one raw measurement batch with every raw file hash; never reopened."""
 
     root = Path(root)
@@ -194,6 +195,15 @@ def close_measurement_batch(root: Path, identity: dict, *, status: str = "CLOSED
     document = {"schema_version": SCHEMA_VERSION, "kind": BATCH_KIND, "status": status,
                 "identity": dict(identity), "files": files,
                 "anchors": ["default", "left", "forward"]}
+    # the same optional fields the production seal carries: a CLOSED batch must be able to name its cleanup proof,
+    # and a refused one its error code - so this helper produces documents the validator accepts rather than ones it
+    # must refuse (CP-1619)
+    if cleanup is not None:
+        document["cleanup"] = cleanup
+    if contamination is not None:
+        document["contamination"] = contamination
+    if error_code is not None:
+        document["error_code"] = error_code
     # the batch document seals itself too, so its identity and status cannot be edited later
     document["batch_sha256"] = hashlib.sha256(
         _canonical({key: value for key, value in document.items()

@@ -189,6 +189,13 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
     # a contaminated batch is a failed cleanup: it keeps its evidence but must never feed a published report
     if recorded.get("contamination") is not None:
         raise ValueError("BATCH_INVALID")
+    # and a CLOSED batch must CARRY its cleanup proof: the receipt was optional, so a seal could be published with no
+    # evidence that the workspace was cleaned, which is the third half of the review's item 4
+    # the proof must be PRESENT and not null: its SHAPE stays the schema's business (`_BATCH_KEYS` already closes the
+    # document). Requiring a dict here would have been stricter than the schema's own contract and refused fixtures
+    # whose receipts are strings - a rule about presence must not smuggle in a rule about shape.
+    if recorded.get("status") == "CLOSED" and recorded.get("cleanup") is None:
+        raise ValueError("BATCH_CLEANUP_PROOF_REQUIRED")
     found = _regular_files(root)
     if set(found) != set(files):
         raise ValueError("BATCH_CLOSURE_INVALID")
