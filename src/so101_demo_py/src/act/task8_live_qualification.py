@@ -353,3 +353,35 @@ def placement_stable_s(samples) -> float:
     if len(stable) != len(final):
         raise ValueError("PLACEMENT_NOT_STABLE_THROUGHOUT: every FINAL_CHECK sample must report stability")
     return _span_s(stable)
+
+
+def longest_contiguous_span_s(frames, *, predicate, phase=None, period_s: float = 0.1,
+                              tolerance_s: float = 0.01, strict_breaks: bool = False) -> float:
+    """The longest contiguous source-stamp span over which a predicate holds.
+
+    Three of the five live-only rules are stated this way - the occlusion window over CLOSE..RELEASE, the release
+    stability duration and the placement stability duration - so the structure lives here once. A stamp gap ends the
+    current span; `strict_breaks` turns a gap into a refusal instead, which is what the occlusion row requires. The
+    predicate is supplied by the caller, so each rule keeps its own definition of "holds".
+    """
+
+    selected = sorted((frame for frame in frames if phase is None or frame.get("phase") == phase),
+                      key=lambda frame: frame["source_stamp"])
+    if not selected:
+        raise ValueError(f"SPAN_FRAMES_REQUIRED: no frames for phase {phase!r}")
+    best, current_start, previous = 0.0, None, None
+    for frame in selected:
+        if previous is not None:
+            step = frame["source_stamp"] - previous["source_stamp"]
+            if abs(step - period_s) > tolerance_s:
+                if strict_breaks:
+                    raise ValueError(f"SPAN_FRAME_BREAK: {previous['source_stamp']} -> {frame['source_stamp']}")
+                current_start = None
+        previous = frame
+        if predicate(frame) is not True:
+            current_start = None
+            continue
+        if current_start is None:
+            current_start = frame["source_stamp"]
+        best = max(best, frame["source_stamp"] - current_start)
+    return best
