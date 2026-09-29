@@ -33353,3 +33353,46 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   options recorded.** P1-1 through P1-4 CLOSED. **Independent of that decision, the remaining packet work is: the demo
   RED's clean re-measurement, P1-6's post-freeze reconfigure/rebuild check, the final freeze gate, and the re-review
   packet.** **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1890 — Option 2 implemented; the chain now stops at the boundary's APPROACH execution
+
+- **The owner chose option 2 (freshness applies at registration, not to later consumption), and the production change
+  is three lines plus their comments:**
+  ```python
+  # selected_approach_candidate.py
+  def prepare(self, observed, *, selected_source: dict, require_fresh: bool = True) -> dict:
+      …
+      if require_fresh and (any(value > now for value in receipts.values())
+                            or not now - min(receipts.values()) < self.max_age):
+          raise ValueError("SELECTED_APPROACH_SOURCE_STALE")
+
+  # visible_approach_expert_route.py - forwards it
+  def prepare(self, observed, *, selected_source: dict, owner_ticket: tuple,
+              active_policy_fingerprint: str, require_fresh: bool = True) -> dict:
+      candidate = self.candidate.prepare(observed, selected_source=source, require_fresh=require_fresh)
+
+  # pick_place_search_port.py, APPROACH - the one consumer of an already-registered source
+  prepared = route.prepare(observed, selected_source=selected_source, owner_ticket=ticket,
+                           active_policy_fingerprint=…, require_fresh=False)
+  ```
+  **defaults keep every other caller (the source port's `register`, and the suites) unchanged**, and the stale refusal is
+  gone from the run.
+- **And the chain advanced to the next real requirement, in the port's own words:**
+  ```
+  PickPlaceSearchPortError: TASK8_PHASE_NOT_PROVISIONED: APPROACH: execute_approach
+  AttributeError: 'CommandBroker' object has no attribute 'stop_all'
+  MutationError: ROS_STOP_REQUEST_FAILED
+  ```
+  1. **the boundary must implement `execute_approach`** - the APPROACH phase's execution belongs to the boundary (the
+     port's own comment: *"the motion and the proof belong to the boundary"*), and the harness's `_Boundary` does not
+     provide it yet: **that is the next fixture method to write, not a production question**;
+  2. **and the stop path proves a wiring error in the harness:** the child calls `self._broker.stop_all(reason)`, and the
+     reference is `ros_child.py:289 driver=broker` - **the object the child is given as `broker` IS the ROS driver** (which
+     has `stop_all`, `submit`, `prepare_goal`), while this harness passes a `CommandBroker`. **So the fixture builds the
+     broker and then hands it to the child as if it were the driver** - **exactly the confusion CP-1882 cost three rounds
+     on, and the fix is to pass the ACT-aware driver and let the child build its own broker, which is the production
+     topology.**
+- **State:** **P1-5 in progress: the option-2 production change is in and the stale refusal is gone; the next two steps are
+  the boundary's `execute_approach` and handing the child its driver rather than a broker.** P1-1 through P1-4 CLOSED.
+  The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are
+  unchanged, so they are not re-stated.**

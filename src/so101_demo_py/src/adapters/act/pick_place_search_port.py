@@ -789,7 +789,11 @@ class PickPlaceSearchPhasePort:
                 request["session_id"], request["attempt_id"])
             prepared = route.prepare(
                 observed, selected_source=selected_source, owner_ticket=ticket,
-                active_policy_fingerprint=reset.sources.contact_pairs.fingerprint)
+                active_policy_fingerprint=reset.sources.contact_pairs.fingerprint,
+                # APPROACH consumes a source the SEARCH registration already freshness-checked, and a registered
+                # source is necessarily older than its registration - so the selection's bound is not re-applied
+                # across the phase boundary (CP-1889/CP-1890, owner decision)
+                require_fresh=False)
             # the prover's identity values belong to the route's manifest, and the route lives here - so they travel
             # into the boundary's orchestration rather than being re-derived from anything else
             prover_identity = {
