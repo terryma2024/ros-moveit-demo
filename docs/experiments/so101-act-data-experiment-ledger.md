@@ -20146,3 +20146,20 @@ not an inference of mine.**
 - **State:** HEAD at the test commit plus this checkpoint; ledger 949 checkpoints; the CLI/composition changes from item 1 are
   committed; the build tree is currently in sync with `src/` for the four touched modules - **which is a state to re-establish after
   any further `src/` edit**; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1235 — Item 2's required-descriptor RED is proven; the GREEN now needs three call sites updated
+
+- **RED, proven before the change:** the new test constructed a context without `runtime_descriptor` and **failed** - the
+  `None` default let it through, which is exactly the bypass Astra named
+  (`experiments/gate6-batch3-py-gate/rev2c-red.log`).
+- **After the change: 3 failed, 65 passed.** The three failures are **existing** negative tests in
+  `test_act_task8_calibration_admission.py` that build a context and expect a *different* `ValueError`; they now hit
+  `TypeError: ... missing 1 required keyword` first. Those are the call sites the required argument is supposed to surface, and
+  they need the descriptor added - **a mechanical consequence of item 2, not a regression**: 65 other tests pass unchanged.
+- **One incidental finding worth keeping:** the `cp` into the build tree reported "**are the same file**" for
+  `task8_calibration_admission.py`, so `build/` and `src/` are **linked** for that module rather than copied - which means the
+  build-tree staleness found at CP-1232 is **per file**, not uniform. **The method rule stands: verify with a print rather than
+  assuming either way.**
+- **State:** the source change to `task8_calibration_admission.py` and the new test are **held uncommitted while red**, per the
+  owner's rule; the item-1 commit and item-2's earlier halves are committed; `runtime_descriptor` is required in the working tree
+  and enforced on every context; no stack, no hardware, nothing deleted, nothing pushed.
