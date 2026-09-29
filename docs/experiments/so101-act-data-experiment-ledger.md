@@ -18711,3 +18711,27 @@ not an inference of mine.**
   descriptor ✅ (CP-1172). **Remaining:** the controlled-config-hash case, which belongs to the contract loader's
   `expected_hashes` boundary rather than to the descriptor, and therefore gets its own RED.
 - **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1174 — Item 3 complete: the changed controlled input is refused, and the four cases are in place
+
+- **The fourth case, pinned:** the identity carries `runtime_config_sha256`, so
+  `load_measurement_contract(bound_path, expected_hashes=changed)` refuses a measurement run against a changed runtime
+  config as **`MEASUREMENT_CONTRACT_IDENTITY_MISMATCH`**, while the unchanged set loads. **49 passed** across the contract,
+  runtime-descriptor and aggregator suites (`beh-r782.log`).
+- **Three fixture errors on the way, all recorded rather than hidden, and each one an interface I had assumed:** the binder
+  returns the **document** in this module (unlike the teleop-side finding at CP-1097, where it returned the path), and it takes
+  the **template's path** rather than a loaded template. Both were named by the interpreter in one line each - a reminder that
+  "the binder returns X" is a per-module fact, not a global one.
+- **Item 3, all four cases, with what each actually is:**
+  | case | kind |
+  | --- | --- |
+  | opaque-digest-only context refused (`MEASUREMENT_RUNTIME_DESCRIPTOR_REQUIRED`) | **fix** - new rule (CP-1173) |
+  | payload descriptor disagreeing with the sealed one refused | **pin** on CP-1171's rule (CP-1172) |
+  | batch that indexes no descriptor cannot bind (`HEAD_SEARCH_SAMPLE_MISMATCH`) | **pin** (CP-1172) |
+  | changed controlled input refused (`MEASUREMENT_CONTRACT_IDENTITY_MISMATCH`) | **pin** (this checkpoint) |
+  That is one rule added and three properties proven, and the ledger says so rather than calling all four fixes.
+- **Next: item 4** - Boundary V's mechanical part. The fake port already carries a case through all nine phases, set-down,
+  release preflight and both retreat segments under `PickPlaceRunner`'s own validators; what remains is to route it through
+  `ros_child._run_pick_place` using its `_pick_place_port` and `_startup_proof_consumer` seams, so the real
+  `CaseEvidenceDriver` window seals and the seven artefacts can be asserted. The untracked RED is committed only once green.
+- **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
