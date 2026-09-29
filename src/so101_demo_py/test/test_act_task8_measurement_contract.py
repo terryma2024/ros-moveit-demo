@@ -66,10 +66,10 @@ def test_batch_close_is_one_way_and_identity_bound(tmp_path):
 
     identity = {name: "a" * 64 for name in IDENTITIES_V2}
     identity["source_commit"] = "0" * 40
-    sealed = close_measurement_batch(root, identity)
+    sealed = close_measurement_batch(root, identity, cleanup={"cleanup_complete": True, "generation": "g1", "reason": "fixture"})
     assert Path(sealed).is_file()
     with pytest.raises(ValueError):
-        close_measurement_batch(root, identity)
+        close_measurement_batch(root, identity, cleanup={"cleanup_complete": True, "generation": "g1", "reason": "fixture"})
     document = json.loads(Path(sealed).read_text())
     assert document["identity"] == identity
     assert document["status"] == "CLOSED"
@@ -152,7 +152,7 @@ def test_closed_batch_accepts_an_indexed_batch_and_rejects_closure_violations(tm
     raw = write_closed_json(root / "raw" / "default.json", {"value": 1})
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    batch = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+    batch = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
              "anchors": ["default", "left", "forward"], "batch_sha256": "0" * 64,
              "identity": identity,
              "files": _index_anchor_evidence(root, {str(raw.relative_to(root)): hashlib.sha256(raw.read_bytes()).hexdigest()},
@@ -309,7 +309,7 @@ def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_pa
     for anchor in ("default", "left", "forward"):                       # the seal declares three, so evidence three
         (root / "sync").mkdir(exist_ok=True)
         (root / "sync" / f"{anchor}.json").write_text('{"samples": []}')
-    sealed = Path(close_measurement_batch(root, require_v2_identity(identities)))
+    sealed = Path(close_measurement_batch(root, require_v2_identity(identities), cleanup={"cleanup_complete": True, "generation": "g1", "reason": "fixture"}))
     assert validate_closed_batch(root) is not None, "an untouched sealed batch validates"
 
     document = json.loads(sealed.read_text())
@@ -347,7 +347,7 @@ def test_a_batch_hiding_a_symlink_is_refused_even_when_it_is_indexed(tmp_path):
     digest = _hashlib.sha256(real.read_bytes()).hexdigest()
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity,
                 "files": _index_anchor_evidence(root, {"raw/real.json": digest, "raw/link.json": digest},
                                                 write_closed_json, _hashlib)}
@@ -378,7 +378,7 @@ def test_a_batch_records_its_cleanup_and_a_contaminated_one_is_refused(tmp_path)
         digest = _hashlib.sha256((root / "raw" / "row.json").read_bytes()).hexdigest()
         identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
         identity["source_commit"] = "b" * 40
-        document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+        document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                     "anchors": ["default", "left", "forward"], "identity": identity,
                     "files": _index_anchor_evidence(root, {"raw/row.json": digest}, write_closed_json,
                                                     _hashlib),
@@ -410,7 +410,7 @@ def test_a_batch_that_does_not_cover_every_declared_anchor_is_refused(tmp_path):
     digest = _hashlib.sha256((root / "anchors" / "default" / "geometry-00.json").read_bytes()).hexdigest()
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity,
                 "files": {"anchors/default/geometry-00.json": digest}}          # only one of three anchors
     document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
@@ -440,7 +440,7 @@ def test_a_driver_batch_that_misses_a_phase_for_an_anchor_is_refused(tmp_path):
             files[f"anchors/{anchor}/{written.name}"] = _hashlib.sha256(written.read_bytes()).hexdigest()
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity, "files": files}
     document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
     write_closed_json(root / "batch.json", document)
@@ -473,7 +473,7 @@ def test_a_driver_batch_whose_phase_stamps_go_backwards_is_refused(tmp_path):
             files[f"anchors/{anchor}/{written.name}"] = _hashlib.sha256(written.read_bytes()).hexdigest()
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity, "files": files}
     document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
     write_closed_json(root / "batch.json", document)
