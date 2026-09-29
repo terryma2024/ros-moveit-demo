@@ -19458,3 +19458,24 @@ not an inference of mine.**
   **42 passed**, no file of the owner's carries a stray modification from me, and the single remaining fix is the one I asked
   about - the module's socket base - which edits their file.
 - **State:** HEAD `fd1372a7`; staged 0; scratch `s804/tmp` added to the deletion candidates; no push, no stack, no hardware.
+
+## CP-1207 — Conclusive: the gate fails in exactly one module, identically under 8 workers and 1
+
+- **Both run roots read directly, every failure listed, and the answer is unambiguous:**
+  | run | workers | failing modules | failures |
+  | --- | --- | --- | --- |
+  | `scratch/g794` | 8 | **1** - `test_controller_reservation_client.py` | 16 |
+  | `scratch/g798w1` | 1 | **1** - the same module | the same 16 |
+  **Zero failures anywhere else in the ordinary suite**, and the same sixteen node ids in both configurations - so the failure is
+  deterministic, module-local and independent of sharding, which also retires any worry that the shard label or the worker count
+  was hiding a second problem.
+- **So the Task 9 gate's entire red reduces to one measured cause:** that module binds its socket at
+  `<TMPDIR>/../../ipc/res-XXXXXX/pYYYYYYYY.sock` (CP-1205), which is **109 characters** at the runner's shortened layout and
+  therefore two bytes over the 107-byte AF_UNIX budget; the same module passes **17/17** at a 68-character `TMPDIR` (CP-1201) and
+  fails at 88 (CP-1204). **Nothing is wrong with its logic, and nothing is wrong with the gate's own budget model** - which its
+  own suite already asserts at 106 with a refusal for anything longer (CP-1206).
+- **Everything else in the gate is green, and that is the sentence worth carrying to the review:** the ordinary package suite
+  passes in full except one module whose test fixture cannot fit a socket under this task's long evidence root. The candidate
+  fix is one line in that fixture - prefer the `SO101_IPC_SOCKET_BASE` the runner already exports, falling back to the current
+  behaviour - and it edits an owner file, so it waits for the owner's word rather than being taken quietly.
+- **State:** HEAD `02bf8fd3`; staged 0; both run roots retained as deletion candidates; no push, no stack, no hardware.
