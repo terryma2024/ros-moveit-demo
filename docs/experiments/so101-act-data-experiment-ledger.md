@@ -24082,3 +24082,18 @@ not an inference of mine.**
   the last full measurement. **Cleanup has never been authorised and has never happened.**
 - **State:** evidence file written under the registered evidence root (not in git by design); ledger checkpoint committed; no stack, no CUDA, no actuators,
   no hardware; nothing pushed.
+
+## CP-1453 — The scope question is now confirmed from three independent places in the code
+
+- **Not one source of evidence but three, all read this round:**
+  1. **the port's own docstring** - `PickPlaceSearchPhasePort`: *"Expose only SEARCH while later physical phases remain unprovisioned"*, with
+     `run_phase` refusing every other phase as `TASK8_PHASE_NOT_PROVISIONED`;
+  2. **the child-port builder** - `adapters/act/pick_place_child_port.py` offers exactly one entry, `build_pick_place_child_search_port(...)`, and names
+     no other phase anywhere in the module;
+  3. **the runner's own loop** - `pick_place_runner.py:209-235` iterates `for phase in self.PHASES:` and calls `evidence = self.port.run_phase(phase,
+     request)`, stopping early only when `request["mode"] == "phase_prefix" and phase == request["stop_after"]`.
+- **So a full case requires nine phase implementations of which one exists, and a prefix case is the supported way to run a bounded case** - the same
+  conclusion CP-1445 reached from `pick_place_case_execution`, now with the runner and the child-port builder agreeing. **The scope question in the packet
+  is therefore not a fixture limitation I am reporting; it is what the repository's own dispatch loop implies.**
+- **Packet note appended** so the review sees this reasoning where it will read it, and the packet's digest is re-measured below.
+- **State:** no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
