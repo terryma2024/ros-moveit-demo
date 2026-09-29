@@ -33794,3 +33794,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **green three consecutive times** (CP-1898, CP-1903): **5793 passed, 163 skipped, rc 0.**
 - **State:** **P1-1 through P1-6 CLOSED; every gate is measured or classified, and the packet carries the numbers and the
   classifications.** **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1905 — CP-1902 is WRONG and is retracted: the layout works, and the two limits are 107 and 103
+
+- **The verdict is right and my "no solution" claim was wrong.** The required layout
+  `R/scratch/<unique-run>/tmp` (with `R = /data/work/so101-evidence/act-data/20260924-fbc25063-resume`) gives
+  `TMPDIR.parents[2] = R`, and the reservation family the test asserts is
+  ```
+  R/ipc/8e2bc502c848d352/gripper.sock            -> 93 bytes   <= 107   OK
+  ```
+  **exactly the 93 the verdict states** - my earlier 109 came from nesting the scratch under `experiments/v5a/...`,
+  which put `parents[2]` one level deeper. **CP-1902's conclusion ("the two rules are incompatible") is retracted.**
+- **But a second, distinct limit exists, and it is what the CTest failures were actually about:**
+  ```
+  bridge.py:121         len((socket_root + "/safety.sock").encode()) > 103  -> IPC_SOCKET_PATH_TOO_LONG
+  child_runtime.py:332  len(str(path).encode()) > 103                      -> IPC_SOCKET_PATH_TOO_LONG
+  test_unified_bridge.py:67   base = os.environ.get("SO101_IPC_SOCKET_BASE") or tempfile.gettempdir()
+  ```
+  **the IPC socket base is a DIFFERENT variable from the fsync scratch**, and the child enforces **103**, not 107. With
+  `TMPDIR` used as that base, `TMPDIR + "/so101bridge-<8>/safety.sock"` is 107 > 103 - **which is why three tests failed
+  however the scratch was laid out.**
+- **The environment that satisfies both rules at once, verified by a targeted run:**
+  ```
+  TMPDIR/TMP/TEMP        = R/scratch/r2/tmp        (tempdir VERIFIED inside the scratch; parents[2] = R)
+  SO101_IPC_SOCKET_BASE  = R/ipc                   (63 bytes, under the evidence root - NOT /tmp)
+  worst child path       = 96 bytes                (<= 103)
+  ctest -R "test_unified_bridge$|test_unified_bridge_cleanup|test_unified_two_channel"
+       1/3 test_unified_bridge ......... Passed 2.18 s
+       2/3 test_unified_bridge_cleanup . Passed 12.97 s
+       3/3 test_unified_two_channel .... Passed 0.79 s
+       100% tests passed, 0 tests failed out of 3                                  rc=0
+  ```
+  **so "the rules are unsolvable" was never true; the missing piece was that the socket base must be short and separate,
+  and it can live under the evidence root rather than `/tmp`.**
+- **State:** **P1-6 in progress; the full 117-item serial CTest is re-running under exactly this environment.** **Task-list
+  statuses: P1-6 in_progress, the other six pending, none completed.**
