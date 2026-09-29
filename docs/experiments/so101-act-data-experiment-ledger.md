@@ -15253,3 +15253,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   gate's own registration, none of them this task's; the demo scope still unmeasured; Task 10 blocked until the 17 search
   values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1022 — The socket question splits in two: my scratch layout caused one half, the child's IPC path is the real one
+
+- **Found my own defect first.** `test_controller_reservation_paths::test_nested_campaign_uses_registered_short_root_for_socket_path`
+  derives its task root as `Path(os.environ["TMPDIR"]).parents[2]`, so it depends on the scratch being at the documented
+  depth. My scratch directories were `scratch-rNNN.XXXX/tmp` - one level shallower than the documented
+  `scratch/<test-run-id>/tmp` - which made `parents[2]` resolve a level too high and shortened the path enough to break
+  the test's own precondition (`assert 103 > 107`). **With the documented layout that module now passes**, so that
+  failure was mine, not the repository's.
+- **The child's IPC socket is a different matter and does not yield to the layout.** Re-running with the documented
+  layout still reproduces the real error: **7 × `IPC_SOCKET_PATH_TOO_LONG`** and 21 × `BRIDGE_CHILD_EXITED` across
+  `test_unified_bridge.py` (7 of its 9 cases failing), because the child builds its socket under `TMPDIR` and any
+  `TMPDIR` inside `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/...` is long enough to exceed the
+  platform's socket-path limit. CP-1012's A/B - 25-character `TMPDIR` passes, evidence-root scratch fails - is what
+  isolates this, and it is unaffected by the layout correction.
+- **So the question stands, but now precisely scoped:** it is about **the child's own IPC socket path**, not about
+  controller-reservation roots (whose mechanism the repository already provides and whose test the documented layout
+  satisfies). The options are unchanged and so is my recommendation: (1) shorten the child's socket path - an `AF_UNIX`
+  abstract socket or a short hashed name - and (2) permit a short, separately registered scratch as the gate's `TMPDIR`
+  while high-frequency evidence stays in the root.
+- **A correction to CP-1021, recorded rather than smoothed over:** there I said the question was mis-framed and withdrew
+  it. Half of that was right - the reservation-root failure was my layout error - and half was wrong: the child IPC
+  socket limit survives the fix, so the question had to come back, narrower and better evidenced.
+- **Also located for the next step:** the gate-registration test lives at
+  `src/so101_teleop/test/test_ctest_registration.py` (not under `test/teleop/`), which is why my first command errored
+  with "file or directory not found" - and its failure, *"modules the package gate would never run"*, is still open and
+  still relevant to whether a green `colcon test` proves the ordinary scope ran.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's teleop scope attributed with one failure class now mine-and-fixed (reservation root layout) and one
+  genuinely environmental (child IPC socket), plus the open registration-coverage finding; the demo scope still
+  unmeasured; Task 10 blocked until the 17 search values are reviewed.
