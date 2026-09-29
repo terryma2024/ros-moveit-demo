@@ -20028,3 +20028,28 @@ not an inference of mine.**
   **4** (per-root authoritative indexed descriptor in the aggregator), **5** (the child-driven Boundary V fixture).
 - **State:** commit for item 1 made with the test already green, per the owner's rule; HEAD at that commit plus this checkpoint;
   no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1230 — Item 2's source half is in and proven; its RED is red because my fixture shape is wrong
+
+- **Two self-inflicted failures this round, both recorded because the pattern matters more than the fixes:**
+  1. my splice of `head_search_binding.py` left a duplicated `detector, camera, motion = ...` line **outside** the `try`, so the
+     module did not parse at all. **I repaired it in place** - the owner's file may carry their own modifications, so
+     `git checkout --` was not an option and I did not use it; the repair only deleted the duplicate, restored its indentation and
+     verified with `ast.parse`;
+  2. my insert into `require_runtime_descriptor` landed **inside its docstring** for one round, because I looked for the first
+     `"""` instead of the closing one. The probe showed it plainly: the source printed with my comment lines inside the docstring.
+- **What is now true, proven by probe rather than by reasoning:** `validate_head_search_shape` was **extracted** from
+  `validate_head_search_binding` (same closed top-level set, same closed `head_search` key set, same dict requirement) and **both**
+  the binding and the shared `require_runtime_descriptor` call it; feeding a descriptor with an extra field through the extracted
+  validator raises `HEAD_SEARCH_CONFIG_INVALID`. **49 tests pass** across the binding, bundle, descriptor and contract suites - so
+  the refactor preserved every existing behaviour.
+- **The source half is committed; the test half is not:** `head_search_binding.py` and `task8_artifact_bundle.py` are committed on
+  their own because their suites are green, while my new item-2 test stays **uncommitted while red** per the owner's rule. Its
+  failure is `DID NOT RAISE`, i.e. it feeds the rule a document that passes the shape check - so the mutation in my test is aimed
+  at a key that is not where I assumed. **The next read is `_descriptor()`'s body**, exactly as CP-1227's lesson dictates: read the
+  fixture before writing the assertion.
+- **Item 2's remaining work after that:** make `runtime_descriptor` a **required** argument of `CalibrationMeasurementContext`
+  (delete the `None` default bypass) and confirm the CLI→context→driver identity test; then the missing/extra/bad-camera/bad-motion
+  negatives fall out of the shape rule that is now shared.
+- **State:** HEAD at the source commit plus this checkpoint; the RED test modification and the CLI/composition changes are in the
+  working tree; ledger 943 checkpoints; no stack, no hardware, nothing deleted, nothing pushed.
