@@ -26326,3 +26326,23 @@ picture in both directions.**
   `act/contracts.py`, `act/pick_place_runner.py`, `act/pick_place_validation_campaign.py`, `adapters/act/{broker_execution,pick_place_reset,pick_place_search_binding,pick_place_sources,ros_broker}.py` and the
   `test_act_{command_broker,contracts,controller_reference,execution}.py` files among them. **This batch's own work is committed; the owner's dirty files are exactly as they were.**
 - **State:** `demo_rc=0` (5731 passed / 163 skipped, fresh numbers, `-n 8` on 32 CPUs); teleop in flight; CTest path confirmed; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
+
+## CP-1581 — The teleop leg returns rc=0 and `colcon test-result` reports failures: the boundary is NOT green until that is resolved
+
+- **Two readings that disagree, recorded rather than reconciled by preference:**
+  1. **this run**: `colcon test --packages-select so101_teleop` finished with **`teleop_rc=0`** and **zero `FAILED`/`ERROR` lines** in its log, with per-file results appearing green as they were reported;
+  2. **`colcon test-result --test-result-base build/so101_teleop`** reports, on disk:
+     ```
+     Testing/20260929-1223/Test.xml                 : 116 tests, 4 failures
+     test_task8_live_evidence_production_chain      :   6 tests, 2 failures
+     test_unified_bridge                            :   9 tests, 7 failures
+     test_unified_bridge_cleanup                    :   7 tests, 7 failures
+     test_unified_two_channel                       :   6 tests, 6 failures
+     ```
+- **And the timestamps say the second reading is a MIXTURE, which is why it cannot be taken at face value:** `Testing/` holds **twelve** runs from `20260928-1705` to `20260929-1223`, and the CTest directory whose name is `20260929-1223` (a **12:23** start) was touched at 20:26; the xunit files carry 20:27. **So some of those failures are from earlier runs this machine has made, and some may be from this one - and I will not call the leg green or red until the failures are read by name.**
+- **The next actions, in order, and both are reads rather than edits:** (1) the aggregated pytest totals from **this** run's log, by reading its summary section rather than grepping per-file lines; (2) the failing test names and messages
+  from the four xunit files, so each failure is attributed to a run and to a cause. **Only then can the teleop leg be reported, and the CTest leg (launched, log `experiments/final-boundary/ctest.log`) has its own fresh
+  `Testing/<stamp>` directory to compare against.**
+- **Why this entry exists at all:** the boundary's whole purpose is that a green-looking gate is not evidence. **`rc=0` and "no FAILED lines" are two readings; the third - the accumulated result files - disagrees, and the boundary
+  report must say so rather than pick the flattering one.**
+- **State:** demo `rc=0` (5731/163, fresh); teleop `rc=0` with a contested result file set; CTest in flight; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
