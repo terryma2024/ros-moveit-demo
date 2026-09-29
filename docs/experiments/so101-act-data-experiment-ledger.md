@@ -12193,3 +12193,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   resource binding is entry-only and that production `owner=act` semantics stay untouched.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-898 — Task 4: the CLI composition boundary is now precisely mapped
+
+- **Read the entry's middle third.** `src/cli/act_command_broker.py` validates calibration mode against several
+  motion manifests (route, transition, held-cup), each requiring `--calibration-mode` plus the timing options and
+  comparing its diagnostic's `session_id`, `submit_lead_s`, `stop_velocity_rad_s` and `stop_max_age_s` against the
+  CLI options; then it takes a `DomainAuthority` lease on `ROS_DOMAIN_ID`, initialises rclpy with
+  `use_sim_time=True`, spins a `SingleThreadedExecutor`, and enters a `try:` block at line 135 where the driver,
+  broker, server, provisions, motion guard and stop state are constructed.
+- **So the remaining Task 4 edit has a known address:** the entry-bound `CalibrationMeasurementContext` belongs
+  immediately after the manifest validation and before that `try:` block, so it exists before any driver, broker or
+  reservation object is built, and it is then handed to the owner-factory/reservation wiring inside the block -
+  keeping resource binding at the entry, exactly as the standing ruling requires. The production `owner=act`
+  construction must come out of this edit byte-for-byte unchanged.
+- **Why the edit waits one more round:** the construction detail lives in the `try:` block I have not yet read, and
+  this file initialises rclpy and takes a domain lease; guessing at its object graph would risk the launch path
+  itself. Editing source is within bounds (no runtime is started by an edit), but a speculative change here is the
+  expensive kind of mistake.
+- **Verified state carried forward:** the Task 4 baseline is green at **75 passed** (CP-897), and the admission,
+  binding, Ownership-role, broker-enforcement and context pieces are all in place.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
