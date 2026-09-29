@@ -614,3 +614,38 @@ def test_each_anchor_runs_the_live_search_and_keeps_its_raw_iterations(tmp_path)
 def test_a_stack_that_cannot_search_fails_closed_by_name(tmp_path):
     sealed = _probe_driver(_SearchStack(search=False)).run(_measurement_context(tmp_path), tmp_path / "batch")
     assert "MEASUREMENT_SEARCH_REQUIRED" in json.dumps(json.loads(Path(sealed).read_text()))
+
+
+def _runtime_descriptor():
+    return {"schema_version": 1, "head_search": {
+        "schema_version": 1,
+        "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "a" * 64,
+                     "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda",
+                     "allow_cpu_fallback": False, "torch_threads": 4, "torch_interop_threads": 2,
+                     "torch_version": "2.0", "ultralytics_version": "8.0"},
+        "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
+                   "width_px": 640, "height_px": 480},
+        "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}}
+
+
+def test_the_driver_registers_the_runtime_descriptor_with_the_batch_it_seals(tmp_path):
+    """Section 4.2/3.1: the descriptor the measurement ran under travels with the raw batch, so a later report can be
+    bound to it - and the closed index covers it like every other file."""
+
+    import json as _json
+
+    context = _measurement_context(tmp_path, generation="generation-descriptor")
+    context.runtime_descriptor = _runtime_descriptor()
+    root = tmp_path / "batch"
+    _driver(FakeStack()).run(context, root)
+
+    recorded = []
+    for path in sorted(root.rglob("*.json")):
+        try:
+            document = _json.loads(path.read_bytes())
+        except (UnicodeDecodeError, _json.JSONDecodeError):
+            continue
+        if isinstance(document, dict) and isinstance(document.get("head_search"), dict):
+            recorded.append((path, document["head_search"]))
+    assert recorded, "the sealed batch records the descriptor it was measured under"
+    assert any(descriptor == context.runtime_descriptor["head_search"] for _, descriptor in recorded)
