@@ -19741,3 +19741,21 @@ not an inference of mine.**
   rather than a defect in the code under test. **I have stopped rather than trying a sixth variation of the same workaround.**
 - **State:** HEAD `6788a81c` plus this checkpoint; staged 0; all five colcon logs, the per-package logs, both xdist artefacts and
   every scratch and IPC base retained as deletion candidates; no push, no MuJoCo stack, no hardware.
+
+## CP-1218 — The blast radius is one module, and it is the gate runner's own test file
+
+- **Counted rather than estimated:** exactly **one** file under `src/so101_demo_py/test/` imports `tools.…` -
+  `test_pytest_full_gate_runner.py`, the sanctioned runner's own test - and the package already carries a `setup.cfg` with pytest
+  configuration in it (its first lines are printed above). So the package gate's `No module named 'tools'` is caused by **one
+  module needing the repository root on `sys.path`**, and the fix is a **one-line addition in that `setup.cfg`** rather than
+  anything structural.
+- **Why that module is inherently root-dependent, which is worth stating for the reviewer:** it tests
+  `tools/so101_pytest_gate.py`, a script that lives at the repository root by design, so a test run that cannot see the root
+  cannot collect it. Nothing about my stretch changed that file - it is **byte-identical to HEAD**, verified with
+  `git checkout --` and an empty `git status` at CP-1206 after my add-then-remove cycle.
+- **What that means for the owner's choice, sharpened:** option (a) is smaller than it looked - one `pythonpath` line in
+  `src/so101_demo_py/setup.cfg` (pytest's own ini option, accepting a path relative to the rootdir or absolute), after which the
+  package gate should collect and run. Option (b) remains: treat the xdist result (5638 passed, 0 failed) plus CP-1217's
+  classification as the package gate. **Both are one decision, and neither is a judgement call I should make on the owner's file.**
+- **State:** HEAD `07b4b014` plus this checkpoint; staged 0; every log, artefact, scratch and IPC base retained as deletion
+  candidates; no push, no MuJoCo stack, no hardware.
