@@ -32172,3 +32172,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   (the scene is the physics state, the audit reports it).** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1850 — Where P1-5 actually stands, stated plainly for the record
+
+- **What the drive has PROVEN, all of it production code accepting production collaborators:**
+  | proven | evidence |
+  | --- | --- |
+  | the APPROACH checker builds from the admitted document and greets with the model hash | CP-1816, `2 passed` |
+  | the screen mounts over it and refuses an incoherent sources | CP-1818 |
+  | the production broker builds (`build_bound_act_broker`) with the reservation fixtures and the production domain | CP-1834/1839 |
+  | `run_pick_place_case` accepts it and `begin` passes the trusted-source-port admission | CP-1839 |
+  | `run_phase` -> `_search_evidence` clears the schema, the receipt, the **physical-readback scope** (including the
+    one-model-hash coherence across scene, pairs and checker), the Planning Scene, the readback members and the
+    tolerances | CP-1843-1848 |
+  **Two production defects were found and fixed on the way (CP-1814's missing required argument, CP-1838's `clock_ns=None`
+  over a callable default), both invisible from either file alone.**
+- **And what it is now meeting is a different kind of obstacle, which is why this is recorded rather than pushed
+  through:** the refusals that remain come from the segment suite's own doubles - a `_locked()` audit that reports
+  `neck_yaw_rad = 0.1` while the readback's `scene["qpos"]` is all zeros (CP-1848/1849). **Those doubles were written for
+  the segment's tests, where the port's checks are never applied**, so they are internally consistent for their own suite
+  and inconsistent only when driven through the port - **which is exactly the gap P1-5 exists to close.** Fixing them
+  means editing fixtures that other suites' tests depend on, one value at a time, **and that is a scope question worth
+  putting rather than assuming.**
+- **The three honest ways forward, with their costs:**
+  1. **continue correcting the segment doubles** so the port's checks hold - the faithful path, **but it touches shared
+     fixtures and needs each change verified against the suites that own them**;
+  2. **build a full-case harness whose doubles are written for the port's contract from the start** - **more code, but no
+     edits to fixtures other tests rely on, and it would keep the one-chain principle**;
+  3. **stop at the boundary the evidence marks** - P1-5's production side is proven as far as the port's own refusals
+     allow, and record the remaining fixture work as the open item **rather than finishing it under time pressure**.
+- **State:** **P1-5 in progress: the production half of the drive is proven with two defects fixed, and the remaining
+  obstacles are fixture inconsistencies in shared test doubles - a scope decision that is being surfaced rather than
+  taken unilaterally.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
+  re-review packet remain waiting on it.
