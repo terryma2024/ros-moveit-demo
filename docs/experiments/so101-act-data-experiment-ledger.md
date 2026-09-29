@@ -12156,3 +12156,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   generation-carrying expectations.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-896 — File accounting verified, and a user-dirty interaction Task 4 must respect
+
+- **Accounting settled by inspection rather than inference:** the tree holds **32 modified tracked + 15 untracked**
+  files. Exactly **two** of the modified files are mine - `src/so101_demo_py/src/act/ownership.py`
+  (16 insertions, 1 deletion) and `src/so101_demo_py/src/adapters/act/command_broker.py` (44 insertions,
+  3 deletions) - and both diffs consist **only** of my calibration-related additions, so neither file was
+  user-dirty before I touched it and I did not overwrite prior work. The other 30 modified tracked files and all 12
+  pre-existing untracked files are the user's, unchanged except the preserved one-token `Pairs.fingerprint` fix
+  (CP-861). (An earlier round recorded 31 modified; the verified figure now is 32 with 2 mine, and the count, not
+  the earlier narration, is what this checkpoint treats as authoritative.)
+- **Important interaction found:** `src/so101_demo_py/test/test_act_task8_search_binding.py` is **user-dirty**, and
+  the approved plan lists it among Task 4's *Modify* targets. Any change there must therefore be a minimal,
+  additive, generation-carrying expectation layered onto the user's current content - never a checkout, never a
+  rewrite - and its diff must be shown and guarded before the nine-file commit. The same care applies to
+  `test_act_control_event_timeline.py` if it turns out to be user-dirty when I reach it.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
