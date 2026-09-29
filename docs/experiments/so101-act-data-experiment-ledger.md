@@ -27014,3 +27014,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   rather than adding a second handler around the existing one, which would leave two INVALID lines for a driver failure. **The ledger is append-only; "one terminal state per run" is the property worth keeping.**
 - **The two companion checks of item 4 remain, and they go into the same change:** the **seal's complete identity against the admitted identity**, and the **enforced cleanup proof** - both assertable through this same seam.
 - **State:** item 4 **RED-established and localized**; the new test stays uncommitted while red, as the rule requires. Item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1618 — The cleanup rule's layer, decided by the failures it caused rather than by preference
+
+- **What the GREEN did and what it cost, honestly:** two source changes went in -
+  1. **the CLI now guards the whole post-run region once** (driver failure, validator refusal and an unreadable seal all append **one** INVALID row and re-raise), **and compares the seal's complete identity with the admitted identity**, refusing with
+     `MEASUREMENT_SEAL_IDENTITY_MISMATCH`;
+  2. **the validator now requires a cleanup proof on a `CLOSED` batch** (`BATCH_CLEANUP_PROOF_REQUIRED`), because `cleanup` was **allowed but not required** (`_BATCH_REQUIRED` excludes it) - so a batch could be published with no evidence its workspace was cleaned, which is the third half of item 4.
+- **The focused run: `8 failed, 34 passed`** - my two RED cases plus **six pre-existing tests** in `test_act_task8_measurement_contract.py`, all of the same shape: they call the low-level
+  `close_measurement_batch(root, identity)` **without a cleanup receipt**, so the new rule refuses a batch they closed for reasons that have nothing to do with cleanup.
+- **And that settles the layer question, which is why this entry stops rather than patching tests:** **a `CLOSED` batch should be impossible to create without its cleanup proof, so the rule belongs at `close_measurement_batch` - the seal - not only at the validator that reads it back.** Enforcing it at the seal
+  fails at the **first** boundary rather than the last, which is this batch's standing rule; and the affected fixtures then need a cleanup receipt **because they are sealing a batch**, which is a legitimate completion rather than a workaround.
+- **So the next step is two edits and one re-run:** move (or duplicate) the requirement into `close_measurement_batch`, complete the six fixtures' seals with a cleanup receipt, and re-run this focused set -
+  **the source changes stay uncommitted until that set is green**, exactly as the red test does.
+- **State:** item 4's GREEN is in progress with its layer decided and its cost measured; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal,
+  worktree or stack; no hardware; no live stack; P2 live not started.
