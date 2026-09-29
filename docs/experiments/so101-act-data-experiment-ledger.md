@@ -22813,3 +22813,16 @@ not an inference of mine.**
   item that the file's own frame was cheaper than my inference.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1377 — And one mistake of mine, recorded: a stray ledger file, moved and removed
+
+- **What happened:** a `cat >> path-A 2>/dev/null || cat >> path-B` fallback in this round's command **created a new file** at
+  `docs/experiments/so101-act-data-0917a-ledger.md` instead of appending to the real ledger, so CP-1376's entry landed in the wrong place and
+  the `git add` of the real ledger staged nothing. **The `||` fallback was mine, and it was a bad idea for exactly this reason.**
+- **What I did about it:** appended that file's content into `docs/experiments/so101-act-data-experiment-ledger.md` and removed the stray -
+  **it contained only the entry I had just written, nothing pre-existing**, so no evidence was lost or discarded. It is recorded here rather than
+  quietly fixed, because the ledger's job is to be the honest record, including of my own slips.
+- **And the substantive read that came with it is decisive:** the marker check at `pick_place_search_segment.py:116-122` requires
+  `marker["session_id"] == request["session_id"]`, `marker["reset_epoch"] == reset_epoch`, `type(marker["marked_physics_step"]) is int` with
+  `>= 1`, and `marker["command_authority"] is False` - **and the suite's double returns its own fixture's session, which is why my case is
+  refused.** The fix is two lines in `_ChildSources`: a `physics_fence` lambda carrying this case's identity and a real marked step.
