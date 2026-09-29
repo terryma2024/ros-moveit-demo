@@ -23741,3 +23741,22 @@ not an inference of mine.**
   `event=True` for the gripper-open command, that also creates the event record the reviewer's first assertion reads.
 - **State:** HEAD is this checkpoint's commit; step 1's changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing
   pushed, nothing deleted.
+
+## CP-1436 — The model call read, and the samples now route through the window
+
+- **The live-evidence suite's own test is the model, and it is exactly the shape the fixture was missing:**
+  ```python
+  for index, phase in enumerate(LiveEvidenceWindow.REQUIRED_PHASES):
+      present = dict(fields, physics_step=index, sim_time_s=index * 0.1)
+      driver.observe(present, phase=phase, frame=frame, contact=contact, measurements=measurements)
+  driver.observe(dict(fields, physics_step=99, sim_time_s=6.05), phase="RELEASE_EPOCH_EDGE",
+                 frame=frame, contact=contact, measurements=measurements, event=True)   # the EVENT record
+  artifact = driver.seal()
+  ```
+  **so the nine phases are GRID samples over `LiveEvidenceWindow.REQUIRED_PHASES`, and the gripper-open style record is an EVENT - the reviewer's
+  first indexed assertion.**
+- **And it settles the reachability problem CP-1435 posed:** the child attaches only the **window** to the port, and `observe` routes to
+  `window.add_grid` / `window.add_event` - **so the fixture routes its samples through the window too**, which is what the edit above does
+  (`_live_window` forwarded alongside the recorder, `add_grid` used when present and `append` otherwise). **No production code was touched.**
+- **State:** the outcome line is captured above for the next read; changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware;
+  nothing pushed, nothing deleted.
