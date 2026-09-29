@@ -32838,3 +32838,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress: the four proofs attach, the native-ingress requirement passes, and the remaining defect is
   a malformed `qvel` in the fixture's scene document.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement,
   P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1872 — The fixture's raw scene is minimal, and the `qvel` is added by the readback's enrichment
+
+- **The fixture's `_raw` builds a four-key scene:**
+  ```python
+  "scene": {"simulation_session_id": "session-1", "reset_epoch": 2,
+            "simulation_step": step, "paused": paused},
+  ```
+  **while the port's `SCENE_KEYS` check requires the richer set** (the earlier diagnostic printed nine keys plus
+  `simulation_time_s`, `qpos`, `qvel`, the clock interval pair and `model_sha256`) - **so the document is enriched
+  between `_raw` and the port, by production's readback assembly**, and
+  ```
+  pick_place_readback.py:338   qvel = raw["scene"]["qvel"]
+  ```
+  **is one of the readers of the enriched key.**
+- **Which narrows the search to one function** - wherever the readback assembles the scene document it hands upward -
+  **and that is where the `int` is coming from.** My construction assumed the vector the production readers demand
+  (`vector(scene["qvel"], model.nv)` in `pick_place_approach_path_screen.py:168`,
+  `stationary_bridge_history.py:97`, `selected_approach_candidate.py:108`), **and the document is the side that is
+  wrong.**
+- **And the reason this is worth one more round rather than a defensive cast:** the four production readers above all call
+  `vector(...)`, **which validates the length against the model's `nv`** - so an `int` there is refused by production for
+  the same reason my `tuple(...)` refused it, **and hiding it in the fixture would only move the refusal downstream
+  where it would be harder to see.**
+- **State:** **P1-5 in progress: the scene's enrichment is the single place left to look, and the defect is a `qvel` that
+  is an `int` where four production readers require a vector of length `nv`.** P1-1 through P1-4 CLOSED. The demo RED's
+  clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they
+  are not re-stated.**
