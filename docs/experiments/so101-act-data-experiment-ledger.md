@@ -24027,3 +24027,25 @@ not an inference of mine.**
 - **Next: the single integration boundary** (fresh NVMe scratch, verified TMPDIR/TMP/TEMP, min(8, CPU) workers, benchmark excluded, retained JUnit/logs/
   skips/elapsed/provenance/real exit codes, **rebuild and verify CTest registration**), then the packet correction, then the independent review request.
 - **State:** committed with the focused file green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1450 — P1-5's single integration boundary: green, with the CTest registration verified
+
+- **Fresh scratch and verified temps:** a previously nonexistent scratch under the registered evidence root
+  (`scratch/p15-boundary-1790676428/tmp`), with `TMPDIR`/`TMP`/`TEMP` pointed at it and **`tempfile.gettempdir()` verified through the exact interpreter**
+  before anything ran; a fresh IPC base at mode 0700; `-n 8` on a 32-CPU host; the demo gate excludes the benchmark through `testpaths = test`.
+- **Rebuild, because the review asked for it and the tree needed it:** `colcon build --packages-select so101_demo_py so101_teleop --symlink-install`
+  -> **rc=0 in 35.5s**, and afterwards the build copy of the adapter **resolves to the src file**, so the production change is actually in the tree the
+  gates exercise.
+- **The gates:**
+  | gate | result |
+  | --- | --- |
+  | **demo** (canonical: `colcon test` from the workspace root, the venv as `sys.executable`, `-n 8`) | **rc=0 - 5651 passed, 163 skipped, 4 warnings in 77.83s** |
+  | **teleop** (`pytest -q test -n 8`) | **rc=0 - 1266 passed, 43 skipped, 9 warnings in 40.49s** |
+  | **CTest registration** | teleop lists **116 tests including `test_task8_case_runner_chain` (#9) and `test_task8_child_driven_case` (#10)**; `ctest -R` on those two gives **100% passed, 0 failed out of 2** |
+- **And an honest note about the first attempt:** I ran the demo gate from inside the package directory by mistake; colcon then warned the package "hasn't
+  been built", used the install copy and printed `[ with test failures ]` **although pytest itself was green (5644 passed, 163 skipped)**. The canonical
+  run from the workspace root - recorded above - reports **no** test failures. **Both facts are in the evidence file, because a boundary that hides its
+  own mis-invocation is worth less than one that names it.**
+- **Evidence retained** in `experiments/gate7-p15-boundary/`: `README.txt` (the summary above), `rebuild.log`, `demo-gate.log` (the mis-invocation),
+  `demo-gate-root.log` (canonical), `teleop-gate.log`, `demo-ctest.log`, `teleop-ctest-new.log`, `scratch-path.txt`, `ipc-base.txt`.
+- **State:** no stack, no MuJoCo, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted; the ~300 GB of deletion candidates untouched.
