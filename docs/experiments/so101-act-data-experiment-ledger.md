@@ -23152,3 +23152,19 @@ not an inference of mine.**
   with P1-5's exact state documented, and defer P1-5 to a fresh approved round. Absent that, I keep going.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1397 — The probe hit the deliberate retry row, and a sharpened expectation I owe the owner
+
+- **Mechanical:** my probe looped sixty `capture` calls without skipping the **queued exception** row (the deliberate `SOURCE_STEP_NOT_ADVANCED`
+  that the segment's own scenario uses), so it aborted on row two. **The fix is to catch and continue** - one line, and the probe then prints the
+  final row's step, sim time, paused/truncated flags, session, epoch, the receipt's epoch, both documents and the timestamp range.
+- **And the expectation, sharpened rather than repeated:** items 1-4 are complete, committed and green. P1-5 has consumed roughly **thirty rounds**
+  and is still inside the **substituted-I/O contract hunt** - one wrapped error code at a time - while its **case-level half** (the trusted
+  aggregator, the seven indexed assertions, the four negatives) has not begun, and about **thirty-seven rounds** remain. **On that arithmetic I do
+  not expect P1-5 to complete within this batch even if every remaining round lands cleanly.**
+- **So my offer is not a hedge but a recommendation:** stop the fixture tail now, submit **items 1-4 as the revision** with P1-5's state documented
+  precisely in the packet and ledger (including the exact failing condition and the four probes that narrowed it), and let P1-5 be re-approved as
+  its own round where its case-level requirements can be built and tested without being squeezed. **I will follow whichever way the owner answers,
+  and absent an answer I continue, because continuing is what the current instruction says.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
