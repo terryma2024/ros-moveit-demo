@@ -28089,3 +28089,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   - **the fixtures that stood in for a phase camera now declare `geometry_state: "MEASURED"` with samples**, and the composition-contract test supplies its geometry through the same seam - **so no fixture can pass by returning a shape the driver would refuse in production.** That is the same discipline P1-1 applied to the detector protocol and P1-2 applied to the identity member.
 - **What P1-3 was, and what it now is:** the evaluator returned the admitted matrix's own occluder names, camera block and hash with `phase`/`index` as labels, so moving the cup, the camera or an occluder could not change the observation, and the driver's `period_s=0.002` described **one sample per phase**. It now poses the head camera per sample from that sample's **neck joint**, projects the target through the pinhole at the admitted 2 ms cadence, decides visibility against each occluder's own geometry, and retains **both the input and the result** of every sample.
 - **State:** **P1-3 complete**; the task list moves P1-3 to done and **P1-4** to in-progress; **three controlled source changes have now occurred**, so the eventual integration boundary needs a new run root; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1678 — P1-4 verified, all four claims, and its first RED is in place
+
+- **Claim by claim, read against the code:**
+  | the verdict says | what the code says |
+  | --- | --- |
+  | `_grid_sample` emits `release_epoch=0` for all phases while the rule says RELEASE+ is 1 | `pick_place_search_port.py:478-480` builds `identity = {..., "release_epoch": 0}` **hardcoded**, while the port's own `_release_epoch_for(phase)` (`:787-795`, `_RELEASE_EPOCH_AFTER = ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")`) returns **1** for exactly those three |
+  | the window seals with the initial epoch and the port returns the already-sealed artifact without comparing | `seal_live_evidence` (`:272-300`) takes its identity from `_release_epoch_for("FINAL_CHECK")` - the **computed terminal epoch** - and returns an existing artifact "instead of sealing again"; **the entries say 0 and the seal says 1, and nothing compares them** |
+  | samples occur at phase completion, not continuously at 10 Hz, and the chain never calls `add_event` | the window **has** `add_gripper_event`/`add_event` (`task8_live_evidence.py:531,561`) and **the port never calls either**: its only feed is the per-phase `add_grid` |
+  | the fixture rewrites timestamps and its source time wraps, masking the deficit | `test_act_task8_nine_phase_case.py:422-426` wraps `window.add_grid` to stamp `base + 0.1 * (grid_count + 1)`, and `:451` computes `moment = simulation_time_s + 0.002 * (1 + index % 40)` - **`index % 40` wraps** |
+- **And the RED's first two cases fail on the repo's own nine-phase fixture, for the stated reasons:**
+  ```
+  FAILED test_each_sample_carries_the_epoch_the_ports_own_rule_gives_its_phase
+      AssertionError: RELEASE carries release_epoch=0 while the port's own rule (_RELEASE_EPOCH_AFTER) gives it 1
+  FAILED test_the_sealed_identity_is_the_epoch_the_case_actually_ended_in
+      a case that has run RELEASE, RADIAL_RETREAT and FINAL_CHECK ended in epoch 0, not 1
+  ```
+  **The second case also asserts the other side of the same rule** - a recorder refuses an identity whose epoch its entries do not end in - so the fix cannot be "make the identity agree with the samples" if the samples are wrong.
+- **The GREEN is four pieces, in the verdict's own order:** (1) derive the sample's epoch from `_release_epoch_for(phase)` instead of the literal; (2) seal and read back with the **actual terminal identity**, comparing rather than returning a stale artifact;
+  (3) implement the **frozen grid plus command/release/contact edge sampling at the source-acquisition layer** - the port calling the window's event path, which is what makes "continuously at 10 Hz, plus the edges" true; (4) make the fixture use **one monotonically increasing source
+  clock and rewrite no timestamps**, which is only possible once (1) and (3) hold.
+- **State:** **P1-4 RED in place**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed (the next boundary needs a new run root); goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
