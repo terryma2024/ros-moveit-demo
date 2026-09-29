@@ -26315,3 +26315,14 @@ picture in both directions.**
 - **What remains for this boundary:** the **teleop gate** (just launched, `colcon test --packages-select so101_teleop`) and **CTest**. **The boundary is not complete until all three are green and recorded together**, and the
   packet will not be updated before that.
 - **State:** nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
+
+## CP-1580 — The boundary's remaining legs: teleop in flight, and the CTest path confirmed read-only
+
+- **The teleop gate is running** (`colcon test --packages-select so101_teleop` with `-q -p no:cacheprovider -n 8` and a JUnit file, log at `experiments/final-boundary/teleop.log`), and per-test-file results are already appearing.
+  **Nothing is claimed about it until it finishes.**
+- **And the CTest leg is confirmed by reading, not by assuming:** `ctest` is `/usr/bin/ctest`, `build/so101_teleop/CTestTestfile.cmake` **is present** (which is where the earlier batch's 116 registered tests came from), and
+  `build/so101_demo_py` **has no CTest file** - so the CTest leg is the teleop tree's, and the demo module's gate is the pytest one that already passed.
+- **A note on the working tree, checked this round:** the pre-existing modifications the owner asked to preserve are all still uncommitted and untouched by this batch -
+  `act/contracts.py`, `act/pick_place_runner.py`, `act/pick_place_validation_campaign.py`, `adapters/act/{broker_execution,pick_place_reset,pick_place_search_binding,pick_place_sources,ros_broker}.py` and the
+  `test_act_{command_broker,contracts,controller_reference,execution}.py` files among them. **This batch's own work is committed; the owner's dirty files are exactly as they were.**
+- **State:** `demo_rc=0` (5731 passed / 163 skipped, fresh numbers, `-n 8` on 32 CPUs); teleop in flight; CTest path confirmed; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
