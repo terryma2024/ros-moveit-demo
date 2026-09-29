@@ -13694,3 +13694,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   at 25; Tasks 9-10 untouched; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts
   and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal
   0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained and ineligible, gen4 reserved for Task 10.
+
+## CP-961 — Definitive verification of the delivered state (round 555)
+
+- **Ran the focused set across both packages** with a fresh verified NVMe scratch and bytecode writing disabled:
+  - **demo package: 204 passed in 0.46s** (rc=0, `beh-final-demo.log`) -
+    runner, live evidence, live qualification, search port, phase camera, deterministic render, measurement contract
+    and formulas;
+  - **teleop package: 47 passed, 1 warning in 1.23s** (rc=0, `beh-final-teleop.log`) -
+    case execution with my uncommitted fixture update, the production-chain test and campaign admission.
+- **Delivered in this session:** Tasks 1-7 of the approved measurement-protocol v2 plan, complete and green at every
+  increment - contract v2 with closed schemas and the ten-member identity; the 28 pure formulas and the aggregator's
+  delegation seam and deterministic render/publish; phase-camera replay and live coverage; bounded calibration
+  admission with the `calibration` role, broker enforcement and entry-only resource binding; the raw-only MuJoCo
+  measurement driver; the nine-phase live-evidence window with release correlation, invalid seal, port grid feed and
+  idempotent seal; the journal-row readback; and the real owner's retirement path proven through the real `_retire`.
+  Task 8 is underway: `derive_live_measurements` implemented and green, with the immutable 33-field report still to
+  build.
+- **Corrections and incidents recorded rather than hidden:** the inferred phase list (CP-907), the aggregator
+  deviations (CP-906), the displaced-work incident and its repair (CP-930/931), and the operational rules that came
+  out of it (CP-932).
+- **Boundaries held throughout:** no runtime started, no package gate run (Task 9's single full gate remains), nothing
+  pushed, no evidence deleted, no hardware touched; the user's files preserved apart from the CP-861 one-token typo fix
+  whose original bytes are in `user-file-backups/`; the three user-dirty files carrying my additive changes remain
+  uncommitted by design.
