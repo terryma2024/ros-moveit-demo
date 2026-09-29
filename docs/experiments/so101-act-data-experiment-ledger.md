@@ -22402,3 +22402,20 @@ not an inference of mine.**
   override - **the assertion is about the startup proof reaching the port, and it should read the production attribute, not a fixture one.**
 - **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
   nothing pushed.
+
+## CP-1350 — Step 1 is in and converging: the production port is now the object the child runs
+
+- **What is true now:** `ChildPort` **extends the production `PickPlaceSearchPhasePort`**, constructed with a substituted `_Boundary`, and
+  `bind_live_evidence` fills `_live_evidence_window` / `_evidence_recorder` from the child's real window. **The monkeypatched `FakePort` seal
+  is out of the loop** - which is the reviewer's first complaint about this fixture, answered structurally rather than by assertion.
+- **And running it is teaching me the production contract one requirement at a time**, which is the honest reason this is not a single edit:**
+  | run | what the production port demanded |
+  | --- | --- |
+  | 1 | the boundary needs its own `reset` (line 66 reads `self.boundary.reset.sources.session_id`) |
+  | 2 | so `reset` is a **value**, not a method, and the startup receipt must carry a non-empty `stack_owner` and `child_owner` as well as its session |
+  | 3 | the failure moved again - and the `--tb=line` summary hid it, so the next step is one `--tb=short` run naming the new site |
+- **Why this is progress rather than churn:** each earlier failure was a **fixture** shortfall that the production code caught and named
+  (`TASK8_SEARCH_PORT_CONFIG_INVALID`, then `TASK8_STARTUP_PROOF_INVALID`'s fields), and no production check was relaxed to get past them.
+  **The contract being satisfied is the production contract, discovered by running it.**
+- **State:** step 1's changes are uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware; cleanup
+  untouched; nothing deleted, nothing pushed.
