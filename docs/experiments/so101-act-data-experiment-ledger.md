@@ -16819,3 +16819,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Next round, in one commit:** recompute the digest in the validator (the block is written and reviewed) **and** give
   the two hand-built fixtures real digests - computed over the document minus the field, with the seal's own
   canonicalisation - then expect 28 passed including the new test.
+
+## CP-1084 — The self-digest is verified: a tampered seal is refused (RED then GREEN, as a pair)
+
+- **Landed together, as CP-1083 required:** the validator now recomputes `batch_sha256` with the **seal's own
+  canonicalisation** (`_canonical` over the document minus the field) and refuses a mismatch, and the two hand-built
+  fixtures compute **real** digests the same way (`pop` the placeholder, hash the document, then set the field). Enabling
+  the check alone had broken four tests that were passing on `"0" * 64` placeholders - which is exactly why the pair had to
+  move together.
+- **GREEN: 28 passed, rc=0** (27 + the new test), scratch `<R>/scratch/r684.<n>` with `TMPDIR` verified through the exact
+  test interpreter; RED `beh-r683-red*.log`, pairing evidence `beh-r683-green.log`, GREEN `beh-r684.log`.
+- **What this closes:** the property the seal's design depends on - that a sealed batch's identity and status cannot be
+  edited after the fact - is now **enforced** rather than assumed, and the "checks the shape but not the value" gap CP-1079
+  flagged is closed inside Boundary IV.
+- **Boundary IV's remaining substance, unchanged and clearly not claimed as done:** the anchor x phase x source closed raw
+  index; real measured values published rather than written as PASS; the four canonical documents and a real 28-field
+  `TASK8_READY`; render-twice byte comparison with a single publish; on-disk readback of the sample path and hash; then
+  `require_gate(report, "task8_live")` and `validate_head_search_binding()`.
