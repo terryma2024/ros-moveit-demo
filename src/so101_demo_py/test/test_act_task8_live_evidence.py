@@ -65,7 +65,7 @@ def recorder(tmp_path):
 def test_sealed_artifact_is_closed_and_lists_every_sample(recorder):
     rec, root = recorder
     for step in range(3):
-        rec.append(sample(root, step=step))
+        rec.append(sample(root, step=step), kind="grid")
     artifact = rec.seal({"case_id": "full-01", "session_id": "session-1",
                          "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 0})
     path = Path(artifact["path"])
@@ -105,13 +105,13 @@ def test_incomplete_or_incoherent_evidence_is_refused(recorder, mutation):
     else:
         document["wrist_frame_valid"] = False
     with pytest.raises(ValueError):
-        rec.append(document)
+        rec.append(document, kind="grid")
 
 
 def test_occlusion_is_only_timed_for_a_valid_frame_with_hidden_target(recorder):
     rec, root = recorder
     honest = sample(root, step=0, wrist_frame_valid=True, wrist_target_visible=False)
-    rec.append(honest)                       # a genuine, bounded visual occlusion is accepted
+    rec.append(honest, kind="grid")                       # a genuine, bounded visual occlusion is accepted
     artifact = rec.seal({"case_id": "full-01", "session_id": "session-1",
                          "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 0})
     index = json.loads(Path(artifact["path"]).read_text())
@@ -172,7 +172,7 @@ def test_sample_builder_cannot_drift_from_the_recorder_shape(recorder):
                       "cup_position_m": [0.0, 0.0, 0.1],
                       "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
     assert set(built) == set(canonical)
-    rec.append(built)                       # the recorder accepts it without adaptation
+    rec.append(built, kind="grid")                       # the recorder accepts it without adaptation
 
 
 def test_sample_builder_refuses_incomplete_readback_inputs(recorder):
@@ -314,7 +314,7 @@ def test_readback_adapter_emits_canonical_samples_through_one_builder(recorder):
                       "cup_position_m": [0.0, 0.0, 0.1],
                       "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
     assert set(built) == set(canonical)
-    rec.append(built)
+    rec.append(built, kind="grid")
     with pytest.raises(ValueError):
         adapter.live_evidence_sample(
             identity={"case_id": "full-01"}, phase="CLOSE", physics_step=0, sim_time_s=0.0,
@@ -535,7 +535,7 @@ def test_capture_evidence_fields_compose_a_canonical_sample(recorder):
                       "cup_position_m": fields["cup_position_m"],
                       "cup_orientation_xyzw": fields["cup_orientation_xyzw"]})
     assert set(built) == set(canonical)
-    rec.append(built)                      # the recorder accepts the composed sample
+    rec.append(built, kind="grid")                      # the recorder accepts the composed sample
     with pytest.raises(Exception):
         adapter.capture_evidence_fields({"world": evidence}, support_distance_max_m=0.005,
                                         raw_records={})

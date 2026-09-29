@@ -33581,3 +33581,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   in this drive used.
 - **State:** **P1-1 through P1-6 CLOSED; the post-change gates are running, and their results will be appended to the
   packet rather than summarised ahead of them.** **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1897 — The demo gate had been RED since P1-4: seventeen callers of a changed signature
+
+- **The first post-change package gate, classified and then fixed:**
+  ```
+  17 failed, 5776 passed, 163 skipped, rc 1
+    all seventeen: TypeError: Task8LiveEvidenceRecorder.append() missing 1 required keyword-only
+                   argument: 'kind'
+  ```
+  **so the failures are not from this span's production change at all** - they are the P1-4 change's blast radius:
+  `append(sample, *, kind, reason=None)` gained a required keyword, the TELEOP caller was updated when it was written
+  (CP-1795's note), **and the demo suite's seventeen callers were never revisited - so `so101_demo_py`'s gate has been RED
+  since then, and the "5764 passed, rc 0" figure in this ledger PREDATES that change.**
+- **Fixed at the callers, which is where a signature change belongs:**
+  | file | calls given `kind="grid"` |
+  | --- | --- |
+  | `test_act_task8_live_evidence.py` | 6 |
+  | `test_act_task8_release_epoch_boundary.py` | 5 |
+  | `test_act_task8_sealed_artifact.py` | 1 |
+  **and the three files are green:**
+  ```
+  49 passed in 38.25s
+  ```
+  **including `test_four_negatives_break_the_chain_and_the_first_two_hit_the_productions_own_names`** - the P1-5
+  negative test - **which had been failing only because its recorder call was stale.**
+- **And one botched attempt is recorded with the fix, because the ledger's job is to be explainable:** the second patcher
+  emitted `rec.append(sample(root, step=step)sample(root, step=step), kind="grid")` - **it appended both the prefix and
+  the arguments** - so the two affected files were reverted to HEAD and patched again with a corrected balancer, **and the
+  revert cost only the six-and-five line edits it had just made.**
+- **State:** **P1-1 through P1-6 CLOSED; the demo package gate is being re-measured with the fix in place, and the P1-4
+  blast radius is recorded as a finding for the packet.** **Task-list statuses are unchanged, so they are not re-stated.**

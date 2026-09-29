@@ -40,10 +40,10 @@ def test_entries_spanning_the_release_boundary_seal_with_the_final_epoch(tmp_pat
     recorder = _recorder(root)
     step = 0
     for phase in PRE_RELEASE:
-        recorder.append(sample(root, step=step, phase=phase, release_epoch=0))
+        recorder.append(sample(root, step=step, phase=phase, release_epoch=0), kind="grid")
         step += 1
     for phase in POST_RELEASE:
-        recorder.append(sample(root, step=step, phase=phase, release_epoch=1))
+        recorder.append(sample(root, step=step, phase=phase, release_epoch=1), kind="grid")
         step += 1
     published = recorder.seal({"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
                                "reset_epoch": 4, "release_epoch": 1})
@@ -61,8 +61,8 @@ def test_entries_that_go_backwards_in_the_release_epoch_are_still_refused(tmp_pa
     root = tmp_path / "evidence"
     root.mkdir()
     recorder = _recorder(root)
-    recorder.append(sample(root, step=0, phase="SEARCH", release_epoch=1))
-    recorder.append(sample(root, step=1, phase="CLOSE", release_epoch=0))
+    recorder.append(sample(root, step=0, phase="SEARCH", release_epoch=1), kind="grid")
+    recorder.append(sample(root, step=1, phase="CLOSE", release_epoch=0), kind="grid")
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH"):
         recorder.seal({"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
                        "reset_epoch": 4, "release_epoch": 1})
@@ -74,7 +74,7 @@ def test_a_last_entry_that_disagrees_with_the_sealing_identity_is_refused(tmp_pa
     root = tmp_path / "evidence"
     root.mkdir()
     recorder = _recorder(root)
-    recorder.append(sample(root, step=0, phase="SEARCH", release_epoch=0))
+    recorder.append(sample(root, step=0, phase="SEARCH", release_epoch=0), kind="grid")
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH"):
         recorder.seal({"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
                        "reset_epoch": 4, "release_epoch": 3})
