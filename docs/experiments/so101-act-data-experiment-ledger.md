@@ -33503,3 +33503,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   chain's own mounting work, **which the passing production suite (CP-1892) makes unnecessary.**
 - **Nothing else changed:** the CMake line stays removed as CP-1893 recorded, and the harness module's status as a
   deletion candidate is unchanged.
+
+## CP-1894 — P1-5's requirement is covered by the passing suite, in the suite's own words
+
+- **The suite's module docstring names every element the finding asked for:**
+  ```
+  "P1-5: one ACTUAL full case whose PRODUCTION code produces the artifact, both receipts and the journal."
+  * the nine-phase composition and the runner that seals the artifact (`_full_case_port`, `PickPlaceRunner`);
+  * the case entry, its preflight, its campaign check, its live-evidence readback rule and its journal publisher;
+  * the journal reader and (below) the calibration aggregator.
+  ```
+  **and its entry point is the production one:**
+  ```python
+  def _run(spec, owner, journal):
+      return asyncio.run(run_pick_place_case(spec, CASE_ID, owner, journal))
+  ```
+  **so the case is driven through `run_pick_place_case` itself** - the requirement's own phrase, *real child → runner →
+  port inside `run_pick_place_case`* - **and the aggregator is consumed by the qualification layer's reader, not by a
+  test-local one:**
+  ```python
+  from … import require_campaign_cases, require_case_journal_row, require_case_row_matches_bundle
+  ```
+- **With the three tests green (CP-1892) and the four negatives built by corrupting that same baseline, P1-5's
+  requirement is MET:**
+  | the finding asked for | where it is proven |
+  | --- | --- |
+  | one actual full case, production end to end | `…publishes_its_row` - artifact, receipts, journal row |
+  | the real reader consumes what production sealed | `…the_qualification_reader_accepts_this_case_and_its_four_facts_hold` |
+  | negatives by corrupting the successful chain | `test_four_negatives_are_derived_by_corrupting_this_baseline` |
+- **What this changes about the plan:** the teleop duplicate is gone (CP-1893) **and no further fixture work is needed for
+  P1-5** - the remaining items are the gates and the packet: the CTest reconfigure (P1-6, running), the demo RED's clean
+  re-measurement, the final freeze gate on a fresh run root, and the re-review packet.
+- **State:** **P1-1 through P1-5 CLOSED with evidence; P1-6 and the three evidence gates remain.** **Task-list statuses
+  are updated to match, and their content is unchanged.**
