@@ -19560,3 +19560,27 @@ not an inference of mine.**
   and is classified explicitly.
 - **State:** HEAD at this commit; staged 0; every failure log, JUnit file and scratch/IPC directory retained; no push, no
   stack, no hardware.
+
+## CP-1211 — The formal pytest-xdist gate is GREEN: 5638 passed, 0 failed, 163 skipped
+
+- **The owner's item 5, first half, at a real boundary and with every condition they set:**
+  | condition | value |
+  | --- | --- |
+  | fresh, previously nonexistent NVMe scratch | `scratch/xdist-1790667393` (created, not reused) |
+  | `TMPDIR`/`TMP`/`TEMP` verified through the exact interpreter | ✅ `tempfile.gettempdir()` inside that scratch, checked with `test-venv/bin/python` |
+  | fresh real 0700 short IPC base | `/tmp/s101-xdist-383491`, `mode=700`, created for this run |
+  | workers = `min(8, CPU)` | **8** (CPU 32), `pytest-xdist 3.8.0` |
+  | ordinary `so101_demo_py` scope, benchmark excluded | `src/so101_demo_py/test` |
+  | result | **rc=0, 5638 passed, 163 skipped, 4 warnings, 108 s** |
+  Evidence: `experiments/gate6-batch3-py-gate/xdist-formal.log` and `xdist-formal-junit.xml`.
+- **What it establishes about the fixture fix:** the module that made the file-sharded runner red -
+  `test_controller_reservation_client.py` - now passes inside the **full ordinary package scope** under xdist, which is the
+  check the owner said is not substitutable by the runner. **5638 passed with zero failures is the first green full-scope run of
+  this task.**
+- **Still to do for item 5, and it is the owner's second half:** the plan's **package/`colcon` gate**, which is a different
+  runner and a different kind of evidence, and then the **Astra implementation re-review** that follows it. The file-sharded
+  runner re-run, if the plan still wants it, comes after and is classified as its own evidence rather than folded into these
+  numbers.
+- **State:** HEAD `fc2c1eac` plus this checkpoint; staged 0; scratch, IPC base, JUnit and logs all retained as deletion
+  candidates; no push, no stack, no hardware; formal accepted Train/Validation/Offline Test still 0/0/0 and `collection_*`
+  NOT_PROVISIONED.
