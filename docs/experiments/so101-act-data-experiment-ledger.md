@@ -19378,3 +19378,25 @@ not an inference of mine.**
   guessing an import cost a round.**
 - **State:** HEAD `09b9cec6`; staged 0; the runner's scratch layout is unchanged, so the gate remains red for the measured
   path-length reason (CP-1201) until that layout is shortened; no push, no stack, no hardware.
+
+## CP-1203 — RED proven with a number: the gate's scratch is 102 chars and a socket needs 33 more
+
+- **The RED runs now, and it fails on the measurement rather than on scaffolding:**
+  ```
+  AssertionError: scratch .../20260924-fbc25063-resume/scratch/g801/69f0/scratch/1a0de918e550/tmp (102 chars) + 33 exceeds 107
+  ```
+  So at this task's evidence root the runner's own scratch layout **cannot host a socket**, which is precisely why
+  `test_controller_reservation_client.py` went red under the gate and passed 17/17 under a 68-character TMPDIR (CP-1201). **One
+  number explains the red shard, and it is not a code defect in any module.**
+- **The arithmetic that decides the fix, done here so the next round does not have to:** the evidence root is **63** characters;
+  the runner adds `/scratch/<run-id>/` (13 with a four-character run id, and the schema pins a 12-character scratch hash inside
+  each process root) plus `/tmp`; the socket needs ~33. **Shortening the middle by a few characters is not enough** - even a
+  minimal `<root>/s/<6hex>/tmp` leaves 75 + 33 = 108, one byte over. So the honest options are: give the process roots a
+  **two-level** layout (`<root>/s/<4hex>/tmp` = 72, which fits), or stop binding sockets beneath `TMPDIR` in that module's
+  fixture - and the first is the runner's business while the second is a test's.
+- **Two collection/import lessons worth keeping, both mine:** the runner's test file imports `tools.so101_pytest_gate` at module
+  scope and therefore **must be run from the repository root** (CP-1202's "cannot collect here" was my working directory, not
+  the file), and `create_process_layout` requires its run root to exist already, so a measurement test must create it first -
+  which is what turned `FileNotFoundError` into this assertion.
+- **State:** HEAD `36bae0ad`; staged 0; the RED is **uncommitted while it is red**, per the owner's standing instruction for new
+  tests; scratch `s801/tmp` and both gate run roots retained as deletion candidates; no push, no stack, no hardware.
