@@ -13939,3 +13939,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and
   the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal
   0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-970 — Divergence 1 corrected: the report field is `support_distance_m` (29 passed)
+
+- **Renamed the derived report field to the design's name.** `LIVE_ONLY_FIELDS`, `LIVE_EXTREMA` and `LIVE_UNITS` now
+  carry `support_distance_m`, and `derive_live_measurements` dispatches the raw rule on that name - while the **sample
+  key** it reads stays `cup_support_distance_m`, because that is the name the recorder's `_SAMPLE_KEYS` uses. The
+  distinction is the whole point: the report field's name is the design's, the sample key's name is the recorder's.
+- **The corrected field list, matching the design's table exactly:**
+  `grasp_occlusion_window_s` (max), `support_distance_m` (max), `release_stable_s` (min), `retreat_distance_m` (min),
+  `placement_stable_s` (min).
+- **Verified: 29 passed, rc=0** (`beh-task8-green5.log`).
+- **Remaining divergences 2 and 3, both recorded in CP-969 and still outstanding:**
+  - `placement_stable_s` must be the longest contiguous **source-stamp** duration in FINAL_CHECK over which pose,
+    linear/angular velocity, **table support** and **forbidden-contact** all hold - not the sim-time span of samples
+    whose single `placement_stable` boolean is true;
+  - `retreat_distance_m` must be the **radial** displacement relative to the **already-placed cup** at the **first**
+    readback satisfying clearance, contact and pose stability together - not the total displacement between the first
+    and last retreat sample.
+  Both need evidence that is not in the sample keys (table support, forbidden contact, clearance), so both depend on
+  the same raw-record layer the occlusion window needs. Correcting them without that layer would mean substituting one
+  plausible rule for another, which is precisely the mistake CP-969 caught.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge, corrected field name and two provisional value functions green at 29; Tasks 9-10 untouched; the goal
+  is armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad`
+  starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware;
+  formal 0/0/0; `collection_*` NOT_PROVISIONED.
