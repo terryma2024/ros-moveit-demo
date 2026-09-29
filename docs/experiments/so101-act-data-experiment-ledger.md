@@ -22888,3 +22888,30 @@ not an inference of mine.**
   helper accepts. **Then `_ChildSources` builds its rows the same way - shared builder, this case's identity - and the spin stops.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1382 — The blueprint, read: the suite's own scenario is the recipe my fixture needs
+
+- **The suite's first scenario, verbatim:**
+  ```python
+  sources = _Sources(_raw(1, sim_time_s=2.0),
+                     PickPlaceReadbackError("SOURCE_STEP_NOT_ADVANCED"),      # a queued EXCEPTION
+                     _raw(2, sim_time_s=2.002),
+                     _raw(3, x=-0.079, sim_time_s=2.004, received_wall_s=10.01),
+                     _raw(53, x=-0.079, sim_time_s=2.104, received_wall_s=10.01))
+  adapter = _Adapter({"status": "INPUT_PENDING", "stop": True}, _locked())   # TWO decisions
+  observation = _segment(sources, adapter, scene).run(_request(), reset_epoch=2)
+  ```
+  with assertions that pin the contract: `sources.cursors == [0, 1, 1, 2, 3]` (the retry re-reads the same cursor), `adapter.ticks == 2`,
+  `adapter.stops == 1`, the world's final step is **53**, the scene phase is `READ_BACK`, and all three proofs carry
+  `command_authority is False`.
+- **Three things that answer my spin directly:** the sources are a **queue that may contain exceptions** (the retry path is deliberate and
+  bounded by the queue, not infinite); the adapter is given **two** decisions - a non-locking one (`INPUT_PENDING`, no `found`) followed by the
+  lock, which is the loop's `continue` path; and **one row at step 53 satisfies the fifty-post-stop-step requirement**, so the interval does not
+  need fifty rows.
+- **And one adaptation my fixture must make:** the suite's rows carry `received_wall_s=10.01` to match its **frozen** clock, while my fixture
+  runs the **real** clock - so the wall receipts must be real values, which is exactly the kind of localisation the "shared builder, local
+  identity" rule covers.
+- **So the write is now mechanical:** `_ChildSources` queues `_raw(...)` rows stamped with this case's identity and real wall receipts, the
+  adapter gets a pending decision then the lock, and `reset_epoch` matches the proof.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
