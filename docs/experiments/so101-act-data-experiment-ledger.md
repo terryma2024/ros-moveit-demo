@@ -26854,3 +26854,14 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   from a superseded build, are not the gate's result once that change lands. **Nothing about the artifacts' or the live-bundle's validity changes, because no production source, config or policy value is touched by it.**
 - **State:** item 5 is one registration away from green under the real gate; item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or
   stack; no hardware; no live stack; P2 live not started.
+
+## CP-1609 — The registration, the rebuild and the gate re-run are chained, so the gate is re-measured after the build change
+
+- **What the chain does, in order, and why it is a chain rather than three separate actions:** it waits for the running gate to finish (a rebuild must not happen underneath a test run), registers
+  `test_teleop_ipc_worker_root_isolation` beside the other `so101_add_pytest_test(...)` lines in `CMakeLists.txt`, **rebuilds `so101_teleop`** so the new CTest registration exists, and then **re-runs the same eight-worker gate** -
+  each heavy step on its own **fresh, previously nonexistent scratch** (`scratch/final-boundary-v3c-build-*`, `scratch/final-boundary-v3c-teleop-*`) with a fresh 0700 IPC base and the fail-closed tempdir equality assertion.
+- **And the sequence matters for the record, not only for hygiene:** CP-1608's numbers came from a build **before** the registration, so they are not the gate's result once it lands. **The re-run's numbers are the ones to cite** - the same rule this
+  batch applied when it refused to reuse the earlier boundary's figures.
+- **Under the owner's item 7, the honest classification of this change:** registering a test module touches the **build configuration**, so the build is refreshed and the gate re-measured - **but no production source, runtime config, policy value or
+  artifact identity changes**, so no Task8L/bundle/live/QUALIFIED result is invalidated by it. **If the rebuild were to change any installed artifact of the measurement path, that statement would have to be revisited.**
+- **State:** chain running; item 5 closes when the re-run is green; item 1 verified; item 2 two-thirds green with the epoch-rule question open; items 3, 4, 6, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
