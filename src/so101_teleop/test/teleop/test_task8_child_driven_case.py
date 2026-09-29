@@ -287,10 +287,16 @@ class _Boundary:
 
             _receipts = observation.physical_readback["source_received_wall_s"]
             _latest_receipt_ns = max(round(float(value) * 1_000_000_000) for value in _receipts.values())
+            # `prepare` enforces an ORDER on these instants:
+            #   0 <= last_ingress <= stop_ns <= latest_receipt_ns <= observed <= received <= now_ns
+            # so they are derived from the run's own numbers rather than written as 1/2/3 (CP-1883)
+            _stop_ns = round(stop_wall_s * 1_000_000_000)
             snapshots = {kind: {"role": kind, "owner_generation": self.owner_generation,
                                 "ingress_sequence": index + 1,
-                                "last_ingress_monotonic_ns": 1, "observed_monotonic_ns": 2,
-                                "received_monotonic_ns": 3, "command_authority": False}
+                                "last_ingress_monotonic_ns": _stop_ns - 1,
+                                "observed_monotonic_ns": _latest_receipt_ns,
+                                "received_monotonic_ns": _latest_receipt_ns + 1,
+                                "command_authority": False}
                          for index, kind in enumerate(_ROUTE_ROLES)}
             from so101_demo.adapters.act.visible_approach_expert_route import _BRIDGE_NS as _BRIDGE
 

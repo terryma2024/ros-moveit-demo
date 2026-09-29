@@ -33164,3 +33164,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `prepare` - from which the route's template and the run's own values must agree.** P1-1 through P1-4 CLOSED. The demo
   RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so
   they are not re-stated.**
+
+## CP-1884 — `native` passes; the scene's vectors are now measured against the REAL model
+
+- **Two more checks cleared, and the drive reached the candidate's own preparation:**
+  ```
+  visible_approach_expert_route.py:153 in prepare
+  selected_approach_candidate.py:107 in prepare
+  contracts.py:41 in vector
+      ContractError: VECTOR_INVALID
+  ```
+  **so the route's `native` snapshot check passed** - **its ordering
+  `0 <= last_ingress <= stop_ns <= latest_receipt_ns <= observed <= received <= now_ns` is now satisfied by DERIVED
+  instants** (`_stop_ns = round(stop_wall_s * 1e9)`, `observed = latest_receipt_ns`, `received = latest_receipt_ns + 1`)
+  rather than by the `1/2/3` the template used.
+- **And the new refusal is the same defect as CP-1871, measured against the real model this time:**
+  `selected_approach_candidate.py:107-108` calls `vector(scene["qpos"], self.model.nq)` and
+  `vector(scene["qvel"], self.model.nv)` - **with the ACT scene's `nq = 14` and `nv = 13`** (CP-1779) - **while the
+  fixture's scene carries eight-element vectors.** **So the length is wrong, not the shape:** giving `qvel` a list
+  satisfied `tuple(...)` in my own construction and in the route's proof check, **and now the model's own dimension
+  refuses it.**
+- **Which is worth recording as the reason the fixture must be built from the model rather than from a constant:** the
+  template's `qpos`/`qvel` were eight long because the template's scene was, **and nothing in that suite compared them
+  with a real `MjModel`.** The chain this drive is building does.
+- **State:** **P1-5 in progress: the phase evidence, the four proofs, the native ingress, the scope, the `proofs` check
+  and the `native` check all pass; the candidate's vector-length validation is next, and the fixture's scene must carry
+  model-length `qpos`/`qvel`.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and
+  the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
