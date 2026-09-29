@@ -553,3 +553,28 @@ def _v2_batch(root, contract):
                   extra_files={"measurements.json": __import__("hashlib").sha256(
                       published.read_bytes()).hexdigest()})
     return root
+
+
+def test_the_published_report_binds_to_a_runtime_head_search_descriptor(tmp_path):
+    """Boundary IV item 5: the report the aggregator publishes must satisfy the head-search binding, not just the gate."""
+
+    import sys
+
+    from so101_demo.act.calibration import require_gate
+    from so101_demo.act.head_search_binding import validate_head_search_binding
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_act_head_search_binding import _inputs
+
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _v2_batch(tmp_path / "batch", contract)
+    outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
+    report = json.loads(Path(outputs["calibration_report"]).read_text())
+    require_gate(report, "task8_live")
+
+    runtime = _inputs(tmp_path)[0]        # the binding fixture's first element is the runtime descriptor
+    bound = validate_head_search_binding(runtime, report)
+    assert bound is not None, "a TASK8_READY report binds to a matching runtime descriptor"
