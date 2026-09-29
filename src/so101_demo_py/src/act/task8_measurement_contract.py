@@ -172,9 +172,18 @@ def close_measurement_batch(root: Path, identity: dict, *, status: str = "CLOSED
     root = Path(root)
     if type(identity) is not dict or not identity:
         raise ValueError("MEASUREMENT_BATCH_IDENTITY_INVALID")
+    # the batch's identity is the contract's ten-member identity, not whatever mapping the caller happens to hold:
+    # the same schema that admitted the measurement is the one that seals it
+    try:
+        require_v2_identity(identity)
+    except ValueError as error:
+        raise ValueError("MEASUREMENT_BATCH_IDENTITY_INVALID") from error
     if status not in ("CLOSED", "INVALID"):
         raise ValueError("MEASUREMENT_BATCH_STATUS_INVALID")
-    for name in ("source_provenance_sha256", "contract_sha256"):
+    # these two members are the ones a sealed batch must be able to name; the contract's own name for itself is
+    # measurement_contract_sha256, while contract_sha256 belongs to the bound document - using the wrong one here
+    # was the naming fissure between the identity schema and the batch seal
+    for name in ("source_provenance_sha256", "measurement_contract_sha256"):
         if _SHA.fullmatch(str(identity.get(name))) is None:
             raise ValueError("MEASUREMENT_BATCH_IDENTITY_INVALID")
     root.mkdir(parents=True, exist_ok=True)
