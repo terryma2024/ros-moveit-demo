@@ -10977,3 +10977,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-851 — Task 8L provenance BUILT (first ladder step satisfied)
+
+- **`act_build_task8_source_provenance` returned 0 and wrote
+  `runtime-task8l-gen2/provenance/source-provenance.json`** with keys
+  `calibration_identity, kind, repository_head, runtime_roles, schema_version, submodules`. The document's own
+  sha256 is recorded in the report of this round. This is the first Task 8L step actually satisfied.
+- **The last rule, applied:** every receipt dependency is now recorded as the **resolved real file** rather than
+  ldd's soname symlink - 49 dependencies for the simulation-evidence plugin, 69 for the broker-owned controller,
+  83 for the vendored `libmujoco_ros2_control.so`, with **zero symlinks among the keys** in all three.
+- **What it took, honestly:** seven rounds of unblocking, each one replacing a guess with a named requirement -
+  the mandatory `task_evidence_root` override, the calibration gate that refuses implicit parameters, the
+  ten-role registry, a non-symlink install, a C++ build into the copy prefix, the `.build-receipt.json` contract
+  (which required adding `tools/so101_build_receipt.py` by TDD), and finally that receipt dependencies must be
+  real regular files rather than symlinks. No check was loosened, no file was copied into a place no build
+  produced except the staging of the vendored plugin at the registry's own path, and that interpretation is
+  recorded as CP-850 with the alternative still open.
+- **Still open for the user (CP-849/CP-850):** whether the qualification overlay is intended as a **staging tree**
+  exactly as the registry describes it (my reading, which made this document buildable) or as a **merged colcon
+  prefix** built from every package including the submodule. If it is the latter, the Python and share role paths
+  change and this document must be regenerated.
+- **Next steps:** the identities document (`bind_measurement_contract`, fed by `bundle.identities`) to unlock
+  `act_measure_task8_calibration` against the frozen contract template, then the measurement pass, then the
+  launch with explicit `act_calibration_report` / `act_motion_calibration_manifest`.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
