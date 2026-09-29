@@ -28497,3 +28497,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   2. **or the fixture's clock advances only when the port samples** - which is a fixture that serves the grid rather than modelling a run, **and is therefore the weaker of the two**.
 - **Which makes this the decision the migration has been converging on**: the verdict asks for sampling *"at the source-acquisition layer"* and *"continuously at 10 Hz"*, and this measurement says the difference between those words and the current code is **exactly the readbacks that are not yet samples**.
 - **State:** **P1-4 production pieces 1-3 committed; APPROACH chain closed (CP-1701); the fixture's clock migration: window, axis and snapshot green, and the grid's sequence is the last decision**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1703 — The gap is gone and the window broke again: one sequence, two consumers, and the resolution is a PROJECTED instant
+
+- **The probe, after making the clock advance once per SAMPLE:**
+  ```
+  GRID t=1.4 delta=None phase=SEARCH          <- the 0.3 s gap is gone: only one sample so far
+  cause: ValueError APPROACH_HEADER_STAMP_INVALID
+  ```
+  **So the unification worked for the grid** - the sequence now advances once per sample - **and it broke the plan's window**, because the prefix refresh (which happens inside `_case_capture`) now reads a `moment` that **does not advance between readbacks**.
+- **And that is the same tension a fourth time, now with all three of its faces measured:**
+  | consumer | needs |
+  | --- | --- |
+  | the **grid** | the clock to advance **once per sample** |
+  | the **plan's window** | the prefix to be refreshed to an instant **ahead of the sample** that will carry the header |
+  | the **signature** | the prefix to be frozen at signing |
+- **The resolution is a projected instant, and it satisfies all three:** the fixture can compute the **next** sample's time from its own counter (`count + 1`) **without advancing it**, use that to place the prefix's window, sign, and let the next sampling readback land exactly on it. **The sequence stays one; the window is ahead by construction; the signature freezes what will be executed.**
+- **State:** **P1-4 production pieces 1-3 committed; APPROACH chain closed; the grid's gap CLOSED by one sequence; the plan's window needs the projected instant**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
