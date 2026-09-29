@@ -31209,3 +31209,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   recorded with the one constraint that makes the order matter.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1821 — The drive is already written; what is missing is the authority on the port
+
+- **Read `test_act_task8_full_case_chain.py` end to end, and the finding is that the drive itself exists:**
+  ```python
+  spec, owner, journal, events = _prepared(tmp_path, case_id="full-01")
+  child, phase_request, port = _prepare_child_case(evidence, monkeypatch, case_id="full-01", …)
+  full_request = phase_request.model_copy(update={"operation": "task8_full",
+                                                  "payload": {**phase_request.payload, "stop_after": None}})
+  owner.worker.run_pick_place = run_pick_place          # -> child.pick_place_full(full_request)
+  row = asyncio.run(run_pick_place_case(spec, "full-01", owner, journal))
+  ```
+  with the assertions a full case alone can make: **the journal row is published by the production entry**, the row is
+  `mode == "full"` and `status == "PASSED"`, **`completed_phases == PickPlaceRunner.PHASES`** (the runner's whole list,
+  where a prefix case completes one), and **the sealed artifact is a real file whose bytes hash to
+  `row["live_evidence_sha256"]`** and parse as a canonical JSON document.
+- **And the reason it is `xfail(strict=True)` is one missing mount, not a missing driver:** the harness builds `port`
+  from `ChildPort`, **and `ChildPort` now accepts `expert_route_factory`/`route_motion` (CP-1811) but the full-case module
+  passes neither**, so APPROACH finds no route and refuses by name - which is what the module's own xfail reason says.
+- **So the remaining edit is exactly the assembly CP-1819 proved, applied to this port:**
+  1. build the route manifest and `route_motion_configuration` from it;
+  2. build the checker (which yields the hash);
+  3. construct the production `expert_route_factory` - `SelectedApproachCandidate` over the three admitted config files
+     plus `VisibleApproachExpertRoute(candidate, policy_fingerprint=manifest["contact_policy_fingerprint"])`;
+  4. pass both to `_prepare_child_case`;
+  5. **mount the screen on the returned `port`** with sources whose `contact_pairs.model_sha256` is the checker's;
+  6. run - and then remove the `xfail`, which is the signal the module itself asked for: *"it fails the suite the moment
+     it starts passing, which is the signal to delete it rather than keep two chains."*
+- **State:** **P1-5 in progress; the drive is written, its assertions are the ones the verdict asks for, and the one
+  missing mount is the assembly already proven in CP-1819.** P1-1 through P1-4 CLOSED. The demo RED's clean
+  re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
+  not re-stated.**
