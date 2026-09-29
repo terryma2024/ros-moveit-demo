@@ -14051,3 +14051,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe
   interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-974 — The exact collision geom names, and a trap the design's wording hides
+
+- **Read `_TASK_GEOMETRY_SCHEMA` and the collision identifiers are concrete:** for `plastic_cup` the collision geoms are
+  `cup_a_wall_*_collision` (twelve walls from `_CUP_WALL_STEMS`) plus **`cup_a_bottom_collision`**; for `plastic_cup_b`
+  they are a **single `cup_b_collision`** - not `cup_b_bottom_collision`; and the table's is **`table_collision`**
+  (with `neutral_block_collision`, `bottle_collision` and `base_pedestal_collision` for the other objects).
+- **The trap: the design's wording "the exact collision pair `bottom_collision`/`table_collision`" is semantic, not
+  literal.** The bottom geom's real name depends on **which cup the case uses** - `cup_a_bottom_collision` for
+  `plastic_cup`, `cup_b_collision` for `plastic_cup_b` - so an implementation that hard-codes `cup_a_bottom_collision`
+  would silently fail to find the pair on a b-cup case, and the design's own rule ("any frame without real contact
+  FAILs") would then reject a perfectly good run with a misleading reason. The derivation must take the cup's collision
+  geom name from the task geometry (the schema above is the source) or from the manifest, never from a literal.
+- **Consequence for the implementation, which is now fully specified:** `_support_from_frames` must be given the pair's
+  two geom names (cup-bottom collision geom for the case's cup, and `table_collision`), then require a
+  `ContactEvidence` entry matching that pair in each of the three consecutive pre-open frames, take
+  `max(0, signed_distance_m)` per frame, and report the three-frame maximum - with a missing pair failing the run.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge and corrected field name green at 29, with all five rules' text and evidence sources recorded and this
+  naming trap now documented before implementation; Tasks 9-10 untouched; the goal is armed with a 756-round budget;
+  one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe
+  interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
