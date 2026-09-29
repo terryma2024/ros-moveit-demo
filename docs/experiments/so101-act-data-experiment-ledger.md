@@ -29616,3 +29616,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Costs paid:** packet now **12473 bytes, `36e40131ee52469c`**; index row re-synced; freeze rewritten and read back (**six entries, all reproducing**); audit again green.
 - **Three self-review passes, three findings, all fixed before the reviewer saw them:** a stale audit count (CP-1761), three figures that were true of a set but read as if of a file (CP-1762), and this one - **a number that was true one commit earlier than the sentence said it was.**
 - **State:** **frozen, indexed, audited; the review still the owner's to launch.** No controlled source change since the freeze; the goal stays active.
+
+## CP-1766 — Fifth self-review pass: the packet's cited number REPRODUCES, and the self-review has converged
+
+- **What the pass did that the previous four did not:** instead of reading the artefacts, it **ran the command the packet now states** and compared the result with the number the packet cites:
+  ```
+  re-run on the frozen HEAD:   151 passed in 101.05s     (experiments/gate8-remediation/selfreview-eleven.log)
+  packet cites:                151 passed in  99.93s     (experiments/gate8-remediation/green-p14-full2.log)
+  ```
+  **Identical count, one second of difference in elapsed time** - so the eleven-suite figure is not a historical artefact but a **reproducible measurement**, and the command written beside it in CP-1765 is the one that reproduces it.
+- **And this pass found nothing to fix**, which is the useful signal: **the first four passes each found a stale or misleading claim** (a count that moved, three figures that read as a file when they were a set, a number one commit out of date, a cited log that named no files), **and the fifth found none.** The self-review has converged - further passes would cost edits to a frozen packet and buy nothing.
+- **Nothing was changed this round, so nothing needed re-freezing:** the packet remains **13172 bytes, `b3ed841ba4a9bee6`**; the index remains 52 rows with 0 mismatches; the freeze remains six entries, all reproducing. **A verification that changes nothing is evidence, and it stays evidence precisely because it changed nothing.**
+- **State:** **everything frozen, indexed, audited and now re-measured; the only remaining step is the independent review, which is the owner's to launch.** No controlled source change since the freeze; the goal stays active.
