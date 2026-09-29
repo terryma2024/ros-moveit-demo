@@ -23652,3 +23652,15 @@ not an inference of mine.**
   **that is a real narrowing won by running rather than by reading, which is the fifth time this item has paid for a probe.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1430 — The driver builds its own recorder under the staging root and drives the window "from readback fields"
+
+- **Read (its `__init__`):** `CaseEvidenceDriver(*, case_id, staging_root, session_id, attempt_id, ..., recorder_factory=None)` validates the staging
+  root and the case id, then constructs **its own `Task8LiveEvidenceRecorder(case_id=..., evidence_root=case_root, ...)`** and a
+  `LiveEvidenceWindow(recorder, identity=..., period_s=...)`; `.window` exposes it and `bind_reset_epoch` is the hook my `ChildPort.begin` already
+  drives. **Its docstring states the design: "Drive one case's evidence window from readback fields into its private staging directory."**
+- **So the missing piece is a caller:** something must hand the driver the **readback fields** it converts into canonical samples, and in production that
+  caller is the port's `record_evidence` - which my substituted run never invokes. **Its own method list is printed above**, so the next round wires
+  the boundary to call the driver's recording method per readback, with the fields the port's phase document already produces.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
