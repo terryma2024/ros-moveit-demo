@@ -62,11 +62,14 @@ def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=Tru
 
     boundary = SimpleNamespace(
         reset=SimpleNamespace(receipt=SimpleNamespace(new_epoch=2), sources=sources, broker=broker,
-                              act_context={"lease_token": "lease-1"}))
+                              act_context={"lease_token": "lease-1"}),
+        # the release phases read the gripper's open position from the MODEL's own joint range, so the stub carries
+        # the fixture's real screen - the same MuJoCo model the rest of this suite uses
+        approach_screen=screen)
     if with_ik:
         boundary.motion_target_joints = lambda target: (calls.append(("ik", target)) or (0.5,) * 5)
-    boundary.sequence_facts = MethodType(PickPlaceSearchBoundary.sequence_facts, boundary)
-    boundary._motion_facts = MethodType(PickPlaceSearchBoundary._motion_facts, boundary)
+    for name in ("sequence_phase", "sequence_facts", "_motion_facts", "_release_facts", "_gripper_open_rad"):
+        setattr(boundary, name, MethodType(getattr(PickPlaceSearchBoundary, name), boundary))
     return (boundary, ticket, capture,
             _template() if with_template else None,
             0.4 if with_duration else None)
@@ -131,41 +134,71 @@ def test_each_missing_piece_refuses_by_name():
             _call(boundary, ticket, template, duration)
 
 
-def test_the_phases_whose_evidence_is_not_designed_yet_refuse_by_name():
-    calls = []
-    boundary, ticket, _capture, template, duration = _case(calls)
-    for phase in ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK"):
-        with pytest.raises(PickPlaceSearchBoundaryError, match=f"{phase}"):
-            _call(boundary, ticket, template, duration, phase=phase)
+def test_release_opens_the_gripper_at_the_models_own_limit_and_the_runner_accepts_it():
+    """A released cup is one nothing is pinching, that is supported, and that the aggregates call EMPTY."""
 
-@pytest.mark.parametrize("phase,expected", [
-    ("MICRO_LIFT", "micro_lift"),
-    ("TRANSPORT", "lift"),
-    ("ALIGN", "above_place"),
-])
-def test_every_motion_phase_aims_at_its_own_admitted_target_and_the_runner_accepts_it(phase, expected):
-    """One path, three phases: what differs is the admitted target each one aims at, and nothing else."""
+    from so101_demo.act.joints import ARM_JOINTS
 
     calls = []
-    boundary, ticket, capture, template, duration = _case(calls)
-    request = {"session_id": ticket[3], "attempt_id": ticket[4]}
-    document = _call(boundary, ticket, template, duration, phase=phase)
+    boundary, ticket, capture, template, duration = _case(calls, lifted=False)
+    document = _call(boundary, ticket, template, duration, phase="RELEASE")
 
-    assert [call[0] for call in calls] == ["ik", "dispatch", "wait"], calls
-    target = calls[0][1]
-    cup_z = capture["world"].object_state.position_world[2]
-    place_z = template.place_tcp_world.values[2]
-    if expected == "micro_lift":
-        assert target.position_m[2] == pytest.approx(cup_z + 0.035 + 0.02, abs=1e-9)
-    elif expected == "lift":
-        assert target.position_m[2] == pytest.approx(cup_z + 0.035 + 0.10, abs=1e-9)
-    else:
-        assert target.position_m[2] == pytest.approx(place_z + 0.08, abs=1e-9)
-        assert target.position_m[:2] == pytest.approx(template.place_tcp_world.values[:2], abs=1e-9)
+    assert [call[0] for call in calls] == ["dispatch", "wait"], calls
+    kind, goal = calls[0][1], calls[0][2]
+    assert kind == "gripper"
+    assert tuple(goal["joint_names"]) == ARM_JOINTS[5:]
+    # the expected value is read from the same model the boundary reads, so the assertion is about the SOURCE of the
+    # number rather than about a literal this test would have had to invent
+    import mujoco
 
-    stamped = {**document, "phase": phase, "session_id": ticket[3], "attempt_id": ticket[4],
-               "reset_epoch": 2, "release_epoch": 0}
-    step = PickPlaceRunner(boundary)._verify_phase(phase, stamped, request, reset_epoch=2,
-                                                   release_epoch=0,
+    model = boundary.approach_screen.path_checker.model
+    joint = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, ARM_JOINTS[5])
+    low, high = (float(value) for value in model.jnt_range[joint])
+    assert goal["positions"][1][0] == (high if abs(high) >= abs(low) else low), \
+        "the open position is the model's own limit, not a number this component chose"
+    assert goal["positions"][0][0] == capture["observation"]["state"][5], "it starts where the gripper is"
+    assert tuple(goal["time_from_start_s"]) == (0.0, 0.4)
+
+    assert document["holding_state"] == "EMPTY" and document["released"] is True
+    assert document["cup_supported"] is True and document["no_fingertip_contact"] is True
+    stamped = {**document, "phase": "RELEASE", "session_id": ticket[3], "attempt_id": ticket[4],
+               "reset_epoch": 2, "release_epoch": 1}
+    step = PickPlaceRunner(boundary)._verify_phase("RELEASE", stamped,
+                                                   {"session_id": ticket[3], "attempt_id": ticket[4]},
+                                                   reset_epoch=2, release_epoch=1,
                                                    after_step=document["physics_step"] - 1)
     assert step == document["physics_step"]
+
+
+def test_radial_retreat_moves_to_the_retreat_target_and_reports_the_released_facts():
+    """RADIAL_RETREAT is the one phase that is BOTH: it aims at the retreat target and its facts are the released ones."""
+
+    calls = []
+    boundary, ticket, _capture, template, duration = _case(calls, lifted=False)
+    document = _call(boundary, ticket, template, duration, phase="RADIAL_RETREAT")
+
+    assert [call[0] for call in calls] == ["ik", "dispatch", "wait"], calls
+    assert calls[0][1].position_m[2] == pytest.approx(template.place_tcp_world.values[2] + 0.10, abs=1e-9), \
+        "the retreat target is the place pose plus the template's own retreat clearance"
+    assert calls[1][1] == "arm"
+    stamped = {**document, "phase": "RADIAL_RETREAT", "session_id": ticket[3], "attempt_id": ticket[4],
+               "reset_epoch": 2, "release_epoch": 1}
+    step = PickPlaceRunner(boundary)._verify_phase("RADIAL_RETREAT", stamped,
+                                                   {"session_id": ticket[3], "attempt_id": ticket[4]},
+                                                   reset_epoch=2, release_epoch=1,
+                                                   after_step=document["physics_step"] - 1)
+    assert step == document["physics_step"]
+
+
+def test_a_cup_still_held_cannot_claim_a_release():
+    calls = []
+    boundary, ticket, _capture, template, duration = _case(calls, lifted=True)
+    with pytest.raises(PickPlaceSearchBoundaryError, match="RELEASE: the cup is not released"):
+        _call(boundary, ticket, template, duration, phase="RELEASE")
+
+
+def test_final_check_refuses_by_name_until_its_tolerances_are_compared():
+    calls = []
+    boundary, ticket, _capture, template, duration = _case(calls, lifted=False)
+    with pytest.raises(PickPlaceSearchBoundaryError, match="FINAL_CHECK: place tolerances"):
+        _call(boundary, ticket, template, duration, phase="FINAL_CHECK")
