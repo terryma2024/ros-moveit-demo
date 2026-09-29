@@ -17261,3 +17261,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   existing `CHECK_MEASUREMENTS` groups, release/retreat stay `UNMEASURED`, and all 28 fields must be present **with their
   approved closed-sample citations**. CP-1103/CP-1104's other findings stand (v2 is 21 + 7 with per-field comparators; the
   comparator layer and closed-sample builders already exist in `task8_measurement_formulas.py`).
+
+## CP-1107 — v2 wiring landed from the correction; the remaining failures are the fixture's raw evidence
+
+- **Done from the user's correction, no new grouping invented:** the entry now dispatches on the contract shape - the v1
+  `thresholds` path is unchanged, and a v2 contract folds the five `PICK_PLACE_READY_CHECKS` from the per-field
+  `compute_field` verdicts via the existing `derived_checks` over `calibration.CHECK_MEASUREMENTS`, with `release` and
+  `retreat` pinned to `UNMEASURED` because the 5 live-only fields belong to the later 33-field QUALIFIED report. The
+  seven support fields are also written against their **own** `build_support_closed_sample` citation instead of borrowing
+  the head-search sample. `require_gate(report, "task8_live")` is the RED's assertion, and `KeyError: 'thresholds'` is
+  gone.
+- **The failure moved to the fixture, and the cause is understood:** `KeyError: 'K02'` - the per-field comparators need
+  the same raw evidence the formulas suite already constructs, and `batch_factory` writes placeholder values instead. The
+  tree already carries the answer: `test/test_act_task8_measurement_formulas.py` defines `FIELD_CASES`, a per-field table
+  of valid evidence and its `configured` companion, so the aggregator's fixture should take its raw records from **that**
+  table rather than inventing 28 more payloads - making the two suites consistent by construction.
+- **One shape question to read before writing it:** the comparators consume arbitrary evidence payloads (`[BOX]`,
+  `{"bboxes": [...], "K02": …}`) while a published measurement entry must be a dict with unit, value and citation, so the
+  reported value has to come from `compute_field`'s own result rather than from the raw payload. I will read that return
+  shape before wiring it, not guess it.
+- **State: 2 failed / 18 passed** in that module, both failures being the publishing-half REDs (`21 == 28` and the gate) now
+  blocked on fixture evidence rather than on missing production logic. No rule was weakened, `REQUIRED_CHECKS` is
+  unchanged, and the user's correction is recorded at CP-1106.
