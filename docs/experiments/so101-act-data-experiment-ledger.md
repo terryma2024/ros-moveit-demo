@@ -32609,3 +32609,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and the source document's `native_snapshots` is the next requirement.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1865 — The native-ingress proof has a production builder and a deterministic digest
+
+- **The registration's check, and the exact reason it refused:**
+  ```python
+  observed = search_port.validated_search_observation()
+  native = observed.native_controller_ingress_proof
+  if (type(native) is not dict
+          or native.get("native_ingress_window_sha256") != native_ingress_digest(native["native_snapshots"])):
+      raise ValueError("native ingress")          # -> wrapped as TRUSTED_VISIBLE_APPROACH_SOURCE_INVALID
+  ```
+  **so the proof must be a dict carrying BOTH `native_snapshots` and a `native_ingress_window_sha256` that is the digest
+  OF those snapshots** - and the `KeyError: 'native_snapshots'` means the proof exists but carries only one of the two.
+- **And both halves have production sources, which is what makes the fix honest rather than chosen:**
+  ```
+  pick_place_search_native_ingress.py:19   def native_ingress_digest(snapshots):
+      return hashlib.sha256(b"SO101_SEARCH_NATIVE_INGRESS_V1\0" + json.dumps(snapshots, sort_keys=True,
+                             separators=(",", ":"), allow_nan=False).encode("utf-8")).hexdigest()
+  pick_place_search_native_ingress.py:115  "native_snapshots": snapshots,
+  ```
+  **the digest is a pure function of the snapshots** - domain-separated, canonical, nan-refusing - **so a fixture that
+  builds the snapshots gets the window digest by CALLING the production function**, not by inventing a hash. **That is the
+  same discipline as the FOV cross-check (CP-1815's `_median_geometry`): compute it, do not assert it.**
+- **Which specifies the next edit:** the observation the boundary's `search` returns must carry a
+  `native_controller_ingress_proof` built the way `pick_place_search_native_ingress.py` builds it - **snapshots first,
+  then their digest from the module's own `native_ingress_digest`** - and the fixtures' existing evidence (the segment
+  suite's rows) is where the snapshots' content has to come from.
+- **State:** **P1-5 in progress: the expert route registers, the source document's native-ingress proof is the remaining
+  requirement, and both of its halves have production sources - a builder and a deterministic digest function.** P1-1
+  through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**
