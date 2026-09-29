@@ -25538,3 +25538,19 @@ picture in both directions.**
   radial/vertical convention is injected rather than invented), through the same IK seam and dispatch the motion phases use, ending in the phase's own validator.
 - **State:** P1-1..P1-3 green and committed; nine phases, the policy wiring, the Planning Scene capabilities, the shared validator and these two documents committed. No new session, goal, worktree or
   stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1532 — The port protocol is complete: all six of the runner's methods are implemented
+
+- **`5 passed`** for the three case documents and **`57 passed`** across the wider demo-side focused set.
+- **`run_retreat_segment` steps from the CURRENT tool pose along an admitted direction - three seams, each refused by name.** The **direction seam is the point:** the runner asks for
+  radial and vertical segments, and **neither the meaning of those names nor the tool's pose can be read from the interface snapshot, so inventing an axis convention would silently decide
+  which way the arm retreats.** The test asserts the step **by value** (the tool pose moved along the axis the runtime supplied), the goal carries the arm's five joints, and the phase's facts come
+  from the same validator every other phase uses.
+- **`set_down`** establishes its document from the validated readback plus a **`controller_stop` seam that must answer `True`**; **`release_preflight`** establishes `fresh` by requiring a sample
+  **newer than the set-down's own**, refuses otherwise, and refuses outright when there was no set-down to compare against. **Both refusals were tested by breaking exactly that rule.**
+- **So the runner's whole port protocol now exists in production:** `begin`, `run_phase`, `run_retreat_segment`, `set_down`, `release_preflight`, `detach_moveit`, `planning_attached` and
+  `safe_stop` - **with SEARCH, the nine phases, the two release documents, the retreat segments and the Planning Scene capabilities all established from validated readback rather than asserted.**
+- **What that unlocks, and it is the point of the whole stretch:** a **nine-phase case can now run end to end through the port** - the runner drives its own `PHASES`, the port routes each one,
+  and the runner's `_verify_phase` judges every document. **That test is the next step, and it is the milestone the approved plan's P1-4 was aiming at.**
+- **State:** P1-1..P1-3 green and committed; nine phases, the policy wiring, the Planning Scene capabilities, the shared validator, the two release documents and the retreat segment committed. No
+  new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
