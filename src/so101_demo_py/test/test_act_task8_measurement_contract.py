@@ -261,15 +261,16 @@ def _bound_contract(tmp_path):
     return contract_path, identities_path
 
 
-def test_the_cli_is_the_only_batch_seal_owner(tmp_path, monkeypatch):
-    """One seal owner: a driver writes raw evidence, the CLI closes the batch - and a driver that seals first wins.
+def test_the_entry_does_not_seal_on_the_drivers_behalf(tmp_path, monkeypatch):
+    """Astra item 3: the driver is the only seal owner, so the entry must not close a batch itself.
 
-    The rule the review asks for, asserted behaviourally rather than by documentation: whichever side seals, the batch
-    carries exactly one seal and the later attempt is refused by name.
+    Asserted behaviourally: a driver that writes raw evidence and does **not** seal must leave the batch
+    unsealed, because sealing is the driver's job. Before this change the entry called
+    ``close_measurement_batch`` after the driver ran, which is what made a real driver's own seal collide
+    with ``MEASUREMENT_BATCH_ALREADY_CLOSED``.
     """
 
-    import sys
-    from so101_demo.cli.act_measure_task8_calibration import main
+    from so101_demo.cli import act_measure_task8_calibration as measure
 
     contract_path, identities_path = _bound_contract(tmp_path)
     driver_dir = tmp_path / "drivers"
@@ -280,36 +281,12 @@ def test_the_cli_is_the_only_batch_seal_owner(tmp_path, monkeypatch):
         "    root = Path(batch_root)\n"
         "    root.mkdir(parents=True, exist_ok=True)\n"
         "    (root / 'raw.json').write_text('{\"row\": 1}')\n")
-    # the CLI hands the driver the *bound contract document*, not a path
-    (driver_dir / "sealing_driver.py").write_text(
-        "import sys\n"
-        "from pathlib import Path\n"
-        "sys.path.insert(0, str(Path(__file__).resolve().parents[0]))\n"
-        "from raw_driver import run as write_raw\n"
-        "from so101_demo.act.task8_measurement_contract import close_measurement_batch, require_v2_identity\n"
-        "def run(contract, batch_root):\n"
-        "    write_raw(contract, batch_root)\n"
-        "    close_measurement_batch(Path(batch_root), require_v2_identity(contract['identities']))\n")
     monkeypatch.syspath_prepend(str(driver_dir))
-
     batch_root = tmp_path / "batch"
-    ledger = tmp_path / "ledger.md"
-    assert main(["--contract", str(contract_path), "--identities", str(identities_path),
-                 "--batch-root", str(batch_root), "--ledger", str(ledger),
-                 "--driver", "raw_driver:run"]) == 0
-    sealed = json.loads((batch_root / "batch.json").read_text())
-    assert sealed["status"] == "CLOSED"
-    assert "raw.json" in sealed["files"], "the driver's raw evidence is sealed by the CLI"
-    assert ledger.read_text().count("VALID") == 1
-
-    # a driver that seals the same batch on its own makes the CLI's later close refuse, by name
-    other_root = tmp_path / "batch-two"
-    with pytest.raises(ValueError, match="MEASUREMENT_BATCH_ALREADY_CLOSED"):
-        main(["--contract", str(contract_path), "--identities", str(identities_path),
-              "--batch-root", str(other_root), "--ledger", str(tmp_path / "ledger-two.md"),
-              "--driver", "sealing_driver:run"])
-
-
+    measure.main(["--contract", str(contract_path), "--identities", str(identities_path),
+                  "--batch-root", str(batch_root), "--ledger", str(tmp_path / "ledger.md"),
+                  "--driver", "raw_driver:run"])
+    assert not (batch_root / "batch.json").exists(), "the entry must not seal a batch the driver did not seal"
 def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_path):
     """Boundary IV: the validator verifies the seal's self-digest, not merely its shape.
 

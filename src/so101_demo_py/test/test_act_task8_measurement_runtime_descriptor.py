@@ -100,14 +100,20 @@ def test_the_cli_composes_the_production_driver_without_the_injected_test_seam(t
     monkeypatch.setenv("SO101_TASK8_PROVIDER_SEAM", "fake_providers:build")
 
     context = _context_document(tmp_path, _descriptor())
-    with pytest.raises(BaseException) as caught:
-        _invoke(tmp_path, context, driver=None)
+    _invoke(tmp_path, context, driver=None)          # the production path must complete, not raise
 
     # the composition ran: it resolved the external I/O seam, so the driver it builds is the real one - whatever
     # happens afterwards inside the run is the fakes' business, not a wiring error
     assert recorded.exists(), "the composition must build its providers"
-    assert "PRODUCTION_DRIVER_WIRING_PENDING" not in str(caught.value)
-    assert "PRODUCTION_PROVIDERS_UNAVAILABLE" not in str(caught.value)
+    # the entry must have produced the driver's seal: the descriptor is inside the batch it wrote. Full schema validity
+    # is asserted where a capturing stack exists (test_act_task8_measurement_driver.py); a provider stand-in that
+    # captures no anchors legitimately seals a batch with an empty anchor list, which the schema refuses
+    sealed = tmp_path / "batch" / "batch.json"
+    assert sealed.exists(), "the driver sealed the batch the entry reports"
+    import json as _json
+
+    recorded = _json.loads(sealed.read_bytes())
+    assert "runtime-descriptor.json" in set(recorded["files"]), "the descriptor travels into the sealed index"
 
 
 def _descriptor_with(mutate):
