@@ -16836,3 +16836,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   index; real measured values published rather than written as PASS; the four canonical documents and a real 28-field
   `TASK8_READY`; render-twice byte comparison with a single publish; on-disk readback of the sample path and hash; then
   `require_gate(report, "task8_live")` and `validate_head_search_binding()`.
+
+## CP-1085 — The symlink rule already existed; the test is a characterization, not a fix
+
+- **Wrote the RED expecting to have to add the rule, and it was already there:** a batch whose index lists a symlink
+  together with its target - digest correct, self-digest correct, closure satisfied - is refused as
+  **`BATCH_PATH_INVALID`**, which is a more precise diagnosis than the closure error I had assumed. **No production code
+  changed this round**, and the test is labelled a **characterization** of an existing rule rather than presented as a
+  RED→GREEN fix.
+- **What the test still earns:** the rule is now pinned, so a future refactor that starts following symlinks while
+  building the index fails here instead of silently sealing a batch that points outside itself.
+- **Suite: 29 passed, rc=0**, scratch `<R>/scratch/r685b.<n>` with `TMPDIR` verified through the exact test interpreter;
+  RED-attempt log `beh-r685-red.log` (the wrong expectation), GREEN `beh-r685-green.log`.
+- **Boundary IV status, honestly:** the entry validates first, the batch shape is canonical, the naming fissures are
+  closed, the self-digest is verified, and the symlink rule is pinned. **Still ahead:** the anchor x phase x source index
+  dimensions beyond files - missing anchor or phase, a mixed contract across roots, time reversal, cleanup contamination -
+  and then the publishing half (real measured values, the four canonical documents, a real 28-field `TASK8_READY`,
+  render-twice byte comparison with a single publish, on-disk readback, `require_gate`, `validate_head_search_binding`).
