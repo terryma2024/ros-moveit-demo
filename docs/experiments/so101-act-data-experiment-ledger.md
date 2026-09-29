@@ -21086,3 +21086,29 @@ not an inference of mine.**
   property Astra asked the fixture to have, and it is why it is worth finishing rather than relaxing.**
 - **State:** the new test file remains **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1281 — Item 5's real obstacle, found by reading the validator's own test
+
+- **What the validator's test shows about a valid artefact set:**
+  ```python
+  from so101_demo.act.contact_policy import policy_fingerprint, verify_activation
+  ...
+  assert result["policy_fingerprint"] == policy_fingerprint(result["payload"])
+  verify_disabled_proposal(proposal)                      # proposal comes from the analysis pipeline
+  verify_activation(proposal["payload"], receipt)
+  ```
+  So the **policy fingerprint is a function of the proposal's payload** (`policy_fingerprint(payload)`), the receipt must satisfy
+  `verify_activation` against that payload, and the valid documents in that suite are **produced by the real analysis pipeline**
+  (`analyze_evidence`, `analyze_manifests`, `seal_cohort`) rather than typed by hand.
+- **Therefore item 5's fixture cannot invent its artefacts, which is the whole point of the loading entry.** Two honest routes, and
+  they are not equally cheap:
+  1. **build a minimal but genuinely valid policy pair** - a payload that `policy_fingerprint` accepts, plus a receipt that
+     `verify_activation` accepts - which requires reading those two functions' requirements closely;
+  2. **reuse the pipeline route** the validator's test uses, which is heavier but produces a real proposal and receipt by construction.
+  **Route 2 is more code; route 1 is more reading. Neither is a shortcut around the check, and that is the correct shape for this
+  fixture** - Astra asked for the child driven through the production loading entry, and the loading entry verifies policy.
+- **This is where the plan's old note - "the child *loads* its artifacts rather than having them injected" - was pointing all along,
+  and it is now a concrete, bounded piece of work rather than a blocked decision.** The fixture is written, it drives the real entry,
+  and it currently stops at the policy check with the exact code `ACT_POLICY_BINDING_INVALID`.
+- **State:** the test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing deleted,
+  nothing pushed.
