@@ -22989,3 +22989,30 @@ not an inference of mine.**
   **One read decides both, and it is the read I should have taken when the traceback first named that function.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1388 — ROOT CAUSE, read at last: the dwell gate compares wall receipts against the stop, and my receipts were built before it
+
+- **`_post_stop_interval`'s body, read in full (`pick_place_search_segment.py:122-160`), contains three rules and I had none of them:**
+  ```python
+  cursor = max(cursor, marker["marked_physics_step"])          # the marker only RAISES the cursor
+  def received_after_stop(raw):
+      receipts = raw["source_received_wall_s"]
+      return all(finite(receipts[kind], nonnegative=True) >= stopped_wall_s
+                 for kind in ("world", "scene", "contact"))      # <- EVERY row must be received AFTER the stop
+  while True:
+      raw, geometry = self._next(request, reset_epoch, cursor)
+      ...
+      if received_after_stop(raw):
+          break                                                # <- this loop is the one that never broke
+  ```
+  and then a second loop that requires `elapsed_ns == elapsed_steps * 2_000_000` (2 ms per step) and at least
+  `_STOP_INTERVAL_STEPS`/`_STOP_INTERVAL_NS`.
+- **So the entire twenty-round tail had ONE cause: my `_raw` rows carry `received_wall_s` stamped when the class was constructed, while
+  `stopped_wall_s = self.monotonic()` is taken later - so every receipt is older than the stop, `received_after_stop` is always False, and the
+  dwell loop consumes the whole queue looking for a receipt that can never satisfy it.** The queue exhaustion, the spin before it, and the
+  timeout after it are all this one comparison. **And `cursor = max(cursor, marker[...])` also settles the marker question: a marker at the
+  current step is correct, and my earlier fixed `54` was wrong for exactly the reason the probe showed.**
+- **The fix is one idea in two lines:** the receipts must be **live**, stamped at capture time - the same localisation the suite performs with its
+  frozen `10.01` against its frozen clock, applied to a real clock. **Production is untouched, and this is the last gate in the search path.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
