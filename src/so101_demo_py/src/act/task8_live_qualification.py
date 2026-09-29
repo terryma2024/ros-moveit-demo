@@ -148,7 +148,8 @@ _QUALIFICATION_CHECKS = ("fov", "collision", "search", "synchronization", "execu
 
 
 def build_task8_qualified_report(task8_ready_report: Path, preparation_receipt: Path,
-                                 campaign_result: Path, case_root: Path, output: Path) -> Path:
+                                 campaign_result: Path, case_root: Path, output: Path, *,
+                                 live_extractors=None, contract=None) -> Path:
     """Upgrade a `TASK8_READY` report to `QUALIFIED` from a complete live campaign.
 
     The input report is read-only and is never rewritten; the output is a new document written
@@ -204,10 +205,30 @@ def build_task8_qualified_report(task8_ready_report: Path, preparation_receipt: 
         "preparation_receipt_sha256": _digest(Path(preparation_receipt)),
         "journal_sha256": list(summary["case_journal_sha256"]),
     }
+    if live_extractors is not None:
+        # the five live-only fields come from the five sealed FULL runs, merged by value, and the document is written
+        # only after the artifact readback so a report can never cite evidence that does not exist
+        rows = validate_case_journals(case_root, manifest, identities=identities,
+                                      manifest_document_sha256=manifest["manifest_document_sha256"])
+        runs = collect_live_runs(rows, identities=identities, extractors=live_extractors)
+        document["measurements"] = build_qualified_measurements(document["measurements"], runs,
+                                                                 contract if contract is not None else {})
+        if len(document["measurements"]) != 33:
+            raise ValueError(f"QUALIFIED_MEASUREMENT_COUNT_INVALID: {len(document['measurements'])}")
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(output.name + ".partial")
     temporary.write_bytes(json.dumps(document, sort_keys=True, indent=2).encode() + b"\n")
     os.replace(temporary, output)
+    if live_extractors is not None:
+        # read the published document back and hand it to the production gate, so a report that cannot pass its own
+        # qualification check is never left on disk as if it had been qualified
+        from .calibration import require_qualified
+
+        try:
+            require_qualified(json.loads(output.read_bytes()))
+        except BaseException:
+            output.unlink()
+            raise
     return output
 
 
