@@ -24701,3 +24701,23 @@ picture in both directions.**
   adapter method, the production boundary and the fixture boundary all call **one** implementation - the fixture now substitutes only the I/O, not the rule.
 - **State:** every change since CP-1482 is uncommitted and the fixture is red on exactly the mapping above. **P1-1 and P1-2 remain green and committed.** No new
   session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1484 — The feed surfaced a REAL production mismatch: four-stream audit versus seven-source vocabulary
+
+- **The failure, chained and read rather than guessed** (`experiments/gate8-p13/child-diag2.log`): the child now reaches the run, the port reaches the
+  canonical derivation, and the builder refuses with **`TASK8_LIVE_EVIDENCE_SOURCE_MISSING`**.
+- **Why, and it is not a fixture problem:** the recorder's canonical vocabulary is **seven** sources -
+  `_SOURCES = ("world", "scene", "contact", "head", "wrist", "arm", "neck")`, used for **both** stamp maps and `raw_records` - while
+  `PickPlacePhysicalReadback.capture` fills `source_stamps_s` and `source_received_wall_s` from `audit["source_stamps"]`, and that audit comes from the
+  **synchronizer**, which samples **four streams** (`arm`, `head`, `wrist`, `neck`; `act/synchronizer.py:83-91`). **So the real production capture cannot
+  satisfy the real production recorder either** - the two ends of the same chain use different source vocabularies, and nothing could reveal it until
+  something actually fed the window (CP-1467/1470 explain why nothing did).
+- **Where the fix belongs, and why not elsewhere:** the three physics sources' stamps are not missing data - the capture already holds their documents
+  (`world`, `scene`, `contact`) with their own simulation times and receipt times, which `_search_evidence` validates against each other. **So the
+  derivation in the readback module completes the two maps to the canonical seven from the physics documents it is already reading**, which keeps the
+  recorder's rule untouched and puts the completion in the layer that owns the capture's meaning.
+- **Also cleaned this round:** the fixture's `record_phases` stand-in **is deleted** (the port feeds the window now), the CP-1471 `xfail` marker is gone,
+  and the fixture's boundary supplies the **MuJoCo-derived end-effector position** the production boundary computes from its own model - the fixture
+  substitutes the simulator, not the rule.
+- **State:** P1-1 and P1-2 green and committed; everything since CP-1482 uncommitted while the fixture is red on this mismatch. **No new session, goal,
+  worktree or stack; nothing pushed, nothing deleted; no hardware.**
