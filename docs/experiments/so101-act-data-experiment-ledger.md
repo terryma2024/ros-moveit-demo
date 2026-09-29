@@ -26004,3 +26004,17 @@ picture in both directions.**
 - **The test's shape, so the next rounds are mechanical:** (1) run the nine-phase case and seal; (2) point the aggregator at the sealed batch root and require its verdicts; (3) assert the **seven indexed facts** against the
   records the aggregator read; (4) break the chain in **four** distinct ways - an unsealed batch, a corrupted record, a foreign identity, and a missing index entry - and require a **named refusal** for each.
 - **State:** P1-1..P1-3 green and committed; the nine-phase milestone committed; the full-case test part of the focused set and green. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1561 — The campaign's admission gate is tested, and the manifest taught the file three facts
+
+- **`3 passed`** for `test_act_task8_validation_campaign.py`, which covers the case->journal gate: a verified manifest plans **every canonical case** - **nine prefix cases, one per phase**, and the **five full
+  cases** of the anchor order - the lifecycle proof is a **static import of the production composition** so no caller can supply it, and **four negatives break the chain at four different links**: a manifest edited after
+  writing, more than one worker claiming the campaign, a deadline already behind the clock, and a class whose composition is unavailable. **Each refuses with its own name.**
+- **And the manifest taught the file three facts, all by refusing a hand-written document (`TASK8_MANIFEST_ROLE_INVALID`) rather than by being read first:** the schema version is **2**, the **anchors are the three
+  named cup starts** (`default`, `left`, `forward`) **rather than the phases I had assumed**, and the case lists are **canonical** - which is why the test now calls **`build_pick_place_validation_manifest`**, the production
+  writer, and asserts against what it produces.
+- **The lesson is the same one this stretch keeps teaching, and it is worth stating as a rule rather than an anecdote:** *when a test needs a document the production code already knows how to build, build it with that
+  code.* Three of this round's four attempts failed on hand-written structure, and the fourth - the production builder - needed no adjustment at all.
+- **What remains for P1-4's close-out, precisely:** the **sealed artifact's indexed assertions** - the aggregator's `_require_sealed_batch` / `_read_indexed` path over the batch the nine-phase case sealed, asserting the
+  facts **from the records** rather than from the run's return value. That is the last piece before P2 and the final integration boundary.
+- **State:** P1-1..P1-3 green and committed; the nine-phase milestone and this gate committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
