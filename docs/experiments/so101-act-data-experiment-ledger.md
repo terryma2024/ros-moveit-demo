@@ -27917,3 +27917,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Next (P1-1 GREEN):** the CLI must populate the admitted context with `calibration_report` and pass `session_id`/`attempt_id`/`search_start_rad` into the entry; the composition's `MeasurementControllerAdapter` site must take them from the parameters instead of `getattr(context, …)`; the bottom-I/O seam
   must supply `io_client` and the detector factory so the real stack/controller/camera still compose; and the driver must use the detector's real protocol.
 - **State:** the task list moves P1-1 RED to done and P1-1 GREEN to in-progress; goal **paused/disarmed with the resume refused by policy (owner action needed)**; boundary unchanged and not re-claimed; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1670 — P1-1 GREEN in progress: the formal entry now RUNS to the seal; what refuses it is the stand-in's fidelity
+
+- **The wiring the verdict asked for is in the tree (uncommitted while RED/GREEN is in flight):**
+  1. **the CLI** puts `calibration_report`, `session_id`, `attempt_id` and `search_start_rad` into the admitted `CalibrationMeasurementContext` **and** passes the three per-run values into `build_production_measurement_driver`
+     (`cli/act_measure_task8_calibration.py`);
+  2. **the composition's `MeasurementControllerAdapter` site now reads the parameters**, not `getattr(context, …)` - the site CP-1635 missed;
+  3. **a narrow bottom-I/O seam** (`SO101_TASK8_BOTTOM_IO_SEAM = "module:client,module:detector_factory,module:frame_source"`) supplies **only** the lowest-level client, the model factory and the camera boundary, so the stack adapter, clock, controller adapter and phase camera are still the real composition's own work;
+  4. **and the detector's protocol is matched where the controller's already was:** `MeasurementDetectorAdapter` wraps a detector exposing `detect(frame, query)` into the callable protocol `task8_measurement_driver.py:197` uses, refusing by name (`PRODUCTION_DETECTOR_FRAME_SOURCE_REQUIRED`, `PRODUCTION_DETECTOR_PROTOCOL_UNSUPPORTED`) instead of calling a non-callable object.
+- **The run's progress, in four measured steps, each moving the failure strictly deeper:**
+  ```
+  attempt 1: ValueError: backend configuration has invalid YOLO artifacts      <- the real factory validated a stub descriptor
+  attempt 2: ValueError: HEAD_SEARCH_SAMPLE_MISMATCH                           <- descriptor and calibration were not a matched pair
+  attempt 3: ValueError: HEAD_SEARCH_CONFIG_INVALID                            <- I wrapped the runtime descriptor twice
+  attempt 4: ValueError: BATCH_INVALID                                         <- the entry RUNS through composition, driver and seal
+  ```
+  **So the formal path is now wired end to end and reaches the seal**, and `2 passed` for the other two cases - **including the negative that requires a missing calibration to be refused by name**, which is the verdict's "the same path must expose missing parameters".
+- **And the remaining failure is the stand-in's fidelity, not the wiring** - and the suite already says so in its own words: the old test's comment records that *"a provider stand-in that captures no anchors legitimately seals a batch with an empty anchor list, which the schema refuses"*. **My `_Client` answers every call with `True`/`{}`, so no anchor row is captured.** **The fixture to reuse is the repo's own `CannedMujocoClient`** in `test_act_task8_production_composition_contract.py`, which drives the real composition and seals a `CLOSED` batch with every anchor
+  `COLLECTED` - **the same boundary, substituted faithfully** - and reusing it is both cheaper and stronger than teaching my stand-in to imitate it.
+- **State:** P1-1 GREEN continues (next: reuse `CannedMujocoClient` as the seam's client and re-run); the task list stays P1-1 GREEN in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
