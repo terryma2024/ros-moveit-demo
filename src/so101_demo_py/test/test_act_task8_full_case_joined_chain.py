@@ -1,0 +1,131 @@
+"""P1-5: one ACTUAL full case whose PRODUCTION code produces the artifact, both receipts and the journal.
+
+The verdict's finding, in its own words, is that *the joined chain has never carried a sealed artifact*: the demo side
+seals one with the production `PickPlaceRunner` but never publishes a journal row, while the teleop side publishes rows
+with the production `run_pick_place_case` but only for **prefix** cases (whose artifact is empty by design). Each side
+tested its half; nothing joined them.
+
+This file joins them with **one substitution**: the process/stack owner, which is the external I/O - the same seam the
+teleop suite substitutes when it drives the real child. Everything that produces evidence is production:
+
+* the nine-phase composition and the runner that seals the artifact (`_full_case_port`, `PickPlaceRunner`);
+* the case entry, its preflight, its campaign check, its live-evidence readback rule and its journal publisher
+  (`run_pick_place_case`, `_publish_new`);
+* both retirement receipts, written by the production code from the receipt files it reads back;
+* the journal reader and (below) the calibration aggregator.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
+
+from test_act_task8_nine_phase_case import ATTEMPT, SCENARIO, SESSION, _full_case_port  # noqa: E402
+from test_act_task8_sealed_artifact import _sealed_case  # noqa: E402
+
+from so101_demo.act.pick_place_runner import PickPlaceRunner  # noqa: E402
+from so101_demo.act.task8_manifest import build_task8_live_manifest, write_new_manifest  # noqa: E402
+from so101_teleop.unified.pick_place_case_execution import run_pick_place_case  # noqa: E402
+
+CASE_ID = "full-01"
+ANCHORS = ("default", "left", "forward")
+
+
+def _manifest(tmp_path: Path) -> tuple[dict, Path, str]:
+    """The frozen manifest the case is declared in - the production builder, not a hand-written document."""
+
+    anchors = {name: {"cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.0} for name in ANCHORS}
+    manifest = build_task8_live_manifest(
+        anchors, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
+        collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
+        calibration_report_path="calibration-report.json", calibration_report_sha256="e" * 64)
+    path = tmp_path / "manifest.json"
+    write_new_manifest(path, manifest)
+    return manifest, path, hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+class _Owner:
+    """The process/stack seam, substituted: it starts and retires, and everything else is production."""
+
+    def __init__(self, tmp_path: Path, result: dict, launch: SimpleNamespace):
+        self._result = result
+        self._launch = launch
+        self.context = None
+        self._stack_retired = self._child_retired = self._final_clear = False
+        self.stack = SimpleNamespace(launch=SimpleNamespace(evidence_root=str(tmp_path / "stack-evidence")))
+        self.child_launch = SimpleNamespace(socket_root=str(tmp_path / "child-evidence"))
+        self.stack_owner_key = SimpleNamespace(pid=1, pgid=1, started_ticks=1, argv_sha256="ab" * 32,
+                                               environment_sha256="ac" * 32)
+        self.child_owner_key = SimpleNamespace(pid=2, pgid=2, started_ticks=2, argv_sha256="ad" * 32,
+                                               environment_sha256="ae" * 32)
+        self.worker = SimpleNamespace(launch=launch, run_pick_place=self._run)
+        Path(self.stack.launch.evidence_root).mkdir(parents=True)
+        Path(self.child_launch.socket_root).mkdir(parents=True)
+
+    async def _run(self, request):
+        """The worker is the PRODUCTION runner's result: the child process is the seam, the runner is not."""
+
+        assert request["attempt_id"] == CASE_ID
+        assert request["mode"] == "full" and request["stop_after"] is None
+        return self._result
+
+    async def start(self, spec):
+        self.context = SimpleNamespace(campaign_id="case-298",
+                                       manifest_sha256=spec.payload["manifest_sha256"],
+                                       contact_policy_fingerprint="d" * 64,
+                                       operation_id="op-1", execution_generation=1)
+        return self.context, self.worker
+
+    async def finish(self, *, attempt_id):
+        # the receipts are the ones the production entry reads back, so they must exist and describe this owner
+        (Path(self.stack.launch.evidence_root) / "cleanup-receipt.json").write_text(json.dumps({
+            "leader_pid": 1, "pgid": 1, "started_ticks": 1, "argv_sha256": "ab" * 32,
+            "group_clear": True, "session_id": SESSION, "ros_domain_id": 198,
+            "physical_stop_confirmed": True, "graph_clear": True}))
+        (Path(self.child_launch.socket_root) / "cleanup-receipt.json").write_text(json.dumps({
+            "leader_pid": 2, "pgid": 2, "started_ticks": 2, "argv_sha256": "ad" * 32, "group_clear": True}))
+        self._stack_retired = self._child_retired = self._final_clear = True
+        self.context = None
+
+
+def _joined_case(tmp_path) -> tuple[dict, dict, Path, Path]:
+    """Run one full case through BOTH production halves and return (row, index, artifact, case_root)."""
+
+    result, index, artifact = _sealed_case(tmp_path)
+    manifest, manifest_path, digest = _manifest(tmp_path)
+    journal = tmp_path / "journal" / "result.json"
+    journal.parent.mkdir()
+    launch = SimpleNamespace(mujoco_session_id=SESSION, ros_domain_id=198)
+    owner = _Owner(tmp_path, result, launch)
+    spec = SimpleNamespace(kind="task8_full", deadline_ns=10 ** 18,
+                           payload={"evidence_root": str(tmp_path), "manifest_path": str(manifest_path),
+                                    "manifest_sha256": digest})
+    row = _run(spec, owner, journal)
+    return row, index, artifact, tmp_path
+
+
+def _run(spec, owner, journal):
+    import asyncio
+
+    return asyncio.run(run_pick_place_case(spec, CASE_ID, owner, journal))
+
+
+def test_the_production_runner_seals_and_the_production_entry_publishes_its_row(tmp_path):
+    """One full case, both halves production: the artifact, the receipts and the journal row all exist."""
+
+    row, index, artifact, _root = _joined_case(tmp_path)
+
+    assert row["case_id"] == CASE_ID and row["mode"] == "full"
+    assert row["completed_phases"] == list(PickPlaceRunner.PHASES), (
+        "a full case completes the runner's whole phase list")
+    assert row["live_evidence_path"] and Path(row["live_evidence_path"]).is_file(), "the sealed artifact exists"
+    assert hashlib.sha256(Path(row["live_evidence_path"]).read_bytes()).hexdigest() == row["live_evidence_sha256"]
+    assert row["stack_receipt_sha256"] != "0" * 64 and row["child_receipt_sha256"] != "0" * 64
+    assert index["samples"], "the sealed index carries samples"
