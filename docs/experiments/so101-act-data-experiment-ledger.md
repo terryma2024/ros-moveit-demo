@@ -16295,3 +16295,34 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   `docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md`, root `AGENTS.md` and the
   `so101-dev` skill, all of which are being re-read as the instruction requires before the first repair.
 - **Last trusted checkpoint before this one:** CP-1058. **Evidence retained, nothing deleted.**
+
+## CP-1060 — Boundary I located with both sides read: the CLI's identity is two keys where the contract requires ten
+
+- **The earliest failing boundary is now concrete rather than described.** Reading the two sides side by side:
+  - **contract side** (`task8_measurement_contract.py`): `IDENTITIES_V2` is the **ten-member** identity, enforced by
+    `require_v2_identity`, which requires the key set to match exactly and every member but `source_commit` to be a
+    64-hex digest; the bound document's own key list additionally carries `contract_sha256`.
+  - **CLI side** (`cli/act_measure_task8_calibration.py`): builds
+    `identity = {"source_provenance_sha256": …, "contract_sha256": …}` - **two keys** - and then reads a whole set of
+    **runtime/admission parameters out of the same `identities` mapping** to construct `CalibrationMeasurementContext`:
+    `measurement_plan_sha256`, `safe_interval_rad`, `candidate_sha256`, `policy_sha256`, `controller_generation`, and
+    `generation=identities["source_commit"]`.
+- **That is exactly the review's finding, and it is three defects in one place:** (a) the identity the CLI logs and
+  passes is **not** the contract's ten-key identity, so the two schemas cannot be the same one; (b) runtime and admission
+  parameters are **carried inside the identity mapping**, which is what makes them masquerade as identity members; and
+  (c) a 40-hex **commit** is used as a `generation`, which is a different kind of value with a different lifetime.
+- **The RED test this defines, to be written next (step I, one boundary at a time):** a CLI → factory → driver →
+  validator compatibility test asserting that (1) the identity the CLI builds has exactly the contract's ten keys and is
+  accepted by `require_v2_identity`; (2) the runtime context is constructed from a **separate** context document rather
+  than from identity members; and (3) the same schema object is what the contract loader, driver and aggregator each
+  consume, so `contract_sha256`/`measurement_contract_sha256` cannot name two different things. It must fail on the
+  current code for the reasons above before any fix is written.
+- **Also recorded from this read, and to be resolved inside boundary I:** `task8_live_evidence.py` defines **three**
+  `seal` entry points (recorder, window, driver) plus `parallel_batch/artifacts.py`'s own - so "one seal owner" is not yet
+  true, and the CLOSED/INVALID closure rules the review lists (strict top-level schema, ten-key identity, recursive
+  regular-file closure, digest, no symlink, no extra file) have no single place that enforces them.
+- **State:** the goal was resumed to active (revision 44); CP-1059 recorded the review's `CHANGES_REQUIRED` verdict and
+  the three corrections (packet reachability with sizes and digests, the accurate
+  "10 shards / 5759 collected / 0 failures / 0 errors / 163 skipped" statement with `worker_count=8` explicitly not
+  xdist, and the retraction of Task 5/6/7/9 completeness as a basis for progress); no fix has been written yet, and no
+  test has been modified to accommodate anything.
