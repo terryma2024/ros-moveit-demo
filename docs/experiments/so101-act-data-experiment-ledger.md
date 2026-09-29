@@ -24795,3 +24795,34 @@ picture in both directions.**
   whitespace never entered history.
 - **State:** committed. **P1-1, P1-2 and P1-3 are green.** Next is **P1-4** (the nine phases and the full case). No new session, goal, worktree or stack;
   nothing pushed, nothing deleted; no hardware.
+
+## CP-1488 — P1-4's real shape, measured: eight phases and five missing protocol methods
+
+- **The per-phase contract, read from the runner that enforces it** (`pick_place_runner.py:41-138`):
+  - the phase document is a **closed 25-key set** (`_EVIDENCE_KEYS`) with **eight gates** that must all be `True` (`planning_ok`, `controller_reference_ok`,
+    `joint_feedback_ok`, `contact_ok`, `mujoco_ok`, `planning_scene_ok`, `head_rgb_ok`, `wrist_rgb_ok`), no manual intervention and no MoveIt recovery;
+  - `holding_state` may only be `EMPTY` or `HOLDING`; **CLOSE** additionally requires `bilateral_contact is True`; **MICRO_LIFT/TRANSPORT/ALIGN** require
+    `HOLDING` **and** `bilateral_contact` **and** `micro_lift_confirmed` **and** `cup_off_table` **and not** `cup_supported`; **RELEASE/RADIAL_RETREAT/
+    FINAL_CHECK** require `EMPTY` **and** `released` **and** `cup_supported` **and** `no_fingertip_contact`; **FINAL_CHECK** alone requires
+    `placement_stable` **and** `retreat_stable`;
+  - `physics_step` must strictly advance between phases, and the reset/release epochs must match the case's scope.
+- **And the port protocol is far from satisfied:** the runner calls `begin`, `run_phase`, `safe_stop`, **`set_down`**, **`detach_moveit`**,
+  **`planning_attached`**, **`release_preflight`**, **`run_retreat_segment`** - while the SEARCH port implements only the first three (plus its evidence and
+  seal surface). **So P1-4 is not one more finding to fix: it is five missing protocol methods and eight phase implementations, each of which must execute
+  motion and produce a 25-key document the runner will not accept otherwise.**
+- **The staged plan, in the order the contract allows (each stage its own RED -> GREEN, its own commit, one checkpoint per phase):**
+  1. the **five protocol methods as named refusals first** - fail-closed so an unimplemented path cannot be mistaken for a completed one;
+  2. **one phase at a time, in runner order** (APPROACH, CLOSE, MICRO_LIFT, TRANSPORT, ALIGN, RELEASE, RADIAL_RETREAT, FINAL_CHECK): the port's `run_phase`
+     dispatch, a segment per phase that executes through the existing motion/route machinery, and a focused test that drives the **runner's own**
+     `_verify_phase` over the produced document - the contract, not a type check;
+  3. the **full-case sealing path**: a nine-phase case reaching FINAL_CHECK, sealed through the port's production `seal_live_evidence`, with the artifact the
+     runner requires (`{path, sha256, schema_version}`);
+  4. **the fixture full case -> journal -> trusted aggregator**, with the **seven indexed assertions** read out of the records (open command event; three
+     adjacent support rows in one release epoch; SEARCH; FINAL_CHECK; both retirement receipts; artifact and journal digests) and the **four negatives**
+     breaking that chain (missing row, wrong epoch, missing receipt, tamper);
+  5. then P2, then the single final integration boundary.
+- **Honest size statement:** stages 2 and 3 are a **production subsystem**, not a patch - eight phases with motion, evidence and per-phase predicates. **The
+  ledger will carry one checkpoint per phase rather than pretending this is a single edit**, and every phase will be proven by the runner's own verifier
+  rather than by a test I wrote to agree with myself.
+- **State:** P1-1, P1-2 and P1-3 are green and committed (HEAD `89d12b8c`). No new session, goal, worktree or stack; nothing pushed, nothing deleted; no
+  hardware.
