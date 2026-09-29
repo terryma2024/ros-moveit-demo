@@ -25947,3 +25947,17 @@ picture in both directions.**
   not a contract, and its rule is written above in three lines.**
 - **State:** P1-1..P1-3 green and committed; every production correction committed except the `current_readback` capability and the retreat sample's readback replacement, which are in the tree; the full-case test
   remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1558 — The grid's clock is fixed at the fixture, and the seal now asks which phase it never saw
+
+- **What the trace taught, in order:** the first sample carried **1.32** (the fixture's own capture clock) and the second **1.48** - a delta of 0.16, **neither one period nor two** - which is what "mix a cached
+  instant with fresh ones" looks like from the recorder's side. **Two production fixes came out of that and are worth keeping on their own merits:**
+  1. **every grid sample is now built through one helper**, `_current_observation`, so the SEARCH sample, the phase samples and the retreat samples all read the **boundary's current readback** - the cached SEARCH
+     observation carries the instant the case started, and sampling it repeatedly is what produced both the regression and the gap;
+  2. **the SEARCH path uses the same helper**, which it did not before.
+- **And the clock itself is defined where it belongs - at the fixture**, because the fixture owns the substituted world's time: the sample's stamp is set from the window's own `grid_count`, so consecutive samples
+  are **exactly one period apart by construction**. **In a real case that clock is MuJoCo's and must satisfy the same rule; the rule is the recorder's, not the fixture's.**
+- **The run now stops at `TASK8_LIVE_EVIDENCE_WINDOW_INCOMPLETE`** - the seal asking **which required phase the window never saw**. **That is a one-line probe (`window._phases_seen` at the end of the run) and the
+  next action**, and it is the last thing between this case and a sealed artifact.
+- **State:** P1-1..P1-3 green and committed; the `current_readback` capability, the unified sample helper and the fixture clock are in the tree (the focused set was green before the fixture clock change and will be
+  re-run with it); the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
