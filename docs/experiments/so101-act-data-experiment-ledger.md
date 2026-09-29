@@ -27871,3 +27871,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **So the item stands and this session does not narrow it:** the formal measurement entry genuinely cannot run, the context genuinely lacks what the composition reads, and the detector protocol genuinely mismatches. **Next: the P1-1 RED - a success test that uses no `--driver`
   and replaces only bottom external ROS/MuJoCo/model I/O.**
 - **State:** goal **paused/disarmed with resume refused by policy (owner action needed)**; boundary unchanged and not re-claimed; nothing pushed, nothing deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1668 — The test that made P1-1 look closed replaces the whole providers object and never asserts success
+
+- **Why the formal entry looked wired when it is not, found by looking for the test that would have caught it:**
+  ```
+  test_act_task8_measurement_runtime_descriptor.py:100-126
+      test_the_cli_composes_the_production_driver_without_the_injected_test_seam
+          (tmp_path / "fake_providers.py").write_text("def build(): ... return {'stack': object(), 'clock': object(),
+                                                      'detector': object(), 'controller': object(), 'phase_camera': object()}")
+          monkeypatch.setenv("SO101_TASK8_PROVIDER_SEAM", "fake_providers:build")
+          with pytest.raises(BaseException):            # <- the run is EXPECTED to fail
+              _invoke(tmp_path, context, driver=None)
+          assert recorded.exists(), "the composition must build its providers"
+  ```
+  **It replaces the entire providers object through the environment seam** - which P1-1 names as exactly what a success test must not do - **and its assertion is that the seam *ran*, not that the formal entry *executed*.** `pytest.raises(BaseException)` accepts the very refusal P1-1 is about, so a
+  broken formal path and a working one are indistinguishable to it.
+- **And the seam itself is the reason a narrow RED is needed:** `task8_production_composition.py:282` chooses between an injected `providers` dict, `_providers_from_seam()` (`PROVIDER_SEAM_ENV = "SO101_TASK8_PROVIDER_SEAM"`, line 23), and the real construction - **both of the first two replace all five collaborators at
+  once**, so neither can show that the *real* stack, detector, controller, phase camera and clock compose.
+- **So the P1-1 RED has a concrete shape and a definite target:** drive `measure.main([...])` with **no `--driver`** and **no provider seam**, substitute **only** the bottom external I/O (the MuJoCo/ROS client and the model factory), and require a **sealed `CLOSED` batch** - which cannot happen today, because the CLI's context carries no
+  `calibration_report` and the composition then demands an `io_client` nothing supplies, while the driver calls the real `YoloSegDetector` as if it were callable.
+- **State:** the task list carries this as its in-progress item; goal **paused/disarmed with the resume refused by policy (owner action needed)**; boundary unchanged and not re-claimed; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
