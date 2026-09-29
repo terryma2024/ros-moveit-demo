@@ -66,3 +66,13 @@ def test_a_context_descriptor_allowing_cpu_fallback_is_refused_before_measuring(
 
     with pytest.raises(ValueError, match="TASK8_PREPARATION_CUDA_REQUIRED|RUNTIME_DESCRIPTOR"):
         _invoke(tmp_path, _context_document(tmp_path, _descriptor(cpu_fallback=True)))
+
+
+def test_a_context_carrying_only_a_digest_is_refused(tmp_path):
+    """Item 3: an opaque digest cannot prove which configuration was measured, so the entry refuses it."""
+
+    document = _context_document(tmp_path, _descriptor())
+    del document["runtime_descriptor"]
+    document["runtime_config_sha256"] = "f" * 64          # provenance without a descriptor
+    with pytest.raises(ValueError, match="MEASUREMENT_RUNTIME_DESCRIPTOR_REQUIRED"):
+        _invoke(tmp_path, document)
