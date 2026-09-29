@@ -11098,3 +11098,32 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-856 — Interface gap: nothing in production assembles the five identities
+
+- **Found by searching call sites rather than assuming a producer exists:** `prepare_task8_bundle` is called
+  **only from tests** (`test/test_act_task8_artifact_bundle.py:79,100`,
+  `test/test_act_task8_live_qualification.py:169`) and `Task8ArtifactInputs(` likewise
+  (`test/test_act_task8_artifact_bundle.py:56`). There is **no production call site**, so the identity
+  assembly the bundle requires is not implemented anywhere in `src/`.
+- **`act_profile_sha256` has no producer in `src/` at all.** Outside
+  `act/task8_measurement_contract.py` and the identity tuple in `act/task8_artifact_bundle.py:28`, nothing in
+  the tree computes it, and the shallow search of the evidence root found no earlier document carrying it
+  either (CP-855). `contact_policy_fingerprint` at least has consumers (`manifest["contact_policy_fingerprint"]`
+  compared across the pick-place adapters), but its producer is likewise the runtime flow.
+- **What the code *does* say about the source of truth:** `act/task8_live_qualification.py:193` compares
+  `identities.get("source_provenance_sha256")` against `ready["source_provenance_sha256"]`, i.e. the identities
+  are expected to agree with the **`task8-ready` document** that `act_build_task8_qualified_report` takes as
+  `--task8-ready`. The calibration status vocabulary already contains `TASK8_READY` (CP-830's schema row), so the
+  intended path is: calibration reaches `TASK8_READY` with those identities recorded, the measurement contract
+  binds them, and the report and bundle re-validate them.
+- **Therefore the exact gap to close, stated plainly:** either (a) some existing CLI is meant to emit the
+  identities/`task8-ready` document and I have not found it, or (b) that assembly is a piece of the runtime
+  campaign that has not been written yet and should be implemented (a controlled source change, TDD, with the
+  tests' own `Task8ArtifactInputs` fixture as the contract). I am not filling it by computing two digests by
+  hand: an identity invented to satisfy a contract is worth less than no identity.
+- **Ladder position unchanged:** provenance built (CP-851); measurement, report, bundle and live all sit behind
+  this one assembly question.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
