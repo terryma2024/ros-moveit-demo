@@ -29281,3 +29281,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Two fixes were needed before the first leg could start, and both are the scripts being honest:** the copied scratch names still carried the v4 suffix (`demo-scratch4`), which would have reused a previous run's tree; and the scratch directory must **exist** before `gettempdir()` can resolve to it, so each leg now creates it (`mkdir -m 0700 -p $SC`) before the check rather than relying on the check to pass on a directory that is not there.
 - **Demo leg launched** (`demo-driver.log`, `demo.log`); the run is in flight with the suite past its first half.
 - **State:** **P1-1 … P1-5 and P2 complete, code frozen at `dc89b6dd`, and the single complete integration boundary running on the new root**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1745 — The boundary's first leg found ONE failure, and it is a timing test under the parallel gate
+
+- **The demo leg, on the new root:**
+  ```
+  1 failed, 5763 passed, 163 skipped in 132.58s      demo_rc=1 elapsed_s=133
+  scratch=…/final-boundary-v5-20260930-001236/demo-scratch/tmp   resolved=<same>   (fail-closed check passed)
+  ```
+  **5763 passed against the v4 baseline's 5748** - the difference is the tests this work added - **and one failure:**
+  ```
+  FAILED test/test_act_exp571_behavior.py::test_revoke_at_the_atomic_claim_boundary_has_only_two_legal_serializations
+  >   assert revoked.is_set(), "the revoker must eventually complete"
+  E   AssertionError: the revoker must eventually complete
+  ```
+- **And the isolation measurement, which is what decides whether this is a regression or a load-sensitive test:**
+  ```
+  serial, that one test:        1 passed, 6 deselected in 0.54s
+  that file under -n 8:         7 passed in 1.14s
+  ```
+  **It passes both ways in isolation** - so it is not a defect this work introduced, and it is not broken in its own file: **it is a five-second wait that the full parallel gate can starve.** The test's subject (revoke/claim serialization in `exp571`) is untouched by P1-1 … P1-5 and P2.
+- **And the gate is not being lowered to make it pass, which is the rule:** `AGENTS.md` requires a shared-resource or timing conflict to be fixed in the test's isolation and **the same parallel gate re-run** - *"不能降为单进程或串行分组来宣称通过"*. **So the demo leg is being re-run at the SAME `-n 8` on a FRESH scratch (`demo-scratch2`, `demo2.log`)**; if it recurs, the fix belongs in that test's wait, not in the gate.
+- **State:** **boundary leg 1 found one load-sensitive failure and is re-running at the same parallelism; legs 2 and 3 follow in order**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
