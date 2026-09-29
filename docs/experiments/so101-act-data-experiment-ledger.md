@@ -11504,3 +11504,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-869 — The driver's contract, pinned from the plan's own test
+
+- **Found the authoritative definition rather than leaving the question open-ended:**
+  `test/test_act_task8_calibration_aggregator.py::test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest`
+  builds the driver module inside the test and passes it as `--driver <module>:<callable>`, which pins the
+  signature as **`fill(contract, root)`** - it receives the **bound contract document** and the **batch root**,
+  creates the root, writes the raw measurement files, and returns; the CLI then seals with
+  `close_measurement_batch` and appends `VALID`, while a raising driver appends `INVALID` with the failure text
+  and leaves the batch unsealed.
+- **The raw files must evidence, for the three anchors** (`default`, `left`, `forward`), the frozen contract's
+  17 `measurements` and 4 `camera_measurements` - i.e. a live MuJoCo procedure, not an offline computation.
+- **Aggregation is separate and driver-free:**
+  `act_build_task8_calibration_report --contract <bound> --identities <file> --batch-root <sealed batch>
+  --output-root <dir>` writes `calibration-report.json` with `status: TASK8_READY`, and the test proves **no
+  status-override flag exists** (passing `--status` makes argparse exit).
+- **Contract saved for reuse:** `runtime-task8l-gen3/measurement/driver-contract.md`.
+- **What this changes about my question from CP-868:** the interface is no longer unknown, so the answer is a
+  binary - either an existing production driver implements `fill(contract, root)` and I run it through the exact
+  interpreter against `gen3/measurement/measurement-contract.json`, or that driver is a controlled source change
+  I should write TDD (RED from the test's own expectations) to run the three anchors on the MuJoCo stack.
+  Nothing else about the measurement step is ambiguous now.
+- **Still true:** no measurement has been taken, so the bound contract and identities from CP-867 remain valid
+  whichever way the answer goes, and no runtime has been started.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's dirty paths untouched apart from CP-861's one-token fix; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
