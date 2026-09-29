@@ -11924,3 +11924,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED. Task 2 remains uncommitted until all 28 are implemented and green, per the
   plan's four-file commit.
+
+## CP-886 — Task 2: all 28 formulas implemented, 79 focused tests green
+
+- **The final four landed:** `lock_valid_neck_rad` (safe intervals from raw unsafe spans, components filtered to
+  those containing 0 **and every anchor start**, requiring exactly one viable component and shrinking its
+  endpoints by the contract's 1e-5 rad on the safe side; no candidate or several candidates fail the field
+  rather than picking a side), `velocity_limit_rad_s` (per-dimension `max(abs(dq/dt))` with a non-positive
+  interval reported as **INVALID**, not FAIL), `acceleration_limit_rad_s2` (velocities from adjacent raw
+  timestamps then adjacent differences, again INVALID on a non-positive interval), and `path_clearance_m`
+  (minimum signed distance over the grid, with an explicit contact failing unless its pair is inside the
+  contract's allowlist, and allowlisted contacts recorded as adjudicated in the raw refs).
+- **Registry completeness is asserted:** `_FORMULAS` covers **28 of 28** fields and equals `FORMULA_IDS`; a
+  partial payload is refused with `RAW_EVIDENCE_REQUIRED` and the missing field named rather than defaulted.
+- **Verified:** formula module plus aggregator **79 passed, rc=0** (`beh-task2-green9.log`).
+- **Two of my own test premises were wrong and were corrected rather than accommodated:** the neck-ambiguity
+  case as first written had only one component containing 0 (so PASS was right), and the end-to-end case assumed
+  a minimal payload could satisfy all 21 fields. The neck case now uses two components where no single one holds
+  zero and every start, and the end-to-end case asserts registry completeness plus refusal-with-field-name, with
+  the full 28-field evidence fixture deferred to the Task 5 driver that will actually produce it.
+- **Remaining in Task 2 before the plan's four-file commit:** `act/task8_calibration_aggregator.py` must delegate
+  to these formulas (the plan lists it as *Modify*), and its test module comes with that change.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
