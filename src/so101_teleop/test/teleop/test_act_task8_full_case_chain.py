@@ -139,7 +139,12 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     # I/O - with the members the admission and the screen additionally read ADDED to it rather than replacing them.
     from test_task8_child_driven_case import _ChildSources
 
-    sources = _ChildSources(session_id=session_id, reset_epoch=getattr(boundary, "reset_epoch", 1))
+    # the scene the segment will produce must name the SAME model the checker compiled and the pairs are bound to -
+    # the three readers of one hash (CP-1845) - so the boundary is told which model this run is, and its `search`
+    # forwards that to the sources it builds
+    boundary.model_sha256 = authority["checker"].model_sha256
+    sources = _ChildSources(session_id=session_id, reset_epoch=getattr(boundary, "reset_epoch", 1),
+                            model_sha256=authority["checker"].model_sha256)
     sources.contact_pairs = contact_pairs
     # the production port reads the PUBLIC name (`bind_startup_receipt`: `receipt["session_id"] !=
     # self.boundary.reset.sources.session_id`), while this double keeps it private - so the public one is added
