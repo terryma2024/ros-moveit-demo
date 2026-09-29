@@ -11028,3 +11028,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-853 — The two missing identities come from the Task 8 preparation receipt, not from me
+
+- **`source_hashes` needs no input:** `bind_measurement_contract` builds it itself as
+  `{"template": sha256(template)}`, then writes the bound document atomically (exclusive partial file plus
+  `os.link`), refusing to overwrite with `MEASUREMENT_CONTRACT_OUTPUT_EXISTS`.
+- **Neither remaining identity is computed by hand anywhere.** `contact_policy_fingerprint` is a **manifest**
+  field: the adapters compare `manifest["contact_policy_fingerprint"]` (and `route["policy_fingerprint"]`)
+  throughout `pick_place_search_port`, `pick_place_approach_source_binding`, `pick_place_child_port`,
+  `visible_approach_expert_route`, `visible_approach_commit_ingress`, `pick_place_reset` and `command_broker`,
+  so it is a value **recorded by the preparation flow**, and `act_profile_sha256` has no producing call site
+  outside the measurement-contract module either - both are carried by the Task 8 preparation document.
+- **That closes the loop with my own earlier work:** the Task 8P3 preparation-receipt schema I generated
+  declares exactly **five identities**, matching `_IDENTITIES`, so the identities document for the calibration
+  measurement is an output of the preparation run - the same ladder step whose receipt the runtime admits.
+- **Next concrete step:** run the preparation entry point
+  (`act_prepare_task8_live_artifacts`, whose `--help` did not respond earlier and must be inspected through its
+  real module), take the identities it records, bind the measurement contract, and only then run
+  `act_measure_task8_calibration` with a driver that fills the batch. The measurement cannot precede the
+  preparation receipt: that ordering is the plan's, and inventing the two digests would be exactly the
+  fabricated identity this contract refuses.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
