@@ -25691,3 +25691,19 @@ picture in both directions.**
   is what turns "my fixture is inconsistent" into a named error instead of a wrong result.**
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed, including the interface correction (`adda872d`); the full-case test remains uncommitted while red, per
   this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1542 — The composite is now ONE case's runtime, and the remaining gap is the SEARCH observation's completeness
+
+- **What changed structurally:** the nine-phase run no longer staples two fixtures together. **One boundary carries the real model, its readback, the runtime seams and the four SEARCH entry points**
+  (`begin`, `search`, `safe_stop`, the neck sweep checker), so there is **one model digest, one session and one epoch** everywhere - which is what CP-1541 concluded and what production looks like.
+- **The steps this round, each named by the system:** the SEARCH observation's readback lives under **`physical_readback`** (not the object's own keys) and had to be patched there; the route takes the
+  **case's own prefix**; and the port refused a **second** window binding (`TASK8_LIVE_EVIDENCE_ALREADY_BOUND`) because the test still repeated what the helper now does - **a duplicate that the port caught
+  rather than silently honouring, which is the one-shot rule working.**
+- **Where it stands now:** the run reaches the port's SEARCH wrap (`pick_place_search_port.py:567`), i.e. **the SEARCH phase inside the full-case run is the remaining gap**, while the SEARCH-only test in this
+  same file passes. **The difference is completeness, not architecture:** the borrowed observation was built for the SEARCH-only fixture and needs the fields the full-case path validates - the next round's
+  work, and a bounded one.
+- **And the honest note:** this round was mostly wiring, and every step was a refusal rather than a wrong result. **A substituted runtime that is *almost* faithful is exactly what a fail-closed interface is
+  supposed to reject**, and the batch's nine phases plus this run now form a single consistent story: the production code is done and proven phase by phase, and what remains is making one stand-in runtime
+  faithful enough to drive them all in sequence.
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
