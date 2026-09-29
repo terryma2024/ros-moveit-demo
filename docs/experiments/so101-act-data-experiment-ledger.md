@@ -26202,3 +26202,18 @@ picture in both directions.**
   * **the full CLI close-out over a real case cannot run under this batch's constraints, and no amount of test-writing changes that** - it needs the owner's go-ahead for a live acceptance run, which is exactly
     the boundary the packet must carry.
 - **State:** P1-1..P1-4 complete and committed; P2's scenarios committed; the projection file green at 41 passed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1573 — P2's testable half is done: the CLI refuses by name, and a real process exits non-zero
+
+- **`3 passed`** for `test_act_task8_live_cli_gates.py`, and the assertion in each is a **real subprocess's exit status** - the same `raise SystemExit(main())` the script runs - plus the
+  refusal's own name in stderr:
+  1. **a declared bundle that is not there** stops the run (`TASK8_PREPARATION_REQUIRED`) **and leaves no journal behind**, which is the "nothing acquired" half of failing closed;
+  2. **a journal outside the case's evidence root** is refused (`TASK8_LOCAL_PATH_INVALID`);
+  3. the loader's kind rule is pinned as well, because these gate tests must start from a spec that can be loaded.
+- **With this, P2 is complete in everything that does not need the live stack** - and the review's remaining clause, a **CLI close-out over a real case**, is the boundary CP-1572 recorded: it needs the
+  stack and the fourteen journals this batch may not take, **so it is reported as an open item with its exact command and gate named, rather than quietly counted as done.**
+- **What the batch has now, by the review's own numbering:** **P1-1, P1-2, P1-3 and P1-4 complete and committed**; **P2's testable half complete and committed**; **P2's live half blocked on the owner's
+  authorization for an acceptance run** - which is a resource decision, not a technical one.
+- **The next steps are the ones the plan names:** the **final integration boundary** (a fresh NVMe scratch, the exact interpreter check, one full xdist run per module, CTest), then the ledger/packet/evidence-index
+  update, then the **independent GPT-6 Astra / High review** - which this agent may not perform or pre-empt.
+- **State:** the focused sets are green (58 demo-side, 41 projection, 3 CLI gates, 3 campaign); no new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
