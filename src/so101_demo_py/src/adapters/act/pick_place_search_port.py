@@ -279,6 +279,27 @@ class PickPlaceSearchPhasePort:
             "placement_stable": False, "retreat_stable": False,
         }
 
+    def _grid_sample(self, phase: str, observed, evidence: dict) -> dict:
+        """One grid sample taken from the port's own readback - never synthesised by a caller."""
+
+        raw = observed.physical_readback
+        sim_time = None
+        for source in (raw.get("observation"), raw.get("world"), raw.get("reference")):
+            if isinstance(source, dict):
+                for key in ("sim_time_s", "simulation_time_s", "requested_sim_time_s"):
+                    value = source.get(key)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        sim_time = float(value)
+                        break
+            if sim_time is not None:
+                break
+        if sim_time is None:
+            raise PickPlaceSearchPortError("LIVE_EVIDENCE_SIM_TIME_UNAVAILABLE")
+        step = evidence.get("physics_step")
+        if type(step) is not int:
+            raise PickPlaceSearchPortError("LIVE_EVIDENCE_STEP_UNAVAILABLE")
+        return {"phase": phase, "sim_time_s": sim_time, "physics_step": step}
+
     def run_phase(self, phase: str, request: dict) -> dict:
         if not self._begun or self._request is None:
             raise PickPlaceSearchPortError("TASK8_BEGIN_REQUIRED")
@@ -304,6 +325,8 @@ class PickPlaceSearchPhasePort:
                 reset.broker._prefix_source_port.register(
                     reset.broker, self, self._expert_route, ticket,
                     active_policy_fingerprint=reset.sources.contact_pairs.fingerprint)
+            if self._live_evidence_window is not None:
+                self._live_evidence_window.add_grid(self._grid_sample(phase, observed, evidence))
             return evidence
         except BaseException as error:
             self._validated_search_observation = None
