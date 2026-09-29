@@ -28150,3 +28150,10 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Evidence:** `test_act_task8_live_epoch_and_edges.py` `2 passed`; `test_act_task8_sealed_artifact.py` `4 passed`; a ten-suite neighbour run is in flight and its result is recorded when it lands.
 - **Still open in P1-4:** **piece 3** - the frozen grid plus command/release/contact **edge** sampling at the source-acquisition layer (`add_event`/`add_gripper_event`, which the port still never calls) - and **piece 4**, the fixture on one monotonically increasing source clock with no timestamp rewriting, which depends on piece 3.
 - **State:** **P1-4 in progress (pieces 1-2 green, 3-4 open)**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1681 — The neighbour run confirms it: `150 passed` across ten suites
+
+- **Ten suites, all green after P1-4 pieces 1-2:** the new `test_act_task8_live_epoch_and_edges.py`, `sealed_artifact`, `sealed_raw_sources`, `live_evidence`, `live_qualification`, `nine_phase_case`, `search_port`,
+  `release_epoch_boundary`, `calibration_admission` and `case_documents` - **150 passed in 99.92 s** on a fresh scratch.
+- **So the epoch change is not a local edit:** the release epoch now flows from the phase through the sample, the window, the seal and the index, **and every suite that reads any of those agrees.**
+- **State:** **P1-4 pieces 1-2 committed**; piece 3 (frozen grid plus command/release/contact edge sampling at the source-acquisition layer) and piece 4 (the fixture on one monotonic clock, no timestamp rewriting) remain; the task list keeps P1-4 in-progress; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
