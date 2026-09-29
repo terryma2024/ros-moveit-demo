@@ -23795,3 +23795,27 @@ not an inference of mine.**
 - **The one question, unchanged and still the owner's:** submit items 1-4 now with P1-5 documented as above and re-approve P1-5 as its own round
   (the ledger's recommendation at CP-1397, CP-1414, CP-1419, CP-1428 and CP-1434), or continue the tail first - **in which case the resumption is
   the print described three paragraphs above.**
+
+## CP-1439 — All nine grid samples are ACCEPTED; a GRID_GAP remains from an add_grid call outside the boundary
+
+- **The fix that worked, and it is the one CP-1438 predicted a print would find:** the window's period is **private** (`_period_s = 0.1`, with
+  `_tolerance_s = 0.01` - both printed at runtime), so the fixture now reads `_period_s` first and falls back to the public name; the nine samples are
+  spaced by exactly that, iterate **`LiveEvidenceWindow.REQUIRED_PHASES`**, and are recorded **once per case**. **The traced wrapper shows all nine
+  accepted:**
+  ```
+  [probe] grid add sim_time=0.0 phase=SEARCH step=0
+  [probe] grid add sim_time=0.1 phase=APPROACH step=1
+  ... through ...
+  [probe] grid add sim_time=0.8 phase=FINAL_CHECK step=8
+  ```
+  **with no `grid REFUSED` line at all.**
+- **And yet the case still ends in `TASK8_LIVE_EVIDENCE_GRID_GAP`, so at least one further `add_grid` happens that my wrapper does not wrap** - the
+  boundary's routing is one caller, and the window is reachable from other code paths. **The grep above lists every `add_grid`/`_validate_grid`
+  reference in the live-evidence module**, which is the next read; the most likely shape is a **validation sweep over the accumulated grid at seal
+  time**, in which case a sample recorded by another path (with a phase-document sim time) sits between mine and breaks the spacing.
+- **Resumption recipe, exact:** (1) read the grep's call sites; (2) print the grid's own accumulated stamps (its `_phases_seen`/`_last_grid_s` and any
+  entry list) immediately before the refusal; (3) either record the phases from **that** path or make the boundary's grid the only one - and then the
+  case records, the seal follows, and the reviewer's seven indexed assertions can be written against real records.
+- **State:** all of this round's edits compile and are covered by the parse-before-write guard (two of my insertions were rejected by it this round and
+  the file was left untouched both times); changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed,
+  nothing deleted.
