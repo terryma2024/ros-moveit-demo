@@ -193,3 +193,71 @@ def test_later_phase_is_explicitly_unprovisioned_and_stopped():
     with pytest.raises(Task8SearchPortError, match="TASK8_PHASE_NOT_PROVISIONED"):
         port.run_phase("APPROACH", request())
     assert ("stop", "TASK8_PHASE_NOT_PROVISIONED") in events
+
+
+def test_search_retains_only_validated_physical_observation_for_next_phase():
+    port, events = fixture()
+    bind(port)
+    port.begin(request())
+    port.run_phase("SEARCH", request())
+
+    retained = port.validated_search_observation()
+    assert isinstance(retained, Task8SearchObservation)
+    assert retained.physical_readback["world"].simulation_step == 2
+    assert retained.physical_readback["scene"]["simulation_step"] == 2
+    assert retained.physical_readback["contact"]["physics_step"] == 2
+    retained.physical_readback["scene"]["simulation_step"] = 999
+    retained.physical_readback["observation"]["head"][0, 0, 0] = 255
+
+    reread = port.validated_search_observation()
+    assert reread.physical_readback["scene"]["simulation_step"] == 2
+    assert reread.physical_readback["observation"]["head"][0, 0, 0] == 0
+    assert events == ["begin", "search", "sweep"]
+
+
+def test_failed_search_cannot_expose_a_physical_observation():
+    observed = observation()
+    raw = dict(observed.physical_readback)
+    raw["scene"] = {**raw["scene"], "simulation_step": 1}
+    port, events = fixture(observed=replace(observed, physical_readback=raw))
+    bind(port)
+    port.begin(request())
+    with pytest.raises(Task8SearchPortError, match="TASK8_SEARCH_EVIDENCE_INVALID"):
+        port.run_phase("SEARCH", request())
+    with pytest.raises(Task8SearchPortError,
+                       match="PICK_PLACE_SEARCH_OBSERVATION_UNAVAILABLE"):
+        port.validated_search_observation()
+    assert ("stop", "TASK8_SEARCH_ABORT") in events
+
+
+def test_a_boundary_without_a_field_builder_records_no_grid_sample(tmp_path):
+    """The port cannot assemble the canonical sample, so it must not hand the recorder a partial one.
+
+    This boundary exposes no ``capture_evidence_fields``, which is exactly the production situation the port is
+    in: it holds the validated observation but not the readback adapter that owns the field builder. Before this
+    contract, the port handed the recorder a three-key document on every attached-window SEARCH and the
+    recorder - correctly - raised ``TASK8_LIVE_EVIDENCE_SAMPLE_INVALID``, so no SEARCH could complete with a
+    window attached. The phase must now complete, and nothing may be recorded.
+    """
+
+    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow, Task8LiveEvidenceRecorder
+
+    port, events = fixture()
+    recorder = Task8LiveEvidenceRecorder(case_id="case-20", evidence_root=tmp_path,
+                                         session_id=SESSION, attempt_id=ATTEMPT)
+    window = LiveEvidenceWindow(
+        recorder,
+        identity={"case_id": "case-20", "session_id": SESSION, "attempt_id": ATTEMPT,
+                  "reset_epoch": 2, "release_epoch": 0},
+        period_s=0.1, tolerance_s=0.01)
+    port.bind_live_evidence(window)
+    bind(port)
+    port.begin(request())
+
+    evidence = port.run_phase("SEARCH", request())
+
+    assert evidence["phase"] == "SEARCH", "the phase completed with a window attached"
+    assert window._grid_count == 0, "no partial sample was handed to the recorder"
+    assert recorder._entries == [], "the recorder stayed empty rather than refusing a partial sample"
+    assert port._grid_sample("SEARCH", port._validated_search_observation, evidence) is None, \
+        "the port reports that it cannot fill the frame, instead of a document the recorder must refuse"
