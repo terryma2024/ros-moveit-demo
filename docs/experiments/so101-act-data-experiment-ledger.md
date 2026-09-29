@@ -15960,3 +15960,19 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   child side, fully specified except for this ordering choice; Task 9's single failing module awaits the (b1)/(b2) choice
   (CP-1035); Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no
   evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1047 — Blast-radius check after the port change: green
+
+- **Checked the modules a change to `PickPlaceSearchPhasePort` could plausibly disturb, rather than only the file it
+  lives in:** the demo package's live-evidence, live-qualification, Task 8 runner, visible-approach source binding and
+  child-port suites report **102 passed, rc=0** (`beh-r643a.log`), and the teleop production-chain suite reports
+  **6 passed, rc=0** (`beh-r643b.log`). Both from the documented scratch layout with a fresh per-run directory.
+- **Why this check was worth its cost:** `bind_live_evidence` added a method to a class the child-side chain constructs,
+  and the port is the object the teleop chain's assertions exercise - so a leak of state, a changed validation order or a
+  stricter constructor would have shown up here rather than at Task 9. It did not: the one-shot rule is additive, and the
+  window parameter's existing validation is untouched.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller's port side is committed, tested and now
+  regression-checked across its neighbours; its child side awaits the owner's (i)/(ii) ordering choice (CP-1046); Task 9's
+  single failing module awaits the (b1)/(b2) choice (CP-1035); Task 10 blocked until the 17 search values are reviewed.
+  No runtime, no formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*`
+  NOT_PROVISIONED.
