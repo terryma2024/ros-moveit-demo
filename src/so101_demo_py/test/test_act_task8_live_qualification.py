@@ -348,6 +348,7 @@ def test_real_runner_full_case_seals_evidence_through_an_evidence_port(tmp_path)
     case_root.mkdir()
     driver = CaseEvidenceDriver(case_id="full-01", staging_root=case_root, session_id="session-1",
                                 attempt_id="attempt-1", reset_epoch=4)
+    driver.bind_reset_epoch(4)
 
     class _EvidencePort(FakePort):
         """The real port contract, plus evidence emission into this task's driver."""
@@ -539,6 +540,7 @@ def test_evidence_port_factory_seals_through_its_driver(tmp_path):
     case_root.mkdir()
     driver = CaseEvidenceDriver(case_id="full-03", staging_root=case_root, session_id="session-1",
                                 attempt_id="attempt-3", reset_epoch=4)
+    driver.bind_reset_epoch(4)
     port = _evidence_port(driver)
     result = Task8Runner(port).run(runner_request(mode="full", stop_after=None))
     assert result["status"] == "PASSED"
@@ -569,6 +571,7 @@ def test_chain_reaches_a_validated_journal_row_from_real_evidence(tmp_path):
     staging.mkdir()
     driver = CaseEvidenceDriver(case_id="full-01", staging_root=staging, session_id="session-1",
                                 attempt_id="full-01", reset_epoch=4)
+    driver.bind_reset_epoch(4)
     result = Task8Runner(_evidence_port(driver)).run(runner_request(mode="full", stop_after=None))
     artifact = result["live_evidence_artifact"]
     assert _Path(artifact["path"]).is_file()
@@ -649,6 +652,7 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
     staging.mkdir()
     driver = CaseEvidenceDriver(case_id="full-01", staging_root=staging, session_id="session-298",
                                 attempt_id="full-01", reset_epoch=4)
+    driver.bind_reset_epoch(4)
     from types import SimpleNamespace
 
     context = SimpleNamespace(

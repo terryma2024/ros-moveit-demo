@@ -65,6 +65,7 @@ def test_the_nine_phase_chain_seals_and_reads_back(tmp_path):
     recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
+    window.bind_reset_epoch((_identity())["reset_epoch"])
 
     seen = []
     for step, phase in enumerate(PHASES):
@@ -101,6 +102,7 @@ def test_a_window_that_never_reached_final_check_invalid_seals_instead(tmp_path)
     recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
+    window.bind_reset_epoch((_identity())["reset_epoch"])
     window.add_grid(_sample(evidence_root, phase="SEARCH", step=0, sim_time=0.0))
     closed = window.invalidate("OWNER_RETIRE")
     assert closed["status"] == "INVALID" and closed["grid_count"] == 1
@@ -143,6 +145,7 @@ def _sealed_chain(tmp_path):
     recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
+    window.bind_reset_epoch((_identity())["reset_epoch"])
     for step, phase in enumerate(PHASES):
         sample = _sample(evidence_root, phase=phase, step=step, sim_time=step * PERIOD_S)
         recorder.append(sample)
@@ -169,6 +172,7 @@ def test_an_unfinished_window_blocks_the_seal_rather_than_passing_silently(tmp_p
     recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
+    window.bind_reset_epoch((_identity())["reset_epoch"])
     window.add_grid(_sample(evidence_root, phase="SEARCH", step=0, sim_time=0.0))   # never reaches FINAL_CHECK
     port = _port_with(recorder, window)
     with pytest.raises(ValueError):
@@ -213,6 +217,7 @@ def test_the_real_owner_invalid_seals_an_open_window_before_child_retirement(tmp
     open_recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                               session_id="session-1", attempt_id="attempt-1")
     open_window = LiveEvidenceWindow(open_recorder, identity=_identity(), period_s=PERIOD_S)
+    open_window.bind_reset_epoch((_identity())["reset_epoch"])
     open_window.add_grid(_sample(evidence_root, phase="SEARCH", step=0, sim_time=0.0))
 
     child = SimpleNamespace(mujoco_session_id="session-1", ros_domain_id=3, socket_root=str(child_root))

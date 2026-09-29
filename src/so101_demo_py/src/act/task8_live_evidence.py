@@ -269,6 +269,10 @@ def build_live_evidence_sample(*, identity: dict, phase: str, physics_step: int,
 
 _CASE_ID = re.compile(r"[a-z]+-[0-9]{2}\Z")
 
+# A window's reset generation is not knowable when it is constructed - only the reset receipt knows it - so the
+# identity starts unbound and must be bound exactly once before anything is recorded or sealed.
+UNBOUND_RESET_EPOCH = None
+
 
 def resolve_case_journal_path(run_root: Path, case_id: str) -> Path:
     """The only legal journal path for a case, refusing anything that already exists.
@@ -468,6 +472,7 @@ class LiveEvidenceWindow:
             raise ValueError("TASK8_LIVE_EVIDENCE_GRID_INVALID")
         self._recorder = recorder
         self._identity = dict(identity)
+        self._identity["reset_epoch"] = UNBOUND_RESET_EPOCH
         self._period_s = period_s
         self._tolerance_s = tolerance_s
         self._opened = False
@@ -486,7 +491,36 @@ class LiveEvidenceWindow:
     def event_count(self) -> int:
         return self._event_count
 
+    @property
+    def identity(self) -> dict:
+        return dict(self._identity)
+
+    @property
+    def reset_epoch(self):
+        return self._identity["reset_epoch"]
+
+    def bind_reset_epoch(self, epoch) -> None:
+        """Record the reset generation this window's samples belong to - once, before anything is recorded.
+
+        The epoch is witnessed by the reset receipt during SEARCH, so it cannot be a constructor argument; binding it
+        late and exactly once keeps every sample and the seal identity on the same generation. A second bind, a bind
+        after the window opened, sealed or was invalidated, and a non-integer or negative epoch are all refused.
+        """
+
+        if self._identity["reset_epoch"] is not UNBOUND_RESET_EPOCH:
+            raise ValueError("TASK8_RESET_EPOCH_ALREADY_BOUND")
+        if self._opened or self._sealed:
+            raise ValueError("TASK8_RESET_EPOCH_BOUND_TOO_LATE")
+        if type(epoch) is not int or epoch < 0:
+            raise ValueError("TASK8_RESET_EPOCH_INVALID")
+        self._identity["reset_epoch"] = epoch
+
+    def _require_bound(self) -> None:
+        if self._identity["reset_epoch"] is UNBOUND_RESET_EPOCH:
+            raise ValueError("TASK8_RESET_EPOCH_UNBOUND")
+
     def add_grid(self, sample: dict) -> None:
+        self._require_bound()
         """Append one grid sample, enforcing the frozen cadence from SEARCH onwards.
 
         The production runner opens the window at SEARCH, so the scan and approach are covered; a window opened at a
@@ -516,6 +550,7 @@ class LiveEvidenceWindow:
         self._recorder.append(sample)
 
     def add_event(self, sample: dict) -> None:
+        self._require_bound()
         """Append an edge sample; it never counts as a grid point."""
 
         if self._sealed:
@@ -543,6 +578,7 @@ class LiveEvidenceWindow:
                 "grid_count": self.grid_count, "event_count": self.event_count}
 
     def seal(self) -> dict:
+        self._require_bound()
         if not self._opened:
             raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
         missing = [phase for phase in self.REQUIRED_PHASES if phase not in self._phases_seen]
@@ -560,7 +596,7 @@ class CaseEvidenceDriver:
     """Drive one case's evidence window from readback fields into its private staging directory."""
 
     def __init__(self, *, case_id: str, staging_root, session_id: str, attempt_id: str,
-                 reset_epoch: int, release_epoch: int = 0, period_s: float = 0.1,
+                 reset_epoch=None, release_epoch: int = 0, period_s: float = 0.1,
                  tolerance_s: float = 0.01, recorder_factory=None) -> None:
         staging_root = Path(staging_root)
         if not staging_root.is_absolute() or ".." in staging_root.parts \
@@ -585,6 +621,11 @@ class CaseEvidenceDriver:
     @property
     def window(self) -> LiveEvidenceWindow:
         return self._window
+
+    def bind_reset_epoch(self, epoch) -> None:
+        """Record the reset generation this case's window belongs to; refused unless it is the window's first bind."""
+
+        self._window.bind_reset_epoch(epoch)
 
     def observe(self, fields: dict, *, phase: str, frame: dict, contact: dict,
                 measurements: dict, event: bool = False) -> None:
