@@ -32640,3 +32640,43 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   requirement, and both of its halves have production sources - a builder and a deterministic digest function.** P1-1
   through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1866 — The native-ingress proof is a twelve-member document with a production builder
+
+- **`pick_place_search_native_ingress.py`'s builder returns:**
+  ```python
+  {
+      "owner_generation": generation,
+      "selected_source_sha256": selected["observation_sha256"],
+      "reference_window_sha256": reference_proof["reference_window_sha256"],
+      "control_event_window_sha256": owner_proof["control_event_window_sha256"],
+      "stop_confirmed_wall_s": stopped_wall_s,
+      "latest_source_receipt_monotonic_ns": latest_source_receipt_ns,
+      "ingress_sequence_by_controller": {kind: snapshots[kind]["ingress_sequence"] for kind in _CONTROLLERS},
+      "native_snapshots": snapshots,
+      "native_ingress_window_sha256": digest,          # = native_ingress_digest(snapshots)
+      "commit_window_ingress_recheck_required": True,
+      "command_authority": False,
+      "eligible_for_collection": False,
+  }
+  ```
+  **so "supply `native_snapshots`" is really "supply the ACT native-ingress proof"** - **twelve members drawn from the
+  broker's ownership generation, the selected source, the reference and control-event windows, the stop wall time, the
+  latest source receipt, and per-controller ingress sequences.** It is the evidence that says *the goal was committed
+  into the controllers' native ingress in this order, at these times*, **and its `command_authority`/`eligible_for_collection`
+  are both `False` by construction** - the same "inspect without authority" rule the screen carries (CP-1817).
+- **And a test already builds one, which is the pattern to follow rather than to invent:**
+  ```
+  test_act_visible_approach_expert_route.py:101   local_owner_goal_proof=owner, native_controller_ingress_proof=native
+  test_act_visible_approach_commit_ingress.py:24  native = observed.native_controller_ingress_proof
+  test_act_visible_approach_commit_ingress.py:26  native["native_snapshots"])
+  ```
+- **Which makes this the deepest requirement the drive has met, and worth naming as such:** every earlier gap was a
+  member or a value; **this one is a document that production assembles from the ACT machinery's own state** - generation,
+  reference window, control-event window, ingress sequences. **The honest construction is therefore the builder called
+  with real inputs from the harness's broker/ownership/segment, exactly as those tests do** - **not a dict assembled to
+  satisfy the two fields the check reads.**
+- **State:** **P1-5 in progress: the expert route registers, the source document it needs is the native-ingress proof, and
+  that proof has both a production builder and existing test constructions to follow.** P1-1 through P1-4 CLOSED. The demo
+  RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so
+  they are not re-stated.**
