@@ -782,3 +782,21 @@ def test_release_correlation_refuses_a_gap_a_summary_and_an_unindexed_mask():
                                                     "command_ref": "raw/open.json",
                                                     "mask_ref": "raw/mask.png"},
                                period_s=0.1, indexed=("raw/open.json",))
+
+
+def test_a_failed_run_invalid_seals_its_window_instead_of_sealing_evidence(recorder):
+    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+
+    rec, root = recorder
+    reference = sample(root, step=0)
+    identity = {key: reference[key] for key in
+                ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch")}
+    window = LiveEvidenceWindow(rec, identity=identity)
+    window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
+    # a run that never reached FINAL_CHECK must not seal as evidence
+    result = window.invalidate("TASK8_ABORT")
+    assert result["status"] == "INVALID" and result["reason"] == "TASK8_ABORT"
+    assert result["grid_count"] == 1 and result["event_count"] == 0
+    assert window.invalidate("TASK8_ABORT") == result          # idempotent
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_INVALID_REASON_REQUIRED"):
+        window.invalidate("")
