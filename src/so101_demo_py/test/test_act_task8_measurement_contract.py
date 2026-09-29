@@ -439,3 +439,32 @@ def test_a_batch_that_does_not_cover_every_declared_anchor_is_refused(tmp_path):
 
     with pytest.raises(ValueError, match="BATCH_ANCHOR_MISSING"):
         validate_closed_batch(root)
+
+
+def test_a_driver_batch_that_misses_a_phase_for_an_anchor_is_refused(tmp_path):
+    """Boundary IV: when a batch evidences anchors the way the driver does, the nine phases must all be there."""
+
+    import hashlib as _hashlib
+
+    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+
+    root = tmp_path / "batch"
+    files = {}
+    for anchor in ("default", "left", "forward"):
+        (root / "anchors" / anchor).mkdir(parents=True)
+        # eight of the nine phases: RELEASE is missing, which the closure check alone cannot notice
+        for index, phase in enumerate(("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN",
+                                       "RADIAL_RETREAT", "FINAL_CHECK")):
+            written = write_closed_json(root / "anchors" / anchor / f"phase-{index:02d}-{phase.lower()}.json",
+                                        {"phase": phase, "index": index})
+            files[f"anchors/{anchor}/{written.name}"] = _hashlib.sha256(written.read_bytes()).hexdigest()
+    identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
+    identity["source_commit"] = "b" * 40
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                "anchors": ["default", "left", "forward"], "identity": identity, "files": files}
+    document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
+    write_closed_json(root / "batch.json", document)
+
+    with pytest.raises(ValueError, match="BATCH_PHASE_MISSING"):
+        validate_closed_batch(root)
