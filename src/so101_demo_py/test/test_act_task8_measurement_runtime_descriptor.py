@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+from test_act_task8_calibration_aggregator import SEAL_VALID_HELPER
 from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -55,8 +57,11 @@ def _invoke(tmp_path, context, driver="descriptor_driver:fill"):
                       "    import json, pathlib\n"
                       "    root = pathlib.Path(root)\n"
                       "    root.mkdir(parents=True, exist_ok=True)\n"
-                      "    (root / 'execution.json').write_text(json.dumps({}))\n")
+                      "    (root / 'execution.json').write_text(json.dumps({}))\n"
+                      "    from seal_valid_helper import seal_valid\n"
+                      "    seal_valid(root, contract)\n")
     sys.path.insert(0, str(tmp_path))
+    (tmp_path / "seal_valid_helper.py").write_text(SEAL_VALID_HELPER)
     argv = ["--contract", str(bound),
             "--identities", str(identities), "--batch-root", str(tmp_path / "batch"),
             "--ledger", str(tmp_path / "ledger.md"),
@@ -101,7 +106,10 @@ def test_the_cli_composes_the_production_driver_without_the_injected_test_seam(t
     monkeypatch.setenv("SO101_TASK8_PROVIDER_SEAM", "fake_providers:build")
 
     context = _context_document(tmp_path, _descriptor())
-    _invoke(tmp_path, context, driver=None)          # the production path must complete, not raise
+    # P1-3: the entry now reads the seal back, and a provider stand-in that captures no anchors legitimately
+    # seals a batch the schema refuses - so the refusal is expected here; that the seam RAN is asserted below
+    with pytest.raises(BaseException):
+        _invoke(tmp_path, context, driver=None)
 
     # the composition ran: it resolved the external I/O seam, so the driver it builds is the real one - whatever
     # happens afterwards inside the run is the fakes' business, not a wiring error
@@ -265,3 +273,48 @@ def test_the_context_keeps_its_descriptor_through_a_round_trip(tmp_path):
     assert document["runtime_descriptor"] == descriptor, "the descriptor survives serialisation"
     rebuilt = CalibrationMeasurementContext(**document)
     assert rebuilt.runtime_descriptor == descriptor, "and a rebuilt context is the same admission"
+
+
+def _invalid_sealing_driver(tmp_path):
+    """A test driver at the external-I/O seam that seals a schema-valid INVALID batch, as a failed case does."""
+
+    module = tmp_path / "invalid_driver.py"
+    module.write_text(
+        "import hashlib, json\n"
+        "from pathlib import Path\n"
+        "from so101_demo.act.task8_measurement_contract import IDENTITIES_V2, _canonical\n"
+        "from so101_demo.act.task8_measurement_schema import write_closed_json\n"
+        "def fill(contract, root):\n"
+        "    root = Path(root); root.mkdir(parents=True, exist_ok=True)\n"
+        "    kept = root / 'anchors' / 'default' / 'phase-release.json'\n"
+        "    kept.parent.mkdir(parents=True, exist_ok=True)\n"
+        "    for index, phase in enumerate(sorted(('search', 'approach', 'close', 'micro_lift',\n"
+        "                                       'transport', 'align', 'release', 'radial_retreat',\n"
+        "                                       'final_check')), start=1):\n"
+        "        (kept.parent / f'phase-{phase}.json').write_bytes(\n"
+        "            json.dumps({'phase': phase, 'source_stamp': index}).encode())\n"
+        "    identity = {name: 'a' * 64 for name in IDENTITIES_V2}\n"
+        "    identity['source_commit'] = 'a' * 40\n"
+        "    identity['measurement_contract_sha256'] = contract['contract_sha256']\n"
+        "    files = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()\n"
+        "             for path in sorted(root.rglob('*'))\n"
+        "             if path.is_file() and path.name != 'batch.json'}\n"
+        "    document = {'schema_version': 1, 'kind': 'task8_calibration_batch', 'status': 'INVALID',\n"
+        "                'error_code': 'ANCHOR_FAILED', 'cleanup': 'confirmed', 'contamination': None,\n"
+        "                'identity': identity, 'anchors': ['default'], 'files': files}\n"
+        "    document['batch_sha256'] = hashlib.sha256(_canonical(document)).hexdigest()\n"
+        "    write_closed_json(root / 'batch.json', document)\n")
+    return module
+
+
+def test_an_invalid_sealed_batch_is_never_reported_valid(tmp_path):
+    """Astra re-review P1-3: the entry must read back the seal and refuse to call INVALID a success."""
+
+    module = _invalid_sealing_driver(tmp_path)
+    context = _context_document(tmp_path, _descriptor())
+    exit_code = _invoke(tmp_path, context, driver=f"{module.stem}:fill")
+    ledger = (tmp_path / "ledger.md").read_text()
+    # the outcome token is checked as a token, not as a substring: "INVALID" contains "VALID"
+    assert "measurement INVALID:" in ledger.splitlines()[-1], \
+        f"the ledger must record the failure: {ledger.splitlines()[-1]}"
+    assert exit_code != 0, "an INVALID measurement must not exit zero"

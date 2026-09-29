@@ -101,6 +101,17 @@ def main(argv=None) -> int:
         raise
     # Astra item 3: the driver is the ONE seal owner; the entry only reports what it sealed
     sealed = args.batch_root / "batch.json"
+    # Astra re-review P1-3: read the seal back and refuse to call an INVALID measurement a success. The
+    # path, the identity and the closure are checked by the schema's validator, and the terminal status
+    # decides the outcome - evidence is left in place either way.
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+
+    validate_closed_batch(args.batch_root)
+    record = json.loads(sealed.read_text())
+    if record["status"] != "CLOSED":
+        _append_ledger(args.ledger, "INVALID", ledger_identity,
+                       f"measurement {record['status']}: {record.get('error_code')}")
+        return 1
     _append_ledger(args.ledger, "VALID", ledger_identity, f"sealed {sealed}")
     print(sealed)
     return 0

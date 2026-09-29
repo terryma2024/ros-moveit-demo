@@ -43,6 +43,46 @@ def contract(tmp_path):
                                                 tmp_path / "contract.json").read_text())
 
 
+SEAL_VALID_HELPER = '''"""A schema-valid CLOSED seal for fake drivers, so the entry may accept their batch."""
+
+import hashlib
+import json
+from pathlib import Path
+
+from so101_demo.act.task8_measurement_contract import IDENTITIES_V2, _canonical
+from so101_demo.act.task8_measurement_schema import write_closed_json
+
+
+def seal_valid(root, contract):
+    root = Path(root)
+    kept = root / "anchors" / "default" / "phase-release.json"
+    kept.parent.mkdir(parents=True, exist_ok=True)
+    kept.write_bytes(b'{"phase": "release", "source_stamp": 8}')
+    # the schema demands the nine phase rows for an anchor evidenced the driver's way, with
+    # non-decreasing source stamps - so the seal writes them all, not just one that looks plausible
+    # the validator sorts the rows by file name, so stamps must increase ALPHABETICALLY
+    phases = sorted(("search", "approach", "close", "micro_lift", "transport", "align",
+                     "release", "radial_retreat", "final_check"))
+    for index, phase in enumerate(phases, start=1):
+        row = root / "anchors" / "default" / f"phase-{phase}.json"
+        row.write_bytes(json.dumps({"phase": phase, "source_stamp": index}).encode())
+    identity = {name: "a" * 64 for name in IDENTITIES_V2}
+    identity["source_commit"] = "a" * 40
+    identity["measurement_contract_sha256"] = contract["contract_sha256"]
+    # the closure must be exact: index every regular file except the batch record itself
+    files = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+             for path in sorted(root.rglob("*"))
+             if path.is_file() and path.name != "batch.json"}
+    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                "cleanup": "confirmed", "contamination": None, "identity": identity,
+                "anchors": ["default"], "files": files}
+    document["batch_sha256"] = hashlib.sha256(_canonical(document)).hexdigest()
+    write_closed_json(root / "batch.json", document)
+'''
+
+
+
+
 def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED", status_field=None,
                   source_provenance_sha256="a" * 64, lock_frames=None, fov_ok=True,
                   sync=True, collision_ok=True, execution_ok=True, descriptor=True):
@@ -237,18 +277,22 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
     ledger = tmp_path / "ledger.md"
     driver_module = tmp_path / "driver.py"
     driver_module.write_text(
-        "def fill(contract, root):\n"
+        "import sys, pathlib\n"
+          "sys.path.insert(0, str(pathlib.Path(__file__).parent))\n"
+          "from seal_valid_helper import seal_valid\n"
+          "def fill(contract, root):\n"
         "    import json, pathlib\n"
         "    root = pathlib.Path(root)\n"
         "    root.mkdir(parents=True, exist_ok=True)\n"
         "    (root / 'execution.json').write_text(json.dumps({}))\n"
       # Astra item 3: the driver is the seal owner, so a driver that succeeds seals and a driver that fails does not.
       # This test is about who seals and when, so the seal here is a marker rather than a schema-true batch.
-      "    (root / 'batch.json').write_text(json.dumps({'sealed_by': 'driver:fill'}))\n"
+      "    seal_valid(root, contract)\n"
         "def boom(contract, root):\n"
         "    raise RuntimeError('measurement failed')\n")
     import sys
     sys.path.insert(0, str(tmp_path))
+    (tmp_path / "seal_valid_helper.py").write_text(SEAL_VALID_HELPER)
     batch = tmp_path / "batch"
     assert measure.main(["--contract", str(bound), "--identities", str(identities),
                          "--batch-root", str(batch), "--ledger", str(ledger),

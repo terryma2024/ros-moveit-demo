@@ -164,7 +164,11 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
 
     root = Path(root)
     recorded = _load(root / "batch.json", "BATCH_INVALID")
-    if not _BATCH_REQUIRED <= set(recorded) <= _BATCH_KEYS or recorded.get("kind") != BATCH_KIND:
+    # P1-3 of the re-review: the driver records an ``error_code`` on an INVALID seal, so a batch that is not
+    # CLOSED may carry it - otherwise an INVALID batch could never be validated, and the entry is required to
+    # read one back. A CLOSED batch stays exactly as strict as before.
+    allowed = _BATCH_KEYS | ({"error_code"} if recorded.get("status") != "CLOSED" else set())
+    if not _BATCH_REQUIRED <= set(recorded) <= allowed or recorded.get("kind") != BATCH_KIND:
         raise ValueError("BATCH_INVALID")
     if recorded.get("status") not in BATCH_STATUSES:
         raise ValueError("BATCH_INVALID")

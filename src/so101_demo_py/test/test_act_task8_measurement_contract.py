@@ -283,9 +283,11 @@ def test_the_entry_does_not_seal_on_the_drivers_behalf(tmp_path, monkeypatch):
         "    (root / 'raw.json').write_text('{\"row\": 1}')\n")
     monkeypatch.syspath_prepend(str(driver_dir))
     batch_root = tmp_path / "batch"
-    measure.main(["--contract", str(contract_path), "--identities", str(identities_path),
-                  "--batch-root", str(batch_root), "--ledger", str(tmp_path / "ledger.md"),
-                  "--driver", "raw_driver:run"])
+    # P1-3: the entry reads the seal back, so a driver that sealed nothing is now refused by name
+    with pytest.raises(ValueError, match="BATCH_INVALID"):
+        measure.main(["--contract", str(contract_path), "--identities", str(identities_path),
+                      "--batch-root", str(batch_root), "--ledger", str(tmp_path / "ledger.md"),
+                      "--driver", "raw_driver:run"])
     assert not (batch_root / "batch.json").exists(), "the entry must not seal a batch the driver did not seal"
 def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_path):
     """Boundary IV: the validator verifies the seal's self-digest, not merely its shape.
