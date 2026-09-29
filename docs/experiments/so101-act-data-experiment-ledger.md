@@ -15843,3 +15843,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   confirming the `case_id` pattern; Task 9's single failing module awaits the (b1)/(b2) choice (CP-1035); Task 10 blocked
   until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no evidence deleted, no hardware;
   formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1042 — The identifiers are two different things, and the last write is down to one unknown
+
+- **Read the patterns rather than assuming the ids were interchangeable, and they are not:**
+  | pattern | value | what it constrains |
+  | --- | --- | --- |
+  | `_CASE_ID` (`task8_live_evidence.py:270`) | `[a-z]+-[0-9]{2}` | the evidence driver's `case_id` - a **case** identifier like `full-03` |
+  | `_CHILD_ID` (`pick_place_child_port.py:26`) | `[A-Za-z0-9][A-Za-z0-9_-]{0,63}` | the port factory's `campaign_id` - a **campaign** identifier |
+  Both patterns accept a case-shaped id, which is exactly why this could have been written wrongly and passed review: the
+  factory's `campaign_id` is **not** the driver's `case_id`, and only reading the two regexes shows it.
+- **Where the driver's real inputs live:** in `_run_pick_place`, where the request is in hand -
+  `request.payload["scenario_id"]` is the case identifier (`_run_pick_place` already uses exactly that value as the
+  runner's `scenario_id`, `ros_child.py:521`), `request.session_id` and `request.attempt_id` are the other two, and
+  `evidence_root` is `driver._act_artifacts.evidence_root` (`:112`).
+- **The one unknown left is `reset_epoch`,** which appears **nowhere** in `ros_child.py` or in the child port factory - so
+  it comes from the reset boundary or its connection, which I have not read. That is the single fact between here and the
+  write: everything else about the child-side bind (which class, which root, which ids, which call site, which
+  ordering) is now read and recorded.
+- **Why I am not writing it this round:** the write would be three lines plus one unread argument, and the whole session's
+  evidence says the unread argument is precisely where a wrong value gets committed and then defended. Reading
+  `reset_epoch`'s source is one grep; guessing it is a silent defect in the identity every recorded sample carries.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller's port side is committed and tested, and its
+  child side is one unread argument away from being writable; Task 9's single failing module awaits the (b1)/(b2) choice
+  (CP-1035); Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
