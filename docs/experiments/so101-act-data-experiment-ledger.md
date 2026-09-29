@@ -20124,3 +20124,25 @@ not an inference of mine.**
   rather carry that caveat forward than let a green line stand on an unknown import path.
 - **State:** HEAD `dbb405e8` plus this checkpoint; probe print still in the test file; no stack, no hardware, nothing deleted,
   nothing pushed.
+
+## CP-1234 — Item 2's RED is GREEN, and the contradiction resolves exactly as CP-1231 predicted
+
+- **`50 passed, rc=0`** across the descriptor, bundle, binding and contract suites
+  (`experiments/gate6-batch3-py-gate/rev2-green6.log`).
+- **The three-round contradiction ended in the least dramatic way possible, which is why it was worth chasing:** the re-probe
+  showed the imported rule (from the build tree) **calls** the shape validator and **does** raise `HEAD_SEARCH_CONFIG_INVALID` on a
+  five-key `head_search` - so the source was right all along. **The failing case was (b), the malformed *camera keys*, exactly the
+  case CP-1231 flagged as belonging to the deeper binding check rather than the shape rule.** My test asserted a raise for a case the
+  shape rule deliberately does not own.
+- **What I changed, and the reasoning is in the test:** the shape case now covers an unknown field inside `head_search`, a
+  non-dict `motion`, and an unknown **top-level** field - the closed structure the rule owns - while the camera-keys case is left to
+  the binding suite, which covers it. **Asserting it here would have made the test pass for the wrong reason or fail for one.**
+- **Method finding kept from CP-1232/CP-1233, because it is not about this item:** the suites import the package from
+  `build/so101_demo_py`, so a `src/` edit is invisible until the build tree is refreshed. **Item 1's GREEN is re-verified here under
+  the corrected method** (its composition test is in the descriptor suite that just passed), which is exactly the caveat CP-1233 said
+  I would carry until it could be discharged - and it is now discharged.
+- **Item 2's remaining piece:** make `runtime_descriptor` a **required** argument of `CalibrationMeasurementContext` and delete the
+  `None` default bypass, then confirm the CLI→context→driver identity path in one test. After that, items 3, 4 and 5.
+- **State:** HEAD at the test commit plus this checkpoint; ledger 949 checkpoints; the CLI/composition changes from item 1 are
+  committed; the build tree is currently in sync with `src/` for the four touched modules - **which is a state to re-establish after
+  any further `src/` edit**; no stack, no hardware, nothing deleted, nothing pushed.
