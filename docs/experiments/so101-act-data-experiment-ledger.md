@@ -23081,3 +23081,25 @@ not an inference of mine.**
   rather than proposing to stop short.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1393 — The build recipe, complete: every vocabulary the port checks is importable from production
+
+- **Found:** `SCENE_KEYS` is defined in **`adapters/act/scene_state.py`** and `FRAME_KEYS` in **`adapters/act/contact_evidence.py`** (the latter
+  composed as `CONTACT_KEYS | frozenset({'simulation_session_id', 'reset_epoch', ...})`), alongside `READBACK_SOURCES` in the live-evidence module.
+  **So all three key sets the port compares against are production definitions the fixture can import - nothing needs transcribing, and nothing can
+  drift.**
+- **The remaining search-path build, as a recipe rather than a hunt:**
+  1. in `_ChildSources.capture`, give each row the **full `physical_readback`** - `world`, `scene`, `contact` (each with its production key set and
+     values matching the world), `source_stamps_s` and `source_received_wall_s` **over `READBACK_SOURCES`** (seven sources, stamped live), plus
+     `observation` and `reference`;
+  2. `observation` must satisfy `validate_observation`: `session_id`, `attempt_id`, `sim_time_s` matching the world, an **8-element `state`**
+     with a normalised neck quaternion, and **real uint8 arrays shaped (480, 640, 3)** for `head` and `wrist` - the camera substitution CP-1392
+     established as legitimate;
+  3. the sources instance must expose **`contacts.safe()`** and **`contact_pairs`** (with `model_sha256` and `for_phase("SEARCH")`), and the queued
+     rows must carry **no fingertip contacts**;
+  4. then the same treatment for `reference`.
+- **And the honest position on time:** with roughly forty rounds left and this list in hand, the search path, the case-level evidence
+  (aggregator, seven assertions, four negatives), the integration boundary and the packet correction fit - **but only as execution of this recipe.
+  The rounds where I inferred instead of reading are exactly the ones this list is meant to prevent.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
