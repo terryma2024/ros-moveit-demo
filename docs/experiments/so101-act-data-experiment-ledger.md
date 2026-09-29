@@ -21203,3 +21203,20 @@ not an inference of mine.**
   the aggregator, contract, descriptor, bundle, binding, admission and driver suites all pass; the ledger has recorded every failure
   of this fixture with its exact code, so the path is auditable rather than lost.
 - **State:** the child-driven test file remains **uncommitted while red**; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1286 — The exact helpers item 5 should reuse, read from the campaign-admission suite
+
+- **`test_act_campaign_admission.py` (same directory as item 5's fixture) has:**
+  | line | helper | what it gives |
+  | --- | --- | --- |
+  | 32 | `_write_policy(tmp_path)` | **returns `(fingerprint, proposal_path, receipt_path, receipt)`** - a genuinely valid policy triple, with `proposal["proposal_sha256"]` computed from `_canonical(proposal)` and both documents written to disk |
+  | 79 | `_prepared_receipt(tmp_path)` | the prepared-state receipt |
+  | 100 | `_calibration(tmp_path, *, status, head_search)` | a calibration report of a chosen status (a QUALIFIED one carries the live-campaign block) |
+  | 152 | `_start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="mujoco", ...)` | the start spec, building an `artifacts` mapping at line 170 |
+- **So item 5's fixture replaces my hand-built proposal and receipt with `_write_policy(...)`'s output** - importing it the same way I
+  already import `FakePort` from the sibling chain test - which is both less code and stronger evidence: the documents would be the ones
+  the admission suite itself treats as valid, rather than ones I assembled from the validators' rule list.
+- **That is the judgement CP-1285 recorded, now with names and line numbers:** the artefacts come from the admission path, not from my
+  typing. **One edit to the fixture, one run, and item 5 either passes or names the next condition.**
+- **State:** the child-driven test file remains **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware,
+  nothing deleted, nothing pushed.
