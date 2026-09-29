@@ -17487,3 +17487,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State: 1 failed / 20 passed** in the aggregator module, that failure being the CP-1116 RED, which now has a precise
   explanation and a named owner in the design rather than a guessed fix. Nothing weakened, nothing deleted, no push, no
   stack, no hardware.
+
+## CP-1118 — Three of the binding's conditions fixed by comparing the sample field by field
+
+- **The diagnostic that worked:** rather than re-reading the binding, I compared the published sample against the
+  binding's own conditions one at a time and printed each answer. It named three defects at once:
+  | condition | before | now |
+  | --- | --- | --- |
+  | `head_search == descriptor` | absent from the sample | **passed through** from the batch when it recorded one, never invented |
+  | `measurements`/`camera_measurements` == the report's **values** | unit-bearing entries | bare values, and taken from the binding's own `_MEASURED` / `_CAMERA_MEASURED` sets so the sample's shape is the binding's vocabulary rather than a restatement |
+  | `observed_lock_frames` an int `>= 3` | a per-anchor mapping | the **conservative minimum** across anchors, which is also the fail-closed choice |
+  | `source_commit`, `config_sha256` | absent | carried from the batch, as the binding compares them against the report |
+- **One condition still refuses the pairing**, so the RED stands: `HEAD_SEARCH_SAMPLE_MISMATCH` is still raised by the
+  binding's own suite of conditions, and the next step is to re-run the same field-by-field diagnostic on the **aligned**
+  sample - the script is written and named in this checkpoint's evidence - rather than reading more code.
+- **This is production work, not fixture work:** the sample the aggregator publishes now records the configuration the
+  measurement was taken under, which is what CP-1117 identified as the missing hand-off between the runtime that measures
+  and the report that is bound to it. The fixture records the descriptor it hands the runtime, so the pairing is honest by
+  construction.
+- **State: 1 failed / 38 passed** across both modules, the failure being this RED. Nothing weakened, nothing deleted, no
+  push, no stack, no hardware.
