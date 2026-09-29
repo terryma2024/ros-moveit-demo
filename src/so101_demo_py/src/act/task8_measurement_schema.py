@@ -110,11 +110,30 @@ def load_contract_v2(path: Path | None = None) -> dict:
 
 
 def load_phase_camera_matrix(path: Path | None = None) -> dict:
+    """The admitted phase-camera matrix, or a refusal naming what is missing.
+
+    P1-3 (rereview 5): this used to accept a scaffold - `phases: []`, `status: SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION`,
+    no `camera` block - and the evaluator then invented 640/480/1.0 rad. A matrix that admits no phase cannot bind a
+    measurement, so each of those three is now refused by name.
+    """
+
     document = _load(path or _CONFIG / "task8-phase-camera-matrix-v1.json",
                      "PHASE_CAMERA_MATRIX_INVALID")
     occluders = document.get("occluders")
     if occluders != EXPECTED_OCCLUDERS:
         raise ValueError("PHASE_CAMERA_OCCLUDERS_INVALID")
+    status = document.get("status")
+    if not isinstance(status, str) or status != "FROZEN":
+        raise ValueError(f"PHASE_CAMERA_MATRIX_NOT_FROZEN: {status!r}")
+    phases = document.get("phases")
+    if not isinstance(phases, list) or not phases:
+        raise ValueError("PHASE_CAMERA_MATRIX_PHASES_REQUIRED")
+    camera = document.get("camera")
+    if not isinstance(camera, dict):
+        raise ValueError("PHASE_CAMERA_INTRINSICS_REQUIRED: camera")
+    for name in ("width_px", "height_px", "horizontal_fov_rad"):
+        if camera.get(name) is None:
+            raise ValueError(f"PHASE_CAMERA_INTRINSICS_REQUIRED: {name}")
     return document
 
 

@@ -141,18 +141,33 @@ def test_the_formal_entrys_replay_rows_carry_a_measured_observation(tmp_path, mo
 # P1-3 (rereview 5): the four things the verdict requires that this file did not yet assert, each in its own words.
 # ----------------------------------------------------------------------------------------------------------------------
 
-def test_the_shipped_matrix_is_not_a_scaffold():
+def test_the_shipped_matrix_is_frozen_and_a_scaffold_is_refused():
     """*"`config/act/task8-phase-camera-matrix-v1.json` still has `phases: []` and `SCAFFOLD_PENDING…`."*
 
-    A matrix that admits no phase cannot bind a measurement, so shipping one must be refused by name rather than
-    loaded and used to substitute defaults.
+    Two sides, because the finding has two: the SHIPPED matrix must now be a frozen, sampled document, and a scaffold
+    handed to the loader must be refused by name rather than loaded and used to substitute defaults.
     """
+
+    import json
 
     from so101_demo.act.task8_measurement_schema import load_phase_camera_matrix
 
-    with pytest.raises(ValueError) as error:
-        load_phase_camera_matrix()
-    assert "PHASE_CAMERA" in str(error.value).upper(), str(error.value)
+    shipped = load_phase_camera_matrix()
+    assert shipped["status"] == "FROZEN", "the scaffold status is what this fixes"
+    assert shipped["phases"], "and an empty phase list cannot bind a measurement"
+    assert shipped["camera"]["width_px"] and shipped["camera"]["horizontal_fov_rad"] > 0.0
+
+    scaffold = {"schema_version": 1, "kind": "task8_phase_camera_matrix",
+                "occluders": list(shipped["occluders"]), "phases": [],
+                "cameras": ["head_camera", "wrist_camera"], "status": "SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION"}
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "scaffold.json"
+        path.write_text(json.dumps(scaffold))
+        with pytest.raises(ValueError) as error:
+            load_phase_camera_matrix(path)
+        assert "PHASE_CAMERA" in str(error.value).upper(), str(error.value)
 
 
 def test_a_camera_without_intrinsics_is_refused_rather_than_defaulted():
