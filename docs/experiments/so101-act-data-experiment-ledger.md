@@ -34069,3 +34069,44 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   entry); next are the phase-path provider from the admitted rows, then the pre-existing `PHASE_CAMERA_MATRIX_INVALID` on
   the formal path, then the entry documents and weights.** **Task-list statuses unchanged: P1-1 in_progress, P1-6
   completed, five pending.**
+
+## CP-1914 — The formal path's RED was a real production defect: the admitted documents were unreachable once installed
+
+- **Root cause, found by asking the running environment rather than reasoning about it:**
+  ```
+  so101_demo resolved to  install/so101_demo_py/lib/python3.12/site-packages/so101_demo/__init__.py
+  _CONFIG was            install/so101_demo_py/lib/python3.12/site-packages/config/act          <- does not exist
+  the matrix really is   install/so101_demo_py/share/so101_demo_py/config/act/task8-phase-camera-matrix-v1.json
+  ```
+  **because `_ROOT = Path(__file__).resolve().parents[2]` is `src/so101_demo_py` in the SOURCE layout but
+  `lib/python3.12/site-packages` once the package is installed** - so every admitted document looked absent to the
+  installed entry, and `_load` correctly refused with `PHASE_CAMERA_MATRIX_INVALID`. **This is exactly the class of defect
+  the formal entry cannot survive: it runs from the installed tree.**
+- **The fix resolves the documents the way every other installed component does, without weakening the loader:**
+  ```python
+  def _config_root() -> Path:
+      candidates = []
+      try:
+          from ament_index_python.packages import get_package_share_directory
+          candidates.append(Path(get_package_share_directory("so101_demo_py")) / "config" / "act")
+      except Exception:                       # no ament index (plain source run)
+          pass
+      candidates.append(_ROOT / "config" / "act")
+      for candidate in candidates:
+          if candidate.is_dir():
+              return candidate
+      return candidates[-1]
+  ```
+  **`_load` still refuses a symlink and a non-dict, so an install that symlinked the config is refused rather than
+  silently accepted** - the rule was not relaxed, the lookup was corrected.
+- **RED→GREEN with the existing tests (the same three that were failing before any of my changes, per CP-1913's A/B):**
+  ```
+  _CONFIG now: install/so101_demo_py/share/so101_demo_py/config/act
+  load_phase_camera_matrix(): 9 phases, status FROZEN
+  load_contract_v2(): sections bound_files/kind/measurements/notes/schema_version/source_design/source_plan/status/support
+  pytest test_act_task8_production_composition_contract.py test_act_task8_measurement_runtime_descriptor.py
+      12 passed in 1.24 s                       rc=0        (was: 3 failed)
+  ```
+- **State:** **P1-1 in progress: frame contract GREEN, production client GREEN and wired, and now the formal path's own
+  loader defect is fixed; remaining are the real phase-path provider and an actual run of
+  `build_production_measurement_driver(providers=None)` with the seam unset.** **Task-list statuses unchanged.**
