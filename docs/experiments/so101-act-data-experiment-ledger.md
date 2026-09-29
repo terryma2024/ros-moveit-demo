@@ -15455,3 +15455,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   invocation is recorded as a refused diagnostic rather than a pass or a failure; Task 10 blocked until the 17 search
   values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1029 — The gate's shards collect fine; the refusal is an origin/provenance check, not a broken scope
+
+- **Read the run's own artefacts instead of theorising, and the run is healthier than its one-line error suggested:**
+  a shard's `pytest.log` ends with **"5754/5766 tests collected (12 deselected) in 6.05s"** - the scope collects, the
+  runner works, and the venv interpreter handles the whole ordinary suite. So the failure was **not** a collection
+  error in the ordinary sense, and the demo package's `tools` import problem does not appear here at all.
+- **What actually failed is the tool's own provenance judgement**, and the artefact that feeds it is visible:
+  `nodeids.json` carries `collection_sha256`, `cwd`, `python_executable` and **`so101_demo_origin`** - the origin of the
+  installed package - while `validate_process_outcomes` marks a process failed with reason **"invalid provenance"** when
+  `_read_manifest` does not return `provenance_valid`. The reported process is named **`collection`**, so the gate
+  compared where the package was imported from against what it expects and rejected it, even under `--allow-dirty`.
+- **Why that is plausible rather than mysterious:** this worktree sources three overlays in order
+  (`/opt/ros/jazzy`, the worktree's `install/`, and the registered evidence root's `i/`), so `so101_demo` can resolve to
+  an *installed* prefix rather than to the source tree - and a gate that records provenance is entitled to refuse that.
+  The exact rule lives in `_read_manifest`/the origin comparison (around `tools/so101_pytest_gate.py:566`), which I have
+  not yet read; **that read is the next step, not a guess**, per the rule this session keeps re-learning.
+- **Also recorded for completeness:** `preflight.json` shows the tool verified the interpreter it was pointed at
+  (`python -c "import sys,tempfile"`, exit 0, `python_valid: true`), so the venv selection worked exactly as CP-1025
+  intended, and the run wrote its own summary (`summary.json` with `worker_count`, `run_root`, `schema_version`) - the
+  evidence layout the gate promises is real.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's runner is proven to collect the full ordinary scope at 5754/5766 in one shard, with the remaining
+  obstacle a provenance-origin rule that must be read before it can be satisfied or waived; Task 10 blocked until the 17
+  search values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
