@@ -25046,3 +25046,22 @@ picture in both directions.**
 - **Next:** read `BrokerPairedExecution.approve_with_source` and what it keeps (goals, positions, times, snapshot), then write the adapter inside `execute_approach` that uses it, plus
   the boundary-level test with substituted physics - and APPROACH is end to end.
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1502 — APPROACH's execution flow is three production calls, and the goals are computable
+
+- **Read from `broker_execution.py`, and the flow is shorter than expected:**
+  | call | what it does |
+  | --- | --- |
+  | `broker.prefix_executor.approve_with_source(ticket, prefix, receipt)` | `_require_source_proof()` then `_bind(ticket)` then `self.permits.approve_with_source(prefix, receipt)` -> the **permit** |
+  | `broker.prefix_executor.submit(ticket, prefix, permit)` | checks the epoch's session, submits through the adapter, **records `self._pairs[gid] = tuple(self.adapter.current_goal_ids)`** (the two goal ids) and the pair's generation and epoch; on any uncertainty it **revokes the whole ownership generation** (`CONTROLLER_PAIR_FAILED`) - the safe direction |
+  | `broker.prefix_executor.goal_state(gid)` | the two goals' states, so the caller can wait for completion |
+- **And the goals themselves are COMPUTABLE, not read from the driver:** the screen's contract (`_goals`) fixes every field - `_GOAL_KEYS`, arm names `ARM_JOINTS[:5]`, gripper `ARM_JOINTS[5:]`, a shared
+  `header_stamp_s` strictly between the prefix's `observation_time_s` and its first `target_times_s`, offsets `(0,) + (target - start ...)`, and `positions` from
+  **`split_positions((held,) + prefix["positions"])`** - all available from the prefix and the held joint positions, using the same `so101_demo.act.execution` helpers the screen uses.
+- **So `execute_approach`'s adapter is: trusted source -> `issue_prefix_source` (receipt) -> `approve_with_source` (permit) -> `submit` (gid) -> wait on `goal_state` -> build the goals with the
+  screen's own helpers -> `screen.inspect(goals, prefix)` -> `PathProver.prove(...)` -> snapshot and facts from readback.** **Only the dispatch and the readback are external, and both are already
+  production calls.**
+- **Why the goals builder gets its own step:** it is the one piece that must agree **exactly** with the screen's validator, and the screen's own test file already holds a valid prefix fixture to judge
+  it against. **Writing it next to a test that uses the screen as the judge - rather than guessing `validate_action_prefix`'s schema in this round - is the difference between a builder and a plausible
+  one.**
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
