@@ -17544,3 +17544,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Honest note on pace:** my remaining context in this session is nearly exhausted, so the next rounds should be surgical
   - one read of `search.py` around line 33, one fixture addition for whichever document it wants, then the negative
   direction (a mismatched pairing refused) which is the last thing item 5 asks for.
+
+## CP-1121 — The search-config relation is the live condition, and my first fix for it was wrong
+
+- **Read the condition rather than guessing it:** `search.py`'s config validates the head-search configuration with the
+  relations `0 < coarse_step_rad <= horizontal_fov_rad / 2 < pi`, `search_timeout_s > 0`, `max_age_s > 0`,
+  `0 <= min_confidence <= 1` and **`0 <= vertical[0] < vertical[1] <= 480`**. The formulas suite's own case for
+  `vertical_bounds_px` is an equal pair (`[125, 125]`), which **fails the strict inequality** - so reusing that case in the
+  v2 fixture is what drives the pairing into `SEARCH_CONFIG_INVALID`.
+- **My first fix was wrong and is reverted:** I replaced the raw record's value with `[100.0, 380.0]`, which took the run
+  from 52 passed / 1 failed to **50 passed / 3 failed** with `AttributeError: 'float' object has no attribute 'get'` -
+  because that dict entry is not only evidence, it is also the shape the report and sample assembly read. **The raw
+  record's shape is load-bearing**, so the correct fix belongs where the search config is built (or in the published
+  value), not in the evidence the comparators read.
+- **State restored: 52 passed / 1 failed** (`beh-r724.log`), the failure being item 5's RED, now known to stop at the
+  search-config relation above. Nothing weakened, nothing deleted, no push, no stack, no hardware.
+- **Next, surgically:** find which document the binding passes into `search.py`'s config (its own fixture satisfies the
+  relation, which is why its suite passes), then give the v2 fixture the same relation **without** changing the shape of
+  the raw record.
