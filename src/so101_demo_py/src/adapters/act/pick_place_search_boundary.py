@@ -513,6 +513,16 @@ class PickPlaceSearchBoundary:
                                    support_distance_max_m=support_distance_max_m,
                                    motion_template=motion_template)
 
+    def current_readback(self, request):
+        """This case's readback right now.
+
+        The grid the recorder seals needs one sample per phase on a clock that only goes forward, and the only readback
+        that moves with the phases is this boundary's own - a cached SEARCH observation would be the same instant every
+        time, which the recorder refuses as a regression.
+        """
+
+        return self.reset.sources.capture(request["attempt_id"])
+
     def planning_attached(self, request):
         """Whether MoveIt still has the cup attached - READ from the planning scene, never assumed."""
 

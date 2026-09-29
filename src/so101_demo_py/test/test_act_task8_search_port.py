@@ -3,6 +3,7 @@
 from dataclasses import replace
 from types import SimpleNamespace
 
+import dataclasses
 import re
 import numpy as np
 import json
@@ -112,6 +113,26 @@ def fixture(*, observed=None, contact_safe=True, sweep_safe=True):
         def __init__(self):
             self.reset = reset
             self.neck_sweep_checker = sweep
+            self._readback_clock = 0
+
+        def current_readback(self, request):
+            """The readback the grid samples from: the SAME world documents, on a clock that advances per call.
+
+            The recorder requires consecutive grid samples to be exactly one period apart, so a boundary that hands back
+            a cached instant makes the grid regress - which is the port's contract now, and this double honours it.
+            """
+
+            self._readback_clock += 1
+            moment = observed.physical_readback["world"].simulation_time_s + 0.1 * self._readback_clock
+            raw = observed.physical_readback
+            stamps = {name: moment for name in ("head", "wrist", "arm", "neck")}
+            return {**raw,
+                    "world": dataclasses.replace(raw["world"], simulation_time_s=moment),
+                    "scene": {**raw["scene"], "simulation_time_s": moment},
+                    "contact": {**raw["contact"], "simulation_time_s": moment},
+                    "observation": {**raw["observation"], "sim_time_s": moment},
+                    "reference": {**raw["reference"], "requested_sim_time_s": moment},
+                    "source_stamps_s": stamps, "source_received_wall_s": dict(stamps)}
 
         def begin(self, item):
             events.append("begin")
