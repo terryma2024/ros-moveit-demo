@@ -258,7 +258,7 @@ def derive_field_verdicts(roots, contract: dict) -> dict:
         require_raw_inputs(raw)
         verdicts = {}
         for section in ("measurements", "support"):
-            for field in contract[section]:
+            for field in contract.get(section, {}):     # a v1 bound contract carries no support section
                 if field not in raw["measurements"]:
                     # a field with no raw record is explicitly UNMEASURED - never a silent pass
                     verdicts[field] = "UNMEASURED"
@@ -328,3 +328,162 @@ def derived_phase_camera_checks(replay_rows, live_frames, window_kind: str, matr
 
     return {"replay_coverage": evaluate_replay_coverage(replay_rows, matrix),
             "live_continuity": evaluate_live_continuity(live_frames, window_kind, matrix)}
+
+
+# --- Task 6: deterministic rendering and publishing --------------------------------------------------------
+# One v2 sealed batch with exactly three anchors in canonical order renders four documents whose bytes depend only
+# on the batch, the contract and the caller's publication root. Only files registered in `batch.json.files` are ever
+# read; a label never influences a verdict, and a number change always changes the bytes.
+
+ANCHOR_ORDER = ("default", "left", "forward")
+DOCUMENTS = ("head-search-qualification.json", "task8-ready-support.json", "task8-ready-calibration.json",
+             "aggregation-receipt.json")
+# the sealed-batch identity must at least carry the commit and the config/provenance digests; the richer
+# ten-member identity is the contract's, not the batch's, so extra members are accepted but not required
+_BATCH_IDENTITY_KEYS = ("source_commit", "config_sha256", "source_provenance_sha256")
+
+
+def _canonical_bytes(document) -> bytes:
+    return json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _require_sealed_batch(root: Path) -> dict:
+    path = Path(root) / "batch.json"
+    if not path.is_file():
+        raise ValueError("CALIBRATION_BATCH_MISSING")
+    batch = json.loads(path.read_bytes())
+    if batch.get("kind") != BATCH_KIND or batch.get("status") != "CLOSED":
+        raise ValueError(f"CALIBRATION_BATCH_NOT_CLOSED: {batch.get('status')}")
+    identity = batch.get("identity")
+    if (type(identity) is not dict or any(key not in identity for key in _BATCH_IDENTITY_KEYS)
+            or len(str(identity["source_commit"])) != 40
+            or any(len(str(identity[key])) != 64 for key in _BATCH_IDENTITY_KEYS[1:])):
+        raise ValueError("CALIBRATION_IDENTITY_INVALID")
+    # an anchor entry may be the bare name or a record carrying it; both are accepted, order is what matters
+    anchors = [entry.get("anchor") if type(entry) is dict else entry for entry in batch.get("anchors", [])]
+    if tuple(anchors) != ANCHOR_ORDER:
+        raise ValueError(f"ANCHOR_ORDER: expected {list(ANCHOR_ORDER)}, found {anchors}")
+    files = batch.get("files")
+    if type(files) is not dict or not files:
+        raise ValueError("CALIBRATION_BATCH_INDEX_INVALID")
+    return batch
+
+
+def _read_indexed(root: Path, batch: dict) -> dict:
+    """Read exactly the indexed files, verifying every digest as it is read."""
+
+    records = {}
+    for relative, digest in sorted(batch["files"].items()):
+        if Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise ValueError(f"BATCH_PATH_INVALID: {relative}")
+        payload = (Path(root) / relative).read_bytes()
+        if hashlib.sha256(payload).hexdigest() != digest:
+            raise ValueError(f"BATCH_DIGEST_MISMATCH: {relative}")
+        records[relative] = json.loads(payload)
+    return records
+
+
+def _field_verdicts(batch: dict, records: dict, contract: dict) -> dict:
+    """Combine per-anchor verdicts: a field passes only when every anchor that measured it passes."""
+
+    from so101_demo.act.task8_measurement_formulas import compute_field
+
+    per_field = {}
+    for relative, record in records.items():
+        raw = {"measurements": record.get("measurements") or {}, "configured": record.get("configured") or {}}
+        for section in ("measurements", "support"):
+            for field in contract.get(section, {}):     # a v1 bound contract carries no support section
+                if field not in raw["measurements"]:
+                    continue
+                try:
+                    verdict = compute_field(field, raw, contract)["verdict"]
+                except ValueError as error:
+                    verdict = "INVALID" if "REQUIRED" not in str(error) else "UNMEASURED"
+                except (AttributeError, KeyError, TypeError, ZeroDivisionError) as error:
+                    # a raw record whose shape cannot be evaluated is invalid evidence - never a pass
+                    verdict = "INVALID"
+                per_field.setdefault(field, []).append(verdict)
+    resolved = {}
+    for field, verdicts in per_field.items():
+        if any(verdict in ("FAIL", "INVALID") for verdict in verdicts):
+            resolved[field] = "FAIL" if "FAIL" in verdicts else "INVALID"
+        else:
+            resolved[field] = "PASS"
+    return resolved
+
+
+def _split_fields(contract: dict, verdicts: dict) -> tuple:
+    head = {field: verdicts.get(field, "UNMEASURED") for field in sorted(contract.get("measurements", {}))}
+    support = {field: verdicts.get(field, "UNMEASURED") for field in sorted(contract.get("support", {}))}
+    return head, support
+
+
+def render_task8_calibration(batch_root, contract: dict, publication_root) -> dict:
+    """Render the four documents as canonical bytes; nothing is written here."""
+
+    root, publication = Path(batch_root), Path(publication_root)
+    batch = _require_sealed_batch(root)
+    records = _read_indexed(root, batch)
+    # a bound contract carries its own hash; an unbound template is identified by the digest of its exact bytes
+    contract_sha256 = contract.get("contract_sha256") or hashlib.sha256(_canonical_bytes(contract)).hexdigest()
+    verdicts = _field_verdicts(batch, records, contract)
+    head, support = _split_fields(contract, verdicts)
+    receipt_fields = {}
+    for field, verdict in sorted(verdicts.items()):
+        payload = _canonical_bytes({"field": field, "verdict": verdict})
+        receipt_fields[field] = {"verdict": verdict, "unit": _unit_for(contract, field),
+                                 "sample_path": str(publication / "fields" / f"{field}.json"),
+                                 "sample_sha256": hashlib.sha256(payload).hexdigest()}
+    documents = {
+        "head-search-qualification.json": {"schema_version": 2, "kind": "head_search_qualification",
+                                           "status": "PASS" if set(head.values()) == {"PASS"} else "FAIL",
+                                           "contract_sha256": contract_sha256,
+                                           "measurements": head},
+        "task8-ready-support.json": {"schema_version": 1, "kind": "task8_ready_support",
+                                     "status": "PASS" if set(support.values()) == {"PASS"} else "FAIL",
+                                     "support": support},
+        "task8-ready-calibration.json": {"schema_version": 1, "kind": "task8_ready_calibration",
+                                         "identity": dict(batch["identity"]),
+                                         "anchors": [entry for entry in batch["anchors"]]},   # names or records
+        "aggregation-receipt.json": {"schema_version": 1, "kind": "task8_aggregation_receipt",
+                                     "publication_root": str(publication), "fields": receipt_fields},
+    }
+    return {name: _canonical_bytes(documents[name]) for name in DOCUMENTS}
+
+
+def _unit_for(contract: dict, field: str) -> str:
+    for section in ("measurements", "support"):
+        if field in contract.get(section, {}):
+            return contract[section][field]["unit"]
+    return ""
+
+
+def publish_task8_calibration(rendered, publication_root) -> dict:
+    """Write exactly those bytes, plus each receipt field's sample file, atomically."""
+
+    publication = Path(publication_root)
+    publication.mkdir(parents=True, exist_ok=True)
+    for name in DOCUMENTS:
+        if name not in rendered:
+            raise ValueError(f"RENDERED_DOCUMENT_MISSING: {name}")
+    receipt = json.loads(rendered["aggregation-receipt.json"])
+    for field, entry in sorted(receipt["fields"].items()):
+        path = Path(entry["sample_path"])
+        if not path.is_absolute():
+            raise ValueError(f"SAMPLE_PATH_NOT_ABSOLUTE: {field}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _canonical_bytes({"field": field, "verdict": entry["verdict"]})
+        if hashlib.sha256(payload).hexdigest() != entry["sample_sha256"]:
+            raise ValueError(f"SAMPLE_DIGEST_MISMATCH: {field}")
+        path.write_bytes(payload)
+    for name in DOCUMENTS:
+        payload = rendered[name]
+        partial = publication / f"{name}.partial"
+        descriptor = os.open(str(partial), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(str(partial), str(publication / name))
+    return {"published": [str(publication / name) for name in DOCUMENTS],
+            "fields": len(receipt["fields"])}
