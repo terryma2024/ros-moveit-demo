@@ -33314,3 +33314,42 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   readback→second-registration latency are inconsistent, and the second registration is where the chain stops.** P1-1
   through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1889 — The chain stops on a production inconsistency: APPROACH re-prepares a source frozen at SEARCH
+
+- **The second `route.prepare` is the port's own APPROACH phase, and the trace is exact:**
+  ```python
+  # pick_place_search_port.py, run_phase(phase)
+  observed = self.validated_search_observation()                    # the SEARCH observation
+  selected_source = self.selected_prefix_source(max_skew_s=…)       # the source REGISTERED during SEARCH
+  if phase == "APPROACH":
+      prepared = route.prepare(observed, selected_source=selected_source, owner_ticket=ticket, …)
+  ```
+  **and the timings from one run:**
+  ```
+  [adiag] boundary hand-off at  200456.753 (search #1)
+  [adiag] register entry at     200456.755
+  [adiag] route.prepare entry at 200456.756      <- SEARCH's registration: SUCCEEDS
+  [adiag] register ok at        200456.772
+  [adiag] route.prepare entry at 200457.685      <- APPROACH: 0.93 s later, refused
+  ```
+- **The inconsistency, stated plainly:** the registered prefix source is frozen at SEARCH and consumed at
+  APPROACH; **the candidate's freshness check compares that source's receipts with the CURRENT clock**, so it can only
+  accept when APPROACH begins within the admitted `max_age_s = 0.2 s` of the SEARCH readback. **Any real run spends longer
+  than that between the two phases** - in this harness 0.93 s, of which `_search_evidence` is 0.000 s, the in-process path
+  checker's eight calls are 0.18 s, and the remainder is the port's own evidence sealing and journal work, all production
+  code.
+- **This is the same class of finding as CP-1814 and CP-1838 - and the reason P1-5 exists:** invisible from either file
+  alone, and visible only when the chain runs end to end. **It is NOT a fixture defect** (the fixture's receipts are
+  truthful capture stamps; re-stamping at the hand-off changed nothing and was reverted, CP-1888).
+- **The options, for the review rather than for a unilateral change:**
+  1. **the APPROACH path uses the document the registration already prepared** (`self._entry`'s `prepared`) rather than
+     re-preparing from the frozen source - **the registration's own output is the authority it already issued**;
+  2. **the freshness bound applies to the registration, not to each later consumption** - a registered source is by
+     definition older than its registration, and re-checking it against `max_age_s` after the phase boundary makes the
+     bound unsatisfiable by construction;
+  3. **the admitted `max_age_s` is raised** - which changes an admitted document, so it is the owner's call, not mine.
+- **State:** **P1-5 in progress and now blocked on a production semantics decision, with the path, the numbers and three
+  options recorded.** P1-1 through P1-4 CLOSED. **Independent of that decision, the remaining packet work is: the demo
+  RED's clean re-measurement, P1-6's post-freeze reconfigure/rebuild check, the final freeze gate, and the re-review
+  packet.** **Task-list statuses are unchanged, so they are not re-stated.**
