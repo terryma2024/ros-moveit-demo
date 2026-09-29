@@ -26938,3 +26938,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Item 5 closed**; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612) and its three options stated; items 3, 4, 6, 7 untouched.
 - **The demo leg and the serial CTest leg of the boundary are the CP-1591/1594 records; the teleop leg's citable record is now THIS one, not the CP-1592 serial run.**
 - Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware, no live stack; P2 live not started; goal still paused+disarmed.
+
+## CP-1614 — Item 6: the evidence index is now audited over BOTH layouts, and the two stale rows are corrected
+
+- **Why the earlier audits kept passing while rows were stale, stated exactly:** this index has used **two column layouts** - an older
+  `| artefact | /absolute/path | size | sha256 |` and a newer `| path | bytes | sha256 |` - and **my audit's regular expression only matched the newer one.** So "19 rows verified" was true and misleading at once:
+  **the table has 63 rows and the audit was looking at 19 of them.** That is the review's item 6, and it is the same class of error as CP-1611: a check that reports success without being able to see what it is checking.
+- **The genuinely full-table audit, both layouts, 44 hash-bearing rows:**
+  ```
+  L61 MISMATCH .../gate7-p15-boundary/README.txt: size 3662 vs 1876, sha 66362e9d… vs 3597b85f…
+  full-table audit -> checked: 44, mismatched: 1, missing: 0
+  ```
+  **That is line 61, one of the two rows the review named.** It was stale because the README was revised after the row was written.
+- **Corrected, with the history preserved rather than erased:** the row now carries the current size and sha256 (`1876 -> 3662` bytes, `3597b85f… -> 66362e9d…`), and the index carries an explicit note that the earlier
+  values are **superseded** and that the audit now covers **both** layouts. **Re-audit: 44 checked, 0 mismatched, 0 missing.** Index sha256 begins `1310b554dec8e401`.
+- **Item 6 closed**, with one honest qualification: **line 68's row (the packet) verifies now** - the revision-batch-3 section lists the packet's current hash, and this round confirmed the current artefact - **so whatever the review saw at line 68 has been superseded by the
+  packet's later revisions** rather than by a silent edit; **the note added this round says so.**
+- **State:** items 5 and 6 closed; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 3, 4, 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
