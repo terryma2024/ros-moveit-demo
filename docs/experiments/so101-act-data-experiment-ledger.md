@@ -19921,3 +19921,35 @@ not an inference of mine.**
 - **State before the batch:** HEAD `c1bd765f`, staged 0, tree 31 modified + 13 untracked (owner's work untouched), both gates green
   as of CP-1211/CP-1221, `runtime-task8l-gen2`/`gen3` retained and `gen4` not yet created, no stack, no hardware, nothing deleted,
   nothing pushed.
+
+## CP-1226 — Item 1's seam read exactly, and the shape of the composition it needs
+
+- **The three facts that make the RED unambiguous (read, not recalled):**
+  ```python
+  class Task8MujocoMeasurementDriver:
+      def __init__(self, *, stack, clock, detector, controller, phase_camera) -> None: ...
+  def production_driver(**overrides):
+      required = ("stack", "detector", "controller", "phase_camera", "clock")
+      missing = [name for name in required if name not in overrides]
+      if missing:
+          raise ValueError(f"PRODUCTION_DRIVER_WIRING_PENDING: {missing[0]}")
+  # cli/act_measure_task8_calibration.py:94-95
+  from so101_demo.act.task8_measurement_driver import production_driver
+  production_driver().run(context, args.batch_root)
+  ```
+  Five collaborators - `stack`, `clock`, `detector`, `controller`, `phase_camera` - and the CLI calls the factory with **none** of
+  them, so the only reachable outcome today is `PRODUCTION_DRIVER_WIRING_PENDING: stack`. The CLI's own `--driver` argument is a
+  **test seam**, and Astra's finding is precisely that it must not be counted as production wiring.
+- **The GREEN this dictates, and why it is buildable without any stack:** the composition must be a **single trusted factory that
+  takes providers, not paths** - one MuJoCo/CUDA stack built once, the detector, the controller port and the phase-camera
+  evaluator supplied from the launch entry, CUDA with no CPU fallback, resource binding performed **only there**, and
+  generation-scoped cleanup. A test can then supply **fakes for the external I/O seams** (the process/ROS/MuJoCo boundary) while the
+  composition itself - the ordering, the single-stack rule, the CUDA policy, the cleanup scope - remains the real production code
+  under test. That is the distinction Astra drew, and it is satisfiable offline: **no MuJoCo stack is launched to prove the wiring
+  exists; the wiring is proved by what the composition does with the providers it is given.**
+- **The RED for the next round, stated so it can be written directly:** call the CLI entry **without** `--driver` against a fake
+  external-I/O seam and assert it reaches a real `Task8MujocoMeasurementDriver`; today it cannot, because
+  `production_driver()` raises before the seam is ever consulted. The same test must also show that a `--driver`-injected fake does
+  **not** satisfy the production path, so the seam cannot be mistaken for the wiring.
+- **State:** HEAD `5579580f` plus this checkpoint; staged 0; no source changed yet in this batch; no stack, no hardware, nothing
+  deleted, nothing pushed.
