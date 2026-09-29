@@ -995,3 +995,30 @@ def test_collect_live_runs_reads_five_sealed_full_rows_and_refuses_anything_else
         collect_live_runs(rows, identities={}, extractors={})
     with pytest.raises(ValueError, match="FIVE_FULL_RUNS_REQUIRED"):
         collect_live_runs(rows[:4], identities={}, extractors=extractors)
+
+
+def test_the_raw_reader_resolves_only_indexed_records_with_matching_digests(tmp_path):
+    import hashlib
+    import json as _json
+
+    from so101_demo.act.task8_live_qualification import make_raw_reader
+
+    (tmp_path / "raw").mkdir()
+    payload = _json.dumps({"pairs": [{"geom1": "cup_a_bottom_collision", "geom2": "table_collision",
+                                      "signed_distance_m": 0.002}]}).encode()
+    (tmp_path / "raw" / "contact.json").write_bytes(payload)
+    artifact = tmp_path / "full-00.json"
+    artifact.write_bytes(b"{}")
+    reader = make_raw_reader(artifact)
+    sample = {"raw_records": {"contact": {"relative_path": "raw/contact.json",
+                                          "sha256": hashlib.sha256(payload).hexdigest()}}}
+    assert reader(sample, "contact")["pairs"][0]["signed_distance_m"] == pytest.approx(0.002)
+
+    with pytest.raises(ValueError, match="RAW_RECORD_REQUIRED"):
+        reader(sample, "wrist")
+    with pytest.raises(ValueError, match="RAW_RECORD_PATH_INVALID"):
+        reader({"raw_records": {"contact": {"relative_path": "../escape.json", "sha256": "a" * 64}}}, "contact")
+    with pytest.raises(ValueError, match="RAW_RECORD_MISSING"):
+        reader({"raw_records": {"contact": {"relative_path": "raw/absent.json", "sha256": "a" * 64}}}, "contact")
+    with pytest.raises(ValueError, match="RAW_RECORD_DIGEST_MISMATCH"):
+        reader({"raw_records": {"contact": {"relative_path": "raw/contact.json", "sha256": "b" * 64}}}, "contact")

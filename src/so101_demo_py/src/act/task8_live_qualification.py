@@ -483,3 +483,36 @@ def collect_live_runs(rows, *, identities: dict, extractors: dict) -> tuple:
             run[field] = extractor(samples, document)
         runs.append(run)
     return tuple(runs)
+
+
+def make_raw_reader(artifact_path) -> callable:
+    """Resolve a sample's raw records by source name, verifying each one's digest.
+
+    The recorder indexes every raw record as `raw_records[source] = {relative_path, sha256}` relative to the root its
+    artifact was sealed in, so an extractor that needs contact or wrist evidence reads it through this reader rather
+    than guessing a path. An absolute or `..` path is refused, as is a missing file or a digest that does not match -
+    the same rules the recorder applied when it registered the record.
+    """
+
+    import hashlib
+    import json
+
+    root = Path(artifact_path).parent
+
+    def read(sample: dict, name: str):
+        entry = (sample.get("raw_records") or {}).get(name)
+        if type(entry) is not dict:
+            raise ValueError(f"RAW_RECORD_REQUIRED: {name}")
+        relative = entry.get("relative_path")
+        if not isinstance(relative, str) or not relative or relative.startswith("/") \
+                or ".." in Path(relative).parts:
+            raise ValueError(f"RAW_RECORD_PATH_INVALID: {name}")
+        target = root / relative
+        if target.is_symlink() or not target.is_file():
+            raise ValueError(f"RAW_RECORD_MISSING: {name}")
+        payload = target.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != entry.get("sha256"):
+            raise ValueError(f"RAW_RECORD_DIGEST_MISMATCH: {name}")
+        return json.loads(payload)
+
+    return read
