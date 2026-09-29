@@ -20380,3 +20380,23 @@ not an inference of mine.**
 - **State:** the driver source changes are **uncommitted while red**; the test file is parse-verified; the build-tree copy of the
   driver has been synced for this round and **must be re-synced after any further `src/` edit**; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1246 — Item 3's design question is answered by the code, and item 4 turns out to be already implemented
+
+- **The read that answered it (and the tooling lesson that made it legible: my earlier grep piped the full path into `cut`, so every
+  match printed as a bare filename. `sed 's|^.*/\([a-z_0-9]*\.py\):|\1:|'` before `cut` is the form that works):**
+  | site | what it proves |
+  | --- | --- |
+  | `task8_calibration_aggregator.py:186` `index.path("runtime-descriptor.json")` | **the aggregator already reads the descriptor through the strict index, per root** - so item 4's requirement is implemented in the aggregator's code; what was missing was the **seal putting the descriptor in the index**, which CP-1245's driver change now does |
+  | `:196` `batch["identity"]["source_provenance_sha256"]` | the aggregator reads the batch's **identity** - it wants the schema's ten-member document, which is exactly what the seal now writes instead of the old four-member stub |
+  | `:372` `index.path(relative)` | indexed files are read back by relative path, which is why the closure has to be exact |
+  | **nothing else reads `batch["index"]`** | the provenance table is the **driver's own record**; only the driver's tests were reading it out of the sealed document |
+- **So the answer is: the provenance rows get an indexed home.** `_seal` writes them to `index.json` in the batch root, includes
+  `index.json` in `files` (so the closure stays exact and the validator accepts the batch), and the driver's tests read them from
+  there. That is the only option consistent with `_BATCH_KEYS`, which has no room for `index`, and with a validator that demands
+  `set(_regular_files(root)) == set(files)`.
+- **Item 4 therefore shrinks from "implement" to "verify, then pin":** the aggregator's per-root indexed read exists; the RED for it is
+  the multi-root case where one root's descriptor is missing from its index - which must fail closed - plus the positive case of
+  identical payloads. **Items 3 and 4 are now one small change and two tests apart, not two rewrites.**
+- **State:** HEAD `548c1c01` plus this checkpoint; driver changes still uncommitted while red; no stack, no hardware, nothing deleted,
+  nothing pushed.
