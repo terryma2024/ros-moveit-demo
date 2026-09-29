@@ -26074,3 +26074,17 @@ picture in both directions.**
   `sim_time_s`) at the moment `execute_approach` runs. **Two values and a comparison, and the fix is then obvious rather than guessed.**
 - **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed; the sealed-artifact test is uncommitted while it is red, per this batch's rule. No new session, goal, worktree
   or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1565 — The fixture widened the route's prefix, and the boundary still received the narrow one: the port builds it
+
+- **What the probe and the two edits established, in order:** the boundary's `execute_approach` receives
+  **`observation_time_s = 1.3, target_times_s = (1.4,)`** - the fixture's **narrow** prefix - **even after the fixture's route was widened**, and the run then fails on `PREFIX_TIME_GRID_INVALID`, which is the
+  contract refusing a target that is not on the grid the prefix itself declared. **So the prefix in `prepared` is not the route's `self._prefix` at all: the PORT builds the preparation document.**
+- **That is a precise, small conclusion and it is where the next probe goes:** print the preparation document **inside the port's APPROACH branch**, at the line where `prepared` is built, and the source of the prefix
+  is then named rather than inferred. **Three rounds have now been spent editing the fixture for a value the fixture does not own** - the same "ask which component owns it" lesson as CP-1509, CP-1510 and CP-1538, and the
+  probe that answers it is one line inside the port.
+- **What is nonetheless done and green:** the nine-phase case passes and seals (`58 passed` with its own test), the campaign gate is tested (`3 passed`), and the sealed-artifact test is written with its **seven assertions and
+  four negatives** - it simply cannot run until APPROACH's stamp fits the prefix the port actually uses.
+- **And an honest note about this stretch of rounds:** the last few have been small edits against a fixture whose shape I keep re-deriving. **The efficient move is the one the ledger keeps recommending and I keep deferring: read the construction site once, then write the fixture against it.**
+- **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed; the sealed-artifact test and the fixture's prefix changes are uncommitted while red, per this batch's rule. No new
+  session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
