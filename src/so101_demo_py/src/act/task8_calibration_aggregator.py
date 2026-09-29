@@ -188,6 +188,14 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
         # bound document's own key, and reading the wrong one made every batch look foreign
         if identity.get("measurement_contract_sha256") != contract_sha256:
             raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
+    # and every member must agree across roots, not only the provenance: two batches measured under different anchor
+    # sets or camera matrices are not the same generation, however equal their provenance happens to be
+    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+
+    for name in IDENTITIES_V2:
+        values = {identity.get(name) for _, identity in batches}
+        if len(values) != 1 or None in values:
+            raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
     thresholds = contract["thresholds"]
     checks = {
         "fov": _fov(roots[0], thresholds["fov"]["sample_period_s"]),
