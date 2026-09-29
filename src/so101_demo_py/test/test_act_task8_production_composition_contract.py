@@ -105,11 +105,19 @@ def _run(tmp_path, monkeypatch, client):
 
     runtime, calibration, _weights, _sample = _inputs(tmp_path)
     document = _context_document(tmp_path, runtime)
+    # the production type requires the twelve the CLI passes; the duck-typed version needed none of them, which is
+    # another way the old test was weaker than it looked
+    document.setdefault("contract_sha256", "f" * 64)
     document["calibration_report"] = calibration
     document["session_id"] = "session-default"
     document["attempt_id"] = "attempt-default"
     document["search_start_rad"] = 0.0
-    context = type("Context", (), document)()
+    # the PRODUCTION context type, not a duck-typed namespace: the previous version satisfied `getattr` reads with a
+    # throwaway class, so it never exercised the type the CLI constructs - which is how item 1's four missing fields
+    # survived a green contract test (CP-1633). A test that proves the formal path must use the formal object.
+    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+
+    context = CalibrationMeasurementContext(**document)
 
     class CannedDetector:
         """The substituted model, in the shape the production builder validates and the driver calls."""
