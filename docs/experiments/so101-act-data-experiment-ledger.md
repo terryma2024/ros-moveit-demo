@@ -23414,3 +23414,18 @@ not an inference of mine.**
   release-epoch assertions the reviewer flagged.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1414 — The recorder's API is `append(sample)`, and the sample recipe is the suite's own with this case's identity
+
+- **Read:** `Task8LiveEvidenceRecorder.__init__(*, case_id, evidence_root, session_id, ...)` and **`append(self, sample: dict) -> None`**, which
+  raises `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID` for a bad shape and `TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH` for a sample that does not match the
+  recorder's own identity - the same identity discipline the port and the seal have been enforcing all along.
+- **So the write is: on each readback the boundary hands the child's recorder a sample built by `build_live_evidence_sample`** - the production
+  builder - with **this case's** `case_id`/`session_id`/`attempt_id` and this case's epochs, real `raw_records` written under the evidence root, and
+  the phase/step/sim-time of that readback. **That is "shared builder, local identity" again, and it is the last piece of P1-5's first half.**
+- **And the honest scope that remains:** the samples recorded here are what the **seven indexed assertions** read back (the gripper-open command
+  event, three adjacent support rows in one release epoch, SEARCH and FINAL_CHECK, both retirement receipts, and the artifact/journal digests),
+  plus the four negatives, and then the single integration boundary and the packet correction - **with about twenty-two rounds left. That is
+  tight, and I am saying so before it becomes a surprise rather than after.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
