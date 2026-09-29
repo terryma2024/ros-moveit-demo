@@ -101,6 +101,16 @@ def _capture(prefix):
     return {"observation": {"state": [0.0] * 6 + [1.0, 0.0], "sim_time_s": 1.32}}
 
 
+def _source_document(ticket, prefix):
+    """The case's frozen selected source, built to the authority's own field set (all seven SOURCE_KEYS receipts)."""
+
+    from so101_demo.act.prefix_source import SOURCE_KEYS
+
+    return {"session_id": ticket[3], "attempt_id": ticket[4], "reset_epoch": 2, "phase": "SEARCH",
+            "physics_step": 9, "simulation_time_s": prefix["observation_time_s"],
+            "observation_sha256": "ae" * 32, "source_received_wall_s": {key: 1.0 for key in SOURCE_KEYS}}
+
+
 def _receipt(prefix, ticket):
     """A real receipt from the production issuing authority, which the prover demands by type."""
 
@@ -121,7 +131,7 @@ def test_the_chain_issues_approves_submits_waits_takes_the_snapshot_inspects_and
     boundary, prepared, ticket = _case(tmp_path, calls)
     result = PickPlaceSearchBoundary.execute_approach(
         boundary, prepared, {"attempt_id": ticket[4]}, prover_identity=IDENTITY, ticket=ticket,
-        support_distance_max_m=0.02)
+        support_distance_max_m=0.02, source=_source_document(ticket, prepared["prefix"]))
 
     # the order is the method's own: register, approve, submit, wait, take the proof snapshot, inspect what was
     # submitted, take the time axis, then establish the facts
@@ -150,4 +160,4 @@ def test_each_missing_piece_refuses_by_name(tmp_path):
         with pytest.raises(PickPlaceSearchBoundaryError, match=expected):
             PickPlaceSearchBoundary.execute_approach(
                 boundary, prepared, {"attempt_id": ticket[4]}, prover_identity=IDENTITY,
-                ticket=ticket, support_distance_max_m=0.02)
+                ticket=ticket, support_distance_max_m=0.02, source=_source_document(ticket, prepared["prefix"]))

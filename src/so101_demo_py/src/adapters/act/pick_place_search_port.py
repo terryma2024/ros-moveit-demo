@@ -657,7 +657,8 @@ class PickPlaceSearchPhasePort:
                 raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: execute_approach")
             try:
                 result = execute(prepared, request, prover_identity=prover_identity, ticket=ticket,
-                                 support_distance_max_m=self._support_distance_max_m)
+                                 support_distance_max_m=self._support_distance_max_m,
+                                 source=selected_source)
             except PickPlaceSearchPortError:
                 raise
             except Exception as error:
