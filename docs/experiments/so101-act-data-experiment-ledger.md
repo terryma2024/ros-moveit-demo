@@ -25473,3 +25473,21 @@ picture in both directions.**
   goal stays active; this is a recorded dependency with a question, not a stop.
 - **State:** P1-1..P1-3 green and committed; all nine phases committed; the policy wiring is uncommitted while these five tests are red. No new session, goal, worktree or stack; nothing pushed, nothing deleted;
   no hardware.
+
+## CP-1528 — CORRECTION to CP-1527: a qualified policy DOES exist, and the wiring is now green
+
+- **`55 passed`** in the focused teleop set, the **whole `test/teleop` directory exits 0**, and **`57 passed`** across the demo-side motion, close, port, approach, goals, path-screen
+  and child-port files.
+- **And the correction first, because the record matters more than looking consistent:** CP-1527 concluded "the repository has no qualified policy" and put three options in front of the owner.
+  **That conclusion was wrong.** A qualified policy **does** exist - **`src/so101_demo_py/config/policies/dynamic_cup_pick/v1/manifest.yaml` carries `execution_allowed_backends`** - and the
+  variants are simply **not interchangeable**: `light_cup_wall_pick/v1` is unqualified (refused by name, correctly), `dynamic_cup_pick/v1` is qualified. **I had searched only the installed tree, which
+  does not carry it, and generalised from that.** **No owner decision is needed; the question is withdrawn, and the reason it was asked is recorded rather than quietly deleted.**
+- **The wiring that made it visible:** the payload names the policy's **variant directory**; the child calls the production
+  `load_dynamic_policy_variant(share_dir, backend="mujoco", policy_id=…, version=…)`, **which validates the schema, the backend and `execution_allowed`**; and the port carries the resulting
+  template into the boundary, where `resolve_motion_targets` turns it into each phase's own target. **The policy stays the single source of its numbers; nothing about it is copied into the payload.**
+- **And the two rules the exercise demonstrated are the ones worth keeping:** an **unqualified** policy is refused by name (so "which policy is admitted" is enforced by code, not convention), and
+  the installed tree and the source tree are **not** the same repository state - **`so101_teleop` imports from `src/`, `so101_demo` from `build/`, and the installed share tree is stale for policies.**
+  Every one of those cost a round; all three are now written down.
+- **Where P1-4 stands:** **all nine phases proven (9/9)**, the case's parameters and its admitted policy fully plumbed, and the demo-side and teleop-side focused sets green. **What remains is the
+  port-level end-to-end nine-phase case, the seal, the full-case journal, and the seven indexed assertions with their four negatives - then P2, the final integration boundary, and the review.**
+- **State:** P1-1..P1-3 green and committed; nine phases and the policy wiring committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
