@@ -65,3 +65,79 @@ def test_the_real_checker_starts_and_greets_with_the_admitted_hash():
     finally:
         checker.close()
     assert not checker.process.is_alive(), "close() retires the worker rather than leaking it"
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# and the screen that consumes the checker: four callables and one model-hash equality (CP-1817)
+# ----------------------------------------------------------------------------------------------------------------------
+
+class _ContactPairs:
+    def __init__(self, model_sha256):
+        self.model_sha256 = model_sha256
+
+
+class _Sources:
+    """The screen needs `capture` and a `contact_pairs` bound to the checker's model - nothing more is read."""
+
+    def __init__(self, model_sha256):
+        self.contact_pairs = _ContactPairs(model_sha256)
+        self.captured = 0
+
+    def capture(self):
+        self.captured += 1
+        return {"fresh": True}
+
+
+class _SearchPort:
+    def validated_search_observation(self, request):
+        return {"validated": request}
+
+
+def _checker(motion):
+    from so101_demo.adapters.act.physics import MujocoPathProcess
+
+    return MujocoPathProcess(
+        check_timeout_s=motion["submit_lead_s"], start_timeout_s=2.0,
+        model_path=motion["model_path"], protected_roots=("base",),
+        cup_joint="cup_free_joint", gripper_body="gripper",
+        path_step_s=motion["path_step_s"], path_clearance_m=motion["path_clearance_m"],
+        velocity_limit_rad_s=motion["velocity_limit_rad_s"],
+        acceleration_limit_rad_s2=motion["acceleration_limit_rad_s2"],
+        allowed_pairs_by_phase=checker_pairs_by_phase(motion))
+
+
+def test_the_screen_mounts_over_the_real_checker_and_the_admitted_model():
+    import threading
+
+    from so101_demo.adapters.act.pick_place_approach_path_screen import PickPlaceApproachPathScreen
+
+    motion = _route_motion()
+    checker = _checker(motion)
+    try:
+        sources = _Sources(checker.model_sha256)
+        screen = PickPlaceApproachPathScreen(search_port=_SearchPort(), sources=sources, broker=object(),
+                                             path_checker=checker, cancelled=threading.Event())
+        assert screen.path_checker is checker and screen.sources is sources
+        # the contract's equality is what makes the screen an inspection rather than a formality: the sources that
+        # measure the rows and the checker that judges the path are looking at the SAME compiled model
+        assert screen.sources.contact_pairs.model_sha256 == screen.path_checker.model_sha256
+    finally:
+        checker.close()
+
+
+def test_a_sources_bound_to_another_model_is_refused():
+    """The refusal is the point: fresh measurements of one robot must not be checked against another's path."""
+
+    import threading
+
+    from so101_demo.adapters.act.pick_place_approach_path_screen import PickPlaceApproachPathScreen
+
+    motion = _route_motion()
+    checker = _checker(motion)
+    try:
+        with pytest.raises(ValueError) as error:
+            PickPlaceApproachPathScreen(search_port=_SearchPort(), sources=_Sources("f" * 64), broker=object(),
+                                        path_checker=checker, cancelled=threading.Event())
+        assert "PICK_PLACE_APPROACH_SCREEN_CONFIG_INVALID" in str(error.value)
+    finally:
+        checker.close()

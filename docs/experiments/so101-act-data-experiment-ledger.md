@@ -31123,3 +31123,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress: the checker is verified, and mounting the screen is now a named four-callable,
   one-hash requirement rather than an unknown.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6,
   the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1818 — The screen mounts, and the coherence rule it enforces is asserted
+
+- **Both halves of P1-5's capability are now proven in one file** (`test_act_task8_approach_checker_wiring.py`,
+  `4 passed`, 3.48 s):
+  1. **the real `MujocoPathProcess` starts and greets with the admitted hash** (CP-1816);
+  2. **the real `PickPlaceApproachPathScreen` mounts over it** - `search_port` with `validated_search_observation`,
+     `sources` with `capture` and a `contact_pairs` bound to the checker's model, a broker (stored, never exercised,
+     because *"the screen inspects without command authority"*), and a `threading.Event` as the cancellation token;
+  3. **and the equality the screen is built on is asserted in the test rather than assumed:**
+     `sources.contact_pairs.model_sha256 == path_checker.model_sha256`;
+  4. **a `sources` bound to ANOTHER model is refused** with `PICK_PLACE_APPROACH_SCREEN_CONFIG_INVALID` - *"fresh
+     measurements of one robot must not be checked against another's path"*.
+- **Which closes the capability question P1-5 opened:** the harness can forward the production expert-route factory
+  (CP-1811), the builder can build its checker (CP-1814/1815), the checker greets with the admitted hash (CP-1816), and
+  the screen mounts over it and refuses an incoherent one (this checkpoint). **What is left is not capability but
+  driving: `run_pick_place_case` through a full case with this wiring, then the aggregator join, then the xfail and the
+  duplicate chain removed together.**
+- **State:** **P1-5 in progress, its capability complete and evidenced; the full-case drive is next.** P1-1 through P1-4
+  CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
+  statuses are unchanged, so they are not re-stated.**
