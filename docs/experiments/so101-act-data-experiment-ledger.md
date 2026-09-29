@@ -22546,3 +22546,22 @@ not an inference of mine.**
   than papered over.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1359 — The readback has no existing builder, which points at the right architecture rather than a bigger fixture
+
+- **Read:** `_sample(...)` builds a **live-evidence sample** through `build_live_evidence_sample(...)` - `source_stamps_s`,
+  `source_received_monotonic_s`, `raw_records` from `READBACK_SOURCES`, holding state, frame, contact, measurements - **which is a different
+  consumer from the port's `physical_readback`**. **So the chain-test family has no builder for the port's physical readback at all**, and its
+  five value shapes (`world` as a real `SimulationEvidence`, plus `scene`, `contact`, `observation`, `reference`) would have to be fabricated
+  field by field. **Hand-building that is the wrong move, and the repository says why.**
+- **Because the production class that PRODUCES an observation already exists:** `PickPlaceSearchSegment`
+  (`adapters/act/pick_place_search_segment.py:35`) is constructed as
+  `PickPlaceSearchSegment(sources, adapter, scene_port, geom..., operation_guard, history_verifier, reference..., owner_verifier,
+  native_ingress_verifier, ...)` - **i.e. it takes the ROS/MuJoCo/scene/owner collaborators as injected ports and builds the observation, the
+  readback and the proofs from them.**
+- **So the compliant architecture is not a bigger boundary, it is the right one:** let the production `PickPlaceSearchPhasePort` run, and have
+  the substituted **boundary** delegate to the **production `PickPlaceSearchSegment`** with its sub-ports substituted - **which is precisely
+  "replace only ROS/MuJoCo/controller/process I/O"**, and which produces real `SimulationEvidence`-typed values by construction instead of by
+  fabrication.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
