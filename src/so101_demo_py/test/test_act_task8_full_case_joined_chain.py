@@ -210,3 +210,59 @@ def test_the_qualification_reader_accepts_this_case_and_its_four_facts_hold(tmp_
 
     # FACT 4 - a complete journal: every phase the runner has, in the runner's own order
     assert row["completed_phases"] == list(PickPlaceRunner.PHASES), "the journal is complete, not a prefix of it"
+
+
+def test_four_negatives_are_derived_by_corrupting_this_baseline(tmp_path):
+    """P1-5's negatives, each one a mutation of the case that just passed - never a row built beside it.
+
+    The verdict's own wording: *"The cadence negative constructs a new row rather than mutating the sealed successful
+    production chain."* So every negative here takes the artifact/journal this chain produced and changes ONE thing,
+    and each must be refused by the PRODUCTION rule that owns that thing.
+    """
+
+    from so101_demo.act.task8_live_evidence import (
+        case_row_to_journal_row, require_case_journal_row, require_case_row_matches_bundle,
+        validate_evidence_grid,
+    )
+
+    row, index, artifact_path, root = _joined_case(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    identities = {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
+                  "contact_policy_fingerprint": manifest["contact_policy_fingerprint"]}
+    journal_row = case_row_to_journal_row(row, identities=identities, manifest_document_sha256=digest)
+
+    # NEGATIVE 1 - a row that lost a retirement receipt is refused by the row's own rule
+    without_child = {key: value for key, value in row.items() if key != "child_receipt_sha256"}
+    with pytest.raises(ValueError):
+        case_row_to_journal_row(without_child, identities=identities, manifest_document_sha256=digest)
+
+    # NEGATIVE 2 - an incomplete journal: the same row, one phase short, refused by name
+    short = {**journal_row, "completed_phases": list(PickPlaceRunner.PHASES)[:-1]}
+    with pytest.raises(ValueError):
+        require_case_journal_row(short, mode="full")
+
+    # NEGATIVE 3 - the cadence, by moving ONE instant of the SEALED samples rather than by building a row:
+    # `validate_evidence_grid` is the production rule for the grid, and the untouched baseline must pass it too
+    records = [json.loads((artifact_path.parent / entry["relative_path"]).read_bytes())
+               for entry in index["samples"]]
+    # one record per INSTANT: the edge additions share their grid sample's moment by design, and the grid's rule is
+    # about the instants (a duplicate instant is a regression, which is what the same folding does in the
+    # sealed-artifact cadence test)
+    by_instant = {}
+    for record in records:
+        by_instant.setdefault(record["sim_time_s"], record)
+    grid = [by_instant[stamp] for stamp in sorted(by_instant)]
+    period = 0.1
+    assert validate_evidence_grid(grid, period_s=period, tolerance_s=0.01) >= 1, "the baseline passes"
+    moved = [dict(record) for record in grid]
+    moved[1] = {**moved[1], "sim_time_s": moved[0]["sim_time_s"] + 0.25}
+    with pytest.raises(ValueError):
+        validate_evidence_grid(moved, period_s=period, tolerance_s=0.01)
+
+    # NEGATIVE 4 - a row from another bundle: the same row under foreign identities is refused
+    foreign = {"source_provenance_sha256": "f" * 64, "runtime_config_sha256": "b" * 64,
+               "contact_policy_fingerprint": manifest["contact_policy_fingerprint"]}
+    with pytest.raises(ValueError):
+        require_case_row_matches_bundle(journal_row, identities=foreign, manifest_document_sha256=digest)

@@ -29105,3 +29105,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **Twenty-four keys, closed, and no event reason among them.** The window knows it (`event_reasons`, and `add_event(sample, reason)` refuses any reason outside `command|release|contact`), and **sealing drops it** - so a sealed record cannot say *which* edge it is. **That is the same gap as CP-1725/1726** (the index cannot say how many of its entries are grid points), and it belongs in the packet as one proposal rather than two: **the sealed evidence should be able to describe its own edges.**
 - **What this means for P1-5 honestly:** the verdict's sentence - one actual full case whose production code emits artifact, receipts and journal, and whose real reader consumes them - **is now met and passing on the production path**. **One of the four named facts (the command event) is not established by the artifact today**, and the reason is a closed key set rather than a missing emission.
 - **State:** **P1-5: the joined chain passes; the four negatives remain, to be derived by corrupting THIS baseline**; the task list keeps P1-5 in progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1737 — P1-5 COMPLETE: one production-sealed full case, read by the production rules, with four mutated negatives
+
+- **The file, `3 passed`:**
+  ```
+  test_act_task8_full_case_joined_chain.py   3 passed in 29.38s
+  ```
+  | case | what it establishes |
+  | --- | --- |
+  | the chain | the production `PickPlaceRunner` seals the artifact over the full-case port; the production `run_pick_place_case` publishes the case row with both retirement receipts; **the owner is the only substitution** |
+  | the trusted reading and the facts | `case_row_to_journal_row` → `require_case_journal_row(mode="full")` → `require_case_row_matches_bundle` → `require_campaign_cases`; support on **every** sample; two distinct receipts hashing to what the row says; `completed_phases` complete |
+  | **the four negatives** | each is a MUTATION of that same baseline, refused by the production rule that owns the thing: (1) a row without its child receipt → the translator; (2) a journal one phase short → the row rule; (3) **one instant of the SEALED samples moved by 0.25 s** → `validate_evidence_grid` (the baseline itself passes it first, which is what makes it a mutation rather than a new row - the verdict's own complaint); (4) the same row under foreign bundle identities → the bundle rule |
+- **And the teleop RED is retired honestly rather than left failing:**
+  ```
+  1 xfailed in 1.55s      @pytest.mark.xfail(strict=True, reason="... SEARCH only ... met and passing in
+                          so101_demo_py/test/test_act_task8_full_case_joined_chain.py ...")
+  ```
+  **Strict**, so the moment that harness gains a full-case port the suite fails and the duplicate chain gets deleted instead of lingering. **The gap it documented is in the ledger (CP-1714) and the requirement is met where a full-case port exists.**
+- **The two honest caveats, both recorded and both packet items rather than silent gaps:**
+  1. **FACT 1 (the requested command event) is not derivable from the sealed artifact**: `_SAMPLE_KEYS` is closed at 24 keys with no event reason, while the window knows it (`event_reasons`). **Same gap as the index not knowing its own grid count** (CP-1725/1726) → **one proposal: let the sealed evidence describe its own edges.**
+  2. **`validate_case_journals` is a CAMPAIGN rule** (all fifteen rows under one root at once) and is not exercised here; the single-case pair of row rules is what a case's own qualification requires.
+- **State:** **P1-5 complete; P1-4 complete; P1-1/2/3 complete. P2 remains, then the code freeze and ONE integration boundary on a new run root, then the packet and a further independent review**; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
