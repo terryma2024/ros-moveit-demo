@@ -28482,3 +28482,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | 10 | **and the path now clears.** |
 - **What remains is the piece-4 core rather than another symptom:** `TASK8_LIVE_EVIDENCE_GRID_GAP` is the frozen grid's own rule - **consecutive samples exactly one period apart** - meeting a port that computes a phase's instants from that phase's **first** readback while the fixture's clock advances **per call**. **Two clocks that must be one sequence**, which is the last thing this migration was for.
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: window, axis and snapshot all green, the grid cadence the last piece**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1702 — The gap MEASURED: 0.3 s between SEARCH's sample and APPROACH's, and why two clocks cannot be one this way
+
+- **The probe on `LiveEvidenceWindow.add_grid`:**
+  ```
+  GRID t=1.6    delta=None  phase=SEARCH
+  GRID t=1.9    delta=0.3   phase=APPROACH      <- the frozen grid wants exactly 0.1
+  ```
+  **One sample for SEARCH, then a 0.3 s jump to APPROACH's first** - three periods, not one.
+- **And the reason is now visible as a structural fact rather than a defect:** the fixture's capture clock advances on **every readback**, while the port records **one sample per phase**. **Between those two grid samples the APPROACH preparation itself performs readbacks** (the plan's capture, the axis's, the snapshot's), so the fixture's clock moves three steps while the window sees one.
+- **So "one sequence" cannot be reached by making the port read a clock it does not control, and the two honest resolutions are:**
+  1. **every readback is a sample** - the port records on each readback it performs, which is the literal reading of the design's *"continuously at 10 Hz"*, and then the fixture's clock and the grid are the same sequence by construction;
+  2. **or the fixture's clock advances only when the port samples** - which is a fixture that serves the grid rather than modelling a run, **and is therefore the weaker of the two**.
+- **Which makes this the decision the migration has been converging on**: the verdict asks for sampling *"at the source-acquisition layer"* and *"continuously at 10 Hz"*, and this measurement says the difference between those words and the current code is **exactly the readbacks that are not yet samples**.
+- **State:** **P1-4 production pieces 1-3 committed; APPROACH chain closed (CP-1701); the fixture's clock migration: window, axis and snapshot green, and the grid's sequence is the last decision**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
