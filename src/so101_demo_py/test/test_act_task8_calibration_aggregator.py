@@ -257,11 +257,13 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
 
 # --- protocol v2 seam: verdicts from raw evidence, all roots, no labels -------------------------------------
 
-def _sealed_batch(root, payload):
+def _sealed_batch(root, payload, identities=None):
     from so101_demo.act.task8_measurement_schema import write_closed_json
     from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
     import hashlib
-    identity = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+    identity = dict(identities) if identities else {
+        name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+
     raw = write_closed_json(Path(root) / "raw" / "records.json", payload)
     files = {"raw/records.json": hashlib.sha256(raw.read_bytes()).hexdigest()}
     # the batch declares three anchors, so it must evidence them: the aggregator's per-anchor sync file is the
@@ -349,3 +351,21 @@ def test_the_aggregator_entry_validates_the_closed_batch_before_publishing(tmp_p
         aggregator.aggregate_task8_calibration([batch], {"thresholds": {}, "verdicts": []}, output)
     assert seen == [batch], "the entry validated the batch it was given, before anything else"
     assert not output.exists() or not any(output.iterdir()), "nothing is published before validation"
+
+
+
+def test_two_batches_that_disagree_on_a_second_identity_member_are_refused(tmp_path):
+    """Boundary IV: all ten identity members agree across roots, not only the provenance."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    bound_path = bind_measurement_contract(TEMPLATE_V2, _cli_identities(), tmp_path / "bound.json")
+    bound = json.loads(Path(bound_path).read_text())      # the binder returns the path it wrote, not the document
+    identities = _cli_identities()
+    identities["measurement_contract_sha256"] = bound["contract_sha256"]
+    first = _sealed_batch(tmp_path / "batch-a", {"measurements": {"min_confidence": [0.6]}}, identities)
+    other = dict(identities, anchors_sha256="f" * 64)
+    second = _sealed_batch(tmp_path / "batch-b", {"measurements": {"min_confidence": [0.6]}}, other)
+    with pytest.raises(ValueError, match="CALIBRATION_IDENTITY_MISMATCH"):
+        aggregate_task8_calibration((first, second), bound, tmp_path / "out")
