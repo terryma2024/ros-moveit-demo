@@ -24721,3 +24721,22 @@ picture in both directions.**
   substitutes the simulator, not the rule.
 - **State:** P1-1 and P1-2 green and committed; everything since CP-1482 uncommitted while the fixture is red on this mismatch. **No new session, goal,
   worktree or stack; nothing pushed, nothing deleted; no hardware.**
+
+## CP-1485 — The seven-source completion landed, from real data, with its one honest bound named
+
+- **What the derivation now does** (`pick_place_readback.py`, module-level `capture_evidence_fields`): the recorder requires both stamp maps over the canonical
+  **seven** sources, while the synchronizer's audit covers the **four** sensor streams - so the three physics sources are stamped from **their own documents**
+  (`world.simulation_time_s`, `scene["simulation_time_s"]`, `contact["simulation_time_s"]`), and for their **receive** time, where the capture records none:
+  the **scene carries its own monotonic bound** (`SCENE_KEYS` includes `clock_interval_begin/end_monotonic_ns`) and world/contact are validated to be within
+  the readback skew of it. **So the scene's receipt is used for all three, and the code says exactly that** - rather than inventing a per-source receive time
+  that nobody measured.
+- **One breadth fix found by the same run:** the nanosecond bound is an `int` in the real capture but was pinned to `int` in my check; it now accepts any
+  **finite positive number**, because the check is about the value, not the Python type.
+- **State of the fixture** (`experiments/gate8-p13/child-fix6.log`): still **5 failed, 2 passed, 1 xfailed** - the chain is now past the capture shape, the
+  attachment and the seven-source maps, and the next cause is to be read from that log's chained exception (the previous ones were `SOURCE_MISSING` then
+  `READBACK_CAPTURE_INVALID`, each fixed at the layer that owned it).
+- **Why this is steady progress rather than thrashing:** every one of these failures has been a **real interface disagreement inside the production chain**
+  (four-stream audit vs seven-source vocabulary, a missing end-effector provider, a required-but-unowned wrist flag, a type-pinned nanosecond bound). **None was
+  papered over, and each fix went to the layer that owned the missing data.** The ledger records the whole sequence, so the P1-3 change set can be reviewed as
+  a chain of named findings rather than a single opaque edit.
+- **No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.**
