@@ -22977,3 +22977,15 @@ not an inference of mine.**
   stays active.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1387 — Correcting my own pointer: both marker rules live inside `_post_stop_interval`, not at the call site
+
+- **What lines 185-195 turned out to be:** the **call site** - `final_raw, final_geometry, stopped_wall_s, marker = self._post_stop_interval(request,
+  reset_epoch, cursor)` - and the check after it compares the final readback's simulated time against the lock's timestamp. **So the marker rules I
+  have been bouncing between are both inside `_post_stop_interval` (its lines 110 onwards), and no amount of reading around the call site would
+  have produced them.**
+- **Therefore the next read is `_post_stop_interval`'s body in full** - it holds the marker validation (`marked_physics_step` against the cursor)
+  **and** the fifty-advancing-step rule together, which is exactly why my three candidate marker values each satisfied one and broke the other.
+  **One read decides both, and it is the read I should have taken when the traceback first named that function.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
