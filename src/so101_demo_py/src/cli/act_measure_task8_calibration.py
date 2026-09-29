@@ -90,9 +90,12 @@ def main(argv=None) -> int:
                 controller_generation=context["controller_generation"],
                 broker_generation=context["broker_generation"],
                 evidence_root=str(args.batch_root.parent),
-                resource_binding=context["resource_binding"])
-            from so101_demo.act.task8_measurement_driver import production_driver
-            production_driver().run(context, args.batch_root)
+                resource_binding=context["resource_binding"],
+                # section 4.2: the same parsed descriptor the CUDA policy was enforced on, not a re-read of the file
+                runtime_descriptor=_document["runtime_descriptor"])
+            from so101_demo.act.task8_production_composition import build_production_measurement_driver
+
+            build_production_measurement_driver(context=context).run(context, args.batch_root)
     except BaseException as error:
         _append_ledger(args.ledger, "INVALID", ledger_identity, f"driver failed: {type(error).__name__}")
         raise
