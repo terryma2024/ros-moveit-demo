@@ -25521,3 +25521,20 @@ picture in both directions.**
   **Then the nine-phase case runs end to end**, and the seal, the journal and the seven indexed assertions with their four negatives follow.
 - **State:** P1-1..P1-3 green and committed; nine phases, the policy wiring, the Planning Scene capabilities and this extraction committed. No new session, goal, worktree or stack; nothing pushed,
   nothing deleted; no hardware.
+
+## CP-1531 — set_down and release_preflight are in, and "fresh" is established rather than asserted
+
+- **`45 passed`** across the port, planning-scene, motion-phase, CLOSE and APPROACH-execution files.
+- **`set_down`** builds the runner's document from the **same validated readback every phase document uses** (`_checked_aggregates`), plus one runtime fact this component cannot observe for
+  itself - **that the controller actually stopped** - which comes from a `controller_stop` seam and is **refused by name** when absent. **A set-down document that merely assumed the stop would be an
+  unearned claim, and this batch exists to prevent exactly those.**
+- **`release_preflight` ESTABLISHES `fresh`** by requiring the preflight sample's physics step to be **newer than the set-down's own**, and refuses by name otherwise. **The rule has a real
+  consequence: the preflight must not be the readback the set-down used, or the release would be authorised by evidence that predates the stop.** It also takes `planning_attached` from the scene
+  probe rather than from a stored flag.
+- **And the release epoch is now counted in two places on purpose, which is worth being explicit about:** the boundary counts the one event it performs (opening the gripper **is** the release), and
+  the runner counts the same event and **compares them**. **That comparison is why a second count is tolerable here and nowhere else** - a disagreement is refused rather than silently accepted. **If
+  the runner did not compare, this bookkeeping would be a second source of truth and I would not have written it.**
+- **Only `run_retreat_segment` still refuses by name**, and its shape is already decided: a motion step from a **current-TCP seam** (refused by name when absent) along a **direction seam** (so the
+  radial/vertical convention is injected rather than invented), through the same IK seam and dispatch the motion phases use, ending in the phase's own validator.
+- **State:** P1-1..P1-3 green and committed; nine phases, the policy wiring, the Planning Scene capabilities, the shared validator and these two documents committed. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
