@@ -11004,3 +11004,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-852 — The identities document is five exact digests; two producers still to read
+
+- **Read the contract rather than composing it by feel:** `_IDENTITIES = ("source_provenance_sha256",
+  "runtime_config_sha256", "anchors_sha256", "contact_policy_fingerprint", "act_profile_sha256")`, every value a
+  64-hex digest, and `bind_measurement_contract` refuses anything else (`MEASUREMENT_CONTRACT_IDENTITY_INVALID`).
+  The bound document must then satisfy `load_measurement_contract(..., expected_hashes=identities)`, which
+  returns the contract only when `document["identities"] == expected_hashes` exactly and refuses the unbound
+  template.
+- **Four of the five already have a real source identified:** `source_provenance_sha256` is the sha256 of the
+  provenance document just built (`3304dd37b4f80f3da0e2cb3343cabb33ab287795d1a0b4b8be0f6426c25f176c`),
+  `runtime_config_sha256` comes from the ACT runtime config, `anchors_sha256` from the frozen
+  `config/act/task8-live-anchors.yaml`, and `contact_policy_fingerprint` from the policy fingerprint type in
+  `core/policy.py` rather than a hand-made digest. `act_profile_sha256` and the derivation of the bound
+  contract's `source_hashes` still need their producers read (lines ~68-95 of the module).
+- **Why I stopped rather than filling them in:** a fingerprint or profile digest computed by hand would be
+  exactly the invented identity this contract exists to prevent. Recorded for reuse at
+  `runtime-task8l-gen2/provenance/identities-contract.md`.
+- **Ladder position:** provenance **built** (CP-851); measurement is now one bound contract away, and the
+  measurement CLI also needs `--batch-root`, `--driver module:callable` (the thing that actually fills the
+  batch) and `--ledger`.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
