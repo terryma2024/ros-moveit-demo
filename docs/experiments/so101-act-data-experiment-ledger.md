@@ -18000,3 +18000,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   on hand-filled state exists to protect.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   (authoritative descriptor document; one authorised live stack for the recording half) remain open and independent.
+
+## CP-1142 — Boundary V's test home is the teleop package, not `so101_demo_py/test`, and there are already two files there
+
+- **Wrote the first increment and the placement was wrong, corrected immediately:** I created
+  `src/so101_demo_py/test/test_act_task8_pick_place_runner_chain.py`, and it failed on
+  `ModuleNotFoundError: No module named 'so101_demo.act.task8_runner'`. Searching the tree shows `Task8Runner` used under
+  **`src/so101_teleop/test/teleop/`** - where `test_task8_full_restart_*.py` and `test_task8_case_execution*.py` already
+  exist. So **Boundary V belongs in the teleop package's test directory**, next to the case-execution tests, and the
+  `so101_demo_py` aggregator suite was never its home.
+- **My file is removed, not left half-written:** it never ran a single assertion (an import error), so there was nothing to
+  salvage, and leaving a broken file in a directory that the module's own gate collects would have been a landmine for the
+  owner. Verified afterwards that the aggregator, contract and binding suites are still **57 passed** (`beh-r745.log`),
+  scratch `<R>/scratch/r745.<n>` with `TMPDIR` verified through the exact test interpreter.
+- **This is a cheap correction and an expensive lesson, recorded the same way as the others:** three checkpoints (CP-1139,
+  CP-1140, CP-1141) built a complete spec for a fixture and I placed the first line of it in the wrong package, because I
+  inferred the home from where `PickPlaceRunner` is *defined* rather than from where the case-execution tests already
+  *live*. **The tree told me the right answer in one grep; I just did not run that grep first.**
+- **State:** no full suite, nothing weakened, nothing deleted (my own uncommitted scratch file removed, no user file
+  touched), no push, no stack, no hardware. Next round: write the fake port and the test in
+  `src/so101_teleop/test/teleop/`, alongside the case-execution tests, per the spec in CP-1139/1140/1141.
