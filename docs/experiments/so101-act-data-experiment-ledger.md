@@ -27049,3 +27049,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   reproduced the defect, and CP-1618 decided the layer **without** reading the driver's seal; this entry is the correction, made as soon as the driver was read.
 - **State:** item 4's source changes remain in the tree and uncommitted while red; the next step is to complete the six fixtures with a cleanup receipt and re-run the focused set. Item 1 verified; item 2 two-thirds green with the
   epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1620 — The cleanup rule's blast radius, measured: 25+ fixtures, and that is a decision rather than a chore
+
+- **After completing the helper and the six fixtures I had found, the focused set went from `8 failed` to `38 failed`** - and reading the causes rather than guessing gave two:
+  ```
+  25x  task8_measurement_schema.py:195  ValueError: BATCH_CLEANUP_PROOF_REQUIRED
+   4x  test_act_task8_measurement_contract.py  AssertionError: Regex pattern did not match
+   1x  test_act_task8_measurement_cli_terminal_state.py:78  (my own case, still red)
+  ```
+  **So there are far more than six sealing call sites:** other suites seal batches through their own helpers (`close_measurement_batch` elsewhere, and direct `batch.json` fixtures), and four tests assert a refusal **name** that my rule now shadows
+  (`BATCH_INVALID` -> `BATCH_CLEANUP_PROOF_REQUIRED`).
+- **Why this is a decision and not just "complete the fixtures":** making the cleanup proof **mandatory for every `CLOSED` batch** is a **contract change** that touches **every producer and every test that seals a batch** - 25+ places
+  across the measurement, aggregator and qualification suites. **The review asked for the cleanup proof to be enforced; it did not ask for the enforcement point**, and the honest options differ in cost and in meaning:
+  1. **enforce it for all CLOSED batches** (what the code now does): strongest - **no sealed batch can exist without proof its workspace was cleaned** - and the cost is completing every sealing fixture, mechanically but widely;
+  2. **enforce it where the review's scenario is decided** (the measurement entry's own close-out, i.e. at `MEASUREMENT_CLEANUP_PROOF_REQUIRED` on the path the CLI validates): narrower, leaves other seals trusting their producers, and **would still satisfy "the cleanup proof must be enforced" for the P2 close-out** but not for batches sealed by other tools.
+- **Where the work stands, stated plainly so nothing is implied:** **the CLI's guarded terminal state and the identity comparison are in the tree (uncommitted while red)**; **my two terminal-state cases are still red** for a reason I have not yet
+  read to the bottom (the ledger text in the failure shows `PLANNED` and no `INVALID`, so the guarded region is not appending on that path); **and the cleanup rule is in the tree, uncommitted, with a measured 25+ fixture blast radius.**
+- **Per the owner's rule, this is where I stop on this item and ask:** *enforce the cleanup proof for every CLOSED batch (option 1, wide but strongest), or scope it to the measurement entry's close-out (option 2, narrow)?* **I will not
+  quietly pick one and let it reshape 25 fixtures' meaning** - the difference is what "a sealed batch" promises.
+- **State:** item 4 **partially in the tree and red, with one decision requested**; item 1 verified; item 2 two-thirds green with the epoch-rule decision open (CP-1612); items 5 and 6 closed; items 3 and 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
