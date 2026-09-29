@@ -25804,3 +25804,20 @@ picture in both directions.**
   green, not before.**
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed, including this refactor; the full-case test remains uncommitted while red, per this batch's rule. No
   new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1549 — Five production corrections from reading five rules; two focused tests still describe the old ones
+
+- **The run advanced through the set-down and into RELEASE by READing each rule that refused it, and every fix was a production correction rather than a fixture adjustment:**
+  1. **the physical release detaches first** - the repository's own rule (and the SO-101 workflow's) is that no planning attachment exists when the gripper opens, so the release path now calls
+     `detach_moveit` before the dispatch, **and the detach is read back through the same probe**;
+  2. **the runner's set-down and preflight documents ask whether the cup will FALL** - true while the gripper holds it - **which is a different question from the frame's `supported`** (does it still rest on
+     the world). Reporting the frame's value made the runner's own `HOLDING and cup_supported` pair unsatisfiable;
+  3. **the release epoch follows the phase's position** in the runner's own order (zero up to and including RELEASE, one afterwards) instead of being hardcoded to zero - which is what the runner verifies
+     against.
+- **And a process failure worth recording, because it cost a fix:** when I restored this file after the mangled scripted edit (CP-1547), **the restore also discarded an uncommitted code fix** that had not been
+  committed because the tree was red. **The restore itself was right; the loss was avoidable** - a fix that is worth making is worth committing once its own file is green, and the ledger now says so.
+- **Where the round ends, precisely:** `52 passed, 2 failed` in the focused set - **two tests still describe the pre-correction behaviour** - and the full-case run reaches `PHASE_EVIDENCE_INVALID` in the
+  runner's phase verifier. **The next action is the one that has worked three times this stretch: probe the actual document the port produces, with SEARCH run first so the sequence path is armed, and read
+  which clause fails - not a sixth guess.**
+- **State:** P1-1..P1-3 green and committed; the five corrections and the full-case test are **uncommitted while red**, per this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing
+  deleted; no hardware.
