@@ -13401,3 +13401,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7 green at every increment with the plan's Step-4 command at **53
   passed**; three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
   gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-950 — Task 7's focused set re-verified across both packages: 244 tests green
+
+- **Re-ran the focused set that covers everything Task 7 touched**, from both packages, with a fresh verified NVMe
+  scratch and bytecode writing disabled:
+  - **demo package: 198 passed, rc=0** (`beh-task7-verify-r544.log`) across `test_act_task8.py` (the runner, whose
+    baseline is the user's own suite), `test_act_task8_live_evidence.py`, `test_act_task8_live_qualification.py`,
+    `test_act_task8_search_port.py`, `test_act_task8_phase_camera.py`, `test_act_task8_calibration_render.py`,
+    `test_act_task8_measurement_contract.py` and `test_act_task8_measurement_formulas.py`;
+  - **teleop package: 46 passed, rc=0** (`beh-task7-verify-r544b.log`) across `test_task8_case_execution.py` (which
+    carries my uncommitted fixture update), `test_task8_live_evidence_production_chain.py` (my new chain test) and
+    `test_act_campaign_admission.py`.
+- **What that covers together:** the 28 formulas and the aggregator's deterministic render/publish, the phase-camera
+  coverage, the measurement contract and its schema, the port's window attachment, grid feed, idempotent seal and
+  public accessor, the runner's own behaviour, the live-evidence window with its nine phases, release correlation and
+  invalid seal, the journal-row readback, and the artifact lifecycle end to end.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment with the plan's Step-4 command at 53 and
+  this broader set at 244; three files carry my additive changes uncommitted inside the user's dirty set; Tasks 8-10
+  untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
