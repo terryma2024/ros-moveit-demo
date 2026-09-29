@@ -249,7 +249,8 @@ _IDENTITY_KEYS = ("session_id", "contact_policy_fingerprint", "phase_camera_matr
 
 
 def support_distance_from_frames(frames, *, cup_collision_geom: str,
-                                 table_collision_geom: str = "table_collision") -> float:
+                                 table_collision_geom: str = "table_collision",
+                                 allow_world_distance: bool = False) -> float:
     """The design's `support_distance_m` rule over one run's pre-open frames.
 
     The bottom geom's real name depends on the case's cup (`cup_a_bottom_collision` for `plastic_cup`,
@@ -279,8 +280,13 @@ def support_distance_from_frames(frames, *, cup_collision_geom: str,
                 pair = contact
                 break
         if pair is None:
-            raise ValueError(
-                f"SUPPORT_CONTACT_REQUIRED: no active contact for {cup_collision_geom}/{table_collision_geom}")
+            if not allow_world_distance or "cup_support_distance_m" not in frame:
+                raise ValueError(
+                    f"SUPPORT_CONTACT_REQUIRED: no active contact for {cup_collision_geom}/{table_collision_geom}")
+            # opt-in fallback: the sample's own world-derived distance, used only when the caller has no contact
+            # records - it is weaker evidence than the exact pair, so it is never the default
+            values.append(max(0.0, float(frame["cup_support_distance_m"])))
+            continue
         values.append(max(0.0, float(pair["signed_distance_m"])))
     return max(values)
 
