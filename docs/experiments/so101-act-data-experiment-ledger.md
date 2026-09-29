@@ -31384,3 +31384,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress, at a recorded fork; the faithful branch's requirements are the next thing to read.**
   P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
   **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1826 — The faithful branch's composition, and the line the verdict draws through it
+
+- **`build_bound_act_broker` is the production composition root** and it takes eleven things:
+  ```python
+  def build_bound_act_broker(*, reservation_port, session_id, roles, history, admission, registry, driver,
+                             ownership, simulation_session_id=None, prefix_source_authority=None,
+                             prefix_source_port=None):
+  ```
+  with its own note that *"construction performs no controller I/O"* - **the session is sealed and installed, and the
+  per-role identities are confirmed later, at the exact ACT acquire, after `arm_generation`.**
+- **Which splits those eleven along exactly the line the verdict draws:**
+  | input | nature |
+  | --- | --- |
+  | `session_id`, `roles`, `simulation_session_id`, `ownership` | values the harness already has |
+  | `history`, `admission`, `registry` | produced in-process by `physics_clock_domain(session_id=…, nq=…, nv=…, settings=…)` |
+  | `prefix_source_authority`, `prefix_source_port` | the collaborators `begin` demands, built by the child in production |
+  | **`reservation_port`** (`ControllerReservationClient` over `arm.sock`/`gripper.sock`/`neck.sock`) | **external I/O** |
+  | **`driver`** | **external I/O** (ROS) |
+  **So the faithful branch is: the PRODUCTION broker, with the reservation endpoint and the driver substituted** - and
+  **that is legitimate under the verdict's own rule**, *"external I/O may be substituted, but the chain may not"*,
+  because a unix-socket reservation service and a ROS driver **are** the external I/O. **What is not legitimate is faking
+  the broker, which is the branch CP-1825 recorded and this checkpoint rejects.**
+- **And the remaining feasibility question is narrow enough to answer by looking rather than by arguing:** does the repo
+  already stand a reservation service up for tests? `controller_reservation_provision.py` exists beside the client, and
+  the client is constructed with a directory of three socket paths plus capabilities and a timeout - **so the question is
+  whether a test-side provision (or the production provision run in-process) can serve those sockets headlessly.** If it
+  can, the faithful branch is reachable; if it genuinely needs the launch's process topology, **that is a real boundary to
+  record rather than to fake past.**
+- **State:** **P1-5 in progress: the faithful branch is specified - production broker, substituted reservation endpoint and
+  driver - and its one open question is whether the reservation service can be served headlessly.** P1-1 through P1-4
+  CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
+  statuses are unchanged, so they are not re-stated.**
