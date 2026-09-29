@@ -27299,3 +27299,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   descriptor carries the search's start). **Then the formal-path test must use the REAL context, or the defect can return unseen.**
 - **State:** item 1 **RED established**; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently
   confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1634 — Item 1's context half is green; the CLI half and the duck-typed test remain
+
+- **`23 passed`** across the new focused test, the production composition contract and the admission suite. The four fields are on `CalibrationMeasurementContext` as **keyword-only with `None` defaults** - which is deliberate:
+  existing callers keep working, and **what enforces them is the composition**, which already refuses by name (`PRODUCTION_CALIBRATION_REPORT_REQUIRED`, `PRODUCTION_MEASUREMENT_IDENTITY_REQUIRED: <field>`). **The context's job is to be able
+  to carry them; the composition's job is to require them.**
+- **One completion surfaced while writing the test, and it is the batch's familiar shape:** the fixture's `runtime_descriptor` was a stub, so the admission rule refused it (`HEAD_SEARCH_CONFIG_INVALID`); the test now carries the complete
+  production-shaped descriptor. **That is CP-1578's completion arriving a third time** - the shared rule is closed over the detector block, and a fixture that omits its members is told so by name.
+- **And the two steps item 1 still needs are named, so the item cannot look finished:**
+  1. **the CLI must construct the context with the four fields** - it currently passes twelve, so the formal path would still refuse at `PRODUCTION_CALIBRATION_REPORT_REQUIRED`; the inputs exist (the manifest names the calibration report, the
+     request and identities carry the two ids, the descriptor carries the search's start);
+  2. **the contract test must stop duck-typing the context** (`type("Context", (), document)()` at line 112) and use the production type - **otherwise this defect can return unseen, which is how it survived the first time.**
+- **State:** item 1 **context half green, CLI half and the test's context type open**; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
