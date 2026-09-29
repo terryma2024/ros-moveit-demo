@@ -30235,3 +30235,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   recomputed field verdicts, at least one non-`UNMEASURED` field, documents on disk) have something to be true about.**
 - **State:** **P1-2: both sides of the join are now mapped to their production sources; the two edits are named.**
   P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
+
+## CP-1789 — P1-2's limit side is blocked on an APPROVAL the config itself records, not on code
+
+- **The candidate config, read to the bottom:**
+  ```
+  status: ANCHORS_AND_ENVELOPE_APPROVED_SEARCH_VALUES_PENDING
+  search_values:
+      min_bbox_aspect:    {"requires_approved_value": true, "value": null}
+      center_deadband_px: {"requires_approved_value": true, "value": null}
+      vertical_bounds_px: {"requires_approved_value": true, "value": null}
+      min_confidence:     {"requires_approved_value": true, "value": null}
+      … and the same shape for coarse_step_rad, max_age_s, max_skew_s, max_fine_corrections,
+        max_fine_total_rad, min_area_px2, search_timeout_s, stop_latency_s, stop_velocity_rad_s,
+        lock_valid_neck_rad
+  ```
+  **Every threshold the aggregator compares against is `null` and marked `requires_approved_value: true`**, and the
+  document's own status says the search values are pending approval. **So the `configured` half of P1-2 cannot be
+  completed by writing code** - the values do not exist yet, and inventing them would be inventing approved limits,
+  which is precisely what this work must never do.
+- **This is a genuine decision boundary, and it is the owner's, so it is being put rather than worked around.** Three
+  honest dispositions exist, and they are not equivalent:
+  1. **the owner approves the search values** (naming their source), after which the composition loads them and the
+     driver emits them as `configured` - the smallest change and the one the design's table anticipates;
+  2. **the fields whose thresholds are unapproved are reported `UNMEASURED`** by the aggregator, which is the vocabulary
+     it already has for "a field with no raw record" - honest, but it means the qualification sample carries fewer
+     measured fields;
+  3. **the chain is exercised against an explicitly labelled provisional config** for development, with the artifact
+     stating that its thresholds are provisional - useful for continuing P1-2's RED→GREEN, but it must never be
+     mistaken for an approved measurement.
+- **What is already true and unaffected:** the evidence side of the join is wired (bbox lists, the document-shaped
+  family, at write time, no post-seal change); the contract reaches the driver; the stand-in detector finds the cup; the
+  RED refuses instead of being swallowed; and the formulas are reached field by field.
+- **State:** **P1-2 stopped at its limit side on a recorded approval, with the question put to the owner; P1-3 CLOSED;
+  P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.**
