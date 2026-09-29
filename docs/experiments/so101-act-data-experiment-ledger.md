@@ -17396,3 +17396,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Evidence:** scratch `<R>/scratch/r711.<n>` with `TMPDIR` verified through the exact test interpreter; logs
   `beh-r710.log` (36/2, before the 33-field fix) and `beh-r711.log` (37/1). No full suite was run, per the owner's
   instruction; nothing weakened, `REQUIRED_CHECKS` is untouched, nothing deleted, no push, no stack, no hardware.
+
+## CP-1114 — GREEN: a v2 batch now yields a report that passes require_gate(report, "task8_live")
+
+- **The last defect was found by validating each field on its own**, exactly as CP-1113 planned, and it was named in one
+  command: four fields were individually invalid - `head_intrinsics_px` as `VECTOR_INVALID` and `head_rpy_rad`,
+  `head_translation_m`, `yaw_zero_bearing_rad` as `CALIBRATION_UNIT_INVALID` - all four being the **camera** entries.
+  **The fold I added at CP-1101 was overwriting the correctly shaped measurements with camera-shaped ones**, because it
+  merged `camera_measurements` **last**. The batch's own measurements now take precedence.
+- **GREEN: 38 passed, rc=0** across both modules (`beh-r712.log`, named before the run recorded it green), scratch
+  `<R>/scratch/r713.<n>` with `TMPDIR` verified through the exact test interpreter. **The publishing half's core is done:**
+  the report that a v2 batch produces satisfies `require_gate(report, "task8_live")` - **28 fields** in the units and
+  shapes `REQUIRED_MEASUREMENTS` declares, each cited to its own group's approved closed sample, the five
+  `PICK_PLACE_READY_CHECKS` **PASS**, and `release`/`retreat` **UNMEASURED** - and the readback test verifies every
+  citation's `sample_path`/`sample_sha256` against the bytes on disk.
+- **The arc of this RED, for the review:** started at 12 failed / 3 passed where my own strict seal invalidated legacy
+  fixtures; through the identity migration (CP-1082), the batch-key unification (CP-1079), the digest verification
+  (CP-1084), anchor coverage with its six-fixture migration (CP-1091), phase coverage (CP-1093), source-time monotonicity
+  (CP-1094), cross-root identity (CP-1097) and this publishing half (CP-1100 → CP-1114); now **38 passed / 0 failed** with
+  every one of the contract's 28 comparators satisfied by evidence taken from the formulas suite's own cases and the
+  comparators' read shapes.
+- **Still ahead in Boundary IV:** item 5's `validate_head_search_binding()` RED/GREEN, the same-root render-twice byte
+  comparison with a single publish as a *targeted* check (currently characterized at CP-1099), and then the boundary's
+  remaining substance. No full suite was run, per the owner's instruction; nothing weakened, `REQUIRED_CHECKS` untouched,
+  nothing deleted, no push, no stack, no hardware.
