@@ -24387,3 +24387,26 @@ next_experiment: NONE until the owner or the review rules on the route
   choice with a reviewer whose stated purpose is to rule on item 5's shape. **Building it unilaterally would be me answering my own question**, and the plan
   the owner approved (CP-1420) does not include a new production interface. **So the design is frozen, its discriminating evidence is named, and its
   execution is mechanical the moment either answer arrives.**
+
+## CP-1469 — The same-shape sweep: one hole confirmed, one false alarm of my own making, one dead API
+
+**After CP-1467 I swept the Task-8 evidence path for siblings of the same shape - "constructed or declared, never used" - and the sweep changed the
+picture in both directions.**
+
+| symbol | production callers | test callers | verdict |
+| --- | --- | --- | --- |
+| `observe_capture` | **0** | 1 | **the hole (CP-1467)**: the driver's capture route has no production caller |
+| `seal_live_evidence` | **0 by naive grep** - **but wired** | 4 | **my grep was wrong**: `pick_place_runner.py:243` calls it as `sealer = getattr(self.port, "seal_live_evidence", None)`, so a `\.seal_live_evidence\(` search misses it. **The seal path is real, and only a full case that reached FINAL_CHECK may use it; a prefix returns `live_evidence_artifact: None` by design** |
+| `bind_live_evidence` | **0 by naive grep** - **but wired** | 7 | likewise called via `getattr` in `ros_child.py:516`, so the window really is attached |
+| `record_evidence` | **0, even internally** | 3 | **a dead API**: nothing - not even the port itself - calls it. It is not the feed; it never was |
+| `bind_reset_epoch` | 1 | 22 | wired |
+- **So the hole narrows to exactly one thing, and it is the one CP-1467 names:** the window is constructed and attached, the seal path is wired, and
+  **nothing feeds the window between attachment and seal.** The consequence for a full case is worth stating precisely: with an empty window, the seal has
+  nothing to publish, `REQUIRED_PHASES` cannot be satisfied, and the runner would refuse the case at the seal rather than pass it with hollow evidence -
+  **which is the safe direction, and still a hole rather than a design.**
+- **And a claim I nearly made and did not:** the naive grep's `0 production callers` for `seal_live_evidence` would have supported *"a full case could never
+  pass"*. **Reading the runner instead of trusting the count shows the opposite** - the seal is wired, and only the feed is missing. **My sweep's first
+  output was a false alarm about my own code; the correction is recorded here rather than quietly dropped.**
+- **What this does to the scope question:** unchanged in substance, but better supported. A full case needs **both** the eight unprovisioned phases **and**
+  the evidence feed; **the feed is now the smaller and more self-contained of the two** (route (a) or (b) in EXP-519), whereas the phases are a much larger
+  build. **If the owner wants one of these done first, the feed is the one that removes a hole rather than adding a capability.**
