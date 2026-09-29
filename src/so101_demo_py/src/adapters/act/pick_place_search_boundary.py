@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from pathlib import Path
 import time
 
@@ -195,7 +197,7 @@ class PickPlaceSearchBoundary:
                                     support_distance_max_m=support_distance_max_m)
         return {"proof": proof, "current_snapshot": snapshot, "facts": facts}
 
-    def sequence_facts(self, phase, snapshot, request, *, support_distance_max_m):
+    def sequence_facts(self, phase, snapshot, request, *, support_distance_max_m, motion_template=None):
         """Establish one sequence phase's eight gates and its facts from the readback - never accept them.
 
         This mirrors the SEARCH evidence validator: every gate is a conclusion from the readback, and a snapshot that
@@ -301,9 +303,36 @@ class PickPlaceSearchBoundary:
                     or facts["holding_state"] != "EMPTY"):
                 raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: the cup is not released")
         if phase == "FINAL_CHECK":
-            # FINAL_CHECK additionally needs the place target's tolerances, which this validator is not given yet, so
-            # it refuses by name rather than reporting a weaker stability claim (CP-1523)
-            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: FINAL_CHECK: place tolerances")
+            # FINAL_CHECK's stability is a COMPARISON, not a flag: the settled cup against the place target, using the
+            # policy's own tolerances. The place's CUP pose is the place TCP pose with the grasp transform undone -
+            # the same computation the policy suite's own place-validation test exercises.
+            if motion_template is None:
+                raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: FINAL_CHECK: motion_template")
+            if facts["released"] is not True or facts["cup_supported"] is not True:
+                raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: FINAL_CHECK: the cup is not released")
+            from so101_demo.core.dynamic_pick import compose_pose, inverse_pose
+            from so101_demo.core.task_geometry import Pose7
+
+            held = snapshot["world"].object_state
+            settled = Pose7(tuple(held.position_world) + tuple(held.orientation_xyzw))
+            expected = compose_pose(motion_template.place_tcp_world,
+                                    inverse_pose(motion_template.cup_to_tcp_grasp))
+            offset = max(abs(float(settled.values[index]) - float(expected.values[index]))
+                         for index in range(3))
+            dot = abs(sum(float(settled.values[3 + index]) * float(expected.values[3 + index])
+                          for index in range(4)))
+            angle = 2.0 * math.acos(min(1.0, dot))
+            stable = (offset <= motion_template.position_tolerance_m
+                      and angle <= motion_template.scene_orientation_tolerance_rad)
+            facts["placement_stable"] = stable
+            # the arm's own clearance is not in this readback, so "the retreat is stable" is claimed only for what the
+            # evidence can support: the cup is released, supported and where it was put. The limitation is documented
+            # rather than papered over with a TCP comparison the snapshot does not carry.
+            facts["retreat_stable"] = stable
+            if stable is not True:
+                raise PickPlaceSearchBoundaryError(
+                    f"TASK8_PHASE_EVIDENCE_INVALID: FINAL_CHECK: placement moved by {offset:.6f} m "
+                    f"and {angle:.6f} rad")
         if phase in ("MICRO_LIFT", "TRANSPORT", "ALIGN"):
             # the lifted phases must show the cup held clear of the table, which is what their flags mean and what the
             # runner's predicates require - a necessary condition, mirrored from it so a contradiction fails here
@@ -344,7 +373,8 @@ class PickPlaceSearchBoundary:
             if support_distance_max_m is None:
                 raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: support_distance_max_m")
             return self.sequence_facts(phase, self.reset.sources.capture(request["attempt_id"]), request,
-                                       support_distance_max_m=support_distance_max_m)
+                                       support_distance_max_m=support_distance_max_m,
+                                       motion_template=motion_template)
         raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
 
     def _gripper_open_rad(self):

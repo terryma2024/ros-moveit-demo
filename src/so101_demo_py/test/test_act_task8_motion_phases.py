@@ -197,8 +197,36 @@ def test_a_cup_still_held_cannot_claim_a_release():
         _call(boundary, ticket, template, duration, phase="RELEASE")
 
 
-def test_final_check_refuses_by_name_until_its_tolerances_are_compared():
-    calls = []
-    boundary, ticket, _capture, template, duration = _case(calls, lifted=False)
-    with pytest.raises(PickPlaceSearchBoundaryError, match="FINAL_CHECK: place tolerances"):
-        _call(boundary, ticket, template, duration, phase="FINAL_CHECK")
+def test_final_check_accepts_a_cup_settled_where_it_was_put_and_refuses_one_that_moved():
+    """FINAL_CHECK's stability is a comparison against the place target, using the policy's own tolerances."""
+
+    from so101_demo.core.dynamic_pick import compose_pose, inverse_pose
+    from so101_demo.core.task_geometry import Pose7
+
+    template = _template()
+    expected = compose_pose(template.place_tcp_world, inverse_pose(template.cup_to_cup_grasp)) \
+        if hasattr(template, "cup_to_cup_grasp") else compose_pose(template.place_tcp_world,
+                                                                  inverse_pose(template.cup_to_tcp_grasp))
+    for displacement, expect_accept in ((0.0, True), (0.05, False)):
+        calls = []
+        boundary, ticket, capture, template, duration = _case(calls, lifted=False)
+        settled = (expected.values[0] + displacement,) + tuple(expected.values[1:])
+        boundary.reset.sources.capture = lambda *args, **kwargs: {
+            **capture, "world": dataclasses.replace(capture["world"],
+                                                    object_state=dataclasses.replace(
+                                                        capture["world"].object_state,
+                                                        position_world=settled[:3],
+                                                        orientation_xyzw=settled[3:]))}
+        if expect_accept:
+            document = _call(boundary, ticket, template, duration, phase="FINAL_CHECK")
+            assert document["placement_stable"] is True and document["retreat_stable"] is True
+            stamped = {**document, "phase": "FINAL_CHECK", "session_id": ticket[3], "attempt_id": ticket[4],
+                       "reset_epoch": 2, "release_epoch": 1}
+            step = PickPlaceRunner(boundary)._verify_phase("FINAL_CHECK", stamped,
+                                                           {"session_id": ticket[3], "attempt_id": ticket[4]},
+                                                           reset_epoch=2, release_epoch=1,
+                                                           after_step=document["physics_step"] - 1)
+            assert step == document["physics_step"]
+        else:
+            with pytest.raises(PickPlaceSearchBoundaryError, match="FINAL_CHECK: placement moved by"):
+                _call(boundary, ticket, template, duration, phase="FINAL_CHECK")
