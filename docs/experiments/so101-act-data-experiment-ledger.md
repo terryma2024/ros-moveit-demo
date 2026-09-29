@@ -16116,3 +16116,36 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   binding plus the child attachment, CP-1051/CP-1052/CP-1053).
 - **What remains:** the single full gate at the Task 9 boundary, on fresh NVMe scratch, with **no commits while it runs**
   (CP-1030). Task 10 stays blocked until the 17 provisional search values are independently designed and Astra-reviewed.
+
+## CP-1054 — The Task 9 boundary gate: 5759 cases, two shards failing, and the budget is the remaining cause
+
+- **The gate ran to completion with correct provenance this time** (the commit discipline of CP-1030 held): rc=1 with
+  `pytest process failed closed: shard-04: exit=1; shard-05: exit=1`, and the JUnit attribution is
+  **5759 cases, 18 failing across exactly two shards**:
+  | shard | cases | failing | module |
+  | --- | --- | --- | --- |
+  | `77a3` | 653 | 16 | `test_controller_reservation_client` |
+  | `c44c` | 486 | 2 | `test_controller_reservation_provision` |
+  Everything else - 9 of 11 shards - is green.
+- **So decision A fixed the structure but not the budget, and the failure says exactly why.** The symptom is unchanged
+  from CP-1031 (`assert ready.wait(1)` - a server thread that never comes up), and the module now *passes standalone*
+  (17/17 at the documented depth) while failing *inside the gate*. The difference is where its derived socket lands:
+  standalone, `Path(TMPDIR).parents[2]` is the registered evidence root (~64 characters) and
+  `root/ipc/res-XXXX/pYYYY.sock` fits the 107-byte AF_UNIX limit; inside the gate, `parents[2]` is the process root,
+  which sits at `<evidence-root>/gate-r650/scratch/r650/<physical>` (~100 characters), so the same derived socket
+  exceeds the limit, `bind` fails, the thread dies and the event is never set.
+- **And the project already provides the remedy - the registered short root CP-1021 found:**
+  `test_controller_reservation_paths` asserts that `controller_reservation_root(campaign_root, env)` **selects a
+  registered short root** from `SO101_ACT_RESERVATION_ROOT` and refuses one outside the task root, and that with it the
+  socket path is `<= 107` while without it the same campaign exceeds the limit. The gate's per-process environment
+  currently sets `TMPDIR`/`TMP`/`TEMP`/`ROS_HOME`/`ROS_LOG_DIR` and **not** that variable, which is the concrete gap.
+- **The next change, therefore, is small and inside decision A's own scope** ("保留 ... AF_UNIX path budget"): give each
+  process's environment a registered short reservation root - the run root, which is short by construction - so the
+  module derives a socket that fits, exactly as the repository's own reservation test prescribes. I am recording it
+  rather than applying it in the same breath as the measurement, because the last three rounds have each shown that a
+  change made immediately after a surprising result is the change that gets reverted.
+- **State:** decision A implemented and verified structurally (gate suite 42 passed, single module 17 passed standalone);
+  decision B complete (CP-1051/1052/1053, 79 + 6 + 38 focused tests green); the Task 9 boundary gate measured at 5759
+  cases with 18 failures confined to the controller-reservation socket budget; Task 10 blocked until the 17 provisional
+  search values are independently designed and Astra-reviewed. No push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
