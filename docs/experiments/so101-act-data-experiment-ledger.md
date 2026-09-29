@@ -25391,3 +25391,18 @@ picture in both directions.**
 - **Where P1-4 stands:** SEARCH, APPROACH, CLOSE and MICRO_LIFT are proven; **TRANSPORT and ALIGN use the same path and need only their own tests** (aim, assert, judge); **RELEASE, RADIAL_RETREAT and
   FINAL_CHECK need their evidence designed**; then the seal, the full-case journal and the seven indexed assertions with their four negatives.
 - **State:** P1-1..P1-3 green and committed; SEARCH, APPROACH, CLOSE, MICRO_LIFT committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1523 — Six of the nine phases are proven; what remains is the release evidence, not more wiring
+
+- **`7 passed`** in the motion-phase file: **TRANSPORT and ALIGN now have MICRO_LIFT's standard**, and the parameterised test is the honest shape for them - **one path, three phases, differing only in
+  the admitted target each aims at**, asserted by value (grasp + micro-lift clearance; grasp + lift clearance; place pose + approach clearance, in the place pose's own x-y) with the runner judging
+  each stamped document.
+- **P1-4's scoreboard, stated plainly:** SEARCH, APPROACH, CLOSE, MICRO_LIFT, TRANSPORT and ALIGN are **proven by the runner**; **RELEASE, RADIAL_RETREAT and FINAL_CHECK remain**, and their blocker is
+  **not wiring** - it is that their flags (`released`, `placement_stable`, `retreat_stable`) need evidence this validator is not given yet:
+  - **RELEASE** needs the **release epoch's own readback** (the detachment and the settle window), because `released` must describe the state *after* the gripper opened, not before;
+  - **FINAL_CHECK** needs the **place target's tolerances** (`position_tolerance_m`, `scene_position_tolerance_m`, `scene_orientation_tolerance_rad` - all admitted in the policy) to say the cup is
+    where it was put and still there;
+  - and **RADIAL_RETREAT** needs the retreat target's clearance to say the arm is clear of the cup.
+- **So the next piece of work is a design decision I can make with the material already read**, and it is the same shape as everything else in this batch: name the evidence each phase needs, refuse by
+  name when it is absent, and establish the flags from it rather than from a literal.
+- **State:** P1-1..P1-3 green and committed; six of nine phases committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
