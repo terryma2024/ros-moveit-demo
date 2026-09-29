@@ -23593,3 +23593,19 @@ not an inference of mine.**
   artifacts, the attach fires, the recorder is bound, the CP-1415 samples record, and the seal proceeds - all pieces already proven in isolation.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1426 — The loader is environment-based, and its guard is the last unknown
+
+- **Read:** the child loads its artifacts with **`ActArtifactBinding.verify_environment(os.environ)`** (line 205) rather than taking them as an
+  argument - and my fixture sets exactly that environment from `binding.environment()`, which is why earlier rounds saw the child raise
+  `ACT_ARTIFACT_BINDING_INVALID` when those names were unset. **So the mechanism is present and exercised; what is left is the guard above it
+  (printed here), which evidently does not fire in this fixture.**
+- **Closing position for this batch, stated once and completely:** items **1-4 are committed and green** (`97244cfc`, `9e106c04`, `f48130c8`,
+  `ebc17755`) with **two genuine production defects found and fixed** along the way (the unvalidatable INVALID batch, and the aggregator's
+  layer-mismatched comparison). **P1-5 is uncommitted by design and stands at:** the production port, the inherited production seal, the production
+  segment, a queued nine-phase scenario, identity plumbing, the entire readback validation passing, and one guard away from binding the child's
+  recorder - after which the sample recipe, the key rules and the append validation are all already known-good. **Its case-level half (the seven
+  indexed assertions and four negatives), the integration boundary and the packet correction remain unstarted, which is why my CP-1397
+  recommendation is to submit items 1-4 now and re-approve P1-5 as its own round.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
