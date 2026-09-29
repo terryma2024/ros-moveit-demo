@@ -52,6 +52,11 @@ class Task8MujocoMeasurementDriver:
     def run(self, context, output_root) -> Path:
         root = Path(output_root)
         root.mkdir(parents=True, exist_ok=True)
+        # section 4.2: the descriptor the measurement runs under travels with the raw batch, so the later report is bound
+        # to the configuration that was actually measured rather than to a path somebody could re-read and change
+        descriptor = getattr(context, "runtime_descriptor", None)
+        if isinstance(descriptor, dict):
+            (root / "runtime-descriptor.json").write_text(json.dumps(descriptor, sort_keys=True))
         anchors, failure = [], None
         for ordinal, anchor in enumerate(ANCHORS):
             identity = {"anchor": anchor}
