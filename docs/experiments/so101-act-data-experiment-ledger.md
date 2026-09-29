@@ -21183,3 +21183,23 @@ not an inference of mine.**
   condition it names next - which is how the last six failures have been resolved, each one inside a production check.
 - **State:** the child-driven test file is **uncommitted while red**; items 1-4 complete and committed; no stack, no hardware, nothing
   deleted, nothing pushed.
+
+## CP-1285 — Item 5's fixture stops inside the policy check, and the repository already has the fixture that answers it
+
+- **State of the work, honestly:** the fixture is written and drives the **real** entry; it has now failed **six** times, every time
+  inside a production check - the binder's shape, its digests, the evidence-root rule, the policy validators, the fingerprint binding,
+  and still `ACT_POLICY_BINDING_INVALID` after I wrote a payload with the closed fourteen-key set, a fingerprint computed by the
+  production function, the cohort counts, the confusion rows and a six-key receipt. **So the remaining gap is in my policy documents,
+  not in the fixture's structure.**
+- **And the repository already contains the thing that would close it:** `test_act_campaign_admission.py` exists in the same test
+  directory, and Astra's own wording for item 5 said the fixture should drive the case **plus "trusted campaign→qualification
+  aggregator"** - i.e. the intended source of a valid artefact cohort is the **campaign admission path** the repository already tests,
+  not a hand-built proposal in my file. **Reusing that is the same judgement I made for the port, and I should have made it for the
+  artefacts two rounds ago.**
+- **So the next step is one read of that file's fixtures** (its helper count is printed above) and then the artefacts come from the
+  admission path rather than from my typing. **That is both less code and stronger evidence** - the child would load what an admitted
+  campaign actually produces.
+- **What is complete and unaffected:** items 1-4 are committed and green (item 4 at 30 passed, item 3 at 89, item 2 at 88, item 1 at 3);
+  the aggregator, contract, descriptor, bundle, binding, admission and driver suites all pass; the ledger has recorded every failure
+  of this fixture with its exact code, so the path is auditable rather than lost.
+- **State:** the child-driven test file remains **uncommitted while red**; no stack, no hardware, nothing deleted, nothing pushed.
