@@ -11284,3 +11284,35 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; the user's dirty paths are otherwise untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-862 — Ruling 1 registry correction: RED boundary established
+
+- **New test file (RED half of the pair):** `test/test_act_source_provenance_registry.py` asserts what ruling 1
+  requires of the closed registry - every role declares the overlay that owns it (`worktree`, `dependency` or
+  `external`), the vendored role is owned by the **dependency** overlay and installs at its package-owned path
+  `mujoco_ros2_control/lib/libmujoco_ros2_control.so` (never relocated into `so101_mujoco_support/lib/`), its
+  source is a real path under `third_party/mujoco_ros2_control/` and is **not**
+  `so101_mujoco_support/src/simulation_evidence_plugin.cpp`, and the two worktree plugins stay in the worktree
+  overlay.
+- **RED, with the exact diagnostics the ruling predicts:** `4 failed` in 0.02 s against fresh verified scratch
+  `scratch-r432.flU6` (`beh-registry-red.log`) -
+  `command_broker does not declare its owning overlay: (…4-tuple…)`,
+  `assert 4 == 5`, `IndexError: tuple index out of range` (the `spec[4]` accesses), and
+  `AssertionError: src/so101_mujoco_support/src/simulation_evidence_plugin.cpp` for the vendored role's source.
+  The registry today therefore records exactly the three things ruling 1 forbids.
+- **Implementation plan for GREEN, read from the code rather than guessed:** (a) `_ROLE_SPECS` becomes 5-tuples
+  `(role, kind, source_rel, install_rel, overlay)` with `mujoco_ros2_control_plugin` set to overlay `dependency`,
+  sources rooted at `third_party/mujoco_ros2_control/mujoco_ros2_control/src` (the package that
+  `add_library(mujoco_ros2_control SHARED …)` at its CMakeLists line 203 actually builds it from) and installed at
+  `mujoco_ros2_control/lib/libmujoco_ros2_control.so`; the two external roles carry `external`. (b) `build_` and
+  `verify_source_provenance` resolve each role against its own overlay root, so they need a second root argument;
+  the CLI `act_build_task8_source_provenance` gains `--dependency-overlay`. (c) The existing tests that unpack the
+  registry as 4-tuples (e.g. `test/test_act_source_provenance.py:45`) are updated deliberately with the shape
+  change rather than left to fail. (d) The receipts for the vendored role are regenerated from its real submodule
+  sources, and no artefact is copied anywhere.
+- **Not done yet, deliberately:** the GREEN implementation is a multi-file edit (registry, builder, verifier, CLI,
+  two test modules) and I am stopping at the RED boundary rather than leaving a half-applied registry change in
+  the tree. The new test file is untracked until GREEN, and **no full gate run is valid until GREEN lands** -
+  ruling 3's "no final code gate yet" still holds.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's dirty paths otherwise untouched; formal accepted 0/0/0; `collection_*` NOT_PROVISIONED.
