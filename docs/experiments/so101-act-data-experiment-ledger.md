@@ -15030,3 +15030,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   gate requirements pinned, and its blocker now **diagnosed to a rule conflict with a proven A/B** rather than an
   unknown; Task 10 blocked until the 17 search values are reviewed. No runtime, no package-gate claim, no push, no
   evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1013 — The Task 8 caller is smaller than the plan's wording: the loop exists, the binding does not
+
+- **Read the port's constructor and its recording path, and the remaining work narrows to one provisioning step:**
+  `PickPlaceSearchPort.__init__(boundary, *, expert_route_factory=None, evidence_recorder=None,
+  live_evidence_window=None)` takes the recorder and the window **at construction** (`pick_place_search_port.py:25-26`),
+  validates that the recorder exposes `append` (`:33-34`) and that a window exposes `seal` (`:161-162`), and then
+  `_grid_sample` (`:147`) **already records every validated phase from the port's own readback** and seals on demand.
+- **So the per-tick half of the "driver" already exists inside the port** - what is missing is **who constructs the port
+  with a recorder and a window bound to this case's identity**. That is the child-side provision step: the port is
+  created/assigned in `ros_child.py` (`maybe_provision_pick_place_port` at `:83`, assignment at `:318`), while the
+  startup receipt is bound later at `:505` and the runner runs at `:512-525`. The plan's wording ("provision the
+  recorder through the real `PickPlaceCaseOwner` and child startup receipt, bind it before `PickPlaceRunner`") maps onto
+  exactly that split.
+- **Why this matters:** it replaces "write a driver that loops at 10 Hz and calls `observe_capture`" with "bind an
+  existing recording path to a case identity at construction", which is a much smaller and more verifiable change - and
+  it means the `observe_capture` seam recorded at CP-993/CP-990 is the **recorder's** interface, reached through
+  `_grid_sample`, not a second loop to be written beside it. Writing a parallel loop would have duplicated the port's
+  own sampling, which is the duplicate-definition hazard (CP-978/CP-995) at architectural scale.
+- **Consequences for the next step:** the change is (a) construct or receive the recorder and window where the case
+  identity, evidence root and sealed-artifact path are known, (b) pass them to the port at construction, (c) seal after
+  FINAL_CHECK and let the existing runtime ladder do the rest. Each of those is testable against the port's existing
+  tests, and the owner's `_retire` invalid-seal (committed at `cf1fedaa`) already covers the failure path.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller's address and true size now recorded; the
+  Task 9 gate is pinned and its blocker is the diagnosed scratch-path/socket conflict awaiting the owner's choice
+  (CP-1012); Task 10 stays blocked until the 17 search values are independently designed and reviewed. No runtime, no
+  package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
