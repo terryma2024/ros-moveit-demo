@@ -14376,3 +14376,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search
   values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no
   evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-987 — Closing verification of the delivered state
+
+- **Ran the three suites that carry Task 7's and Task 8's work together** from a fresh verified NVMe scratch with
+  bytecode writing disabled: `test_act_task8_live_qualification.py`, `test_act_task8.py` and
+  `test_act_task8_live_evidence.py` report **87 passed, rc=0** (`beh-r579.log`).
+- **Delivered and committed:** Tasks 1-7 complete and green; Task 8's code side complete and green - the extrema
+  derivation, by-value merge, corrected report field name `support_distance_m`, the exact-collision-pair support rule,
+  the shared contiguous-span helper, the corrected radial retreat rule, the placement and release stability spans, the
+  occlusion window, the five-run collection layer, the digest-verifying raw-record reader, the extractor factory and
+  the weld into `build_task8_qualified_report` with its 33-measurement check, readback and `require_qualified`.
+- **Outstanding, all recorded:** Task 8's caller-side predicate binding (the specific field-to-evidence mapping is in
+  the handoff); Task 9's single full `so101_demo_py` + `so101_teleop` xdist gate, which must follow Task 8 and needs
+  the three user-dirty files resolved first so its diff is mine alone; Task 10's Task 8L rebuild in a new generation
+  subroot; and the one approval awaiting the user.
+- **Carried uncommitted by design** inside the user's dirty set: `pick_place_case_owner.py` (the verified
+  retirement-path invalid seal), `pick_place_case_execution.py` (the journal-row artifact readback) and
+  `test/teleop/test_task8_case_execution.py` (the real sealed-artifact fixture plus its mismatch case). The tree stands
+  at 30 modified and 13 untracked files, all the user's apart from those three additions.
+- **Boundaries held:** no runtime started, no package gate run, nothing pushed, no evidence deleted, no hardware
+  touched; formal accepted Train/Validation/Offline Test 0/0/0; `collection_*` NOT_PROVISIONED; gen3 retained and
+  ineligible with gen4 reserved for Task 10.
