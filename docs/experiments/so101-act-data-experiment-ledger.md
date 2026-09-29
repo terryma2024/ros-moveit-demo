@@ -27251,3 +27251,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The check that settles it, named for the next round:** find every consumer of `CalibrationMeasurementContext`'s fields and ask whether any of them needs a calibration report or a measurement identity **that it cannot get from the manifest or the identity mapping it already has**. **If none does, the review's item 1 is answered by
   the composition contract test above plus this layer analysis; if one does, that consumer names the field to add.**
 - **State:** item 1 **composition verified green, one layer question open**; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1632 — Item 1 settled: the production controller path needs FOUR fields the context does not have
+
+- **The check CP-1631 named, run, and it settles the question in the review's favour - with the fields pinpointed:**
+  `task8_production_composition.py` (the function that builds the controller from the admitted calibration) reads, all through `getattr(context, ...)`:
+  ```
+  calibration = getattr(context, "calibration_report", None)
+  if not isinstance(calibration, dict):
+      raise ProductionCompositionError("PRODUCTION_CALIBRATION_REPORT_REQUIRED")
+  ...
+  for name in ("session_id", "attempt_id"):
+      value = getattr(context, name, None)
+      if not isinstance(value, str) or not value:
+          raise ProductionCompositionError(f"PRODUCTION_MEASUREMENT_IDENTITY_REQUIRED: {name}")
+  ...
+  start = getattr(context, "search_start_rad", None)
+  if type(start) not in (int, float):
+      raise ProductionCompositionError("PRODUCTION_MEASUREMENT_IDENTITY_REQUIRED: search_start_rad")
+  ```
+  **And `CalibrationMeasurementContext.__init__` takes twelve fields, none of which is `calibration_report`, `session_id`, `attempt_id` or `search_start_rad`** - so on the formal path this function **cannot get past its first check**, and the composition the review says "still cannot run" is blocked at exactly four
+  named refusals.
+- **That corrects my own earlier framing, and the correction matters:** CP-1599 said *"the identity is not absent from the path - the driver takes `identity` as its own parameter."* **True for the driver, and it is why the driver-based tests pass; but the CONTROLLER builder reads the identity through the CONTEXT, which
+  never carries it.** So the review's sentence was right, my "layer question" framing was wrong, and **the honest state is: four fields to add, each with its own refusal already written.**
+- **And the fix's shape is therefore not a design question:** the context must carry **the calibration report**, **`session_id`/`attempt_id`**, and **`search_start_rad`**; the CLI must build the context with them (they exist in its inputs: the manifest names the calibration report, the
+  identities document and the request carry the ids, and the descriptor carries the search's start); and the composition contract test already asserts the rest of the path. **The RED that proves it is the same test class the batch already uses: build the context the way the CLI does and require the controller to be built.**
+- **State:** item 1 **settled with four named fields** (composition verified green, context fields missing); item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 untouched. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
