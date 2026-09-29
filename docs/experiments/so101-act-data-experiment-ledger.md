@@ -28157,3 +28157,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `release_epoch_boundary`, `calibration_admission` and `case_documents` - **150 passed in 99.92 s** on a fresh scratch.
 - **So the epoch change is not a local edit:** the release epoch now flows from the phase through the sample, the window, the seal and the index, **and every suite that reads any of those agrees.**
 - **State:** **P1-4 pieces 1-2 committed**; piece 3 (frozen grid plus command/release/contact edge sampling at the source-acquisition layer) and piece 4 (the fixture on one monotonic clock, no timestamp rewriting) remain; the task list keeps P1-4 in-progress; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1682 — P1-4 claim 3 verified: the port feeds the frozen grid ONLY, and the window's event path is unused
+
+- **The claim, counted rather than described:** the port feeds the window through **`add_grid`** at **four** call sites (`pick_place_search_port.py:603,655,751,782`) and **never calls `add_event`** - while the window has had the event path all along:
+  ```
+  task8_live_evidence.py:469   """The SEARCH..FINAL_CHECK evidence window: a frozen 10 Hz grid plus edge events."""
+  task8_live_evidence.py:473   "... event samples are recorded as additions and can never stand in for a grid point."
+  task8_live_evidence.py:506   def event_count(self) -> int:
+  task8_live_evidence.py:567   def add_event(self, sample: dict) -> None:
+  ```
+  **So the window documents exactly the shape the verdict asks for - grid plus edges, as additions - and the source-acquisition layer never uses half of it.** `CaseEvidenceDriver.observe_capture(..., event=False)` already routes to `add_event` when asked, so the missing piece is the port's decision that a capture IS an edge.
+- **And the RED is written but its fixture is the wrong one, which the refusal says by name:** my first version bound the search-port suite's `fixture()` - the one whose own test expects `TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: canonical_evidence` - so the run never reached the release. **The fix is to build the RED on the pattern that DOES produce canonical evidence** (the `_p13_window` family in that suite), which is a fixture change rather than a code change: **the RED's assertion - `event_count >= 1` with `"release"` among the reasons - is unchanged.**
+- **The GREEN is therefore two edits, both at the port:** a capture is an edge when the phase is RELEASE, when the contact signature changes, or when a new command is issued (`command` / `release` / `contact`, the three the verdict names); and the window records **why** (`add_event(sample, reason=...)` plus `event_reasons`), so the sealed evidence can say which edge it carries rather than only that some event happened.
+- **State:** **P1-4 claim 3 verified, its RED in place with a known fixture correction**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
