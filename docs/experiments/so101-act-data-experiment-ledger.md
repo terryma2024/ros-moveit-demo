@@ -30491,3 +30491,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   five named in CP-1796 are next** - the camera frames, the client, the phase path and the target. **Task-list statuses
   are unchanged this round**, so they are not re-stated for the sake of a no-op. P1-2 and P1-3 CLOSED; P1-1 second half
   GREEN; the demo RED's clean re-measurement, P1-4, P1-5, P1-6 and the final gate remain.
+
+## CP-1798 — Headless rendering works on this host, so the camera frames are buildable rather than substitutable
+
+- **The probe, and the two details that matter:**
+  ```
+  MUJOCO_GL=egl
+  RENDER OK  shape=(480, 640, 3)  dtype=uint8  min=0  max=255  std=39.024  nonblank=True
+  mujoco version: 3.12.0
+  ```
+  **A headless EGL context renders the ACT scene's own `head_camera` at the admitted 640x480 into a real image** - so the
+  detector's frame source is something this composition can build, not something it must stand in for. The frame is
+  `uint8` RGB with genuine content (`std=39`, not a blank buffer).
+- **And the first probe was misread, which is worth recording because it nearly became a false negative:** it printed a
+  traceback ending in `EGLError` and nothing else - **but the failure was in `GLContext.__del__`, i.e. at teardown**,
+  while the render itself had already run. Re-probing with the result flushed to stdout and `os._exit(0)` before the GL
+  context is collected printed the success above. **A teardown exception is not a failure of the work that preceded
+  it** - the same distinction the earlier `LastTest.log` stub taught in CP-1749, in a different medium.
+- **The practical rule that follows, for whoever wires this next:** a process that owns a MuJoCo renderer on this host
+  should close the renderer explicitly or exit without collecting it, **because the EGL context's destructor raises
+  here.** That is an operational note, not a defect in the render.
+- **State:** **P1-1's first half now has two of its five remaining values settled as buildable** - the occluder geometry
+  (CP-1797, done with evidence) and the camera frames (this checkpoint: proven possible, the writer is next). The client,
+  the phase path and the target follow from the run's own case. **Task-list statuses are unchanged, so they are not
+  re-stated.** P1-2 and P1-3 CLOSED; P1-1 second half GREEN; the demo RED's clean re-measurement, P1-4, P1-5, P1-6 and
+  the final gate remain.
