@@ -17323,3 +17323,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   evidence rather than by argument.
 - **State: unchanged at 2 failed / 18 passed** in the aggregator module; the v2 dispatch and the support-sample citation
   from CP-1107 stand; nothing weakened, nothing deleted, no push, no stack, no hardware.
+
+## CP-1110 — The v2 fixture seals correctly and stops on the fields FIELD_CASES does not cover
+
+- **Fixture work landed, each step named by a real error rather than a guess:** `FileExistsError` / `CLOSED_JSON_EXISTS`
+  (I was sealing twice - the batch is sealed once, with the bound contract's identity), then
+  `BATCH_CLOSURE_INVALID` **twice** for two different reasons - first because the published `measurements.json` was
+  written **after** the seal, then because it was written before but **not indexed** by the helper's hand-built file map.
+  Both were the closure check working exactly as intended, and both fixes are in the fixture, not in the validator.
+- **Where it stops now:** `CONFIGURED_LIMIT_REQUIRED: coarse_step_rad` - the fields the formulas suite's `FIELD_CASES`
+  does not cover need their own evidence and configured limits, and my `fill` table covers eleven of them. The remaining
+  ones are the config-driven scalars (`coarse_step_rad`, `search_timeout_s`, `max_fine_corrections`, `max_fine_total_rad`,
+  `min_confidence`, `max_age_s`, `max_skew_s`, `submit_lead_s`, `stop_latency_s`, `stop_velocity_rad_s`) plus
+  `horizontal_fov_rad`.
+- **How the next round should close it, without a field-per-round loop:** probe the comparators directly - call
+  `compute_field` for each of the 28 with the current evidence and collect the raised `RAW_EVIDENCE_REQUIRED` /
+  `CONFIGURED_LIMIT_REQUIRED` messages in one pass - then fill exactly what those messages name. That turns twelve
+  unknowns into one command's output instead of twelve failed runs.
+- **State: 1 failed / 19 passed** in this module (the other publishing-half RED now passes its earlier assertions), the
+  remaining failure being the gate test, blocked only on this fixture data. Nothing weakened, nothing deleted, no push, no
+  stack, no hardware.
