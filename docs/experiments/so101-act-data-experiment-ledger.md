@@ -23843,3 +23843,27 @@ not an inference of mine.**
   since every other field is derived from the observation that already passes the port's full evidence validation.
 - **State:** the edit compiles; `record_phases` is a documented no-op; changes remain uncommitted by design; no stack, no CUDA, no actuators, no
   hardware; nothing pushed, nothing deleted.
+
+## CP-1441 — Third production defect, proven by two key sets: the port's SEARCH grid feed can never be recorded
+
+- **The proof, from the code alone and with no inference:**
+  | site | what it requires/produces |
+  | --- | --- |
+  | `pick_place_search_port.py:329-348` `_grid_sample(...)` | **returns exactly three keys** - `{"phase", "sim_time_s", "physics_step"}` - with the docstring "one grid sample taken from the port's own readback - never synthesised by a caller" |
+  | `pick_place_search_port.py:376` | `self._live_evidence_window.add_grid(self._grid_sample(phase, observed, evidence))` |
+  | `task8_live_evidence.py:522-552` `add_grid(...)` | validates cadence, then **`self._recorder.append(sample)`** |
+  | `task8_live_evidence.py:79-82` `Task8LiveEvidenceRecorder.append(...)` | **`set(sample) != set(_SAMPLE_KEYS)` -> `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID`**, with `_SAMPLE_KEYS` the 24-key canonical shape |
+  **So every SEARCH phase that reaches line 376 with a window attached raises the invalid-sample code, in production, always** - a three-key dictionary can never equal a 24-key set.
+- **And this is why the fixture's whole tail looked like a fixture problem:** with my own grid samples removed (CP-1440, correct - the port owns the grid),
+  the refusal that remains is the port's own feed, and every earlier spacing experiment was chasing a rule that could never be satisfied from that call.
+  **It is the same class of defect as the INVALID-batch one (CP-1329) and the layer mismatch (P1-4): production code that cannot work as written, exposed by a
+  test that finally drives it.**
+- **The minimal honest fix, for the next round:** `_grid_sample` already receives everything it needs to build the canonical shape -
+  `observed` (the validated `PickPlaceSearchObservation` with `search_result`, `physical_readback` and `planning_scene`) and `evidence` (the phase
+  document with `physics_step` and the holding state). It can therefore return
+  `build_live_evidence_sample(identity=<case identity from the request>, phase=phase, physics_step=evidence["physics_step"], sim_time_s=<as now>,
+  source_stamps_s=raw["source_stamps_s"], source_received_monotonic_s=raw["source_received_wall_s"], raw_records=<from the observation>,
+  holding_state=evidence[...], frame=..., contact=..., measurements=...)` - **the same production builder the live-evidence suite uses, fed from the
+  observation the port has already validated.** No check is weakened; the feed simply stops sending a partial sample to a recorder that forbids them.
+- **State:** no source change yet in this round; changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed,
+  nothing deleted.
