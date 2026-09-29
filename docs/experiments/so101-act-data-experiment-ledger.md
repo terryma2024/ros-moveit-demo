@@ -29503,3 +29503,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and the boundary's three legs: **demo 5764 passed / 163 skipped / rc 0**, **teleop 117 files, 1315 cases, 43 skipped, 0 failures / rc 0**, **CTest 117/117 / rc 0**.
 - **The three questions the packet puts to the reviewer, restated here so they are not lost in prose:** (1) is each of P1-1 … P1-5 and P2 closed by the artefacts named; (2) are the three boundary legs sufficient evidence for the frozen commit; (3) are the two proposals - a self-describing sealed artifact, and whether a full case's aggregation should be reachable per case - the right disposition for the two gaps they describe.
 - **State:** **the session is paused at a user-decision boundary with everything frozen and indexed; the goal stays active because the plan's last step (the review and whatever it returns) is not complete.**
+
+## CP-1758 — The v5 boundary's canonical teleop Test.xml recovered into the evidence root, and CP-1749's real cause named
+
+- **What the verification found, and it was a retention risk rather than a test problem:** the v5 teleop leg's canonical `Test.xml` was written to **`build/so101_teleop/Testing/20260929-1627/Test.xml`** - **inside the build tree**, which is ephemeral and can be cleaned at any time - while the `--test-result-base` directory the script passes (`$ROOT/teleop-results`) stayed **empty**. **So the boundary's most important teleop artefact existed only where a `colcon clean` would take it.**
+- **It is now copied into the evidence root and verified byte for byte:**
+  ```
+  source:  build/so101_teleop/Testing/20260929-1627/Test.xml     662035 bytes
+  copy:    $ROOT/teleop-results/so101_teleop/Testing/20260929-1627/Test.xml
+  digest:  fa15dd0418203b74  ==  fa15dd0418203b74
+  ```
+  **and decoded from that copy: 117 CTest outputs; 1272 passed + 43 skipped = 1315 pytest cases; 0 failed** - **the same numbers as from the 117 xunit files (CP-1752) and as P2 decoded from the v4 canonical artefact.** Two independent readings of the same leg agree, and the durable one is now in the registered root.
+- **And the cause of CP-1749's misreading is now measurable rather than mysterious:** `build/so101_teleop/Testing/Temporary/LastTest.log` **is 442099 bytes at 00:35** - the 121 bytes I read at 00:18 were that file **mid-write, while the leg was still running**. **The correction in CP-1750 was right, and this is why it was right:** a file being appended to is not evidence that nothing happened, which is the same family as every other caution in this ledger (a length is not a key set; a stub is not an empty run).
+- **Nothing in the product was touched for this:** it is evidence handling - copy, verify, index, freeze - and the frozen HEAD is unchanged.
+- **State:** **the review is still the owner's to launch (no new file has appeared in the handoff directory); the packet, the index and the freeze are current, and the boundary's canonical teleop artefact is now durable**; boundary unchanged and not re-claimed; goal **paused/disarmed at the user-decision boundary**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
