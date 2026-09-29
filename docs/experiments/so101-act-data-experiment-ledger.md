@@ -32890,3 +32890,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   end, and the remaining defect is one malformed `qvel` in a frame the scene-port stand-in returns.** P1-1 through P1-4
   CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses
   are unchanged, so they are not re-stated.**
+
+## CP-1874 — Production validates `qvel` at INGESTION, so the harness's scene port bypasses the check
+
+- **`SceneState` - the production scene port - validates every frame it accepts:**
+  ```python
+  scene_state.py:9    'simulation_time_s','model_sha256','qpos','qvel', …      # the frame's key set
+  scene_state.py:32   def accept(self, frame):
+  scene_state.py:64   def validate(self, frame):
+                          vector(frame['qpos'], self.nq); vector(frame['qvel'], self.nv)
+  ```
+  **so a frame whose `qvel` is an `int` can never be accepted by the production scene state** - **`vector(...)` would refuse
+  it at the door.** Which means the scene document my construction read (`qvel` an `int`) **did not come through the
+  production ingestion path: the harness's scene port is a stand-in that accepts what production would refuse.**
+- **And that is the same shape as CP-1859's `FakeBroker`, one layer down:** a seam that answers questions it was never
+  taught, **so the first time the whole chain runs, a value that could not exist in production arrives in a document
+  production reads.** Here it surfaced as `TypeError: 'int' object is not iterable` in my own proof construction -
+  **which is exactly the kind of late, confusing symptom this work keeps finding, and why the fix belongs at the
+  stand-in rather than in the reader.**
+- **So the honest repair is the one the drive has applied every time:** let the harness use the **production** scene port
+  (`SceneState`, which validates), or make its stand-in produce frames that would pass `validate` - **a `qpos` of length
+  `nq` and a `qvel` of length `nv`, from the same model the run is executed against.**
+- **State:** **P1-5 in progress: the malformed `qvel` is traced to a scene-port stand-in that bypasses production's own
+  ingestion validation, and the repair is to use the production port or to feed the stand-in real frame shapes.**
+  P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain.
+  **Task-list statuses are unchanged, so they are not re-stated.**
