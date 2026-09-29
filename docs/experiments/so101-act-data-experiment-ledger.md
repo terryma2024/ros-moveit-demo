@@ -32552,3 +32552,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress; the driver's surface and the two shape rules are read, and the ACT-aware double is
   specified by them.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
   re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1862 — The ACT-aware driver is in, and `ID_INVALID` survives it: one more read is needed
+
+- **What the attribute diagnostic named, and what was done about it:**
+  ```
+  [attr] FakeBroker.__getattr__('bind_control_events')      <- called, returns True: harmless, as before
+  [attr] FakeBroker.__getattr__('bind_control_events')
+  [attr] FakeBroker.__getattr__('hazard_reason')            <- READ as a value, not called
+  ```
+  **so the ACT chain asks its driver for exactly three names beyond the short list CP-1861 derived** - and `hazard_reason`
+  is read as a **value** (`command_broker.py:369: hazard = getattr(self.driver, 'hazard_reason', None)`), where the blanket
+  `__getattr__` gave a function. **That is now a real reason (`None`), and the diagnostic is removed.**
+- **And `FakeBroker` now answers the ACT chain with the driver's shapes** - `stopped()`, `current_epoch()` (session and
+  epoch, for the trusted source port's scope check), `prepare_goal` → a goal id and a **canonical uuid**, `send_prepared`
+  → the prepared id, `submit`, `discard_prepared`, `goal_state`, `cancel`, `stop_all`, `ready`, `validate`,
+  `refresh_idle`, `hazard_reason`, and the `stop` it had. **That is a real improvement regardless of what happens next:
+  the seam no longer answers every question with `True`.**
+- **But `ID_INVALID` survives all of it**, so the offending value is neither the three attribute reads nor the goal-id
+  path - **and the next read is precisely the one CP-1858 identified and CP-1857 showed how to do:** wrap the **bound**
+  `so101_demo.act.ownership.identifier` **and print a traceback**, not just the value, **because the value alone (a
+  function) did not say which call site produced it.** That is one instrumented run away, and the technique is already
+  proven on this exact function.
+- **State:** **P1-5 in progress; the driver seam is ACT-aware with real shapes, `hazard_reason` is a reason rather than a
+  callable, and the remaining `ID_INVALID` needs the ownership-side traceback that names its call site.** P1-1 through
+  P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
+  statuses are unchanged, so they are not re-stated.**

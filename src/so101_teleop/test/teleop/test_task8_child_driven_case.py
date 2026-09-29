@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import pytest
 import dataclasses
+import uuid
 import hashlib
 import sys
 from types import SimpleNamespace
@@ -456,9 +457,73 @@ class ChildPort(PickPlaceSearchPhasePort):
 
 
 class FakeBroker:
-    """The ROS/process seam: the child must not start a real broker inside a test."""
+    """The ROS/process seam: the child must not start a real broker inside a test.
+
+    P1-5: the blanket `__getattr__` is right for the PREFIX path, where the child never asks its driver for an
+    identifier - but on the ACT path `CommandBroker` does exactly that, and `identifier(...)` correctly refuses a
+    function or a `True`. So the short list of calls the ACT chain makes (`command_broker.py:156/184/210`, and the
+    trusted source port's `current_epoch`) is answered here with the SHAPES `RosBrokerDriver` returns: a goal id that
+    is a non-empty string, a CANONICAL uuid (the broker checks `str(uuid.UUID(value)) == value`), and an epoch whose
+    `session_id`/`reset_epoch` are the ones the live window and the sources are at.
+    """
+
+    def __init__(self, *, session_id=None, reset_epoch=0):
+        self._goals = {}
+        self._session_id = session_id
+        self._reset_epoch = reset_epoch
 
     def stop(self, *args, **kwargs):
+        return True
+
+    def stopped(self):
+        return True                                     # the broker refuses `acquire` unless the driver is stopped
+
+    def hazard_reason(self):
+        # a REASON, so it is a string or None - never the blanket callable: the broker stores what this returns as its
+        # fault reason and can hand it to `ownership.revoke(reason)`, whose first act is `identifier(reason)`
+        return None
+
+    def current_epoch(self):
+        # the trusted source port's `_scope` compares this with the source's own session/epoch (CP-1825)
+        return {"session_id": self._session_id, "reset_epoch": self._reset_epoch}
+
+    def refresh_idle(self):
+        return True
+
+    def ready(self, kind=None):
+        return True
+
+    def validate(self, kind, goal):
+        return goal
+
+    def prepare_goal(self, kind, goal):
+        gid = f"goal-{len(self._goals) + 1}"
+        goal_uuid = str(uuid.uuid4())                   # canonical, because the broker compares the round trip
+        self._goals[gid] = {"goal_uuid": goal_uuid, "kind": kind, "goal": goal}
+        return gid, goal_uuid
+
+    def discard_prepared(self, gid):
+        self._goals.pop(gid, None)
+        return True
+
+    def send_prepared(self, gid, kind, goal, goal_uuid):
+        self._goals.setdefault(gid, {"goal_uuid": goal_uuid, "kind": kind, "goal": goal})
+        return gid                                      # the broker asserts the returned id equals the prepared one
+
+    def submit(self, kind, goal, *, goal_uuid=None):
+        gid, _ = self.prepare_goal(kind, goal)
+        return gid
+
+    def goal_state(self, gid):
+        return {"accepted": True, "done": True}
+
+    def cancel(self, gid):
+        return True
+
+    def prepare_goal_state(self, *args, **kwargs):
+        return {"accepted": True}
+
+    def stop_all(self, reason=None):
         return True
 
     def __getattr__(self, name):                     # every other broker call answers harmlessly
