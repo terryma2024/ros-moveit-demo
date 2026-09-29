@@ -26088,3 +26088,20 @@ picture in both directions.**
 - **And an honest note about this stretch of rounds:** the last few have been small edits against a fixture whose shape I keep re-deriving. **The efficient move is the one the ledger keeps recommending and I keep deferring: read the construction site once, then write the fixture against it.**
 - **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed; the sealed-artifact test and the fixture's prefix changes are uncommitted while red, per this batch's rule. No new
   session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1566 — The wide prefix is in place and the refusal comes from INSIDE execute_approach
+
+- **The probe now shows exactly what CP-1565 asked for:**
+  ```
+  prefix window: 1.3 (60.0,)   grid fields: []
+  execute_approach raised: ContractError PREFIX_TIME_GRID_INVALID
+  ```
+  **so `prepared["prefix"]` was never the narrow object** - my `_wide_prefix` edit is in effect, the fixture's route returns it, **and the grid rule that refuses is triggered by something INSIDE `execute_approach`** rather than by
+  the prefix it was handed.
+- **And that is a useful narrowing rather than a failure:** the rule (`contracts.validate_action_prefix`) fires only when a prefix **declares** `target_interval_s`, and the handed-in prefix declares none - so the
+  document being validated is one `execute_approach` **builds**: either the request it derives from the receipt (`RelativePathRequest.from_source_receipt`) or the goals it hands the screen. **One traceback inside that
+  method names which, and it is the next action.**
+- **And the build is not stale, which the round also settled** (worth recording because it would have been the easy explanation): the build copy and the source differ in no relevant line, carry the same
+  modification time, and contain the same `_current_observation` / `current_readback` / `_release_epoch_for` occurrences. **So the code being exercised is the code being written.**
+- **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed; the sealed-artifact test and the fixture's prefix changes are uncommitted while red, per this batch's rule. No new
+  session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
