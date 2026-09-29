@@ -24964,3 +24964,17 @@ picture in both directions.**
   anchor or works by line number and reports what it changed** - a silent no-op that still parses is the most expensive kind of edit, because the file looks
   edited and the failure appears somewhere else entirely.
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1497 — `execute_approach`'s API map is complete; the call is `PathProver.prove`
+
+- **Read from `act/path_proof.py`, and it closes the last unknown of the APPROACH boundary:**
+  | piece | what it is |
+  | --- | --- |
+  | `PathProver(checker, *, monotonic=time.monotonic)` | the production proof runner (`path_proof.py:315-318`), built on the **same checker object the screen validates against** |
+  | **`PathProver.prove(request, snapshot, *, ticket, reset_epoch, ...)`** | the call that returns a `PathProof` - it digests the canonical input, calls `checker.check_path(relative_prefix, relative_snapshot)`, validates the sample count (`PATH_PROOF_SAMPLE_COUNT_INVALID`) and returns status `SAFE`/`VIOLATION` |
+  | `RelativePathRequest.from_prefix(prefix, *, bridge_time_s, start_time_s, ...)` and `.from_source_receipt(prefix, *, receipt, bridge_time_s, ...)` | the two ways to build the request the prover takes (`:114`, `:139`) - the second is the broker-permitted path, which is the one the prefix source produces |
+  | `PathProof` fields | `status`, `canonical_input_sha256`, `prefix_sha256`, `snapshot_sha256`, `state_sha256`, `model_sha256`, `policy_fingerprint`, `profile_sha256`, `contact_scope_sha256`, `checker_sha256`, `owner_ticket`, `relative_request`, `sample_count`, `first_violation`, wall times, `nq`/`nv` - which is exactly what `VisibleApproachExpertRoute.qualify` re-checks |
+- **So `execute_approach(prepared, request)` is now fully specified, and every piece is a real call:** issue the prefix source through the broker (`issue_prefix_source`, whose only production caller today is
+  `TrustedVisibleApproachSource`), build the request from the source receipt, have the **screen** inspect the executed goals, run **`PathProver.prove`** for the proof, capture the current snapshot, and report
+  the eight gates from readback. **The two things it must be handed - the executed goals and the bridge times - come from the ROS/broker layer, i.e. exactly the I/O the review allows substituting.**
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
