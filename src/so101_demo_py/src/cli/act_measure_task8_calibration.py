@@ -96,22 +96,28 @@ def main(argv=None) -> int:
             from so101_demo.act.task8_production_composition import build_production_measurement_driver
 
             build_production_measurement_driver(context=context, identity=identity).run(context, args.batch_root)
-    except BaseException as error:
-        _append_ledger(args.ledger, "INVALID", ledger_identity, f"driver failed: {type(error).__name__}")
-        raise
-    # Astra item 3: the driver is the ONE seal owner; the entry only reports what it sealed
-    sealed = args.batch_root / "batch.json"
-    # Astra re-review P1-3: read the seal back and refuse to call an INVALID measurement a success. The
-    # path, the identity and the closure are checked by the schema's validator, and the terminal status
-    # decides the outcome - evidence is left in place either way.
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+        # Astra item 3: the driver is the ONE seal owner; the entry only reports what it sealed
+        sealed = args.batch_root / "batch.json"
+        # Astra re-review P1-3: read the seal back and refuse to call an INVALID measurement a success. The
+        # path, the identity and the closure are checked by the schema's validator, and the terminal status
+        # decides the outcome - evidence is left in place either way.
+        from so101_demo.act.task8_measurement_schema import validate_closed_batch
 
-    validate_closed_batch(args.batch_root)
-    record = json.loads(sealed.read_text())
-    if record["status"] != "CLOSED":
-        _append_ledger(args.ledger, "INVALID", ledger_identity,
-                       f"measurement {record['status']}: {record.get('error_code')}")
-        return 1
+        validate_closed_batch(args.batch_root)
+        record = json.loads(sealed.read_text())
+        # the seal's COMPLETE identity must be the identity this entry admitted: a seal that validates in shape but
+        # belongs to another contract is not this run's evidence
+        if record.get("identity") != identity:
+            raise ValueError("MEASUREMENT_SEAL_IDENTITY_MISMATCH")
+        if record["status"] != "CLOSED":
+            _append_ledger(args.ledger, "INVALID", ledger_identity,
+                           f"measurement {record['status']}: {record.get('error_code')}")
+            return 1
+    except BaseException as error:
+        # ONE terminal state per run: the driver's failure, the validator's refusal and an unreadable seal all land
+        # here, so the ledger cannot be left claiming a run is still in progress (the review's P2 finding)
+        _append_ledger(args.ledger, "INVALID", ledger_identity, f"measurement failed: {type(error).__name__}")
+        raise
     _append_ledger(args.ledger, "VALID", ledger_identity, f"sealed {sealed}")
     print(sealed)
     return 0
