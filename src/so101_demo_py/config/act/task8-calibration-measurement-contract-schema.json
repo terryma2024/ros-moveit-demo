@@ -1,9 +1,11 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "SO-101 Task 8 bound calibration measurement contract",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "SO-101 Task 8 calibration measurement contract (v1 and v2)",
+ "anyOf": [
+  {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
     "schema_version",
     "kind",
     "identities",
@@ -14,89 +16,297 @@
     "thresholds",
     "verdicts",
     "contract_sha256"
-  ],
-  "properties": {
+   ],
+   "properties": {
     "schema_version": {
-      "const": 1
+     "const": 1
     },
     "kind": {
-      "const": "task8_calibration_measurement_contract"
+     "const": "task8_calibration_measurement_contract"
     },
     "identities": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "source_provenance_sha256",
-        "runtime_config_sha256",
-        "anchors_sha256",
-        "contact_policy_fingerprint",
-        "act_profile_sha256"
-      ],
-      "properties": {
-        "source_provenance_sha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "runtime_config_sha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "anchors_sha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "contact_policy_fingerprint": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "act_profile_sha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        }
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "source_provenance_sha256",
+      "runtime_config_sha256",
+      "anchors_sha256",
+      "contact_policy_fingerprint",
+      "act_profile_sha256"
+     ],
+     "properties": {
+      "source_provenance_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "runtime_config_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "anchors_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "contact_policy_fingerprint": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "act_profile_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
       }
+     }
     },
     "source_hashes": {
-      "type": "object",
-      "minProperties": 1,
-      "additionalProperties": {
-        "type": "string",
-        "pattern": "^[0-9a-f]{64}$"
-      }
-    },
-    "anchors": {
-      "type": "array",
-      "minItems": 3,
-      "maxItems": 3,
-      "items": {
-        "enum": [
-          "default",
-          "left",
-          "forward"
-        ]
-      }
-    },
-    "measurements": {
-      "type": "object",
-      "minProperties": 17
-    },
-    "camera_measurements": {
-      "type": "object",
-      "minProperties": 4
-    },
-    "thresholds": {
-      "type": "object",
-      "minProperties": 6
-    },
-    "verdicts": {
-      "type": "array",
-      "minItems": 4,
-      "items": {
-        "type": "string"
-      }
-    },
-    "contract_sha256": {
+     "type": "object",
+     "minProperties": 1,
+     "additionalProperties": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+     }
+    },
+    "anchors": {
+     "type": "array",
+     "minItems": 3,
+     "maxItems": 3,
+     "items": {
+      "enum": [
+       "default",
+       "left",
+       "forward"
+      ]
+     }
+    },
+    "measurements": {
+     "type": "object",
+     "minProperties": 17
+    },
+    "camera_measurements": {
+     "type": "object",
+     "minProperties": 4
+    },
+    "thresholds": {
+     "type": "object",
+     "minProperties": 6
+    },
+    "verdicts": {
+     "type": "array",
+     "minItems": 4,
+     "items": {
+      "type": "string"
+     }
+    },
+    "contract_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
     }
+   }
+  },
+  {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "schema_version",
+    "kind",
+    "identities",
+    "source_hashes",
+    "bound_files",
+    "measurements",
+    "support",
+    "contract_sha256"
+   ],
+   "properties": {
+    "schema_version": {
+     "const": 2
+    },
+    "kind": {
+     "const": "task8_calibration_measurement_contract"
+    },
+    "identities": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "source_commit",
+      "config_sha256",
+      "source_provenance_sha256",
+      "runtime_config_sha256",
+      "anchors_sha256",
+      "contact_policy_fingerprint",
+      "act_profile_sha256",
+      "measurement_contract_sha256",
+      "phase_camera_matrix_sha256",
+      "driver_source_sha256"
+     ],
+     "properties": {
+      "source_commit": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{40}$"
+      },
+      "config_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "source_provenance_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "runtime_config_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "anchors_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "contact_policy_fingerprint": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "act_profile_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "measurement_contract_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "phase_camera_matrix_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      },
+      "driver_source_sha256": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{64}$"
+      }
+     }
+    },
+    "source_hashes": {
+     "type": "object",
+     "minProperties": 1,
+     "additionalProperties": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+     }
+    },
+    "bound_files": {
+     "type": "object",
+     "minProperties": 1
+    },
+    "measurements": {
+     "type": "object",
+     "minProperties": 21,
+     "additionalProperties": {
+      "type": "object",
+      "required": [
+       "unit",
+       "source_kind",
+       "comparator",
+       "formula_id",
+       "window",
+       "threshold_source",
+       "failure_code"
+      ],
+      "properties": {
+       "unit": {
+        "type": "string",
+        "minLength": 1
+       },
+       "source_kind": {
+        "type": "string",
+        "minLength": 1
+       },
+       "comparator": {
+        "type": "string",
+        "minLength": 1
+       },
+       "formula_id": {
+        "type": "string",
+        "minLength": 1
+       },
+       "window": {
+        "type": "string",
+        "minLength": 1
+       },
+       "threshold_source": {
+        "type": "string",
+        "minLength": 1
+       },
+       "failure_code": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+       },
+       "source_detail": {
+        "type": "string"
+       },
+       "formula_detail": {
+        "type": "string"
+       },
+       "failure_detail": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "support": {
+     "type": "object",
+     "minProperties": 7,
+     "additionalProperties": {
+      "type": "object",
+      "required": [
+       "unit",
+       "source_kind",
+       "comparator",
+       "formula_id",
+       "window",
+       "threshold_source",
+       "failure_code"
+      ],
+      "properties": {
+       "unit": {
+        "type": "string",
+        "minLength": 1
+       },
+       "source_kind": {
+        "type": "string",
+        "minLength": 1
+       },
+       "comparator": {
+        "type": "string",
+        "minLength": 1
+       },
+       "formula_id": {
+        "type": "string",
+        "minLength": 1
+       },
+       "window": {
+        "type": "string",
+        "minLength": 1
+       },
+       "threshold_source": {
+        "type": "string",
+        "minLength": 1
+       },
+       "failure_code": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+       },
+       "source_detail": {
+        "type": "string"
+       },
+       "formula_detail": {
+        "type": "string"
+       },
+       "failure_detail": {
+        "type": "string"
+       }
+      }
+     }
+    },
+    "contract_sha256": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{64}$"
+    }
+   }
   }
+ ]
 }

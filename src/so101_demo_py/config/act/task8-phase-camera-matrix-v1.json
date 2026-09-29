@@ -1,0 +1,15 @@
+{
+ "schema_version": 1,
+ "kind": "task8_phase_camera_matrix",
+ "occluders": [
+  "fixed_fingertip_pad_visual",
+  "gripper_visual_00",
+  "gripper_visual_01",
+  "jaw_visual_00",
+  "moving_fingertip_pad_visual"
+ ],
+ "phases": [],
+ "cameras": ["head_camera", "wrist_camera"],
+ "coverage_source": "docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md",
+ "status": "SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION"
+}

@@ -1,0 +1,36 @@
+{
+ "categories": {
+  "candidate_target_generation": "search_start_rad 起点与 coarse/fine 目标生成",
+  "coarse_algorithm": "search.py 的 coarse_accumulator 步进与 state event 记录（coarse_step_rad 语义见 contract v2）",
+  "controller_generation_binding": "broker/controller generation 绑定（见 adapters/act/ros_search.py）",
+  "fine_algorithm": "search.py 的 fine correction 计数与 max_fine_total_rad 累加",
+  "out_of_range_handling": "coarse_step_rad <= horizontal_fov_rad/2 < pi 与 vertical_bounds_px 闭区间判定",
+  "state_machine_source": "src/so101_demo_py/src/act/search.py",
+  "stop_cleanup_rules": "stop/revoke 后的三步严格递增 feedback 证明与 generation-scoped 单飞清理",
+  "timeout_origin": "第一次 advance_deadline() 设置 started_wall_s 的 monotonic 时刻，不是首个有效图像"
+ },
+ "kind": "task8_calibration_search_policy",
+ "notes": "This document binds the production sources and their digests; the 17 search configuration values themselves are NOT enumerated by the approved design or plan and are therefore not frozen here.",
+ "schema_version": 1,
+ "source_design": "docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md",
+ "source_files": [
+  {
+   "path": "src/so101_demo_py/src/act/search.py",
+   "sha256": "1d9ea14ef00a788a4d2c36f7b19e8e41eec8edf524feca2e387ff48f6a10a0ae"
+  },
+  {
+   "path": "src/so101_demo_py/src/act/head_search_binding.py",
+   "sha256": "6e19cb8c40c42e4555b5f2c4dd3b0481ec2ddd785ba5a3647c4e8695c3e84900"
+  },
+  {
+   "path": "src/so101_demo_py/src/adapters/act/ros_search.py",
+   "sha256": "7ab4d8fa70b8bc9ad10b1b11b8a167f3d56efc530c6e6f13b5b3201864f82f32"
+  },
+  {
+   "path": "src/so101_demo_py/config/act/task8-live-anchors.yaml",
+   "sha256": "91bbecbfd0914507ff7e55cd554960ce089375b5944809732512e645de42d10b"
+  }
+ ],
+ "source_plan": "docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md",
+ "status": "SCAFFOLD_PENDING_APPROVED_VALUES"
+}
