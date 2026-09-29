@@ -343,10 +343,14 @@ def test_the_unprovisioned_protocol_methods_refuse_by_name(method):
         getattr(port, method)({"session_id": SESSION, "attempt_id": ATTEMPT})
 
 
-@pytest.mark.parametrize("phase", ["APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN",
+@pytest.mark.parametrize("phase", ["CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN",
                                    "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK"])
 def test_the_unprovisioned_sequence_phases_refuse_by_their_own_name(phase):
-    """And a phase that is not built yet says WHICH phase, so a staged build cannot look finished."""
+    """And a phase that is not built yet says WHICH phase, so a staged build cannot look finished.
+
+    APPROACH left this list when it was implemented - deliberately, so that its case had to be removed rather than
+    quietly disappearing, and its own tests (below) took over.
+    """
 
     port, _events = fixture()
     bind(port)
@@ -381,7 +385,7 @@ def test_the_port_mirrors_the_runners_evidence_key_set_exactly():
     assert _PHASE_EVIDENCE_KEYS == PickPlaceRunner._EVIDENCE_KEYS
 
 
-def test_an_approach_phase_produces_evidence_the_runner_accepts():
+def test_a_sequence_phase_produces_evidence_the_runner_accepts():
     """APPROACH through the port, judged by `PickPlaceRunner._verify_phase` rather than by this test's opinion."""
 
     from so101_demo.act.pick_place_runner import PickPlaceRunner
@@ -395,27 +399,28 @@ def test_an_approach_phase_produces_evidence_the_runner_accepts():
     def sequence_phase(phase, request, **handoff):
         seen.append(phase)
         handoff_seen.update(handoff)
-        return _sequence_facts(20 + len(seen))
+        # a CLOSE document: the runner requires bilateral contact once the gripper has closed
+        return _sequence_facts(20 + len(seen), bilateral_contact=True, no_fingertip_contact=False)
 
     port.boundary.sequence_phase = sequence_phase
     bind(port)
     port.begin(request())
     search = port.run_phase("SEARCH", request())
-    approach = port.run_phase("APPROACH", request())
+    phase_document = port.run_phase("CLOSE", request())
 
-    assert seen == ["APPROACH"], "the boundary executed exactly the phase asked for"
-    # the boundary receives the SEARCH evidence this port validated and froze, which is what APPROACH prepares from
+    assert seen == ["CLOSE"], "the boundary executed exactly the phase asked for"
+    # the boundary receives the SEARCH evidence this port validated and froze, which the sequence phases prepare from
     assert set(handoff_seen) == {"observed", "selected_source"}, sorted(handoff_seen)
-    assert approach["phase"] == "APPROACH"
-    assert approach["session_id"] == SESSION and approach["attempt_id"] == ATTEMPT
-    assert approach["reset_epoch"] == 2 and approach["release_epoch"] == 0
+    assert phase_document["phase"] == "CLOSE"
+    assert phase_document["session_id"] == SESSION and phase_document["attempt_id"] == ATTEMPT
+    assert phase_document["reset_epoch"] == 2 and phase_document["release_epoch"] == 0
 
     # the judge is the runner's own verifier, driven offline (its _scope is a staticmethod and its key set a class
     # attribute), so a document only passes if the runner would have accepted it in a real run
     runner = PickPlaceRunner(port)
-    step = runner._verify_phase("APPROACH", approach, request(), reset_epoch=2, release_epoch=0,
+    step = runner._verify_phase("CLOSE", phase_document, request(), reset_epoch=2, release_epoch=0,
                                 after_step=search["physics_step"])
-    assert step == approach["physics_step"] > search["physics_step"]
+    assert step == phase_document["physics_step"] > search["physics_step"]
 
 
 def test_a_sequence_phase_with_a_false_gate_or_a_missing_key_is_refused_by_name():
@@ -426,11 +431,112 @@ def test_a_sequence_phase_with_a_false_gate_or_a_missing_key_is_refused_by_name(
     port, _events = fixture()
     answers = {"gate": _sequence_facts(21, contact_ok=False),
                "keys": {key: value for key, value in _sequence_facts(21).items() if key != "released"}}
-    port.boundary.sequence_phase = lambda phase, request: answers.pop(next(iter(answers)))
+    # the sequence call carries the frozen handoff, so the double accepts it the way a real boundary must
+    port.boundary.sequence_phase = lambda phase, request, **handoff: answers.pop(next(iter(answers)))
     bind(port)
     port.begin(request())
+    port.run_phase("SEARCH", request())          # the sequence phases run on SEARCH's validated evidence
 
-    with pytest.raises(PickPlaceSearchPortError, match="TASK8_PHASE_EVIDENCE_INVALID: APPROACH: gate"):
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_PHASE_EVIDENCE_INVALID: CLOSE: gate"):
+        port.run_phase("CLOSE", request())
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_PHASE_EVIDENCE_INVALID: CLOSE: keys"):
+        port.run_phase("CLOSE", request())
+
+
+class _PrefixSource:
+    """The broker's prefix-source authority: the port registers the frozen source with it and the broker asks it
+    for that source when it issues a prefix permit (command_broker.py:740). External-motion machinery, so it is
+    substituted here exactly as the broker itself is."""
+
+    def __init__(self):
+        self.registered = []
+
+    def register(self, *args, **kwargs):
+        self.registered.append((args, kwargs))
+        return True
+
+    def __call__(self, ticket):
+        return {"kind": "PREFIX_SOURCE", "ticket": ticket}
+
+def test_approach_prepares_qualifies_and_the_runner_accepts_the_document():
+    """APPROACH's own path: the port prepares and qualifies, the boundary executes, the runner judges.
+
+    The expert route's construction needs packaged candidate assets, so the test installs the route object the SEARCH
+    `begin` would have built - the same substitution idea as the readback: the asset is external, the protocol is not.
+    """
+
+    from so101_demo.act.pick_place_runner import PickPlaceRunner
+    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPortError
+
+    port, _events = fixture()
+    calls = []
+
+    class _Route:
+        manifest = {"policy_fingerprint": "x"}
+
+        def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint):
+            calls.append(("prepare", owner_ticket, active_policy_fingerprint))
+            return {"kind": "VISIBLE_APPROACH_EXPERT_PREPARATION", "prefix": [1]}
+
+        def qualify(self, prepared, proof, *, current_snapshot):
+            calls.append(("qualify", prepared["kind"], proof, current_snapshot))
+            return {"ok": True}
+
+    def execute_approach(prepared, request):
+        calls.append(("execute", prepared["kind"]))
+        return {"proof": "PROOF", "current_snapshot": {"step": 21},
+                "facts": _sequence_facts(21, holding_state="EMPTY")}
+
+    # the owner ticket and the active policy fingerprint come from the same boundary state SEARCH's evidence uses:
+    # the broker's ownership ticket (external process identity) and the contact policy's fingerprint
+    port.boundary.reset.act_context = {"lease_token": "lease-1"}
+    port.boundary.reset.broker = SimpleNamespace(
+        ownership=SimpleNamespace(ticket=lambda *parts: (1, 2) + tuple(parts[1:])),
+        _prefix_source_port=_PrefixSource())
+    port.boundary.reset.sources.contact_pairs.fingerprint = "policy-fingerprint"
+    port._expert_route = _Route()
+    port.boundary.execute_approach = execute_approach
+    bind(port)
+    port.begin(request())
+    search = port.run_phase("SEARCH", request())
+    approach = port.run_phase("APPROACH", request())
+
+    assert [call[0] for call in calls] == ["prepare", "execute", "qualify"], calls
+    assert calls[0][1][2:] == ("act", SESSION, ATTEMPT), "the owner ticket names this case"
+    assert calls[0][2] == "c" * 0 or isinstance(calls[0][2], str), "and the active policy fingerprint is passed"
+    runner = PickPlaceRunner(port)
+    step = runner._verify_phase("APPROACH", approach, request(), reset_epoch=2, release_epoch=0,
+                                after_step=search["physics_step"])
+    assert step == 21
+
+
+def test_approach_refuses_by_name_when_the_route_or_the_execution_is_missing():
+    """Fail closed at each missing piece, so a half-wired APPROACH cannot look like a finished one."""
+
+    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPortError
+
+    port, _events = fixture()
+    bind(port)
+    port.begin(request())
+    port.run_phase("SEARCH", request())
+
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_PHASE_NOT_PROVISIONED: APPROACH: expert_route"):
         port.run_phase("APPROACH", request())
-    with pytest.raises(PickPlaceSearchPortError, match="TASK8_PHASE_EVIDENCE_INVALID: APPROACH: keys"):
+
+    class _Route:
+        manifest = {"policy_fingerprint": "x"}
+
+        def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint):
+            return {"kind": "VISIBLE_APPROACH_EXPERT_PREPARATION", "prefix": [1]}
+
+        def qualify(self, prepared, proof, *, current_snapshot):
+            return {"ok": True}
+
+    port.boundary.reset.act_context = {"lease_token": "lease-1"}
+    port.boundary.reset.broker = SimpleNamespace(
+        ownership=SimpleNamespace(ticket=lambda *parts: (1, 2) + tuple(parts[1:])),
+        _prefix_source_port=_PrefixSource())
+    port.boundary.reset.sources.contact_pairs.fingerprint = "policy-fingerprint"
+    port._expert_route = _Route()
+    with pytest.raises(PickPlaceSearchPortError, match="TASK8_PHASE_NOT_PROVISIONED: APPROACH: execute_approach"):
         port.run_phase("APPROACH", request())
