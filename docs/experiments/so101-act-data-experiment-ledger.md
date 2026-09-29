@@ -14104,3 +14104,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad`
   starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware;
   formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-976 — One contiguous-span helper now carries three of the five rules (31 passed)
+
+- **Implemented `longest_contiguous_span_s(frames, *, predicate, phase=None, period_s=0.1, tolerance_s=0.01,
+  strict_breaks=False)`** because three of the design's five rows are the same structure: the grasp occlusion window,
+  the release stability duration and the placement stability duration are each "the longest contiguous source-stamp
+  span over which a predicate holds". The predicate comes from the caller, so each rule keeps its own definition of
+  "holds"; a stamp gap **ends** the current span, and `strict_breaks=True` turns a gap into a refusal
+  (`SPAN_FRAME_BREAK`) - which is what the occlusion row demands ("断帧 ... 使该 run FAIL"); a phase with no frames is
+  refused rather than reported as zero (`SPAN_FRAMES_REQUIRED`).
+- **Verified: 31 passed, rc=0** (`beh-task8-green8.log`), including a case where the predicate holds, breaks, and
+  holds again - the answer is the longer of the two runs, not their sum.
+- **Why this shape rather than four copies:** each remaining rule differs only in its predicate (wrist occlusion with
+  an owner check for the window; cup pose/velocity/contact stability for release; pose, linear/angular velocity, table
+  support and forbidden contact for placement) and in whether a frame break fails the run. Writing the structure once
+  means the four predicates can be added as data, each with its own test, instead of four subtly different loops.
+- **Remaining in Task 8:** the four predicates over the raw records (occlusion with the owner check, release
+  stability, placement stability including table support and forbidden contact, and the retreat rule's
+  clearance/contact/pose qualifier), the `retreat_distance_m` correction to the radial-relative-to-placed-cup rule,
+  and then the wiring - `collect_live_runs` from the validated rows through these rules into
+  `build_task8_qualified_report` with the readback and `require_qualified(report)`.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's extrema derivation,
+  by-value merge, corrected field name, support-distance pair rule and span helper green at 31; Tasks 9-10 untouched;
+  the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three
+  `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted,
+  no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
