@@ -120,7 +120,20 @@ class ModelFrameSource:
             self.data.qpos[:len(values)] = values
         mujoco.mj_forward(self.model, self.data)
         self._renderer.update_scene(self.data, camera=camera)
-        return self._renderer.render()
+        # P1-1: the real `YoloSegDetector.detect(frame: DetectionFrame, query)` declares a DetectionFrame, and the
+        # production ACT detector additionally requires a STRICTLY INCREASING `source_stamp_ns` (`detector.py:131/138`).
+        # A bare ndarray satisfies neither, so the frame carries its pixels, the instant it was rendered on the real
+        # clock, and the camera it was rendered from - which is this source's identity, exactly as a ROS image's
+        # `header.frame_id` identifies the camera it came from (`ros_search.py:131-132`).
+        import time as _time
+
+        import numpy as _numpy
+
+        from so101_demo.core.detection import DetectionFrame
+
+        rgb8 = _numpy.ascontiguousarray(self._renderer.render()[..., :3], dtype=_numpy.uint8)
+        return DetectionFrame(rgb8=rgb8, source_stamp_ns=int(_time.monotonic_ns()),
+                              source_frame_id=str(camera))
 
     def close(self) -> None:
         if self._renderer is not None:
