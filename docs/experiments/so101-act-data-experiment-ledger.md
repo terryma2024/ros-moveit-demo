@@ -21877,3 +21877,19 @@ not an inference of mine.**
   reason P1-2 took several rounds.
 - **State:** committed with all six suites green; build copies synced for the three changed source files; no stack started, no CUDA, no
   actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1321 — P1-3's rule works, and it has exposed three fake seals that were never schema-valid
+
+- **The RED was exact:** the ledger's last line read `VALID` for a batch the driver sealed `INVALID` - the reviewer's finding reproduced
+  word for word (`p13-red.log`, with the ledger line quoted in the assertion message). **The GREEN is in:** the entry now reads the seal
+  back, has the schema validate the path, identity and closure, and returns **1** with an `INVALID` ledger outcome when the terminal
+  status is not `CLOSED`, leaving the evidence in place. **My P1-3 test passes.**
+- **And the change immediately found three more fixtures that were not production-shaped:** three CLI tests now fail with
+  `BATCH_INVALID`, because their fake drivers seal **marker** batches (`{"sealed_by": "driver:fill"}` - the marker I introduced at
+  CP-1261) which the strict closed-batch schema correctly refuses. **The entry is right and the fakes were optimistic**; the fix is the
+  same pattern as P1-2 - give those drivers a **schema-valid** seal rather than weakening the readback.
+- **A shared two-line helper is the clean repair:** one function in the test file that writes a valid `CLOSED` batch (the same shape as
+  the `INVALID` one P1-3's driver writes, with `status="CLOSED"` and no `error_code`), used by every fake driver that needs to seal.
+  **Then the marker batches disappear from the tests entirely, which is a better outcome than teaching the CLI to accept them.**
+- **State:** P1-3's source and test changes uncommitted while three sibling fixtures are red; no stack started, no CUDA, no actuators, no
+  hardware; cleanup untouched; nothing deleted, nothing pushed.
