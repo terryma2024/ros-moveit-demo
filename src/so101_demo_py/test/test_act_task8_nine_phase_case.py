@@ -629,12 +629,12 @@ def test_the_runner_runs_the_whole_case_and_reports_which_phases_completed(tmp_p
     port, _events, boundary, _prefix = _full_case_port(tmp_path)
     # the closed position is a positive joint value (the port refuses zero by name): closing moves the gripper joint
     # towards its closed limit, it does not mean "no value"
-    _route = _Route.__new__(_Route)
-    # the SHARED plan, not a fresh copy of it: `_wide_prefix` returns a new dict, and a route built from a copy has a
-    # window the readback's refresh can never reach (`APPROACH_HEADER_STAMP_INVALID`), which is CP-1699's defect
-    # appearing a third time - this time in the test that injects the route
-    _route.__init__(boundary.prefix)
-    port._expert_route = _route
+    # EXPERIMENT (CP-1722): does this test still need to inject a route at all? The fixture now provisions the port's
+    # own expert route, and the injected one is a `VisibleApproachExpertRoute` made with `object.__new__`, i.e. without
+    # the constructor that admits a candidate.
+    # _route = _Route.__new__(_Route)
+    # _route.__init__(boundary.prefix)
+    # port._expert_route = _route
     port.bind_case_targets(gripper_closed_rad=0.2, close_duration_s=0.4,
                            motion_template=_template(), motion_duration_s=0.4)
     runner = PickPlaceRunner(port)

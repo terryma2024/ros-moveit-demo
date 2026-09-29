@@ -28807,3 +28807,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The next probe is therefore about the route's own contract, not the fixture's clock:** `_Route.__init__` is called with the plan, and the route then participates in `execute_approach` - so the one-line probe is **what the route holds after `__init__`** (does it keep the plan by reference, derive its own times, or require `time_axis` values it was never given?), printed beside the prefix's `observation_time_s` and the header stamp on that path only.
 - **And a plain statement of cost, for the record rather than for sympathy:** P1-4's **production** half has been committed since CP-1685/1688; its **fixture** half has now taken roughly thirty checkpoints, each moving a real defect and each recorded. **The grid's sequence is green and the case seals on the production path.** What remains is one injected-route mechanism and three stale expectations - **all four named**, none of them a resource or safety boundary.
 - **State:** **P1-4: grid green, sealing green, one injected-route mechanism plus three stale expectations outstanding**; P1-5's joined chain waits behind it (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1722 — The last "mechanism" was a stale TEST substitution, and only the three expectations remain
+
+- **The experiment, one line long:** the runner test injected its own route into the port -
+  `_route = _Route.__new__(_Route); _route.__init__(boundary.prefix); port._expert_route = _route` - a
+  `VisibleApproachExpertRoute` built with **`object.__new__`**, i.e. **bypassing the constructor whose job is to admit a
+  candidate from a pinned manifest**. Disabling that injection (nothing else changed) turns the failing test green:
+  ```
+  1 passed
+  ```
+  and the whole set becomes:
+  ```
+  3 failed, 8 passed          (was 4 failed, 7 passed)
+  ```
+  **with the APPROACH refusal gone entirely.**
+- **So the mechanism I had been chasing was not in the fixture's clock, the port, or the path proof - it was a test
+  collaborator that had outlived its reason.** The fixture used to have no expert route, so the test supplied one; the
+  P1-4 work then gave the fixture a real one, and the substitution silently kept replacing it with an object that had
+  never been admitted. **A substituted collaborator that bypasses its own constructor is not a measurement of the layer
+  under test** - the same family as this batch's other lessons, and worth its own line because it cost the most.
+- **And what is left is exactly the list CP-1687 predicted, nothing more:**
+  | failure | the rule it was approximating |
+  | --- | --- |
+  | `test_every_sample_names_its_own_raw_sources:56` | each capture names its own raw record - **per SAMPLE, not per phase** |
+  | `test_the_index_chains_to_complete_canonical_records:69` | *"ten samples: nine phases, two retreat segments"* - the count must follow the case's own instants |
+  | `test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period:109` | *"the retreat is two segments of one phase"* - the cadence is the port's clock, which is now one period per sample |
+- **State:** **P1-4's grid sequence green, sealing green, and the three stale expectations are the only failures left in these suites - all three named above with the rule each was approximating**; P1-5's joined chain follows (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
