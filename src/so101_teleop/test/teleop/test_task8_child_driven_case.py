@@ -249,6 +249,11 @@ class _Boundary:
         decision = dict(_locked(), attempt_id=request["attempt_id"])
         sources = _ChildSources(session_id=request["session_id"], reset_epoch=self.reset_epoch,
                                 model_sha256=getattr(self, "model_sha256", None))
+        # CP-1884/1885: the frames this search builds must carry vectors of the MODEL's length, because
+        # `selected_approach_candidate` validates them with `vector(scene["qpos"], model.nq)` - and this is a FRESH
+        # sources object per search, so the dimensions are forwarded here rather than set on the boundary's own
+        sources.nq = getattr(self, "nq", 8)
+        sources.nv = getattr(self, "nv", 8)
         # the fence and the deadline both compare against the segment's clock, so the clock is the REAL one -
         # the segment suite's `_segment` helper pins it to a frozen list, which cannot work here. Everything
         # else (boundary, verifiers, geometry, timings) comes from the imported doubles unchanged.
@@ -458,7 +463,13 @@ class _ChildSources(_Sources):
                         # only `qpos` was overridden - so `qvel` stayed an int where four production readers validate
                         # `vector(scene["qvel"], model.nv)` and `SceneState.validate` refuses it at ingestion
                         # (`scene_state.py:64`). Both vectors are given the same length the fixture's scene uses.
-                        "model_sha256": self._model_sha256, "qpos": [0.0] * 8, "qvel": [0.0] * 8}
+                        # P1-5/CP-1884: the lengths come from the MODEL the run is executed against - fourteen and
+                        # thirteen for the ACT scene - because `selected_approach_candidate` validates them with
+                        # `vector(scene["qpos"], model.nq)` / `vector(scene["qvel"], model.nv)`. The defaults keep the
+                        # fixture's own eight for every caller that does not know a model.
+                        "model_sha256": self._model_sha256,
+                        "qpos": [0.0] * getattr(self, "nq", 8),
+                        "qvel": [0.0] * getattr(self, "nv", 8)}
         row["contact"] = {**{key: () for key in FRAME_KEYS},
                           "simulation_session_id": self._session_id,
                           "reset_epoch": self._reset_epoch,

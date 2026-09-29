@@ -33191,3 +33191,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and the `native` check all pass; the candidate's vector-length validation is next, and the fixture's scene must carry
   model-length `qpos`/`qvel`.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and
   the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1885 — `VECTOR_INVALID` cleared: the dimensions had to go to the object that builds the frames
+
+- **The fix was placement again, and the read that found it was one `grep`:**
+  ```
+  test_task8_child_driven_case.py:250  sources = _ChildSources(session_id=request["session_id"], …,
+                                          model_sha256=getattr(self, "model_sha256", None))
+  ```
+  **the boundary's `search` builds a FRESH `_ChildSources` on every call** - so setting `nq`/`nv` on the boundary and
+  on the boundary's own `reset.sources` reached neither, **because neither is the object whose `capture` builds the
+  scene frame.** The dimensions are now forwarded to the per-search instance:
+  ```python
+  sources.nq = getattr(self, "nq", 8)
+  sources.nv = getattr(self, "nv", 8)
+  ```
+  **and the refusal moved immediately:**
+  ```
+  before: selected_approach_candidate.py:107 -> contracts.vector -> VECTOR_INVALID
+  after:  selected_approach_candidate.py:124 -> ValueError("SELECTED_APPROACH_START_INVALID")
+  ```
+- **Which makes three rounds in a row where the fix was "give the value to the object that reads it" rather than "give
+  the value" -** the epoch (`broker.driver.epoch_reader`, CP-1882), the dimensions (the per-search sources, CP-1885),
+  and before them `hazard_reason` as an attribute rather than a method (CP-1863). **A seam with several stand-ins does
+  not have one place to put a value; it has as many places as there are objects, and only the reader's own identity says
+  which.**
+- **State:** **P1-5 in progress: the candidate's vector validation passes and its start validation is next.** P1-1 through
+  P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
+  statuses are unchanged, so they are not re-stated.**
