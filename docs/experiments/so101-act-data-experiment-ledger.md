@@ -15189,3 +15189,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   (CP-1013); Task 9's teleop scope measured at 5 failures of 113 with verified arguments and two open attribution
   questions above; the demo scope still unmeasured; Task 10 blocked until the 17 search values are reviewed. No runtime,
   no package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1020 — Where colcon's results actually live, and why the first query answered "0 tests"
+
+- **Two measurement traps found while trying to name the five failing entries, both worth recording because they
+  produce confident wrong answers:**
+  1. **`colcon test-result --test-result-base log/latest_test` returns "0 tests, 0 errors, 0 failures"** - that
+     directory holds colcon's own logs, not the xunit results. The results live in
+     **`build/<package>/test_results/<package>/*.xunit.xml`** for this workspace, which is why the scoped query found
+     nothing while the run had plainly failed. A query that answers "no failures" because it looked in the wrong place
+     is indistinguishable from a green gate unless you check where the results are.
+  2. **`colcon test-result --all` (default bases) reports 1411 tests, 1 error, 27 failures, 43 skipped** - far more than
+     the current run's five, because it aggregates **stale xunit files from earlier runs** that I had not cleared
+     (`build/**/test_results` is not touched by clearing `log/latest_test`). So the aggregate is not this run's result,
+     and attributing its 27 failures to the current gate would have been wrong in exactly the way CP-932 and CP-1011
+     were about.
+- **What is legible from the per-file breakdown:** `test_unified_two_channel.xunit.xml` shows **6 tests, 6 failures** -
+  the same file CP-1011 flagged - consistent with the socket-path cause rather than a new defect. The remaining entries
+  visible in that listing (parents, route parity, safety, route binding, web dependencies) report 0 failures.
+- **The correct attribution procedure, to use next:** scope the query to the xunit files **written by this run** (by
+  modification time), or clear `build/<pkg>/test_results` before re-running so the aggregate can only contain the fresh
+  run. Then separate the ament **lint** entries from the pytest entries, since the captured plugin list shows
+  `ament-copyright`, `ament-pep257`, `ament-flake8` and `ament-xmllint` participating in `colcon test`.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's teleop scope measured at 5 failures of 113 with verified arguments, with the socket cause legible
+  in the per-file results and the exact five not yet isolated by a scoped query; the demo scope still unmeasured; Task 10
+  blocked until the 17 search values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware;
+  formal 0/0/0; `collection_*` NOT_PROVISIONED.
