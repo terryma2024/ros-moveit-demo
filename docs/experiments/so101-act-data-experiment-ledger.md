@@ -27448,3 +27448,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
      run identity at admission**. The context now carries the fields (committed); **which of the two wires them is the decision.**
 - **And item 7 waits on all three by its own terms:** the re-run boundary must happen "仅在上述代码与证据链修复完成的集成边界" - so re-running it now would measure code that is about to change, which is exactly the reuse this batch has refused twice.
 - **State:** the batch is **blocked on those three decisions**; the goal is also **paused and disarmed**, and `update_goal(resume)` is refused by the tool ("the model cannot resume a paused goal; the user must resume it"). **Nothing is pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.**
+
+## CP-1643 — CORRECTION to CP-1642: the goal was resumed, so "paused and disarmed" is withdrawn
+
+- **What changed between the two entries:** `update_goal(resume)` had been refused for many rounds ("the model cannot resume a paused goal; the user must resume it"), and **CP-1642 recorded that as part of its state**. The user has now resumed it from the TUI, and
+  `get_goal` reports **`phase: active`, `activation: armed`, revision 68**. **So the paused/disarmed sentence in CP-1642 is withdrawn** - the three decisions remain, but **the goal is pursuing and this session continues**.
+- **What is NOT withdrawn, because the evidence is unchanged:** the tree is **settled and green** (`142 passed` demo-side, `83 passed` across the six measurement suites), the parked cleanup patch is where CP-1639 left it, and **the remaining work genuinely
+  depends on the three decisions**, which are now the only thing standing between this batch and its re-run boundary:
+  1. **CP-1612** - the release-epoch seal rule;
+  2. **CP-1620** - where the cleanup proof is required (the patch is ready for either answer);
+  3. **CP-1635** - which component supplies the per-run identity.
+- **And the shape of the correction is the batch's own rule applied to itself one more time:** a claim about the goal's state is only as good as the last `get_goal`, exactly as a claim about an artefact is only as good as a read of that artefact.
+- **State:** goal **active and armed**; three decisions requested; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
