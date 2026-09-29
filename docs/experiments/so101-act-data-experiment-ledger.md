@@ -23867,3 +23867,26 @@ not an inference of mine.**
   observation the port has already validated.** No check is weakened; the feed simply stops sending a partial sample to a recorder that forbids them.
 - **State:** no source change yet in this round; changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed,
   nothing deleted.
+
+## CP-1442 — The design's own field-capture protocol is on the READBACK adapter, and the SEARCH port cannot reach it
+
+- **Read, and it explains the defect precisely:** the canonical fields are built by
+  **`pick_place_readback.py:400 capture_evidence_fields(self, captured, *, support_distance_max_m, raw_records)`** - the **readback adapter's** method - and
+  `CaseEvidenceDriver.observe_capture(...)` exists only to route: *"The adapter supplies the fields (its own capture shape is its business); this method
+  only routes them."* **So the production design is: readback adapter -> `capture(...)` -> `capture_evidence_fields(...)` -> `driver.observe(fields,
+  phase, frame, contact, measurements)`.**
+- **And the SEARCH port sits outside that chain:** its constructor takes a *boundary* whose `search(request)` returns a validated
+  `PickPlaceSearchObservation` (in production, the search segment), **not** the readback adapter that owns `capture_evidence_fields` - the adapter is
+  nested inside the segment as its `sources`. **That is why `_grid_sample` returns three keys: the port has the observation but not the field builder, so
+  its grid line cannot produce a recordable sample - the third production defect is architectural, not a typo.**
+- **Two candidate fixes, both minimal and both honest:**
+  1. **Port-side, with a capability check:** `_grid_sample` builds the canonical sample through `build_live_evidence_sample(...)` when its boundary exposes
+     `capture_evidence_fields` (plus `frame`/`contact`/`measurements` from the phase document, which already carries `holding_state`,
+     `bilateral_contact`, `no_fingertip_contact`, `cup_supported`, `released`, `placement_stable` - CP-1441's read) and otherwise keeps today's partial
+     return documented as the legacy path. **This makes the real chain work without inventing a mapping the port cannot see.**
+  2. **Driver-side:** leave the port's line alone and have the child/runner record SEARCH through `observe_capture(...)` with the adapter, which is the
+     design's own route - but then the port's grid line runs only when a window is attached **without** an adapter, i.e. in tests exactly like mine.
+- **Recommendation: (1)**, because it repairs the production path the reviewer asked to be proved (the port records into the window it was given) and it
+  touches one method; **(2)** is larger and moves the recording responsibility out of the port, which is a design change, not a fix.
+- **State:** no source change yet in this round; changes remain uncommitted by design; no stack, no CUDA, no actuators, no hardware; nothing pushed,
+  nothing deleted.
