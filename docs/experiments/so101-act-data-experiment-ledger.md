@@ -27408,3 +27408,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   helper needs the file), or the test writes two different mappings (in which case the fixture is simply inconsistent).
 - **What is NOT claimed:** the fixture is not yet green, the suites stand at `1 failed, 82 passed`, and this entry does not present the change as a fix. **It is a narrowing, recorded because the batch's rule is that a claim about a specific artefact is only made after reading that artefact - and I have not yet read what the bound document holds.**
 - **State:** the parked cleanup patch is unaffected; the tree carries only owner modifications plus this batch's committed work. Item 1's context half done with its CLI half awaiting CP-1635; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope awaiting CP-1620; items 5 and 6 closed and independently confirmed; item 7 pending the code settling. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1641 — The last failure was a real inconsistency, and the new check is what caught it: `83 passed`
+
+- **The one-line cause, and it is a genuine field mix-up rather than strictness:**
+  ```
+  identity = dict(contract["identities"])
+  identity["measurement_contract_sha256"] = contract["contract_sha256"]
+      ^ the identity's own digest of the measurement contract
+                                                  ^ the BOUND DOCUMENT's self-digest
+  ```
+  **So the aggregator's seal helper filled an identity member from a different field**, and the seal's identity disagreed with the one the entry admitted in exactly that member. **`MEASUREMENT_SEAL_IDENTITY_MISMATCH` was therefore right, and the fixture was wrong** - which
+  is the outcome CP-1639 predicted ("a test expectation my new refusal changed") and CP-1640 narrowed to two possibilities, the second of which it was.
+- **The probe that settled it is worth recording too, because its first form failed and its result was not what I expected:** comparing the bound document's `identities` against the admitted mapping showed **`differing fields: []`** - i.e. they agree - and
+  **the disagreement was introduced one line later, inside the helper.** **Reading the artifact that actually seals, rather than the artifact I assumed was sealing, is what ended a three-round hunt.**
+- **And the state is now clean, which is the first time since the third review began:**
+  ```
+  83 passed across the six measurement suites (aggregator, CLI terminal state, measurement contract, driver,
+  production composition contract, formal context fields) - on a fresh scratch, with the tree carrying only the owner's
+  pre-existing modifications plus this batch's COMMITTED work.
+  ```
+- **State:** item 1's context half done with its CLI half awaiting CP-1635; item 2 two-thirds green with the epoch-rule decision open (CP-1612); item 3 verified complete; item 4's CLI half green with all five scenarios and its cleanup scope parked as a patch awaiting CP-1620;
+  items 5 and 6 closed and independently confirmed; item 7 pending the code settling. Goal still paused+disarmed. Nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
