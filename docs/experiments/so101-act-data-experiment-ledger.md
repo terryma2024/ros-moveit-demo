@@ -18182,3 +18182,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the phase-evidence shape that already works.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   remain open and independent.
+
+## CP-1151 — The release path passes; the retreat segment's own expectations are the last unknown
+
+- **Read the release condition (lines 169-170) and it was the planning side, not the cup:** the preflight must report
+  `holding_state == "HOLDING"`, `cup_supported is True`, `fresh is True` **and `planning_attached is True`** - the detach
+  happens *after* the preflight, and my fixture had said `False`. Corrected, and the release path now passes.
+- **The failure then returned to `PHASE_EVIDENCE_INVALID`, this time from `run_retreat_segment`** - so my assumption in
+  CP-1149 that it "shares the phase-evidence shape that already works" was **wrong**: the retreat has expectations of its
+  own, and the next read is its validation (which `phase` value it wants and which of the released/hold flags it checks).
+- **Where Boundary V's test now stands, itemised:**
+  | contract | state |
+  | --- | --- |
+  | `begin` | passes |
+  | `safe_stop` | passes |
+  | `run_phase`, all nine phases | passes |
+  | `set_down` | passes |
+  | `release_preflight` and the release safety rule | passes |
+  | `run_retreat_segment` | **the last one** |
+- **Two of this test's rejections have been physical-safety rules rather than shape rules** - the release refusing an
+  unsupported cup, and the set-down requiring the cup still held with the planning side attached - which is the clearest
+  evidence yet that this fixture is driving real logic rather than a stub, and that the seven assertions it ends with will
+  mean something when they run.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  (authoritative descriptor document; one authorised live stack for the recording half) remain open and independent.
