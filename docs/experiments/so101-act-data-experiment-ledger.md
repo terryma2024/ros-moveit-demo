@@ -25218,3 +25218,16 @@ picture in both directions.**
   phase's own entry in this validator, and a focused test that lets the runner judge the document. **CLOSE is next** - it needs the gripper dispatch and the bilateral-grasp
   predicate, both of which are already named here.
 - **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1513 — CLOSE's inventory: two facts read, two left to read, and one honest note about pace
+
+- **Read, and they name CLOSE's execution path:** the controller kinds are **`'arm'`, `'gripper'` and `'neck'`** (`broker_execution.py:55-56`, `ros_neck.py:42`), and
+  `BrokerControllerPort.send(goal)` hands the goal to **`CommandBroker.dispatch(ticket, kind, goal, ...)`** -> **`self.driver.submit(kind, goal)`** (`command_broker.py:147-156`).
+  **So CLOSE is a `'gripper'` submission through the broker, exactly as APPROACH's prefix is a paired submission.**
+- **Two things still to read before writing it, and both are on the driver side:** (1) **the goal document's shape for `kind='gripper'`** - `RosControllerPort(node,
+  action_client, names, ...).send(goal)` is where the names and the trajectory fields are fixed; (2) **the closed gripper position's admitted source** - the value that says "closed" is
+  not something this component may invent, and if nothing admits it, then CLOSE refuses by name and the gap is reported rather than papered over.
+- **And an honest note about pace, because the ledger should carry it:** each of the seven remaining phases is turning out to be a **two-to-four-round** piece (read the execution
+  surface, implement the execution path, add the phase's predicate, write the test that lets the runner judge it). **With ~430 rounds left that is comfortably feasible, and P2 plus the
+  final boundary and the review still fit - but it means P1-4 is the batch's critical path and the review request belongs after it, exactly as the owner's instruction says.**
+- **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed; CLOSE is next. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
