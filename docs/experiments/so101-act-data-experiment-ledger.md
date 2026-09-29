@@ -22258,3 +22258,21 @@ not an inference of mine.**
   measured under; the new tests do.
 - **State:** committed with five suites green; build copy synced; no stack started, no CUDA, no actuators, no hardware; cleanup untouched;
   nothing deleted, nothing pushed.
+
+## CP-1343 — P1-5's landscape read: the fake seal is a monkeypatch on a shared class, and the real port is a protocol
+
+- **What the fixture actually does today** (`test_task8_child_driven_case.py:100-129`): it defines `ChildPort(FakePort)` with two overrides -
+  `begin` (which binds the child window's reset epoch) and `seal_live_evidence` (which takes the recorder from the window the child
+  attached, then calls `super()`). **The `super()` is the problem the reviewer named:** the chain test ends with
+  `FakePort.seal_live_evidence = _seal_port_method`, a **monkeypatched class attribute** ("the three steps the production port performs, in
+  its own order (CP-1179)"), so the child fixture's seal is a **re-implementation**, not the production path.
+- **The production vocabulary exists and is distinct:** `unified/ports.py:137` defines the **`ExecutionPort` protocol**, and
+  `unified/ros_child.py:121` defines **`_FencedPickPlacePort`**, the wrapper the child actually runs
+  (`PickPlaceRunner(_FencedPickPlacePort(port, cancelled), task)`). **So P1-5's work is to drive the real port implementation through those
+  production types with only ROS/MuJoCo/controller/process I/O replaced - not to keep a class-attribute fake in the loop.**
+- **The next read is named:** the real `ExecutionPort` implementation's own `seal_live_evidence` (it did not appear in
+  `so101_teleop/so101_teleop` or `so101_demo_py/src`, so it lives with the ROS action server or an instances module - one targeted search
+  names it), together with the seven indexed evidence assertions the reviewer lists: the gripper-open command event, three adjacent support
+  rows in one release epoch, SEARCH and FINAL_CHECK, both retirement receipts, and the artifact/journal digests.
+- **State:** no source changed for P1-5 yet; no stack started, no CUDA, no actuators, no hardware; cleanup untouched; nothing deleted,
+  nothing pushed.
