@@ -15976,3 +15976,15 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   single failing module awaits the (b1)/(b2) choice (CP-1035); Task 10 blocked until the 17 search values are reviewed.
   No runtime, no formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*`
   NOT_PROVISIONED.
+
+## CP-1048 — Handoff refreshed to the current state
+
+- **Appended the post-decision state to `handoffs/20260930-task7-onward/HANDOFF.md`** so a fresh session - or the owner -
+  can resume without reading 100+ checkpoints: decisions 1-4 with their commits, the Task 8 caller's split between a done
+  port side and a one-decision child side, Task 9's identified runner with its first full-scope diagnostic result, the
+  two open choices with recommendations, and the one operational rule that cost a run (never commit while the gate is in
+  flight, CP-1030).
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller's port side committed, tested and
+  regression-checked; its child side and Task 9 each awaiting one small decision from the owner; Task 10 blocked until
+  the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no evidence deleted, no hardware; formal
+  0/0/0; `collection_*` NOT_PROVISIONED.
