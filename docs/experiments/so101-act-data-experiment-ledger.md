@@ -20788,3 +20788,21 @@ not an inference of mine.**
   SEARCH and FINAL_CHECK, both retirement receipts, and the journal hash.
 - **State:** HEAD `c9286fd7` plus this checkpoint; items 1-4 complete; item 5's recon complete and its fixture unwritten; no stack, no
   hardware, nothing deleted, nothing pushed.
+
+## CP-1266 — The constructor's contract, the artifacts question, and the fixtures that already exist
+
+- **Read from the child's `__init__`:** the port arrives as `pick_place_port` **or** `task8_port` and supplying both raises
+  `ACT_PICK_PLACE_PORT_AMBIGUOUS`; `startup_proof_consumer` must be callable or `TASK8_STARTUP_CONSUMER_INVALID`; `stop_timeout_s` and
+  `accept_timeout_s` default to 2 s and must be in `(0, 30]`; `owner` defaults to `local_owner(...)`, which matters because the entry
+  needs `stop_act` to confirm; and `_act_hashes` falls back to the environment names in `_ACT_HASH_ENV`, so a fixture can bind them
+  explicitly instead of exporting six variables.
+- **`_act_artifacts` is initialised to `None` in the constructor and its assignment sites are printed above.** That is the one thing
+  item 5 still has to settle on evidence: Astra asked the fixture to drive the case **through the normal construction/loading entry**,
+  so if there is a loader for the act artifacts, the fixture must use it rather than assigning the attribute. **The grep output above
+  is exactly the set of lines that answers it, and I am reading them before writing the fixture rather than after.**
+- **And the reusable pieces are confirmed to exist:** `test_task8_case_runner_chain.py` has `FakePort` at line 21 and `_request()` at
+  line 164, plus a `_seal_port_method` attached at line 231 - i.e. the port that already satisfies the runner contract, the fence, and
+  the sealing path this batch made canonical. **Reusing it is the honest choice on evidence: a second fake port would be a second
+  definition of the same contract, which is the drift this whole revision batch exists to remove.**
+- **State:** HEAD `eb3c1f1e` plus this checkpoint; item 5's fixture unwritten; items 1-4 complete and committed; no stack, no hardware,
+  nothing deleted, nothing pushed.
