@@ -26298,3 +26298,20 @@ picture in both directions.**
 - **What the boundary has taught this batch, in one sentence:** the focused sets were green, the nine-phase case sealed, the artifact read back from its records - **and a defect that would have failed every real capture sat
   underneath all of it**, visible only to the full gate. **That is the argument for the boundary existing, and it is why the boundary result is not a formality.**
 - **State:** the module gate's re-run is in flight; the teleop gate and CTest have not been run for this boundary; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
+
+## CP-1579 — The demo module's full xdist gate PASSES: `demo_rc=0`, 5731 passed, 163 skipped
+
+- **The numbers, from this run and no other:**
+  ```
+  resolved tmpdir: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/scratch/final-boundary-20260929-201359/tmp
+  5731 passed, 163 skipped, 4 warnings in 228.28s
+  demo_rc=0 elapsed_s=229 cpus=32 workers=8
+  ```
+  **`-n 8` on 32 CPUs, benchmark excluded, JUnit at `experiments/final-boundary/demo-junit.xml`, the resolved tempdir printed by the exact interpreter and inside the registered scratch.**
+- **And the count moved for the right reason:** **5731 passed against the earlier batch's 5651** - the difference is this batch's own tests (the nine-phase case, the sealed-artifact assertions, the campaign gate,
+  the CLI gates) plus the ones the fixtures' completion re-enabled.
+- **The path here is worth one line, because it is the whole point of a boundary:** the first run was **`24 failed`**; reading the failures named **one production defect** (`CaseEvidenceDriver.observe_capture` held the
+  end-effector and never forwarded it - it would have failed **every real capture**) and **four fixture lags**; all 24 were cleared; the re-run is **green**.
+- **What remains for this boundary:** the **teleop gate** (just launched, `colcon test --packages-select so101_teleop`) and **CTest**. **The boundary is not complete until all three are green and recorded together**, and the
+  packet will not be updated before that.
+- **State:** nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
