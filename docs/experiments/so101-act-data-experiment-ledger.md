@@ -17180,3 +17180,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   green; this is the publishing half's central piece of work.
 - **Evidence:** the contract read is in this round's tool output; scratch `<R>/scratch/r698.<n>` with `TMPDIR` verified
   through the exact test interpreter; log `beh-r698.log`.
+
+## CP-1104 — Correction: the comparator architecture already exists, and the aggregator already uses part of it
+
+- **Checked before building, and the layer is there.** `src/act/task8_measurement_formulas.py` - this task's Task 2 module -
+  already provides exactly what CP-1103 said had to be rebuilt:
+  | surface | role |
+  | --- | --- |
+  | `require_raw_inputs(payload)` | refuses a payload that is not raw evidence |
+  | `compute_field(field, raw, contract)` | one field's result set against the contract's comparator |
+  | `compute_head_search_fields(raw, contract)` / `compute_support_fields(raw, contract)` | the **21 + 7** groupings the contract defines |
+  | `build_head_closed_sample(...)` / `build_support_closed_sample(...)` | the **approved closed-sample builders** the review names |
+  | `build_field_report(sample, root)` | a report document from a closed sample |
+  **And the aggregator already calls it:** `verdicts[field] = compute_field(field, raw, contract)["verdict"]` - so the entry
+  is not missing the comparator architecture, it is **partially wired to it**.
+- **So CP-1103's conclusion was too pessimistic and this corrects it:** the work is not "rebuild the checks on
+  comparators" but **finish wiring the entry to the comparator layer for the v2 contract** - the v1 `thresholds` reads
+  only need to be bypassed when the contract carries no `thresholds`, and the five aggregate checks derived from the
+  per-field verdicts instead.
+- **The one thing I have not read, and will not assume:** how the contract's **28 fields group into the five check names**
+  (`fov`, `collision`, `search`, `synchronization`, `execution`) that the ready document reports. That mapping either
+  exists in the v2 metadata or has to be defined, and it is the next thing to read - not to invent.
+- **State, unchanged: the module is at 1 failed / 18 passed**, the failure being CP-1100's proven RED. Boundary IV's index
+  half is complete; this is the publishing half's remaining wiring, and it is smaller than CP-1103 implied.
+- **Evidence:** the module surface above is this round's tool output; scratch `<R>/scratch/r698.<n>` with `TMPDIR`
+  verified through the exact test interpreter.
