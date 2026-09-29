@@ -31241,3 +31241,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   missing mount is the assembly already proven in CP-1819.** P1-1 through P1-4 CLOSED. The demo RED's clean
   re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they are
   not re-stated.**
+
+## CP-1822 — Two manifests, and the route's must carry the case's own ids
+
+- **The full-case harness freezes the case in a TASK-8 LIVE manifest:**
+  ```python
+  manifest = build_task8_live_manifest(anchors, source_sha256="a"*64, runtime_config_sha256="b"*64,
+                                       collection_config_sha256="c"*64, contact_policy_fingerprint="d"*64, …)
+  write_new_manifest(manifest_path, manifest)
+  digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+  ```
+  **while the expert route's document comes from a TASK-6 ROUTE manifest** - the one `build_route_manifest(...)` builds
+  over `scene.xml`, `task6_route_plugins.yaml` and `task6_visible_approach_v1.json`, and the only kind
+  `route_motion_configuration` accepts (`require_route_sources`). **They are different documents for different purposes,
+  and the full case needs both.**
+- **And the second detail makes the wiring precise rather than approximate:** the production factory is built per request
+  - `SelectedApproachCandidate(… session_id=request["session_id"], attempt_id=request["attempt_id"] …)` - **so the route
+  manifest must carry the CASE's session and attempt ids, or the route would be evaluated for a different run.** Which is
+  exactly the same discipline the anchors manifest already follows (its anchors carry `cup_start_m`/`neck_start_rad`
+  per anchor), applied to the route.
+- **So the drive's remaining edit is now fully determined:**
+  1. build a **route** manifest with the case's `session_id`/`attempt_id` (the values the harness already threads:
+     `session_id="session-298"`, `attempt_id="full-01"`);
+  2. `route_motion_configuration(route_manifest)` → the document whose `model_sha256` is the ACT scene's
+     `3c876e7bbf879dbf…` (CP-1816);
+  3. build the checker → learn its hash;
+  4. build the production factory over the same three config files, with the case's ids and
+     `policy_fingerprint=manifest["contact_policy_fingerprint"]`;
+  5. pass `expert_route_factory` and `route_motion` to `_prepare_child_case`, then **mount the screen on the returned
+     port** with sources whose `contact_pairs.model_sha256` is the checker's;
+  6. run, and if the full case passes, **remove the `xfail` and the duplicate chain together**.
+- **State:** **P1-5 in progress with the drive's last unknown removed: it needs a route manifest beside the case's live
+  manifest, carrying the case's own ids.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final
+  gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
