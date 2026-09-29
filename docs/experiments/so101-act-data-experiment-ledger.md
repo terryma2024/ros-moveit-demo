@@ -22842,3 +22842,19 @@ not an inference of mine.**
   real deadline, so the fixture's request deadline is a knob I should shorten when iterating rather than waiting a minute per probe.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1379 — Both the interval's requirements look satisfiable, so the next move is to instrument rather than to guess again
+
+- **Read:** `_post_stop_interval` is documented as "select after a fresh stopped frame and 100 ms of advancing physics", it takes the marker from
+  the fence and validates it, and the loop's tail builds the observation, calls `history_verifier` and `reference_verifier` and then either
+  returns or **raises a named error** - `SEARCH_PHYSICS_HISTORY_INVALID` and its neighbours. **So a failure inside that path would surface by name,
+  not as a deadline.** My boundary advances one step per `capture` and the interval needs fifty, which is satisfiable; the real 100 ms is
+  satisfiable with the poll sleep the segment already does.
+- **Therefore the deadline expiry must be in the FIRST half of the loop** - `_next` waiting on `sources.capture` until `max_wait`, or the
+  `tick`/`validate_search_result` path cycling - **and I have guessed at that half three times now. The honest instrument is to count the calls:
+  a two-line counter in `_Boundary`/`_ChildSources` that prints how many times `search`, `capture` and the fence are called, plus the last
+  decision seen.**
+- **And the probe gets faster:** per CP-1378's lesson, the fixture's request deadline is shortened for iteration so a failing probe costs seconds
+  rather than a minute. **Both changes are mine to make in the fixture, and neither touches production.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
