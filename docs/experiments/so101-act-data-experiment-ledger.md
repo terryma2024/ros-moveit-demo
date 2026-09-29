@@ -22581,3 +22581,24 @@ not an inference of mine.**
   a packet later should not have to infer it, and because the owner may have a view on priority that I do not.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1361 — The whole substitution surface, in one place: eleven pieces, all named by production validation
+
+- **Read (`pick_place_search_segment.py:38-58`):**
+  ```python
+  PickPlaceSearchSegment(sources, adapter, scene_port, geometry: TaskGeometry, *,
+                         operation_guard, history_verifier, reference_verifier,
+                         owner_verifier, native_ingress_verifier,
+                         max_source_wait_s: float, poll_interval_s: float,
+                         monotonic=time.monotonic, sleep=time.sleep, clock_ns=time.monotonic_ns)
+  ```
+  with the constructor requiring a real `TaskGeometry`, **five callables** (`operation_guard`, `history_verifier`, `reference_verifier`,
+  `owner_verifier`, `native_ingress_verifier`), and positive timings with `poll <= max_wait` - else `SEARCH_SEGMENT_CONFIG_INVALID`.
+- **So P1-5's harness is a list, not a mystery:** the MuJoCo `sources`, the controller `adapter`, the MoveIt `scene_port`, a real
+  `TaskGeometry`, the five verifiers, the two timing values, and the clock/sleep injectables. **Each is a small substituted object, each
+  validated by production code that names what it wants, and the segment then builds the observation, the physical readback and the proofs by
+  construction rather than by fabrication.**
+- **And the clock/sleep injectables are a gift:** `monotonic`, `sleep` and `clock_ns` are parameters, so a substituted boundary can drive the
+  nine phases deterministically - **no wall-clock waiting, no stack, and the same discipline the repository already uses elsewhere.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
