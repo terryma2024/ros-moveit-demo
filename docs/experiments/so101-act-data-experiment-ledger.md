@@ -16451,3 +16451,32 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Next: Boundary II** - the Task 5 production MuJoCo measurement driver - beginning with its RED, and with the two
   facts this stretch established: the config contract at `config/act/task8-calibration-measurement-contract-v2.json` is
   an **unbound template**, and `production_driver()` must be composed from the launch entry with real adapters.
+
+## CP-1066 — Boundary II's first failure, proven by execution: an anchor can seal CLOSED with zero phase coverage
+
+- **RED, at the intended interface and reached by running the real driver:** with fake external I/O only - a fake
+  stack, a fake clock exposing `monotonic()`, a fake detector and controller, and a **fake phase camera that records its
+  calls** - plus a **real** `CalibrationMeasurementContext`, `Task8MujocoMeasurementDriver.run()` launches and closes all
+  three anchors, calls cleanup, seals a document... and the phase camera is invoked **zero** times:
+  ```
+  E  AssertionError: nine phases per anchor, saw 0
+  E  assert 0 == (3 * 9)
+  ```
+  So a Task 8 calibration measurement can seal **CLOSED** while **no phase coverage was ever evaluated** - the coverage
+  the measurement contract's phase matrix depends on. Command:
+  `pytest -q -p no:cacheprovider test/test_act_task8_measurement_driver.py -k phase_replay` -> **rc=1**, scratch
+  `<R>/scratch/r667c.<n>` with `TMPDIR` verified through the exact test interpreter.
+- **What the driver does and does not do today, read from its source rather than inferred** (`task8_measurement_driver.py`):
+  it stores `phase_camera` in `__init__` and **never calls it**; `_acquire` writes ten `geometry-NN` records carrying
+  `source_stamp`, `receive_monotonic_s`, session/reset/attempt, `physics_step` and detector/controller replies;
+  `_write_record` refuses `FORBIDDEN_OUTPUT_TOKENS` (`PASS`, `FAIL`, `qualified`, `visible`, `target_in_view`,
+  `contact_ok`, `_ok`) so the raw layer's no-verdict rule **is** enforced; the index rows already carry payload path,
+  sha256, encoding and shape.
+- **Three fixture errors of mine were spent getting the RED to the right assertion, and they are recorded because they
+  are not production facts:** a `SimpleNamespace` context that lacked `contract_sha256`, a `clock` passed as a bare
+  callable where the driver calls `clock.monotonic()`, and (from the previous round) a `Path` in argv. Each was a fake,
+  not a defect.
+- **The fix this RED demands** is the substantial half of Boundary II: the per-anchor **2 ms nine-phase replay** through
+  the real phase camera, the live search, the fixed non-contact arm probe, CameraInfo/TF/raw rows per anchor, real
+  session/reset/attempt readback, and generation-scoped single-flight cleanup with contamination on cleanup failure -
+  each of which then needs its own RED. **No production code has been changed for Boundary II yet.**
