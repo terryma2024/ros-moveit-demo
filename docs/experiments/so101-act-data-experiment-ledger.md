@@ -24950,3 +24950,17 @@ picture in both directions.**
   rounds left and P2 plus the final boundary and the review still ahead, **that is feasible at this pace but it is the batch's critical path - and if the owner prefers an earlier
   review, the honest milestone to review would be APPROACH end-to-end plus the pattern it establishes.**
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1496 — The builder can build APPROACH's inspection authority, from admitted values only
+
+- **`23 passed`** (`experiments/gate8-p14/builder4.log`) across the child-port, path-screen and route-diagnostic files, after the builder gained
+  `route_motion` (the admitted document) and a `path_process_factory` seam: it builds the `MujocoPathProcess` checker from **the same configuration the motion
+  path already uses**, **validates the model hash against it** (`APPROACH_CHECKER_MODEL_HASH_INVALID` otherwise), and constructs the screen **only when that
+  document is supplied**. **A SEARCH-only caller gets no screen, and `execute_approach` refuses by name exactly as it does today** - so nothing about the
+  current production path changed except that a full case can now be wired.
+- **And a method lesson worth recording, because it cost two runs:** two `str.replace` calls **silently did nothing** this round (a parameter insertion and a
+  signature edit whose anchors did not match), and the first failure showed up only as `NameError: route_motion is not defined` at run time. **The fix was
+  line-based insertion with the line number printed.** The standing rule for this batch is therefore strengthened: **every scripted edit either asserts its
+  anchor or works by line number and reports what it changed** - a silent no-op that still parses is the most expensive kind of edit, because the file looks
+  edited and the failure appears somewhere else entirely.
+- **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
