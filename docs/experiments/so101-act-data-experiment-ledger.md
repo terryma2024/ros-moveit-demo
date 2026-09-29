@@ -29755,3 +29755,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1's second half is closed with a RED→GREEN on the real interface; its first half - the default real
   bottom-I/O composition, so the formal entry does not depend on `SO101_TASK8_BOTTOM_IO_SEAM` - is next**, followed by
   P1-2 … P1-6. The demo RED's fix is committed and its rate is being measured (before: 2 failures in 3 full-gate runs).
+
+## CP-1772 — P1-1's first half, scoped against the code: it needs P1-3's geometry, and three of the six bottom inputs
+
+- **Read from `build_real_providers` (line 456):** the builder falls back to `_bottom_io_from_seam()` when **any** of six
+  values is `None` - `io_client`, `yolo_detector_factory`, `frame_source`, `phase_path`, `target`,
+  `occluder_geometry` - and **without the seam they stay `None`, so the default (no-seam) production path cannot
+  produce the bottom I/O at all.** That is the verdict's P1-1 first half, and it is a composition gap rather than a
+  missing branch.
+- **And scoping it shows where the real work is:**
+  | bottom input | how it can come from production |
+  | --- | --- |
+  | `yolo_detector_factory` | **does not need the seam at all**: the builder already imports `build_detector` and `DetectorFactoryOptions` and builds the detector from the descriptor's admitted CUDA block (lines 487+) |
+  | `io_client` | the real IPC client to the child - the same one `pick_place_child_port.py` wires |
+  | `frame_source` | the real camera frames, from the child's readback rather than a stand-in |
+  | `phase_path`, `target`, `occluder_geometry` | **these three are P1-3's subject**: a frozen phase-camera matrix, the dynamic target and the occluder geometry bound to real model/TF/intrinsics |
+- **Which makes the dependency explicit rather than discovered later: P1-1's first half cannot be finished honestly
+  before P1-3's matrix exists**, because half of what it must supply *is* that matrix's output. The order in which the
+  work is done inside P1-1 … P1-6 is the verdict's, but the dependency is real and is recorded here so it is not a
+  surprise in the middle of a patch.
+- **What can be done first without it:** the detector factory (already real), the client and the frame source from the
+  production child wiring - and the honest default path must **fail closed by name** for the three geometry inputs
+  until P1-3 supplies them, rather than substituting defaults the way the phase-camera reader does today.
+- **State:** **P1-1's second half is GREEN; its first half is scoped with a dependency on P1-3 recorded**; the demo
+  RED's rate measurement is still running (`demo4.log` green, `demo5.log` in flight). No other controlled change yet.
