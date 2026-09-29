@@ -590,3 +590,34 @@ def test_the_published_report_binds_to_a_runtime_head_search_descriptor(tmp_path
     require_gate(report, "task8_live")
     bound = validate_head_search_binding(runtime, report)
     assert bound is not None, "a TASK8_READY report binds to a matching runtime descriptor"
+
+
+def test_a_runtime_that_does_not_match_the_measured_descriptor_is_refused(tmp_path):
+    """Boundary IV item 5, negative direction: a report measured under one configuration cannot bind another."""
+
+    import sys
+
+    from so101_demo.act.head_search_binding import validate_head_search_binding
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_act_head_search_binding import _inputs
+
+    runtime = _inputs(tmp_path)[0]
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _v2_batch(tmp_path / "batch", contract, descriptor=runtime["head_search"])
+    report = json.loads(Path(aggregate_task8_calibration(
+        (batch,), contract, tmp_path / "out")["calibration_report"]).read_text())
+    assert validate_head_search_binding(runtime, report) is not None, "the matching pairing binds"
+
+    other = json.loads(json.dumps(runtime))
+    other["head_search"]["detector"]["model_id"] = "different-cup-model"
+    with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
+        validate_head_search_binding(other, report)
+
+    other = json.loads(json.dumps(runtime))
+    other["head_search"]["motion"]["goal_tolerance_rad"] = 0.05
+    with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
+        validate_head_search_binding(other, report)
