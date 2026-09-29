@@ -20583,3 +20583,23 @@ not an inference of mine.**
   the next round starts with.**
 - **State:** aggregator source + `_v2_batch` edits uncommitted while red; `_sealed_batch` at its exact prior text; suite at
   `15 failed / 13 passed`; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1256 — Correction to CP-1255: the batches come from a **fixture**, and that is the single place to fix
+
+- **The test body, read rather than inferred:**
+  ```python
+  def test_aggregator_never_trusts_raw_pass_labels(tmp_path, contract):
+      batch = batch_factory(tmp_path, contract,
+                            lock_frames={"default": 2, "left": 4, "forward": 4},
+                            declared_status="PASS")
+      report = _report(aggregate_task8_calibration((batch,), contract, tmp_path / "out"))
+  ```
+  So the batches are built by **`batch_factory`**, a pytest **fixture** - which is why my `^def _` grep never saw it and why the
+  name-to-builder mapping said "no builder". **CP-1255's statement that each test builds its batch inline was wrong**; the shared
+  helper is `_report`, but the shared **builder** is `batch_factory`, and the fixture's own definition line is printed above.
+- **That makes item 4's fixture work much smaller than the last two rounds assumed: one fixture, one edit.** Add the descriptor to the
+  batch `batch_factory` seals - write `runtime-descriptor.json`, index it, and seal once with `batch_sha256` over the contract's
+  canonicalisation - and the fifteen failures become the four existing negatives plus the two new cases. **No test bodies need
+  touching, and `_report` stays alone**, which is what CP-1255 correctly insisted on for a different reason.
+- **State:** aggregator source + `_v2_batch` edits uncommitted while red; suite at `15 failed / 13 passed`; no stack, no hardware,
+  nothing deleted, nothing pushed.
