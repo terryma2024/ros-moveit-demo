@@ -22223,3 +22223,19 @@ not an inference of mine.**
   block runs, the comparison executes, and the assertion is meaningful.
 - **State:** P1-4's source and test changes uncommitted while its two tests are red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1341 — The RED's three-step recipe, so the next round implements rather than re-derives it
+
+- **Step 1 - a valid root:** `_v2_batch(root, contract, descriptor=<inner block>)` writes a schema-true `measurements.json` (the 28 published
+  entries, the camera measurements, the observed lock frames) **without** a `head_search` block, and seals the root with the **full**
+  indexed `runtime-descriptor.json` - which is exactly the production layer split.
+- **Step 2 - inject the payload's block:** rewrite `measurements.json` adding `"head_search": <inner block>`, which is what a production
+  `measurements.json` carries and what the existing coverage omits.
+- **Step 3 - re-seal with the file indexed:** call `_sealed_batch(root, payload, identities, extra_files={"measurements.json": <digest>},
+  descriptor=<inner block>)`. Its `extra_files` support exists for exactly this, its `descriptor_path.exists()` guard leaves the already
+  sealed full descriptor in place, and the closure check is satisfied because the file is on disk and named in the index.
+- **Then the test is meaningful:** `aggregate_task8_calibration((root,), contract, out)` runs the head-search block, and the comparison
+  under review decides the outcome - passing for an equal payload (today it raises `CALIBRATION_IDENTITY_MISMATCH`) and raising for a
+  payload that claims a different configuration.
+- **State:** P1-4's source and test changes uncommitted while its two tests are red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
