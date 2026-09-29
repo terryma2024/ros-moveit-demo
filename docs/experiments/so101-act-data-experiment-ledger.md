@@ -17420,3 +17420,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   comparison with a single publish as a *targeted* check (currently characterized at CP-1099), and then the boundary's
   remaining substance. No full suite was run, per the owner's instruction; nothing weakened, `REQUIRED_CHECKS` untouched,
   nothing deleted, no push, no stack, no hardware.
+
+## CP-1115 — Item 5 started: the binding validator is green on its own suite, and the integration is a three-way pairing
+
+- **Read the interface before testing it:** `validate_head_search_binding(runtime, calibration)` in
+  `src/act/head_search_binding.py` pairs a **runtime descriptor** (`{"schema_version": 1, "head_search": {detector,
+  camera, motion}}`, with the detector's eleven keys and a no-CPU-fallback rule) against the **published calibration
+  report**, and its own suite `test/test_act_head_search_binding.py` **passes 14 tests**.
+- **The integration RED answers a real code rather than a fixture error:** pairing the aggregator's freshly published
+  report with the binding fixture's runtime gives **`HEAD_SEARCH_SAMPLE_MISMATCH`** - so the binding does not check two
+  documents but **three**: the runtime, the report, and the report's cited head-search sample must agree, and a runtime
+  built for one sample cannot be paired with a report citing another. That is a genuine finding about item 5's shape, and
+  it means the honest integration test **derives the runtime from the report's cited sample** rather than borrowing a
+  fixture built for a different one.
+- **State: 1 failed / 20 passed** in the aggregator module, that failure being this proof-of-shape RED; the gate test and
+  the readback test remain green (38 passed across both modules before it). The next round reads how the binding compares
+  the sample (`HEAD_SEARCH_SAMPLE_MISMATCH`'s own condition) and builds the runtime from the report, then checks the
+  negative direction - a mismatched pairing must still be refused.
+- **Evidence:** scratch `<R>/scratch/r716.<n>` with `TMPDIR` verified through the exact test interpreter; logs
+  `beh-r714.log` (binding suite, 14 passed) and `beh-r716.log` (the RED). No full suite was run, per the owner's
+  instruction; nothing weakened, nothing deleted, no push, no stack, no hardware.
