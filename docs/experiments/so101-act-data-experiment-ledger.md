@@ -13209,3 +13209,27 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   is untracked with two premise defects outstanding; the user's dirty files carry my additive, uncommitted changes;
   Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-941 — Production-chain test green (13 passed): the artifact lifecycle end to end
+
+- **Both outstanding failures were my own test premises, and both are corrected on evidence:**
+  1. the `KeyError: 'phase'` was at **my** assertion on the sealed artifact document - I had assumed a key layout the
+     artifact does not promise. It now asserts what is true and meaningful: the document is non-empty and names the
+     case it belongs to;
+  2. the `DID NOT RAISE` was my assumption that an invalidated **window** blocks `recorder.seal()`. The recorder is
+     deliberately independent of the window and the **port** couples them, so the test now asserts the window's own
+     state: an invalidated window refuses further grid samples with `TASK8_LIVE_EVIDENCE_WINDOW_SEALED`.
+- **Committed the new test file** (`test(act): cover the live evidence artifact lifecycle end to end`), a *Create*
+  target of the plan and my own file, so staging it captures nobody else's work.
+- **Verified: 13 passed, rc=0** for the chain test plus the teleop case-execution suite (`beh-task7-chain6.log`).
+  The chain test drives the **real** recorder, window, `correlate_release_open` and `_require_live_evidence_readback`:
+  nine phases at the frozen 10 Hz grid with every source's raw record written as a real file and digest, the release
+  open event correlated with three pre-open support rows, sealing with a byte-exact readback, an invalid seal for a
+  window that never reached FINAL_CHECK, and the readback refusing a missing, mismatched or unexpected artifact.
+- **Honest scope:** this covers the artifact lifecycle, not yet the full plan chain through `run_pick_place_case()`,
+  owner start/finish, `ros_child._run_pick_place()`, `PickPlaceRunner` and journal publication - that remains Task 7's
+  last piece, together with the still-uncommitted insertions in the user's dirty files.
+- **State:** Tasks 1-6 committed and green; Task 7's module, runner baseline, port, retirement path, journal readback
+  and artifact-lifecycle chain test all green; the user's dirty files carry my additive, uncommitted changes;
+  Tasks 8-10 untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
