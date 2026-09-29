@@ -23103,3 +23103,17 @@ not an inference of mine.**
   The rounds where I inferred instead of reading are exactly the ones this list is meant to prevent.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1394 — The readback is assembled from production vocabularies, and the run's next refusal is captured
+
+- **Written, following CP-1393's recipe:** each queued row now carries `source_stamps_s` and a **seven-source** `source_received_wall_s` (stamped
+  live), a `scene` and `contact` filled against the **imported** `SCENE_KEYS`/`FRAME_KEYS` with the world's session, epoch, step, paused flag, sim
+  time and model digest, and `observation`/`reference` documents carrying an 8-element state with a normalised neck pair and **real uint8
+  (480, 640, 3) arrays** - the camera substitution. The sources instance also exposes `contacts.safe()` and `contact_pairs` with `model_sha256`
+  and `for_phase`, which the port reads directly.
+- **No production module was changed to make this pass**, and every key set came from its production definition (`scene_state.SCENE_KEYS`,
+  `contact_evidence.FRAME_KEYS`, the suite's re-exported `READBACK_SOURCES`).
+- **The run's outcome line is printed above** for the next round's read; the fixture is intact and compiles, so whatever it says is the next shape
+  the port wants, named by the port itself.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
