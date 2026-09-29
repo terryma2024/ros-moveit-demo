@@ -246,7 +246,8 @@ class _Boundary:
         # readback, the proofs and the scene receipt are built by production code from substituted I/O.
         # the shared decision builder, with THIS case's identity - built from it, not copied from it
         decision = dict(_locked(), attempt_id=request["attempt_id"])
-        sources = _ChildSources(session_id=request["session_id"], reset_epoch=self.reset_epoch)
+        sources = _ChildSources(session_id=request["session_id"], reset_epoch=self.reset_epoch,
+                                model_sha256=getattr(self, "model_sha256", None))
         # the fence and the deadline both compare against the segment's clock, so the clock is the REAL one -
         # the segment suite's `_segment` helper pins it to a frozen list, which cannot work here. Everything
         # else (boundary, verifiers, geometry, timings) comes from the imported doubles unchanged.
@@ -293,7 +294,7 @@ class _ChildSources(_Sources):
     assertion, which by construction cannot hold for a second case.
     """
 
-    def __init__(self, *, session_id, reset_epoch):
+    def __init__(self, *, session_id, reset_epoch, model_sha256=None):
         wall = time.monotonic()
         # one deliberate retry, then every step the post-stop interval needs: the interval selects only
         # after fifty ADVANCING steps, so the queue carries them one by one rather than a single jump
@@ -306,7 +307,10 @@ class _ChildSources(_Sources):
         self._session_id = session_id
         self._reset_epoch = reset_epoch
         self._step = 0
-        self._model_sha256 = "e" * 64
+        # P1-5: the scene the segment produces carries this hash, and the port compares it with
+        # `sources.contact_pairs.model_sha256`. Production has ONE model, so a caller that knows the real hash passes
+        # it; the default keeps the fixture's own constant for every caller that does not.
+        self._model_sha256 = model_sha256 or "e" * 64
         self.contact_pairs = SimpleNamespace(model_sha256=self._model_sha256,
                                              for_phase=lambda phase: frozenset())    # ditto: a dict here reads as a hazard
         self.contacts = SimpleNamespace(safe=lambda: True)

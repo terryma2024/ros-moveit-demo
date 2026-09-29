@@ -32054,3 +32054,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress with its root cause confirmed and its fix identified as a single value that must reach the
   fixture's model hash.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the
   re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1846 — The scope check PASSES: CP-1845's root cause was right, and the next members are in `settings`
+
+- **The model-hash coherence was the scope failure, and fixing it cleared the whole guard:**
+  ```
+  before: pick_place_search_port.py:358  ValueError("physical readback scope")
+  after:  pick_place_search_port.py:398  AttributeError: 'SimpleNamespace' object has no attribute 'joint_tolerance'
+  ```
+  **`run_phase` -> `_search_evidence` now gets past the entire scope check** - the `SimulationEvidence`, the scene and
+  contact documents, their session/epoch/step/time agreement within `skew`, and `scene["model_sha256"] ==
+  sources.contact_pairs.model_sha256` - **all satisfied, because the three readers of that one hash now name the same
+  compiled model: the scene the segment produces, the pairs bound to the checker, and the checker itself.**
+- **And the next refusal is the readback's remaining members, every one of which `settings` already carries:**
+  | member | the port reads it as | `settings` key (from `bound_act_source_settings`) |
+  | --- | --- | --- |
+  | `max_skew` | `finite(sources.readback.max_skew)` | **`max_source_skew_s`** - already supplied (CP-1843's edit) |
+  | `joint_tolerance` | the current refusal, line 398 | **`joint_tolerance_rad`** (0.002) |
+  | `cup_position_tolerance` | the production factory used `readback.cup_position_tolerance` | **`cup_pose_tolerance_m`** (1e-8) |
+  **so the readback's surface is calibrated data, not a protocol to re-implement** - **which is why the honest supply is a
+  plain namespace whose numbers come from the admitted report rather than from a double built to satisfy a call.**
+- **The method that found this is worth repeating because it has now worked twice:** instrument the guard's own
+  sub-conditions, run, and let the unprinted one name itself (CP-1845) - **then fix the value rather than the check.**
+  Both times the fix was one value from an admitted document, and both times the check that refused was right.
+- **State:** **P1-5 in progress: `run_phase` clears the physical-readback scope check, and what remains is to supply the
+  readback's calibrated members from `settings` - `joint_tolerance` and `cup_position_tolerance` first.** P1-1 through
+  P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
+  statuses are unchanged, so they are not re-stated.**
