@@ -20701,3 +20701,16 @@ not an inference of mine.**
   are green inside the 28.
 - **State:** committed with its tests green; build tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing
   pushed.
+
+## CP-1262 — Astra item 4 COMPLETE: 30 passed, with both new cases
+
+- **GREEN: `30 passed, rc=0`** (`rev4-m.log`), and the two cases Astra asked for are in:
+  | case | assertion |
+  | --- | --- |
+  | a multi-root set with **one bare root** | raises `CALIBRATION_DESCRIPTOR_MISSING` - the fixture builds that root with `descriptor=False`, so the refusal is exercised rather than described |
+  | **identical sealed payloads** across roots | the aggregation publishes a sample whose `head_search` block **is** the sealed descriptor's (the assertion moved from the report to `head-search-qualification.json`, which is where the published sample actually lives - my first attempt read the report and got a `KeyError`, which the run told me plainly) |
+  **The four existing negatives are green inside the 30**, so nothing was traded for the new cases.
+- **Item 4 therefore stands complete on both halves:** the code requires a sealed, indexed descriptor in **every** root and has **no
+  second authority**, and the suite both proves the agreement case and refuses the disagreement and the absence.
+- **State:** committed with its tests green; build tree synced for the aggregator; no stack, no hardware, nothing deleted, nothing
+  pushed.
