@@ -163,4 +163,4 @@ def test_four_negatives_break_the_chain_and_the_first_two_hit_the_productions_ow
     accepting = Task8LiveEvidenceRecorder(case_id=SCENARIO, evidence_root=tmp_path / "edited",
                                          session_id=SESSION, attempt_id=ATTEMPT)
     with pytest.raises(ValueError):
-        accepting.append(edited)
+        accepting.append(edited, kind="grid")   # the recorder validates what it accepts
