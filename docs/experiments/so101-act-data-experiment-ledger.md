@@ -11127,3 +11127,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
   ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-857 — Correction to CP-856: the identity derivations exist, the assembler does not
+
+- **Running the resolver beat reading it:** `installed_calibration_identity()` returns
+  `config_hash = 0aef56dfaf527e3fa7ffe53e1a073ed417a74d1a690cb18a7c670d7708b8da3f`, computed by hashing every
+  file under the installed ACT profile (`share/assets/mujoco/act`, `share/config/mujoco/act`) canonically. That is
+  the same digest the earlier generation recorded as `config_sha256` (CP-855) and the same one inside this
+  generation's provenance document, so the ACT-profile identity has a **code-defined derivation** and three
+  independent generations agree on its value.
+- **The contact fingerprint is defined too:** `core/policy.py:107 TaskPolicyFingerprint` carries
+  `motion_policy_sha256` (required) and `contact_policy_sha256` (optional) - the measurement identity's
+  `contact_policy_fingerprint` is that contact hash.
+- **So CP-856 is corrected in one respect:** the *values* are not underived; what is missing is the **assembler**
+  that calls those rules and writes the five-key document. That is a much smaller gap than "no producer", and I
+  am recording the correction rather than leaving the earlier, stronger claim standing.
+- **Remaining to confirm:** which field name each digest maps to (`act_profile_sha256` versus
+  `runtime_config_sha256`) and the derivation rules for `runtime_config_sha256` and `anchors_sha256` - after
+  which the identities document can be assembled honestly from code rules with no invented value anywhere.
+- **Boundaries:** no runtime composed, no hardware, no Gazebo, no push, no evidence deleted, no gate lowered, no
+  ROS Python touched; user's 31 modified and 12 untracked paths untouched; formal accepted 0/0/0;
+  `collection_*` NOT_PROVISIONED.
