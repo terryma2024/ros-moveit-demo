@@ -15400,3 +15400,29 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   (CP-1013); Task 9 now has a named, sanctioned runner to invoke rather than three improvised substitutes; Task 10
   blocked until the 17 search values are reviewed. No package-gate claim yet - the first run of this runner has not
   happened - and no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1027 — The gate tool answers the socket question, and the first sanctioned gate run is in flight
+
+- **`--process-id-chars {4..12}`, described in the tool's own help as "physical process directory width; shorten for
+  long evidence roots"** - that is the repository's own, designed remedy for exactly the conflict this session spent
+  CP-1012/CP-1016/CP-1022 on. The tool expects long evidence roots and shortens the per-run process directory to keep
+  derived paths (including the child's IPC socket) inside the platform limit. **So the question I put to the owner is
+  answered by the tool's design rather than by a policy choice**, and I am withdrawing it for the second and final time -
+  this time with the mechanism named, not merely a hope that it dissolves.
+- **Two more of its options matter for how the run is reported, and both are provenance features rather than
+  conveniences:** `--expected-source-commit` lets the result be tied to a commit, and `--allow-dirty` (with
+  `--allow-dirty-path` for a single audit-only path) is explicitly documented as producing a
+  **"provenance-recorded diagnostic run from a dirty worktree"**. This worktree carries the owner's uncommitted work, so
+  `--allow-dirty` is the honest flag: the run will be recorded as a diagnostic, **not** as a formal gate, and calling it
+  a gate pass would misrepresent both the run and the work it measured.
+- **In flight (background job `bash-2751`):**
+  `tools/so101_pytest_gate.py --evidence-root $R/gate-r620 --run-id r620 --workers 8 --python $R/test-venv/bin/python
+  --process-id-chars 4 --allow-dirty --expected-source-commit <HEAD>`, from a fresh verified scratch with
+  `TMPDIR`/`TMP`/`TEMP` set there, at HEAD `15e3647e` with 43 dirty paths. Log:
+  `experiments/gate6-batch3-py-gate/beh-r620-gate.log`.
+- **Why `--process-id-chars 4`:** the documented minimum, chosen deliberately for the long evidence root - the exact
+  situation its help text describes - so that the child IPC socket and the reservation-root paths stay short. If the
+  run still reports `IPC_SOCKET_PATH_TOO_LONG`, that is evidence the knob is insufficient and the question returns with
+  the tool's own limits as its subject; if it does not, the conflict was always a configuration matter.
+- **Not yet claimed:** anything about the run's outcome. It has not finished, and its result - pass or fail, and whether
+  the socket class appears - will be recorded when it settles.
