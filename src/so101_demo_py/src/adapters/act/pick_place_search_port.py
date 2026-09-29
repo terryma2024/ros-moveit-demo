@@ -275,12 +275,16 @@ class PickPlaceSearchPhasePort:
         recorder = self._evidence_recorder
         if recorder is None or not callable(getattr(recorder, "seal", None)):
             raise ValueError("LIVE_EVIDENCE_SEAL_UNAVAILABLE")
+        # The identity comes from the CASE's own state, not the caller's request: the runner's request carries its own
+        # seven keys (mode, stop_after, lifecycle, scenario_id, the two ids and the deadline) and NO epochs, which is why
+        # this raised KeyError('reset_epoch'). The reset epoch is the receipt's, and the release epoch is the one the
+        # seal's own position implies - the case ends after FINAL_CHECK, which carries the incremented epoch.
         identity = {
             "case_id": request["scenario_id"],
             "session_id": request["session_id"],
             "attempt_id": request["attempt_id"],
-            "reset_epoch": request["reset_epoch"],
-            "release_epoch": request["release_epoch"],
+            "reset_epoch": self.boundary.reset.receipt.new_epoch,
+            "release_epoch": self._release_epoch_for("FINAL_CHECK"),
         }
         window = self._live_evidence_window
         if window is not None and not getattr(window, "_sealed", False):
@@ -593,7 +597,13 @@ class PickPlaceSearchPhasePort:
                     "attempt_id": request["attempt_id"],
                     "reset_epoch": self.boundary.reset.receipt.new_epoch,
                     "release_epoch": self._release_epoch_for("RADIAL_RETREAT"), **facts}
-        return self._checked_sequence_document("RADIAL_RETREAT", document)
+        checked = self._checked_sequence_document("RADIAL_RETREAT", document)
+        # the window must SEE every required phase before it can seal, and a retreat segment is one of them: the phase
+        # path records its grid sample here, and the retreat path has to do the same or the seal is refused forever
+        if self._live_evidence_window is not None:
+            self._live_evidence_window.add_grid(
+                self._grid_sample("RADIAL_RETREAT", self._validated_search_observation, checked))
+        return checked
 
     def set_down(self, request, *args, **kwargs):
         return self._boundary_capability("set_down", request, support_distance_max_m=self._support_distance())
@@ -708,8 +718,11 @@ class PickPlaceSearchPhasePort:
                     "release_epoch": self._release_epoch_for(phase), **facts}
         return self._checked_sequence_document(phase, document)
 
-    #: the runner increments its release epoch AFTER the RELEASE phase, so the phases that follow carry the new value
-    _RELEASE_EPOCH_AFTER = ("RADIAL_RETREAT", "FINAL_CHECK")
+    #: The runner increments its release epoch INSIDE the RELEASE iteration, BEFORE it verifies that phase's document -
+    #: so RELEASE's own document already carries the epoch it is creating, and the two phases after it carry the same
+    #: value. Reading the loop rather than assuming the order is what fixed this: the trace showed the runner verifying
+    #: RELEASE with epoch 1 while the document said 0.
+    _RELEASE_EPOCH_AFTER = ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")
 
     def _release_epoch_for(self, phase: str) -> int:
         """The release epoch the runner expects on this phase's document.
