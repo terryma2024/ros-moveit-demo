@@ -827,3 +827,38 @@ def test_placement_stability_span_requires_every_final_check_sample_to_be_stable
         placement_stable_s(stable + [_sample_row("FINAL_CHECK", 1.5, stable=False)])
     with pytest.raises(ValueError, match="PLACEMENT_STABLE_REQUIRED"):
         placement_stable_s([_sample_row("FINAL_CHECK", 1.0, stable=False)])
+
+
+def _contact_pair(geom_a, geom_b, distance):
+    return {"geom1": geom_a, "geom2": geom_b, "signed_distance_m": distance}
+
+
+def test_support_distance_needs_the_exact_pair_in_every_pre_open_frame():
+    from so101_demo.act.task8_live_qualification import support_distance_from_frames
+
+    def frame(stamp, contacts, before=True):
+        return {"phase": "RELEASE", "release_epoch": 7, "before_first_open": before,
+                "source_stamp": stamp, "contacts": contacts}
+
+    good = [frame(1.0, [_contact_pair("cup_a_bottom_collision", "table_collision", -0.002)]),
+            frame(1.1, [_contact_pair("cup_a_bottom_collision", "table_collision", 0.004)]),
+            frame(1.2, [_contact_pair("cup_a_bottom_collision", "table_collision", 0.001)])]
+    assert support_distance_from_frames(good, cup_collision_geom="cup_a_bottom_collision") == pytest.approx(0.004)
+    # a run for the b cup names its own single collision geom and is found just as the a cup's is
+    b_cup = [frame(1.0, [_contact_pair("cup_b_collision", "table_collision", 0.003)]),
+             frame(1.1, [_contact_pair("cup_b_collision", "table_collision", 0.005)]),
+             frame(1.2, [_contact_pair("cup_b_collision", "table_collision", 0.004)])]
+    assert support_distance_from_frames(b_cup, cup_collision_geom="cup_b_collision") == pytest.approx(0.005)
+    # naming a geom the frames do not carry fails the run rather than passing on a missing pair
+    with pytest.raises(ValueError, match="SUPPORT_CONTACT_REQUIRED"):
+        support_distance_from_frames(good, cup_collision_geom="cup_b_collision")
+    with pytest.raises(ValueError, match="CUP_COLLISION_GEOM_REQUIRED"):
+        support_distance_from_frames(good, cup_collision_geom="")
+    # a negative signed distance is floored at zero, and a gap in the stamps is refused
+    floored = [frame(1.0, [_contact_pair("cup_a_bottom_collision", "table_collision", -0.5)]),
+               frame(1.1, [_contact_pair("cup_a_bottom_collision", "table_collision", -0.4)]),
+               frame(1.2, [_contact_pair("cup_a_bottom_collision", "table_collision", -0.3)])]
+    assert support_distance_from_frames(floored, cup_collision_geom="cup_a_bottom_collision") == 0.0
+    with pytest.raises(ValueError, match="SUPPORT_FRAMES_NOT_CONSECUTIVE"):
+        support_distance_from_frames([good[0], good[1], frame(1.35, good[2]["contacts"])],
+                                     cup_collision_geom="cup_a_bottom_collision")

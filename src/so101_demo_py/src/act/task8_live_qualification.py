@@ -227,13 +227,19 @@ LIVE_UNITS = {"grasp_occlusion_window_s": "s", "support_distance_m": "m", "relea
 _IDENTITY_KEYS = ("session_id", "contact_policy_fingerprint", "phase_camera_matrix_sha256")
 
 
-def _support_from_frames(run: dict) -> float:
-    """The plan's raw rule for the cup support distance, applied only when the run carries its own frames."""
+def support_distance_from_frames(frames, *, cup_collision_geom: str,
+                                 table_collision_geom: str = "table_collision") -> float:
+    """The design's `support_distance_m` rule over one run's pre-open frames.
 
-    frames = run.get("support_frames")
-    if not frames:
-        return float(run["cup_support_distance_m"])
-    epoch = run.get("release_epoch")
+    The bottom geom's real name depends on the case's cup (`cup_a_bottom_collision` for `plastic_cup`,
+    `cup_b_collision` for `plastic_cup_b`), so it is supplied by the caller rather than hard-coded. Each of the three
+    consecutive 10 Hz frames immediately before the first open must carry a real contact for the exact pair, the
+    per-frame value is `max(0, signed_distance_m)`, and the run's value is the maximum of the three.
+    """
+
+    if not cup_collision_geom:
+        raise ValueError("CUP_COLLISION_GEOM_REQUIRED: the pair's bottom geom must be named by the caller")
+    epoch = frames[0].get("release_epoch") if frames else None
     pre_open = [frame for frame in frames
                 if frame.get("release_epoch") == epoch and frame.get("phase") == "RELEASE"
                 and frame.get("before_first_open") is True]
@@ -243,14 +249,31 @@ def _support_from_frames(run: dict) -> float:
     for earlier, later in zip(window, window[1:]):
         if abs((later["source_stamp"] - earlier["source_stamp"]) - 0.1) > 0.01:
             raise ValueError("SUPPORT_FRAMES_NOT_CONSECUTIVE: the three samples must be one 10 Hz step apart")
+    values = []
     for frame in window:
-        contacts = frame.get("active_contacts") or ()
-        if not ({"bottom_collision", "table_collision"} <= set(contacts)):
-            raise ValueError("SUPPORT_CONTACT_REQUIRED: bottom_collision and table_collision must both be active")
-        if frame.get("pose_stable") is not True or frame.get("velocity_stable") is not True:
-            raise ValueError("SUPPORT_STABILITY_REQUIRED: pose and velocity must both be stable")
-    # the reported distance is the signed distance floored at zero
-    return max(0.0, max(float(frame["signed_distance_m"]) for frame in window))
+        pair = None
+        for contact in frame.get("contacts") or ():
+            names = {contact.get("geom1"), contact.get("geom2")}
+            if names == {cup_collision_geom, table_collision_geom}:
+                pair = contact
+                break
+        if pair is None:
+            raise ValueError(
+                f"SUPPORT_CONTACT_REQUIRED: no active contact for {cup_collision_geom}/{table_collision_geom}")
+        values.append(max(0.0, float(pair["signed_distance_m"])))
+    return max(values)
+
+
+def _support_from_frames(run: dict) -> float:
+    """One run's `support_distance_m`, taken from its own frames and the case's cup collision geom."""
+
+    frames = run.get("support_frames")
+    if not frames:
+        return float(run["cup_support_distance_m"])
+    geom = run.get("cup_collision_geom")
+    if not geom:
+        raise ValueError("CUP_COLLISION_GEOM_REQUIRED: the run must name its cup's collision geom")
+    return support_distance_from_frames(frames, cup_collision_geom=geom)
 
 
 def derive_live_measurements(full_runs, contract) -> dict:
