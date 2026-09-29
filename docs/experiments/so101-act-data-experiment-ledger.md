@@ -33219,3 +33219,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress: the candidate's vector validation passes and its start validation is next.** P1-1 through
   P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1886 — The start check wants the REAL scene's initial state, and it says so in seven conditions
+
+- **`SelectedApproachCandidate.prepare`'s start validation, read in full:**
+  ```python
+  qpos = vector(scene["qpos"], self.model.nq); qvel = vector(scene["qvel"], self.model.nv)
+  expected = self._manifest["segments"][0]["prior"]
+  actual = tuple(qpos[index] for index in self.joints)
+  if (any(abs(value - target) > self.joint_tolerance for value, target in zip(actual, expected, strict=True))
+          or any(abs(qvel[index]) > self.stop_velocity for index in self.dofs)
+          or any(abs(value - actual[index]) > self.joint_tolerance
+                 for index, value in enumerate(raw["observation"]["state"][:6]))
+          or math.dist(qpos[self.cup_address:self.cup_address + 3], route["cup_start_m"]) > self.cup_tolerance
+          or math.dist(world.object_state.position_world, route["cup_start_m"]) > self.cup_tolerance
+          or abs(abs(qpos[self.cup_address + 3]) - 1.) > .01
+          or any(abs(value) > .01 for value in qpos[self.cup_address + 4:self.cup_address + 7])):
+      raise ValueError("SELECTED_APPROACH_START_INVALID")
+  ```
+  **so the scene must start where the ROUTE says it starts** - the manifest's segment prior at the ACT joints, zero
+  velocity at the controlled dofs, agreement with the decision's own `observation.state`, **and the cup upright at
+  `route["cup_start_m"]` in both the scene's qpos and the world's object state.**
+- **And my fixture cannot satisfy any of those by construction, because it writes `[0.0] * nq`:** the manifest comes from
+  `build_route_manifest(scene_path=assets/mujoco/act/scene.xml, plugin_path=…, profile_path=…)` (CP-1886's read of
+  `_route_manifest`) - **the REAL scene** - so its prior, its cup address and its `cup_start_m` are the real model's, and
+  a frame of zeros is a different world.
+- **Which makes the honest fix unambiguous and large enough to name:** the fixture's frames must carry the real scene's
+  initial `qpos`/`qvel` and the route's `cup_start_m`, **read from the same `scene.xml` the manifest was built from -
+  not chosen to pass the check.** Anything else would be the substitution this drive has refused four times.
+- **State:** **P1-5 in progress: the candidate's start validation is the next check, and it requires the fixture's scene to
+  be the real scene's initial state.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate
+  and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
