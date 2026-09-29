@@ -11715,3 +11715,23 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   uncommitted by design, to go in together at Step 4 with the plan's exact `git add` list.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-877 — Task 1: the full contract source set is staged verbatim; transcription is the last step
+
+- **Staged byte-for-byte from the approved design** into
+  `handoffs/20260929-measurement-protocol-v2-approved/contract-source/`, each file carrying a provenance header
+  naming its exact source document and line range: `3.1-contract-v2.md` (lines 73-94, the bound-file list and the
+  per-measurement metadata set), `4.1-camera-geometry.md` (170-186, the four camera-geometry fields),
+  `4.2-search-detector-timing.md` (187-212, the remaining 17 head-search fields),
+  `5-support-fields.md` (213-267, the seven support fields) and `6-phase-camera-coverage.md` (268 up to the next
+  `## 7.` heading, the coverage rules) - **227 lines in total, none of it paraphrased**.
+- **Together with `task1-inventory.md`** (field names, units already verified against
+  `calibration.REQUIRED_MEASUREMENTS`, the ten identity members and the five approved occluders) this is the
+  complete input for `task8-calibration-measurement-contract-v2.json`, the search candidate and policy documents,
+  and the phase-camera matrix, so the transcription needs no re-reading of the 36 KB design.
+- **Task 1 status unchanged and verified:** `act/task8_measurement_schema.py` implemented (closed ten-member
+  identity, `write_closed_json`, closure-first `validate_closed_batch`, occluder guard), the phase-camera matrix
+  present with the approved occluders and marked `SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION`, the corrected test
+  harness showing **2 failed, 7 passed**, with both failures being the absent v2 contract document.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
