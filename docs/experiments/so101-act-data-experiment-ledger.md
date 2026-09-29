@@ -18161,3 +18161,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   question - which is worth recording, because four rounds ago this looked like it might be the wrong test to write.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
   remain open and independent.
+
+## CP-1150 — `set_down` passes: eleven flags true and the cup still held; the release's physical rule is next
+
+- **Read `_set_down` (lines 141-154) and corrected the fixture on the strength of it:** the return must carry
+  `_SET_DOWN_KEYS` exactly, be scoped to the request with `begin`'s epochs, have a strictly greater `physics_step`, and -
+  the two I had wrong - **`holding_state == "HOLDING"`** and **all eleven listed flags true**, including
+  `cup_supported`, `bilateral_contact`, `controller_stopped` and **`planning_attached`**. Set-down happens *while the cup is
+  still held and the planning side still attached*, which is exactly what the runner demands; my first version said `EMPTY`
+  and `planning_attached=False`, and it was refused.
+- **The failure moved to `RELEASE_UNSUPPORTED`, and this one is the physical-safety rule rather than a shape rule:** the
+  runner refuses to open the gripper on a cup that is not supported, which is the same prohibition the project's own
+  guidance states in words - an unsupported, physically held cup must not have its gripper opened automatically. My
+  preflight returns `cup_supported=True`, `fresh=True`, `holding_state="HOLDING"`, `planning_attached=False`, so the next
+  read is the exact release condition, and it is worth reading carefully for exactly that reason: **the fixture has to model
+  a *legitimate* release, not merely a shaped one**, or Boundary V would be asserting against a case that should have been
+  refused.
+- **Where the test stands:** `begin`, `safe_stop`, `run_phase` across all nine phases and `set_down` all pass. Remaining:
+  the release pair (`release_preflight` plus whatever `RELEASE_UNSUPPORTED` reads) and `run_retreat_segment`, which shares
+  the phase-evidence shape that already works.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The owner's two decisions
+  remain open and independent.
