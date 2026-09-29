@@ -2,17 +2,51 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
+import json
+import os
 
 import copy
 import math
 
+from pathlib import Path
+
 from so101_demo.act.contracts import finite, validate_observation, validate_search_result
+from so101_demo.act.task8_live_evidence import build_live_evidence_sample
 from so101_demo.core.simulation.types import SimulationEvidence
 from so101_demo.ports.planning_scene import SceneCommandReceipt
 from .contact_evidence import FRAME_KEYS, contact_hazard
 from .scene_state import SCENE_KEYS
 from .pick_place_search_segment import PickPlaceSearchObservation
+
+
+#: the recorder's canonical source names, and where this port finds each one's document in the capture.
+#: `world`, `scene` and `contact` are the capture's own documents; the synchronizer's observation carries the head and
+#: wrist frames and the arm/neck state vector (`synchronizer.py:83-91`), so the four streams are recorded from what the
+#: capture actually measured rather than from a name that has no document.
+_RAW_DOCUMENTS = ("world", "scene", "contact", "head", "wrist", "arm", "neck")
+
+
+def _raw_document(value):
+    """A JSON-safe rendering of one captured document, or a refusal - never a lossy str().
+
+    The capture carries frozen dataclasses (simulation evidence, object state), so they are converted structurally.
+    Anything this cannot render raises, because a raw record that silently became a string would be worse than no
+    record at all: the recorder hashes these bytes and the index calls them evidence.
+    """
+
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return _raw_document(dataclasses.asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _raw_document(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_raw_document(item) for item in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if hasattr(value, "tolist") and hasattr(value, "dtype"):      # numpy arrays and scalars are capture content
+        return _raw_document(value.tolist())
+    raise PickPlaceSearchPortError(f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:{type(value).__name__}")
 
 
 class PickPlaceSearchPortError(RuntimeError):
@@ -70,7 +104,7 @@ class PickPlaceSearchPhasePort:
             raise PickPlaceSearchPortError("TASK8_STARTUP_PROOF_INVALID")
         self._startup_receipt = dict(receipt)
 
-    def bind_live_evidence(self, window) -> None:
+    def bind_live_evidence(self, window, *, support_distance_max_m=None, raw_records_root=None) -> None:
         """Attach this case's evidence window once, before the port starts recording into it.
 
         The window is bound here rather than passed at construction because a case's identity - its attempt id in
@@ -80,6 +114,17 @@ class PickPlaceSearchPhasePort:
 
         if self._live_evidence_window is not None or self._begun:
             raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_ALREADY_BOUND")
+        # Astra re-review #3, finding 3: the support threshold is an ADMITTED policy value, so it travels with the
+        # attachment and is never defaulted - a case that did not admit one must not pretend to have measured it
+        if type(support_distance_max_m) not in (int, float) or isinstance(support_distance_max_m, bool) \
+                or not support_distance_max_m > 0:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: support_distance_max_m")
+        self._support_distance_max_m = float(support_distance_max_m)
+        # the raw records must live under the recorder's own evidence root, and the caller that owns that root is the
+        # one attaching the evidence - so it is named here rather than guessed from the window's internals
+        if raw_records_root is None:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw_records_root")
+        self._raw_records_root = Path(raw_records_root)
         if window is None or not callable(getattr(window, "seal", None)):
             raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_WINDOW_INVALID")
         self._live_evidence_window = window
@@ -327,34 +372,98 @@ class PickPlaceSearchPhasePort:
         return self._live_evidence_window
 
     def _grid_sample(self, phase: str, observed, evidence: dict) -> dict:
-        """One grid sample taken from the port's own readback - never synthesised by a caller."""
+        """One canonical grid sample, derived from this phase's own readback - or a named refusal.
+
+        Astra re-review #3, finding 3: this method used to report `None`, so an attached window was never fed in
+        production (CP-1467/1470). It now does the three things the review asks for, in this order:
+
+        1. write the RAW records the recorder will index, under the recorder's own evidence root - the port is the
+           component that owns that root;
+        2. ask the BOUNDARY to derive the canonical fields, because the readback adapter that owns
+           `capture_evidence_fields` is built inside the boundary's own search and is not reachable from here;
+        3. build the canonical 24-key sample with the production `build_live_evidence_sample`.
+
+        Any missing piece raises `TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED` naming it. Nothing is skipped and nothing is
+        synthesised here.
+        """
 
         raw = observed.physical_readback
-        sim_time = None
-        for source in (raw.get("observation"), raw.get("world"), raw.get("reference")):
-            if isinstance(source, dict):
-                for key in ("sim_time_s", "simulation_time_s", "requested_sim_time_s"):
-                    value = source.get(key)
-                    if isinstance(value, (int, float)) and not isinstance(value, bool):
-                        sim_time = float(value)
-                        break
-            if sim_time is not None:
-                break
-        if sim_time is None:
-            raise PickPlaceSearchPortError("LIVE_EVIDENCE_SIM_TIME_UNAVAILABLE")
-        step = evidence.get("physics_step")
-        if type(step) is not int:
-            raise PickPlaceSearchPortError("LIVE_EVIDENCE_STEP_UNAVAILABLE")
-        # The canonical shape needs fields only the readback adapter can supply (`capture_evidence_fields`),
-        # and this port holds the validated observation, not that adapter. Until the port is given a canonical
-        # builder, returning the partial sample would hand the recorder a document it MUST refuse
-        # (`set(sample) != _SAMPLE_KEYS`), turning every attached-window SEARCH into a hard failure. Returning
-        # None says "this port cannot fill the frame" and lets the caller that owns the adapter record it.
-        canonical = getattr(self.boundary, "capture_evidence_fields", None)
-        if callable(canonical) and isinstance(getattr(self, "_live_evidence_window", None), object):
-            return {"phase": phase, "sim_time_s": sim_time, "physics_step": step,
-                    "_partial": True}
-        return None
+        threshold = getattr(self, "_support_distance_max_m", None)
+        if threshold is None:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: support_distance_max_m")
+        canonical = getattr(self.boundary, "canonical_evidence", None)
+        if not callable(canonical):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: canonical_evidence")
+        root = getattr(self, "_raw_records_root", None)
+        if root is None:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw_records_root")
+
+        raw_records = self._write_raw_records(observed, root)
+        fields = canonical(raw, support_distance_max_m=threshold, raw_records=raw_records)
+        if not isinstance(fields, dict):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: canonical_evidence_return")
+
+        request = self._request
+        # the port keeps the request as a dict, and the phase document's own key names are the ones to use here
+        identity = {"case_id": request["scenario_id"], "session_id": request["session_id"],
+                    "attempt_id": request["attempt_id"], "reset_epoch": self.boundary.reset.receipt.new_epoch,
+                    "release_epoch": 0}
+        try:
+            return build_live_evidence_sample(
+                identity=identity, phase=phase, physics_step=fields["physics_step"],
+                sim_time_s=fields["sim_time_s"], source_stamps_s=fields["source_stamps_s"],
+                source_received_monotonic_s=fields["source_received_monotonic_s"],
+                raw_records=raw_records, holding_state=fields["holding_state"],
+                frame={"wrist_frame_valid": fields["wrist_frame_valid"],
+                       "wrist_target_visible": fields["wrist_target_visible"]},
+                contact={"observation_valid": fields["contact_observation_valid"],
+                         "bilateral_contact": fields["bilateral_contact"],
+                         "no_fingertip_contact": fields["no_fingertip_contact"],
+                         "cup_supported": fields["cup_supported"], "released": fields["released"],
+                         "placement_stable": fields["placement_stable"]},
+                measurements={"cup_support_distance_m": fields["cup_support_distance_m"],
+                              "end_effector_position_m": fields["end_effector_position_m"],
+                              "cup_position_m": fields["cup_position_m"],
+                              "cup_orientation_xyzw": fields["cup_orientation_xyzw"]},
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise PickPlaceSearchPortError(
+                f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: {type(error).__name__}") from error
+
+    def _write_raw_records(self, observed, root) -> dict:
+        """Persist this capture's raw source documents under the recorder's root, with their digests."""
+
+        raw = observed.physical_readback
+        directory = Path(root) / "raw"
+        directory.mkdir(parents=True, exist_ok=True)
+        records = {}
+        observation = raw.get("observation")
+        if not isinstance(observation, dict):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:observation")
+        state = observation.get("state")
+        if not isinstance(state, (list, tuple)) or len(state) != 8:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:arm")
+        documents = {
+            "world": raw.get("world"), "scene": raw.get("scene"), "contact": raw.get("contact"),
+            "head": observation.get("head"), "wrist": observation.get("wrist"),
+            "arm": {"sim_time_s": observation.get("sim_time_s"), "state": list(state[:6])},
+            "neck": {"sim_time_s": observation.get("sim_time_s"), "state": list(state[6:])},
+        }
+        for name in _RAW_DOCUMENTS:
+            document = documents.get(name)
+            if document is None:
+                raise PickPlaceSearchPortError(f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:{name}")
+            payload = json.dumps(_raw_document(document), sort_keys=True,
+                                 separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+            target = directory / f"{name}.json"
+            descriptor = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            records[name] = {"relative_path": f"raw/{name}.json",
+                             "sha256": hashlib.sha256(payload).hexdigest()}
+        return records
 
     def run_phase(self, phase: str, request: dict) -> dict:
         if not self._begun or self._request is None:
@@ -382,10 +491,16 @@ class PickPlaceSearchPhasePort:
                     reset.broker, self, self._expert_route, ticket,
                     active_policy_fingerprint=reset.sources.contact_pairs.fingerprint)
             if self._live_evidence_window is not None:
-                grid_sample = self._grid_sample(phase, observed, evidence)
-                if grid_sample is not None:
-                    self._live_evidence_window.add_grid(grid_sample)
+                # no `is not None` guard: a phase with an attached window either records canonical evidence or has
+                # already refused by name (Astra re-review #3, finding 3)
+                self._live_evidence_window.add_grid(self._grid_sample(phase, observed, evidence))
             return evidence
+        except PickPlaceSearchPortError:
+            # this port's own refusal already names the missing piece (P1-3's FIELDS_REQUIRED); wrapping it into
+            # SEARCH_EVIDENCE_INVALID would hide which contract failed
+            self._validated_search_observation = None
+            self._stop_or_raise("TASK8_SEARCH_ABORT", request)
+            raise
         except BaseException as error:
             self._validated_search_observation = None
             self._stop_or_raise("TASK8_SEARCH_ABORT", request)
