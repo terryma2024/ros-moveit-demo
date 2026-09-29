@@ -22748,3 +22748,19 @@ not an inference of mine.**
   doubles stay imported rather than forked.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1372 — The live clock did not change the refusal, so my diagnosis was incomplete - and the next read is named
+
+- **What I did:** built the segment with the production constructor and the **real** clock functions (`monotonic=time.monotonic,
+  sleep=time.sleep, clock_ns=time.monotonic_ns`), reusing `_segment`'s substituted verifiers, geometry and timings unchanged. **The refusal is
+  identical** (`PHYSICS_STEP_FENCE_INVALID`), **so my CP-1371 diagnosis was incomplete: the failing condition inside the fence is not the frozen
+  clock.**
+- **What that rules out, and what it leaves:** with a live `monotonic` and a live `clock_ns`, `sent < stopped_wall_s` no longer holds, so the
+  refusal must come from the other three conditions in the same expression - `sent_ns <= 0`, `sent_ns >= deadline_ns`, or (on the second
+  sequence) `sent_ns < self._last_result["ack_received_monotonic_ns"]`. **`deadline_ns` is the one value I have not yet read from the fence's
+  own construction:** the segment may pass its own deadline rather than the request's, in which case a real nanoseconds clock is *greater* than
+  it and the fence refuses exactly as observed.
+- **So the next read is the fence's constructor and its callers** - who supplies `deadline_ns` and in what units - **rather than another
+  fixture change on a hunch.** That is the same discipline that worked in the middle of this batch and the same one I drifted from here.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
