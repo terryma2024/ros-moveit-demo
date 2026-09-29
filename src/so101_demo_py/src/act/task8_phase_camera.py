@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import statistics
 
-#: the approved phase list: a matrix that does not cover all nine phases is invalid, not merely incomplete
-APPROVED_PHASES = ("SEARCH", "APPROACH", "ALIGN", "DESCEND", "GRASP", "LIFT", "TRANSPORT", "PLACE", "FINAL_CHECK")
+#: the approved phase list, taken from the design's phase-camera coverage table (section 6) and the approved
+#: plan's live-evidence step, which agree exactly: a matrix that does not cover all nine is invalid
+APPROVED_PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE",
+                   "RADIAL_RETREAT", "FINAL_CHECK")
 REPLAY_GRID_S = 0.002
 REPLAY_SPACING_MAX_S = 0.005
 LIVE_MIN_VISIBLE_FRACTION = 0.80

@@ -7,7 +7,9 @@ free of ROS.
 
 import pytest
 
-PHASES = ("SEARCH", "APPROACH", "ALIGN", "DESCEND", "GRASP", "LIFT", "TRANSPORT", "PLACE", "FINAL_CHECK")
+# the design's phase-camera coverage table and the approved plan name the same nine phases
+PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE",
+          "RADIAL_RETREAT", "FINAL_CHECK")
 CAMERAS = ("head_camera", "wrist_camera")
 ALLOWED_OCCLUDERS = (
     "fixed_fingertip_pad_visual", "gripper_visual_00", "gripper_visual_01",
