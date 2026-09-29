@@ -28403,3 +28403,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Which closes the chain's logic and names the fix precisely:** the prefix may move **only until** it is signed, or **the signature must be re-issued with the plan**. Production does the second - a plan is prepared, its prefix signed, and executed - and the fixture signs once and then keeps moving the document. **The refresh must not outlive the signature.**
 - **And it says what the fixture's shape should be:** issue the receipt **inside** the plan preparation (where the header stamp is taken), so the prefix the receipt names is the prefix that is executed, and let the **capture clock** stay the case's monotonic sequence. **Two clocks, one signature, no rewriting.**
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: window green, and the receipt must be signed with the plan rather than before it**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1697 — The two requirements are genuinely in tension, and the resolution is "refresh, then sign" at the same moment
+
+- **Freezing the prefix at signing moved the failure straight back:**
+  ```
+  cause[0]: ValueError APPROACH_HEADER_STAMP_INVALID
+  ```
+  **Because the freeze stops the refresh, and by the time the APPROACH plan is prepared the current readback is outside the frozen prefix's ~0.102 s window.** So the fixture cannot satisfy both by choosing one:
+  | requirement | what it needs |
+  | --- | --- |
+  | the receipt must name the executed prefix (`prefix_sha256(checked)`, path_proof.py:153) | the prefix must **not move after** signing |
+  | the header (the current readback's `sim_time_s`) must fall inside the prefix's window | the prefix must be **current at the moment of signing** |
+- **And the conjunction has exactly one shape, which is what production does:** **refresh the prefix to the observation being planned, sign THAT, and execute it.** "Refresh then sign, at the same moment" satisfies both; "refresh always" breaks the signature (CP-1696) and "refresh never" breaks the window (this entry).
+- **Which makes the issuing seam the place, and the only question left is what it is given:** the fixture's issuer is
+  `issue_prefix_source=lambda **kwargs: _receipt(kwargs["prefix"], ...)`, and the boundary calls it during APPROACH preparation - **so the next probe is two lines: print `sorted(kwargs)` at that seam**, and whatever carries the observation (the prefix's own `observation_time_s`, or a source document beside it) is what the prefix must be set from before signing.
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: the window and the signature each green alone and one seam from both being green together**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
