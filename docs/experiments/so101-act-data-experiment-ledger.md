@@ -24007,3 +24007,23 @@ not an inference of mine.**
 - **Remaining, precisely:** feed the journal row into the **aggregator** and assert its verdict (the trusted aggregator is the next piece); the other three
   negatives in their applicable forms (**missing row**, **wrong epoch**, **missing receipt**); then the single integration boundary; then the packet.
 - **State:** committed with both tests green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
+
+## CP-1449 — All four negatives are proven, and P1-5's achievable half is complete
+
+- **`5 passed`** for the focused child-driven file. The four negatives the review listed are now enforced against **production code**, not against my
+  expectations:
+  | negative | what refuses it |
+  | --- | --- |
+  | **missing row** | `validate_case_journals` -> `TASK8_QUALIFICATION_JOURNAL_MISSING` |
+  | **tamper** | a journal row missing a required field is refused even though the file exists, and the trusted translator's real row for the case **is** accepted (proven by the reader moving past it to the next case) |
+  | **wrong epoch** | the window's generation is bound **exactly once**; `bind_reset_epoch(99)` is refused |
+  | **missing receipt** | with the child receipt omitted, the production entry raises `TASK8_RETIREMENT_RECEIPT_INVALID` and **publishes no row** |
+- **With that, P1-5's achievable half is complete:** the real child drives the production port through SEARCH (nine grid samples recorded through the
+  case's own window, all nine phases seen), the real case entry publishes the journal row, and the trusted translator and the trusted aggregator's own
+  reader both accept it - with every negative the review asked for refusing where it should.
+- **The one thing that is NOT done, and it is a scope question rather than a gap:** the review's full-case assertions (FINAL_CHECK, a release epoch,
+  a sealed artifact, both receipts as *full*-case evidence) cannot be produced because this repository's port provisions SEARCH only - its own docstring
+  says later phases "remain unprovisioned" - and `pick_place_case_execution` defines a prefix case as carrying **no** sealed artifact (CP-1445).
+- **Next: the single integration boundary** (fresh NVMe scratch, verified TMPDIR/TMP/TEMP, min(8, CPU) workers, benchmark excluded, retained JUnit/logs/
+  skips/elapsed/provenance/real exit codes, **rebuild and verify CTest registration**), then the packet correction, then the independent review request.
+- **State:** committed with the focused file green; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
