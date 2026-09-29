@@ -147,7 +147,8 @@ class _Boundary:
     boundary emits carries them, because that is where the production seal reads them from.
     """
 
-    def __init__(self):
+    def __init__(self, *, session_id="session-item5"):
+        self._session_id = session_id
         self.rows = []
         self.calls = []
         # the receipt's epoch is what the port compares every readback against, so the boundary's epoch
@@ -163,7 +164,7 @@ class _Boundary:
         self.reset = SimpleNamespace(
             # the port reads contact_pairs/contacts from the RESET's sources, not from the queue double,
             # which is why an earlier fix in the wrong place did not take
-            sources=SimpleNamespace(session_id="session-item5",
+            sources=SimpleNamespace(session_id=self._session_id,
                                     readback=SimpleNamespace(max_skew=0.01, joint_tolerance=0.5),
                                     contact_pairs=SimpleNamespace(
                                         model_sha256="e" * 64,
@@ -183,7 +184,7 @@ class _Boundary:
 
         self.calls.append("reset")
         self.reset_epoch += 1
-        self.reset = SimpleNamespace(sources=SimpleNamespace(session_id="session-item5"),
+        self.reset = SimpleNamespace(sources=SimpleNamespace(session_id=self._session_id),
                                      release_epoch=self.release_epoch)
         return self.reset
 
@@ -426,8 +427,8 @@ class ChildPort(PickPlaceSearchPhasePort):
     recorder. The former FakePort seal (a class attribute monkeypatched by the chain test) is gone.
     """
 
-    def __init__(self):
-        self.boundary = _Boundary()
+    def __init__(self, *, session_id="session-item5"):
+        self.boundary = _Boundary(session_id=session_id)
         super().__init__(self.boundary)
         self.receipt = None
 
@@ -461,20 +462,28 @@ class FakeBroker:
         return _call
 
 
-def test_the_child_runs_a_full_case_and_seals_what_the_runner_produced(tmp_path, monkeypatch):
+def _prepare_child_case(tmp_path, monkeypatch, *, case_id="case-05", campaign_id="campaign-item5",
+                        session_id="session-item5", attempt_id="attempt-item5",
+                        worker_id="item5-child"):
+    """Build the real child, its substituted port and the phase request - parameterised for reuse.
+
+    The ids are the only thing a second caller has to change: the case-execution harness runs cases named
+    ``prefix-NN`` with its own session, and this helper is where the two meet.
+    """
+
     binding = _binding(tmp_path)
     for name, value in binding.environment().items():      # the binder's own writer, not a copy of it
         monkeypatch.setenv(name, value)
-    monkeypatch.setenv("SO101_ACT_CAMPAIGN_ID", "campaign-item5")
+    monkeypatch.setenv("SO101_ACT_CAMPAIGN_ID", campaign_id)
 
     # the chain test's port builds its rows from its own fixture identity, and the production recorder refuses
     # samples naming another case - so the fixture supplies this case's identity to that builder (fixture code,
     # not production code, and the sample builder itself stays the production one)
-    port = ChildPort()
+    port = ChildPort(session_id=session_id)
     # the rows must carry the epochs the port is actually at, since the runner advances release_epoch as the case
     # proceeds - so the builder reads the live port rather than a constant
-    monkeypatch.setattr(chain, "_identity", lambda: {"case_id": "case-05", "session_id": "session-item5",
-                                                    "attempt_id": "attempt-item5",
+    monkeypatch.setattr(chain, "_identity", lambda: {"case_id": case_id, "session_id": session_id,
+                                                    "attempt_id": attempt_id,
                                                     "reset_epoch": port.reset_epoch,
                                                     "release_epoch": port.release_epoch})
     # IPC_STACK_OWNER_GROUP_INVALID unless the stack owner is its own process group (pgid == pid), and the
@@ -491,28 +500,28 @@ def test_the_child_runs_a_full_case_and_seals_what_the_runner_produced(tmp_path,
     child = RclpyActionDriver(pick_place_port=port, owner=owner, broker=FakeBroker(), act_hashes=bound_hashes,
                               startup_proof_consumer=lambda request: {
                                   "schema_version": 1, "proof": "startup",
-                                  "session_id": "session-item5",
+                                  "session_id": session_id,
                                   "stack_owner": {"pid": owner.pid, "pgid": owner.pgid},
                                   "child_owner": {"pid": owner.pid}})
     deadline_ns = time.monotonic_ns() + 5_000_000_000   # short for iteration (CP-1378 lesson)      # one deadline, shared by the request and its token
     request = IpcRequest(
         version=1, operation="task8_phase",
-        command_id="item5-command", service_epoch="item5-epoch",
+        command_id=f"{worker_id}-command", service_epoch=f"{worker_id}-epoch",
         # the act identity block the model validator requires for act operations
-        campaign_id="campaign-item5", worker_id="item5-child",     # the rule is token.child_id == worker_id
+        campaign_id=campaign_id, worker_id=worker_id,     # the rule is token.child_id == worker_id
         execution_generation=1,
-        runtime_id="item5-runtime",
+        runtime_id=f"{worker_id}-runtime",
         # the token is a closed model, and the request's execution_generation is an int - not strings
-        token=DispatchTokenModel(operation_id="item5-op", child_id="item5-child",
-                                 runtime_id="item5-runtime", execution_generation=1,
+        token=DispatchTokenModel(operation_id=f"{worker_id}-op", child_id=worker_id,
+                                 runtime_id=f"{worker_id}-runtime", execution_generation=1,
                                  deadline_ns=deadline_ns,
                                  revocation_revision=0),
-        service_token="item5-service_token",
-        session_id="session-item5", attempt_id="attempt-item5",
+        service_token=f"{worker_id}-service_token",
+        session_id=session_id, attempt_id=attempt_id,
         deadline_ns=deadline_ns,
         payload=_PickPlacePhasePayload(
             stop_after="SEARCH",     # the port provisions SEARCH; the child supports the prefix
-            scenario_id="case-05",          # the journal's _CASE_ID is r"[a-z]+-[0-9]{2}\Z"
+            scenario_id=case_id,          # the journal's _CASE_ID is r"[a-z]+-[0-9]{2}\Z"
             manifest_sha256=digests["manifest"],
             runtime_config_sha256=digests["runtime_config"],
             contact_policy_fingerprint=bound_hashes["contact_policy_fingerprint"],
@@ -520,6 +529,10 @@ def test_the_child_runs_a_full_case_and_seals_what_the_runner_produced(tmp_path,
                                     argv_sha256=owner.argv_sha256,
                                     environment_sha256=owner.environment_sha256)).model_dump())
 
+
+    return child, request, port
+def test_the_child_runs_a_full_case_and_seals_what_the_runner_produced(tmp_path, monkeypatch):
+    child, request, port = _prepare_child_case(tmp_path, monkeypatch)
     result = asyncio.run(child.pick_place_phase(request))   # SEARCH-only is what this port provisions
     print("[probe] result keys:", sorted(result) if isinstance(result, dict) else type(result).__name__)
     if isinstance(result, dict):
@@ -539,3 +552,43 @@ def test_the_child_runs_a_full_case_and_seals_what_the_runner_produced(tmp_path,
     assert port.receipt.get("proof") == "startup", "the startup proof reached the production port"
     assert set(port.receipt) == {"schema_version", "proof", "session_id", "stack_owner", "child_owner"}
     assert result.get("stopped_confirmed") is True, "the entry only returns after a confirmed stop"
+
+
+def test_the_real_case_execution_publishes_the_journal_row_for_a_prefix_case(tmp_path, monkeypatch):
+    """P1-5: the production case entry runs the REAL child as its worker and publishes the row itself.
+
+    Only the worker seam is substituted: ``run_pick_place_case`` does its own preflight, campaign check,
+    result validation, live-evidence readback rule and retirement-receipt requirement, and ``_publish_new``
+    writes the journal row. The evidence directory is its own subdirectory so the harness's manifest and this
+    case's artifact binding cannot collide over the same file name.
+    """
+
+    from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
+    from test_task8_case_execution import _prepared
+
+    spec, owner, journal, events = _prepared(tmp_path)
+    evidence = tmp_path / "child-evidence"
+    evidence.mkdir()
+    child, request, port = _prepare_child_case(
+        evidence, monkeypatch, case_id="prefix-01", session_id="session-298",
+        attempt_id="prefix-01", campaign_id="case-298")
+
+    async def run_pick_place(case_request):
+        events.append("execute")          # the child runs between the harness's start and finish
+        assert case_request["attempt_id"] == "prefix-01", "the harness's case is what the child runs"
+        assert case_request["session_id"] == "session-298"
+        return await child.pick_place_phase(request)
+
+    owner.worker.run_pick_place = run_pick_place
+    row = asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
+
+    assert journal.exists(), "the production entry published the journal row itself"
+    assert row["case_id"] == "prefix-01" and row["mode"] == "phase_prefix"
+    assert row["status"] == "PASSED" and row["stopped_confirmed"] is True
+    assert row["completed_phases"] == ["SEARCH"]
+    assert row["eligible_for_formal_collection"] is False
+    assert row["live_evidence_path"] == "", "a prefix case carries no sealed artifact, and says so"
+    assert row["live_evidence_sha256"] == "0" * 64
+    assert Path(row["stack_retirement_receipt_path"]).is_file()
+    assert Path(row["child_retirement_receipt_path"]).is_file()
+    assert events == ["start", "execute", "finish"]
