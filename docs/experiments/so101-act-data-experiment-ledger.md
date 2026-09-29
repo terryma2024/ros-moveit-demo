@@ -20400,3 +20400,22 @@ not an inference of mine.**
   identical payloads. **Items 3 and 4 are now one small change and two tests apart, not two rewrites.**
 - **State:** HEAD `548c1c01` plus this checkpoint; driver changes still uncommitted while red; no stack, no hardware, nothing deleted,
   nothing pushed.
+
+## CP-1247 — Item 3's driver half is GREEN: **89 passed**, and the descriptor is inside the sealed index
+
+- **The RED was proven at the real boundary before any of this:** real `run(...)` output → `validate_closed_batch` → **`BATCH_INVALID`**
+  (`rev3-red.log`). **The GREEN is the same test passing**, plus the five suites around it: **`89 passed, rc=0`**
+  (`rev3-green8.log`).
+- **What the seal writes now, and each item is one of Astra's findings:**
+  | finding | fix |
+  | --- | --- |
+  | stray `index` key (illegal under `_BATCH_KEYS`) | the document carries only schema keys; the provenance rows moved to an **indexed `index.json`** (CP-1246's answer) |
+  | no `batch_sha256` | computed over **the contract's `_canonical`** - the exact function the validator recomputes with (CP-1244) |
+  | four-member identity | the schema's **ten-member** identity, `require`d, travelling CLI → composition → driver |
+  | descriptor not in `files` | `run()` indexes `runtime-descriptor.json`, so the closure is exact |
+  | `anchors` shape incompatible | sealed as **names**, because the schema addresses them as `f"anchors/{anchor}/"`; the richer per-anchor records live in `index.json` |
+  | second seal owner | **still to remove** - the CLI's `close_measurement_batch` call (CP-1241), and the CLI must also pass the identity now that the driver requires it |
+- **Two existing tests changed, both for the same honest reason:** they read the driver's private records out of the sealed document
+  (`batch["index"]`, `batch["anchors"]`), which the schema forbids; they now read `index.json`, and the provenance-field assertion is
+  scoped to the `anchors/` rows, because the descriptor and index rows are artefacts of the closure rather than of a capture.
+- **State:** committed with its tests green; the CLI half of item 3 is next; no stack, no hardware, nothing deleted, nothing pushed.
