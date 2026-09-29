@@ -24430,3 +24430,18 @@ picture in both directions.**
   evidence route would still be empty.**
 - **Correction appended to `EXP-519` (not a rewrite of its frozen text, per the ledger's own rule):** the fix must feed **grids and events** through the
   driver route, not grids alone - otherwise the "command event" assertion remains as unproducible after the fix as before it.
+
+## CP-1471 — The hole is now executable, not just described
+
+- **`7 passed, 1 xfailed`** for the focused child-driven file, after adding
+  `test_the_production_evidence_route_still_has_no_feeder`, which **disables the fixture's stand-in feeder** (`monkeypatch.setattr(_Boundary,
+  "record_phases", lambda self, request: 0)`) so the run describes **production** rather than the harness, asserts the phase **still completes with
+  `status == "PASSED"`**, and then asserts what is missing: **the window must have been fed through the driver route.**
+- **It is `xfail(strict=True)` deliberately, and the reasons are worth stating because an xfail can also be a way of hiding a problem:**
+  - the suite stays **green without pretending** the hole is closed - it appears in every run summary as `1 xfailed`;
+  - the hole is **executable**: if someone removes the stand-in or the assertion, the record breaks loudly rather than silently;
+  - **when EXP-519 wires grids and events through the driver route, this test XPASSes, strict turns that into a failure, and the fix's author is forced
+    to delete the marker and assert the samples themselves** - i.e. the marker cannot outlive the hole.
+- **And it is honest about its own role:** the test's docstring says `record_phases` is the fixture standing in for a production feeder that does not exist,
+  so a reader who finds this test learns both the hole and the fact that the other focused tests depend on the stand-in.
+- **State:** committed; no stack, no CUDA, no actuators, no hardware; nothing pushed, nothing deleted.
