@@ -24324,3 +24324,66 @@ boundary, and (4) no alternative explanation remains (duplicate stacks, stale bi
   limitation, whereas this is a hole.
 
 *(Packet size 24896 bytes, sha256 `fa8bb9251655d30da4c946a8abd25108c253ea80bb7204245e50746cb96618d5` as of this checkpoint.)*
+
+## CP-1468 — The live-feed fix, frozen as a PLANNED experiment (and the fixture's role stated in plain words)
+
+```yaml
+experiment_id: EXP-519
+status: PLANNED
+prior_experiment: EXP-518
+hypothesis: >
+  A live SEARCH case records no live-evidence samples because the only feeder was the port's grid call, which
+  could not build the canonical sample and now reports None; the case's evidence driver is constructed by the
+  child and never fed. If the captured frame reaches the window through a documented route, a live SEARCH case
+  will carry the nine indexed samples that the fixture currently supplies itself.
+prediction: >
+  With the route in place, a case run with the port's own feed enabled records the same nine phases and the
+  fixture's manual record_phases becomes redundant (its removal must NOT change the recorded index).
+single_variable: >
+  The evidence feed's route: today the test fixture calls window.add_grid directly; after the change the segment
+  (or a boundary field-builder the port calls) supplies the captured frame and CaseEvidenceDriver.observe_capture
+  feeds the window. No other behaviour changes.
+lifecycle: REUSE_STACK
+preconditions:
+  - No live stack, no MuJoCo process, no ROS graph; ROS_DOMAIN_ID and GZ_PARTITION unset; the focused teleop
+    file and the port's own demo test file are the only harnesses involved.
+  - The candidate routes are (a) the SEARCH segment returns its captured frame alongside the phase document and
+    the port forwards it, or (b) the child-port boundary gains a documented field-builder the port may call.
+    Route (b) is smaller; route (a) keeps the capture where it is produced.
+success_criteria:
+  - A case run in which the fixture does NOT feed the window still yields nine indexed samples, all nine phases,
+    correct epochs, canonical 32-key... (exactly the 24-key sample) and adjacency at the window's period.
+  - The existing focused tests still pass unchanged, and the port's own test still proves that a boundary with no
+    field-builder records nothing and does not crash.
+failure_criteria:
+  - The window stays empty with the route in place, or the port raises on a boundary that lacks the capability.
+invalid_criteria:
+  - Any live stack, CUDA, actuator or hardware involvement; or a run whose provenance is not the worktree src.
+provenance:
+  source_commit: 792d1e19
+  install_overlay: <worktree>/install/setup.bash over /opt/ros/jazzy and the task overlay
+  runtime_executable: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python
+  ros_domain_id: unset
+  gz_partition: unset
+commands:
+  - command: PENDING
+    exit_code: PENDING
+observed:
+  - CP-1467: the child constructs CaseEvidenceDriver and attaches only evidence.window; the driver is used nowhere else.
+inferred:
+  - The production SEARCH evidence feed is therefore absent rather than merely unfixed.
+conclusion: PENDING
+evidence:
+  - ros_child.py:512-527; CP-1467; packet correction (sha256 fa8bb925...)
+decision: PENDING
+next_experiment: NONE until the owner or the review rules on the route
+```
+
+- **And the fixture's role, said plainly because a reviewer will otherwise read it as production:** the focused fixture's `record_phases` calls
+  `window.add_grid(...)` **directly**, i.e. **it stands in for a production feeder that does not exist** (CP-1467). **So the child-driven test proves the
+  contract - builder, window, recorder, epochs, index - and NOT the production wiring.** The fixture's docstring says it stands in for the adapter that owns
+  the fields; **this checkpoint is the ledger saying the same thing without the benefit of the doubt.**
+- **Why freeze it rather than build it:** the two routes differ in **where the capture is forwarded** and therefore in which interface changes - a design
+  choice with a reviewer whose stated purpose is to rule on item 5's shape. **Building it unilaterally would be me answering my own question**, and the plan
+  the owner approved (CP-1420) does not include a new production interface. **So the design is frozen, its discriminating evidence is named, and its
+  execution is mechanical the moment either answer arrives.**
