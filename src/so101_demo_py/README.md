@@ -466,6 +466,105 @@ remain mandatory. Execute JSON and the atomic provenance document record
 `confirmation_mode=skipped`; normal confirmed execution records
 `confirmation_mode=digest`.
 
+## Formal Task 8 model assets
+
+The Task 8 ACT measurement stack takes its model assets from two Hugging Face repositories. Both are pinned by
+immutable revision, and every file the boundary needs is checked against the digests the repository itself ships.
+
+The two assets are not interchangeable. The ACT detector is `YoloSegDetector`, and the only weights file it may load is
+`best.pt` from the YOLO repository. The Grounded-SAM bundle is a separate, complementary formal asset; it is recorded
+here and is wired only where an existing production path names it.
+
+| asset | repository | immutable revision | role |
+| --- | --- | --- | --- |
+| YOLO11n-seg plastic cup | `zjumty/so101-yolo11n-seg-plastic-cup` | `b55430fb75c0207b35bd20f4e328e042bff06f3f` | weights for the ACT detector (`best.pt`); `model/provenance.json` carries the training provenance |
+| Grounded-SAM cup pick-place | `zjumty/so101-grounded-sam-cup-pickplace` | `52b8334358e5ff11f94f10f7c14b1697ef44d964` | independent bundle: Grounding DINO tiny + SAM2.1 hiera tiny, with `bundle/manifest.json` |
+
+### Where the files live
+
+Downloaded assets belong to the task's registered evidence root, never inside the git worktree:
+
+```
+/data/work/so101-evidence/<task-family>/<run-id>/models/huggingface/<repo-name>/<revision>/
+```
+
+For the Task 8 calibration work the root is `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`, which gives
+these two directories:
+
+```
+…/models/huggingface/so101-yolo11n-seg-plastic-cup/b55430fb75c0207b35bd20f4e328e042bff06f3f/
+…/models/huggingface/so101-grounded-sam-cup-pickplace/52b8334358e5ff11f94f10f7c14b1697ef44d964/
+```
+
+### Download (exact commands)
+
+`hf` reads the token from the login shell's Hugging Face configuration. On a host whose `NO_PROXY` contains `[::1]`,
+httpx fails with `invalid literal for int() with base 10: ':1]'`, so the commands narrow `no_proxy` for their duration
+while keeping the proxy the network needs.
+
+```bash
+ROOT=/data/work/so101-evidence/act-data/20260924-fbc25063-resume/models/huggingface
+YOLO_REV=b55430fb75c0207b35bd20f4e328e042bff06f3f
+GSAM_REV=52b8334358e5ff11f94f10f7c14b1697ef44d964
+
+export no_proxy=localhost,127.0.0.1 NO_PROXY=localhost,127.0.0.1
+hf auth whoami                      # confirms the account; it prints no token
+
+hf download zjumty/so101-yolo11n-seg-plastic-cup --revision "$YOLO_REV" \
+  --include README.md --include SHA256SUMS --include best.pt \
+  --include model/provenance.json --include model/training-config.yaml --include model/metrics.json \
+  --local-dir "$ROOT/so101-yolo11n-seg-plastic-cup/$YOLO_REV"
+
+hf download zjumty/so101-grounded-sam-cup-pickplace --revision "$GSAM_REV" \
+  --include README.md --include SHA256SUMS --include 'bundle/**' \
+  --local-dir "$ROOT/so101-grounded-sam-cup-pickplace/$GSAM_REV"
+```
+
+The YOLO repository also publishes a dataset tree; the commands above deliberately fetch only the weights and the
+files that describe them.
+
+### Verify (exact commands)
+
+Both repositories ship more digests than a single boundary needs, so each check filters its own `SHA256SUMS` first.
+A mismatch fails the command.
+
+```bash
+cd "$ROOT/so101-yolo11n-seg-plastic-cup/$YOLO_REV"
+grep -E "(README\.md|best\.pt|model/provenance\.json|model/training-config\.yaml|model/metrics\.json)$" SHA256SUMS \
+  | sha256sum -c -
+
+cd "$ROOT/so101-grounded-sam-cup-pickplace/$GSAM_REV"
+grep -E "^[0-9a-f]{64}  \./(README\.md|bundle/)" SHA256SUMS | sha256sum -c -
+```
+
+### Verified files
+
+Sizes and digests below were read from the downloaded files and matched against `SHA256SUMS` and
+`bundle/manifest.json`. `SHA256SUMS` carries no entry for itself, which is why it has no digest column.
+
+| file | size (bytes) | sha256 |
+| --- | --- | --- |
+| `so101-yolo11n-seg-plastic-cup/b55430fb…/README.md` | 2686 | `ae88fa0197aeafccf2fce129565370e1d6656f7a85808d42cf51a81ef66a8c7d` |
+| `…/SHA256SUMS` | 371280 | — |
+| `…/best.pt` | 6001316 | `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` |
+| `…/model/provenance.json` | 715 | `c6ada6e22263a7769047426ea296ce2527bd3fc98b6fc38060c1b8e9c38acb23` |
+| `…/model/training-config.yaml` | 248 | `a99e0e090dc9ea31fb4ef69a540d572131360492f2671de18df191bb726eaf77` |
+| `…/model/metrics.json` | 604 | `a98cd71be24d4c4f5a9fe67c3052b886429676f47f6f9f0f12af2e6d0bdeb9b2` |
+| `so101-grounded-sam-cup-pickplace/52b83343…/README.md` | 3011 | `5c9a0515da2098c42061342a6e6521791a48fba48d195df2b59179a1c6c0fccb` |
+| `…/SHA256SUMS` | 2409 | — |
+| `…/bundle/manifest.json` | 3626 | `b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05` |
+| `…/bundle/grounding-dino-tiny/model.safetensors` | 689359096 | `bfa141974163338b7333c9d9174609e1b29b4f3fd43eaaf5b1017d14abe7da4b` |
+| `…/bundle/sam2.1-hiera-tiny/model.safetensors` | 125802132 | `0d252822a8c62636467368fc39d2239d5303de482f04e8bda801e71aff9c6893` |
+
+The remaining bundle configuration files (`config.json`, `preprocessor_config.json`, `tokenizer*.json`,
+`special_tokens_map.json`, `vocab.txt`, `processor_config.json`) are listed in `bundle/manifest.json` and are covered by
+the second verify command above.
+
+### Device policy
+
+Placement is CUDA only. A runtime descriptor is refused unless it names `requested_device: "cuda"` and
+`allow_cpu_fallback: false`, so a measurement cannot quietly run on CPU.
+
 ## Safety, evidence, and lifecycle boundaries
 
 - `dry_run` validates composition and request semantics without live motion.
