@@ -25872,3 +25872,18 @@ picture in both directions.**
   request exactly (mode, stop_after, lifecycle and the live-evidence binding) - three fields and one binding, and the trace will name the phase.**
 - **State:** P1-1..P1-3 green and committed; every production fix committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed,
   nothing deleted; no hardware.
+
+## CP-1553 — Seven of nine phases now produce documents the runner accepts inside the full run
+
+- **The trace is the evidence, and it is the milestone this stretch was aiming at:**
+  `ok: SEARCH`, `ok: APPROACH`, `ok: CLOSE`, `ok: MICRO_LIFT`, `ok: TRANSPORT`, `ok: ALIGN`, `ok: RELEASE` - **seven phases, driven by the production runner, routed by the production port, judged by
+  the runner's own verifier, against one substituted runtime.**
+- **Two production gaps were found and fixed on the way, both by probing rather than guessing:**
+  1. **the route's source depends on the anchor**: the factory is used for a `"default"` anchor only, so a non-default anchor takes its route by **direct assignment** - and `begin` does not replace it (its only other
+     assignment is in the failure path). **I had removed the assignment on a wrong assumption and spent two rounds rediscovering the condition; it is now written down in the test.**
+  2. **a retreat segment is a phase document**: the port returned the boundary's raw mapping - no `phase`, no epochs - while the runner validates it with the same verifier as every phase, so **every retreat
+     segment of a real case would have been refused.** The port now stamps the case scope and runs the same closed rule `run_phase` uses.
+- **And the run's frontier is now one call:** the trace stops **inside** `run_retreat_segment` (no RETREAT line printed), so the next action is the same probe printing the **exception** rather than the document -
+  **one call, one read, and then FINAL_CHECK, which a previous probe already showed the runner accepts.**
+- **State:** P1-1..P1-3 green and committed; both production fixes committed; the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed,
+  nothing deleted; no hardware.
