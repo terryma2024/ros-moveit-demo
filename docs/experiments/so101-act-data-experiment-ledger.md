@@ -17707,3 +17707,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **Still with the owner:** authorisation for one live stack so the driver wiring can record the descriptor and raw
   evidence at measurement time (CP-1117); that is the only remaining piece of Boundary IV, and it is also Boundary II's
   outstanding composition item.
+
+## CP-1129 — The binding has no production caller at all, which is the review's integration complaint in one line
+
+- **Searched the whole source tree rather than assuming a caller existed:** `validate_head_search_binding` is defined in
+  `src/act/head_search_binding.py` and called **only from tests** - there are **no** call sites under `src/` at all. So the
+  Task 1 contract's binding is implemented, documented ("fail closed before ROS or model construction on an unqualified
+  pairing"), covered by 14 of its own tests and by my integration test, and **never enforced anywhere a real run would
+  reach it**.
+- **That is the review's Task 5-7 finding made concrete and stack-free:** it is not only that the descriptor is never
+  *recorded* (CP-1117) - it is that even a correctly recorded and published pairing is never *checked* before a runtime
+  proceeds. Both halves of the hand-off are missing, one at write time and one at read time.
+- **Where it belongs, from the function's own docstring:** the binding is meant to fail closed **before ROS or model
+  construction**, which is the **preparation/launch entry** - the same entry Boundary II's composition item points at.
+  That wiring is testable **without** a live stack, because both of its inputs are documents: the runtime head-search
+  descriptor and the published calibration report. So the next RED is available now, and it does not need the owner's
+  authorisation: *the preparation entry must refuse a report that cannot bind to the descriptor it is about to construct a
+  runtime from, and accept one that can.*
+- **What that leaves genuinely blocked on the owner, stated precisely:** only the **recording** half - a live measurement
+  run writing the descriptor it actually used into the batch - because that is the part that needs real adapters, real
+  MuJoCo and an authorised stack. The checking half is mine to do, and I will start it next round unless the owner
+  redirects.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware.
