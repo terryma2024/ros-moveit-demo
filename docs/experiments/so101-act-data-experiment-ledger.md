@@ -15516,3 +15516,40 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   that made the first run refuse - and a clean re-run with no intervening commits is the next action; Task 10 blocked
   until the 17 search values are reviewed. No package-gate claim yet, no push, no evidence deleted, no hardware; formal
   0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1031 — The gate diagnostic ran nearly green: provenance fixed, one module failing
+
+- **CP-1030's fix worked.** Re-running with no intervening commit removed the provenance refusal entirely - the run got
+  past collection and executed the scope. New and only error: `SO101_PYTEST_GATE_ERROR: pytest process failed closed:
+  shard-04: exit=1` (`beh-r623-gate.log`), i.e. **one shard failed on a test, not on provenance**.
+- **Read every shard's JUnit, and the picture is close to green:**
+  | shard | cases | failing |
+  | --- | --- | --- |
+  | 7ba9 | 901 | 0 |
+  | 3196 | 751 | 0 |
+  | 5b10 | 710 | 0 |
+  | 9ef2 | 680 | 0 |
+  | f944 | 654 | 0 |
+  | 49d5 | 653 | **16** |
+  | 78e3 | 633 | 0 |
+  | 774e | 486 | 0 |
+  | 9179 | 286 | 0 |
+  | b7a9 | 0 | 0 |
+  **≈5754 cases across ten shards, nine of them fully green**, at `--workers 8` from the test venv with
+  `--process-id-chars 4` on a worktree carrying the owner's 43 dirty paths - and **no `IPC_SOCKET_PATH_TOO_LONG` and no
+  `BRIDGE_CHILD_EXITED` anywhere**, so both the socket remedy and the "dirty worktree is fine" conclusion hold.
+- **The one failing module is not this task's:** all 16 cases are in
+  `src/so101_demo_py/test/test_controller_reservation_client.py` (15 `AssertionError`, 23 `Error` in its log), and the
+  assertion that fails is **`assert ready.wait(1)`** - a threaded client that never becomes ready within one second, in
+  the controller-reservation family already touched by CP-1022's root-path finding. It fails in the gate's parallel
+  scratch environment; whether the cause is the socket root, a fixed endpoint under eight concurrent shards, or a
+  legitimate need for the gate's documented `SERIAL_MODULES` treatment is **not yet established**.
+- **What this run is and is not:** it is a **diagnostic** run (`--allow-dirty`, provenance recorded) on a worktree with
+  the owner's uncommitted work, and it is the first time this task has executed the full ordinary scope. It is not a
+  formal gate, and its single failing module means Task 9 is not green - but the remaining failure is now one named
+  module with one named symptom rather than an unknown.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's diagnostic is 5754 cases with one module failing, and the next step is to read that module's
+  fixture to distinguish socket-root, endpoint-collision and serial-registration explanations before changing anything;
+  Task 10 blocked until the 17 search values are reviewed. No formal-gate claim, no push, no evidence deleted, no
+  hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
