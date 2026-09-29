@@ -417,6 +417,19 @@ class PickPlaceSearchPhasePort:
 
         return self._live_evidence_window
 
+    def _current_observation(self, observed, request):
+        """The observation to sample the grid from: the boundary's CURRENT readback, or the one given.
+
+        One helper for every sample, so the grid's clock moves exactly one period per sample. The cached SEARCH
+        observation carries the instant the case started, and a boundary that cannot supply a current readback is a
+        named refusal rather than a silently reused instant.
+        """
+
+        current = getattr(self.boundary, "current_readback", None)
+        if not callable(current):
+            return observed
+        return dataclasses.replace(observed, physical_readback=current(request))
+
     def _grid_sample(self, phase: str, observed, evidence: dict) -> dict:
         """One canonical grid sample, derived from this phase's own readback - or a named refusal.
 
@@ -557,7 +570,11 @@ class PickPlaceSearchPhasePort:
             if self._live_evidence_window is not None:
                 # no `is not None` guard: a phase with an attached window either records canonical evidence or has
                 # already refused by name (Astra re-review #3, finding 3)
-                self._live_evidence_window.add_grid(self._grid_sample(phase, observed, evidence))
+                # EVERY sample is built from the boundary's current readback, through one helper: the grid's clock must
+                # step exactly one period per sample, and mixing a cached observation with fresh ones produced deltas
+                # that were neither (TASK8_LIVE_EVIDENCE_GRID_GAP).
+                self._live_evidence_window.add_grid(
+                    self._grid_sample(phase, self._current_observation(observed, request), evidence))
             return evidence
         except PickPlaceSearchPortError:
             # this port's own refusal already names the missing piece (P1-3's FIELDS_REQUIRED); wrapping it into
@@ -598,11 +615,19 @@ class PickPlaceSearchPhasePort:
                     "reset_epoch": self.boundary.reset.receipt.new_epoch,
                     "release_epoch": self._release_epoch_for("RADIAL_RETREAT"), **facts}
         checked = self._checked_sequence_document("RADIAL_RETREAT", document)
-        # the window must SEE every required phase before it can seal, and a retreat segment is one of them: the phase
-        # path records its grid sample here, and the retreat path has to do the same or the seal is refused forever
+        # the window must SEE every required phase before it can seal, and a retreat segment is one of them. Its sample
+        # is built from the boundary's CURRENT readback, not from the cached SEARCH observation: the grid's clock must
+        # only go forward, and the SEARCH instant is behind every phase sample (TASK8_LIVE_EVIDENCE_GRID_REGRESSION).
         if self._live_evidence_window is not None:
+            current = getattr(self.boundary, "current_readback", None)
+            if not callable(current):
+                raise PickPlaceSearchPortError(
+                    "TASK8_PHASE_NOT_PROVISIONED: RADIAL_RETREAT: boundary.current_readback")
+            # the SEARCH observation supplies the search result and the frames the sample also needs; only its READBACK
+            # is replaced, with a copy - mutating the cached one would corrupt what later phases read
             self._live_evidence_window.add_grid(
-                self._grid_sample("RADIAL_RETREAT", self._validated_search_observation, checked))
+                self._grid_sample("RADIAL_RETREAT",
+                                  self._current_observation(self._validated_search_observation, request), checked))
         return checked
 
     def set_down(self, request, *args, **kwargs):
@@ -692,7 +717,13 @@ class PickPlaceSearchPhasePort:
             document = {"phase": phase, "session_id": request["session_id"], "attempt_id": request["attempt_id"],
                         "reset_epoch": self.boundary.reset.receipt.new_epoch,
                     "release_epoch": self._release_epoch_for(phase), **facts}
-            return self._checked_sequence_document(phase, document)
+            checked = self._checked_sequence_document(phase, document)
+            # APPROACH has its own path and therefore its own feed, for the same reason as the generic one: the
+            # window must SEE every phase before it can seal, and this branch was the last one not feeding it
+            if self._live_evidence_window is not None:
+                self._live_evidence_window.add_grid(
+                    self._grid_sample(phase, self._current_observation(observed, request), checked))
+            return checked
 
         execute = getattr(self.boundary, "sequence_phase", None)
         if not callable(execute):
@@ -716,7 +747,14 @@ class PickPlaceSearchPhasePort:
         document = {"phase": phase, "session_id": request["session_id"], "attempt_id": request["attempt_id"],
                     "reset_epoch": self.boundary.reset.receipt.new_epoch,
                     "release_epoch": self._release_epoch_for(phase), **facts}
-        return self._checked_sequence_document(phase, document)
+        checked = self._checked_sequence_document(phase, document)
+        # The window must SEE every phase before it can seal, and the SEARCH path's feed was the only one that existed:
+        # the eight sequence phases executed, verified and were never sampled, so the seal could never complete. This is
+        # CP-1467's finding again, one layer down - a component that was wired up and then not fed.
+        if self._live_evidence_window is not None:
+            self._live_evidence_window.add_grid(
+                self._grid_sample(phase, self._current_observation(observed, request), checked))
+        return checked
 
     #: The runner increments its release epoch INSIDE the RELEASE iteration, BEFORE it verifies that phase's document -
     #: so RELEASE's own document already carries the epoch it is creating, and the two phases after it carry the same
