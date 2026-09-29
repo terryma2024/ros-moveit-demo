@@ -25567,3 +25567,15 @@ picture in both directions.**
 - **What is unlocked:** the runner's whole port protocol exists (`begin`, `run_phase`, `run_retreat_segment`, `set_down`, `release_preflight`, `detach_moveit`, `planning_attached`, `safe_stop`),
   so **a nine-phase case can run end to end through the port** - which is the next test and the milestone P1-4 was aiming at.
 - **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1534 — The nine-phase milestone test is scaffolded, with the boundary double carrying the REAL methods
+
+- **`2 passed`**: a guard that every production method the port calls is bound on the double, and a check that the port **delegates** rather than re-implements.
+- **The shape the milestone will grow in, stated so it cannot drift:** the **only** substituted layer is the boundary underneath the port - a planning scene, a controller stop, a tool pose, a retreat axis,
+  an IK solver and the readback - while the **port, the phase routing, the validators and the runner's own verifier stay production code.** That is where every other test in this batch draws the line, and
+  a nine-phase run has to draw it in the same place or the run could agree with itself about what a phase's evidence is.
+- **The guard test is the part worth keeping:** binding ten methods onto a stub is exactly the kind of setup where one missing `setattr` shows up three phases later as an unrelated refusal.
+  **A test that asserts the bindings first turns that into a one-line failure in the right place.**
+- **Next, in order:** drive the runner's **SEARCH** phase through the real port (its documents are stamped against the case scope the port binds, so it comes first), then the other eight phases one at a time,
+  then the seal, the journal and the seven indexed assertions with their four negatives.
+- **State:** P1-1..P1-3 green and committed; every piece of P1-4's phase and protocol work committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
