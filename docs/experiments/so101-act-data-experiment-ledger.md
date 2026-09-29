@@ -20181,3 +20181,17 @@ not an inference of mine.**
   CP-1235 before the change.
 - **State:** the source change and the swept tests are **held uncommitted while red** per the owner's rule; the build tree is in sync
   for the touched modules (verified per-file, CP-1235); no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1237 — The repair script aborted **before writing**, which is the guard doing its job
+
+- **What happened:** my de-duplication pass parsed each file after editing and **raised a `SyntaxError` on the third file**, so
+  `write_text` never ran for it. The check `ast.parse` before `write_text` is what kept a broken file off disk - worth recording as
+  the reason to keep that ordering in every mechanical edit.
+- **What it caught:** removing the descriptor literal from a call **whose opening paren was on the same line** leaves an unbalanced
+  parenthesis, so my "delete the line" strategy is only valid where the literal sits on a line of its own. **The fix is not to
+  delete lines but to edit the argument text inside the call**, which is what the hand-repair does.
+- **The four failures are unchanged and still named:** the requires-a-descriptor test (my sweep wrongly supplied one), and three in
+  the admission suite - two duplicate-keyword `TypeError`s from my sweep and one `RESOURCE_BINDING_REQUIRED` whose expectation order
+  my insertion disturbed. **84 tests pass**, including every suite that exercises the required argument end to end.
+- **State:** the source change is intact and uncommitted while red; the three test files are on disk **unparsed-safe** (verified
+  above); no stack, no hardware, nothing deleted, nothing pushed.
