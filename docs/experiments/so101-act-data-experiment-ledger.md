@@ -25341,3 +25341,20 @@ picture in both directions.**
   establish the facts with the phase-aware validator - which **for MICRO_LIFT and everything after it agrees with the aggregates** (HOLDING means held and unsupported, and by then the cup is
   off the table), leaving CLOSE's tension (CP-1518) as the one open semantic question.
 - **State:** P1-1..P1-3 green and committed; SEARCH, APPROACH and CLOSE committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1520 — Every remaining phase's target is already computed by production code; the phases are resolve + IK + facts
+
+- **`core/dynamic_pick.py: resolve_motion_targets(sample, template) -> ResolvedMotionTargets`** is the production resolver, and reading its body settles the remaining design:
+  - `grasp = compose_pose(sample.pose_world, template.cup_to_tcp_grasp)`
+  - `pregrasp = _offset_world_z(grasp, template.pregrasp_world_z_clearance_m)` -> **`State.MOVE_ABOVE_OBJECT`** (APPROACH)
+  - `micro_lift = _offset_world_z(grasp, template.micro_lift_world_z_clearance_m)` -> **`State.MICRO_LIFT`** (MICRO_LIFT)
+  - `lift = _offset_world_z(grasp, template.lift_world_z_clearance_m)` -> **`State.LIFT`** (TRANSPORT, and RECOVER_LIFT_TO_SAFE_HEIGHT)
+  - `place = template.place_tcp_world`, `above_place = _offset_world_z(place, …place_approach…)` -> **`State.MOVE_ABOVE_PLACE`** (ALIGN), **`DESCEND_TO_PLACE`**
+  - `retreat = _offset_world_z(place, template.retreat_world_z_clearance_m)` -> **`State.RETREAT`** (RADIAL_RETREAT), plus the three RECOVER states
+  - **and every one of the seven is workspace-checked** (`_check_workspace(value, template.workspace_bounds_m)`) before it is returned.
+- **So the remaining phases reduce to three steps, and only the middle one is new:** (1) take the phase's target from `resolve_motion_targets` - **already validated, already admitted, nothing invented**;
+  (2) **turn that TCP pose into the joint trajectory the arm controller takes, through an IK seam the boundary names and refuses without** (this is the one external I/O piece these phases need, exactly as
+  APPROACH's dispatch and the snapshot port are for APPROACH); (3) establish the phase's facts with the phase-aware validator and let the runner judge.
+- **And the aggregate tension stays where it belongs:** from MICRO_LIFT onward the cup is off the table, so `HOLDING` means what the runner's contract says it means; **only CLOSE (CP-1518) needs a
+  decision that is not mine to make.**
+- **State:** P1-1..P1-3 green and committed; SEARCH, APPROACH and CLOSE committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
