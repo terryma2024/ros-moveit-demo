@@ -14606,3 +14606,26 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   single dependency; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17
   candidate search values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate,
   no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-997 — The weld's 33-field path has no test yet, and its fixture is one function away
+
+- **Located the coverage gap precisely:** `build_task8_qualified_report` is exercised by three existing tests in
+  `test/test_act_task8_live_qualification.py` (calls at lines 228, 259 and 273) - the ready-to-qualified success path
+  and two refusals - but **none of them passes `live_extractors`**, so the new branch (collect the five full runs,
+  merge by value, enforce 33 measurements, read back and call `require_qualified`, delete the output on refusal) has
+  **no test of its own**. It is implemented and it compiles, and its helpers are individually tested (collection at 5
+  runs, merge by value, the extractor factory, the record binding), but the welded path is not yet asserted end to end.
+- **What the test needs is one reuse, not new infrastructure:** the three existing calls already construct a ready
+  report, a preparation receipt, a campaign summary and a case root, so a fourth test can take the same fixtures, pass
+  `live_extractors=` built from synthetic records (the pattern proved at CP-994, where an artifact plus `raw/contact.json`
+  and `raw/wrist.json` was enough), and assert the published document carries **33** measurements and that a report the
+  gate refuses leaves **no output file behind**. That last assertion is the one worth having: it is what makes "never
+  leave a document that looks qualified but is not" true in practice rather than by construction.
+- **Why it is recorded rather than written now:** the fixture block sits above line 228 and I have not read it, and this
+  session's recurring lesson is that writing against an unread fixture produces test defects that cost more than the
+  read would have. The exact insertion point and the exact assertion are noted so the work is minutes, not discovery.
+- **State:** Tasks 1-7 module work complete and green; Task 8's code side complete and green (37 in its own suite, 51
+  with the runner suite) with this single coverage gap and the driver dependency outstanding; Tasks 9-10 untouched; the
+  goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search values, three
+  `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no evidence deleted,
+  no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
