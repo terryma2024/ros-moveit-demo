@@ -33691,3 +33691,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **The re-run therefore uses the same environment as every other run in this drive, with the short socket base restored.**
 - **State:** **P1-1 through P1-6 CLOSED; the teleop re-run is in flight with the correct environment.** **Task-list
   statuses are unchanged, so they are not re-stated.**
+
+## CP-1901 — The freeze gate's three failures name their own variable, and production names it too
+
+- **The serial CTest, first attempt:**
+  ```
+  ctest -N: 117          (the deleted chain is not among them)
+  ctest rc=8             97% tests passed, 3 failed out of 117        Total Test time = 218.78 s
+      32 test_controller_reservation_paths    34 test_act_ros_child    36 test_act_stack_probes
+  ```
+  **and the assertion that failed says exactly why:**
+  ```python
+  assert len(os.fsencode(first / "gripper.sock")) <= 107
+  AssertionError: assert 109 <= 107
+    where 109 = len(b'/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/v5a/ipc/8e2bc502c848d352/gripper.sock')
+  ```
+  **the test enforces the Unix socket path limit itself, and the root it used is the deep evidence root.**
+- **And production names the variable that decides it** - from the launcher, which is where a real run sets it:
+  ```
+  runtime/launch_composition.py:2462  SetEnvironmentVariable("SO101_ACT_RESERVATION_ROOT", str(evidence_root))
+  adapters/act/controller_reservation_provision.py:153  root = Path(environment["SO101_ACT_RESERVATION_ROOT"])
+  ```
+  **so the session root comes from `SO101_ACT_RESERVATION_ROOT`, and a gate that leaves it at the deep evidence root will
+  fail a 107-byte assertion by two bytes** - **which is a property of the environment, not of the code, and the same class
+  as CP-1900's socket base.**
+- **The re-run sets it explicitly to a short path**, the same way the launcher sets it to the run's own root.
+- **State:** **P1-1 through P1-6 CLOSED; the freeze gate is re-run with the reservation root named.** **Task-list
+  statuses are unchanged, so they are not re-stated.**
