@@ -30184,3 +30184,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-2: emission reaches and now steps through the formulas; the per-field limit shapes are the next
   table.** P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6
   remain.
+
+## CP-1787 — The limits are `None` in the contract BY DESIGN, so the driver must carry the CONFIG's values
+
+- **Read from the admitted contract itself (`load_contract_v2()`):**
+  ```
+  vertical_bounds_px:  limit=None  source='config'
+  center_deadband_px:  limit=None  source='config'
+  min_bbox_aspect:     limit=None  source='config'
+  horizontal_fov_rad:  limit=None  source='模型 FOV + tolerance'
+  measurements: 21   support: 7
+  ```
+  **So passing `entry["configured_limit"]` through - which is what my emission does - passes `None`**, `_limit` returns
+  it, and `lower, upper = None` is exactly the `TypeError` at line 224. **The contract deliberately does not carry the
+  limits**: it says where they come from (`threshold_source: "config"`), and `horizontal_fov_rad` says its own source is
+  the **model's FOV plus a tolerance**.
+- **Which corrects the shape of P1-2's remaining work, and it is smaller than "supply 28 shapes":** the evidence side is
+  nearly done (bbox lists, and one document-shaped family), and the **limit side needs the configuration values** - the
+  same ones the design's table lists as "reported value = configured value": `min_bbox_aspect`, `min_area_px2`,
+  `center_deadband_px`, `vertical_bounds_px`, `tracking_iou`, `min_confidence`, `coarse_step_rad`,
+  `search_timeout_s`, `max_fine_corrections`, `max_fine_total_rad`, and the timing fields.
+- **And their source is already in the composition's hands:** the descriptor's `head_search` block - the same block the
+  detector's CUDA policy and the controller config are read from - **so this is the same plumbing I already did for the
+  contract, one more value carried to the place that writes raw records.**
+- **What stands:** evidence emission wired and stepping through the formulas; shapes separated by construction
+  (`DOCUMENT_EVIDENCE_FIELDS`); contract plumbed to the driver; the stand-in detector finds the cup; the RED refuses
+  rather than being swallowed.
+- **State:** **P1-2: evidence side nearly done, limit side needs the descriptor's config values carried to the driver.**
+  P1-3 CLOSED; P1-1 second half GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
