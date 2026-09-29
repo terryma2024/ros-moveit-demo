@@ -942,3 +942,21 @@ def test_longest_contiguous_span_ends_at_a_break_and_can_refuse_one():
     assert longest_contiguous_span_s(gapped, predicate=lambda f: f["ok"], phase="RELEASE") == 0.0
     with pytest.raises(ValueError, match="SPAN_FRAME_BREAK"):
         longest_contiguous_span_s(gapped, predicate=lambda f: f["ok"], phase="RELEASE", strict_breaks=True)
+
+
+def test_release_stability_and_occlusion_window_use_the_span_structure():
+    from so101_demo.act.task8_live_qualification import grasp_occlusion_window_s, release_stable_s
+
+    release = [{"phase": "RELEASE", "source_stamp": stamp, "steady": steady}
+               for stamp, steady in ((0.0, False), (0.1, True), (0.2, True), (0.3, False))]
+    assert release_stable_s(release, stable=lambda f: f["steady"]) == pytest.approx(0.1)
+
+    close_to_release = [{"phase": "CLOSE", "source_stamp": 0.0, "occluded": True},
+                        {"phase": "CLOSE", "source_stamp": 0.1, "occluded": True},
+                        {"phase": "CLOSE", "source_stamp": 0.2, "occluded": True},
+                        {"phase": "RELEASE", "source_stamp": 0.3, "occluded": False}]
+    assert grasp_occlusion_window_s(close_to_release, occluded=lambda f: f["occluded"]) == pytest.approx(0.2)
+    # the occlusion row, unlike the stability rows, fails the run on a frame break
+    gapped = [close_to_release[0], {"phase": "CLOSE", "source_stamp": 0.25, "occluded": True}]
+    with pytest.raises(ValueError, match="SPAN_FRAME_BREAK"):
+        grasp_occlusion_window_s(gapped, occluded=lambda f: f["occluded"])
