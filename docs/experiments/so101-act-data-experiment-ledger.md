@@ -14651,3 +14651,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   and the driver dependency still open; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval
   outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no
   runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-999 — The weld has its own test, proving the refusal cleanup (52 passed)
+
+- **Added `test_the_weld_publishes_a_thirty_three_field_qualified_report`**, which drives `build_task8_qualified_report`
+  with `live_extractors` against a campaign fixture whose **five full rows point at real sealed artifacts** and whose
+  ready report carries the **contract's own 28 field names, units and sizes** (read from
+  `calibration.REQUIRED_MEASUREMENTS` rather than invented). The fixture helper `_campaign` gained an optional
+  `live_artifacts` parameter so a test can supply real artifact files without disturbing the three existing callers.
+- **What the test proves:** the merge size is exactly **28 + 5 = 33**, and **a report the licence gate refuses leaves
+  no output on disk** - the deletion-on-refusal property, which is what makes "never leave a document that looks
+  qualified but is not" true in practice rather than by construction.
+- **What it does not yet prove, stated plainly:** the *published* 33-field document is not asserted, because a synthetic
+  ready report cannot satisfy `require_qualified`'s licence checks; the fixture would need to be a genuinely qualified
+  report. That is a fixture gap, not a code gap, and it is recorded rather than papered over.
+- **Three more real fixes came out of building it**, each an instance of the session's recurring lesson: `collect_live_runs`
+  had assumed a `live_evidence_artifact` mapping where the validated row carries `live_evidence_path`/`live_evidence_sha256`
+  (CP-998); the identity keys can come from the bundle **or** the artifact's own identity, and a missing one is now
+  refused **by name** (`IDENTITY_KEY_REQUIRED`) instead of surfacing as a confusing cross-run mismatch; and the
+  derivation now prefers each run's collected value over the older frames path, so the two routes cannot disagree.
+- **A fourth, subtler one:** the run fixture carried only the *sample* key `cup_support_distance_m`, while the *report*
+  field is `support_distance_m` - the two names would have drifted apart silently, and the fixture now carries both with
+  a comment saying why.
+- **Verified: 52 passed, rc=0** (`beh-r593g.log`) across the live-qualification and Task 8 runner suites.
+- **State:** Tasks 1-7 module work complete and green; Task 8's code side complete and green with the licence-qualified
+  fixture and the driver as its two remaining items; Tasks 9-10 untouched; the goal is armed with a 756-round budget;
+  one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe
+  interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
