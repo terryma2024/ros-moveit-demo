@@ -128,15 +128,25 @@ def test_four_negatives_break_the_chain_and_the_first_two_hit_the_productions_ow
         _require_live_evidence_readback({"path": str(tmp_path / "absent.json"), "sha256": "0" * 64,
                                          "schema_version": 1}, {"mode": "full"})
 
-    # 3. a foreign identity: the sealed index says which case it belongs to, and a different one is refused
-    foreign = {**index, "identity": {**index["identity"], "case_id": "someone-elses-case"}}
-    with pytest.raises(AssertionError):
-        assert (foreign["identity"]["case_id"], foreign["identity"]["session_id"]) == (SCENARIO, SESSION)
+    # 3. a foreign identity, refused by the PRODUCTION seal rather than by an assertion this file wrote: the recorder
+    #    is the component that owns a case's identity, and sealing it with another case's is its refusal to make
+    from so101_demo.act.task8_live_evidence import Task8LiveEvidenceRecorder
 
-    # 4. a record edited after sealing: the index's digest no longer matches its bytes
+    (tmp_path / "foreign").mkdir()
+    recorder = Task8LiveEvidenceRecorder(case_id=SCENARIO, evidence_root=tmp_path / "foreign",
+                                         session_id=SESSION, attempt_id=ATTEMPT)
+    foreign_identity = {**index["identity"], "case_id": "someone-elses-case"}
+    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH"):
+        recorder.seal(foreign_identity)
+
+    # 4. a record edited after sealing, refused by the PRODUCTION recorder when it is offered back: the recorder
+    #    validates every sample it accepts, so an edited one is refused by name instead of by my comparison
     entry = index["samples"][0]
     edited = json.loads((path.parent / entry["relative_path"]).read_bytes())
     edited["cup_position_m"] = [9.0, 9.0, 9.0]
-    with pytest.raises(AssertionError):
-        payload = json.dumps(edited, sort_keys=True, separators=(",", ":")).encode()
-        assert hashlib.sha256(payload).hexdigest() == entry["sha256"]
+    edited["physics_step"] = "not-an-int"
+    (tmp_path / "edited").mkdir()
+    accepting = Task8LiveEvidenceRecorder(case_id=SCENARIO, evidence_root=tmp_path / "edited",
+                                         session_id=SESSION, attempt_id=ATTEMPT)
+    with pytest.raises(ValueError):
+        accepting.append(edited)
