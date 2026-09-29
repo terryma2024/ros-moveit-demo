@@ -12607,3 +12607,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
      without loosening the builder.
 - **State:** Task 7 in progress at a WIP commit that names its own red suite; Tasks 1-6 committed and green; no
   runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-916 — Task 7 WIP: one failure left, and it asserts the old gate
+
+- **Read the builder's remaining validations and shaped the fixture to them** instead of loosening anything:
+  `frame` must be exactly `{wrist_frame_valid, wrist_target_visible}`; `contact` exactly
+  `{observation_valid, bilateral_contact, no_fingertip_contact, cup_supported, released, placement_stable}`; and
+  `measurements` exactly `{cup_support_distance_m, end_effector_position_m, cup_position_m,
+  cup_orientation_xyzw}`. My fixture had supplied a one-key contact and an empty measurements mapping.
+- **Suite movement:** **2 failed / 35 passed -> 1 failed / 36 passed** (`beh-task7-green5.log`). Both of my own new
+  tests now pass: the row cites every raw record and its identity, and the audit camera is refused.
+- **The single remaining failure** is
+  `test_case_driver_reaches_the_window_and_seals_into_the_case_directory`, failing with
+  `DID NOT RAISE ValueError` - it asserts an error that only existed under the **old CLOSE-only open gate**, which
+  CP-913 deliberately replaced. Like the window test already corrected in CP-915, it needs updating to the SEARCH
+  entry contract (or to probe a phase outside the required nine), and its assertions were captured alongside this
+  checkpoint so the change is mechanical rather than exploratory.
+- **Standing instruction for whoever resumes:** do not restore the CLOSE-only gate and do not weaken the builder's
+  identity, frame, contact or measurements key sets - both were changed or confirmed on evidence from the approved
+  design and the code's own contract, and each of the three failures fixed across CP-915 and CP-916 was a test or
+  fixture defect, not a production defect.
+- **State:** Task 7 in progress at a WIP commit naming its own red suite; Tasks 1-6 committed and green; no runtime,
+  no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
