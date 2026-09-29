@@ -17048,3 +17048,22 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   which today compares provenance across roots and the contract per batch but **not** the ten members across roots.
 - **State:** Boundary IV's index work is complete apart from this one comparison; the publishing half is untouched. The
   suite is green at **33 passed**, HEAD `925ca90b` plus this checkpoint.
+
+## CP-1097 — Boundary IV's index work is complete: all ten identity members agree across roots
+
+- **The last index piece landed, RED then GREEN.** The entry compared one provenance and each batch's contract digest,
+  so two batches measured under **different anchor sets or camera matrices** were aggregated together as one generation.
+  Every member of the ten-member identity must now agree across roots, else `CALIBRATION_IDENTITY_MISMATCH`.
+- **The fixture, done the way CP-1096 said it had to be:** a bound v2 contract supplies the identities, the binder's
+  **return value is the path it wrote** rather than the document (one more interface read rather than assumed, and the
+  fixture reads it back), and the two batches differ in exactly **one** member - `anchors_sha256`.
+- **GREEN: 34 passed, rc=0** (`beh-r693b.log`), scratch `<R>/scratch/r693b.<n>` with `TMPDIR` verified through the exact
+  test interpreter; the fixture-error attempt is `beh-r693.log`.
+- **Boundary IV's index work is therefore complete**, every piece RED first except the one characterization: entry
+  validates the closed batch before publishing; one canonical shape shared by writer and validator; the contract member
+  the identity actually defines; the recomputed self-digest; the symlink rule pinned; the driver's keys accepted and
+  contamination disqualifying; anchor coverage over both conventions; phase coverage; source-time monotonicity; and now
+  ten-member agreement across roots.
+- **Still ahead, untouched: the publishing half** - real measured values published rather than written as PASS, the four
+  canonical documents, a real 28-field `TASK8_READY`, render-twice byte comparison with a single publish, on-disk readback
+  of the sample path and hash, then `require_gate(report, "task8_live")` and `validate_head_search_binding()`.
