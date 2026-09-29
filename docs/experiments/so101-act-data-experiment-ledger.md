@@ -26403,3 +26403,37 @@ picture in both directions.**
 - **So the last leg's next run is `ctest` serially** (with the IPC base still set), and the boundary report will state **both** results - the parallel one with its two SIGTERM failures and the serial one - rather than
   only the flattering one. **If the serial run also fails, that is a real finding about the tests' isolation and it will be recorded as such.**
 - **State:** demo `rc=0` (5731/163); teleop `rc=0` (1430/0/0/43); CTest: chain fixed, two SIGTERM failures under `-j 8`, serial re-run pending; nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware.
+
+## CP-1586 — THE FINAL INTEGRATION BOUNDARY IS COMPLETE AND GREEN, and it earned its keep
+
+### The three legs, with fresh numbers from this boundary and no reused ones
+
+| leg | command | result |
+| --- | --- | --- |
+| **demo** | `pytest test -n 8 --junit-xml=…/demo-junit.xml` (benchmark excluded) | **`demo_rc=0`** — **5731 passed, 163 skipped**, 228 s |
+| **teleop** | `colcon test --packages-select so101_teleop --pytest-args "… -n 8 --junit-xml=…"` | **`teleop_rc=0`** — **1430 tests, 0 errors, 0 failures, 43 skipped** (pytest terms: 1271 passed / 43 skipped), 217 s |
+| **CTest** | `ctest --output-on-failure` in `build/so101_teleop` | **`ctest_rc=0`** — **100% tests passed, 0 tests failed out of 116**, 217 s |
+
+**Parameters actually used, not remembered:** 32 CPUs, **`-n 8`**, benchmark excluded, **fresh scratch**
+`scratch/final-boundary-20260929-201359/tmp` with the **literal `tempfile.gettempdir()` check printed by the exact interpreter**, **`SO101_IPC_SOCKET_BASE` at a 0700 directory** (the parameter whose omission cost twenty
+failures, CP-1583), logs and JUnit under the registered evidence root.
+
+### And the boundary found three things the focused sets could not
+
+1. **A production defect in the demo module:** `CaseEvidenceDriver.observe_capture` held `end_effector_position_m` in `measurements` and never forwarded it to `capture_evidence_fields`, which refuses a frame without it by
+   name - **so every real capture through the driver would have failed while the driver held the value the adapter demanded** (CP-1577).
+2. **A defect in THIS BATCH's own change, visible only to the teleop package:** the seal's identity now reads `self.boundary`, and that package's port double did not supply one (CP-1582), which also surfaced the contract
+   question the fix answers: **the seal now REFUSES a caller whose epochs disagree with the case rather than ignoring the claim** (CP-1583).
+3. **A defect in my own gate script:** two of them, `run-teleop.sh` and `run-ctest.sh`, never set the IPC base **the recipe had recorded all along** (CP-1583).
+
+**None of the three was visible to the focused sets, the nine-phase case, the sealed artifact or the CLI gates. That is what a boundary is for.**
+
+### And one result worth recording as a measured fact rather than a preference
+
+**`ctest -j 8` fails two tests with `BRIDGE_CHILD_EXITED: -15` (SIGTERM) and serial `ctest` passes all 116.** The two bridge tests spawn child process groups, and eight concurrent CTest jobs signal each other's children.
+**The recipe never specified `-j`**; the earlier boundary recorded a selected `ctest -R`. **Both results are recorded here - the parallel one with its two SIGTERMs and the serial one green - because the boundary report must not
+pick the flattering number.**
+
+### State
+- **All five of Astra's P1 items and P2's testable half are committed; the boundary is green; the packet and evidence index are NOT yet updated, and no review has been requested.**
+- Nothing deleted, nothing pushed; the owner's dirty files untouched; no new session, goal, worktree or stack; no hardware, no live stack, no CUDA, no actuators.
