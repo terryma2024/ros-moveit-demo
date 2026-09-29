@@ -18679,3 +18679,19 @@ not an inference of mine.**
   elsewhere, a changed controlled-config hash, and a batch that does **not** index the descriptor. Then item 4, Boundary V's
   mechanical part through `ros_child._run_pick_place`.
 - **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1172 — Item 3, two of four cases pinned: descriptor disagreement and unindexed descriptor
+
+- **Both written and both green on the first run, labelled honestly as pins rather than fixes** - CP-1171 had already
+  implemented the rule they exercise, so claiming a RED→GREEN here would be false:
+  | case | what it proves |
+  | --- | --- |
+  | payload claims a **different** descriptor than the sealed one | refused as `CALIBRATION_IDENTITY_MISMATCH`, so a payload cannot overrule the evidence the seal covers |
+  | batch seals **no** descriptor at all | the published report cannot be bound - `validate_head_search_binding` refuses it as `HEAD_SEARCH_SAMPLE_MISMATCH` |
+  **28 passed** in the aggregator module (`beh-r778.log`).
+- **The two remaining item-3 cases, and why they are separate work:** the **opaque-digest-only** context needs the entry to
+  *require* a parsed descriptor rather than validating one only when present - which is a behaviour change that will make
+  existing `--context` fixtures without a descriptor fail, so it lands with their migration in the same commit, exactly as
+  CP-1162 did for the bundle fixture. The **controlled-config-hash** case needs the contract loader's `expected_hashes` path,
+  which is a different boundary (the contract, not the descriptor) and gets its own RED.
+- **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
