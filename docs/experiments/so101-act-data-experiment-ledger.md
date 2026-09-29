@@ -12866,3 +12866,35 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Task 7 module complete and green (37 module / 76 focused set); Tasks 1-6 committed and green; Tasks 8-10
   untouched; no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-926 — First Task 7 wiring edit landed, and the real port seam is not the file the plan names
+
+- **Edited `act/pick_place_runner.py` (additively, on top of the user's in-flight work):**
+  `PickPlaceRunner.__init__` accepts an optional `window_factory`, stored as `self.window_factory`; and inside `run`,
+  immediately after `latest_step = 0`, the window is created through that factory with the five-key identity the
+  recorder requires (`case_id`, `session_id`, `attempt_id`, `reset_epoch`, `release_epoch`). Nothing else changed -
+  no seal, no grid samples, and the failure path untouched.
+- **I removed a synthetic sample I had first written.** My initial version called
+  `window.add_grid({"phase": "SEARCH", "sim_time_s": 0.0, "physics_step": 0})` to "open" the window - which would
+  have fabricated a grid point rather than recording verified evidence, exactly the practice this whole protocol
+  exists to forbid. The window now opens naturally on the first verified phase, which is SEARCH (`PHASES[0]`), and
+  the comment in the code says the grid samples come from the port's readback so none is synthesised in the runner.
+- **Verified:** `test_act_task8.py` reports **14 passed** after the first form of the edit
+  (`beh-task7-runner1.log`) and **51 passed** across `test_act_task8.py` and `test_act_task8_live_evidence.py` after
+  the correction (`beh-task7-runner2.log`), both rc=0.
+- **The discovery that changes the remaining plan:** `seal_live_evidence(request)` - which `run` already calls on
+  the success path, requiring the exact `{path, sha256, schema_version}` artifact and `LIVE_EVIDENCE_SEAL_UNAVAILABLE`
+  when absent - is implemented in **`src/adapters/act/pick_place_search_port.py:152`**, not in
+  `pick_place_child_port.py`. The plan names the *builder* module (`build_pick_place_child_search_port`), but the
+  port class and its sealer live in `pick_place_search_port.py` - which is **clean** (not user-dirty) and is therefore
+  the correct, safer place to implement the grid feed and the artifact return.
+- **So the remaining Task 7 edits are:** (1) in `pick_place_search_port.py`, feed the window's grid from the port's
+  own readback (the only place with real sim time and source stamps) and return the sealed artifact from
+  `seal_live_evidence`; (2) in the runner, emit the per-phase record call once the sim-time source is confirmed;
+  (3) `ros_child.py:525`, pass `window_factory` before constructing `PickPlaceRunner`; (4) `PickPlaceCaseOwner._retire`,
+  invalid-seal before the child retirement step; (5) `pick_place_case_execution.py`, read the artifact back before the
+  journal row.
+- **State:** Task 7 module complete and green; the runner's optional window wiring landed and green; the user's six
+  in-flight files remain untouched except `pick_place_runner.py`, whose only change is my additive window factory
+  (their 46 lines unchanged); Tasks 1-6 committed and green; Tasks 8-10 untouched; no runtime, no package gate, no
+  push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
