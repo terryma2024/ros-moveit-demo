@@ -19479,3 +19479,30 @@ not an inference of mine.**
   fix is one line in that fixture - prefer the `SO101_IPC_SOCKET_BASE` the runner already exports, falling back to the current
   behaviour - and it edits an owner file, so it waits for the owner's word rather than being taken quietly.
 - **State:** HEAD `02bf8fd3`; staged 0; both run roots retained as deletion candidates; no push, no stack, no hardware.
+
+## CP-1208 — Closing checkpoint for this stretch: one permission away from a green Task 9 gate
+
+- **The owner's list, complete except one permission:**
+  | item | state |
+  | --- | --- |
+  | 1 - descriptor = option (b), the immutable runtime config | ✅ CP-1158, CP-1162 |
+  | 2 - the same parsed descriptor through context, driver and closed-index readback | ✅ CP-1167, CP-1169, CP-1171 |
+  | 3 - focused negative set, four cases | ✅ CP-1172, CP-1173, CP-1174 |
+  | 4 - Boundary V's mechanical part, seven artefacts | ✅ CP-1185, CP-1193, CP-1195 (test committed only once green) |
+  | 5 - revised Task 9 package/xdist gate | **diagnosed to the byte**; the single remaining fix edits an owner file and waits for permission (CP-1205, CP-1207) |
+  | 6 - no full suite except the authorised gate, preserve everything | ✅ honoured: no live stack, nothing deleted, nothing pushed, no hardware |
+- **What the gate now shows, in one sentence a reviewer can act on:** *the ordinary package suite passes in full except one module -
+  `test_controller_reservation_client.py` - whose test fixture cannot fit its unix socket under this task's 63-character evidence
+  root, and which passes 17/17 when `TMPDIR` is short enough; the runner's own budget model is correct and already asserted at
+  106 with a refusal above it.*
+- **The permission being asked for, precisely:** may I change that module's `socket_path()` helper to prefer the
+  `SO101_IPC_SOCKET_BASE` the runner already exports - a short `/tmp` path - and fall back to today's
+  `TMPDIR/../../ipc` behaviour when it is unset? It is a one-line change to a test fixture, it cannot alter any production
+  behaviour, and it is the last thing between this task and a green formal gate.
+- **Why I am stopping rather than taking it:** it is the owner's file, untouched by me all stretch, and the last three
+  checkpoints have been the measurement that justifies touching it. Making the edit quietly is exactly the shortcut item 4
+  forbids in spirit - and this stretch has already paid three times for writing something before reading it (CP-1142, CP-1186,
+  CP-1202), so the habit of asking when the answer belongs to somebody else is the one worth keeping.
+- **Evidence and state:** HEAD `aa49002e`; staged 0; ledger 918 checkpoints; run roots `scratch/g794`, `scratch/g798w1`,
+  `scratch/g802`, `s799`…`s804/tmp` retained as deletion candidates, nothing deleted; formal accepted Train/Validation/Offline
+  Test 0/0/0; `collection_*` NOT_PROVISIONED; the 17 provisional values still `null` with `requires_approved_value: true`.
