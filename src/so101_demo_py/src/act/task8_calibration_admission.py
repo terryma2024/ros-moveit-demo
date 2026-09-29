@@ -77,7 +77,12 @@ class CalibrationMeasurementContext:
     def __init__(self, *, generation: str, contract_sha256: str, measurement_plan_sha256: str,
                  safe_interval_rad, candidate_sha256: str, policy_sha256: str,
                  driver_source_sha256: str, controller_generation: str, broker_generation: str,
-                 evidence_root: str, resource_binding, runtime_descriptor) -> None:
+                 evidence_root: str, resource_binding, runtime_descriptor,
+                 # The production controller path reads these four through the context, and until they existed here the
+                 # formal composition failed at its first check while a duck-typed test namespace satisfied it
+                 # (CP-1632/1633). They default to None so existing callers keep working: what ENFORCES them is the
+                 # composition, which refuses by name when they are absent.
+                 calibration_report=None, session_id=None, attempt_id=None, search_start_rad=None) -> None:
         # section 4.2/6: the parsed runtime descriptor travels in the context once, so no later component re-reads the
         # preparation directory; the one shared rule reads it, and an omitted descriptor is a state a caller must be
         # able to see rather than a silent default
@@ -102,6 +107,10 @@ class CalibrationMeasurementContext:
         lower, upper = safe_interval_rad
         if not lower < upper:
             raise ValueError("CONTEXT_IDENTITY_INVALID: safe interval")
+        self.calibration_report = calibration_report
+        self.session_id = session_id
+        self.attempt_id = attempt_id
+        self.search_start_rad = search_start_rad
         self.generation = generation
         self.contract_sha256 = contract_sha256
         self.measurement_plan_sha256 = measurement_plan_sha256
