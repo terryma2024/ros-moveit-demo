@@ -105,6 +105,33 @@ def _publish_receipt(document: dict, target: Path) -> Path:
     return target
 
 
+
+def _require_runtime_descriptor(runtime_path: Path, calibration_path: Path) -> None:
+    """Approved preparation design section 4.2: the runtime config is parsed, never bound as opaque bytes.
+
+    Reuses the production validator's own reading of the descriptor, and adds the CUDA policy that section 4.2 states:
+    Task 8 live requests CUDA with allow_cpu_fallback false, and a resource shortage is a human decision rather than a
+    silent recovery on CPU.
+    """
+
+    _regular(runtime_path, "TASK8_PREPARATION_RUNTIME_CONFIG_MISSING")
+    try:
+        runtime = json.loads(runtime_path.read_bytes())
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID") from error
+    if (type(runtime) is not dict or set(runtime) != {"schema_version", "head_search"}
+            or runtime["schema_version"] != 1 or type(runtime["head_search"]) is not dict):
+        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID")
+    detector = runtime["head_search"].get("detector")
+    if type(detector) is not dict:
+        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID")
+    if detector.get("allow_cpu_fallback") is not False or detector.get("requested_device") != "cuda":
+        raise ValueError("TASK8_PREPARATION_CUDA_REQUIRED")
+    # the full runtime/report pairing is the aggregator's check (measurement design section 8, proven at CP-1122);
+    # demanding a fully bound report here would make every bundle fixture carry a measured calibration, which is a
+    # different decision taken at a different boundary
+    del calibration_path
+
 def prepare_task8_bundle(inputs: Task8ArtifactInputs, bundle_root: Path) -> Path:
     """Copy every business artifact into one bundle and commit its receipt."""
 
@@ -118,6 +145,8 @@ def prepare_task8_bundle(inputs: Task8ArtifactInputs, bundle_root: Path) -> Path
     if bundle_root.exists() and any(bundle_root.iterdir()):
         raise ValueError("TASK8_PREPARATION_DESTINATION_IN_USE")
     bundle_root.mkdir(parents=True, exist_ok=True)
+    # section 4.2: parse the immutable runtime config through the production validator before binding anything
+    _require_runtime_descriptor(Path(inputs.runtime_config), Path(inputs.calibration_report))
     artifacts = {}
     for name in _ARTIFACTS:
         source = Path(getattr(inputs, name))
