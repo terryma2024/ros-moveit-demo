@@ -15426,3 +15426,32 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the tool's own limits as its subject; if it does not, the conflict was always a configuration matter.
 - **Not yet claimed:** anything about the run's outcome. It has not finished, and its result - pass or fail, and whether
   the socket class appears - will be recorded when it settles.
+
+## CP-1028 — The gate refused a dirty worktree even with `--allow-dirty`: exact error and what it means
+
+- **The first sanctioned gate run (job `bash-2751`) failed closed immediately, rc=1, with one line:**
+  ```
+  SO101_PYTEST_GATE_ERROR: pytest process failed closed: collection: invalid provenance
+  ```
+  at HEAD `15e3647e` with 43 dirty paths, invoked with `--allow-dirty` and a matching `--expected-source-commit`
+  (`beh-r620-gate.log`). So `--allow-dirty` **by itself is not sufficient** for this tool, and I am not going to guess the
+  rest of its requirement - the help text distinguishes `--allow-dirty` ("allow a provenance-recorded diagnostic run
+  from a dirty worktree") from `--allow-dirty-path` ("allow **one exact** audit-only dirty path while rejecting all
+  others"), and the phrase "invalid provenance" points at the tool's own provenance gate rather than at any test.
+- **Two ways forward, and the difference between them is what gets recorded:**
+  1. **read the tool's provenance requirement** rather than infer it - it may need `--allow-dirty-path` entries per
+     path (43 here), a particular combination with `--expected-source-commit`, or a clean tree outright. The session's
+     recurring rule applies verbatim: read the interface, cite it, then invoke.
+  2. **run the gate on a clean tree**, which is the same condition that would make the run a *formal* gate rather than a
+     diagnostic - and it is the same condition the owner's in-flight work blocks (CP-993, CP-1012 lineage). If the
+     owner commits or stashes the 43 paths, both the gate and the Task 8 caller unblock together.
+- **What is now known about Task 9, and it is more than before:** the runner exists, its interface is fully read, the
+  `--python` problem is solved by pointing it at the test venv (xdist 3.8.0, MuJoCo 3.12.0), the teleop registration gap
+  is fixed (CP-1024), the socket conflict has a designed remedy (`--process-id-chars`, CP-1027) - and the remaining
+  obstacle is **provenance on a worktree carrying someone else's uncommitted work**, which is a policy state rather than
+  a technical fault.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9 has a named runner, a determined interpreter, fixed registration and a socket remedy, and its first
+  invocation is recorded as a refused diagnostic rather than a pass or a failure; Task 10 blocked until the 17 search
+  values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
