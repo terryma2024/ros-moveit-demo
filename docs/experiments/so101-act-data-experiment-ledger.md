@@ -22565,3 +22565,19 @@ not an inference of mine.**
   fabrication.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1360 — The hook is exact, and the estimate the owner deserves
+
+- **Read:** `PickPlaceSearchSegment.__init__(self, sources, adapter, scene_port, geometry: TaskGeometry, *, ...)` and
+  **`run(self, request: dict, *, reset_epoch: int) -> PickPlaceSearchObservation`** - **so the boundary's `search` becomes a call to
+  `segment.run(request, reset_epoch=...)`**, and the substitution surface is the segment's own collaborators: the MuJoCo `sources`, the
+  controller `adapter`, the MoveIt `scene_port`, the `geometry`, and the verifiers it takes by keyword. **That is the real I/O boundary, and it
+  is where the reviewer's instruction points.**
+- **The honest estimate, for the owner and not just the ledger:** satisfying P1-5 as written - the real execution adapter and production seal,
+  `run_pick_place_case()`, the trusted aggregator, **seven indexed assertions** and **four negatives** - is a harness on the scale of the
+  original item, because the production segment validates a deep physical-evidence surface (CP-1357) that no existing fixture builds. **Items
+  1-4 are complete and green; this one is the remainder.** The review's own instruction is to finish all five before the single integration
+  boundary, so **I am continuing rather than proposing a partial submission** - but I am recording the size plainly, because a reviewer reading
+  a packet later should not have to infer it, and because the owner may have a view on priority that I do not.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
