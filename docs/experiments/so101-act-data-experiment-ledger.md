@@ -22764,3 +22764,18 @@ not an inference of mine.**
   fixture change on a hunch.** That is the same discipline that worked in the middle of this batch and the same one I drifted from here.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1373 — The fence takes its deadline as a PARAMETER, so the caller is where the value is decided
+
+- **Read:** the fence never derives a deadline itself - `self._request_deadline_ns` starts as `None` and every entry point takes
+  `deadline_ns: int` **as an argument** (`_request(epoch, stopped_wall_s, deadline_ns, *, after_step)`), validating its type. **So the refusal is
+  decided by whatever the SEGMENT passes at that call site**, and the segment's call comes from `_post_stop_interval(...)`, whose return value is
+  the `marker` the observation carries as `physics_step_fence`.
+- **Therefore the next read is `_post_stop_interval` itself** - specifically which value it hands the fence as `deadline_ns` and in what units,
+  since a real `time.monotonic_ns()` (about 1.7e18) against anything smaller refuses exactly as observed. **Printed above is the grep that
+  narrows that function's relevant lines**, so the next round reads the value rather than searching for it.
+- **A pace note, plainly:** P1-5's search path has now taken roughly sixteen rounds, each one buying a named production contract or a corrected
+  diagnosis. **Items 1-4 remain complete and green and nothing in this stretch has weakened a check** - but I am recording the tail cost so the
+  owner and the next reviewer see it, not just the ledger's optimism.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
