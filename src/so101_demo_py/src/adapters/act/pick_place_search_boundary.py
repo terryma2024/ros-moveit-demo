@@ -344,6 +344,34 @@ class PickPlaceSearchBoundary:
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: premature contact")
         return facts
 
+    def planning_attached(self, request):
+        """Whether MoveIt still has the cup attached - READ from the planning scene, never assumed."""
+
+        scene = getattr(self, "planning_scene", None)
+        probe = getattr(scene, "is_attached", None)
+        if not callable(probe):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: planning_scene.is_attached")
+        value = probe()
+        if type(value) is not bool:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: planning_scene.is_attached")
+        return value
+
+    def detach_moveit(self, request):
+        """Detach the cup from MoveIt, then READ BACK that it is detached.
+
+        The physical release must happen with no planning attachment (the repository's own rule), so the postcondition
+        is read through the same probe rather than inferred from the detach call having returned.
+        """
+
+        scene = getattr(self, "planning_scene", None)
+        detach = getattr(scene, "detach", None)
+        if not callable(detach):
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_NOT_PROVISIONED: planning_scene.detach")
+        detach()
+        if self.planning_attached(request) is not False:
+            raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: planning scene still attached")
+        return True
+
     def sequence_phase(self, phase, request, *, observed, selected_source,
                        gripper_closed_rad=None, close_duration_s=None, support_distance_max_m=None,
                        motion_template=None, motion_duration_s=None):

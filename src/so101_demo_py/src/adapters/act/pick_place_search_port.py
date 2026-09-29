@@ -571,20 +571,33 @@ class PickPlaceSearchPhasePort:
     # is implemented it refuses by NAME, so an unimplemented path can never be mistaken for a completed one - which is
     # exactly what the previous behaviour (an AttributeError, or a phase that silently returned nothing) allowed.
 
-    def set_down(self, *args, **kwargs):
-        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: set_down")
-
-    def detach_moveit(self, *args, **kwargs):
-        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: detach_moveit")
-
-    def planning_attached(self, *args, **kwargs):
-        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: planning_attached")
-
     def release_preflight(self, *args, **kwargs):
         raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: release_preflight")
 
     def run_retreat_segment(self, *args, **kwargs):
         raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: run_retreat_segment")
+
+    def set_down(self, *args, **kwargs):
+        raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: set_down")
+
+    def _boundary_capability(self, name, request, *args):
+        """Call a capability the boundary owns, or refuse by name - the port never re-implements one."""
+
+        capability = getattr(self.boundary, name, None)
+        if not callable(capability):
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: boundary.{name}")
+        try:
+            return capability(request, *args)
+        except PickPlaceSearchPortError:
+            raise
+        except Exception as error:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: boundary.{name}: {error}") from error
+
+    def detach_moveit(self, request, *args, **kwargs):
+        return self._boundary_capability("detach_moveit", request)
+
+    def planning_attached(self, request, *args, **kwargs):
+        return self._boundary_capability("planning_attached", request)
 
     def _sequence_evidence(self, phase: str, request: dict) -> dict:
         """Assemble one sequence phase's evidence from the boundary's own facts, or refuse by name.
