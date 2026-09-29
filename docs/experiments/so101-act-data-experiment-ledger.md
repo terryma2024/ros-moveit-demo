@@ -17625,3 +17625,24 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   wiring** that would record the descriptor and the evidence at measurement time (CP-1117's hand-off, which needs the
   authorised runtime rather than a fixture), and then Boundary V's production-chain test. Nothing weakened, nothing
   deleted, no push, no stack, no hardware.
+
+## CP-1125 — Regression sweep over the neighbouring suites: nothing broke, and the render path is green
+
+- **Ran the suites my publishing-half changes could plausibly have disturbed, targeted rather than full** (the owner's
+  instruction), each with a fresh NVMe scratch and `TMPDIR` verified through the exact test interpreter:
+  | run | modules | result |
+  | --- | --- | --- |
+  | `beh-r732.log` | `test_act_task8_measurement_formulas.py`, `test_act_task8_measurement_driver.py` | **87 passed** |
+  | `beh-r733.log` | `test_act_task8_calibration_render.py`, `test_act_calibration.py`, `test_act_task8_calibration_admission.py`, `test_act_task8_artifact_bundle.py` | **52 passed** |
+  | `beh-r731.log` | aggregator, contract, head-search binding | **55 passed** |
+- **What that establishes, concretely:** the **four-document render path** is green (`test_act_task8_calibration_render.py`)
+  - so "what remains" item 1 is not a defect but a *content review* against the plan's definitions; `require_gate` /
+  `require_qualified` are green in their own suite (`test_act_calibration.py`); the admission and artifact-bundle paths are
+  green; and the measurement driver's own suite passes **87** tests, which matters because my aggregator now consumes the
+  shapes that suite builds.
+- **No fallout from any of this boundary's changes** across roughly 194 tests in five suites, run as three targeted
+  invocations rather than a full gate. Nothing weakened, nothing deleted, no push, no stack, no hardware.
+- **The one remaining item needs the owner, and it is the same one CP-1117 named:** the live driver wiring that records the
+  head-search descriptor and the raw evidence **at measurement time** cannot be finished against fixtures - it needs an
+  authorised runtime (a live MuJoCo/ROS stack) to compose the real adapters, which is Boundary II's outstanding
+  composition item as well. Everything on the reporting side is now in place for that wiring to plug into.
