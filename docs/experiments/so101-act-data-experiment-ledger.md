@@ -19614,3 +19614,30 @@ not an inference of mine.**
   workaround.**
 - **State:** HEAD `6858750d` plus this checkpoint; staged 0; scratch, IPC bases, JUnit and all logs retained as deletion
   candidates; no push, no stack, no hardware.
+
+## CP-1213 — Goed resumed and active; the package gate needs a build-time interpreter, not another runtime workaround
+
+- **Goal state verified, not assumed:** `get_goal` reports **phase `active`, activation `armed`, revision 53, cap 1000** — the
+  resume the owner asked for is already in force and **no new goal was created** (the id is the same
+  `goal-c67c4522-…-96c938e72662`).
+- **The authorised RED/GREEN and the first half of the gate were already complete before this instruction, and re-verified here:**
+  fixture fix RED 15 failed/2 passed → **GREEN 19 passed** (CP-1210, with JUnit and the `AF_UNIX path too long` evidence), and the
+  formal pytest-xdist gate **rc=0, 5638 passed, 0 failed, 163 skipped** at 8 workers on a fresh NVMe scratch with a fresh 0700
+  IPC base (CP-1211).
+- **The package/`colcon` gate: three attempts, three named failures, and the mechanism is now clear:**
+  | attempt | variation | result |
+  | --- | --- | --- |
+  | 1 | plain `colcon test --packages-select so101_demo_py` | rc=2, 1.1 s, `No module named 'mujoco'` |
+  | 2 | `PYTHONPATH` → the venv's site-packages (mujoco 3.12.0 present) | rc=2, 5.6 s, same collection error |
+  | 3 | **venv first on `PATH`** (so `pytest` and `python3` both resolve to `test-venv`) | rc=2, 1.2 s, same failure |
+  So colcon does **not** run that package's tests through the interpreter on `PATH` or through `PYTHONPATH`; it uses whatever
+  interpreter the package was **built/installed** with. Environment variables cannot change that after the fact.
+- **The remaining route is a build-time one, and I have not taken it:** selecting the venv's Python for the package's build
+  (for instance `colcon build --packages-select so101_demo_py --cmake-args -DPython3_EXECUTABLE=…`, or rebuilding with that
+  interpreter as `python3`) would let its test command see `mujoco`. That is a **rebuild of a package in a shared worktree**
+  whose rules require a complete dependency closure for a fresh build base, so it is not something to do inside a checkpoint
+  without the owner's word - and the owner's earlier instruction was explicit that a runner-pass cannot substitute for the
+  package gate, which cuts both ways: a `colcon` invocation that cannot import the package's own dependency is not evidence
+  about the code.
+- **State:** HEAD `c3e7da87` plus this checkpoint; staged 0; every log, JUnit file, scratch and IPC base retained as deletion
+  candidates; no push, no MuJoCo stack, no hardware.
