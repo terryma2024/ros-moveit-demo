@@ -24377,6 +24377,8 @@ evidence:
   - ros_child.py:512-527; CP-1467; packet correction (sha256 fa8bb925...)
 decision: PENDING
 next_experiment: NONE until the owner or the review rules on the route
+correction: CP-1470 - the fix must feed GRIDS AND EVENTS through the driver route (observe / observe_capture), not grids alone: the driver's
+  observe, observe_capture and seal all have zero production callers, so the event half (the review's command event) is unreachable too.
 ```
 
 - **And the fixture's role, said plainly because a reviewer will otherwise read it as production:** the focused fixture's `record_phases` calls
@@ -24410,3 +24412,21 @@ picture in both directions.**
 - **What this does to the scope question:** unchanged in substance, but better supported. A full case needs **both** the eight unprovisioned phases **and**
   the evidence feed; **the feed is now the smaller and more self-contained of the two** (route (a) or (b) in EXP-519), whereas the phases are a much larger
   build. **If the owner wants one of these done first, the feed is the one that removes a hole rather than adding a capability.**
+
+## CP-1470 — The hole generalises: the whole driver route is unreachable in production, not only the grid
+
+- **Chasing `add_event`'s two production hits resolved them to the same file and the same conclusion:**
+  - `task8_live_evidence.py:552` is the **definition**; the only **call** is `:641`, inside `CaseEvidenceDriver.observe(...)` when `event=True`;
+  - and **`observe` has no production caller** - the ten `.observe(` hits in production belong to other classes (scene and truth observers). The driver's own methods
+    (`observe`, `observe_capture`, `seal`) have **0, 0 and 0** production callers; `ros_child.py:519` constructs it and uses only `.window`.
+- **So the accurate statement is wider than CP-1467's:** in production today the live-evidence route is wired **only as far as attaching the window**. **Grids** went
+  through the port's own call, which could not build the canonical sample (a crash before the fix, a gap after it). **Events** would go through
+  `observe(..., event=True)`, which nothing calls. **Sealing by the driver** is likewise uncalled - sealing is reachable only through the **port's**
+  `seal_live_evidence`, which the runner invokes for a full case that reaches FINAL_CHECK (CP-1469).
+- **Consequence for the review's seven assertions, stated exactly:** the ones that depend on the driver route - **the gripper-open command event**, **adjacent
+  support rows**, **the artifact digest**, **both receipts as full-case evidence** - cannot be produced in production because **that route has no caller**;
+  the ones that depend on the campaign/journal path (status, completed phases, the prefix rule, the retirement receipts, the journal digest) are produced and
+  asserted (CP-1447 - CP-1461). **That is a sharper answer to the scope question than "the later phases are unprovisioned": even with the phases built, the
+  evidence route would still be empty.**
+- **Correction appended to `EXP-519` (not a rewrite of its frozen text, per the ledger's own rule):** the fix must feed **grids and events** through the
+  driver route, not grids alone - otherwise the "command event" assertion remains as unproducible after the fix as before it.
