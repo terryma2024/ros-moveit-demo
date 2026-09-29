@@ -18944,3 +18944,23 @@ not an inference of mine.**
   to force a test to confront.
 - **State:** goal active (revision 51, cap 1000); HEAD `96719519`; staged 0; the untracked test remains failing and
   **uncommitted**, per the owner's instruction, and it is one assertion from green; logs `beh-r783` … `beh-r795`.
+
+## CP-1184 — GREEN, and committed as the owner required: Boundary V's case runs and the live evidence seals for real
+
+- **The test is in the tree and passing:** `src/so101_teleop/test/teleop/test_task8_case_runner_chain.py`, **1 passed**, rc=0
+  (`beh-r796.log`). It was kept **untracked while red** - twelve iterations from the first import error to this - and is
+  committed **only now that it is green**, exactly as item 4 instructed.
+- **What it proves, and why it is not decoration:** the case is driven by the **real** `PickPlaceRunner`; the fake sits at the
+  external I/O seam only; the live evidence goes through the **production** `Task8LiveEvidenceRecorder` and
+  `LiveEvidenceWindow` and is sealed by the port's own three-step sequence (window before recorder, idempotent on an
+  already-published artifact, CP-1179). **No `object.__new__`, no hand-filled `_ready`, no direct `finish`** - the three
+  shortcuts the owner's item 4 forbids, and the reason the existing chain test could not simply be reused.
+- **Three details the code taught, now in the fixture's comments:** the **physics-step clock and the evidence-grid clock are
+  different clocks** (the release handshake advances physics three times between two recorded rows); the window is bound to the
+  fixture's `reset_epoch`; and the runner's incremented `release_epoch` applies to the phase evidence rather than to the seal
+  identity. Each of those was a real refusal from the production code, not a fixture wrinkle.
+- **Boundary V's remaining work, now purely additive:** the seven assertions the plan lists - SEARCH rows, the release open
+  event, three adjacent 10 Hz support rows in one epoch, FINAL_CHECK, the sealed artifact read **back from disk**, the
+  confirmed retirement, and the journal path and hash - plus routing the same port through `ros_child._run_pick_place`
+  (`_pick_place_port`, `_startup_proof_consumer`) so the child supplies the window rather than the test.
+- **State:** goal active (revision 51, cap 1000); HEAD at this commit; staged 0; no full suite, no push, no stack, no hardware.
