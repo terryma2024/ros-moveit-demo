@@ -48,16 +48,26 @@ def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_pa
     batch_root, bound_path, sealed = _formally_sealed(tmp_path, monkeypatch)
     contract = json.loads(bound_path.read_bytes())
 
-    # the two quantities, printed so a failure says WHICH contract rule disagreed
+    # the two quantities, so a failure says WHICH contract rule disagreed
     declared = sealed["identity"]["measurement_contract_sha256"]
     bound_self = contract["contract_sha256"]
-    try:
-        aggregate_task8_calibration([batch_root], contract, tmp_path / "out")
-    except ValueError as error:
-        assert "CALIBRATION_IDENTITY_MISMATCH" not in str(error), (
-            "a batch sealed by the formal entry must not be refused as a foreign contract: "
-            f"the seal names {declared[:16]}… while the bound document's self-digest is {bound_self[:16]}… "
-            f"({error})")
+
+    # P1-2 (rereview 5): this used to be a `try/except ValueError` that only asserted the refusal was not
+    # `CALIBRATION_IDENTITY_MISMATCH` - so a TOTAL aggregator failure (`RAW_EVIDENCE_REQUIRED`) still produced GREEN.
+    # The rule is the end-to-end one: the entry's seal must be CONSUMED, and the consumption must produce output.
+    output_root = tmp_path / "out"
+    report = aggregate_task8_calibration([batch_root], contract, output_root)
+    assert isinstance(report, dict) and report, "the aggregator returns a report rather than raising"
+
+    # real output: a field-verdict set recomputed from the sealed raw records, and a report document on disk
+    verdicts = report.get("field_verdicts") or report.get("verdicts") or {}
+    assert verdicts, f"the aggregator recomputed measurements from the sealed batch: {sorted(report)}"
+    recomputed = [field for field, value in verdicts.items() if value != "UNMEASURED"]
+    assert recomputed, (
+        "and at least one field was recomputed from raw evidence rather than declared UNMEASURED: "
+        f"{verdicts} (seal names {declared[:16]}…, bound document's self-digest is {bound_self[:16]}…)")
+    written = sorted(path.name for path in output_root.rglob("*.json"))
+    assert written, f"the aggregation published its documents: {output_root}"
 
 
 def test_a_batch_naming_another_contract_is_still_refused(tmp_path, monkeypatch):

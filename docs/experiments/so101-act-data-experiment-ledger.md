@@ -30050,3 +30050,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
      verdict's explicit prohibition.
 - **State:** **P1-3 CLOSED; P1-1 second half GREEN; P1-2's gap now has a named line on each side and a plan; P1-4, P1-5,
   P1-6 and the demo RED's clean re-measurement remain.** No controlled change this round beyond the analysis.
+
+## CP-1782 — P1-2's RED is confirmed with the verdict's own error, and the GREEN's shape is read
+
+- **The RED, written by removing the swallowed exception:**
+  ```
+  1 failed, 1 passed
+  test_act_task8_identity_contract_end_to_end.py::test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting
+      task8_measurement_formulas.py:51: ValueError: RAW_EVIDENCE_REQUIRED: no raw measurements in payload
+  ```
+  **The same refusal the verdict found in the retained batch**, now produced by a focused run - and the `try/except
+  ValueError` that let it pass is gone: the test asks for a **report**, for **field verdicts recomputed from raw
+  evidence**, for **at least one non-`UNMEASURED` field**, and for **documents on disk**.
+- **And the GREEN's shape is now read rather than guessed:**
+  ```python
+  def _compute(section, raw, contract):
+      require_raw_inputs(raw)                       # measurements must be a NON-EMPTY mapping
+      for name, entry in contract[section].items():
+          results[name] = _FORMULAS[name](raw, entry)
+  ```
+  each formula reading what it needs through helpers - `_bboxes(raw, "<field>")` for the detector fields,
+  `_limit(raw, "<field>")` for the configured limit, and their siblings for camera, timing and search fields. **So the
+  join is not a new format**: the driver's records already carry real raw evidence (`geometry`, `controller_ack`,
+  `source_stamp`, …), and what they lack is **the keys the formulas read** - `bboxes`, the camera block, the timing
+  samples, and the `configured` limits beside them.
+- **Which also fixes the constraint the verdict states for this work:** the emission happens **at write time**, in
+  `_write_record`, where the record is built - **never after sealing, never with a re-seal, and never by altering the
+  sealing identity**.
+- **State:** **P1-3 CLOSED; P1-1 second half GREEN; P1-2 RED confirmed with its production error named; the driver's
+  emission is the next edit.** P1-4, P1-5, P1-6 and the demo RED's clean re-measurement remain.
