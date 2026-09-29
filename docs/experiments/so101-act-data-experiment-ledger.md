@@ -21925,3 +21925,19 @@ not an inference of mine.**
   next attempt starts by reading that test's body in full rather than by pattern-matching another two lines.
 - **State:** all of P1-3's changes and the partial fixture repair remain **uncommitted while red**; no stack started, no CUDA, no
   actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1324 — The closure fix did not apply (my anchor did not match the file's quoting), and all four failures are the same root cause
+
+- **What happened, mechanically:** I wrote the replacement for the helper's `files = {...}` line using the quoting I *believed* the file
+  had; the assertion guarding the edit failed, so **nothing was written** - the guard did its job, and the run reproduced the same four
+  failures rather than a new breakage. **The actual line is printed above**, which is what the next edit anchors on instead of a
+  recollection of it.
+- **And the four failures are one root cause:** three fake drivers seal batches whose `files` map does not cover **every** regular file
+  under the batch root - one because it also writes `execution.json`, two because they still seal **markers** - so the strict closure check
+  (`set(_regular_files(root)) == set(files)`) refuses them, exactly as it should. **The entry is right; the fakes are still optimistic.**
+- **The honest reading of this stretch:** P1-3's production change is done and green on its own terms (the entry reads the seal back,
+  INVALID yields a nonzero exit and an INVALID ledger outcome, evidence is preserved), and **the remaining work is purely making three
+  fake drivers produce production-shaped seals** - which is the same "strengthen the fixtures" pattern as P1-2, and which I have now
+  edited four times by pattern rather than by reading the call site first, the error CP-1238 and CP-1323 both named.
+- **State:** P1-3's changes and the fixture work remain uncommitted while red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
