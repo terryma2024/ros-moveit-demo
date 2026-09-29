@@ -480,21 +480,21 @@ def collect_live_runs(rows, *, identities: dict, extractors: dict) -> tuple:
     import hashlib
     import json
 
-    full = [row for row in rows if row.get("live_evidence_artifact") is not None]
+    # the validated case row carries a live-evidence path and digest (a prefix row carries empty strings), which is
+    # the contract `require_case_journal_row` enforces - not an artifact mapping
+    full = [row for row in rows if row.get("live_evidence_path")]
     if len(full) != 5:
         raise ValueError(f"FIVE_FULL_RUNS_REQUIRED: found {len(full)} full runs")
     policy = identities.get("contact_policy_fingerprint")
     matrix = identities.get("phase_camera_matrix_sha256")
     runs = []
     for index, row in enumerate(full):
-        artifact = row["live_evidence_artifact"]
-        if type(artifact) is not dict or not artifact.get("path") or not artifact.get("sha256"):
-            raise ValueError("SEALED_SAMPLE_REQUIRED: a full run must name its sealed artifact")
-        target = Path(artifact["path"])
+        target = Path(row["live_evidence_path"])
         if target.is_symlink() or not target.is_file():
             raise ValueError(f"SEALED_SAMPLE_REQUIRED: {target} is not a readable regular file")
         payload = target.read_bytes()
-        if hashlib.sha256(payload).hexdigest() != artifact["sha256"]:
+        digest = row["live_evidence_sha256"]
+        if hashlib.sha256(payload).hexdigest() != digest:
             raise ValueError(f"SEALED_SAMPLE_DIGEST_MISMATCH: {target.name}")
         document = json.loads(payload)
         samples = document.get("samples")
@@ -503,7 +503,7 @@ def collect_live_runs(rows, *, identities: dict, extractors: dict) -> tuple:
         identity = document.get("identity") or {}
         run = {"run_index": index, "session_id": identity.get("session_id"),
                "contact_policy_fingerprint": policy, "phase_camera_matrix_sha256": matrix,
-               "sample_path": str(target), "sample_sha256": artifact["sha256"],
+               "sample_path": str(target), "sample_sha256": digest,
                "support_frames": [], "samples": samples}
         for field in LIVE_ONLY_FIELDS:
             extractor = extractors.get(field)
