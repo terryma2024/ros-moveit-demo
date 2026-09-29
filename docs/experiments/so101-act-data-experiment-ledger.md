@@ -29314,3 +29314,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **rc 0 - and the single failure CP-1745 recorded did not recur.** The honest reading is the one already written: **that test is a five-second wait that the full parallel gate can starve**, it passes in isolation and in its own file, and **the gate was re-run at the same parallelism rather than lowered** (which is what `AGENTS.md` requires). **5764 passed against the v4 baseline's 5748** - the difference is this work's own tests, all of them green.
 - **Leg 2 (teleop) launched** with its own fresh scratch (`teleop-scratch/tmp`), the same fail-closed `gettempdir()` check, `-n 8`, and xunit output into `$ROOT/teleop-results` - so the canonical `Test.xml` for this boundary will be a NEW file under the new root, not the v4 one (`…/Testing/20260929-1419/Test.xml`, which stays untouched as the artefact P2 froze).
 - **State:** **boundary leg 1 green; leg 2 in flight; leg 3 (serial CTest) follows**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1747 — Leg 2's scratch was still the v4 tree, and the fix taught a lesson about `pkill`
+
+- **What the script actually said, which my earlier blanket rewrite had missed:**
+  ```
+  was: SC=/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/v4a/t-teleop
+  now: SC=/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/v5a/t-teleop   (84 chars)
+  ```
+  The teleop and CTest legs do **not** use `$ROOT/<leg>-scratch`: they use the **short** paths under `experiments/v4a/`, because a long path exceeds the AF_UNIX socket limit (**84 chars is what fits**; this was recorded when the v4 boundary was built). **My rewrite only matched the `$ROOT/…` form, so leg 2 would have reused the v4 scratch** - the one thing "fresh scratch per run" forbids.
+- **And the first attempt to fix it killed my own shell:** `pkill -f "run-teleop.sh"` matched the command line of the shell that was running it, so the tool call died by SIGTERM before it could patch anything. **The lesson is the one this batch keeps meeting in other forms: a pattern is not an identity** - `pkill -f` selects on a substring of the whole command line, and my own command contained that substring. **The fix used PIDs**:
+  ```
+  ps -eo pid,args | grep -E "colcon test --packages-select so101_teleop" | awk '{print $1}'  ->  kill <each>
+  ```
+  and the relaunch then ran with the corrected scratch. **Verified: exactly one leg running** (`timeout` + `colcon`, 33 s elapsed), scratch `v5a/t-teleop`, and `teleop.log` growing.
+- **Also worth recording so the freeze stays honest:** the canon for this boundary will be a **new** `Test.xml` under the new root's `teleop-results`; the v4 file (`…/Testing/20260929-1419/Test.xml`, 662025 bytes, `eb1130b8b7f8420e`) **stays untouched** as the artefact P2 froze.
+- **State:** **leg 1 green, leg 2 running with a fresh short scratch, leg 3 next**; P1-1 … P1-5 and P2 complete; code frozen at `dc89b6dd`; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
