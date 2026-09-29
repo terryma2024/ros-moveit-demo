@@ -363,3 +363,39 @@ def test_a_batch_hiding_a_symlink_is_refused_even_when_it_is_indexed(tmp_path):
     # problem rather than as a closure problem, which is the more precise diagnosis
     with pytest.raises(ValueError, match="BATCH_PATH_INVALID"):
         validate_closed_batch(root)
+
+
+def test_a_batch_records_its_cleanup_and_a_contaminated_one_is_refused(tmp_path):
+    """Boundary IV: the driver's own batch document validates, and contamination disqualifies it.
+
+    The measurement driver writes ``cleanup`` and ``contamination`` beside the seal's fields, so the validator must
+    accept that shape when cleanup was confirmed - and refuse the batch when it was not, because a contaminated batch
+    must never feed a published report.
+    """
+
+    import hashlib as _hashlib
+
+    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+
+    def build(root, contamination):
+        (root / "raw").mkdir(parents=True)
+        (root / "raw" / "row.json").write_text('{"row": 1}')
+        digest = _hashlib.sha256((root / "raw" / "row.json").read_bytes()).hexdigest()
+        identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
+        identity["source_commit"] = "b" * 40
+        document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+                    "anchors": ["default", "left", "forward"], "identity": identity,
+                    "files": {"raw/row.json": digest},
+                    "cleanup": {"requested": {"anchor": "forward", "generation": "gen-1"}, "status": "CONFIRMED"},
+                    "contamination": contamination}
+        document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
+        write_closed_json(root / "batch.json", document)
+        return root
+
+    confirmed = build(tmp_path / "clean", None)
+    assert validate_closed_batch(confirmed) is not None, "the driver's batch shape validates when cleanup confirmed"
+
+    dirty = build(tmp_path / "dirty", "CLEANUP_REFUSED: RuntimeError")
+    with pytest.raises(ValueError, match="BATCH_INVALID"):
+        validate_closed_batch(dirty)
