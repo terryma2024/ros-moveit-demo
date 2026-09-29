@@ -14332,3 +14332,30 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
   candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-985 — The aggregates come from `derive_frame_aggregates`; the raw records are caller-supplied
+
+- **Followed `raw_records` to its producer and found the piece that matters:**
+  `src/adapters/act/pick_place_readback.py` (428 lines) captures world/scene/contact/rgb and exposes
+  `capture_evidence_fields(captured, *, support_distance_max_m, raw_records)`, whose docstring states the rules this
+  session has been enforcing from the other side: "the physics aggregates come from the world evidence (**never from a
+  label**); the step, sim time, both stamp maps and **the caller's dereferenceable raw records** complete the frame".
+  It builds the per-frame fields through `derive_frame_aggregates(world, support_distance_max_m=...)` - which is where
+  the sample key `cup_support_distance_m` comes from - and passes `raw_records` through unchanged.
+- **Two consequences, both settling open questions:**
+  1. the support distance **is** carried per frame in the samples as `cup_support_distance_m`, produced from world
+     evidence rather than from a label; what the design's row adds beyond that is the **exact-pair contact proof**
+     (`bottom_collision`/`table_collision` active) and the three-consecutive-pre-open-frames window, which is precisely
+     what `support_distance_from_frames` enforces - so the two are complementary, not competing, and my fast path in
+     `_support_from_frames` is the right fallback;
+  2. `raw_records` are **supplied by the caller** of `capture_evidence_fields`, so their container shape is a
+     caller-side decision rather than a fixed schema. That is exactly why the extractor design is correct: predicates
+     and records are bound at the call site, and `make_raw_reader` verifies whatever the seal indexed.
+- **So CP-984's remaining piece is a caller-side wiring task, not an unknown schema:** the concrete predicates bind
+  where the records are written - in the port/child path, which is partly the user's in-flight work - which is route
+  (2) of CP-984 and the reason not to duplicate it here.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation, collection,
+  raw-access, extractor and weld layers green at 49 across two suites; Tasks 9-10 untouched; the goal is armed with a
+  756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
+  candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
