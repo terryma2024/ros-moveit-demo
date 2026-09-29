@@ -26105,3 +26105,18 @@ picture in both directions.**
   modification time, and contain the same `_current_observation` / `current_readback` / `_release_epoch_for` occurrences. **So the code being exercised is the code being written.**
 - **State:** P1-1..P1-3 green and committed; the nine-phase milestone and the campaign gate committed; the sealed-artifact test and the fixture's prefix changes are uncommitted while red, per this batch's rule. No new
   session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1567 — P1-4 IS COMPLETE: the nine-phase case seals, and the artifact is read back from its records
+
+- **`8 passed`** across the sealed-artifact test and the full-case test - **and with that, all five of Astra's P1 items are closed:** P1-1 (the composition->measurement contract), P1-2 (the shared
+  descriptor validator), P1-3 (the SEARCH evidence and the window feed) and P1-4 (the phases, the seal, the seven **indexed** assertions and the four negatives). **P2 is what remains.**
+- **The seven assertions read the ARTIFACT, not the run:** its own digest through the **production** readback rule, the sample count, the per-record digest chain, the identity and epochs on every record, the
+  **24-key canonical shape**, the phase coverage with **`RADIAL_RETREAT` twice** (two segments, one phase), and the **one-period cadence**. **Four negatives break the chain** - a tampered artifact, a missing artifact, a
+  foreign identity and an edited record - **and the first two hit the production refusals by name.**
+- **Three contract rules the fixture had been inventing around, each read from the code that refused it - and this is the round's real lesson:**
+  1. **`first_target_delay_s` is exactly `0.1`** (`PREFIX_FIRST_TARGET_DELAY_INVALID` otherwise);
+  2. **`target_interval_s` is exactly `0.002` if declared**, and the target sits at `origin + delay + interval` (`PREFIX_TARGET_INTERVAL_INVALID` / `PREFIX_TIME_GRID_INVALID`);
+  3. **the readback's clock must stay inside the prefix's window** while the **grid's** cadence comes from the `add_grid` wrapper - two different clocks, on purpose, and the earlier failures were the two of them
+     fighting.
+- **And one more production-facing fix came out of it:** the receipt is now **signed against the prefix the boundary actually receives**, which is what `PATH_SOURCE_RECEIPT_INVALID` had been saying.
+- **State:** P1-1..P1-4 complete and committed; the focused set green. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
