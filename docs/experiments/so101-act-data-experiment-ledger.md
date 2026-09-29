@@ -25264,3 +25264,18 @@ picture in both directions.**
 - **Next:** CLOSE's execution in the boundary - a `'gripper'` trajectory to this admitted value, dispatched through the broker, with the phase-aware `sequence_facts("CLOSE", ...)`
   establishing the document for the runner to judge.
 - **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1516 — CLOSE is implemented; its boundary-level test is the remaining proof
+
+- **`55 passed`** across the worker-port, child-driven, ros-child and IPC files after the plumbing, and the boundary now has its **first sequence phase implementation**:
+  `sequence_phase(phase, request, *, observed, selected_source, ...)` requires the case's admitted target and duration **by name**, requires the broker's **`dispatch`** and the driver's
+  **`wait`** by name (the wait policy belongs to the execution layer - a poll loop here would be a policy nobody set), builds the gripper trajectory **from the robot's own current joint
+  value** to the admitted closed position over the admitted duration, dispatches it through the broker's public boundary, and then establishes the facts with the **phase-aware**
+  `sequence_facts`, which refuses a CLOSE document without a bilateral grasp.
+- **And the case admits `close_duration_s` beside `gripper_closed_rad`** - same precedent, same named refusal - plumbed through the payload, `ActWorkerPort`'s request keys, the child's
+  `bind_case_targets`, and the support distance now travels with the sequence call exactly as the motion targets do.
+- **What CLOSE still needs is its proof:** a boundary-level test where the runner's `_verify_phase` judges the document, with the broker, the driver's wait and the physics substituted -
+  the same shape as APPROACH's chain test, with a readback whose world shows the bilateral grasp. **The execution is written; the test is next, and then CLOSE is done by the same standard
+  APPROACH was held to.**
+- **State:** P1-1..P1-3 green and committed; APPROACH end to end and committed; CLOSE implemented, test pending. No new session, goal, worktree or stack; nothing pushed, nothing deleted;
+  no hardware.
