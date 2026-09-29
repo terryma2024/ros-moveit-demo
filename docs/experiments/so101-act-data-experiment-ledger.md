@@ -16242,3 +16242,16 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   green at 5759/5759, rc=0** (CP-1056); the two invalid-invocation artefacts retained and marked (CP-1054/CP-1055
   corrected, not rewritten); the short IPC base registered as a deletion candidate and not deleted. No push, no evidence
   deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1058 — Implementation-review packet produced for tasks 1-9
+
+- **Written from verified facts:** every commit cited in
+  `handoffs/20260930-task7-onward/task8-implementation-review-packet.md` was checked with `git log -1` first, so the
+  packet's per-task table names the real commit for tasks 1-6 and the real evidence for tasks 7-9 rather than a
+  recollection. It records the deliverables, the owner-approved decisions with their commits, the **deviations and
+  corrections on record** (the aggregator seam, the phase-list correction, the row-contract bug, the two invalid gate
+  invocations, the entangled fixture edit) and the three open items a reviewer should weigh, with the search-values
+  packet referenced by path.
+- **Why this is the right next step rather than waiting:** the approved plan's own completion criterion requires the
+  implementation review to pass, and that review needs this material; producing it involves no guessing and no change to
+  any production behaviour, and it leaves Task 10 exactly as blocked as the owner requires.
