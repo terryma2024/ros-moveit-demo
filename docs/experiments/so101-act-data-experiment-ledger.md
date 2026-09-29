@@ -14359,3 +14359,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   756-round budget; one approval outstanding (the 17 candidate search values, three `neck_start_rad` starts and the
   candidate safe interval); no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-986 — Task 8 remainder and Task 9 readiness recorded in the handoff
+
+- **Appended the newest Task 8 truth to `handoffs/20260930-task7-onward/HANDOFF.md`:** the code side is complete and
+  green at 49 focused tests across two suites; what remains is **caller-side wiring** where the raw records are
+  written, with the specific predicate-to-field binding listed; and where
+  `capture_evidence_fields` states the protocol's own rule ("the physics aggregates come from the world evidence, never
+  from a label").
+- **Also recorded what Task 9 needs before it can run meaningfully:** it is the single full xdist gate across both
+  packages, so it should follow Task 8's completion; it needs a fresh nonexistent scratch under the registered
+  evidence root with `TMPDIR`/`TMP`/`TEMP` verified through the exact test interpreter; and the three user-dirty files
+  carrying my additive changes must be resolved first - staged hunk-wise or committed once the user's work lands -
+  because otherwise the gate's diff is not mine alone and its result would be ambiguous.
+- **State:** Tasks 1-7 complete and green; Task 8's code side complete and green with caller-side wiring outstanding;
+  Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval outstanding (the 17 candidate search
+  values, three `neck_start_rad` starts and the candidate safe interval); no runtime, no package gate, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
