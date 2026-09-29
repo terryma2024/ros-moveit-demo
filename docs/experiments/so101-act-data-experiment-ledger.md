@@ -70,7 +70,7 @@ open_hypotheses:
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
 latest_checkpoint: CP-1464
-next_experiment: NONE until the owner returns an independent GPT-6 Astra/High verdict on the P1-5 packet (handoffs/20260930-task7-onward/task8-astra-rereview-packet.md, 23306 bytes, sha256 7de92953cc5033c99d35e793729dc51752773f35ee91692fcebee79581f171fe); the alternative is the owner directing the eight unprovisioned phase implementations
+next_experiment: wire the live evidence feed (plumb the captured frame out of the SEARCH segment or expose a boundary field-builder, then feed the window through CaseEvidenceDriver.observe_capture; ROS domain/GZ partition unset, no stack) - CP-1467; and NONE for the review item until the owner returns an independent GPT-6 Astra/High verdict on the P1-5 packet (handoffs/20260930-task7-onward/task8-astra-rereview-packet.md, 23306 bytes, sha256 7de92953cc5033c99d35e793729dc51752773f35ee91692fcebee79581f171fe); the alternative is the owner directing the eight unprovisioned phase implementations
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -24303,3 +24303,24 @@ boundary, and (4) no alternative explanation remains (duplicate stacks, stale bi
 | **nothing here is live-robot or live-simulator evidence** | **OBSERVED** | no stack was started in this batch at all: `ROS_DOMAIN_ID` and `GZ_PARTITION` unset, zero MuJoCo/ROS processes at the checks | the physical phases remain **HYPOTHESIS-only** territory and are explicitly not claimed |
 - **What this classification is for:** it tells a reviewer exactly which sentences in the packet are **enforced by code**, which are **observed from a run**, and which are
   **statements about provisioning** - and it names the one confound this batch has (the first RED log's coincidence), instead of leaving a reviewer to find it.
+
+## CP-1467 — Material correction: in production the evidence driver is constructed and never fed
+
+- **The question I should have asked earlier and asked this round:** *who actually feeds the window in production?* Answer, from `ros_child.py:512-527`:
+  the child **constructs `CaseEvidenceDriver`** and **attaches only `evidence.window`** to the port, and then **never uses the driver again** - no
+  `observe`, no `observe_capture`, no `seal`. The comment there states the intent plainly: *"The case records its evidence through the port"*.
+- **Which means the port's grid feed was the ONLY feeder**, and my fix therefore has a consequence I must state instead of implying otherwise:
+  | state | what a live SEARCH case does |
+  | --- | --- |
+  | before the port fix | raises `TASK8_LIVE_EVIDENCE_SAMPLE_INVALID` on every attached-window SEARCH - **crash, no evidence, phase incomplete** |
+  | after the port fix | completes the phase with the window attached and **nothing feeds it** - **no live-evidence samples at all** |
+  **So the fix trades a crash for a gap rather than restoring evidence.** The packet said the component owning the adapter records the frame; **in
+  production no component does today, and the packet now carries that correction** (written where the reviewer will read it, with the digest restated below).
+- **The correct minimal fix, named so it cannot be hand-waved:** plumb the **captured frame** out of the SEARCH segment (the only place holding the readback
+  adapter's `capture_evidence_fields` fields) - or expose a documented boundary field-builder the port may call - and feed the window through
+  **`CaseEvidenceDriver.observe_capture`**. **That is an interface change across the segment, the port and the child's attach, so it belongs in its own
+  commit with its own RED->GREEN, not smuggled into a test-only change.**
+- **`next_experiment` is set to exactly that**, because it is now the batch's **largest open production gap** - larger than the scope question, which is a
+  limitation, whereas this is a hole.
+
+*(Packet size 24896 bytes, sha256 `fa8bb9251655d30da4c946a8abd25108c253ea80bb7204245e50746cb96618d5` as of this checkpoint.)*
