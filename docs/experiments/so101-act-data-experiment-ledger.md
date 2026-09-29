@@ -20505,3 +20505,21 @@ not an inference of mine.**
   root bare) and the positive case (all roots sealed with identical payloads → the sample's `head_search` is the sealed block). **The
   four existing negatives stay as they are.**
 - **State:** HEAD `b4b9ad83` plus this checkpoint; item 4's code untouched so far; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1252 — Item 4's code is changed; the aggregator's own fixture has to catch up
+
+- **Both changes are in the aggregator:**
+  1. **every root now requires the sealed, indexed descriptor** - a bare root raises `CALIBRATION_DESCRIPTOR_MISSING` instead of
+     being skipped, which is what let a sample rest on fewer roots than it claimed;
+  2. **the second authority is gone** - the `elif` that copied `measurements.json`'s own `head_search` into the published sample is
+     deleted and replaced by a refusal, so the sealed descriptor is the only one that can reach the sample.
+- **And the suite went `21 failed / 7 passed`, every failure `CALIBRATION_DESCRIPTOR_MISSING` (plus one regex mismatch on
+  `CALIBRATION_IDENTITY_MISMATCH`) - which is the rule biting the fixture, not a defect in the rule.** The aggregator's own
+  `_v2_batch`/`_sealed_batch` helpers build batches that do **not** index `runtime-descriptor.json` (their definition lines are printed
+  above), so under the corrected aggregator every one of them is now a bare root. **That is the honest reading: the tests were
+  constructing batches the production driver could not have produced.**
+- **The next step is one edit to that helper:** index the descriptor alongside the other artefacts, which is what the driver does since
+  CP-1247 - and then the four existing negatives plus the two new cases (multi-root with a bare root fails closed; identical payloads
+  across sealed roots pass) become the suite.
+- **State:** the aggregator source change is **uncommitted while red**; the build tree has been synced for it; no stack, no hardware,
+  nothing deleted, nothing pushed.
