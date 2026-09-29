@@ -312,6 +312,9 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     outputs = {"calibration_report": report_path, "aggregation_receipt": receipt_path}
     if sample is not None:
         outputs["head_search_qualification"] = sample
+    if support_sample is not None:
+        # the fourth canonical document: written to disk but previously invisible to the caller
+        outputs["task8_ready_support"] = support_sample
     return outputs
 
 

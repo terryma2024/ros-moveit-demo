@@ -621,3 +621,23 @@ def test_a_runtime_that_does_not_match_the_measured_descriptor_is_refused(tmp_pa
     other["head_search"]["motion"]["goal_tolerance_rad"] = 0.05
     with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
         validate_head_search_binding(other, report)
+
+
+def test_a_v2_render_is_byte_identical_when_repeated_and_publishes_once(tmp_path):
+    """Boundary IV item 4 on the v2 path: the 28-field report and its two samples render deterministically."""
+
+    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+
+    contract = json.loads(Path(bind_measurement_contract(
+        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _v2_batch(tmp_path / "batch", contract)
+    out = tmp_path / "out"
+    first = aggregate_task8_calibration((batch,), contract, out)
+    snapshot = {name: Path(path).read_bytes() for name, path in first.items()}
+    listing = sorted(str(path.relative_to(out)) for path in Path(out).rglob("*") if path.is_file())
+
+    second = aggregate_task8_calibration((batch,), contract, out)
+    assert {name: Path(path).read_bytes() for name, path in second.items()} == snapshot
+    assert sorted(str(path.relative_to(out)) for path in Path(out).rglob("*") if path.is_file()) == listing
+    assert len(snapshot) == 4, f"the four canonical documents, saw {sorted(snapshot)}"
