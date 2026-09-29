@@ -32866,3 +32866,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   is an `int` where four production readers require a vector of length `nv`.** P1-1 through P1-4 CLOSED. The demo RED's
   clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses are unchanged, so they
   are not re-stated.**
+
+## CP-1873 — The scene frames come from the scene port, and the fixture's `_Scene` does not provide them
+
+- **One more reader, and it names the producer:**
+  ```python
+  # pick_place_readback.py
+  111   scene_frames = self.scene.recent_frames_with_receipts()
+  118   scenes = {frame["simulation_step"]: (frame, received) for frame, received in scene_frames …}
+  136   scene, scene_received = scenes[step]
+  145   qpos = scene["qpos"]
+  338   qvel = raw["scene"]["qvel"]        # the enriched document, read from the scene port's own frames
+  ```
+  **so the scene document comes from the SCENE PORT's `recent_frames_with_receipts()`** - and the segment suite's
+  `_Scene` double provides only `apply_task_scene`/`observe_task_scene` (CP-1849's read), **so the frames are supplied
+  elsewhere: by the boundary the harness builds, through whatever stands in for the scene port.**
+- **Which makes this the end of the chain rather than another link:** the `int` `qvel` is in a frame document that a
+  scene-port stand-in returns, **and the four production readers validate it as a vector of length `nv`**
+  (`pick_place_approach_path_screen.py:168`, `stationary_bridge_history.py:97`, `selected_approach_candidate.py:108`,
+  `pick_place_search_reference.py:45`) - **so the fixture's frame is wrong in a way production would refuse four times
+  over, and it is the last fixture in this drive's path.**
+- **State:** **P1-5 in progress: the chain from the scene port's frames to the expert route's physical proof is read end to
+  end, and the remaining defect is one malformed `qvel` in a frame the scene-port stand-in returns.** P1-1 through P1-4
+  CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet remain. **Task-list statuses
+  are unchanged, so they are not re-stated.**
