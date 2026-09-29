@@ -92,5 +92,33 @@ def test_the_phase_path_is_sampled_at_the_admitted_period_with_inputs_and_result
     assert len(samples) == int(round(PHASE_DURATION_S / PERIOD_S)) + 1, len(samples)
     first = samples[0]
     assert "joints_rad" in first, "each sample retains the INPUT it was projected from"
-    assert "bbox_px" in first and "visible" in first, "each sample retains its RESULT"
+    assert "bbox_px" in first and "in_frame" in first, "each sample retains its RESULT"
     assert samples[1]["t_s"] - samples[0]["t_s"] == pytest.approx(PERIOD_S)
+
+
+def test_the_formal_entrys_replay_rows_carry_a_measured_observation(tmp_path, monkeypatch):
+    """P1-3's wiring half: a sealed batch's phase rows must say MEASURED, not ABSENT.
+
+    The evaluator measures (CP-1675), but the driver still calls it with `(phase, index)` alone, so a production
+    replay writes `geometry_state: "ABSENT"` with an empty sample list. **The design's "2 ms projected sampling" is a
+    property of the SEALED EVIDENCE**, so this reads the batch the formal entry seals rather than the evaluator in
+    isolation - and it is the requirement the marker was introduced to make visible.
+    """
+
+    import json as _json
+
+    from test_act_task8_formal_measurement_entry import _formal_run
+
+    measure, argv = _formal_run(tmp_path, monkeypatch)
+    assert measure.main(argv) == 0, "the formal entry must seal before its evidence can be judged"
+    batch = tmp_path / "batch"
+    phase_rows = sorted(batch.rglob("phase-*.json"))
+    assert phase_rows, "the private replay writes one row per phase"
+    for row in phase_rows:
+        record = _json.loads(row.read_bytes())
+        observation = record["observation"]
+        assert observation.get("geometry_state") == "MEASURED", (
+            f"{row.name} carries {observation.get('geometry_state')!r}: the replay must measure the phase path, and "
+            "the driver must hand the evaluator the run's trajectory, camera and target")
+        assert observation["samples"], f"{row.name} must retain its per-sample inputs and results"
+        assert len(observation["samples"]) > 1, "2 ms sampling over a phase is more than one sample"

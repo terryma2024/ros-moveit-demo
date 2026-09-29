@@ -43,8 +43,8 @@ def _bottom_io_from_seam():
 
     spec = os.environ.get(BOTTOM_IO_SEAM_ENV)
     if not spec:
-        return None, None, None
-    client = factory = frames = None
+        return {}
+    resolved = {}
     for entry in (part.strip() for part in spec.split(",")):
         if not entry:
             continue
@@ -55,13 +55,15 @@ def _bottom_io_from_seam():
         value = getattr(module, attribute, None)
         if value is None:
             raise ProductionCompositionError(f"PRODUCTION_BOTTOM_IO_SEAM_INVALID: {entry}")
-        if "detector" in attribute:
-            factory = value
-        elif "frame" in attribute:          # the camera boundary the real detector's protocol needs
-            frames = value
+        for name, key in (("detector", "detector_factory"), ("frame", "frame_source"),
+                          ("phase", "phase_path"), ("path", "phase_path"),
+                          ("target", "target"), ("occluder", "occluder_geometry")):
+            if name in attribute:
+                resolved[key] = value
+                break
         else:
-            client = value
-    return client, factory, frames
+            resolved["client"] = value
+    return resolved
 
 
 class MeasurementDetectorAdapter:
@@ -234,13 +236,23 @@ class PhaseCameraMatrixEvaluator:
         sample = {"t_s": float(entry.get("t_s", 0.0)), "joints_rad": joints, "neck_rad": neck,
                   "camera": {"position_m": list(position), "rpy_rad": list(rpy)}}
         if projected is None:
-            sample.update({"bbox_px": None, "visible": False, "occluded_by": blocked})
+            sample.update({"bbox_px": None, "in_frame": False, "occluded_by": blocked})
             return sample
         u, v, focal, _in_camera = projected
         radius_px = focal * target_radius / max(1e-9, abs(_in_camera[2]))
+        # `in_frame`, NOT `visible`: the driver's raw layer refuses verdict-like tokens in a raw row
+        # (`FORBIDDEN_OUTPUT_TOKENS` contains "visible"), and whether the projection landed inside the image is a
+        # measurement result rather than a verdict - so the key is named for what it measures
         sample.update({"bbox_px": [u - radius_px, v - radius_px, u + radius_px, v + radius_px],
-                       "visible": not blocked, "occluded_by": blocked})
+                       "in_frame": True, "occluded_by": blocked})
         return sample
+
+    def _path_for(self, phase):
+        """The phase's joint path: a mapping, or a provider the run supplies per phase."""
+
+        if callable(self.trajectory):
+            return self.trajectory(phase) or {}
+        return self.trajectory or {}
 
     def __call__(self, phase, index):
         camera = self.document.get("camera", {})
@@ -249,7 +261,7 @@ class PhaseCameraMatrixEvaluator:
                        "camera": {"frame_id": camera.get("frame_id"), "width_px": camera.get("width_px"),
                                   "height_px": camera.get("height_px")},
                        "matrix_sha256": self.document.get("matrix_sha256")}
-        samples = (self.trajectory or {}).get("samples") or []
+        samples = self._path_for(phase).get("samples") or []
         if not samples or not self.target:
             observation.update({"geometry_state": "ABSENT", "period_s": self.period_s, "samples": []})
             return observation
@@ -389,7 +401,8 @@ def _admitted_controller_config(*, context, descriptor, session_id=None, attempt
 
 def build_real_providers(*, context, descriptor, binding=None, io_client=None,
                          session_id=None, attempt_id=None, search_start_rad=None,
-                         yolo_detector_factory=None, controller_factory=None, frame_source=None) -> dict:
+                         yolo_detector_factory=None, controller_factory=None, frame_source=None,
+                         phase_path=None, target=None, occluder_geometry=None) -> dict:
     """Build the five production collaborators from the admitted context and the frozen descriptor.
 
     This is what the formal entry reaches with nothing set in the environment: the detector comes from the descriptor's
@@ -401,14 +414,19 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
     # P1-1: the two BOTTOM boundaries may be stood in for - and only those two. Everything else (the stack when a
     # client is supplied, the clock, the controller adapter, the phase camera) is still this composition's own work,
     # which the whole-provider seam could never show because it replaced all five at once.
-    if io_client is None or yolo_detector_factory is None or frame_source is None:
-        seam_client, seam_factory, seam_frames = _bottom_io_from_seam()
+    if any(value is None for value in (io_client, yolo_detector_factory, frame_source,
+                                       phase_path, target, occluder_geometry)):
+        seam = _bottom_io_from_seam()
+        seam_client = seam.get("client")
         # a named client may be an object or a factory/class: call it once when it is the latter, so the seam can name
         # either the repo's own canned client class or a ready-made instance
         if io_client is None and seam_client is not None:
             io_client = seam_client() if callable(seam_client) and not hasattr(seam_client, "launch") else seam_client
-        yolo_detector_factory = (yolo_detector_factory if yolo_detector_factory is not None else seam_factory)
-        frame_source = frame_source if frame_source is not None else seam_frames
+        yolo_detector_factory = yolo_detector_factory or seam.get("detector_factory")
+        frame_source = frame_source or seam.get("frame_source")
+        phase_path = phase_path or seam.get("phase_path")
+        target = target or seam.get("target")
+        occluder_geometry = occluder_geometry or seam.get("occluder_geometry")
 
 
     from so101_demo.act.search import HeadSearchController
@@ -460,7 +478,15 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
         # persistent stack is still built, but the adapter is what implements the protocol the driver calls
         "stack": Task8StackAdapter(io_client) if io_client is not None else PersistentTaskStack(),
         "clock": _monotonic_clock(),
-        "phase_camera": PhaseCameraMatrixEvaluator(load_phase_camera_matrix()),
+        # P1-3: the phase camera is built with the geometry a measurement actually has - the run's phase path, the
+        # target it looks for, and the occluders' own geometry - so the replay measures instead of echoing the matrix.
+        # Without them the evaluator says ABSENT, and the DRIVER refuses that by name rather than sealing it.
+        "phase_camera": PhaseCameraMatrixEvaluator(
+            load_phase_camera_matrix(), trajectory=phase_path,
+            # a provider is called once for the run's own values: the target and the occluders' geometry are
+            # per-measurement facts, while the phase path is per phase and stays callable
+            target=target() if callable(target) else target,
+            occluder_geometry=occluder_geometry() if callable(occluder_geometry) else occluder_geometry),
     }
 
 
