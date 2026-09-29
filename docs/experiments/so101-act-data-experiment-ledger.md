@@ -13500,3 +13500,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
   set 244); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
   gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-954 — ActChildLaunch read; one constructor left before the chain fixture can be written
+
+- **`ActChildLaunch`** (`src/so101_teleop/so101_teleop/unified/bridge.py`) is a frozen dataclass with eight fields -
+  `campaign_id`, `worker_id`, `execution_generation`, `ros_domain_id`, `namespace`, `controller_name`,
+  `mujoco_session_id`, `socket_root` - validating that the three identity strings are non-empty
+  (`CHILD_IDENTITY_INVALID`) and that `execution_generation` is a non-negative int (`CHILD_GENERATION_INVALID`). So the
+  `spec.payload["children"]` entry the owner parses is fully specified.
+- **The single remaining unknown** before the full-chain fixture can be written is
+  `PickPlaceCaseOwner`'s **constructor signature** plus the names of its supplied collaborators
+  (`workload_service`, `artifact_binding`, `stack_factory`, `final_clear_probe`, `final_clear_timeout_s`, and the
+  child owner), since the fixture must hand it doubles for each. Every other piece is recorded: the `start()`
+  collaborator contract and identity relationships (CP-949), the retirement sequence with my insertion's position
+  (CP-951), the receipt shape including the child root's required absences (CP-952), `OwnerKey`'s five fields (CP-953)
+  and now `ActChildLaunch`'s eight.
+- **Why I stopped at the boundary rather than writing the fixture this round:** writing it needs that constructor, and
+  the last nine rounds have shown repeatedly that a fixture built on an assumed interface fails at a scope check or -
+  worse - passes without exercising the real code. Reading one more signature is cheaper than one more
+  misattributed failure.
+- **State:** Tasks 1-6 committed and green; Task 7 green at every increment (plan's Step-4 command 53, broader focused
+  set 244); three user-dirty files carry my additive, uncommitted changes; Tasks 8-10 untouched; no runtime, no package
+  gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
