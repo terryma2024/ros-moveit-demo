@@ -21417,3 +21417,25 @@ not an inference of mine.**
   accept that it proves less. **Both are ready to implement; neither should be chosen by me.**
 - **State:** HEAD `c0430f7f` plus this checkpoint; the fixture **uncommitted while red**; no live stack, no hardware, nothing deleted,
   nothing pushed.
+
+## CP-1297 — Owner decision route (a) implemented: the fixture now runs against the real compiled ACT scene
+
+- **The owner authorised compiling `src/so101_demo_py/assets/mujoco/act/scene.xml` with `MjModel.from_xml_path` for validation only - no
+  stepping, no stack, no CUDA, no actuators - and the work proceeded exactly on that basis.** What that unlocked, and how each piece was
+  read before it was written:
+  | gate | what it demanded | fixture's answer |
+  | --- | --- | --- |
+  | `load_installed_phase_contact_allowlist` | the loader **compiles the installed scene itself** (`get_package_share_directory("so101_demo_py")/assets/mujoco/act/scene.xml`) and checks the policy against that exact model | the fixture compiles the same scene once and writes the real `model_sha256(model)`, the scene's bytes digest, `mujoco.__version__` and `allowed_other_contact_bodies == ["table"]` into the payload, recomputing the fingerprint from it |
+  | proposal envelope | `verify_disabled_proposal` checks the **envelope's own hash over the envelope minus that field** | `proposal_sha256` computed the way the admission suite does it, not over the payload (my earlier attempt) |
+  | stale write | my own leftover line rewrote the receipt with the pre-recompute fingerprint | removed |
+  | `_StackOwner` | requires `environment_sha256`, then `pgid == pid` (`IPC_STACK_OWNER_GROUP_INVALID`) | the owner comes from `local_owner(...)` with its group replaced by its own pid, and the request describes the same owner |
+  | `IpcRequest` | required `command_id`, `service_epoch`, `runtime_id`, `service_token`, a **dict** payload, then `campaign_id`/`worker_id`/`session_id`/`attempt_id`/`execution_generation` and a `token` (`IPC_ACT_IDENTITY_REQUIRED`, `IPC_TOKEN_REQUIRED`) | all supplied; payload via `.model_dump()` |
+  | the ROS/process seam | the child would otherwise start a **real broker** | a fake broker is injected at that seam - an external I/O boundary, which the rules allow a test to stand in for |
+- **Exact result of the focused run (`rev5-zb.log`): one failure remaining, and it is two field *types* in my request:**
+  `execution_generation` must be an **int** (mine is a string) and `token` must be a **`DispatchTokenModel`** instance (mine is a string).
+  **Everything before those two fields is satisfied by production code**, including the compiled-scene contact policy check that the owner
+  authorised this turn.
+- **No stepping, no stack, no CUDA, no actuators, no hardware were used**; the compile happens inside the production loader and once in the
+  fixture for the policy payload.
+- **State:** the child-driven test file is still **uncommitted while red**; items 1-4 complete and committed; nothing deleted, nothing
+  pushed.
