@@ -25961,3 +25961,28 @@ picture in both directions.**
   next action**, and it is the last thing between this case and a sealed artifact.
 - **State:** P1-1..P1-3 green and committed; the `current_readback` capability, the unified sample helper and the fixture clock are in the tree (the focused set was green before the fixture clock change and will be
   re-run with it); the full-case test remains uncommitted while red, per this batch's rule. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1559 — THE NINE-PHASE CASE RUNS END TO END, VERIFIES EVERY PHASE AND SEALS ITS EVIDENCE
+
+- **The result, quoted from the run rather than paraphrased:**
+  ```
+  full-case result: {'status': 'PASSED',
+                     'completed_phases': ['SEARCH', 'APPROACH', 'CLOSE', 'MICRO_LIFT', 'TRANSPORT', 'ALIGN',
+                                          'RELEASE', 'RADIAL_RETREAT', 'FINAL_CHECK'],
+                     'stopped_confirmed': True,
+                     'formal_episode_eligible': True,
+                     'live_evidence_artifact': {'path': '...', 'sha256': ..., 'schema_version': 1}}
+  ```
+  **and `58 passed` across the nine-phase case plus the seven focused demo-side files.**
+- **The last three gaps were all one shape, and it is CP-1467's finding one layer down: components that were wired up and then never fed.**
+  1. the **eight sequence phases never recorded a grid sample** - only SEARCH and the retreat segments did, so the window could never see all nine and the seal could never complete;
+  2. the **APPROACH branch had its own path and no feed either** - the same gap, one branch over;
+  3. the **grid's clock** was built from a cached SEARCH instant mixed with fresh readbacks, which produced deltas that were **neither one period nor two** - the recorder's rule is `abs(delta - period) <= tolerance`.
+- **Every grid sample now goes through one helper reading the boundary's current readback**, and the fixture defines the substituted world's clock so consecutive samples are **exactly one period apart** - *the recorder's rule, which in
+  a real case MuJoCo's clock has to satisfy.*
+- **AND THE CAVEAT, recorded here rather than buried, because it is the most important sentence in this entry:** the runner reports **`formal_episode_eligible: True`** for this run **because everything IT checks is
+  satisfied. A substituted runtime is not something it can detect.** So that flag must not be read as "the task was performed" - **which is exactly why this batch's constraints require a real acceptance run before any formal claim, and why
+  the ledger's own `collection_*` entries stay NOT_PROVISIONED and the formal Train/Validation/Offline Test counts stay 0/0/0.**
+- **What this milestone does establish, and what it does not:** it establishes that **the production runner, port, nine phases, validators, seal and recorder work together end to end** and that every document they produce satisfies the
+  contracts the repository enforces. It does **not** establish that a robot or MuJoCo performed a pick-and-place, and nothing in this batch has run against live hardware or a real simulator session.
+- **State:** P1-1..P1-3 green and committed; the nine-phase milestone committed; the full-case test is now part of the focused set and green. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
