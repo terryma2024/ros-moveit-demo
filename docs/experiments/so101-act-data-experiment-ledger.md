@@ -31465,3 +31465,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress, its faithful branch fully mapped to an existing working pattern; the reuse in the
   full-case harness is the next edit.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final
   gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1829 — The import direction matters, and the path-insertion precedent is already there
+
+- **Reading where the teleop suite's cross-imports actually point corrects CP-1819's caution into a precise rule:**
+  ```
+  test_task8_case_execution                   src/so101_teleop/test/teleop/…
+  test_task8_live_evidence_production_chain   src/so101_teleop/test/teleop/…
+  test_act_campaign_admission                 src/so101_teleop/test/teleop/…
+  test_gate6_bound_authority_wiring           src/so101_demo_py/test/…          <- the OTHER direction
+  ```
+  **So the teleop suite's existing cross-imports are within itself**, and the direction my full-case harness would need -
+  teleop importing `so101_demo_py`'s gate-6 helpers - **has not been crossed before.** CP-1819's rule (a `so101_demo_py`
+  test must not depend on teleop internals) therefore stands as one-directional: **demo_py must not reach into teleop;
+  teleop reaching into demo_py is the direction that would be new.**
+- **And the mechanism for it is already in the harness, used for exactly this purpose:**
+  ```python
+  if str(_SEGMENT_SUITE) not in sys.path:
+      sys.path.insert(0, str(_SEGMENT_SUITE))
+  ```
+  **the child-driven harness inserts another suite's directory onto `sys.path` to import its test module** - so doing
+  the same for `so101_demo_py`'s test directory follows the file's own convention rather than inventing one.
+- **Which gives the reuse a concrete shape:** a teleop-side helper that inserts the demo_py test directory and imports
+  the gate-6 fixtures (`_AckServer`, `_real_client`, `_domain`) **is not a new pattern, and it duplicates no production
+  behaviour** - it reuses a test pattern to build a **production** broker, which is precisely the faithful branch.
+- **State:** **P1-5 in progress with the reuse's direction and mechanism both settled against the file's own
+  conventions.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review
+  packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
