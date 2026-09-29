@@ -22720,3 +22720,17 @@ not an inference of mine.**
   completed `search`.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1370 — The fence's rule, read: it is a CLOCK relationship, and the clock is injected
+
+- **The rule (`physics_step_fence.py:172-176`):** when sending a step it requires
+  `sent = self.monotonic() >= stopped_wall_s`, `sent_ns = self.clock_ns() > 0`, **`sent_ns < deadline_ns`**, and on later sequences
+  `sent_ns >= self._last_result["ack_received_monotonic_ns"]` - otherwise `PHYSICS_STEP_FENCE_INVALID`.
+- **So my fixture's failure is a clock relationship, not a missing proof:** the request carries a **real** deadline
+  (`time.monotonic_ns() + 60s`), while the segment suite's `_segment(...)` helper defaults its clock to a **test** clock, so `clock_ns()` cannot
+  be below a real deadline it knows nothing about. **The fix is the injectable the segment already exposes - pass the real clock functions - and
+  that is precisely the kind of substitution the reviewer sanctions (process/clock I/O), not a relaxation of any check.**
+- **The next read is `_segment`'s own clock parameters** (its definition is printed above): which names it forwards to
+  `monotonic`/`sleep`/`clock_ns`, so the fixture can pass the real ones and keep the rest substituted.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
