@@ -27843,3 +27843,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   default 0.1 s grid, or accept the current bounded assertion?* **A reviewer can answer a costed choice; an open question just comes back.**
 - **State:** the request is updated and its index row re-stamped; **weakness 2 remains the genuine "the substitution cannot express it" case** (its port reports one epoch while the runner verifies per phase); goal
   **active and armed**; nothing pushed, nothing deleted; no new session, goal, worktree or stack; no hardware; no live stack; P2 live not started.
+
+## CP-1667 — Rereview4 verdict received: CHANGES_REQUIRED with six findings; task list replaced; P1-1 verified claim by claim
+
+- **The verdict, read in full and digest-verified before anything else was touched:**
+  ```
+  handoffs/20260930-task7-onward/task8-astra-rereview4-verdict.md
+      8604 bytes, sha256 f7443b35919dcd85d92f3c15703ffb6ce48da37acd40cda41fb700fc02f1c0c2  (matches the owner's)
+  Reviewer baseline: HEAD 1de131511940f2d50e996d54807652b9341575e9 plus the existing dirty/untracked work.
+  Verdict: CHANGES_REQUIRED. Task 10 / Task 8L / P2 live / bundle / live / QUALIFIED / real hardware remain forbidden.
+  ```
+  **Findings: P1-1 formal measurement entry cannot execute; P1-2 seal and aggregator identity contracts conflict; P1-3 phase-camera evaluator is configuration echo; P1-4 live-evidence epoch and causal 10 Hz sampling invalid; P1-5 the full producer -> journal -> aggregator chain is
+  absent; P2 the index and test counts are wrong.** The reviewer **closed four things**, which are recorded rather than re-argued: unified descriptor validation, the wrong-layer descriptor comparison, the CLI's terminal handling plus full seal-identity comparison, and the non-null cleanup proof for every `CLOSED` batch.
+- **The TUI task list was replaced before any implementation action**, as the verdict's first instruction requires: it now carries **nine items** - P1-1 RED and GREEN, P1-2, P1-3, P1-4, P1-5, P2, the code freeze plus single integration boundary, and the packet/ledger/further-review step - **with the current boundary as its own line** (HEAD `1de13151` plus the existing dirty/untracked work; not approved for Task 10 / 8L / P2 live / bundle / live / QUALIFIED / hardware; the v4 three-leg boundary is **documentation-only until P2 is corrected**).
+- **And one instruction could not be carried out by this session, recorded rather than worked around:** the verdict's third instruction and the owner both direct a resume of the **existing** goal. `get_goal` reports `phase: paused`, `activation: disarmed`, revision 69, and
+  `update_goal(action="resume")` is **refused**: *"the model cannot resume a paused goal; the user must resume it."* **The resume affordance is on the TUI side** - the same wall CP-1643 recorded, which the owner cleared once from there. **This session continues the work through the
+  goal rounds regardless; it does not create a new goal.**
+- **P1-1 is VERIFIED, not refuted - all six of its claims read against the code:**
+  | claim | what the code says |
+  | --- | --- |
+  | CLI does not put `calibration_report` in the admitted context | `cli/act_measure_task8_calibration.py:83-95` constructs `CalibrationMeasurementContext` with twelve fields - **`calibration_report`, `session_id`, `attempt_id` and `search_start_rad` are absent** |
+  | CLI does not pass the per-run values to the entry | line 98: `build_production_measurement_driver(context=context, identity=identity).run(context, args.batch_root)` - **none of the three** |
+  | the composition does not supply `io_client` | `task8_production_composition.py:284-285` calls `build_real_providers(context=..., descriptor=..., session_id=..., attempt_id=..., search_start_rad=...)` - **no `io_client`**, and `:245-246` then raises **`PRODUCTION_CONTROLLER_ADAPTER_REQUIRED: io_client`** |
+  | the composition reads session/attempt from the context | `:248-249`: `MeasurementControllerAdapter(HeadSearchController(config), client=io_client, clock=_monotonic_clock(), session_id=getattr(context, "session_id"), attempt_id=getattr(context, "attempt_id"))` - **my CP-1635 change fixed `_admitted_controller_config` and left THIS site reading the context** |
+  | missing calibration is rejected first | `:186-188`: `getattr(context, "calibration_report", None)` -> `PRODUCTION_CALIBRATION_REPORT_REQUIRED`, which the CLI's context always triggers |
+  | the detector is called as a callable but is not one | driver `:197` `self.detector({"anchor": …, "sample": …})`; `detector_factory.py:117` defaults to **`YoloSegDetector`**, whose interface is **`detect(self, frame: DetectionFrame, query: DetectionQuery) -> DetectionBatch`** (`perception/yolo_seg.py:249`) with **no `__call__`** |
+- **So the item stands and this session does not narrow it:** the formal measurement entry genuinely cannot run, the context genuinely lacks what the composition reads, and the detector protocol genuinely mismatches. **Next: the P1-1 RED - a success test that uses no `--driver`
+  and replaces only bottom external ROS/MuJoCo/model I/O.**
+- **State:** goal **paused/disarmed with resume refused by policy (owner action needed)**; boundary unchanged and not re-claimed; nothing pushed, nothing deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
