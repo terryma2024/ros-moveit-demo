@@ -261,3 +261,78 @@ def test_a_boundary_without_a_field_builder_records_no_grid_sample(tmp_path):
     assert recorder._entries == [], "the recorder stayed empty rather than refusing a partial sample"
     assert port._grid_sample("SEARCH", port._validated_search_observation, evidence) is None, \
         "the port reports that it cannot fill the frame, instead of a document the recorder must refuse"
+
+
+# --- P1-3: the SEARCH phase must produce canonical evidence ITSELF, or refuse by name -----------------------
+
+def _p13_window(tmp_path):
+    """A real window and recorder for the case, so the port's own feed can be observed."""
+
+    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow, Task8LiveEvidenceRecorder
+
+    recorder = Task8LiveEvidenceRecorder(case_id="prefix-01", evidence_root=tmp_path,
+                                         session_id=SESSION, attempt_id=ATTEMPT)
+    window = LiveEvidenceWindow(
+        recorder,
+        identity={"case_id": "prefix-01", "session_id": SESSION, "attempt_id": ATTEMPT,
+                  "reset_epoch": 2, "release_epoch": 0},
+        period_s=0.1, tolerance_s=0.01)
+    return recorder, window
+
+
+def test_a_search_phase_records_a_canonical_sample_through_the_port(tmp_path):
+    """The port's own feed, not a fixture's: one canonical 24-key sample reaches the recorder."""
+
+    from so101_demo.act.task8_live_evidence import build_live_evidence_sample  # noqa: F401  (the shape)
+
+    recorder, window = _p13_window(tmp_path)
+    port, events = fixture()
+    port.boundary.canonical_evidence = lambda captured, *, support_distance_max_m, raw_records: {
+        "physics_step": 12, "sim_time_s": 2.0,
+        "source_stamps_s": {name: 2.0 for name in ("head", "wrist", "arm", "neck")},
+        "source_received_monotonic_s": {name: 2.0 for name in ("head", "wrist", "arm", "neck")},
+        "holding_state": "EMPTY", "cup_supported": False, "released": False,
+        "placement_stable": False, "bilateral_contact": False, "no_fingertip_contact": True,
+        "wrist_frame_valid": True, "wrist_target_visible": True,
+        "cup_support_distance_m": 0.01, "end_effector_position_m": [0.0, 0.0, 0.1],
+        "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+        "contact_observation_valid": True}
+    port.bind_live_evidence(window, support_distance_max_m=0.02)
+    bind(port)
+    port.begin(request())
+
+    port.run_phase("SEARCH", request())
+
+    assert window._grid_count == 1, "the phase's own feed recorded exactly one sample"
+    entries = recorder._entries
+    assert len(entries) == 1
+    recorded = json.loads((tmp_path / entries[0]["relative_path"]).read_bytes())
+    assert len(recorded) == 24, f"the recorded sample is the canonical shape: {len(recorded)} keys"
+    assert recorded["phase"] == "SEARCH" and recorded["reset_epoch"] == 2
+    assert recorded["cup_supported"] is False and recorded["holding_state"] == "EMPTY"
+
+
+def test_a_boundary_that_cannot_derive_the_fields_is_refused_by_name(tmp_path):
+    """Fail closed: no silent None, no skipped sample - the phase raises and says which piece is missing."""
+
+    _recorder, window = _p13_window(tmp_path)
+    port, _events = fixture()                      # this boundary has no canonical_evidence method
+    port.bind_live_evidence(window, support_distance_max_m=0.02)
+    bind(port)
+    port.begin(request())
+
+    with pytest.raises(Exception, match="TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED"):
+        port.run_phase("SEARCH", request())
+
+
+def test_an_attachment_without_the_support_threshold_is_refused_by_name(tmp_path):
+    """And the threshold is not defaulted: a case that did not admit one cannot record evidence."""
+
+    _recorder, window = _p13_window(tmp_path)
+    port, _events = fixture()
+    port.bind_live_evidence(window)                # deliberately no support_distance_max_m
+    bind(port)
+    port.begin(request())
+
+    with pytest.raises(Exception, match="TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED"):
+        port.run_phase("SEARCH", request())
