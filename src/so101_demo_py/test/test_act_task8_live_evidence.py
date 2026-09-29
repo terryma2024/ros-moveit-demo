@@ -529,6 +529,7 @@ def test_window_opens_at_search_and_enforces_the_frozen_grid(recorder):
     identity = {key: reference[key] for key in
                 ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch")}
     window = LiveEvidenceWindow(rec, identity=identity)
+    window.bind_reset_epoch((identity)["reset_epoch"])
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN"):
         window.add_grid(_window_sample(root, 0.0, "IDLE", 0))
     window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
@@ -551,6 +552,7 @@ def test_window_seals_only_after_final_check_and_then_refuses_more_samples(recor
     identity = {key: reference[key] for key in
                 ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch")}
     window = LiveEvidenceWindow(rec, identity=identity)
+    window.bind_reset_epoch((identity)["reset_epoch"])
     for index, phase in enumerate(LiveEvidenceWindow.REQUIRED_PHASES):
         window.add_grid(_window_sample(root, index * 0.1, phase, index))
     artifact = window.seal()
@@ -566,6 +568,7 @@ def test_case_driver_reaches_the_window_and_seals_into_the_case_directory(tmp_pa
 
     driver = CaseEvidenceDriver(case_id="full-01", staging_root=tmp_path, session_id="session-1",
                                 attempt_id="attempt-1", reset_epoch=4)
+    driver.bind_reset_epoch(4)
     assert driver.case_root == tmp_path / "full-01" and driver.case_root.is_dir()
     reference = sample(tmp_path, step=0)
     # the recorder resolves each raw record against ITS evidence root, so materialise them there
@@ -614,6 +617,7 @@ def test_driver_observe_capture_composes_from_a_readback_capture(tmp_path):
 
     driver = CaseEvidenceDriver(case_id="full-02", staging_root=tmp_path, session_id="session-1",
                                 attempt_id="attempt-2", reset_epoch=7)
+    driver.bind_reset_epoch(7)
     reference = sample(tmp_path, step=0)
     for record in reference["raw_records"].values():
         relative = record if isinstance(record, str) else (
@@ -792,6 +796,7 @@ def test_a_failed_run_invalid_seals_its_window_instead_of_sealing_evidence(recor
     identity = {key: reference[key] for key in
                 ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch")}
     window = LiveEvidenceWindow(rec, identity=identity)
+    window.bind_reset_epoch((identity)["reset_epoch"])
     window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
     # a run that never reached FINAL_CHECK must not seal as evidence
     result = window.invalidate("TASK8_ABORT")
@@ -825,3 +830,51 @@ def test_the_port_binds_one_evidence_window_and_refuses_a_second():
         port.bind_live_evidence(Window())
     with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_WINDOW_INVALID"):
         PickPlaceSearchPhasePort(_Boundary()).bind_live_evidence(object())
+
+
+
+def test_a_window_refuses_observation_until_the_reset_epoch_is_bound(recorder):
+    """The epoch is unknown until the reset receipt is verified, so an unbound window must not record or seal."""
+
+    from so101_demo.act.task8_live_evidence import UNBOUND_RESET_EPOCH, LiveEvidenceWindow
+
+    rec, root = recorder
+    reference = sample(root, step=0)
+    identity = {key: reference[key] for key in
+                ("case_id", "session_id", "attempt_id", "release_epoch")}
+    identity["reset_epoch"] = None
+    window = LiveEvidenceWindow(rec, identity=identity)
+    assert window.reset_epoch is UNBOUND_RESET_EPOCH
+    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_UNBOUND"):
+        window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
+    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_UNBOUND"):
+        window.add_event(_window_sample(root, 0.0, "SEARCH", 0))
+    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_UNBOUND"):
+        window.seal()
+
+
+def test_the_reset_epoch_binds_once_and_reaches_the_identity(recorder):
+    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+
+    rec, root = recorder
+    reference = sample(root, step=0)
+    identity = {key: reference[key] for key in
+                ("case_id", "session_id", "attempt_id", "release_epoch")}
+    identity["reset_epoch"] = None
+    window = LiveEvidenceWindow(rec, identity=identity)
+    window.bind_reset_epoch(7)
+    assert window.reset_epoch == 7 and window.identity["reset_epoch"] == 7
+    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_ALREADY_BOUND"):
+        window.bind_reset_epoch(8)
+    for bad in (True, -1, None, "7"):
+        with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_INVALID"):
+            LiveEvidenceWindow(rec, identity=dict(identity)).bind_reset_epoch(bad)
+    # an unbound window cannot open at all, so "bound after opening" is unreachable by construction; the reachable
+    # too-late case is a window invalidated by the retirement path before its epoch ever arrived
+    window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
+    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_ALREADY_BOUND"):
+        window.bind_reset_epoch(9)
+    other = LiveEvidenceWindow(rec, identity=dict(identity))
+    other.invalidate("OWNER_RETIRE")
+    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_BOUND_TOO_LATE"):
+        other.bind_reset_epoch(9)
