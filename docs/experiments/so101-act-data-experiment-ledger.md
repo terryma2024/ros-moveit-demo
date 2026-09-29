@@ -24642,3 +24642,23 @@ picture in both directions.**
   threshold and root, and **deleting the fixture's pre-filled nine-phase path** plus the CP-1471 strict-xfail marker.
 - **State:** P1-1 and P1-2 remain green and committed; this round's code is uncommitted and the port's file is red on exactly the mapping above. No new
   session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1481 — The port's half of P1-3 is GREEN; the child fixture is mid-migration and says so
+
+- **`15 passed`** for the port's own file (`experiments/gate8-p13/green-8.log`): the canonical sample is recorded through the port itself, and the three
+  refusals are asserted where they happen - **at attach** for a missing threshold or root, and **in the phase** for a boundary that cannot derive the fields.
+- **The seven-source mapping is read, not guessed:** the recorder's `_SOURCES` are `world, scene, contact, head, wrist, arm, neck`; the capture carries
+  `world/scene/contact`, and the synchronizer's observation carries `head`, `wrist` and the **arm/neck state vector** (`act/synchronizer.py:83-91`, where
+  `state = arm joints + (sin yaw, cos yaw)`). **So the port writes all seven raw records from the capture's own measured documents** - the last unknown from
+  CP-1480 is closed.
+- **And the child fixture is now mid-migration, deliberately and visibly:** `test/teleop/test_task8_child_driven_case.py` reports **5 failed, 2 passed,
+  1 xfailed** (`experiments/gate8-p13/child-state.log`), because its boundary has no `canonical_evidence` and its child attaches without the threshold and
+  root. **That is the next work item, and it is also where the review's other demand lives:** the fixture's `record_phases` stand-in must be **deleted** (the
+  port now feeds the window itself), the case-execution tests must read the port-fed samples instead of the fixture's, and the **CP-1471 strict-xfail marker
+  must go** - its own text says the fix's author has to replace it with assertions about the real samples.
+- **Why the port is committed while the child file is red:** the port's file is green and the port change is what invalidates the fixture; **the fixture's
+  migration is a separate, larger edit** (boundary method + child wiring + stand-in deletion + test rewrites), and committing the verified half with its
+  evidence is more honest than holding a green file hostage to an in-progress one. **The ledger records both states, so nothing about the fixture is implied
+  to be finished.**
+- **State:** P1-1 and P1-2 green and committed; P1-3's port half green and committed; the child fixture is the open item. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
