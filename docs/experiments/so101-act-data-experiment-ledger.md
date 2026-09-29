@@ -34224,3 +34224,42 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1 in progress. Done this turn: A (pinned downloads), B (fail-closed verification), C (role separation),
   E (English README), plus the descriptor's exact requirements and values. Remaining: D's producers, the phase-path
   provider, and the run itself with its rc/log.** **Task-list statuses: P1-1 in_progress, P1-6 completed, five pending.**
+
+## CP-1919 — What the descriptor must be paired with, and which of those inputs already exist
+
+- **`head_search_binding.validate_head_search_binding(runtime, calibration)` is a two-document gate, read in full:**
+  ```
+  runtime     : the eight-key detector block; `weights_path` digest must equal `weights_sha256`;
+                image_size_px == 640; requested_device cuda+no fallback enforced by require_runtime_descriptor
+  calibration : status in ("TASK8_READY", "QUALIFIED")
+                source_provenance_sha256 (64-hex)
+                measurements[name]["value"] for the measured names, and ONE shared
+                (sample_path, sample_sha256) across them
+                the file at sample_path must hash to sample_sha256 and be a document with
+                kind == "head_search_qualification", status == "PASS",
+                schema_version == 1, and `head_search` EQUAL TO the descriptor
+  ```
+  **so the descriptor cannot be bound alone: it must be paired with a calibration report whose sample is the
+  qualification document for that very descriptor.**
+- **And the approved producer of that report runs the other way round:** `act_build_task8_calibration_report.py` is
+  *"purely offline ... never starts ROS, MuJoCo or a model"* and consumes `--contract`, `--identities` and **one V2
+  sealed batch** (`ONE_V2_SEALED_BATCH_REQUIRED`), rendering and publishing the report from it. **It is therefore
+  downstream of a measurement run, not an input to the descriptor** - which corrects my CP-1918 note that treated it as
+  a prerequisite of the descriptor.
+- **What already exists in the evidence root, outside scratch:**
+  ```
+  experiments/gate6-runtime/artifacts/head-search-runtime-config.json     <- an admitted runtime config document
+  ```
+  **and what exists only inside test scratch:** every `calibration-TASK8_READY.json` found under this root lives in
+  `scratch-r555.RLjw/tmp/pytest-of-matianyi/…`, i.e. **pytest artefacts rather than a formal calibration report for this
+  task** (the full-tree search for a `head_search_qualification` sample was stopped once that was established - it was
+  scanning pytest scratch at that point).
+- **So the next step is exact, and it is a controlled change that invalidates the old bundles (item G):** in a NEW run
+  root, build the runtime descriptor from the admitted `head-search-runtime-config.json` with the verified weights values
+  (`best.pt`, `f281d252…`, 640, cuda, no fallback), then attempt the binding and the run, recording each rc and log; the
+  calibration report it must be paired with comes from the calibration campaign / the offline aggregator, not from a
+  handwritten document.
+- **State:** **P1-1 in progress. A/B/C/E done and committed (CP-1916/CP-1917); D's input graph is now fully mapped and its
+  first real input is identified.** **Task-list statuses: P1-1 in_progress, P1-6 completed, five pending** (and the list's
+  text is the original seven items verbatim - a typo I introduced in the previous update, `Astra/Hard`, was corrected back
+  to the original `Astra/High`).
