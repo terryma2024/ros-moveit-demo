@@ -200,6 +200,9 @@ def _mount_approach_screen(port, authority, *, live_manifest, session_id, broker
     boundary.attach_proofs = True
     boundary.max_skew = float(authority["motion"]["max_skew_s"])
     boundary.owner_generation = broker.ownership.generation
+    # the epoch the source port compares against ADVANCES in `begin`, after the broker was built - so the broker is
+    # given a live reader rather than the value that held at construction (CP-1877)
+    broker.epoch_reader = lambda: {"session_id": session_id, "reset_epoch": boundary.reset_epoch}
     boundary.contact_pairs = contact_pairs
     if not callable(getattr(boundary, "capture", None)):
         boundary.capture = sources.capture
