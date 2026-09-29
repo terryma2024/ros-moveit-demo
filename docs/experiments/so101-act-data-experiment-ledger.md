@@ -18757,3 +18757,31 @@ not an inference of mine.**
   epoch, FINAL_CHECK, the sealed-artifact readback, the confirmed retirement and the journal path and hash. The untracked RED
   is committed only once it is green, per the owner's instruction.
 - **State:** goal active (revision 51, cap 1000); HEAD `d47f05e0`, staged 0; no full suite, no push, no stack, no hardware.
+
+## CP-1176 — The window-recording recipe, read line by line, so item 4's test is mechanical
+
+- **The exact calls the existing chain test uses, which my Boundary V port must imitate:**
+  ```python
+  recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
+                                       session_id="session-1", attempt_id="attempt-1")
+  window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
+  window.bind_reset_epoch(identity["reset_epoch"])
+  for step, phase in enumerate(PHASES):
+      sample = _sample(evidence_root, phase=phase, step=step, sim_time=step * PERIOD_S)
+      recorder.append(sample)
+      window.add_grid(sample)
+  ```
+  with `_sample` built by `build_live_evidence_sample(identity=..., phase=..., physics_step=..., sim_time_s=...,
+  source_stamps_s=..., source_received_monotonic_s=..., raw_records=..., holding_state=..., frame=..., contact=...,
+  measurements=...)`, and `_raw_records` writing one **real file with its own digest** per `READBACK_SOURCES` entry - which is
+  what makes the seal's readback meaningful rather than synthetic. The identity used there carries `reset_epoch` and
+  `release_epoch`, the same fields the runner validates.
+- **One residual question to settle before writing, and it is small:** whether `window.add_grid(sample)` alone also appends to
+  its recorder or whether the pair (`recorder.append` + `window.add_grid`) is required - the existing test does both, so the
+  safe move is to do both until a read shows otherwise.
+- **What that means for item 4's test, concretely:** my runner-driving port keeps its current validated returns (CP-1149 →
+  CP-1153) and, in `run_phase`/`run_retreat_segment`, also feeds the window it was handed by `bind_live_evidence` using the
+  recipe above; the child then seals a window that genuinely covers the case, `LIVE_EVIDENCE_SEAL_UNAVAILABLE` cannot occur,
+  and the seven artefacts - SEARCH rows, the release open event, three adjacent 10 Hz support rows in one epoch, FINAL_CHECK,
+  the sealed artifact read back, the confirmed retirement and the journal path and hash - become assertable.
+- **State:** goal active (revision 51, cap 1000); HEAD `8825a166`; staged 0; no full suite, no push, no stack, no hardware.
