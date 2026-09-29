@@ -211,11 +211,19 @@ def validate_evidence_grid(samples, *, period_s: float, tolerance_s: float) -> i
     return len(samples)
 
 
+def _refuse_audit_camera(raw_records) -> None:
+    """The Task camera is audit-only, so it can never be an ACT observation source."""
+
+    if isinstance(raw_records, dict) and any("task_camera" in str(key) for key in raw_records):
+        raise ValueError("TASK_CAMERA_NOT_AN_OBSERVATION: the audit camera is not an observation source")
+
+
 def build_live_evidence_sample(*, identity: dict, phase: str, physics_step: int,
                               sim_time_s: float, source_stamps_s: dict,
                               source_received_monotonic_s: dict, raw_records: dict,
                               holding_state: str, frame: dict, contact: dict,
                               measurements: dict) -> dict:
+    _refuse_audit_camera(raw_records)
     """Assemble one canonical sample from explicit readback inputs.
 
     The port and readback adapters own the values; this function owns the shape, so both call
@@ -478,12 +486,17 @@ class LiveEvidenceWindow:
         return self._event_count
 
     def add_grid(self, sample: dict) -> None:
-        """Append one grid sample, enforcing the frozen cadence from CLOSE onwards."""
+        """Append one grid sample, enforcing the frozen cadence from SEARCH onwards.
+
+        The production runner opens the window at SEARCH, so the scan and approach are covered; a window opened at a
+        later required phase is accepted too, because what the tuple guarantees is the phase set, not the entry
+        point. Any phase outside the tuple cannot open the window at all.
+        """
 
         if self._sealed:
             raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_SEALED")
         phase = sample.get("phase") if isinstance(sample, dict) else None
-        if phase == "CLOSE":
+        if phase in self.REQUIRED_PHASES:
             self._opened = True
         elif not self._opened:
             raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
