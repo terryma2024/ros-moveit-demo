@@ -685,3 +685,29 @@ def test_the_trusted_aggregator_refuses_a_missing_and_a_tampered_case_journal(tm
     with pytest.raises(ValueError, match="TASK8_QUALIFICATION_JOURNAL_MISSING"):
         validate_case_journals(case_root, manifest, identities=identities,
                                manifest_document_sha256=manifest_sha256)
+
+
+def test_a_missing_retirement_receipt_refuses_the_case_and_publishes_nothing(tmp_path):
+    """Negative: without the child's retirement receipt the case must not publish a success row."""
+
+    from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
+    from test_task8_case_execution import _prepared
+
+    from so101_teleop.unified.contracts import MutationError
+
+    spec, owner, journal, events = _prepared(tmp_path, omit_child_receipt=True)
+    with pytest.raises(MutationError, match="TASK8_RETIREMENT_RECEIPT_INVALID"):
+        asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
+    assert not journal.exists(), "a case without both retirement receipts publishes nothing"
+    assert "finish" in events, "the attempt still retired the stack and the child"
+
+
+def test_the_case_window_binds_its_reset_epoch_exactly_once(tmp_path, monkeypatch):
+    """Negative: the window's generation is bound once; claiming another epoch for the same case is refused."""
+
+    child, request, port = _prepare_child_case(tmp_path, monkeypatch)
+    asyncio.run(child.pick_place_phase(request))
+    window = port.live_evidence_window
+    assert window is not None, "the child attached its evidence window to the production port"
+    with pytest.raises(ValueError):
+        window.bind_reset_epoch(99)
