@@ -29833,3 +29833,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-1's second half GREEN and its seam mismatch closed test-side; P1-3's RED stands with its four
   requirements; the next work is P1-3's GREEN** (a frozen matrix that refuses a scaffold, intrinsics that are not
   defaulted, image bounds on `in_frame`, and occluders that fail closed).
+
+## CP-1775 — P1-3's evaluator contracts land: intrinsics required, `in_frame` bounded, occluders fail closed
+
+- **The three production changes (`task8_production_composition.py`):**
+  | the verdict's sentence | the change |
+  | --- | --- |
+  | *"substitutes defaults"* | `_project` now raises `PHASE_CAMERA_INTRINSICS_REQUIRED: <field>` for a camera without `width_px`/`height_px`/`horizontal_fov_rad`, instead of inventing 640/480/1.0 rad - **because the projection is made of those three** |
+  | *"marks every positive-depth projection `in_frame=True` without image-bound checks"* | `in_frame` is now decided on the sample's own bbox against `_image_size()`: inside means **inside the image**, not merely in front of the camera |
+  | *"silently skips absent occluder geometry"* | `_occluded` raises `PHASE_CAMERA_OCCLUDER_GEOMETRY_REQUIRED: <name>` for an admitted occluder with no geometry |
+- **And the fixtures had to be told, which is the fix working:** the P1-3 file's evaluator fixture passed **no** occluder geometry at all and its matrix carried no `horizontal_fov_rad`; **it had been relying on both silent behaviours.** It now builds geometry for every occluder the matrix admits, and six other fixtures gained the field. The progression, all on the same file:
+  ```
+  before the changes:  5 failed, 4 passed      (the four REDs + the seam regression)
+  after the evaluator: 8 failed, 1 passed      (the fixtures now hit the new refusals - correctly)
+  after the fixtures:  3 failed, 6 passed
+  ```
+- **The three that remain are named and each is legitimate:**
+  1. `test_a_target_projected_outside_the_image_is_not_in_frame` **now passes** - the bounds check is the fix;
+  2. `test_the_shipped_matrix_is_not_a_scaffold` **is held open on purpose**: the shipped
+     `config/act/task8-phase-camera-matrix-v1.json` still says `phases: []` and `SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION`, and the loader still accepts it. **That is P1-3's first requirement and the largest piece of it - the matrix must be completed from the real model/TF/intrinsics and then frozen**, which is where the next work goes;
+  3. `test_the_formal_entrys_replay_rows_carry_a_measured_observation` fails because **the formal entry's own matrix fixture** does not yet carry what the evaluator now requires.
+- **State:** **P1-3 has three of its four requirements implemented and the fourth (the frozen matrix) explicitly RED.**
+  P1-1's second half is GREEN. The demo RED's rate stands at `demo4=0`, `demo5=0`, `demo6` in flight.

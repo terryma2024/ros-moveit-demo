@@ -229,13 +229,27 @@ class PhaseCameraMatrixEvaluator:
         rpy[2] += float(neck_rad)
         return position, tuple(rpy)
 
+    def _image_size(self):
+        """The admitted camera's image size - the bounds `in_frame` is decided against."""
+
+        camera = self.document.get("camera", {})
+        for name in ("width_px", "height_px"):
+            if camera.get(name) is None:
+                raise ProductionCompositionError(f"PHASE_CAMERA_INTRINSICS_REQUIRED: {name}")
+        return float(camera["width_px"]), float(camera["height_px"])
+
     def _project(self, point_world, position, rpy):
         """Pinhole projection: world point -> pixel, or None when it is behind the camera."""
 
         camera = self.document.get("camera", {})
-        width = float(camera.get("width_px", 640))
-        height = float(camera.get("height_px", 480))
-        hfov = float(camera.get("horizontal_fov_rad", self.DEFAULT_HFOV_RAD))
+        # P1-3 (rereview 5): the projection is MADE of these three, so inventing them (640/480/1.0 rad) made
+        # `in_frame` a statement about the defaults rather than about the admitted camera. Missing is refused by name.
+        for name in ("width_px", "height_px", "horizontal_fov_rad"):
+            if camera.get(name) is None:
+                raise ProductionCompositionError(f"PHASE_CAMERA_INTRINSICS_REQUIRED: {name}")
+        width = float(camera["width_px"])
+        height = float(camera["height_px"])
+        hfov = float(camera["horizontal_fov_rad"])
         focal = (width / 2.0) / max(1e-9, __import__("math").tan(hfov / 2.0))
         rotation = self._rotation(rpy)
         relative = tuple(point_world[index] - position[index] for index in range(3))
@@ -256,7 +270,9 @@ class PhaseCameraMatrixEvaluator:
         for name in self.occluders:
             geometry = self.occluder_geometry.get(name)
             if not isinstance(geometry, dict):
-                continue
+                # P1-3 (rereview 5): the matrix ADMITS this occluder, so the visibility decision cannot be made
+                # without its geometry - skipping it silently published a measurement that ignored a named occluder
+                raise ProductionCompositionError(f"PHASE_CAMERA_OCCLUDER_GEOMETRY_REQUIRED: {name}")
             centre = tuple(float(value) for value in geometry.get("position_m", ()))
             if len(centre) != 3:
                 continue
@@ -297,8 +313,14 @@ class PhaseCameraMatrixEvaluator:
         # `in_frame`, NOT `visible`: the driver's raw layer refuses verdict-like tokens in a raw row
         # (`FORBIDDEN_OUTPUT_TOKENS` contains "visible"), and whether the projection landed inside the image is a
         # measurement result rather than a verdict - so the key is named for what it measures
-        sample.update({"bbox_px": [u - radius_px, v - radius_px, u + radius_px, v + radius_px],
-                       "in_frame": True, "occluded_by": blocked})
+        #
+        # AND IT MEANS INSIDE THE IMAGE (P1-3, rereview 5): the old code marked every positive-depth projection
+        # `in_frame=True`, so a cup a metre off-axis - `u` far beyond the width - was reported in frame. The bounds
+        # are the admitted camera's own, and the check is on the bbox the sample carries.
+        bbox = [u - radius_px, v - radius_px, u + radius_px, v + radius_px]
+        camera_width, camera_height = self._image_size()
+        in_frame = bbox[0] >= 0.0 and bbox[1] >= 0.0 and bbox[2] <= camera_width and bbox[3] <= camera_height
+        sample.update({"bbox_px": bbox, "in_frame": bool(in_frame), "occluded_by": blocked})
         return sample
 
     def _path_for(self, phase):
