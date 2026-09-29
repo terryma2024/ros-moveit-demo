@@ -21893,3 +21893,18 @@ not an inference of mine.**
   **Then the marker batches disappear from the tests entirely, which is a better outcome than teaching the CLI to accept them.**
 - **State:** P1-3's source and test changes uncommitted while three sibling fixtures are red; no stack started, no CUDA, no actuators, no
   hardware; cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1322 — The marker seal is replaced, but its helper is not yet wired in - named so it is finished, not forgotten
+
+- **What I did:** found that exactly one test carried the marker seal (`sealed_by`, in the aggregator suite) and replaced its write with a
+  call to a schema-valid `seal_valid(root, contract)` helper - **so the optimistic marker is gone from the tests, which is the outcome
+  CP-1321 argued for.**
+- **And what I have not finished:** the helper module is not yet written into the driver's directory and the driver does not yet import
+  it, so the call currently names something undefined. **The file still parses** (the replacement is syntactically clean), which means the
+  next run will fail with a `NameError` inside the fake driver rather than anything ambiguous - **a self-explaining failure, but a
+  failure I introduced and am recording rather than leaving for the ledger to discover later.**
+- **The next edit is two lines:** write the helper (the `seal_valid` body already drafted: a CLOSED batch with one anchor file, the ten
+  identity members, `batch_sha256` over the contract's canonicalisation, written by `write_closed_json`) beside the fake driver module,
+  and add its import to the driver string. **Both locations are printed above.**
+- **State:** P1-3's source and test changes plus this partial fixture edit are uncommitted while red; no stack started, no CUDA, no
+  actuators, no hardware; cleanup untouched; nothing deleted, nothing pushed.
