@@ -29192,3 +29192,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   | 4 | packet line 340: *"117 xunit files, 1311 cases, 0 failures, 43 skipped"* | **1272 passed + 43 skipped = 1315** pytest cases, with `1432 = 1315 + 117` named as a sum rather than as accumulation |
   | 5 | the auditor's reach | widened to **every row that states a digest (46)**, still expecting zero mismatches |
 - **State:** **P2 in progress: three stale statements located, two corrected; the count correction, the auditor widening and the canonical copy's freeze/read-back remain**; P1-1 … P1-5 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1741 — The three stale statements corrected, the index re-synced - and the packet's digest moved, which is the point
+
+- **What was written, each after measuring:**
+  | # | where | was | now |
+  | --- | --- | --- | --- |
+  | 1-2 | index lines 130/159 (tabulated) | `31987` / `fe029a4e34c90b75` | **36458** / **`b0bb2bc784c5f624`** |
+  | 3 | index line 44 (prose) | *"10438 bytes after the addendum"* | **36458 bytes** |
+  | 4 | **a fourth site found while re-syncing**, index line 68 | the same stale pair | **36458** / **`b0bb2bc784c5f624`** |
+  | 5 | packet line 340 | *"117 xunit files, **1311 cases**, 0 failures, 43 skipped"* | *"117 xunit files, **1272 passed + 43 skipped = 1315 pytest cases**, 0 failures"* |
+  | 6 | packet, appended | - | the count correction, naming **1432 = 1315 pytest cases + 117 CTest entries as a SUM** and recording that `1311` was not the complete count |
+- **And the packet's own digest moved as a result - which is the circularity P2 implies and the reason the order matters:**
+  ```
+  the packet the reviewer saw:   36042 bytes   df220deebfd05e56...      <- quoted in the verdict
+  the packet after correction:   36458 bytes   b0bb2bc784c5f624...      <- what the index now states
+  ```
+  **An index cannot describe a file that is still being edited**, so the packet was finished first and the index written after; **both values stay in this record** (the verdict's figure and the current one) rather than the older being erased.
+- **And the audit re-run over the corrected index:**
+  ```
+  references parsed: 37
+  mismatches: 0
+  ```
+  **Every reference that states a size and a digest matches the file on disk**, including the four re-synced rows. **The widening to the 46 rows that state a digest (CP-1740) is still outstanding**, as is the canonical copy's freeze/read-back.
+- **State:** **P2: three stale statements and a fourth site corrected; the audit green at 37/0; the auditor widening and the freeze/read-back remain**; P1-1 … P1-5 complete; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
