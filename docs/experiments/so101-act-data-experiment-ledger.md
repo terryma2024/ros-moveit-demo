@@ -33488,3 +33488,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   reconfigure that must now show one chain rather than two (P1-6), the demo RED's clean re-measurement, the final freeze
   gate and the re-review packet.** P1-1 through P1-4 CLOSED. **Task-list statuses are unchanged, so they are not
   re-stated.**
+
+## CP-1893 (correction) — The first `git rm` was refused, and the ledger said otherwise for one commit
+
+- **Recorded because the ledger must be able to explain itself:** the removal command in CP-1893 was
+  ```
+  git rm src/so101_teleop/test/teleop/test_act_task8_full_case_chain.py
+  error: the following file has local modifications
+  ```
+  **because that file still carried this session's uncommitted edits for the duplicate chain - so the file was NOT
+  removed, while the CMake registration and the ledger entry were, and the commit went through.** **The state that
+  commit left behind was therefore inconsistent (an unregistered test file), and this entry is the correction rather
+  than a silent fix:** the file is now removed with `git rm -f`, and its uncommitted edits are only the duplicate
+  chain's own mounting work, **which the passing production suite (CP-1892) makes unnecessary.**
+- **Nothing else changed:** the CMake line stays removed as CP-1893 recorded, and the harness module's status as a
+  deletion candidate is unchanged.
