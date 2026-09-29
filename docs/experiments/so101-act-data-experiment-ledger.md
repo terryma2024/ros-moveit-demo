@@ -20419,3 +20419,22 @@ not an inference of mine.**
   (`batch["index"]`, `batch["anchors"]`), which the schema forbids; they now read `index.json`, and the provenance-field assertion is
   scoped to the `anchors/` rows, because the descriptor and index rows are artefacts of the closure rather than of a capture.
 - **State:** committed with its tests green; the CLI half of item 3 is next; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1248 — The CLI half is in, and the two failures are **tests that encode the defect**
+
+- **What changed, both edits the item requires:**
+  1. `build_production_measurement_driver(*, context, identity, providers=None)` - the identity the CLI holds now travels into
+     the composition and on to the driver, so the sealed batch's ten members are the entry's own document rather than a guess;
+  2. the CLI's `sealed = close_measurement_batch(args.batch_root, identity)` is gone, replaced by
+     `sealed = args.batch_root / "batch.json"` - **the driver is the one seal owner**, while the CLI keeps its `INVALID` ledger
+     append and its cleanup semantics.
+  **`73 passed`, with two failures - and both of them are the old behaviour asserted by name:**
+  | failure | meaning |
+  | --- | --- |
+  | `test_the_cli_is_the_only_batch_seal_owner` | **the defect in test form**: a test whose name states the ownership Astra's finding 3 reverses. It has to become "the driver is the only seal owner and the entry does not seal", otherwise the repository keeps a green test asserting the thing we are fixing |
+  | `FileNotFoundError` | a CLI test whose fake `--driver` never sealed, so after the change there is no `batch.json` to read back. The fake must seal - which is also the honest shape, since a driver that does not seal is not a driver |
+- **Why I am recording rather than finishing:** both fixes are test-side and small, but the first one is a **statement about the design**
+  (who owns the seal), and rewriting a test that names the old owner is exactly the place where a rushed edit would quietly turn a
+  design decision into a passing assertion. **Next round reads that test and rewrites it deliberately.**
+- **State:** the two source edits are **uncommitted while red**; the build tree has been synced for both files; no stack, no hardware,
+  nothing deleted, nothing pushed.
