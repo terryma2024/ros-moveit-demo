@@ -28757,3 +28757,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the suite still fails, for a reason the single-case probe cannot show:** the fixture's clock is **module-level state**, so a case inherited the previous test's clock. The reset is now in place (`_reset_case_clock`, called per case) - and the first attempt at it produced `KeyError: 'count'` (clearing a dict and then reading a key), which the suite caught immediately. **With the reset in, the remaining failures are at `pick_place_search_port.py:806`, i.e. `TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution` again** - the prefix window/axis/snapshot arithmetic that was tuned against the *old*, unreset clock.
 - **So the next step is the same rule applied once more, and it is now cheap:** with the sequence reset per case, the fixture's **prefix origin, time axis and snapshot times** must all be derived from that same sequence (they already read it - CP-1700/1704 fixed two of the three) instead of from values that assumed a shared, never-reset clock.
 - **State:** **P1-4's grid sequence is green in a single case and the case seals; the fixture's per-case arithmetic is the last of it, with the suite's failure now at the APPROACH path rather than the grid**; P1-5's joined chain waits behind it as recorded (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1719 — Eight failures became four, and all four are named: three stale expectations and one mechanism
+
+- **The suite, after the per-case reset also clears the plan and its signing flag:**
+  ```
+  4 failed, 7 passed          (was 8 failed, 3 passed)
+  ```
+  | failure | what it is |
+  | --- | --- |
+  | `pick_place_search_port.py:806` | the wrapped `TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution` - the one mechanism still open |
+  | `test_every_sample_names_its_own_raw_sources:56` | *"each capture must name its own raw record"* - the collision CP-1688 fixed inside a phase, now visible **across** samples that share a phase |
+  | `test_the_index_chains_to_complete_canonical_records:69` | *"ten samples: nine phases, two retreat segments"* - a hardcoded count from the one-sample-per-phase era |
+  | `test_the_indexed_phases_cover_the_runners_own_list_and_the_clock_advances_one_period:109` | *"the retreat is two segments of one phase"* - the same era's cadence assumption |
+- **Which is exactly the set CP-1687 predicted** (*"four expectations to restate with piece 4"*), now reached with the mechanism green behind it: **the grid's sequence is one period per sample, the case seals, and the three failures that remain are assertions written for a case that had one sample per phase.**
+- **And the reset taught its own lesson twice in two rounds, which is worth the line:** clearing module-level fixture state is not one edit - `count` had to be re-established (`KeyError: 'count'`), and the **plan** had to be cleared too, because a previous test's `prefix_signed = True` froze the next case's prefix before it was refreshed, so its ~0.102 s window was stale and APPROACH refused by name. **A fixture with three globals has three ways to leak.**
+- **State:** **P1-4's grid sequence green, the case seals, and four named items remain: one mechanism (APPROACH at port:806) and the three stale expectations**; P1-5's joined chain waits behind it (CP-1717); the task list carries both; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
