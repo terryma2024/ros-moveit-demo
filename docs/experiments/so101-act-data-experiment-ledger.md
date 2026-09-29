@@ -23402,3 +23402,15 @@ not an inference of mine.**
   batch were elsewhere (the INVALID-batch schema, CP-1329) and both are fixed.
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1413 — The seal path is the case-level evidence the reviewer asked for, and its API is the next read
+
+- **What the landmark means for the remaining work:** the fixture now drives the production port successfully through a full SEARCH, and the refusal
+  is the **recorder refusing to seal a case with no recorded samples**. **So the next piece is exactly P1-5's second half:** have the substituted
+  boundary record genuine live-evidence samples as it produces readbacks (using the production sample builder the suite already re-exports), let
+  the production seal write them, and then read back the indexed records for the seven assertions the reviewer lists.
+- **The recorder's methods are printed above**, so the recording call is a named-API fix like the last several rather than a hunt. **And the
+  samples are the same ones the window's epoch binding and the journal's identity checks are about, which is why this step also unblocks the
+  release-epoch assertions the reviewer flagged.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
