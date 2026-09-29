@@ -23030,3 +23030,21 @@ not an inference of mine.**
   sources instance across the boundary's calls. **Both are fixture-side, and the read above says which of the two the code expects.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1390 — MILESTONE: the entire production search path now runs; the refusal is the port's evidence schema
+
+- **What changed in one line:** with the marker's floor explicit, the run gets through **the segment's whole search** - `_next`, the guard, the
+  lock, `stop_and_confirm`, `_post_stop_interval`'s dwell gate (the CP-1388 fix), the marker check, `_sync_scene` - and the refusal now comes from
+  **one layer further out**: `PickPlaceSearchPortError: TASK8_SEARCH_EVIDENCE_INVALID` caused by `ValueError: physical readback schema`, which is
+  the port's own key-set check (CP-1357).
+- **So the remaining work is shape, not mechanism:** the port requires `physical_readback` to be exactly
+  `{world, scene, contact, observation, reference, source_stamps_s, source_received_wall_s}`, while the segment suite's `_raw` provides four of
+  them, and it requires `source_received_wall_s` itself to be exactly
+  `{world, scene, contact, head, wrist, arm, neck}` with finite non-negative values. **`observation` and `reference` are the two whose inner
+  shapes the port validates further down (beyond line 244), so that is the next read** - and the seven-source set is already in the repository as
+  `READBACK_SOURCES`, so those two maps come from it rather than from a hand-written list.
+- **Honest note on the stretch:** this path took about twenty-four rounds, of which the decisive four were a five-second counter, one full read of
+  `_post_stop_interval`, and two one-line marker corrections. **Every production check that refused me was correct; the fixture was wrong each
+  time.** Items 1-4 remain complete and green throughout.
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
