@@ -29517,3 +29517,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the cause of CP-1749's misreading is now measurable rather than mysterious:** `build/so101_teleop/Testing/Temporary/LastTest.log` **is 442099 bytes at 00:35** - the 121 bytes I read at 00:18 were that file **mid-write, while the leg was still running**. **The correction in CP-1750 was right, and this is why it was right:** a file being appended to is not evidence that nothing happened, which is the same family as every other caution in this ledger (a length is not a key set; a stub is not an empty run).
 - **Nothing in the product was touched for this:** it is evidence handling - copy, verify, index, freeze - and the frozen HEAD is unchanged.
 - **State:** **the review is still the owner's to launch (no new file has appeared in the handoff directory); the packet, the index and the freeze are current, and the boundary's canonical teleop artefact is now durable**; boundary unchanged and not re-claimed; goal **paused/disarmed at the user-decision boundary**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1759 — Waiting state, with the index at 52/0 and the freeze at 6/6
+
+- **Both disciplines re-run after the recovery in CP-1758 (which changed the index, and therefore the freeze):**
+  ```
+  index audit:  rows stating a digest: 52      mismatches: 0
+  freeze:       entries: 6                      read-back: every frozen entry reproduces
+     10876 598f8887f62d194d  task8-astra-rereview5-packet.md
+      8604 f7443b35919dcd85  task8-astra-rereview4-verdict.md
+     19051 edc8aadade83f4e4  task9-package-gate-evidence-index.md
+    662025 eb1130b8b7f8420e  Test.xml   (v4 canonical, the artefact P2 decoded)
+    662035 fa15dd0418203b74  Test.xml   (v5 boundary, recovered from the build tree)
+      2868 b671908bc4010f2a  BOUNDARY.md
+  ```
+  **Two Test.xmls, both of them canonical for their own run, both durable in the registered root** - and the index now names each of them with the size and digest that match.
+- **And the review has not arrived:** the handoff directory's newest file is still this session's own packet (00:36). **The session is where CP-1757 left it - at the owner's decision boundary, with no controlled source change made since the freeze, and none planned until the verdict returns.**
+- **What I will do when it returns, so the handoff is unambiguous:** read the verdict in full and verify its digest against the freeze; reproduce every finding it names, item by item, with focused runs; **if it requires a change, write a failing test first, then the change, then the focused run, then the boundary leg it belongs to** - and if it disputes something on technical grounds, record the precise counter-evidence and stop at that item for the owner rather than narrowing the approved contract silently.
+- **State:** **frozen, indexed, audited and waiting; the goal stays active because the review and its outcome are the plan's last step.**
