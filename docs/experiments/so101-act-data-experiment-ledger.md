@@ -18556,3 +18556,24 @@ not an inference of mine.**
   insertion point (the technique that resolved CP-1118 and CP-1152 in one pass each), then the check moved to wherever that
   print shows it must live - and only then the context field, the driver's seal and the aggregator's readback.
 - **State:** goal active (revision 51, cap 1000); RED log `beh-r771.log`; no full suite, no push, no stack, no hardware.
+
+## CP-1166 — Confirmed by reading, then fixed: the check sat inside the `else`, so `--driver` bypassed it
+
+- **CP-1165's first hypothesis was the right one, and one read settled it:** the whole `--context` block in
+  `act_measure_task8_calibration.py` lives in the **`else`** of `if args.driver:` - so an invocation that supplies a driver
+  (the test-only injection the plan allows) never builds the production context and never reached my line. That is why the
+  RED stayed silent while the check was visibly present.
+- **The fix is where the rule belongs rather than where it was convenient:** a supplied `--context` is now read and its
+  `runtime_descriptor` validated **before both branches**, so neither the driver injection nor the production path can be a
+  way around §4.2. The entry-level RED passes - the CPU-fallback descriptor is refused with
+  **`TASK8_PREPARATION_CUDA_REQUIRED`** - and **58 passed** across the descriptor, runtime-config-binding, artifact-bundle,
+  aggregator and contract suites (`beh-r772.log`).
+- **Two rounds, one read, and no guessing:** CP-1165 recorded the hypotheses instead of a claim of completion; this round
+  read eight lines of the CLI and confirmed which one held. **That is the pattern this boundary has settled into, and it is
+  also why I keep writing the failed attempts into the ledger rather than only the successes.**
+- **Where item 2 stands now, precisely:** the descriptor is parsed once (CP-1162), the rule is shared by both boundaries
+  (CP-1165), and the measurement entry enforces it before doing anything (this checkpoint). **Remaining for item 2:** carry
+  the descriptor in `CalibrationMeasurementContext` as canonical payload + path + sha256, have the production driver register
+  it in the batch it seals, and have the aggregator read it back **from the strict closed index** before calling
+  `validate_head_search_binding` - then the negative set (item 3) and Boundary V's mechanical part (item 4).
+- **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
