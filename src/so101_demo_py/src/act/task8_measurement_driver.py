@@ -231,30 +231,39 @@ class Task8MujocoMeasurementDriver:
             if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
                 x1, y1, x2, y2 = (float(value) for value in bbox)
                 boxes.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2, "accepted": True})
-        from so101_demo.act.task8_measurement_formulas import DOCUMENT_EVIDENCE_FIELDS
+        from so101_demo.act.task8_measurement_formulas import BBOX_EVIDENCE_FIELDS
 
         # the camera evidence: the admitted camera block's own horizontal FOV, which is what the FOV field is
         # measured against (its `threshold_source` is the model's FOV, not a pending config value)
         camera_block = getattr(self.phase_camera, "document", {}).get("camera") or {}
         measurements = {}
-        if camera_block.get("horizontal_fov_rad") is not None and camera_block.get("width_px"):
-            # `_f_horizontal_fov_rad` reads `evidence["frames"]` and derives the FOV per frame from `fx`, `cx` and the
-            # width - so the evidence is the camera's own intrinsics, not a pre-computed angle
-            import math
-
-            width_px = float(camera_block["width_px"])
-            cx = width_px / 2.0
-            fx = cx / math.tan(float(camera_block["horizontal_fov_rad"]) / 2.0)
+        fov_limit = None
+        focal = camera_block.get("focal_px")
+        principal = camera_block.get("principal_point_px")
+        if (camera_block.get("horizontal_fov_rad") is not None and camera_block.get("width_px")
+                and isinstance(focal, (list, tuple)) and len(focal) == 2
+                and isinstance(principal, (list, tuple)) and len(principal) == 2):
+            # `_f_horizontal_fov_rad` derives the angle PER FRAME from `fx`, `cx` and the width, compares the minimum
+            # against the model's own FOV, and requires `tolerance_rad` beside them. Both numbers here were MEASURED by
+            # the sampler from the headless model (`focal_px`, `principal_point_px` from the sampled poses; the FOV
+            # from the camera's declared fovy), so the comparison the formula makes is between two measured values at
+            # the protocol's tolerance - not between a value and itself.
             measurements["horizontal_fov_rad"] = {
-                "frames": [{"fx": fx, "cx": cx, "width": width_px, "accepted": True}]}
-        if boxes:
-            for field in measurements_section:
-                if field in DOCUMENT_EVIDENCE_FIELDS:
-                    # this family reads a document: the principal point beside the boxes it is measured against
-                    measurements[field] = {
-                        "K02": float((detection or {}).get("image_width", 0)) / 2.0, "bboxes": boxes}
-                else:
-                    measurements[field] = boxes
+                "frames": [{"fx": float(focal[0]), "cx": float(principal[0]),
+                            "width": float(camera_block["width_px"])}],
+                "model_fov_rad": float(camera_block["horizontal_fov_rad"]),
+                # the design fixes the geometric cross-check tolerance at 1e-6 rad; it is a protocol constant, not a
+                # config value awaiting approval, which is why this field IS measurable in this chain
+                "tolerance_rad": 1e-6,
+            }
+            fov_limit = float(camera_block["horizontal_fov_rad"])
+        # ONLY the fields this measurement truly produced, under the names whose formula reads them: the bbox
+        # evidence goes to `BBOX_EVIDENCE_FIELDS`. Emitting it under EVERY declared field - which is what this did
+        # first - made fields look measured whose evidence a calibration head search produces and this chain does not;
+        # those are now simply absent, and the aggregator reports them UNMEASURED (the owner's disposition, CP-1789).
+        for field in BBOX_EVIDENCE_FIELDS:
+            if boxes and field in measurements_section:
+                measurements[field] = boxes
         # ONLY approved limits travel: an entry whose value is unapproved (`value: null` with
         # `requires_approved_value: true`) or absent is omitted, and the aggregator reports that field UNMEASURED
         configured = {}
@@ -262,6 +271,8 @@ class Task8MujocoMeasurementDriver:
             if not isinstance(entry, dict):
                 continue
             limit = entry.get("configured_limit")
+            if limit is None and field == "horizontal_fov_rad":
+                limit = fov_limit                    # its threshold source is the model, measured above
             if limit is None:
                 continue
             configured[field] = limit

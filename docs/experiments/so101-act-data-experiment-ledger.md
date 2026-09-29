@@ -30407,3 +30407,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   exactly the four rows above.
 - **State:** **P1-2's honest scope is now measured and named; the two edits are ordered.** P1-3 CLOSED; P1-1 second half
   GREEN; the demo RED's fix awaits a clean re-measurement; P1-4, P1-5, P1-6 remain.
+
+## CP-1795 — P1-2 CLOSED: the formal seal reaches the real aggregator and produces recomputed verdicts
+
+- **`67 passed`** across the identity-contract, measurement-driver, aggregator, phase-camera and formal-entry files -
+  and the RED that started as a swallowed `except ValueError` now asserts, with no exception handling at all:
+  | the RED asserts | evidence |
+  | --- | --- |
+  | the formal entry seals a batch | `main(argv) == 0` |
+  | the aggregator accepts it and returns a report | `aggregate_task8_calibration([batch_root], contract, out)` |
+  | it publishes documents | `*.json` under the output root |
+  | it recomputes per-field verdicts FROM the sealed raw records | `derive_field_verdicts([batch_root], contract)` |
+  | a field whose threshold comes from an unapproved config reports `UNMEASURED` | the owner's disposition, CP-1789 |
+  | a field whose threshold is the MODEL's is measured | `horizontal_fov_rad`, against the camera the sampler measured |
+- **What made the difference, in one line:** the driver stopped emitting its bbox evidence under **every** declared field
+  and now emits it under the three whose formula reads bboxes (`BBOX_EVIDENCE_FIELDS`). **That single change turned
+  "fields that look measured" into "fields that are"** - and the rest are honestly absent, which the aggregator already
+  knew how to report as `UNMEASURED`.
+- **And the FOV comparison is not circular:** the evidence carries `focal_px` and `principal_point_px` **as the sampler
+  measured them from the headless model**, the formula derives the angle per frame, compares the minimum against
+  **`model_fov_rad` from the same matrix's camera block**, and the tolerance is the design's own protocol constant
+  (1e-6 rad) - a constant, not a config value awaiting approval, which is precisely why this field is measurable while
+  the search-config fields are not.
+- **The shape work, closed by measurement rather than guesswork (CP-1794):** a behavioural probe over all 28 contract
+  fields found **19 that accept neither a bbox list nor a document** and **two that merely tolerate a list without being
+  about bboxes** (`max_fine_corrections` counts, `search_timeout_s` sums) - so the emission set is the three fields the
+  bboxes are actually about, declared in the formulas module beside `DOCUMENT_EVIDENCE_FIELDS`.
+- **State:** **P1-1 second half GREEN; P1-2 CLOSED; P1-3 CLOSED.** Remaining: **P1-1's first half** (the default real
+  bottom-I/O composition, whose geometry sources P1-3 now supplies), **P1-4**, **P1-5**, **P1-6**, the demo RED's clean
+  re-measurement, the final freeze gate and the re-review packet.

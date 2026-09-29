@@ -166,6 +166,12 @@ def _limit(raw: dict, field: str):
 #: declaration that cannot drift from the code it describes.
 DOCUMENT_EVIDENCE_FIELDS = ("center_deadband_px", "horizontal_fov_rad")   # both read `evidence[...]`, not a list
 
+#: fields whose formula reads the evidence as a LIST OF BBOXES through `_bboxes` - the one family a producing driver
+#: can honestly fill from a detection. A behavioural probe (CP-1794) found five fields that merely TOLERATE a list
+#: (`max_fine_corrections` counts its items, `search_timeout_s` sums durations), so tolerance is not the test: these
+#: three are the ones the bboxes are actually about. The probe test asserts that distinction.
+BBOX_EVIDENCE_FIELDS = ("min_area_px2", "min_bbox_aspect", "vertical_bounds_px")
+
 
 def _evidence(raw: dict, field: str):
     evidence = raw["measurements"].get(field)
