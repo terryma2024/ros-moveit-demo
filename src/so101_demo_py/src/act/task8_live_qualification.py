@@ -409,3 +409,29 @@ def longest_contiguous_span_s(frames, *, predicate, phase=None, period_s: float 
             current_start = frame["source_stamp"]
         best = max(best, frame["source_stamp"] - current_start)
     return best
+
+
+def release_stable_s(frames, *, stable) -> float:
+    """The design's `release_stable_s` rule: the longest contiguous source-stamp span in RELEASE over which the cup's
+    pose, velocity and contact stability predicate holds.
+
+    The row measures from the first moment after RELEASE at which the predicate holds to the first break or the end
+    of the phase, so a break simply ends the span; the predicate itself is supplied by the caller because the
+    velocity and contact parts are read from the raw records.
+    """
+
+    return longest_contiguous_span_s(frames, predicate=stable, phase="RELEASE")
+
+
+def grasp_occlusion_window_s(frames, *, occluded) -> float:
+    """The design's `grasp_occlusion_window_s` rule: the longest contiguous source-stamp interval of legitimate
+    gripper occlusion between CLOSE and RELEASE.
+
+    Unlike the stability rows, this one makes a frame break fail the run, so the span is computed with
+    `strict_breaks=True` and a gap raises `SPAN_FRAME_BREAK`. No phase filter is applied: the caller's predicate is
+    what identifies legitimate occlusion, and it must accept only CLOSE..RELEASE frames whose occluder owner is one of
+    the approved group-0 visual geoms - a non-allowed owner belongs in the predicate so it ends the span rather than
+    being silently counted.
+    """
+
+    return longest_contiguous_span_s(frames, predicate=occluded, strict_breaks=True)
