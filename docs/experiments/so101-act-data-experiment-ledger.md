@@ -14236,3 +14236,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   collection layers green at 33; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval
   outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no
   runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-981 — The raw-record reader is in, so the extractors have their access path (34 passed)
+
+- **Implemented `make_raw_reader(artifact_path)`:** it resolves a sample's
+  `raw_records[source] = {relative_path, sha256}` against the root the artifact was sealed in, refusing an absolute or
+  `..` path (`RAW_RECORD_PATH_INVALID`), a missing file (`RAW_RECORD_MISSING`), an unindexed source
+  (`RAW_RECORD_REQUIRED`) and a digest that does not match (`RAW_RECORD_DIGEST_MISMATCH`) - the same rules the
+  recorder applied when it registered each record, so an extractor cannot read anything the seal did not cover.
+- **Why this is the right next building block:** every raw-dependent rule (the occlusion window over the wrist
+  records, the support pair over the contact records, the retreat qualifier and the two stability predicates) needs to
+  reach those records through the index, and now it can without any extractor inventing a path. The test proves all
+  four refusals plus the successful read of a contact record carrying a pair with `signed_distance_m`.
+- **Verified: 34 passed, rc=0** (`beh-task8-green19.log`).
+- **Remaining in Task 8:** write the five extractors on top of this reader (the occlusion predicate including the
+  approved-owner check, the release and placement stability predicates reading pose/velocity/table-support/
+  forbidden-contact evidence, the retreat qualifier, and the support pair's three pre-open frames), then weld
+  `collect_live_runs` -> `derive_live_measurements` -> `build_qualified_measurements` into
+  `build_task8_qualified_report` with the readback and `require_qualified(report)`.
+- **State:** Tasks 1-7 complete and green (204 + 47 focused tests, Step-4 command 53); Task 8's derivation, collection
+  and raw-access layers green at 34; Tasks 9-10 untouched; the goal is armed with a 756-round budget; one approval
+  outstanding (the 17 candidate search values, three `neck_start_rad` starts and the candidate safe interval); no
+  runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
