@@ -11802,3 +11802,25 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   plan's exact `git add` list.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED; `runtime-task8l-gen3` retained and ineligible.
+
+## CP-881 — CP-879 strengthened: the design's "closed sample" carries measured, not configured, values
+
+- **Read the design's own wording rather than paraphrasing it.** Line 20 says the **existing head-search closed
+  sample** continues to carry the 17 search fields and 4 head-camera fields (21 in total), and line 243 defines
+  that sample's `measurements` as "17 个字段到裸 `reported_value` 的映射" - a mapping from the 17 fields to bare
+  **reported values**. So the closed sample is a *measurement* artefact, not a configuration source.
+- **The only concrete numbers in the tree are that sample's shape, in a test:** the teleop campaign-admission
+  test builds `measured_values` with exactly the 17 fields (`horizontal_fov_rad: 1.0`, `coarse_step_rad: 0.2`,
+  `search_timeout_s: 15.0`, `min_confidence: 0.5`, `vertical_bounds_px: [100.0, 380.0]`, …) inside a
+  `calibration-sample.json` fixture. Those are modelled **observations**, and promoting them into
+  `task8-calibration-search-candidate-v1.json` as the frozen **configuration** would invert their meaning.
+- **No configuration source exists to transcribe:** the key set and its invariants live in `act/search.py`, the
+  binding key set in `act/head_search_binding.py`, and the descriptors (units and which fields belong to which
+  check) in `config/act/task8-calibration-measurement-contract-v{1,2}.json` and `config/act/calibration-schema.json`
+  - none of which carries values. `find` for a head-search or closed-sample file returns nothing but code and
+  tests.
+- **Therefore the question stands, now with its evidence tightened:** the 17 configured search values must come
+  either from an approved source I have not been shown, or from an upstream approval step whose output I then
+  freeze verbatim. Choosing them myself would set the qualification's own limits.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
