@@ -15771,3 +15771,28 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   two specific remaining reads; Task 9's single failing module awaits the (b1)/(b2) choice; Task 10 blocked until the 17
   search values are reviewed. No runtime, no formal-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-1039 — Where the new test belongs, found by looking rather than assuming
+
+- **Two file-name assumptions died on contact with the tree, and both are worth recording so the next round starts clean:**
+  - `test/test_act_task8_search_port.py` **exists but tests a different module** -
+    `so101_demo.adapters.act.task8_search_port`, the legacy Task 8 search port with its own `fixture`/`bind` helpers - and
+    contains nothing about `pick_place_search_port`. A test added there would have been in the wrong place and would not
+    have exercised the class CP-1038's change touches.
+  - **the pick-place port's actual coverage is** `test/test_act_task8_live_evidence.py` and
+    `test/test_act_visible_approach_source_binding.py` - the former being the file that already holds this session's
+    window, recorder, seal-idempotence and chain tests.
+- **So the write planned at CP-1038 lands in `test_act_task8_live_evidence.py`**, beside the existing port/window tests,
+  with the boundary and window doubles that file already uses - no new fixture design, and the file is one this session
+  has already edited and committed to, so its patterns are known rather than guessed.
+- **The remaining write, unchanged and now fully located:**
+  1. `bind_live_evidence(window)` in `pick_place_search_port.py`: refuse when `_live_evidence_window is not None or
+     self._begun` (`TASK8_LIVE_EVIDENCE_ALREADY_BOUND`), refuse a window without a callable `seal`
+     (`TASK8_LIVE_EVIDENCE_WINDOW_INVALID`), else store it - mirroring `bind_startup_receipt` exactly (CP-1034's read);
+  2. its test in `test/test_act_task8_live_evidence.py`;
+  3. the child-side binding at `ros_child.py:505`, hunk-level and staged alone (CP-1038), after reading where
+     `reset_epoch` comes from and confirming the `case_id` pattern.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller is located to the line, with its method,
+  its test file and its call site all identified; Task 9's single failing module awaits the owner's (b1)/(b2) choice
+  (CP-1035); Task 10 blocked until the 17 search values are reviewed. No runtime, no formal-gate claim, no push, no
+  evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
