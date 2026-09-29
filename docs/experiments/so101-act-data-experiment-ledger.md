@@ -25173,3 +25173,18 @@ picture in both directions.**
   search readback and the real sources - **the fixture that already drives a real screen with a real snapshot.**
 - **State:** the boundary chain test is still **uncommitted** while red; the `time_axis` fix, the fixture corrections and this correction belong to it. No new session, goal, worktree or stack;
   nothing pushed, nothing deleted; no hardware.
+
+## CP-1510 — The fixture has its own executor with a snapshot port; take the snapshot from there
+
+- **Two facts read, both confirming the plan:** `physical_inputs()` returns exactly the **10-tuple** `(screen, prefix, goals, checks, sources, driver, owner, events, qpos, qvel)`,
+  and `checks` accumulates `(prefix, snapshot)` **only when `check_path` runs** - i.e. from `screen.inspect(...)`, with the snapshot being the screen's own checker input (the one the
+  screen's test asserts carries `model_qpos`).
+- **And the fixture already contains the right producer:** line 80 sets **`broker.prefix_executor = pair`**, where that `pair` is the fixture's own paired-execution double. **So the
+  proof's snapshot belongs to `pair.snapshot_port`, not to `checks[-1][1]`** - which is why the prover complained about `model_qvel` and then about the state: it was being handed the
+  screen's checker input instead of the snapshot the paired execution owns.
+- **That is the third time this stretch that the lesson is the same:** ask the component that **owns** the document, and stop reconstructing it from whatever is nearby. The receipt came
+  from the issuing authority, the goals from the screen's own helpers, and now the snapshot from the paired execution's snapshot port.
+- **So the chain test's remaining work is one substitution:** take `snapshot_for_proof` from the fixture's `pair.snapshot_port` (with the arguments it expects), keep everything else, and
+  the test should pass - after which the boundary chain is proven and **APPROACH is end to end**.
+- **State:** the boundary chain test is **uncommitted** while red, together with the `time_axis` fix and the snapshot-ownership fix in `execute_approach`. No new session, goal, worktree or
+  stack; nothing pushed, nothing deleted; no hardware.
