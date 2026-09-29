@@ -26185,3 +26185,20 @@ picture in both directions.**
 - **And the honest statement of what P2 still lacks:** the review asks for a **non-zero exit** and a **ledger row that says INVALID**, and these tests assert the **refusal** at the service level. **The CLI half - the exit
   code and the ledger's own vocabulary - is the remaining work**, and it is the next round's target rather than something these tests can claim.
 - **State:** P1-1..P1-4 complete and committed; the P2 scenarios committed; the projection file green at 41 passed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1572 — The CLI's exit surface and its fail-closed gates, and the one part of P2 that cannot run here
+
+- **The CLI the review means is `cli/act_run_pick_place_validation.py`, and its exit surface is one line:** `raise SystemExit(main())` - so a refusal reaches the process as an uncaught error and
+  **the exit code is non-zero**, which is half of what P2 asks for.
+- **And its gates are already fail-closed before any resource is acquired, each with its own name:**
+  `TASK8_SPEC_INVALID`, `TASK8_LOCAL_PATH_INVALID`, `TASK8_PREPARATION_REQUIRED` (no receipt), `TASK8_BUNDLE_SPEC_MISMATCH` (a receipt that disagrees with the spec) and `TASK8_CAMPAIGN_JOURNAL_PLAN_INCOMPLETE`
+  (all fourteen journals must be free at once).
+- **Its existing test file covers three of them** - the missing full-restart owner, the fence order, and the spec loader - **and the gap is precise:** the **artifact-bundle gates** and the **journal-plan gate** are
+  untested, and they are the ones a terminal close-out depends on.
+- **And here is the boundary this batch must report honestly rather than paper over:** the review asks the three seal scenarios to **exit non-zero from the CLI with a ledger row that says INVALID**, and
+  **that path runs real cases - it needs the live stack and the fourteen journals this batch is forbidden to take.** So:
+  * the **service-level** refusal of all three scenarios is tested and green (CP-1571, `41 passed`);
+  * the **CLI-level** non-zero exit is testable only for the gates that fire **before** admission, which is what the next round adds;
+  * **the full CLI close-out over a real case cannot run under this batch's constraints, and no amount of test-writing changes that** - it needs the owner's go-ahead for a live acceptance run, which is exactly
+    the boundary the packet must carry.
+- **State:** P1-1..P1-4 complete and committed; P2's scenarios committed; the projection file green at 41 passed. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
