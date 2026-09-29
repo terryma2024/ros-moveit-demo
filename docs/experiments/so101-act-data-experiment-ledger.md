@@ -16901,3 +16901,21 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   So the tree has **two conventions on purpose**: the driver records per anchor, and the aggregator consumes per topic. My reverted rule assumed only the first and would have rejected every batch the aggregator's own fixtures build.
 - **What that means for the anchor x phase x source index, stated as a design rather than a patch:** the coverage rule has to be expressed over **both** conventions - the aggregator's per-topic files give the anchor dimension for `fov`, `search` and `sync`, and the driver's per-anchor rows give the phase and source dimensions (nine phase rows, ten geometry rows, one probe, one camera-info and one tf row per anchor). A rule that only knows one of them is wrong in one direction or the other, which is exactly what the last two rounds demonstrated in both directions.
 - **State:** the anchor-coverage RED stands proven and unlanded (`Failed: DID NOT RAISE`), the suite is at **30 passed / 1 failed** with that test as the failure, and the paired change now has the information it lacked. Nothing was guessed into the validator this round; the map above is read from the writers and readers themselves.
+
+## CP-1089 — Anchor coverage enforced over both conventions; six fixtures are the migration
+
+- **The paired change landed, using the map from CP-1088 rather than a guess:** every declared anchor must now be
+  evidenced either by the driver's `anchors/<anchor>/...` rows **or** by the aggregator's `fov|search|sync/<anchor>.json`
+  files, else the batch is refused as **`BATCH_ANCHOR_MISSING`**. The anchor-coverage RED from CP-1087 now passes.
+- **Effect measured: the wrong-convention attempt had broken 15 tests; this one breaks 6.** The remaining six are
+  fixtures whose batches **declare** `["default", "left", "forward"]` while evidencing **none or only some** of them -
+  the aggregator's `_sealed_batch` indexes just `raw/records.json`, for instance. **They fail for exactly the reason the
+  rule exists**, which is the difference between a rule that is wrong (the reverted one) and a rule that is right and
+  exposes compliant-looking fixtures.
+- **State recorded plainly, as at CP-1076:** **HEAD is red for those six tests** - 6 failed / 25 passed - and the fix is a
+  fixture migration: either evidence every declared anchor in one of the two conventions, or declare only the anchors the
+  batch evidences, whichever each test actually means. That choice is the tests' to make honestly, not mine to paper over
+  by weakening the rule.
+- **Evidence:** scratch `<R>/scratch/r688.<n>` with `TMPDIR` verified through the exact test interpreter; log
+  `beh-r688.log`; RED `beh-r687-red.log`; the reverted wrong rule `beh-r687-green.log`; restored baseline
+  `beh-r687-restored.log`.
