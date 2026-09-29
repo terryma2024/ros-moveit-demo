@@ -11967,3 +11967,18 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   the suite half-migrated.
 - **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
   `collection_*` NOT_PROVISIONED.
+
+## CP-888 — Task 2 committed (28 formulas + aggregator delegation seam)
+
+- **Committed with the plan's exact four-file list** (`feat(act): derive task8 calibration fields from raw
+  evidence`): the formula module with all **28** fields, the aggregator with its delegation seam, and both test
+  modules; guard reported `staged=4 check_rc=0`.
+- **Scope confirmed from the approved plan before closing the task:** Task 6 ("Close the deterministic offline
+  aggregator") is where `roots[0]` is rejected, the labelled helpers are replaced at the call site and the
+  fixtures are rewritten (`render_task8_calibration` / `publish_task8_calibration`, one v2 sealed batch with
+  exactly three anchors, raw label mutation must not change the result while number/mask mutation must fail).
+  Task 2's own instruction to *modify* the aggregator is the delegation seam, which is in place - so the call-site
+  swap belongs to Task 6 and was not rushed here.
+- **Verified at the commit:** **82 passed, rc=0** across the formula and aggregator modules.
+- **Boundaries:** no runtime, no package gate, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
