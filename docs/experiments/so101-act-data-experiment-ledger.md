@@ -28528,3 +28528,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **And the reason is narrowed to one question, which is the next probe rather than another patch:** the port builds each sample from `canonical(observed.physical_readback, ...)`, where `observed` is `self._current_observation(observed, request)` - **so the sample's time is whatever that readback carries**. Either that readback is the fresh one (and the counter is not advancing where the fixture thinks it is), or it is the cached observation (and the port is stamping samples with an older instant). **Printing the sample's own `physics_step` beside its `sim_time_s` at `_grid_sample` answers it in one line.**
 - **Where the migration stands, honestly:** the APPROACH chain is **closed** (CP-1701), the plan's **window** is green (this entry), the **axis** and the **snapshot** are green (CP-1700), and the grid's sequence is **the one thing left** - with its failure now a **regression** (no advance) rather than a **gap** (too much advance), i.e. the clock is being consumed by something other than the samples.
 - **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration: everything green except the grid's per-sample advance**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
+
+## CP-1705 — The step advances and the instant does not: two candidate causes, each with its own one-line probe
+
+- **The measurement, which rules out the obvious:**
+  ```
+  SAMPLE phase=SEARCH   step=4  sim=1.4
+  SAMPLE phase=APPROACH step=7  sim=1.4
+  ```
+  **The physics step moves (4 → 7) while the instant is frozen**, so the case IS progressing and the fixture's clock is not what the samples carry. Two candidates remain, and they are distinguishable in one line each:
+  1. **the fixture's `capture_base` is being re-set** (or the counter read is not the one advanced) - probe: print `_case_clock` at each `_case_capture`;
+  2. **the port stamps each sample from a CACHED observation** - `_current_observation` returns `dataclasses.replace(observed, physical_readback=current(request))` **only when the boundary exposes `current_readback`**; probe: print `id(observed.physical_readback)` beside the returned `sim_time_s` and see whether the cache is the one being read.
+- **Why this is worth a probe rather than a patch:** the last five rounds each fixed a real defect and each moved the failure on (window → axis → snapshot → APPROACH closed → gap → regression). **This one has two candidate causes that would need opposite fixes**, so patching either would be a coin toss - and the batch's own rule is that a claim about an artefact waits until the artefact has been read.
+- **And the state, unchanged in substance:** APPROACH chain closed (CP-1701); window, axis and snapshot green (CP-1700/1704); **the grid's per-sample instant is the last thing**, and it is now one of exactly two causes.
+- **State:** **P1-4 production pieces 1-3 committed; the fixture's clock migration one probe from the last link**; the task list keeps P1-4 in-progress; boundary unchanged and not re-claimed; goal **paused/disarmed with the resume refused by policy (owner action needed)**; nothing pushed, deleted or moved; no new goal/session/worktree/stack; no Task 10/8L/P2 live; no real hardware.
