@@ -23016,3 +23016,17 @@ not an inference of mine.**
   frozen `10.01` against its frozen clock, applied to a real clock. **Production is untouched, and this is the last gate in the search path.**
 - **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
   cleanup untouched; nothing deleted, nothing pushed.
+
+## CP-1389 — The dwell gate PASSES - the receipts fix worked - and the marker is the next, narrower question
+
+- **Measured:** with receipts stamped live the run completes in **0.69 s with no queue exhaustion at all** (zero `EMPTY` events, against 136
+  pops of churn before), and the refusal is back at the marker check. **CP-1388's root cause is confirmed: the twenty-round tail was the stale
+  wall receipt, and nothing else.**
+- **The marker question is now narrow and mechanical.** The `try` scope printed above wraps the fence call and the marker check, and the marker
+  my sources returns is `session_id` (this case's), `reset_epoch` (as passed), `marked_physics_step = self._step`, `command_authority = False`.
+  The check requires an **int `>= 1`**, so the only way it fails is `self._step == 0` at the moment of the call - **which happens if the stop is
+  requested before any readback on that sources instance.** My `_Boundary.search` builds a **fresh** `_ChildSources` on every call, so the first
+  stop can indeed arrive with `_step` still zero, and the fix is to make the marker's floor explicit (`max(1, self._step)`) **or** to keep one
+  sources instance across the boundary's calls. **Both are fixture-side, and the read above says which of the two the code expects.**
+- **State:** step 1's changes remain uncommitted while the focused test is red; no stack started, no CUDA, no actuators, no hardware;
+  cleanup untouched; nothing deleted, nothing pushed.
