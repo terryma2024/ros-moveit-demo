@@ -17729,3 +17729,20 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   MuJoCo and an authorised stack. The checking half is mine to do, and I will start it next round unless the owner
   redirects.
 - **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware.
+
+## CP-1130 — The wiring point already takes both documents of the binding
+
+- **Found the entry rather than inventing one:** `src/cli/act_prepare_pick_place_validation.py` requires **`--runtime-config`**
+  and **`--calibration-report`** - precisely the two documents `validate_head_search_binding(runtime, calibration)` takes -
+  and, per CP-1129, it never calls it. So the checking half of the hand-off needs **one call site**, not a new entry, and
+  it is testable with fixtures alone because both inputs are documents on disk.
+- **What the RED will assert, written out so the next round is mechanical:** the preparation entry **refuses** when the
+  report cannot bind to the runtime configuration it is about to construct a runtime from (`HEAD_SEARCH_SAMPLE_MISMATCH`,
+  `HEAD_SEARCH_CONFIG_INVALID` or `HEAD_SEARCH_WEIGHTS_INVALID` depending on the mismatch) and **accepts** a matching
+  pairing - which is the function's own documented contract, "fail closed before ROS or model construction on an
+  unqualified pairing", moved from the docstring into the entry that actually constructs the runtime.
+- **One thing to read before writing it:** whether `--runtime-config`'s document is the binding's
+  `{"schema_version": 1, "head_search": {…}}` shape or something the entry adapts into it, since the binding refuses any
+  other shape with `HEAD_SEARCH_CONFIG_INVALID` and I do not want to test the wrong document.
+- **State:** no full suite, nothing weakened, nothing deleted, no push, no stack, no hardware. The recording half of the
+  hand-off remains the only piece that needs the owner's authorisation for a live stack.
