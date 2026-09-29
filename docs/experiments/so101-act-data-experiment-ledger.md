@@ -26237,3 +26237,18 @@ picture in both directions.**
   instruction not to reuse old numbers is why the first line of this entry is the scratch path and the exit code.
 - **State:** the focused sets remain green; nothing deleted, nothing pushed; the 3415 scratch trees, 495 experiment dirs and 87 evidence files under the registered root are **all retained** (measured this round: `/data`
   1.9 T total, 1.3 T available, 29% used).
+
+## CP-1575 — The five live-evidence failures, identified to the line: one fixed, two edits left
+
+- **The module gate's five `test_act_task8_live_evidence` failures have exactly two causes, and reading the failing lines rather than guessing settled both:**
+  1. **4x `NameError: SimpleNamespace`** in the double I had just extended (`test_act_task8_live_evidence.py:209`) - **fixed** by importing it; the double now carries
+     `reset.receipt.new_epoch = 2`, which is what the port reads for a document's epoch and the seal's identity;
+  2. **2x `PickPlaceReadbackError: READBACK_END_EFFECTOR_REQUIRED`**, raised at `pick_place_readback.py:441` - and the rule there is explicit and correct: *"the end-effector position is MuJoCo output, so the
+     caller that holds the model supplies it; the recorder requires it, and a frame without it must not be recorded as if it had one."* **The two call sites are in the test file** (the composed-sample case at line 495 and
+     the driver case at line 616), and one of them is the negative case that already expects to raise.
+- **And the two `bind_live_evidence` call sites are patched too** - the evidence attachment now carries the case's admitted support distance, which is the port's contract since the grid is fed on every phase.
+- **So the remaining work on this file is two mechanical edits**, and the interesting part is what the failures say about the batch: **the port's new requirements are correct, and it is the fixtures that lag** - the same
+  finding as CP-1574, one layer in.
+- **Progress this round, measured:** `36 passed` -> `37 passed` of 42 in this file with the double extended, and the module gate's 24 failures now have a precise plan: **5 here, 19 in the measurement driver's
+  `runtime_descriptor` fixture** (already recorded in this ledger at line 21865).
+- **State:** nothing deleted, nothing pushed; the focused sets still green; the boundary is not complete and is not claimed to be. No new session, goal, worktree or stack; no hardware.
