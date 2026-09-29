@@ -15216,3 +15216,40 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
   in the per-file results and the exact five not yet isolated by a scoped query; the demo scope still unmeasured; Task 10
   blocked until the 17 search values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware;
   formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-1021 — The five failures attributed, and the repo already has a "registered short root" for sockets
+
+- **Scoped the query to the 113 xunit files this run wrote (all fresh, none stale) and the picture is exact:** the
+  summary's "5 tests failed out of 113" counts **ctest entries, one per test module** - so 113 = test *modules*, and the
+  five failing entries are:
+  | Module | Cases | Failing |
+  | --- | --- | --- |
+  | `test_unified_bridge` | 9 | **14** |
+  | `test_unified_bridge_cleanup` | 7 | **14** |
+  | `test_unified_two_channel` | 6 | **12** |
+  | `test_controller_reservation_paths` | 4 | **2** |
+  | `test_ctest_registration` | 3 | **2** |
+  Every other module of the 113 reports **0 failures**, including all of this task's: `test_task8_case_execution` (10),
+  `test_task8_case_owner` (18), `test_task8_startup_proof` (8), `test_task8_child_startup` (3),
+  `test_act_campaign_admission` (31), `test_task8_full_restart_campaign` (6).
+- **Two failing tests answer questions this session has been asking:**
+  1. **`test_controller_reservation_paths::test_nested_campaign_uses_registered_short_root_for_socket_path` fails with
+     `AssertionError: assert 103 > 107`** - a *socket-path length* assertion, and its name says the project already has a
+     **registered short root** for socket paths. So the repository's own design answer to CP-1012 is not "pick a
+     resolution": it is that nested campaigns **must use the registered short root**, and the long evidence-root scratch
+     path is what violates that expectation. **The question I put to the owner was therefore mis-framed** - the fix
+     direction is in the code and its tests, not in a policy choice, and I should read that mechanism next rather than
+     ask for a decision.
+  2. **`test_ctest_registration::test_registration_matches_the_ordinary_test_modules` fails with
+     "modules the package gate would never run"** - the package's ctest registration does **not** cover every test
+     module, so `colcon test` is not running the whole ordinary scope. That is a **gate-completeness** finding directly
+     relevant to Task 9: a green `colcon test` on this package would not yet prove the package's ordinary tests pass,
+     which is exactly the "do not shrink the collection scope" rule the skill states.
+- **Corrections to earlier checkpoints, recorded rather than quietly fixed:** CP-1011/CP-1016/CP-1019 read the summary's
+  "tests" as pytest tests; they are ctest entries (one per module). The socket cause and the "not this task's fault"
+  conclusion both stand; the arithmetic around them was wrong and is corrected here.
+- **State:** owner decisions 1-4 implemented and committed; the Task 8 caller narrowed to a construction-time binding
+  (CP-1013); Task 9's teleop scope now fully attributed - five modules failing, two of them about the socket root and the
+  gate's own registration, none of them this task's; the demo scope still unmeasured; Task 10 blocked until the 17 search
+  values are reviewed. No package-gate claim, no push, no evidence deleted, no hardware; formal 0/0/0;
+  `collection_*` NOT_PROVISIONED.
