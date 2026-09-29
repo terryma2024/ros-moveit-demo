@@ -26528,3 +26528,20 @@ pick the flattering number.**
   scratches created for their legs and the **retracted** `scratch/final-boundary-20260929-201359`. **All retained.**
 - **State:** demo leg compliant-green; **teleop leg running on its own scratch** with its own assertion and the new 0700 IPC base printed; CTest leg waiting its turn; nothing deleted, nothing pushed; no new session, goal,
   worktree or stack; no hardware; goal active.
+
+## CP-1592 — The corrected boundary's SECOND leg: teleop green on its own fresh scratch
+
+- **The record, exactly as the leg printed it:**
+  ```
+  tempdir assertion OK: <root>/scratch/final-boundary-v2-teleop-20260929-204350/tmp ; ipc base: /tmp/s101-finalv2-ipc-863999
+  teleop_rc=0 elapsed_s=217 scratch=<root>/scratch/final-boundary-v2-teleop-20260929-204350/tmp
+  colcon test-result: Summary: 1430 tests, 0 errors, 0 failures, 43 skipped
+  ```
+  **Command:** `colcon test --packages-select so101_teleop --event-handlers console_direct+ --pytest-args "-q -p no:cacheprovider -n 8 --junit-xml=<root>/experiments/final-boundary-v2/teleop-junit.xml"`
+  from the workspace root, with `TMPDIR`/`TMP`/`TEMP` set to the leg's **own, previously nonexistent** scratch, `tempfile.gettempdir()` **asserted equal** to it by the exact interpreter, and
+  **`SO101_IPC_SOCKET_BASE=/tmp/s101-finalv2-ipc-863999` (mode 700, created for this boundary)** - the parameter whose omission caused twenty failures in the retracted run (CP-1583). Log:
+  `experiments/final-boundary-v2/teleop.log`; result: `experiments/final-boundary-v2/teleop-test-result.txt`; JUnit beside them.
+- **And the fix that this leg's predecessor forced is in it:** the retracted run failed `test_task8_live_evidence_production_chain` with `AttributeError: 'PickPlaceSearchPhasePort' object has no attribute
+  'boundary'` - a defect in **this batch's own seal identity** - and that test now passes, along with the seal's new refusal of a caller whose epochs disagree (CP-1582/1583).
+- **Three of the three legs' statuses right now:** demo `rc=0` (5731/163, own scratch, CP-1591) · **teleop `rc=0` (1430/0/0/43, own scratch, this entry)** · **CTest launched on its own scratch and running**.
+- **State:** nothing deleted, nothing pushed; no new session, goal, worktree or stack; no hardware, no live stack, no CUDA, no actuators; goal active.
