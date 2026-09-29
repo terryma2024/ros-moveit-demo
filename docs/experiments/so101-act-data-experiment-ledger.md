@@ -13082,3 +13082,31 @@ Re-ran the teleop package after CP-819's registration fix (`gate391-teleop.log`,
 - **State:** Tasks 1-6 committed and green; Task 7's module, runner baseline and port (attachment plus grid feed) all
   green at **81 passed**; the user's six in-flight files intact; Tasks 8-10 untouched; no runtime, no package gate, no
   push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
+
+## CP-936 — Retirement-path seal inserted (uncommitted by design) and the invalid-seal increment committed
+
+- **Committed the invalid-seal increment** (`72c62970`): `LiveEvidenceWindow.invalidate(reason)` closes an open window
+  as `INVALID` - a run that never reached FINAL_CHECK must not seal as evidence - returning its grid/event counts,
+  idempotent, refusing an empty reason (`TASK8_LIVE_EVIDENCE_INVALID_REASON_REQUIRED`); the search port exposes
+  `live_evidence_window` publicly; and a test proves a run with one SEARCH sample invalid-seals at `TASK8_ABORT` and
+  repeats identically. Guard `staged=3 check_rc=0`; **63 passed** on the live-evidence, runner and search-port
+  suites (`beh-task7-port10.log`).
+- **Inserted the retirement-path seal in `pick_place_case_owner.py`** immediately before the child retirement step:
+  when `self.worker` exposes a `live_evidence_window` that is not already sealed, the owner calls
+  `window.invalidate("OWNER_RETIRE")` **before** `await self.child_owner.stop_owned()`. One insertion therefore
+  covers both `finish()` and `retire_failed_start()`, and no open window can outlive the child that owns the port
+  recording into it.
+- **Deliberately left uncommitted, per the rules adopted in CP-930/CP-932:** that file carries the user's
+  uncommitted work, so my change is **not staged** and the file remains `M` in their dirty set - verified, not
+  assumed, at the end of the edit. Committing it would capture their work along with mine, which is precisely the
+  mistake this rule exists to prevent.
+- **Verified:** the teleop case-execution and campaign-admission suites report **40 passed, rc=0**
+  (`beh-task7-owner1.log`) with the insertion in place, so the retirement-path change neither breaks the normal
+  finish flow nor the failed-start recovery the user added.
+- **Remaining Task 7 work:** (1) `pick_place_case_execution.py` - read the returned `live_evidence_artifact` back
+  before the journal row (also user-dirty: same staging rule applies); (2) the production-chain test
+  `src/so101_teleop/test/teleop/test_task8_live_evidence_production_chain.py`, keeping `run_pick_place_case()`, owner
+  start/finish, child `_run_pick_place()`, `PickPlaceRunner`, artifact validation and journal publication real.
+- **State:** Tasks 1-6 committed and green; Task 7's module, runner baseline, port and retirement path all green; the
+  user's files intact apart from this one additive, uncommitted insertion; Tasks 8-10 untouched; no runtime, no
+  package gate, no push, no evidence deleted, no hardware; formal 0/0/0; `collection_*` NOT_PROVISIONED.
