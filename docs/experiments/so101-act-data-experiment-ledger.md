@@ -31444,3 +31444,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State:** **P1-5 in progress with its faithful branch proven feasible by an existing test pattern; the reuse is
   next.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final gate and the re-review packet
   remain. **Task-list statuses are unchanged, so they are not re-stated.**
+
+## CP-1828 — The pattern's parts, named: an ack server, a real client, a real domain
+
+- **`test_gate6_bound_authority_wiring.py` contains exactly the three pieces the faithful branch needs, and they are
+  small:**
+  | piece | what it is |
+  | --- | --- |
+  | **`_AckServer`** (line 33) | a test-side reservation service that answers the client's protocol - **the substituted external I/O** |
+  | **`_real_client(roles)`** (line 108) | the **REAL `ControllerReservationClient`**, over that server's sockets - *"real" is the function's own name for it* |
+  | **`_domain()`** (line 120) + `_clock()` | the production `physics_clock_domain`, which yields `history`, `admission` and `registry` in-process |
+  and then the production session, built in a test as plainly as:
+  ```python
+  session = BoundAuthoritySession(reservation_port=client, session_id="clock-session", …)
+  ```
+- **So P1-5's faithful branch has a proven construction to reuse, and the substitution list is exactly two entries** -
+  the ack server standing in for the reservation processes, and a driver standing in for ROS - **with the broker, the
+  session, the per-phase authority, the checker and the screen all production.** That is the verdict's rule applied
+  literally: *"External I/O may be substituted, but the chain may not."*
+- **State:** **P1-5 in progress, its faithful branch fully mapped to an existing working pattern; the reuse in the
+  full-case harness is the next edit.** P1-1 through P1-4 CLOSED. The demo RED's clean re-measurement, P1-6, the final
+  gate and the re-review packet remain. **Task-list statuses are unchanged, so they are not re-stated.**
