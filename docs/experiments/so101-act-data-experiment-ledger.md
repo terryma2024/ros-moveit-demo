@@ -18613,3 +18613,22 @@ not an inference of mine.**
   `validate_head_search_binding(runtime, report)`. Only when that readback test is green is item 2 done.
 - **State:** goal active (revision 51, cap 1000); RED log `beh-r774-red.log`; the 19 pre-existing driver tests are untouched
   and were green at CP-1167; no full suite, no push, no stack, no hardware.
+
+## CP-1169 — GREEN: the descriptor is written into the batch the driver seals
+
+- **Implemented in the driver's own entry, before any anchor works:** `run(context, output_root)` writes
+  `runtime-descriptor.json` from `context.runtime_descriptor` **before** the anchor loop, so the seal indexes it exactly as
+  it indexes the measured rows. A descriptor that is absent stays absent - the driver writes nothing rather than inventing a
+  document, which is the same fail-closed choice the context field makes.
+- **GREEN: 46 passed, rc=0** across the measurement-driver, aggregator and runtime-descriptor suites (`beh-r775.log`), with a
+  fresh NVMe scratch and `TMPDIR` verified through the exact test interpreter. The RED from CP-1168 now passes **for the right
+  reason**: the sealed batch contains a document whose `head_search` block equals the descriptor the context carried.
+- **Why this placement is the design's rather than mine:** §4.2 requires a report to be bound to the configuration that was
+  actually measured, and §6 forbids later components returning to the preparation directory to re-select files - so the
+  descriptor has to be *inside* the sealed evidence, which is where it now is.
+- **Still outstanding for item 2, and it is the half that closes the loop:** the aggregator must read the descriptor **back
+  from the strict closed index** - not from the context and not from a path - and pass it to
+  `validate_head_search_binding(runtime, report)`. CP-1114 already proved the aggregator folds a `head_search` block it finds
+  in the batch's `measurements.json` into the published sample; the readback test must prove it finds the descriptor the
+  **index** carries, which is a different source from the one CP-1114 used.
+- **State:** goal active (revision 51, cap 1000); staged 0; no full suite, no push, no stack, no hardware.
