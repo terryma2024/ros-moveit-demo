@@ -25127,3 +25127,19 @@ picture in both directions.**
   facts -> the runner's own verifier judges the document.** What remains before calling APPROACH done is a **boundary-level test of the real `execute_approach`** with
   the physics and the ROS calls substituted (the port test stubs the method itself), and then the seven phases after it - which now have a working template.
 - **State:** P1-1..P1-3 green and committed; P1-4 in progress. No new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1507 — The boundary chain test is written; it now fails on one time-axis rule, and four real contract facts came out of it
+
+- **The test drives the REAL `PickPlaceSearchBoundary.execute_approach` unbound on a stub `self`** (screen, broker, prefix executor and checker substituted; the proof and the request
+  are still built by production code). Its refusal half **passes**; the chain half now reaches `RelativePathRequest.from_source_receipt` and fails with
+  **`PATH_TIME_AXIS_INVALID`** - my `bridge_time_s`/`start_time_s` pair (both 1.36) does not satisfy that builder's ordering rule. **That is the last unknown in this test, and it is a rule
+  to read rather than a value to guess.**
+- **Four contract facts the test surfaced, each of which was worth learning - three of them my own fixtures being wrong, not the repository:**
+  1. a **ticket's second member is the owner KEY, a string identifier** (`prefix_source._ticket` calls `identifier(ticket[1])`), so a pid integer there is refused - **and the port fixture's
+     ticket stub had the same shape error**, which its stubbed path had hidden. Both are corrected;
+  2. **a digest must be hex**: `"p" * 64` is 64 characters but not `[0-9a-f]{64}`, so the authority refused it - **"64 characters" and "a digest" are not the same claim**;
+  3. the receipt must come from the **production `PrefixSourceAuthority.issue(...)`**, because `from_source_receipt` checks `isinstance(receipt, PrefixSourceReceipt)` - **a stub receipt cannot
+     stand in, and the test now uses the real issuer with a real source document** (`SOURCE_FIELDS`, all seven `SOURCE_KEYS` receipts, the observation's own sim time);
+  4. and the goals builder's held row and header stamp are taken from the capture, which is why the stub snapshot has to carry a real `observation` shape.
+- **State:** the boundary chain test is **uncommitted** while it is red, per this batch's rule; everything else in this stretch is committed. No new session, goal, worktree or stack; nothing
+  pushed, nothing deleted; no hardware.
