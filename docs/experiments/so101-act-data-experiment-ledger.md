@@ -19584,3 +19584,33 @@ not an inference of mine.**
 - **State:** HEAD `fc2c1eac` plus this checkpoint; staged 0; scratch, IPC base, JUnit and logs all retained as deletion
   candidates; no push, no stack, no hardware; formal accepted Train/Validation/Offline Test still 0/0/0 and `collection_*`
   NOT_PROVISIONED.
+
+## CP-1212 — The package/`colcon` gate cannot pass in this environment, and the reason is named, not guessed
+
+- **Both attempts, with their exit codes and logs:**
+  | attempt | invocation | result |
+  | --- | --- | --- |
+  | 1 | `colcon test --packages-select so101_demo_py` on a fresh scratch and 0700 base | **rc=2 after 1.1 s**: `collected 0 items / 1 error`, `ModuleNotFoundError: No module named 'mujoco'`, "0 packages finished" |
+  | 2 | the same with `PYTHONPATH` pointed at the venv's site-packages (which does have mujoco 3.12.0) | **rc=2 after 5.6 s**, same package failure - the collection error is unchanged, so `PYTHONPATH` is not how colcon's pytest is isolated |
+  Evidence: `experiments/gate6-batch3-py-gate/colcon-formal.log` and `colcon-formal2.log`.
+- **Classification, stated explicitly because the owner asked for it:** this is a **runner/environment limitation, not a code
+  failure and not a regression**. `colcon test` for this package collects with an interpreter that cannot import `mujoco`, the
+  package's tests need it, and the environment I am allowed to use exposes it only through
+  `test-venv` (`/data/work/so101-evidence/.../test-venv`, mujoco 3.12.0, pytest 7.4.4, xdist 3.8.0). **The owner's own rule for
+  this task is that the file-sharded runner's pass cannot substitute for the pytest-xdist/package gate** - and the same
+  reasoning applies in reverse: a `colcon` invocation that cannot import the package's dependencies is not evidence about the
+  code, so I am not counting it as a failure of the change and not papering over it either.
+- **What is green and what is not, in one place:**
+  | gate | state |
+  | --- | --- |
+  | ordinary `so101_demo_py` scope under **pytest-xdist 3.8.0**, 8 workers, fresh scratch, fresh 0700 IPC base | ✅ **rc=0, 5638 passed, 0 failed, 163 skipped, 108 s** (CP-1211) |
+  | module RED→GREEN for the fixture fix | ✅ 15 failed/2 passed → **19 passed** (CP-1210) |
+  | `colcon test --packages-select so101_demo_py` | ✗ **cannot collect**: `No module named 'mujoco'` under colcon's interpreter |
+  | file-sharded runner (`tools/so101_pytest_gate.py`) | its last run was red for the module now fixed; a re-run is the owner's optional extra, and it is **not** what the xdist result above depends on |
+- **The honest next step for the package gate, which needs a decision rather than another attempt from me:** either colcon is
+  configured to run that package's tests with an interpreter that can import `mujoco` (an environment change outside this
+  worktree's scope, which I have not made and will not make silently), or the plan's "package gate" is satisfied by the
+  pytest-xdist run above plus this classification. **I have stopped rather than trying a third variation of the same
+  workaround.**
+- **State:** HEAD `6858750d` plus this checkpoint; staged 0; scratch, IPC bases, JUnit and all logs retained as deletion
+  candidates; no push, no stack, no hardware.
