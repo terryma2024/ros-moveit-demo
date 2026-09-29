@@ -628,3 +628,44 @@ def case_row_to_journal_row(row: dict, *, identities: dict,
         "manifest_document_sha256": manifest_document_sha256,
     }
     return require_case_journal_row(journal, mode=row["mode"])
+
+
+def correlate_release_open(rows, open_event: dict, *, period_s: float, tolerance_s: float = 0.01,
+                           indexed=None) -> dict:
+    """Correlate the first gripper-open command with its release-epoch support rows.
+
+    The open event must belong to the same release epoch as the rows it is correlated with, must cite a raw command
+    reference that is inside the sealed index, and must be supported by the three immediately preceding rows being
+    consecutive on the frozen 10 Hz grid. A summary of the event is never a substitute for it.
+    """
+
+    if type(open_event) is not dict or any(key in open_event for key in ("summary", "summary_ref", "digest_only")):
+        raise ValueError("SUMMARY_ONLY_SUBSTITUTE: the open event must be the raw controller record")
+    rows = list(rows)
+    if len(rows) < 3:
+        raise ValueError("SUPPORT_ROWS_MISSING: three preceding rows are required")
+    if not _finite(period_s) or period_s <= 0:
+        raise ValueError("PERIOD_INVALID")
+    epoch = open_event.get("release_epoch")
+    if epoch is None or any(row.get("release_epoch") != epoch for row in rows):
+        raise ValueError(f"RELEASE_EPOCH_MISMATCH: open epoch {epoch!r}")
+    command_ref = open_event.get("command_ref")
+    if not command_ref:
+        raise ValueError("RAW_REF_REQUIRED: the open event must cite its raw command record")
+    refs = [value for key, value in sorted(open_event.items())
+            if key.endswith("_ref") and isinstance(value, str) and value]
+    if indexed is not None and any(ref not in indexed for ref in refs):
+        missing = next(ref for ref in refs if ref not in indexed)
+        raise ValueError(f"UNINDEXED_REF: {missing}")
+    support = rows[-3:]
+    stamps = [row.get("source_stamp") for row in support]
+    if any(not _finite(stamp) for stamp in stamps):
+        raise ValueError("SUPPORT_ROWS_MISSING: every support row needs a source stamp")
+    for earlier, later in zip(stamps, stamps[1:]):
+        if abs((later - earlier) - period_s) > tolerance_s:
+            raise ValueError(f"SUPPORT_ROWS_NOT_CONSECUTIVE: {earlier} -> {later} is not one {period_s}s step")
+    open_stamp = open_event.get("source_stamp")
+    if _finite(open_stamp) and open_stamp < stamps[-1]:
+        raise ValueError("OPEN_BEFORE_SUPPORT: the open event precedes its support rows")
+    return {"verdict": "PASS", "release_epoch": epoch, "support_rows": 3, "support_stamps": stamps,
+            "command_ref": command_ref, "open_source_stamp": open_stamp}
