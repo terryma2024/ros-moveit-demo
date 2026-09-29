@@ -20053,3 +20053,27 @@ not an inference of mine.**
   negatives fall out of the shape rule that is now shared.
 - **State:** HEAD at the source commit plus this checkpoint; the RED test modification and the CLI/composition changes are in the
   working tree; ledger 943 checkpoints; no stack, no hardware, nothing deleted, nothing pushed.
+
+## CP-1231 — A contradiction I will not paper over: the probe says the rule raises, the test says it does not
+
+- **The fixture is read now and it is correct, which sharpens the problem rather than solving it:** `_descriptor()` returns the full
+  document `{"schema_version": 1, "head_search": {"schema_version", "detector", "camera", "motion"}}` with `detector` carrying the
+  device fields, so my three mutations really do produce (a) a five-key `head_search`, (b) a `camera` block with an unknown key and
+  (c) a `motion` that is not a dict. **(a) and (c) must be refused by the shape validator**; (b) is only a dict-shape violation if
+  the validator looks inside `camera`, which the extracted shape function deliberately does not - so case (b) belongs in the deeper
+  checks, not in the shape rule, and my test is wrong about it.
+- **And yet the two observations do not agree, so one of them is about a different object:**
+  | observation | what it shows |
+  | --- | --- |
+  | probe run from `src/so101_demo_py` | `require_runtime_descriptor` **does** call the shape validator, and the extracted validator **does** raise `HEAD_SEARCH_CONFIG_INVALID` on a five-key `head_search` |
+  | the test | `DID NOT RAISE` on the same case |
+  **Both cannot be true of the same function and the same document**, so the next step is not another guess - it is one print **inside
+  the test**: `require_runtime_descriptor.__module__` and `__code__.co_filename`, plus the document's actual key sets as the rule
+  receives them. That single line distinguishes the candidates I can already name - a stale installed overlay copy of the module
+  being imported instead of the edited `src/` file (the repository has a documented history of stale installed binaries), a second
+  definition of the rule shadowing the first, or my mutation not landing where I think it does.
+- **What is settled regardless:** the extraction itself is correct and shared by both callers (proven at CP-1230), the four affected
+  suites are 49 passed, and the source half is committed. **The remaining question is which object the test exercises** - and that is
+  a print, not a refactor.
+- **State:** HEAD `eaa6bebf` plus this checkpoint; my item-2 test still held back **uncommitted while red**; the CLI/composition
+  changes from item 1 are committed; no stack, no hardware, nothing deleted, nothing pushed.
