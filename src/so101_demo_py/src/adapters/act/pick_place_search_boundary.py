@@ -197,13 +197,12 @@ class PickPlaceSearchBoundary:
                                     support_distance_max_m=support_distance_max_m)
         return {"proof": proof, "current_snapshot": snapshot, "facts": facts}
 
-    def sequence_facts(self, phase, snapshot, request, *, support_distance_max_m, motion_template=None):
-        """Establish one sequence phase's eight gates and its facts from the readback - never accept them.
+    def _checked_aggregates(self, phase, snapshot, request, *, support_distance_max_m):
+        """Validate the readback and return its frame aggregates and world - shared by every phase document.
 
-        This mirrors the SEARCH evidence validator: every gate is a conclusion from the readback, and a snapshot that
-        cannot support one refuses by name rather than reporting it as true. The phase's own contact allowlist is the
-        one APPROACH uses (`contact_pairs.for_phase("APPROACH")`), and the holding/contact facts follow from the world
-        evidence exactly as they do for SEARCH.
+        The scope, stamp and contact rules live here once, so the phase documents that are not the nine
+        phases' own evidence (the set-down and release-preflight documents) are established from exactly the
+        same validated readback rather than from a second, weaker copy of these checks.
         """
 
         from so101_demo.act.task8_live_evidence import derive_frame_aggregates
@@ -258,6 +257,20 @@ class PickPlaceSearchBoundary:
         if threshold <= 0:
             raise PickPlaceSearchBoundaryError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: support threshold")
         aggregates = derive_frame_aggregates(world, support_distance_max_m=threshold)
+        return aggregates, world
+
+
+    def sequence_facts(self, phase, snapshot, request, *, support_distance_max_m, motion_template=None):
+        """Establish one sequence phase's eight gates and its facts from the readback - never accept them.
+
+        This mirrors the SEARCH evidence validator: every gate is a conclusion from the readback, and a snapshot that
+        cannot support one refuses by name rather than reporting it as true. The phase's own contact allowlist is the
+        one APPROACH uses (`contact_pairs.for_phase("APPROACH")`), and the holding/contact facts follow from the world
+        evidence exactly as they do for SEARCH.
+        """
+
+        aggregates, world = self._checked_aggregates(
+            phase, snapshot, request, support_distance_max_m=support_distance_max_m)
         # the gates this validator can actually establish from the readback above; anything it cannot check refuses
         # rather than being asserted, and `planning_ok`/`planning_scene_ok` come from the Planning Scene receipt the
         # caller validated (SEARCH's rule) - so they are established there, not here

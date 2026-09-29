@@ -80,6 +80,7 @@ def _case(calls, *, bilateral=True, with_dispatch=True, with_wait=True):
     # the real validator and the real close path are bound to this stub, so CLOSE's facts are established by the
     # production code rather than by a double that agrees with the test
     boundary._close_facts = MethodType(PickPlaceSearchBoundary._close_facts, boundary)
+    boundary._checked_aggregates = MethodType(PickPlaceSearchBoundary._checked_aggregates, boundary)
     boundary.sequence_facts = MethodType(PickPlaceSearchBoundary.sequence_facts, boundary)
     return boundary, ticket, capture
 
