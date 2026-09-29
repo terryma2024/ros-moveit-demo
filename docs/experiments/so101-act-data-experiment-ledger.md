@@ -26137,3 +26137,20 @@ picture in both directions.**
 - **And the same pattern holds as at every other layer in this batch:** the components exist and are exercised separately; **what P2 asks for is the chain driven end to end with its refusals named**, which is a
   test rather than a subsystem.
 - **State:** P1-1..P1-4 complete and committed; the focused set green; no new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
+
+## CP-1569 — The P2 scenarios have an exact construction, read from the projection test that already builds the chain
+
+- **The existing projection test drives the whole chain, and reading it settles how the three scenarios are built:** it creates the batch root, opens a **`CoordinatorJournal`**, appends
+  **`CAMPAIGN_STARTED` -> `POINT_LEASED` -> `ATTEMPT_STARTED` -> `RESULT_COMMITTED`** per point, and for each point calls **`make_sealed_attempt(...)`**, taking the digest of the sealed
+  **`attempt_result_manifest.json`**. When the sealed reference is wanted it also attaches the attempt's **identity** (`asdict(identity)` plus `location`) and its **response** (`location`, `status`, `sha256`).
+- **And the ten-field identity is exact, read from `task8_measurement_schema.MEMBERS`:**
+  `source_commit, config_sha256, source_provenance_sha256, runtime_config_sha256, anchors_sha256, contact_policy_fingerprint, act_profile_sha256, measurement_contract_sha256,
+  phase_camera_matrix_sha256, driver_source_sha256`.
+- **So the three scenarios are three mutations of that chain, each of which must end in a refusal rather than a row:**
+  1. **corrupted seal** - after sealing, rewrite a sealed file's bytes so the digest the journal committed no longer matches what is on disk;
+  2. **cleanup contamination** - leave an extra file inside the sealed workspace, so the sealed attempt is no longer the workspace that was sealed;
+  3. **foreign identity** - commit a reference whose ten fields belong to another attempt/worker/point.
+  **Each must produce a terminal verdict, a non-zero exit and a ledger row that says INVALID** - and the assertion in each case is *which refusal names it*, not merely that something failed.
+- **What the next round writes, and it is bounded:** one test file beside the projection test, reusing `validation_seal_fixture` and the journal chain above, with the three scenarios and their
+  named refusals - and, where a scenario turns out to have **no** check to refuse it, that is a finding to record rather than a test to weaken.
+- **State:** P1-1..P1-4 complete and committed; the focused set green; no new session, goal, worktree or stack; nothing pushed, nothing deleted; no hardware.
