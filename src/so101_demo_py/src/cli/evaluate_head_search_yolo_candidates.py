@@ -23,6 +23,7 @@ from so101_demo.perception_benchmark.head_search_models import (
     choose_candidate,
     load_frozen_candidate,
     paired_scene_delta_bootstrap,
+    verify_split_manifest,
     write_comparison,
 )
 
@@ -33,27 +34,12 @@ def _path(value: str) -> Path:
     return Path(value).expanduser()
 
 
-def _split_samples(manifest: Mapping[str, object], split: str, *, domain: str) -> list[Mapping]:
-    raw = manifest.get("split_counts")
-    if not isinstance(raw, Mapping) or split not in raw:
-        raise EvaluationError(
-            f"EVALUATION_SPLIT_MISSING: the {domain} manifest has no {split} split"
-        )
-    samples = [
-        sample
-        for sample in manifest.get("samples") or []
-        if isinstance(sample, Mapping) and sample.get("split") == split
-    ]
-    if len(samples) != int(raw[split]):
-        raise EvaluationError(
-            f"EVALUATION_SPLIT_INCOMPLETE: the {domain} manifest lists {len(samples)} {split} samples "
-            f"but declares {raw[split]}"
-        )
-    return samples
-
-
 def _episode_frames(
-    partitions: Mapping[str, object], records: Path | None, split: str
+    partitions: Mapping[str, object],
+    records: Path | None,
+    split: str,
+    *,
+    partitions_path: Path,
 ) -> list[Mapping[str, object]]:
     """The held-out frames of the declared partition, or a named refusal when they do not exist yet."""
 
@@ -69,6 +55,9 @@ def _episode_frames(
         )
     frames: list[Mapping[str, object]] = []
     wanted = {int(seed) for seed in seeds}
+    if records is None:
+        default = Path(partitions_path).resolve().parent / "held-out-episodes"
+        records = default if default.is_dir() else None
     for path in sorted(Path(records).glob("*.json")):
         document = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(document, Mapping) or int(document.get("seed", -1)) not in wanted:
@@ -156,9 +145,11 @@ def main(arguments: list[str] | None = None) -> int:
     compare.add_argument("--episode-split", default="held_out_evaluation")
     compare.add_argument("--episode-records", type=_path)
     compare.add_argument("--bootstrap-repetitions", type=int, default=10_000)
-    compare.add_argument("--weights-dir", required=True, type=_path)
-    compare.add_argument("--head-dataset-root", required=True, type=_path)
-    compare.add_argument("--task-dataset-root", required=True, type=_path)
+    # the pinned invocation passes only candidates, manifests, partitions, repetitions, device and
+    # output, so every other location is derived from an artifact that was itself verified
+    compare.add_argument("--weights-dir", type=_path)
+    compare.add_argument("--head-dataset-root", type=_path)
+    compare.add_argument("--task-dataset-root", type=_path)
     compare.add_argument("--device", default="cuda")
     compare.add_argument("--output", required=True, type=_path)
     parsed = parser.parse_args(arguments)
@@ -177,20 +168,32 @@ def main(arguments: list[str] | None = None) -> int:
             )
         head_manifest = json.loads(parsed.head_dataset.read_text(encoding="utf-8"))
         task_manifest = json.loads(parsed.task_dataset.read_text(encoding="utf-8"))
-        head_samples = _split_samples(head_manifest, parsed.head_split, domain="head")
-        task_samples = _split_samples(task_manifest, parsed.task_split, domain="task")
+        head_root = parsed.head_dataset_root or parsed.head_dataset.resolve().parent
+        task_root = parsed.task_dataset_root or parsed.task_dataset.resolve().parent
+        head_samples = verify_split_manifest(
+            head_manifest, parsed.head_split, dataset_root=head_root, domain="head"
+        )
+        task_samples = verify_split_manifest(
+            task_manifest, parsed.task_split, dataset_root=task_root, domain="task"
+        )
         partitions = json.loads(parsed.episode_partitions.read_text(encoding="utf-8"))
-        frames = _episode_frames(partitions, parsed.episode_records, parsed.episode_split)
+        frames = _episode_frames(
+            partitions,
+            parsed.episode_records,
+            parsed.episode_split,
+            partitions_path=parsed.episode_partitions,
+        )
 
         scratch = Path(parsed.output)
         scratch.mkdir(parents=True, exist_ok=True)
+        weights_dir = parsed.weights_dir or Path(parsed.candidate[0]).resolve().parent
         evaluations = []
         for candidate in frozen:
-            weight_path = (parsed.weights_dir / f"{candidate.candidate_id}.pt").resolve()
+            weight_path = (weights_dir / f"{candidate.candidate_id}.pt").resolve()
             if not weight_path.is_file():
                 raise EvaluationError(
                     f"EVALUATION_WEIGHTS_MISSING: no weight file for candidate "
-                    f"{candidate.candidate_id} in {parsed.weights_dir}"
+                    f"{candidate.candidate_id} in {weights_dir}"
                 )
             if hashlib.sha256(weight_path.read_bytes()).hexdigest() != candidate.weight_sha256:
                 raise EvaluationError(
@@ -199,8 +202,8 @@ def main(arguments: list[str] | None = None) -> int:
                 )
             static = {}
             for domain, samples, root in (
-                ("head", head_samples, parsed.head_dataset_root),
-                ("task", task_samples, parsed.task_dataset_root),
+                ("head", head_samples, head_root),
+                ("task", task_samples, task_root),
             ):
                 operating_point = (candidate.document["operating_points"] or {})[domain]
                 domain_scratch = scratch / f"measure-{candidate.candidate_id}-{domain}"

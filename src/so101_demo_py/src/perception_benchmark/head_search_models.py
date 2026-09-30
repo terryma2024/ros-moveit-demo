@@ -11,11 +11,12 @@ declared margin without giving up the task domain.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import numpy as np
 from so101_demo.perception_benchmark.contracts import canonical_sha256
@@ -149,6 +150,111 @@ def paired_scene_delta_bootstrap(
         return (left - right) / len(drawn)
 
     return paired_scene_bootstrap(items, delta, repetitions=repetitions, seed=seed)
+
+
+def verify_split_manifest(
+    manifest: Mapping[str, object],
+    split: str,
+    *,
+    dataset_root: Path | str,
+    domain: str,
+    require_digests: bool = False,
+) -> list[Mapping[str, object]]:
+    """Verify one split of a sealed dataset manifest before anything is measured on it.
+
+    Declared counts are not evidence. The selected samples must be canonical relative paths that exist
+    inside the dataset root they claim, their seeds and scene groups must not appear in another split, and
+    any per-file digest a sample carries must match the bytes on disk.
+    """
+
+    if not isinstance(manifest, Mapping):
+        raise EvaluationError(
+            f"EVALUATION_MANIFEST_INVALID: the {domain} manifest is not a mapping"
+        )
+    for key in ("dataset_contract", "camera_name", "split_counts", "samples", "sample_count"):
+        if key not in manifest:
+            raise EvaluationError(
+                f"EVALUATION_MANIFEST_INVALID: the {domain} manifest has no {key}"
+            )
+    counts = manifest["split_counts"]
+    if not isinstance(counts, Mapping) or split not in counts:
+        raise EvaluationError(
+            f"EVALUATION_SPLIT_MISSING: the {domain} manifest has no {split} split"
+        )
+    root = Path(dataset_root).resolve()
+    if not root.is_dir():
+        raise EvaluationError(f"EVALUATION_MANIFEST_INVALID: {root} is not a dataset root")
+    samples: list[Mapping[str, object]] = []
+    seeds: dict[object, str] = {}
+    groups: dict[object, str] = {}
+    for sample in manifest["samples"] or []:
+        if not isinstance(sample, Mapping):
+            raise EvaluationError(
+                f"EVALUATION_MANIFEST_INVALID: the {domain} manifest has a non-mapping sample"
+            )
+        sample_split = sample.get("split")
+        for key, seen, label in (
+            ("seed", seeds, "seed"),
+            ("scene_group_id", groups, "scene group"),
+        ):
+            value = sample.get(key)
+            if value is None:
+                raise EvaluationError(
+                    f"EVALUATION_MANIFEST_INVALID: the {domain} manifest has a sample without a {label}"
+                )
+            previous = seen.get(value)
+            if previous is not None and previous != sample_split:
+                raise EvaluationError(
+                    f"EVALUATION_SPLIT_LEAK: the {domain} manifest puts the same {label} {value!r} in "
+                    f"both {previous} and {sample_split}"
+                )
+            seen[value] = str(sample_split)
+        if sample_split != split:
+            continue
+        for key in ("image", "label", "truth"):
+            relative = sample.get(key)
+            if not isinstance(relative, str) or not relative:
+                raise EvaluationError(
+                    f"EVALUATION_MANIFEST_INVALID: a {domain} {split} sample has no {key}"
+                )
+            candidate = PurePosixPath(relative)
+            if (
+                candidate.is_absolute()
+                or "\\" in relative
+                or candidate.as_posix() != relative
+                or any(part in {"", ".", ".."} for part in candidate.parts)
+            ):
+                raise EvaluationError(
+                    f"EVALUATION_MANIFEST_INVALID: {relative!r} is not a canonical relative path"
+                )
+            path = root / relative
+            if not path.is_file():
+                raise EvaluationError(
+                    f"EVALUATION_MANIFEST_INVALID: {relative!r} is not on disk under {root}"
+                )
+            if not path.resolve().is_relative_to(root):
+                raise EvaluationError(
+                    f"EVALUATION_MANIFEST_INVALID: {relative!r} resolves outside the dataset root"
+                )
+            digest = sample.get(f"{key}_sha256")
+            if digest is None:
+                if require_digests:
+                    raise EvaluationError(
+                        f"EVALUATION_MANIFEST_INVALID: {relative!r} carries no {key}_sha256"
+                    )
+                continue
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            if actual != digest:
+                raise EvaluationError(
+                    f"EVALUATION_MANIFEST_INVALID: {relative!r} does not match its recorded digest"
+                )
+        samples.append(sample)
+    if len(samples) != int(counts[split]):
+        raise EvaluationError(
+            f"EVALUATION_SPLIT_INCOMPLETE: the {domain} manifest lists {len(samples)} {split} samples "
+            f"but declares {counts[split]}"
+        )
+    return samples
 
 
 @dataclass(frozen=True, slots=True)

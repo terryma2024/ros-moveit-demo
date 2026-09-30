@@ -308,3 +308,130 @@ def test_paired_delta_bootstrap_keeps_a_scene_level_effect_visible() -> None:
 
     assert result.mean == pytest.approx(0.10, abs=1e-9)
     assert result.interval[0] >= 0.09
+
+
+def test_split_manifest_verification_refuses_a_path_that_leaves_the_dataset(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.perception_benchmark.head_search_models import verify_split_manifest
+
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"not a real image")
+    root = tmp_path / "dataset"
+    root.mkdir()
+    manifest = {
+        "dataset_contract": "so101-head-search-yolo-seg-v1",
+        "camera_name": "head_camera",
+        "sample_count": 1,
+        "split_counts": {"test": 1},
+        "samples": [
+            {
+                "seed": 1,
+                "split": "test",
+                "scene_group_id": "scene-1",
+                "image": "../../outside.png",
+                "label": "labels/test/1.txt",
+                "truth": "truth/test/1.json",
+            }
+        ],
+    }
+    with pytest.raises(EvaluationError, match="EVALUATION_MANIFEST_INVALID"):
+        verify_split_manifest(manifest, "test", dataset_root=root, domain="head")
+
+
+def test_split_manifest_verification_refuses_a_digest_that_does_not_match(tmp_path: Path) -> None:
+    from so101_demo.perception_benchmark.head_search_models import verify_split_manifest
+
+    root = tmp_path / "dataset"
+    for relative in ("images/test/1.png", "labels/test/1.txt", "truth/test/1.json"):
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"payload")
+    base = {
+        "seed": 1,
+        "split": "test",
+        "scene_group_id": "scene-1",
+        "image": "images/test/1.png",
+        "label": "labels/test/1.txt",
+        "truth": "truth/test/1.json",
+    }
+    manifest = {
+        "dataset_contract": "so101-head-search-yolo-seg-v1",
+        "camera_name": "head_camera",
+        "sample_count": 1,
+        "split_counts": {"test": 1},
+        "samples": [{**base, "image_sha256": "0" * 64}],
+    }
+    with pytest.raises(EvaluationError, match="EVALUATION_MANIFEST_INVALID"):
+        verify_split_manifest(manifest, "test", dataset_root=root, domain="head")
+    good = hashlib.sha256((root / "images/test/1.png").read_bytes()).hexdigest()
+    manifest["samples"] = [{**base, "image_sha256": good}]
+    assert len(verify_split_manifest(manifest, "test", dataset_root=root, domain="head")) == 1
+
+
+def test_compare_cli_accepts_the_pinned_invocation_shape(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Finding 1: the plan's own invocation must not die inside argparse."""
+
+    from so101_demo.cli.evaluate_head_search_yolo_candidates import main
+
+    for candidate_id, digest in (("A", "a" * 64), ("B", "b" * 64), ("C", "c" * 64)):
+        _write_candidate(tmp_path, candidate_id, digest)
+    root = tmp_path / "dataset"
+    for relative in ("images/test/1.png", "labels/test/1.txt", "truth/test/1.json"):
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"payload")
+    manifest = {
+        "dataset_contract": "so101-head-search-yolo-seg-v1",
+        "camera_name": "head_camera",
+        "sample_count": 1,
+        "split_counts": {"test": 1},
+        "samples": [
+            {
+                "seed": 1,
+                "split": "test",
+                "scene_group_id": "scene-1",
+                "image": "images/test/1.png",
+                "label": "labels/test/1.txt",
+                "truth": "truth/test/1.json",
+            }
+        ],
+    }
+    (root / "dataset-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (tmp_path / "partitions.json").write_text(
+        json.dumps({"held_out_evaluation": [1]}), encoding="utf-8"
+    )
+    # exactly the plan's argument shape: no --weights-dir, no dataset roots, no episode records
+    arguments = [
+        "compare",
+        "--candidate",
+        str(tmp_path / "frozen-a.json"),
+        "--candidate",
+        str(tmp_path / "frozen-b.json"),
+        "--candidate",
+        str(tmp_path / "frozen-c.json"),
+        "--head-dataset",
+        str(root / "dataset-manifest.json"),
+        "--head-split",
+        "test",
+        "--task-dataset",
+        str(root / "dataset-manifest.json"),
+        "--task-split",
+        "test",
+        "--episode-partitions",
+        str(tmp_path / "partitions.json"),
+        "--episode-split",
+        "held_out_evaluation",
+        "--bootstrap-repetitions",
+        "10000",
+        "--device",
+        "cuda",
+        "--output",
+        str(tmp_path / "out"),
+    ]
+    assert main(arguments) == 2, "a refusal is fine, an argparse exit is not"
+    printed = capsys.readouterr().out
+    assert "EVALUATION_" in printed, printed
+    assert "usage:" not in printed.lower()
