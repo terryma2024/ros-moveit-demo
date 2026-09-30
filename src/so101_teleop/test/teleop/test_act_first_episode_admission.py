@@ -395,65 +395,17 @@ def test_diagnostic_refuses_an_anchor_identity_the_bytes_do_not_describe(tmp_pat
         store.close()
 
 
-def test_diagnostic_accepts_a_frozen_set_whose_identity_is_not_current(tmp_path):
-    """CP-1928: the frozen manifest's source and config identity are recorded provenance.
-
-    The set still has to be internally sound: the same manifest with a substituted resource policy
-    is refused by the resource derivation below.
-    """
-
-    for tag, mutation in (("commit", ("source_commit", "c" * 40)),
-                          ("config", ("config_sha256", "e" * 64))):
-        spec = _diagnostic_spec(tmp_path, tag=tag)
-        manifest_path = Path(spec.payload["inputs_manifest_path"])
-        manifest = json.loads(manifest_path.read_text())
-        manifest[mutation[0]] = mutation[1]
-        manifest_path.write_bytes(_canonical(manifest))
-        store = IntentStore.open(tmp_path / f"state-{tag}")
-        try:
-            service = _service(store)
-            context = service.start(_refresh_payload(spec, manifest_path))
-            assert context.workload_kind == "act_first_episode_diagnostic"
-            assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
-        finally:
-            store.close()
-
-
-def test_diagnostic_refuses_an_anchor_identity_the_bytes_do_not_describe(tmp_path):
-    """Recomputing every hash does not let a manifest assert a scene the anchor bytes deny."""
-
-    spec = _diagnostic_spec(tmp_path)
-    manifest_path = Path(spec.payload["inputs_manifest_path"])
-    manifest = json.loads(manifest_path.read_text())
-    manifest["roles"]["anchor_scene"]["identity"] = dict(
-        manifest["roles"]["anchor_scene"]["identity"], scene_id="left", seed=1)
-    manifest["inputs_sha256"] = hashlib.sha256(_canonical(manifest["roles"])).hexdigest()
-    manifest_path.write_bytes(_canonical(manifest))
-
-    scope_path = Path(spec.payload["collection_scope_path"])
-    scope = json.loads(scope_path.read_text())
-    scope.update(scene_id="left", seed=1, inputs_sha256=manifest["inputs_sha256"])
-    scope_path.write_bytes(_canonical(scope))
-
-    payload = _refresh_payload(spec, manifest_path,
-                               collection_scope_sha256=hashlib.sha256(
-                                   scope_path.read_bytes()).hexdigest())
-    store = IntentStore.open(tmp_path / "state")
-    try:
-        service = _service(store)
-        with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
-            service.start(payload)
-    finally:
-        store.close()
-
-
 def test_diagnostic_accepts_two_distinct_approved_calibration_reports(tmp_path):
     """CP-1928 withdrew the one-report rule; each frozen report is validated on its own merits."""
 
     spec = _diagnostic_spec(tmp_path)
     manifest_path = Path(spec.payload["inputs_manifest_path"])
-    frozen_skew = Path(spec.payload["calibration_report_path"])
-    second = frozen_skew.read_bytes().replace(b"}", b', "note": "second report"}', 1)
+    manifest = json.loads(manifest_path.read_text())
+    frozen_skew = manifest_path.parent / manifest["roles"]["rgb_skew"]["path"]
+    document = json.loads(frozen_skew.read_text())
+    # a genuinely valid second report: the top-level audit field is outside the closed check set
+    document["audit_note"] = "a second, distinct approved report"
+    second = _canonical(document)
     assert second != frozen_skew.read_bytes()
     manifest = _rewrite_frozen(manifest_path, "rgb_skew", second)
     scope_path = Path(spec.payload["collection_scope_path"])
@@ -469,5 +421,45 @@ def test_diagnostic_accepts_two_distinct_approved_calibration_reports(tmp_path):
         context = service.start(payload)
         assert context.workload_kind == "act_first_episode_diagnostic"
         assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("mutation", ("extra-check-key", "unmeasured-check", "changed-sample"))
+def test_diagnostic_refuses_a_secondary_report_that_breaks_its_contract(tmp_path, mutation):
+    """Every frozen calibration report carries the same structural contract, not just the pinned one.
+
+    Distinct reports are allowed since CP-1928, so each one is validated on its own bytes; all outer
+    hashes (frozen file, manifest, manifest digest, scope, payload) are refreshed so only the report's
+    own contract can refuse it.
+    """
+
+    spec = _diagnostic_spec(tmp_path)
+    manifest_path = Path(spec.payload["inputs_manifest_path"])
+    manifest = json.loads(manifest_path.read_text())
+    frozen_skew = manifest_path.parent / manifest["roles"]["rgb_skew"]["path"]
+    document = json.loads(frozen_skew.read_text())
+    if mutation == "extra-check-key":
+        document["checks"]["note"] = "smuggled into the closed check set"
+    elif mutation == "unmeasured-check":
+        document["checks"]["release"] = "UNMEASURED"
+    else:
+        document["measurements"]["max_skew_s"]["sample_sha256"] = "0" * 64
+    second = _canonical(document)
+    manifest = _rewrite_frozen(manifest_path, "rgb_skew", second)
+    scope_path = Path(spec.payload["collection_scope_path"])
+    scope = json.loads(scope_path.read_text())
+    scope["inputs_sha256"] = manifest["inputs_sha256"]
+    scope_path.write_bytes(_canonical(scope))
+    payload = _refresh_payload(
+        spec, manifest_path,
+        collection_scope_sha256=hashlib.sha256(scope_path.read_bytes()).hexdigest())
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
+            service.start(payload)
+        assert service.child_registry.launches() == ()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
     finally:
         store.close()

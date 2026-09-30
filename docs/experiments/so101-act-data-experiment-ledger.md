@@ -34697,3 +34697,41 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   tree. The plan reserves the full ordinary xdist gate for Task 6, which rebuilds the whole dependency
   closure into `PLAN_ROOT`; that remains the boundary where this amendment gets its full-scope
   regression. Recorded attempts: `logs/amend-regression.run` (8 collection errors, environmental).
+
+
+## CP-1929 — Amendment review verdict FAIL (1 Important, 2 Minor) and the fix
+
+- **Verdict 5** (`reviews/task1-amendment-verdict.md`, dispatch `bf2574e8-f8ec-4951-8a96-887257026605`)
+  on `0fd23ba6f`: FAIL, 0 Critical / 1 Important / 2 Minor. The reviewer explicitly accepted the
+  withdrawal itself ("not treated as a defect"; it judged the code under CP-1928's amended contract)
+  and confirmed the retained boundaries, the tier-3 statement and that F1/F2/F4/F5/F6/F7/F9 stay
+  closed, while F3's live-matching and F8/F10 portions are superseded by the owner decision.
+  - **F11 (Important, blocking).** Removing the single-report rule left the other two frozen
+    calibration reports unvalidated at admission: `_validate_start` ran the non-Head gate only for the
+    payload's report (bound to `path_policy`), and `verify_frozen_inputs` checks bytes, not calibration
+    semantics. Worse, the reviewer read back my own positive test's retained fixture and showed the
+    "second report" was **malformed**: inserting a key into canonical JSON puts it inside `checks`
+    (which sorts first), so the frozen `rgb_skew` report carried eight check keys, the gate requires
+    exactly seven, and the case admitted a GPU lease and a campaign context for an artifact the
+    contract rejects. That was my test's error as much as the gate's hole.
+  - **F12 (Minor).** Two test names were defined twice and the earlier definitions were shadowed.
+  - **F13 (Minor).** The module docstring, `profile_config_identity()` and the `act_preflight`
+    docstring still described the withdrawn identity contract.
+- **Fixes.**
+  - F11: `_require_diagnostic_scope` now parses and structurally validates **every** frozen
+    calibration report (`require_nonhead_gate` on `path_policy`, `placement_qc`, `rgb_skew`) before any
+    resource is taken, without comparing them to the live identity or to each other. The positive
+    distinct-report case now builds a genuinely valid second report (a top-level audit field, outside
+    the closed check set), and three negative cases cover an extra check key, an unmeasured non-Head
+    check and a changed sample, each with the frozen file, manifest entry, manifest digest, scope and
+    payload digests refreshed so only the report's own contract can refuse it.
+  - F12: the two shadowed definitions are removed; the file now has 13 uniquely collected cases and
+    the coverage statements are based on collected tests.
+  - F13: the three descriptions now distinguish recorded provenance from enforced byte/structural
+    integrity, and CP-1928 preserves the history rather than implying the removed checks never existed.
+- **RED/GREEN.** RED `logs/fix11-red.run` rc=1: the three new secondary-report cases fail against
+  `0fd23ba6f`. GREEN `logs/fix11-green.run` rc=0: **97 passed in 7.98 s** across the two new test files
+  plus `test_act_campaign_admission.py` and `test_act_collection.py`, own scratch and non-empty
+  tempfile proof.
+- **State.** **Task-list item 1 in_progress, awaiting verdict 6; items 2-8 pending.** Packet:
+  `reviews/task1-amendment2-packet.md`.

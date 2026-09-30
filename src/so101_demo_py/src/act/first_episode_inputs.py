@@ -1,14 +1,20 @@
 """Frozen non-Head safety inputs for the first diagnostic episode.
 
 The diagnostic mode removes the Head Search prerequisite only. Every non-Head safety value the plan
-names still has to exist, match the current identity, and have been approved by something other than
-a candidate file that merely contains numbers: measured policy values, the activated contact policy
-and the frozen scene/anchor/configuration files.
+names still has to exist and have been approved by something other than a candidate file that merely
+contains numbers: measured policy values, the activated contact policy and the frozen
+scene/anchor/configuration files.
 
 `inspect_inputs` records what exists (read-only, no defaulting). `freeze_inputs` refuses anything
-that is missing, ambiguous, unapproved, stale or identity-drifted, then copies the survivors once
+that is missing, ambiguous, unapproved or internally inconsistent, then copies the survivors once
 into an immutable directory and returns the manifest that binds their bytes. A missing value is a
 blocker code, never a default.
+
+Per the owner amendment recorded in the ledger as CP-1928, an artifact's recorded source/config
+identity is provenance, not a claim about the tree that happens to be running: it is validated for
+shape and recorded, never compared with the current identity. Byte integrity, report structure,
+byte-derived anchor and resource identities, and the payload-to-frozen-role binding are still
+enforced.
 """
 
 from __future__ import annotations
@@ -456,10 +462,10 @@ def profile_config_identity(source_root: Path) -> str:
     """The ACT profile digest, computed from the source tree the same way the installed probe does.
 
     `so101_demo.act.calibration.installed_calibration_identity()` digests every file under the
-    installed `assets/mujoco/act` and `config/mujoco/act` keyed by its package-relative path. The
-    freeze derives the same value from the named source root, so a calibration report's
-    `config_sha256` can be required to be the config of the tree being frozen rather than a value the
-    registry asserts.
+    installed `assets/mujoco/act` and `config/mujoco/act` keyed by its package-relative path. This
+    derives the same value from a named source root so the registry and the manifest can record which
+    profile the frozen inputs were inspected against. Per CP-1928 that value is recorded provenance:
+    nothing compares it with the tree that is running.
     """
 
     package = Path(source_root) / "src/so101_demo_py"

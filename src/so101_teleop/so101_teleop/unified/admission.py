@@ -547,6 +547,7 @@ class UnifiedWorkloadService:
 
         from so101_demo.act.collection_scope import CollectionMode, read_collection_scope
         from so101_demo.act.first_episode_inputs import (anchor_identity_from_bytes,
+                                                         require_nonhead_gate,
                                                          resource_policy_identity,
                                                          verify_frozen_inputs)
 
@@ -560,6 +561,7 @@ class UnifiedWorkloadService:
         try:
             manifest = verify_frozen_inputs(manifest_path)
             frozen_root = manifest_path.parent.resolve()
+            frozen = lambda role: (frozen_root / manifest["roles"][role]["path"]).read_bytes()
             for key, (role, digest_declared) in self._DIAGNOSTIC_FROZEN_BINDINGS.items():
                 entry = manifest["roles"][role]
                 expected = (frozen_root / entry["path"]).resolve()
@@ -570,7 +572,12 @@ class UnifiedWorkloadService:
             scope = read_collection_scope(Path(payload["collection_scope_path"]),
                                           expected_mode=CollectionMode.DIAGNOSTIC,
                                           expected_inputs_sha256=manifest["inputs_sha256"])
-            frozen = lambda role: (frozen_root / manifest["roles"][role]["path"]).read_bytes()
+            # every frozen calibration report carries its own structural contract: all five
+            # non-Head checks, complete measurements with matching sample digests. Distinct reports
+            # are allowed since CP-1928, so each one is validated instead of relying on equality
+            # with the payload's report.
+            for role in ("path_policy", "placement_qc", "rgb_skew"):
+                require_nonhead_gate(json.loads(frozen(role)))
             # the anchor identity is derived from the frozen anchor bytes, so neither the manifest
             # nor the scope can assert a scene or seed the bytes do not describe
             derived_anchor = anchor_identity_from_bytes(frozen("anchor_scene"))

@@ -1,4 +1,9 @@
-"""Emit current ACT calibration status; unmeasured checks never pass."""
+"""Emit ACT calibration status; unmeasured checks never pass.
+
+A supplied measured report is validated for structure and emitted with its own recorded identity.
+Per the owner amendment recorded as CP-1928 that identity is provenance: it is no longer required to
+match the installed profile, and the emitted document says which revision it was measured on.
+"""
 
 import argparse
 import json
