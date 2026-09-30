@@ -41005,3 +41005,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   its sample fixture and the third cut's first two edits done**, the chain test one read away; F11 open. Targeted
   gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 passed**; HEAD `ab62c0c95`; no push, no evidence deletion,
   no hardware, no second stack.
+
+
+## CP-2180 — F1's chain test is written and one admission rule short
+
+- **What I wrote and tried**: `test_the_expert_carries_the_ratified_group_into_the_audit` — a fake port supplying
+  the legacy state and two valid frames built from the shapes read this round (`_FRAME_FIELDS`' nine keys,
+  `_EVALUATION_FIELDS`' five, `_EVALUATION_BASES = ("published", "interval")`), the expert's `reference(1.0)` record
+  asserted to carry the canonical map and the evaluated projection, then appended as a `references` row, sealed and
+  read back. It fails with `AUDIT_SCHEMA_INVALID`; adding the row's own `reference_time_s` (the field the capture
+  layer normally supplies) did not change it, so one more rule in the references branch or in `_reference_frames_ok`
+  is unmet.
+- **Reverted**; the audit suite re-runs green.
+- **The technique that localises this in one call, proved on the sample (CP-2171/CP-2172)**: run the failing test
+  alone and read the traceback's `episode_audit.py:NNN` line, then probe that function with `inspect.getsource` or
+  by bisecting the payload. The frames' nine keys, the evaluation's five and the two bases are already known, so
+  whatever remains is a join or a range rule rather than a vocabulary.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
+  plus its sample fixture and the third cut's first two edits**; F11 open. Targeted gates **430 / 201 / 201 / 201 /
+  246 / 247 / 200 / 283 passed**; HEAD `cc743914b`; no push, no evidence deletion, no hardware, no second stack.
