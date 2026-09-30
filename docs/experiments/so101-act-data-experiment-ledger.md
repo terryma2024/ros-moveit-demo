@@ -35793,3 +35793,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL ×2; T3-F2, F3, F4, F6,
   F7 closed; F1 and F5 open); items 4-8 pending.** HEAD `f92ab8f57`; 39-path dirty baseline untouched;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1953 — Task 3 fix pass, ninth instalment: collection-scope and identity admission (T3-F1 slice)
+
+- **The scope is now the frozen contract, not "any non-empty dictionary".** Opening an episode audit
+  requires `kind == ACT_COLLECTION_SCOPE`, `schema_version == 1`, `mode` in
+  `(formal, preselected_target_diagnostic)`, a non-empty `scene_id`, a non-negative integer `seed`, a
+  64-hex `inputs_sha256` and a closed field set (the optional `scope_sha256` the recorder adds when it
+  names the scope file is the only extra key allowed); anything else is refused with
+  `AUDIT_SCOPE_INVALID`.
+- **The identity must carry what the plan names.** `session_id` and `attempt_id` non-empty strings plus
+  integer `reset_epoch` and `release_epoch` are required (`AUDIT_IDENTITY_INVALID` otherwise). The plan
+  does not fix the remaining lease key names, so the rest of the caller's identity document is recorded
+  verbatim rather than invented here — that boundary is explicit and tested rather than silently assumed.
+- **Readback re-applies both.** `verify_audit_manifest` refuses a metadata set that no longer satisfies
+  the scope contract or the identity requirements, so a checksum-consistent re-signed `source.json`
+  carrying `mode: live` is caught with `AUDIT_METADATA_INVALID`.
+- **Evidence.** `logs/task3-fix9.run` rc=0: **92 passed** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_release_boundary.py` and `test_act_continuous_capture.py`, with its
+  own NVMe scratch and a non-empty tempfile proof. New controls: wrong scope kind, version, mode and an
+  extra scope field; identities missing session, reset or release; and the re-signed live-mode scope on
+  readback. Three of my own fixture misses were caught and fixed (loose scope literals in the audit
+  tests, and two fixture identities without `release_epoch`).
+- **Still open.** **T3-F1**'s remaining dimensions: the `window` contract (the plan names source
+  schedule, first command, physical end and label cutoff but fixes no key names, so the writer records
+  the caller's window verbatim — an explicit boundary, not an invented one); the required event kinds
+  (dispatch, accept, revoke, stop, contact, release, final-check) with typed payload validators, which
+  needs the broker wiring; and the raw observer-reference and physics payloads, which must be
+  implemented together with their producers and never reconstructed from phase booleans. **T3-F5** gates
+  eligibility on that raw coverage and therefore waits on them. Then the consolidated 19-file gate and a
+  fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL ×2; T3-F2, F3, F4, F6,
+  F7 closed and F1's structural, metadata and event-envelope slices closed; F1's window/event-kind/raw
+  payloads and F5 open); items 4-8 pending.** HEAD `53dd63e26`; 39-path dirty baseline untouched; no
+  push, no evidence deletion, no hardware, no second stack.

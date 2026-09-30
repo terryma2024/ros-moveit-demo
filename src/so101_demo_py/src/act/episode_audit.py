@@ -26,6 +26,13 @@ from .acquisition import CAMERAS, canonical_acquisition_id
 
 MANIFEST_KIND = "ACT_EPISODE_AUDIT"
 _METADATA_FILES = ("source.json", "inputs.json", "episode.json")
+# the frozen collection-scope contract, field for field
+_SCOPE_FIELDS = frozenset({"kind", "schema_version", "mode", "scene_id", "seed",
+                           "inputs_sha256", "scope_sha256"})
+_SCOPE_MODES = ("formal", "preselected_target_diagnostic")
+# the plan names session/reset/release as part of the identity; the rest of the lease document is
+# recorded verbatim because the plan does not fix its key names here
+_IDENTITY_REQUIRED = ("session_id", "attempt_id", "reset_epoch", "release_epoch")
 _STREAM_NAMES = ("acquisitions.jsonl", "row-bindings.jsonl", "events.jsonl",
                  "references.jsonl", "physics.jsonl")
 SOURCE_KINDS = ("events", "references", "physics")
@@ -63,6 +70,28 @@ def _canonical(value) -> bytes:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _scope_ok(scope) -> bool:
+    """The collection-scope document must be the closed kind/version/mode contract."""
+
+    return bool(
+        isinstance(scope, dict)
+        and set(scope) in (_SCOPE_FIELDS, _SCOPE_FIELDS - {"scope_sha256"})
+        and scope.get("kind") == "ACT_COLLECTION_SCOPE" and scope.get("schema_version") == 1
+        and scope.get("mode") in _SCOPE_MODES and isinstance(scope.get("scene_id"), str)
+        and scope.get("scene_id") and type(scope.get("seed")) is int and scope["seed"] >= 0
+        and _hex64(scope.get("inputs_sha256")))
+
+
+def _identity_ok(identity) -> bool:
+    return bool(
+        isinstance(identity, dict) and identity
+        and all(key in identity for key in _IDENTITY_REQUIRED)
+        and isinstance(identity.get("session_id"), str) and identity["session_id"]
+        and isinstance(identity.get("attempt_id"), str) and identity["attempt_id"]
+        and type(identity.get("reset_epoch")) is int and identity["reset_epoch"] >= 0
+        and type(identity.get("release_epoch")) is int and identity["release_epoch"] >= 0)
 
 
 def _closed(record, fields: frozenset, code: str) -> dict:
@@ -111,10 +140,14 @@ class EpisodeAuditWriter:
                 or not isinstance(inputs, dict)):
             raise ValueError("AUDIT_ROOT_INVALID")
         digest = inputs.get("inputs_sha256") if isinstance(inputs, dict) else None
-        if not scope or not identity or not inputs:
+        if not _scope_ok(scope):
+            # a scope the frozen contract does not recognise may not open an episode audit
             raise ValueError("AUDIT_SCOPE_INVALID")
-        if (not isinstance(digest, str) or len(digest) != 64
-                or any(character not in "0123456789abcdef" for character in digest)):
+        if not _identity_ok(identity):
+            raise ValueError("AUDIT_IDENTITY_INVALID")
+        if not inputs:
+            raise ValueError("AUDIT_SCOPE_INVALID")
+        if not _hex64(digest):
             # the audit always names the frozen inputs it belongs to
             raise ValueError("AUDIT_INPUTS_INVALID")
         self.root.mkdir(parents=False, exist_ok=False)
@@ -498,7 +531,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     declared = json.loads((audit / "episode.json").read_bytes())
     scope = json.loads((audit / "source.json").read_bytes())
     inputs = json.loads((audit / "inputs.json").read_bytes())
-    if (declared != identity or not isinstance(scope, dict) or not scope
+    if (declared != identity or not _scope_ok(scope) or not _identity_ok(declared)
             or not isinstance(inputs, dict) or not _hex64(inputs.get("inputs_sha256"))):
         # the manifest identity must be the identity the episode actually recorded, and the scope and
         # inputs payloads must be the closed documents they claim to be

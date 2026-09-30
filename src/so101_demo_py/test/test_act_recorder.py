@@ -229,7 +229,8 @@ def _audit_and_scope(tmp_path):
                                  "seed": 0, "inputs_sha256": "c" * 64,
                                  "scope_sha256": scope_sha256},
                                 {"session_id": "session-1", "attempt_id": "attempt-1",
-                                 "reset_epoch": 2, "scene_id": "default", "seed": 0},
+                                 "reset_epoch": 2, "release_epoch": 1, "scene_id": "default",
+                                 "seed": 0},
                                 {"inputs_sha256": "c" * 64})
     minter = AcquisitionMinter()
     frames = {}

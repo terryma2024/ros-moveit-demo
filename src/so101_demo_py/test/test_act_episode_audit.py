@@ -28,16 +28,21 @@ ZERO = np.zeros((480, 640, 3), dtype=np.uint8)
 
 
 def identity():
-    return {"session_id": "s", "attempt_id": "attempt-1", "reset_epoch": 1, "scene_id": "default",
-            "seed": 0, "mode": "preselected_target_diagnostic"}
+    return {"session_id": "s", "attempt_id": "attempt-1", "reset_epoch": 1, "release_epoch": 1,
+            "scene_id": "default", "seed": 0, "mode": "preselected_target_diagnostic"}
+
+
+def scope():
+    return {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
+            "mode": "preselected_target_diagnostic", "scene_id": "default", "seed": 0,
+            "inputs_sha256": "a" * 64}
 
 
 def complete_audit(tmp_path):
     """Every closed field and file this task writes, with real files and real hashes."""
 
-    writer = EpisodeAuditWriter(tmp_path / "episode", {"mode": "preselected_target_diagnostic",
-                                                       "scene_id": "default", "seed": 0},
-                                identity(), {"inputs_sha256": "a" * 64})
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope(), identity(),
+                                {"inputs_sha256": "a" * 64})
     minter = AcquisitionMinter()
     # one frame per camera per instant: a row binds the head frame to the head slot and the wrist frame
     # to the wrist slot, which is exactly the relationship the review's counterexample violated
@@ -100,7 +105,7 @@ def test_a_changed_raw_reference_is_detected(tmp_path):
 
 
 def test_a_missing_acquisition_binding_is_refused(tmp_path):
-    writer = EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"}, identity(),
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope(), identity(),
                                 {"inputs_sha256": "a" * 64})
     minter = AcquisitionMinter()
     frame = minter.mint("head", session_id="s", reset_epoch=1, stamp_s=1.0,
@@ -111,7 +116,7 @@ def test_a_missing_acquisition_binding_is_refused(tmp_path):
 
 
 def test_one_acquisition_cannot_fill_two_rows(tmp_path):
-    writer = EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"}, identity(),
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope(), identity(),
                                 {"inputs_sha256": "a" * 64})
     minter = AcquisitionMinter()
     head = minter.mint("head", session_id="s", reset_epoch=1, stamp_s=1.0,
@@ -171,12 +176,11 @@ def test_a_stale_epoch_in_a_sealed_audit_is_detected_on_readback(tmp_path):
 
 def test_a_missing_inputs_digest_is_refused(tmp_path):
     with pytest.raises(ValueError, match="AUDIT_SCOPE_INVALID"):
-        EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"}, identity(), {})
+        EpisodeAuditWriter(tmp_path / "episode", scope(), identity(), {})
     with pytest.raises(ValueError, match="AUDIT_INPUTS_INVALID"):
-        EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"}, identity(),
-                           {"candidate": "x"})
+        EpisodeAuditWriter(tmp_path / "episode", scope(), identity(), {"candidate": "x"})
     with pytest.raises(ValueError, match="AUDIT_INPUTS_INVALID"):
-        EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"}, identity(),
+        EpisodeAuditWriter(tmp_path / "episode", scope(), identity(),
                            {"inputs_sha256": "not-a-digest"})
 
 
@@ -191,7 +195,7 @@ def test_every_source_kind_is_closed_and_the_writer_is_exclusive(tmp_path):
                                         "sim_time_s": 2.0, "monotonic_ns": 5,
                                         "payload": {"phase": "SEARCH", "physics_step": 2}})
     with pytest.raises(FileExistsError):
-        EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"}, identity(),
+        EpisodeAuditWriter(tmp_path / "episode", scope(), identity(),
                            {"inputs_sha256": "a" * 64})
 
 
@@ -262,9 +266,9 @@ def _staging(tmp_path, *, reset_epoch=1, identity_reset=1):
 
     tmp_path.mkdir(parents=True, exist_ok=True)
     writer = EpisodeAuditWriter(tmp_path / "episode",
-                                {"mode": "diagnostic", "scene_id": "default", "seed": 0},
+                                scope(),
                                 {"session_id": "s", "attempt_id": "a",
-                                 "reset_epoch": identity_reset, "scene_id": "default", "seed": 0},
+                                 "reset_epoch": identity_reset, "release_epoch": 1},
                                 {"inputs_sha256": "a" * 64})
     minter = AcquisitionMinter()
     frames = {}
@@ -330,9 +334,9 @@ def test_a_future_or_stale_frame_is_not_causal_for_a_row(tmp_path):
                         (0.5, "AUDIT_BINDING_CAUSALITY_INVALID")):
         base = tmp_path / f"case-{stamp}"
         base.mkdir(parents=True)
-        writer = EpisodeAuditWriter(base / "episode", {"mode": "diagnostic"},
-                                    {"session_id": "s", "attempt_id": "a", "reset_epoch": 1},
-                                    {"inputs_sha256": "a" * 64})
+        writer = EpisodeAuditWriter(base / "episode", scope(),
+                                    {"session_id": "s", "attempt_id": "a", "reset_epoch": 1,
+                                     "release_epoch": 1}, {"inputs_sha256": "a" * 64})
         minter = AcquisitionMinter()
         frames = {}
         for camera in ("head", "wrist"):
@@ -349,9 +353,9 @@ def test_a_future_or_stale_frame_is_not_causal_for_a_row(tmp_path):
 def test_rows_must_sit_on_the_10hz_grid(tmp_path):
     from so101_demo.act.acquisition import AcquisitionMinter
 
-    writer = EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"},
-                                {"session_id": "s", "attempt_id": "a", "reset_epoch": 1},
-                                {"inputs_sha256": "a" * 64})
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope(),
+                                {"session_id": "s", "attempt_id": "a", "reset_epoch": 1,
+                                 "release_epoch": 1}, {"inputs_sha256": "a" * 64})
     minter = AcquisitionMinter()
     ids = {}
     for stamp in (1.0, 1.3):
@@ -413,4 +417,45 @@ def test_readback_refuses_a_resigned_unknown_event(tmp_path):
                                              sort_keys=True, separators=(",", ":"))]) + "\n").encode()
     _resign(writer, path, "events.jsonl", payload)
     with pytest.raises(ValueError, match="AUDIT_EVENT_INVALID"):
+        verify_audit_manifest(path)
+
+
+def test_the_scope_and_identity_must_be_the_frozen_contracts(tmp_path):
+    for bad_scope, code in (
+            ({"kind": "ACT_EPISODE_AUDIT", "schema_version": 1,
+              "mode": "preselected_target_diagnostic", "scene_id": "default", "seed": 0,
+              "inputs_sha256": "a" * 64}, "AUDIT_SCOPE_INVALID"),
+            ({"kind": "ACT_COLLECTION_SCOPE", "schema_version": 2, "mode": "formal",
+              "scene_id": "default", "seed": 0, "inputs_sha256": "a" * 64},
+             "AUDIT_SCOPE_INVALID"),
+            ({"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1, "mode": "live",
+              "scene_id": "default", "seed": 0, "inputs_sha256": "a" * 64},
+             "AUDIT_SCOPE_INVALID"),
+            ({"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1, "mode": "formal",
+              "scene_id": "default", "seed": 0, "inputs_sha256": "a" * 64, "extra": 1},
+             "AUDIT_SCOPE_INVALID")):
+        with pytest.raises(ValueError, match=code):
+            EpisodeAuditWriter(tmp_path / "episode", bad_scope, identity(),
+                               {"inputs_sha256": "a" * 64})
+    for bad_identity in ({"session_id": "s", "attempt_id": "a", "reset_epoch": 1},
+                         {"session_id": "s", "attempt_id": "a", "release_epoch": 1},
+                         {"attempt_id": "a", "reset_epoch": 1, "release_epoch": 1}):
+        with pytest.raises(ValueError, match="AUDIT_IDENTITY_INVALID"):
+            EpisodeAuditWriter(tmp_path / "episode", scope(), bad_identity,
+                               {"inputs_sha256": "a" * 64})
+
+
+def test_readback_refuses_a_resigned_scope_document(tmp_path):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    document = json.loads((path.parent / "source.json").read_bytes())
+    document["mode"] = "live"
+    payload = json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+    (path.parent / "source.json").write_bytes(payload)
+    manifest = json.loads(path.read_bytes())
+    manifest["files"]["source.json"] = {"path": "source.json", "size": len(payload),
+                                        "sha256": hashlib.sha256(payload).hexdigest()}
+    manifest["scope_sha256"] = hashlib.sha256(payload).hexdigest()
+    path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="AUDIT_METADATA_INVALID"):
         verify_audit_manifest(path)
