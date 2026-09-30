@@ -19,6 +19,9 @@ allow_cpu_fallback: false
 amp: false
 optimizer: auto
 patience: 20
+# the checkpoint score is the two-domain average, not the stock fitness, so the stock plots do not
+# describe it; results.csv still records both domain cells
+plots: false
 # the frozen 1:1 batch composition is the order the union dataset is materialised in, so shuffling would
 # dissolve the property the plan declares; the deterministic seed still fixes every other draw
 shuffle: false

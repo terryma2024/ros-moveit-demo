@@ -202,40 +202,105 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     class CandidateTrainer(SegmentationTrainer):
         def get_dataloader(self, dataset_path, batch_size=16, rank=0, mode="train"):
-            loader = super().get_dataloader(dataset_path, batch_size, rank, mode)
             if mode != "train":
-                return loader
-            head_positions, task_positions = domain_positions(self.train_loader.dataset.im_files)
+                return super().get_dataloader(dataset_path, batch_size, rank, mode)
+            import torch
+            from ultralytics.data.build import InfiniteDataLoader, seed_worker
+            from ultralytics.utils import RANK
+
+            dataset = self.build_dataset(dataset_path, mode, batch_size)
+            head_positions, task_positions = domain_positions(dataset.im_files)
             sampler_class = _balanced_sampler_class()
-            loader.batch_sampler = sampler_class(
-                head_positions, task_positions, batch_size, seed, epochs
+            sampler = sampler_class(head_positions, task_positions, batch_size, seed, epochs)
+            generator = torch.Generator()
+            generator.manual_seed(6148914691236517205 + RANK)
+            workers = min(
+                os.cpu_count() // max(torch.cuda.device_count(), 1), int(self.args.workers)
             )
+            loader = InfiniteDataLoader(
+                dataset=dataset,
+                batch_sampler=sampler,
+                num_workers=workers,
+                pin_memory=True,
+                collate_fn=getattr(dataset, "collate_fn", None),
+                worker_init_fn=seed_worker,
+                generator=generator,
+            )
+            # Ultralytics' training pipeline reads batch_size and len(sampler) off the loader, which a
+            # batch-sampler loader leaves unset
+            object.__setattr__(loader, "batch_size", batch_size)
+            object.__setattr__(loader, "sampler", sampler)
             return loader
 
         def validate(self):
+            from copy import deepcopy
+
+            from ultralytics.models.yolo.segment import SegmentationValidator
+
             cells = {}
             for domain, val_list in (("head", self._head_val), ("task", self._task_val)):
-                metrics = super().validate(validator=self.validator.__class__(args=self.args))
-                cells[domain] = _mask_map(metrics)
+                args = deepcopy(self.args)
+                args.data = str(val_list)
+                validator = SegmentationValidator(args=args)
+                validator(model=self.ema.ema if self.ema else self.model)
+                cells[domain] = _mask_map(validator.metrics)
             self.fitness = two_domain_fitness(cells["head"], cells["task"])
-            self.metrics = type("CandidateMetrics", (), {"results_dict": cells})()
-            return self.metrics
+            self.metrics = dict(cells)
+            return self.metrics, self.fitness
 
         def save_model(self):
+            """Keep the checkpoint the frozen rule selects, not the one a pretrained baseline ranks.
+
+            A candidate starts from A's weights, whose recorded `best_fitness` is higher than any early
+            candidate epoch, so the stock comparison would never promote an epoch. The selection is made
+            here and the selected weights are promoted explicitly.
+            """
+
+            import shutil
+
             epoch = int(self.epoch)
             score = float(self.fitness)
-            if select_checkpoint(list(self._history), candidate_epoch=epoch, candidate_score=score):
+            keep = select_checkpoint(
+                list(self._history), candidate_epoch=epoch, candidate_score=score
+            )
+            if keep:
                 self._history.append((epoch, score))
-                super().save_model()
+            super().save_model()
+            if keep:
+                last, best = self.wdir / "last.pt", self.wdir / "best.pt"
+                if last.is_file():
+                    shutil.copyfile(last, best)
+                    self.best_fitness = score
 
     # the two validation lists the frozen plan declares
+    # each validation domain is its own dataset yaml: the score needs both cells measured separately
     head_val = run_root / "val-head.txt"
     task_val = run_root / "val-task.txt"
     if not head_val.is_file() or not task_val.is_file():
         raise SystemExit("CANDIDATE_VALIDATION_MISSING: the run root lacks its validation lists")
+    names = overrides.get("names") or {
+        index: name
+        for index, name in enumerate(plan["recipe"].get("class_names") or ["plastic_cup"])
+    }
+    domain_yaml = {}
+    for domain, val_list in (("head", head_val), ("task", task_val)):
+        path = run_root / f"val-{domain}.yaml"
+        path.write_text(
+            yaml.safe_dump(
+                {
+                    "path": str(val_list.parent),
+                    "train": str(val_list),
+                    "val": str(val_list),
+                    "names": names,
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        domain_yaml[domain] = path
     trainer = CandidateTrainer(overrides=dict(overrides))
-    trainer._head_val = head_val
-    trainer._task_val = task_val
+    trainer._head_val = domain_yaml["head"]
+    trainer._task_val = domain_yaml["task"]
     trainer._history = []
     trainer.train()
     best = run_root / str(overrides.get("name", "train")) / "weights" / "best.pt"
