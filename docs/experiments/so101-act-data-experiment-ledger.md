@@ -39793,3 +39793,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list stands at F1/F3/F5/F11 plus those F13 residuals, with F12 closed; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `30e86f0da`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2123 — F13's joint-age item: the measured values come from `/joint_states`, not the epoch
+
+- **Read from the code** (`ros_broker.py`): the driver subscribes to **two** joint sources — `/joint_states` →
+  `self._joints` (line 150) and `ScalarJointEvidence` on `/so101/simulation/joints` → `self._scalar_joints`
+  (line 152), the latter being what stores the epoch (`self._epoch = (message, receipt)`). `_joints` (line 175)
+  is where `self._positions` and `self._velocity` — the **measured** arrays my `controller_feedback` returns —
+  are produced.
+- **So CP-2121's bound is incomplete for the measured half**: the record's age is bounded by the epoch's receipt
+  and the reference's, but the measured values come from a **different callback** whose receipt is not (yet)
+  consulted. If `/joint_states` goes stale while the scalar epoch stays fresh, a record can still claim fresh
+  measurements — which is F13's complaint, one level down.
+- **The next step, precisely**: read `_joints`'s current body to see whether it stores its own receipt (like
+  `_epoch` does); if it does, bound the measured half by it; if it does not, apply CP-2122's principle — refuse to
+  emit rather than stamp an unproven age — and record that the callback must store its receipt for the record to
+  be emitted at all.
+- **State.** Item 3's list stands at F1/F3/F5/F11 plus this F13 residual and the `sim_time_s` schema tension;
+  targeted gate `logs/task3-final.run` **430 passed**; HEAD `7edd95717`; no push, no evidence deletion, no
+  hardware, no second stack.
