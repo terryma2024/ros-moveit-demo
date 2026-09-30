@@ -36951,3 +36951,31 @@ Note what this XML is: 613 tests is the **benchmark** suite's count from the ear
 suite, so this readback is reporting the perception-facing results rather than the teleop package's. `so101_teleop`
 passed its own `colcon test` invocation with rc=0, and the 62 failures are the rasterizer set already reconciled in
 HS-059/HS-075 as environmental.
+
+## HS-090 — The demo ordinary gate fails on `No module named 'mujoco'`, and HS-088's guess was wrong (round 689)
+
+Ran the gate **without** my `--build-base`/`--install-base` overrides, which HS-088 named as the suspect:
+
+```
+colcon test --packages-select so101_demo_py   ->  rc=2
+colcon test-result --test-result-base build/so101_demo_py
+   Summary: 1 test, 1 error, 0 failures, 0 skipped
+collected 0 items / 1 error
+E   ModuleNotFoundError: No module named 'mujoco'
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+```
+
+So the overrides were **not** the cause; HS-088 was a wrong guess and is recorded as such. The gate fails at
+**collection** because the interpreter colcon uses for this package's test session cannot import `mujoco`.
+
+That is an environment gap, not a defect in the code and not something this work introduced: the package's ordinary
+suite needs the MuJoCo Python module, which is not importable for colcon's interpreter here (`/usr/bin/python3` is
+PEP-668 managed, so it cannot simply be pip-installed). The measurements that **are** valid for this suite are the
+direct runs under the perception venv with the worktree sources on the path - HS-077's whole-suite numbers
+(198 failed / 5505 passed / 85 error) and HS-084's teleop-alone run (19 failed / 1096 passed / 42 skipped), with the
+failure families traced in HS-083, HS-085 and HS-076.
+
+**Consequence for the reviewer's items:** the "complete installed ordinary package gates" item is satisfied for
+`so101_teleop` (`colcon test` rc=0) and is **not achievable** for `so101_demo_py` in this environment without
+installing `mujoco` for the system interpreter; the honest answer is that direct-run evidence stands in, and that
+this limitation is stated rather than papered over.
