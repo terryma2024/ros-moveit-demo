@@ -39394,3 +39394,34 @@ head-only` then `--candidate C … --run-name head-task-mixed`, both against
 `config/perception/head_search_yolo_training.yaml`, with C's sampling manifest required to show **800 head and 800 task
 images per epoch at 1:1 batches**, both jobs on CUDA, and "never concurrently" holding - which on this host also means no
 detector process may hold the GPU while training runs.
+
+## HS-188 — Step 3's plan flags do not match the installed training CLI (same class as HS-175)
+
+The installed `train_yolo_seg` rejected the plan's Step 3 invocation with a message that names the required trio:
+
+```
+training input error: --candidate needs --training-contract, --head-manifest, --task-manifest
+train-b rc=2
+```
+
+Its actual surface carries **both** generations of flags:
+
+```
+--dataset DATASET                 --head-manifest HEAD_MANIFEST
+--contract CONTRACT               --task-manifest TASK_MANIFEST
+--candidate {B,C}                 --training-contract TRAINING_CONTRACT
+--base-model/--output/--run-name/--epochs/--fraction
+```
+
+So `--candidate` is wired to the **newer** `--training-contract/--head-manifest/--task-manifest` trio, while the plan's Step 3
+passes the **older** `--contract/--head-dataset/--task-dataset` names - the same "later task invokes what the CLI spells
+differently" pattern as HS-175/176, in a second CLI.
+
+**Also worth recording:** my pre-flight check printed "WARNING: detector/stack process present", and it was a **self-match** -
+my own `pgrep -f 'ultralytics|yolo|ros2 launch'` matched the command line containing that pattern. `ps -eo pid,cmd | grep -v
+grep` shows **no detector and no stack running**, so the GPU really was free, which is the condition the constraint requires.
+That is HS-112's lesson recurring in a new disguise: a process-matching check that includes its own text.
+
+**Reconciliation:** re-run Step 3 through the installed flags (`--training-contract`, `--head-manifest`, `--task-manifest`),
+keeping the plan's semantics and recording the spelling difference - not editing the plan, and not adding aliases to a training
+CLI for one invocation.
