@@ -38012,3 +38012,26 @@ So the new failure is caused by one of these **config changes of mine**, most pl
 edits that alter values another subsystem reads rather than adding new files nobody consumes yet. That is a real,
 attributable regression-shaped effect of Task 11's re-seal - and the lead is now specific enough to test directly: swap
 those two configs to their base versions in the overlay and re-run the single test id.
+
+## HS-134 — The import path carries this work into task 8: `head_search_qualification` is imported by two task 8 modules
+
+Following the two config A/Bs (both of which left the failure intact, clearing the geometry contract and the perception
+seal), I traced who imports the new modules:
+
+```
+head_search_calibration   -> 0 other modules import it
+head_search_domain        -> 2 (search.py)
+head_search_qualification -> 2 (head_search_binding.py, task8_artifact_bundle.py, task8_calibration_aggregator.py)
+```
+
+The third line is the find: **`head_search_qualification` - a module this task added - is imported by two task 8
+modules**, so my new code sits directly on the task 8 path that the failing phase-camera test exercises. Combined with
+HS-132 (the three pre-existing modules I modified are cleared by base-swap) and this round's config A/Bs (the geometry
+contract and perception seal are cleared), the evidence points at the **new head-search modules reached through task 8's
+own code** as the source of the one new failure.
+
+That is a materially different conclusion from where this thread started - "the task 8 families are pre-existing" - and
+it is the reviewer's two rejections that moved it there: first refusing the file-level inference (HS-128), then requiring
+per-failure causal evidence. The next step is a base-swap of `task8_artifact_bundle.py` and `task8_calibration_aggregator.py`
+if they exist at base, which would either carry the failure across or clear it and localise the cause to
+`head_search_qualification` itself.
