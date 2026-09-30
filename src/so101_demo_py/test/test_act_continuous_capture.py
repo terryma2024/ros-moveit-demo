@@ -474,3 +474,22 @@ def test_a_non_numeric_reference_position_is_terminal():
         capture.on_reference(reference(1.1))
     with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
         capture.drain()
+
+
+def test_a_wrong_shaped_selected_image_is_terminal():
+    """A malformed image from the sampler must latch the first reason, like the receipt path."""
+
+    capture, minter = build(sampler_pixels=np.zeros((480, 640), dtype=np.uint8))
+    start(capture)
+    frames_at(capture, minter, [1.0])                # valid receipts with matching stamps
+    capture.on_reference(reference(1.1))
+    frames_at(capture, minter, [1.1])
+    with pytest.raises(ValueError, match="ACQUISITION_PIXELS_INVALID"):
+        capture.drain()
+    # the original reason survives: later callbacks, drain and finish all refuse with it
+    with pytest.raises(ValueError, match="ACQUISITION_PIXELS_INVALID"):
+        capture.on_reference(reference(1.2))
+    with pytest.raises(ValueError, match="ACQUISITION_PIXELS_INVALID"):
+        frames_at(capture, minter, [1.2])
+    with pytest.raises(ValueError, match="ACQUISITION_PIXELS_INVALID"):
+        capture.finish(1.3)

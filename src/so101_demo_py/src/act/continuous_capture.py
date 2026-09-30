@@ -321,8 +321,13 @@ class ContinuousEpisodeCapture:
             self._fail("ACQUISITION_SELECTION_MISMATCH")
         # the images the row will store must be the ones whose identity it carries
         for camera, frame in (("head", head), ("wrist", wrist)):
-            if pixel_digest(observation[camera]) != frame.pixel_sha256:
-                self._fail("ACQUISITION_PIXEL_MISMATCH")
+            try:
+                selected_digest = pixel_digest(observation[camera])
+            except (ValueError, TypeError, KeyError) as error:
+                # the sampler's own image may be malformed: that failure latches like any other
+                self._reject(str(error) or "CAPTURE_SAMPLE_INVALID")
+            if selected_digest != frame.pixel_sha256:
+                self._reject("ACQUISITION_PIXEL_MISMATCH")
         if len(self._pending) >= self._pending_capacity:
             self._fail("CAPTURE_PENDING_OVERFLOW")
         audit = dict(self.physical_audit(at_s))

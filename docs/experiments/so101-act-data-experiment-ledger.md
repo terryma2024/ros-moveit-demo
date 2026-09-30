@@ -34952,3 +34952,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   every live camera/physics/queue behaviour remain Tasks 3/5/7.
 - **State.** **Task-list items 0-1 completed; item 2 in_progress (third rework green, re-review
   pending); items 3-8 pending.**
+
+
+### CP-1932 fourth rework outcome (verdict `7dda3adb-c4b8-4463-a6c7-fab2d1557b78`)
+
+- **Verdict 4 on Task 2** (`reviews/task2-rereview3-verdict.md`) on `8d4aca626`: FAIL, 0 Critical /
+  1 Important / 0 Minor. T2-F2's late-stop residual closed; T2-F1/F3/F5/F6 stayed closed. The single
+  remaining finding was exact: the selected-image digest call inside `_mint()` was still outside any
+  handler, so a malformed image from the sampler raised `ACQUISITION_PIXELS_INVALID` without latching
+  the reason — my previous patch's replacement had silently not applied, and the packet claimed
+  otherwise.
+- **Fixed with a verified patch.** The `_mint()` selected-image check now wraps `pixel_digest()` and
+  routes helper failures through `_reject()`, keeping the first reason; the patch script asserts the
+  handler is present after writing. New regression `test_a_wrong_shaped_selected_image_is_terminal`
+  uses valid receipts with matching source stamps and a wrong-shaped sampler image, then asserts that a
+  later reference callback, later acquisitions, `drain()` and `finish()` all refuse with the *original*
+  reason rather than degrading into `ACQUISITION_REUSED`.
+- **Evidence.** `logs/task2-all.run` rc=0: **175 passed in 9.62 s** (two Task 2 files plus the seven
+  neighbouring suites), own NVMe scratch and non-empty tempfile proof.
+- **Process correction.** Two of my earlier patch scripts used unasserted string replacement and
+  silently no-opped; both cost a review round. Every replacement now asserts its match, as this one
+  does.
+- **Still open, recorded, not claimed.** `_completed` keeps whole observations (memory not certified);
+  production composition wiring, physical-readback t vs t+0.1 reconciliation, durable audit
+  persistence and every live camera/physics/queue gate remain Tasks 3/5/7.
+- **State.** **Task-list items 0-1 completed; item 2 in_progress (fourth rework green, re-review
+  pending); items 3-8 pending.**
