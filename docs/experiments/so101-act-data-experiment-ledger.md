@@ -39140,3 +39140,28 @@ arguments versus rewriting two downstream tasks' invocations.
 This is recorded rather than done silently because it modifies Task 5's delivered interface in order to satisfy Task 11's
 contract, and because a reviewer should be able to see that the mismatch was resolved in favour of the later tasks with the
 reason stated.
+
+## HS-177 — The plan's installed smoke runs and passes; the coverage artefact has a different name
+
+The verdict-15 requirement, produced entirely by the build script at `afd1dbeddd592330ee5dab8a1a4ceee990b65977`:
+
+```
+build rc=0   (so101_mujoco_support 23.8s | so101_teleop 10.7s | so101_demo_py 1.62s)
+prefix_demo / prefix_teleop = that root
+exe_ok x7
+resolved_script=<root>/install/so101_demo_py/lib/so101_demo_py/so101_head_search_smoke
+smoke_invocation=ros2 run so101_demo_py so101_head_search_smoke --scenario no_cup --anchor default \
+  --geometry-seal <probe11>/head-camera-geometry.json --evidence-root <root>/search-smoke
+smoke rc=0
+coverage-proof.json MISSING
+```
+
+**So the renamed installed command now runs with the plan's exact invocation and exits 0** - the CLI patch (HS-176) worked,
+and the log shows `"coverage_complete": true` in the emitted document.
+
+**One mismatch remains, and it is HS-171's shape again:** the smoke wrote `head-search-plan-default.json` into the evidence
+root, while the plan checks for `coverage-proof.json`. The artefact exists - under a different name - so the reconciliation
+is the same kind as HS-176: the plan's Task 11 gate is load-bearing, the emitted document *is* the coverage proof (it carries
+`coverage_complete`), and the smaller change is for the CLI to also emit `coverage-proof.json` rather than to edit the plan's
+check. That change is not yet made; I am recording the state precisely so the next step is a two-line patch plus a rebuild
+rather than another investigation.
