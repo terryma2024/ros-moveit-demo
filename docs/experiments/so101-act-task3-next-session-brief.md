@@ -39,10 +39,13 @@ have theirs at CP-2036/CP-2044 via `_case(..., receipt=..., feedback=...)`): add
 parameters to `_case` in `test_act_task8_motion_phases.py` (line 29) and assert the document's values
 for a present, an absent and a wrong-shape proof, mirroring CP-2044.
 
-**(c) T3-F11's window-to-rows and observed-schedule checks.** Two attempts reverted; the recipes are CP-1997
-and CP-2001. Build the fixtures **from the audit's own contents**: mint the acquisitions the window declares,
-bind a row, then derive `label_cutoff_s`, `collection_start_s`, `collection_end_s` and `physics_end_s` from
-those values behind one self-consistent formal-episode helper; every check then becomes a one-line variant.
+**(c) T3-F11's window-to-rows and observed-schedule checks.** Two attempts reverted (CP-1997, CP-2001),
+so the checks are not in the code. What went wrong both times: the fixtures were written by hand with a
+window that did not match what the audit actually held, so the check under test was not the one that fired
+— the coverage gate refused first once, and the observed-schedule rule refused the hand-written schedule
+the other time. Build them the other way round: mint the acquisitions the window will declare, bind a row,
+then **derive** `label_cutoff_s`, `collection_start_s`, `collection_end_s` and `physics_end_s` from those
+values behind one self-consistent formal-episode helper, and make every check a one-line variant of it.
 
 **(d) A fresh checkpoint after (a)-(c).** The plan's checkpoint reviewers are GPT-6.1 Sol / High via a Codex
 session in tmux; the fifth verdict is `reviews/task3-rereview4-verdict.md` (FAIL, 6 Important, all since

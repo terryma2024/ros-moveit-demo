@@ -38698,3 +38698,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `3793e8bd7`;
   targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2074 — Task 3: the T3-F11 failure modes written into the brief before anyone retries it
+
+- **Why.** Item (c) is the one remaining implementation task with a history of two reverts (CP-1997, CP-2001).
+  Rather than attempt a third in a round with little budget, its two failure modes are now written where the next
+  session will read them: the fixtures were hand-written with windows that did not match what the audit held, so
+  the check under test was never the one that fired — the coverage gate refused first once, the observed-schedule
+  rule the other time.
+- **The order that avoids both**: mint the acquisitions the window will declare, bind a row, then derive the four
+  window instants from those values behind a single self-consistent formal-episode helper, so every check becomes
+  a one-line variant of a fixture that is already correct.
+- **Open list unchanged**: (a) the record's producer; (c) this item; (d) the fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `afd61fbcb`;
+  targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
