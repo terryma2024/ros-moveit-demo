@@ -268,7 +268,6 @@ class PickPlaceSearchBoundary:
         return aggregates, world
 
 
-    @staticmethod
     def _remember_planning_scene_receipt(self, observed):
         """Remember the validated SEARCH receipt for the gates that later phases report.
 
@@ -282,6 +281,7 @@ class PickPlaceSearchBoundary:
             self._planning_scene_receipt = receipt
         return None
 
+    @staticmethod
     def _gate_facts(aggregates, world):
         """The eight gates and the holding/contact facts one validated readback establishes.
 

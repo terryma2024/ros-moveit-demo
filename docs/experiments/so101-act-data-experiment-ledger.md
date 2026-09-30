@@ -37807,3 +37807,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `01c0c7b19`;
   targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2033 — Self-inflicted regression found and fixed: CP-2031 had moved `@staticmethod` onto the wrong method
+
+- **What was wrong.** My CP-2031 patch inserted `_remember_planning_scene_receipt` **above** the existing
+  `@staticmethod` decorator, so that decorator ended up attached to the new helper (which takes
+  `self, observed`) while `_gate_facts` **lost** the decorator it needs. The suite stayed green because the
+  fixtures neither run `search()` nor read `_gate_facts` through the class, so the breakage hid: on the real
+  path `self._remember_planning_scene_receipt(observed)` would have passed `observed` as `self` and raised
+  `TypeError`, and `_gate_facts` had silently become an ordinary function rather than a static method.
+- **The fix.** The decorator is back on `_gate_facts` and removed from the helper; both methods are verified in
+  the file (`@staticmethod` immediately above `def _gate_facts(aggregates, world):`, and
+  `def _remember_planning_scene_receipt(self, observed):` with no decorator).
+- **Evidence.** `logs/task3-fix59.run` rc=0 across the search-port, three task8 phase, release-boundary,
+  supervisor and audit suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty
+  tempfile proof.
+- **Lesson for this worktree, recorded because it will recur.** An insertion that anchors on a method name can
+  land **between** a decorator and its method. Always print the neighbouring lines after such a patch, which is
+  what caught this one.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `2ded8eb3d`;
+  targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
