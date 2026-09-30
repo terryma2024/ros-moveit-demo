@@ -38131,3 +38131,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `77cec5b70`;
   consolidated gate `logs/task3-gate12.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2047 — Task 3: the port half is down to one unknown site
+
+- **Read from `observation()`** (`test_act_task8_search_port.py:36-60`): the fixture's world is built with
+  `simulation_time_s=1.2`, `simulation_step=2`, `reset_epoch=2` as **constants**, and the contact and rgb
+  dictionaries repeat `1.2`. So the ratified records the port's derivation will compare against must carry
+  `sim_time_s == 1.2` — no arithmetic needed, unlike the boundary's fixtures where the instant came from the
+  world object.
+- **What is therefore fully known for the port half**: (1) the derivation site — immediately after the
+  `planning_scene_ok` lines CP-2029 added, using `getattr(observed, "controller_feedback", None)` and
+  `world.simulation_time_s`; (2) the gate line to change —
+  `"controller_reference_ok": True, "joint_feedback_ok": True,` beside `"planning_ok": True`; (3) the value the
+  fixture must stamp — `1.2`.
+- **The one unknown**: where `observation()` constructs the `PickPlaceSearchObservation` (between line 60 and
+  the `fixture(...)` helper at line 94). The field defaults to `None`, so it **must be passed explicitly**
+  there; reading that block is the last step before the edit, and doing it by guesswork is what CP-2042 already
+  showed to be the wrong order.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9f4a9d20f`;
+  consolidated gate `logs/task3-gate12.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
