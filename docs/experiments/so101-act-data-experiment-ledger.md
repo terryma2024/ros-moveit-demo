@@ -38908,3 +38908,19 @@ and HS-148 (a partial or ambiguous view treated as the whole).
 
 The lesson this time is about labelling, not diligence: two commands whose outputs can be confused should never be run in
 one block without per-line labels, because the confusion it produces looks exactly like evidence.
+
+## HS-168 — Deviation taken: `empy` added to the perception venv so Step 2's `-DPython3_EXECUTABLE` can generate rosidl
+
+Step 2 passes `-DPython3_EXECUTABLE="$HEAD_PYTHON"`, and that interpreter lacked `empy`, so rosidl generation failed inside
+`so101_mujoco_support` (HS-167). Of the two recorded options I took the smaller one: **`empy==3.3.4` installed into
+`/data/work/venvs/so101-v5-t004-perception`**, a build-time-only dependency, which keeps the plan's command line intact
+rather than substituting a different interpreter.
+
+**Recorded as a deviation because it changes the venv the whole task runs on**, not because it is large: the venv is the
+interpreter every gate in this task has used, and adding a package to it is exactly the kind of change this ledger exists to
+make visible. The alternative (build with a different interpreter) would have left the venv untouched but deviated from
+Step 2's command instead - either way something is recorded, and I chose the one that keeps the reviewed command verbatim.
+
+With both blockers now addressed - the vendored ignores (HS-166, proven at HS-142) and `empy` (this entry) - the toolchain
+root can be built with the plan's line plus the recorded ignore list, and then Step 2's provenance assertions
+(`ros2 pkg prefix` for both packages, and the seven executables) can be run against it.
