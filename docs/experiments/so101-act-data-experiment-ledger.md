@@ -40649,3 +40649,26 @@ frames per grid cell, and the val grid was already non-discriminating (margin 0.
 relative to the machinery it would add.
 
 `held_out_evaluation` (20 seeds, same shape) is recording now; then Step 5's `compare` with `--episode-records` pointed at it.
+
+## HS-239 — The gate's frames are per-domain, so a recording must declare which domain each frame belongs to
+
+The gate got past the latency and interpreter refusals, measured candidate A on both image splits
+(`$MODEL_RUN/evaluation/measure-A-head`, `measure-A-task`), and then refused:
+
+```
+{"failure": "EVALUATION_EPISODES_INCOMPLETE: no head held_out_evaluation frame was recorded"}
+```
+
+Reading the loader again with this in hand: `_episode_frames(...)` is invoked **per domain** (the caller loops
+`(("head", head_samples, head_root), ("task", task_samples, task_root))`), so a frame must declare **which domain it belongs
+to** - my recorded frames carry `seed`, `neck_rad`, `detections`, `latency_ms` and nothing that says "head". Hence "no head
+frame was recorded" even though 20 episodes exist with 3 frames each.
+
+**Fix identified, not yet applied:** tag each frame with its domain, and record **both** domains - the scene has the cameras for
+it (`head_camera` and `task_camera`, per HS-235's camera list), so the recorder should capture a head-domain frame and a
+task-domain frame per step rather than only the head one. That also matches the design's split between head-camera perception and
+task-domain perception, and it is the same class of finding as the last three: the record contract has a field the plan never
+names and only the consumer's code defines.
+
+Also visible in this run: numpy `invalid value encountered in divide` warnings - the paired bootstrap computing on frames for a
+domain it found empty, i.e. a symptom of the same cause rather than a separate defect.
