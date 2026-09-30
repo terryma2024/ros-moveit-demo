@@ -40984,3 +40984,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed,
   its sample fixture and the third cut's first two edits done**; F11 open. Targeted gates **430 / 201 / 201 / 201 /
   246 / 247 / 200 / 283 passed in 4.73s passed**; HEAD `4ff06fc15`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2179 — F1's chain test: the recipe, and the three shapes one read away
+
+- **The recipe**: a fake port whose `reference_state` returns the legacy four keys (so the expert's existing checks
+  pass) and whose `reference_frames` returns two valid frames — five arm names and one gripper name — then
+  `MoveItExpertActionTap(port).reference(t)` must yield a record carrying `frames`, `projected_positions` and
+  `projection_map` with the map selecting the **evaluated** values; appending that record as a `references` row,
+  sealing and reading it back completes the chain F1 names (port → expert → writer → readback), and the capture can
+  join it once its own API is read.
+- **The three shapes to read first** (one call, three greps): `_FRAME_FIELDS`' exact nine keys (line 66 onwards);
+  the `evaluation` sub-keys and their `basis` vocabulary in `_reference_frames_ok` (lines 232-260); and
+  `CausalEpisodeCapture`'s entry point in `expert.py` (from line 44). Guessing them is the CP-2157 mistake, and the
+  audit refuses a frame whose evaluation does not match its instant.
+- **Why this is a note rather than an attempt**: the chain test's payloads are the unknown, and a wrong `basis`
+  string or a missing evaluation key refuses the row at admission rather than in my test, which is exactly the
+  failure mode that has cost this session several rounds.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed,
+  its sample fixture and the third cut's first two edits done**, the chain test one read away; F11 open. Targeted
+  gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 passed**; HEAD `ab62c0c95`; no push, no evidence deletion,
+  no hardware, no second stack.
