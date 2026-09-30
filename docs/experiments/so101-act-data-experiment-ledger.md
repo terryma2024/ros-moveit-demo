@@ -35438,6 +35438,14 @@ blocks - the reviewer agreed that deferral is not a blocker.
 **Tasks 1-8 are now complete and independently approved.** Next: Task 9, the Teleop head-camera backend with
 no second detector, with its RED tests first.
 
+- **Task 9 environment probe (round 270).** `src/so101_teleop` is importable when the worktree package is on
+  `sys.path`, but `so101_teleop.unified.compose` fails under the ordinary test helper with
+  `ImportError: cannot import name 'field_validator' from 'pydantic'` because the **system** pydantic (v1) at
+  `/usr/lib/python3/dist-packages` shadows the v2 the package needs. Task 9's tests therefore need an
+  interpreter whose pydantic is v2 (the perception venv is the candidate, probed alongside this note);
+  otherwise the RED gate would fail at import for the wrong reason and must not be counted as RED. This is an
+  environment prerequisite for Task 9 and Task 10, not a source defect.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
