@@ -37374,3 +37374,26 @@ while the vendored third-party stack comes from the existing underlay, and recor
 "the closure of `so101_demo_py` and `so101_teleop` resolves against underlay X; the vendored MuJoCo stack is provided
 by that underlay and is not rebuilt here". Claiming a from-scratch closure across the vendored stack would be false,
 and the rule's own warning is what makes that clear.
+
+## HS-109 — Per-test failure inventory extracted, with its staleness stated
+
+The reviewer's gap 1 asks for per-test attribution rather than family-level explanation. First step: extracted every
+`FAILED`/`ERROR` id from the corrected batched gate into a machine-readable inventory
+
+```
+351 rows -> /data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/scratch/attribution-inventory.tsv
+     54 src/so101_demo_py/test/test_act_path_proof_permits.py
+     47 src/so101_demo_py/test/test_parallel_batch_cli.py
+     26 src/so101_demo_py/test/test_act_visible_approach_expert_route.py
+     19 src/so101_demo_py/test/test_act_visible_approach_commit_ingress.py
+```
+
+**Caveat, and it matters:** this inventory comes from the corrected run *before* the task 8 contract revert (HS-072),
+which is why `test_act_task8_calibration_aggregator.py` shows 16 failures there while the file is 32 passed now. Any
+attribution table built from this file must either re-run that module or mark those rows superseded - a stale row is
+exactly the kind of thing that made the earlier "unrelated by name" reading wrong.
+
+The dedicated attribution run (per-suite JUnit XML, short tracebacks) was stopped after it parked at 99% with no XML
+written, since JUnit output is only flushed at the end; its scratch is a deletion candidate and nothing is claimed
+from it. What remains for gap 1: re-run with tracebacks for the modules in this inventory, giving every id a named
+cause, and mark the superseded rows.
