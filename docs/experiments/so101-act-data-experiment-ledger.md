@@ -37215,3 +37215,29 @@ link (HS-100), the `so101_teleop` installed gate (HS-089), the shared-contract r
 non-promotable refusal (HS-052), the benchmark readbacks (HS-058/HS-059/HS-068/HS-075) and now the installed server
 smoke are all closed **by evidence**; the `so101_demo_py` installed gate is characterized by cause and its direct-run
 numbers stand in (HS-090/HS-091). Task 11 is therefore ready for a re-review rather than for more work.
+
+## HS-102 — Third Task 11 verdict: REJECT on two grounds, and both are about "failing is failing" (round 707)
+
+The reviewer accepted the final-seal smoke, the dataset verification and the installed-server evidence as addressing
+those gaps, and rejected on two remaining grounds:
+
+1. "The demo installed gate remains unresolved: HS-091 still reports one error."
+2. "The direct ordinary suites remain failing."
+
+Both are the same position it stated in its second review: classifying a failure does not waive a gate, and a suite
+that reports failures is not a passing suite. On its reading, Task 11's acceptance requires the ordinary suites to
+**pass**, not to be explained; narrowing that requires an explicit change to the acceptance contract, which is a
+user decision rather than mine.
+
+**What that means concretely.** The ordinary suites report 198 failed / 5505 passed / 85 error (HS-077) and the
+teleop tree 19 failed / 1096 passed / 42 skipped run alone (HS-084). Their causes are established and none is this
+work's: a missing `mujoco` for colcon's interpreter, tests needing a live ROS/MuJoCo stack or a GPU session, socket
+roots under `/tmp/act-<worker>` colliding across concurrent runs, `/diagnostics` at the filesystem root being
+unwritable, and the stale-`pysrc` shadowing (HS-076/083/085/090). Making them pass is not a code change: it ranges
+from installing a module for a PEP-668 interpreter to providing a live simulator stack inside a unit-test gate - the
+latter being something Task 11 cannot supply by construction.
+
+**So this is a contract question, not a coding question, and it belongs to the user:** either the ordinary-suite
+acceptance for Task 11 is explicitly narrowed to "the head-search and head-camera suites pass; the rest is
+environment" - with that wording recorded - or Task 11 stays open until the environment can run those suites green,
+which is a much larger piece of work than this task.
