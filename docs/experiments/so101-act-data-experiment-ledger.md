@@ -37735,3 +37735,24 @@ for the suite's content, **not** an installed-gate pass - stated explicitly so n
 
 **What this does not close:** clause (c)'s 114 unexplained failures (`FIELDS_INVALID` 67,
 `TRUSTED_FINAL_TARGET_INVALID` 47) remain open, separately from the provenance and benchmark items.
+
+## HS-123 — The unexplained families were my PYTHONPATH replacement: one module went 14 failures -> 33 passed
+
+Decisive A/B on a module from the "unexplained" group, changing only whether ROS's own paths survive:
+
+```
+test_act_command_broker.py
+  PYTHONPATH=<overlay>:<venv>                -> 14 failures, messages "No module named 'rclpy'",
+                                                'control_msgs', 'action_msgs', 'mujoco_ros2_control_msgs'
+  PYTHONPATH=<overlay>:<venv>:$PYTHONPATH    -> 33 passed in 0.57 s
+```
+
+So the `FIELDS_INVALID` and `TRUSTED_FINAL_TARGET_INVALID` families - the 114 rows I had left unexplained and refused
+to relabel twice - are, at least in this module, **secondary symptoms of a missing ROS import**: the module cannot
+import `rclpy`/`control_msgs`, and the failures surface later as contract-field complaints rather than as import
+errors. My environment **replaced** ROS's `PYTHONPATH` instead of extending it, which is the identical mistake HS-116
+identified and I then failed to carry into the very next run.
+
+That means the ordinary-suite numbers quoted so far (347 failed / 4392 passed / 165 error) are **inflated by my
+invocation**, and a run with the environment appended rather than replaced is the one to quote. It is launched with
+this entry; until it lands, no number from those earlier runs should be treated as a property of the suite.
