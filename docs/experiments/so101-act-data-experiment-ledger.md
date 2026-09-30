@@ -35229,6 +35229,18 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   long steps and has not written `reviews/task6/task6-final-verdict.md` yet. Task 6 therefore stays
   `in_progress`, and Task 7's RED work may proceed because it consumes the finished bundle.
 
+- **Task 7 RED written (round 215).** `test/test_act_head_search_qualification.py` holds the plan's Step 1
+  cases: the CLI has no resume or stage continuation (`run --resume` and `qualify --continue-from` both
+  exit), the runner refuses any existing run root (`RUN_ROOT_ALREADY_EXISTS`), the head-only report never
+  grants Task 8 readiness (task8_live, release, recorder, retreat and pick all raise, naming TASK8),
+  `serve-teleop` requires the closed head-only report (`HEAD_SEARCH_QUALIFIED_REQUIRED`), the connection
+  descriptor binds operation TELEOP_ACCEPTANCE with matching runtime ids, a live owner pid and start ticks
+  and a bridge socket root under the run root, and only the four subcommands parse. RED gate failed for the
+  right reason: `rc=2`, module absent (`scratch/head-test-20260930T080204Z-JbSoxNpO`). Next: implement
+  `act/head_search_qualification.py` (parser, `qualify_head_search`, `require_gate`, `serve_teleop`),
+  `cli/head_search_calibration.py`, the restricted admission and the `setup.py` entry point, then GREEN and
+  commit. Task 6's confirmation verdict is still pending while its fixes are complete.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
