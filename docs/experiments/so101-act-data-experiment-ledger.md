@@ -43189,3 +43189,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   own comment names - before emitting a record.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four cuts, the fourth located;
   F5/F12 open; goal paused.
+
+## CP-2285 - F13's fourth item is a design contradiction, not a missing line
+
+- The port's own docstring (task_scene.py:295-301) says the simulation instant is deliberately **not** stamped
+  there, because "the caller that owns the simulation clock adds it, at the same instant it derives the gate,
+  which is the join the audit enforces". The segment's comment (pick_place_search_segment.py:59-64) says stamping
+  that instant would **manufacture** exact clock equality rather than prove the scene and physics describe the
+  same step, and therefore emits nothing. The seventh verdict sides with the segment: a record that cannot be
+  fenced is not the obligation met, and it asks for "a defensible current query/readback fence".
+- So the two files disagree about who may stamp the instant and on what evidence, and the disagreement is about
+  physics semantics - whether a fresh Planning Scene read and the physics readback can be shown to describe the
+  same step at all, or only assumed to. That is a contract decision for the plan's owner, not a line I should
+  guess at: stamping from the caller is exactly what the port's docstring invites and exactly what the verdict
+  refuses.
+- Recorded and stopped there, with the tree green and nothing half-landed. The two documents' texts are in this
+  entry's sources: task_scene.py:295-301 and pick_place_search_segment.py:59-64.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four cuts with the fourth
+  blocked on this contradiction; F5/F12 open; goal paused.
