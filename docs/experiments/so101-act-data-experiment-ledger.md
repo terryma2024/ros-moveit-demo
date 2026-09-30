@@ -40375,3 +40375,36 @@ the protocol publicly) is cleaner but puts the verified dataset path back on the
 The step-pose mechanism is the last unknown: whether the neck/head angle is set through a joint write, a dedicated setter, or
 by re-preparing the scene per step. Reading it is the next action; then the harness is written, run over the 20 calibration
 seeds first (cheaper, and it is what Step 4's redo needs), and only then the 20 held-out seeds for Step 5.
+
+## HS-229 — Capture is entangled with preparation, which flips HS-227's recommendation
+
+The exact call graph, now read in full:
+
+```
+render(seed, scenario)                      -> select_bounded_render(seed, scenario, render_attempt, geometry, ...)
+  render_attempt(random)                    -> self._render_attempt(random, scenario, seed=..., attempt_index=..., event_sink=...)
+    _render_attempt(...)                    -> self._prepare(random, scenario)      <- scene setup happens HERE, per attempt
+                                            -> measure_task_scene_geometry(...) if require_nonpenetrating_scene
+                                            -> ... camera capture ...
+```
+
+Two consequences that matter more than the earlier reading suggested:
+
+1. **`_render_attempt` calls `_prepare` itself**, so capturing a frame **re-builds the scene**. Calling it per step would reset
+   the world every frame, which is not an episode - it is a fresh sample each time wearing an episode's clothes. So a recorder
+   cannot simply loop the existing capture path.
+2. **The neck angle exists only as data** (`neck_rad` on the sample dataclasses, `neck_yaw_rad` as an increasing range); there is
+   no neck actuator setter in the module at all. So sweeping the head across the search domain requires writing the neck joint
+   in `self._data` - capability the renderer does not expose today.
+
+**Therefore HS-227's "sibling harness, leave the renderer untouched" recommendation is wrong**, and I am correcting it before
+writing code rather than after: the capture half cannot be reused without the preparation half, and the pose half does not
+exist. The honest options are now:
+
+- **(i)** refactor the adapter to separate `_prepare` from capture and add a public step/pose entry point (`render_at(neck_rad)`),
+  which is the only way to reuse the verified rendering path for sequences; or
+- **(ii)** replicate the capture path in the harness (its own MuJoCo model + camera), which duplicates exactly the machinery
+  Task 11 verified through the seal and risks the "second stack" the handoff forbids.
+
+So the choice is (i) - a contained refactor of a verified module, reviewed as such - rather than the untouched-module harness I
+recommended two rounds ago. Recorded as a correction to my own recommendation, before any code exists to defend.
