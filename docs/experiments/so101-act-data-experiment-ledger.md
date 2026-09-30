@@ -38890,3 +38890,21 @@ Checked directly rather than left as inference: **the perception venv *does* hav
 `so101_mujoco_support`'s rosidl step. HS-167's first reading ("the venv lacks `empy`") was wrong, and the corrected
 statement is narrower: some interpreter in that build lacked `em`, and identifying which one is the next step - not
 changing the venv, which would have been a fix for a problem it does not have.
+
+### Second correction, and this one restores HS-167 as written
+
+The check above, labelled cleanly per interpreter, gives:
+
+```
+system python3 (/usr/bin/python3)          -> has em
+venv python (so101-v5-t004-perception)     -> ModuleNotFoundError: No module named 'em'
+```
+
+So **HS-167's original statement was correct**: the venv the plan passes as `-DPython3_EXECUTABLE` lacks `empy`, which is
+why `so101_mujoco_support`'s rosidl step failed at 1.4 s. The "Correction to HS-167" immediately above is **wrong** and is
+retained rather than deleted, because of how it went wrong: I read the two `import em` results from a single combined
+command in the wrong order and then wrote a confident correction on top of the misreading - the same error class as HS-112
+and HS-148 (a partial or ambiguous view treated as the whole).
+
+The lesson this time is about labelling, not diligence: two commands whose outputs can be confused should never be run in
+one block without per-line labels, because the confusion it produces looks exactly like evidence.
