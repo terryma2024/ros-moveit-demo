@@ -37879,3 +37879,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `8160707f8`.
   Targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2036 — Task 3: the gate derivation is proven at the layer that decides it, and CP-2035's alarm is retired
+
+- **CP-2035's `DID NOT RAISE` was my control's mistake, not a missing enforcement.** The runner **does**
+  enforce the gates: `_verify_phase` refuses any phase whose `_EVIDENCE_GATES` values are not all `True`
+  (`pick_place_runner.py:194-195`, `PHASE_EVIDENCE_INVALID`). My earlier control called
+  `boundary.sequence_phase(...)` directly through the fixture's `_call`, so the runner's rule never ran —
+  the alarm was about testing the wrong layer, and I am correcting the record rather than leaving a
+  misleading gap.
+- **The control now asserts the layer that decides the value**, parametrised over a successful, an
+  unsuccessful and an absent receipt: `document["planning_scene_ok"]` is `True`, `False` and `False`
+  respectively. Combined with the runner's rule above, a missing receipt refuses the phase **and** the
+  document that carries it says so.
+- **Evidence.** `logs/task3-step4f.run` rc=0: **152 passed** across the motion-phases, close-execution, task8,
+  search-port, release-boundary, supervisor and audit suites under `pytest-xdist` with 8 workers, with its own
+  NVMe scratch and a non-empty tempfile proof.
+- **Producer wiring status for the scene gate: complete.** Port record (CP-2020), additive travel in the
+  SEARCH document (CP-2028), the verified receipt stored by `search()` (CP-2031), the derived gate at both
+  sites (CP-2029, CP-2034) and the controls (CP-2036), with the runner's enforcement already in place.
+  Remaining in CP-2017's spirit: the same treatment for `controller_feedback`'s two gates and letting the
+  full record travel once the readback fills it.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `27f8eb4b0`;
+  targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

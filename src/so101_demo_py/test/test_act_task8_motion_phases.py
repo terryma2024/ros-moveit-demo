@@ -27,7 +27,7 @@ from so101_demo.adapters.act.pick_place_search_boundary import (  # noqa: E402
 
 
 def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=True, with_template=True,
-          with_duration=True):
+          with_duration=True, receipt=True):
     screen, prefix, goals, checks, sources, _driver, _owner, _events, _qpos, _qvel = physical_inputs()
     raw = sources.capture(prefix["attempt_id"], after_step=0)
     from so101_demo.core.simulation.types import ContactEvidence
@@ -78,8 +78,10 @@ def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=Tru
     # the boundary's own bookkeeping, which a release increments and a set-down records
     boundary._release_epoch, boundary._set_down_step = 0, None
     # the SEARCH receipt this fixture's phases are derived from (CP-2017 step three): a successful
-    # SceneCommandReceipt, the same shape the boundary remembers from its own validated search
-    boundary._planning_scene_receipt = SimpleNamespace(success=True, failure_code=None)
+    # SceneCommandReceipt, the same shape the boundary remembers from its own validated search. A case may
+    # ask for an unsuccessful one or for none, which is what the fail-closed control below drives.
+    if receipt is not None:
+        boundary._planning_scene_receipt = SimpleNamespace(success=receipt, failure_code=None)
     boundary._gate_facts = PickPlaceSearchBoundary._gate_facts   # a staticmethod: assigned, not bound
     for name in ("sequence_phase", "sequence_facts", "_checked_aggregates", "_motion_facts", "_release_facts",
                  "_gripper_open_rad",
@@ -245,3 +247,16 @@ def test_final_check_accepts_a_cup_settled_where_it_was_put_and_refuses_one_that
         else:
             with pytest.raises(PickPlaceSearchBoundaryError, match="FINAL_CHECK: placement moved by"):
                 _call(boundary, ticket, template, duration, phase="FINAL_CHECK")
+
+
+@pytest.mark.parametrize("receipt,expected", [(True, True), (False, False), (None, False)])
+def test_the_scene_gate_is_derived_from_the_receipt(receipt, expected):
+    """CP-2017 step four: the gate follows the receipt, and its absence is a refusal.
+
+    The runner refuses a phase whose gates are not all true (`_verify_phase`'s `_EVIDENCE_GATES` rule), so
+    this control asserts the document the boundary produces — the layer that decides the value.
+    """
+
+    boundary, ticket, _capture, template, duration = _case([], receipt=receipt)
+    document = _call(boundary, ticket, template, duration)
+    assert document["planning_scene_ok"] is expected
