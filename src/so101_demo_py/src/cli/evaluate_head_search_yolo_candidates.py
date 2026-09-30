@@ -15,6 +15,7 @@ import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import numpy as np
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 from so101_demo.perception_benchmark.head_search_models import (
     CANDIDATE_IDS,
@@ -23,6 +24,7 @@ from so101_demo.perception_benchmark.head_search_models import (
     choose_candidate,
     load_frozen_candidate,
     paired_scene_delta_bootstrap,
+    require_selection_supported,
     verify_split_manifest,
     write_comparison,
 )
@@ -239,6 +241,7 @@ def main(arguments: list[str] | None = None) -> int:
         scratch.mkdir(parents=True, exist_ok=True)
         weights_dir = parsed.weights_dir or Path(parsed.candidate[0]).resolve().parent
         evaluations = []
+        head_scene_cells: dict[str, dict[str, dict[str, float]]] = {}
         for candidate in frozen:
             weight_path = (weights_dir / f"{candidate.candidate_id}.pt").resolve()
             if not weight_path.is_file():
@@ -252,6 +255,7 @@ def main(arguments: list[str] | None = None) -> int:
                     f"candidate {candidate.candidate_id}"
                 )
             static = {}
+            head_scene_cells[candidate.candidate_id] = {}
             for domain, samples, root in (
                 ("head", head_samples, head_root),
                 ("task", task_samples, task_root),
@@ -259,14 +263,29 @@ def main(arguments: list[str] | None = None) -> int:
                 operating_point = (candidate.document["operating_points"] or {})[domain]
                 domain_scratch = scratch / f"measure-{candidate.candidate_id}-{domain}"
                 domain_scratch.mkdir(parents=True, exist_ok=True)
-                measured = _measure_static(
-                    weight_path,
-                    Path(root),
-                    samples,
-                    operating_point,
-                    parsed.device,
-                    domain_scratch,
-                )
+                if domain == "head":
+                    per_scene = _measure_static_per_scene(
+                        weight_path,
+                        Path(root),
+                        samples,
+                        operating_point,
+                        parsed.device,
+                        domain_scratch / "by-scene",
+                    )
+                    head_scene_cells[candidate.candidate_id] = per_scene
+                    measured = {
+                        key: float(np.mean([cell[key] for cell in per_scene.values()]))
+                        for key in STATIC_METRIC_KEYS
+                    }
+                else:
+                    measured = _measure_static(
+                        weight_path,
+                        Path(root),
+                        samples,
+                        operating_point,
+                        parsed.device,
+                        domain_scratch,
+                    )
                 for key in STATIC_METRIC_KEYS:
                     if key not in measured:
                         raise EvaluationError(
@@ -295,6 +314,39 @@ def main(arguments: list[str] | None = None) -> int:
         verdict = choose_candidate(*evaluations)
         # the paired scene-level delta: each challenger against the retained model, per episode domain
         scenes: dict[str, object] = {}
+        static_intervals: dict[str, tuple[float, float]] = {}
+        scenes_by_id = sorted(set().union(*(set(cells) for cells in head_scene_cells.values())))
+        if scenes_by_id and all(
+            len(cells) == len(scenes_by_id) for cells in head_scene_cells.values()
+        ):
+            valued_static = [
+                {
+                    "scene_group_id": scene,
+                    **{
+                        f"value_{name}": float(head_scene_cells[name][scene]["mask_map50_95"])
+                        for name in CANDIDATE_IDS
+                    },
+                }
+                for scene in scenes_by_id
+            ]
+            scenes["static_head"] = {}
+            for challenger in ("A", "B"):
+                delta = paired_scene_delta_bootstrap(
+                    valued_static,
+                    left_key=f"value_{challenger}",
+                    right_key="value_C",
+                    repetitions=parsed.bootstrap_repetitions,
+                    seed=20260930,
+                )
+                static_intervals[challenger] = delta.interval
+                scenes["static_head"][f"{challenger}_minus_C"] = {
+                    "independent_unit": delta.independent_unit,
+                    "unit_count": delta.unit_count,
+                    "mean": delta.mean,
+                    "interval": list(delta.interval),
+                    "repetitions": delta.repetitions,
+                }
+            require_selection_supported(verdict, static_intervals)
         for domain in ("head", "task"):
             domain_frames = [
                 frame
@@ -354,6 +406,35 @@ def main(arguments: list[str] | None = None) -> int:
         )
     )
     return 0
+
+
+def _measure_static_per_scene(
+    weights: Path,
+    dataset_root: Path,
+    samples: Sequence[Mapping],
+    operating_point: Mapping[str, object],
+    device: str,
+    scratch: Path,
+) -> dict[str, dict[str, float]]:
+    """Measure the deciding head cells one scene at a time, so their interval can be bootstrapped.
+
+    Ultralytics validation reports one aggregate per call, so a per-scene value means one call per scene
+    group. This runs only for the head domain, the domain the selection is decided on; the task domain
+    keeps its single whole-split measurement.
+    """
+
+    by_scene: dict[str, list[Mapping]] = {}
+    for sample in samples:
+        scene = str(sample.get("scene_group_id") or sample.get("seed"))
+        by_scene.setdefault(scene, []).append(sample)
+    cells: dict[str, dict[str, float]] = {}
+    for index, scene in enumerate(sorted(by_scene)):
+        scene_scratch = scratch / f"scene-{index:04d}"
+        scene_scratch.mkdir(parents=True, exist_ok=True)
+        cells[scene] = _measure_static(
+            weights, dataset_root, by_scene[scene], operating_point, device, scene_scratch
+        )
+    return cells
 
 
 def _measured_latency_p95(

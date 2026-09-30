@@ -444,3 +444,19 @@ def test_a_candidate_with_better_measured_f1_blocks_an_undefendable_selection() 
     strong_f1 = _evaluation("B", head_ap=0.795, task_ap=0.80, head_f1=0.90, task_f1=0.90)
     with pytest.raises(EvaluationError, match="EVALUATION_F1_MARGIN"):
         choose_candidate(A_EQUIVALENT, strong_f1, weak_f1)
+
+
+def test_a_challenger_needs_a_scene_interval_that_excludes_zero() -> None:
+    from so101_demo.perception_benchmark.head_search_models import require_selection_supported
+
+    clear = _evaluation("B", head_ap=0.53, task_ap=0.508, head_recall=0.95, head_f1=0.95)
+    verdict = choose_candidate(A_EQUIVALENT, clear, C_EQUIVALENT_RETAINED)
+    assert verdict.candidate_id == "B"
+    require_selection_supported(verdict, {"B": (0.01, 0.09)})  # supported
+    with pytest.raises(EvaluationError, match="EVALUATION_SELECTION_UNSUPPORTED"):
+        require_selection_supported(verdict, {"B": (-0.02, 0.05)})  # straddles zero
+    with pytest.raises(EvaluationError, match="EVALUATION_SELECTION_UNSUPPORTED"):
+        require_selection_supported(verdict, {})  # no interval at all
+    retained = choose_candidate(A_EQUIVALENT, B_EQUIVALENT, C_EQUIVALENT_RETAINED)
+    assert retained.candidate_id == "C"
+    require_selection_supported(retained, {})  # keeping the retained model needs no interval

@@ -487,6 +487,36 @@ def choose_candidate(*candidates: CandidateEvaluation) -> SelectionVerdict:
     )
 
 
+#: the candidate the plan retains unless a challenger is demonstrably better
+RETAINED_CANDIDATE = "C"
+
+
+def require_selection_supported(
+    verdict: SelectionVerdict, intervals: Mapping[str, tuple[float, float]]
+) -> None:
+    """A challenger may only replace the retained model on evidence, not on a point estimate.
+
+    `intervals` maps a challenger's id to the paired scene-level interval of its advantage over the
+    retained model on the deciding head cell. A challenger whose interval does not exclude zero has not
+    shown an advantage the frozen data supports, and the gate refuses rather than recording a choice the
+    evidence cannot carry.
+    """
+
+    if verdict.candidate_id == RETAINED_CANDIDATE:
+        return
+    interval = intervals.get(verdict.candidate_id)
+    if interval is None:
+        raise EvaluationError(
+            f"EVALUATION_SELECTION_UNSUPPORTED: {verdict.candidate_id} was selected without a paired "
+            "scene-level interval for its advantage over the retained model"
+        )
+    if not (float(interval[0]) > 0.0):
+        raise EvaluationError(
+            f"EVALUATION_SELECTION_UNSUPPORTED: {verdict.candidate_id}'s advantage over the retained "
+            f"model is not supported by its paired scene interval {tuple(interval)}"
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class ComparisonPaths:
     comparison: Path
