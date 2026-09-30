@@ -38455,3 +38455,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c21bcc329`;
   consolidated gate `logs/task3-gate16.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2063 — Task 3 state at HEAD `0eab1a66e`: 419 passed in 10.57s, eleven derived gates
+
+- **Gate.** `logs/task3-gate17.run` rc=0: **419 passed in 10.57s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **Eleven gates derived, one stated.** Every gate the boundary helper reports and all but one of the SEARCH
+  document's are derived from observations the search established; that document's `planning_ok` is an
+  explicit value with the reason in the code (CP-2062), because the port refuses a non-locking result first.
+- **Context of the number.** The same twenty-file scope measured **337 passed** when this session's Task 3
+  work began; the rise is the ratified schemas, the fail-closed gates, the A.1 implementation and the derived
+  gates with their controls, and the ledger records each step with its RED/GREEN pointers.
+- **Open for Task 3**: the full `planning_scene_observation` record's travel, the three-way controls CP-2061
+  could not land, T3-F11's window-to-rows checks, and then a fresh checkpoint. Tasks 4-8 have not started and
+  the four real input roles are still unapproved.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
+  deletion, no hardware, no second stack.
