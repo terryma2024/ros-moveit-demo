@@ -36502,3 +36502,25 @@ That distinction is the honest outcome: the gate now **runs as specified**, and 
 limits rather than hiding them. Classifying all 270 non-passing tests is a larger job than this task, so the next
 step is narrower - confirm that **none** of them is a Head Search or teleop test by name - and record that,
 rather than claiming a green suite that does not exist.
+
+## HS-070 — The 270 non-passing tests: none is a head-search module, 25 are the older ACT calibration suites (round 397)
+
+Classifying by name, the 270 `FAILED`/`ERROR` lines in the top-level batch include 25 whose names match
+`head_search|camera|search_binding|teleop|calibration`, and they are all the **older ACT calibration** suites:
+
+```
+test_act_calibration_motion.py            (2)
+test_act_task8_calibration_aggregator.py  (many, e.g. test_measure_cli_seals_only_on_success)
+```
+
+No `test_act_head_search_*` file appears in the fail list, and the five head-search suites pass in the same
+directory under `-n 8` (HS-044). So the classification narrows to: **nothing in the head-search or head-camera
+surface is failing**, while a neighbouring ACT calibration subsystem fails in this environment for a reason not
+yet established.
+
+That last point matters and is recorded rather than glossed: "not ours by name" is weaker than "not ours by
+cause". One of those tests should be run under the pinned environment to see whether it fails for an
+environmental reason (a runtime or artifact the gate does not provide) or for something my changes could have
+touched - the two share the task 8 calibration contracts, and this task did edit
+`config/act/task8-calibration-measurement-contract-v2.json`. That check is the next step, and until it is done the
+honest statement is that the failures are unrelated **by name**, not yet by cause.
