@@ -37694,3 +37694,44 @@ Clause (d) of the narrowed contract (HS-103) already covers this: the installed 
 rather than as passing. If the reviewer judges that insufficient, the honest next move is to ask what evidence would
 suffice rather than to keep trying invocation variants - the returns here are clearly diminishing, and Task 11's
 substance is not in this gate.
+
+## HS-122 — Installed-gate availability record, in the form the reviewer asked for
+
+Asked what would close the demo installed-gate item, the reviewer answered: HS-103(d) already authorizes recording it
+as **unavailable** (no passing substitute required), provided the record links the exact command, interpreter/module
+paths, exit code, collection log and a **matching fresh XML**; and that direct pytest results must be labelled
+**supplemental evidence**, not an installed-gate pass. Here is that record.
+
+**Exact command (latest run, colconfixed-20260930T111625Z):**
+
+```zsh
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+PYTHONPATH="$HEAD_WORKTREE/src/so101_demo_py/test:$HEAD_VENV_SITE:$PYTHONPATH" \
+  colcon test --packages-select so101_demo_py --event-handlers console_direct-
+colcon test-result --test-result-base build/so101_demo_py
+```
+
+**Interpreter and module paths:** colcon's interpreter is `/usr/bin/python3`; the appended site-packages is
+`/data/work/venvs/so101-v5-t004-perception/lib/python3.12/site-packages` (the only interpreter on this host with
+`mujoco 3.12.0`); the installed package under test is
+`<overlay>/install/so101_demo_py/lib/python3.12/site-packages` with overlay digest
+`bee7d3f4...` (HS-105/HS-116).
+
+**Exit codes and artefacts:**
+
+| artefact | value |
+| --- | --- |
+| `colcon test` | rc logged in `colconfixed-20260930T111625Z/colcon.log` |
+| `colcon test-result` | `Summary: 11 tests, 11 errors, 0 failures, 0 skipped` |
+| fresh XML | `build/so101_demo_py/pytest.xml` - 11 module **collection** failures, each an `ImportError while importing test module` |
+| collection log | `colconfixed-20260930T111625Z/colcon.log` |
+
+**Statement of unavailability:** the installed ordinary gate for `so101_demo_py` collects eleven modules and fails
+all eleven at import, through four successive invocation-level mechanisms (HS-118 plugin autoload, HS-119 collection,
+HS-120 bare sibling imports, HS-121 environment construction). It therefore **does not run the suite here**.
+
+**Labelling of the substitute:** the direct pytest runs (HS-077/084/110/111/113/114/116) are **supplemental evidence**
+for the suite's content, **not** an installed-gate pass - stated explicitly so no reader mistakes them for one.
+
+**What this does not close:** clause (c)'s 114 unexplained failures (`FIELDS_INVALID` 67,
+`TRUSTED_FINAL_TARGET_INVALID` 47) remain open, separately from the provenance and benchmark items.
