@@ -39652,3 +39652,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list F1/F3/F5/F11/F12/F13 stands with F12's third edit done; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `4fb3f2b53`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2117 — F12's carrier fix landed: the typed record travels inside `physical_observation`
+
+- **What landed** (`pick_place_search_port.py`): the SEARCH document no longer adds `planning_scene_observation`
+  as a sibling key. It now builds a `physical_observation` block from the validated `world`
+  (`simulation_time_s`, `simulation_step`, `paused`, `truncated` — the flat part the runner's `_raw` accepts) and
+  carries the ratified record **inside** it. This is the carrier contract read from both ends (CP-2113/CP-2114/
+  CP-2115) and the runner-side half of it landed last round (CP-2116).
+- **The one expectation that moved, correctly**: my own CP-2067 control asserted the record as a **top-level** key
+  and failed with `KeyError` — the contract F12 changed — so it now asserts the record is inside the block and that
+  no sibling key exists, which is strictly stronger than before.
+- **Edit 2 needs nothing for SEARCH**: the closure rule at `pick_place_search_port.py:926-930` belongs to
+  `_checked_sequence_document`, i.e. the sequence phases; the SEARCH document is not routed through it, and the
+  suites confirm nothing else validates that closure. The rule may still need the union if a sequence phase ever
+  carries the block, which is a note for the pass that gives those documents a raw block too.
+- **Evidence.** `logs/`-style targeted run this round: **103 passed** across the search-port, `test_act_task8.py`,
+  the motion-phase, close-execution, release-boundary and supervisor suites under `pytest-xdist` with 8 workers,
+  its own NVMe scratch and a non-empty tempfile proof.
+- **What remains of F12**: a production caller that actually **fills** the records — the segment fills the scene
+  record (CP-2077) but nothing joins it into this document's block yet — and the gates derived from the joined
+  **current** records rather than from cached receipts. F13's dimension/freshness corrections travel with that.
+- **State.** Item 3's list F1/F3/F5/F11/F12/F13 stands with F12's carrier now correct; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `a8427bbd7`; no push, no evidence deletion, no hardware, no second
+  stack.

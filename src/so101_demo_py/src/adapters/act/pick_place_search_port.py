@@ -414,6 +414,7 @@ class PickPlaceSearchPhasePort:
         # CP-2017 step 3: the gate is the Planning Scene receipt the observation carries, not a literal.
         # `PickPlaceSearchObservation.planning_scene` is a SceneCommandReceipt, so `success is True` is the
         # observed verdict; a missing or unsuccessful receipt fails the gate instead of asserting it.
+        scene_record = getattr(observed, "planning_scene_observation", None)
         receipt = getattr(observed, "planning_scene", None)
         planning_scene_ok = getattr(receipt, "success", None) is True
         # CP-2017 step three for the controller gates: derived from the ratified records the observation
@@ -452,12 +453,17 @@ class PickPlaceSearchPhasePort:
             # and any stamp outside `skew` are all refused outright - so they are stated here, not derived.
             # The boundary's gates are the derived ones: its receipts and proofs can genuinely be absent.
             "contact_ok": True, "mujoco_ok": True,
-            # CP-2017 step 2, additive half: when the readback that established these gates carries the
-            # ratified Planning Scene observation, it travels with the document so the gate can be derived
-            # from it. Nothing supplies it yet, so the gate below keeps its documented interim value and
-            # step 3 flips it to a derivation; the audit refuses a record whose instant or fields disagree.
-            **({"planning_scene_observation": observed.planning_scene_observation}
-               if getattr(observed, "planning_scene_observation", None) is not None else {}),
+            # F12 (CP-2115): the typed records travel INSIDE `physical_observation` - the one nested carrier
+            # the runner accepts - instead of as a sibling key it refuses. The flat part keeps the runner's
+            # `_raw` rule satisfied, and the common audit validates the records themselves.
+            "physical_observation": {
+                "simulation_time_s": world.simulation_time_s,
+                "simulation_step": world.simulation_step,
+                "paused": bool(world.paused),
+                "truncated": bool(world.truncated),
+                **({"planning_scene_observation": scene_record}
+                   if scene_record is not None else {}),
+            },
             "planning_scene_ok": planning_scene_ok,
             "head_rgb_ok": True, "wrist_rgb_ok": True, "manual_intervention": False,
             "moveit_recovery": False, "holding_state": "EMPTY",

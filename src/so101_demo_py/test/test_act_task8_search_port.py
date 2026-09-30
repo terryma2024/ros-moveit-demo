@@ -646,10 +646,13 @@ def test_the_document_carries_the_scene_record_when_the_observation_supplies_one
 
     observed = observation()
     port, _events = fixture()
-    assert "planning_scene_observation" not in port._search_evidence(observed, request())
+    # F12 (CP-2115): the record travels inside `physical_observation`, not as a sibling key
+    assert "planning_scene_observation" not in port._search_evidence(observed, request())["physical_observation"]
     record = {"scene_revision": 1, "attached_objects": [],
               "world_object_ids": ["table", "pedestal", "plastic_cup"], "is_diff": False,
               "sim_time_s": observed.physical_readback["world"].simulation_time_s,
               "source": "ros_task_scene_port"}
     carried = replace(observed, planning_scene_observation=record)
-    assert port._search_evidence(carried, request())["planning_scene_observation"] == record
+    document = port._search_evidence(carried, request())
+    assert document["physical_observation"]["planning_scene_observation"] == record
+    assert "planning_scene_observation" not in document
