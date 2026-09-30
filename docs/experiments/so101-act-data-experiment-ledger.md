@@ -38556,3 +38556,24 @@ src/so101_demo_py/test/test_parallel_batch_cli.py::test_cli_never_unlinks_or_rep
 That one is recorded as needing inspection rather than folded into the 192 or waved off - it is the only id where the two
 installs disagree in their *message*, and after three measurement bugs in this thread the correct posture toward a single
 anomalous row is to read it, not to classify it.
+
+## HS-156 — The one "different" case differs only by install path, and the teleop gap is being closed
+
+Inspecting the single `BOTH_FAIL_DIFF_TB` row instead of classifying it:
+
+```
+test_act_task8_calibration_aggregator.py::test_offline_report_cli_p...
+  base(1): '/tmp/so101-debug-.../base-ab-install/so101_demo_py/lib/python3.12/...'
+  over(1): '/data/work/so101-evidence/.../head-task2-overlay/install/...'
+```
+
+The two messages differ **only in the install path they embed** - which is exactly the difference the experiment creates on
+purpose. So the underlying cause is the same, and the honest count is that **all 193 comparable ids fail with the same
+cause under the base code**, with the comparison needing a path normalisation to see it.
+
+That normalisation is not cosmetic: it is the difference between "1 anomalous row" and "0 anomalous rows", and it changes
+what the artefact means. Recording it here rather than silently stripping paths in the parser, because a reviewer reading
+the raw logs will see the paths and should be told why they differ.
+
+**Also started:** a base install of `so101_teleop` in the base worktree, which will let the 38 `NO_BASE_INSTALL` ids be
+compared the same way instead of being excluded - the gap I labelled honestly in HS-155 and can now actually close.
