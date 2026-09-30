@@ -36047,3 +36047,17 @@ So the fix is to narrow `workspace_x_m` / `workspace_y_m` to positions where a r
 which is a horizontal question, and z stays at 0.165. Two of my earlier readings of this mechanism were wrong
 (first "inside the table footprint", then "occluded by the support"); the code and the validator's own message
 settled it, and both wrong readings are left on the record rather than quietly removed.
+
+### HS-046 fifth addendum — the mechanism is confirmed, and narrowing works
+
+Narrowing `workspace_x_m` from `[-0.15, 0.12]` to `[-0.12, 0.12]` reduced the embedded count from **42 to 33**,
+with the new first sample at the new boundary `[-0.12, -0.24, 0.165]`. That confirms the mechanism read from
+the code (`target_clear_of_support` places a cup at the candidate point and reports a contact involving the cup
+body) and shows the fix direction: the declared workspace must exclude the horizontal positions occupied by
+scene objects - the `neutral_block` at `pos="-0.17 -0.18 0.155"` with half-sizes `0.025 0.035 0.035` is one of
+them, and its x extent `[-0.195, -0.145]` is exactly what the first narrowing removed.
+
+The remaining 33 samples still contact something at the new boundaries, so the next step is a systematic sweep
+rather than another single guess: probe x and y in steps, using the validator's own embedded count as the
+objective (42 -> 33 already shows the count is a usable signal), and keep the window that a resting cup is
+genuinely free in. The contract edit stays uncommitted until the seal passes, and the ledger says so.
