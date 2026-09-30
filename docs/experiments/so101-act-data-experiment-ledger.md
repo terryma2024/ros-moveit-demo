@@ -42863,3 +42863,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   missing-stream/fabricated-endpoint negatives.
 - **State.** **F14, F3 and F1 closed**; **F11 in progress** (first cut landed); F5/F12/F13 open; the goal is paused.
   HEAD `76e36a54d`; twenty-three gates green.
+
+
+## CP-2266 — F11's second cut: the endpoint check works, and its refusal names the fixture to align
+
+- **What I wrote** (`episode_audit.py`): `_window_matches_observed` gained an optional `physics_times` parameter
+  (empty by default, so nothing else changes) and, when supplied, refuses a window whose `physics_end_s` exceeds the
+  last physics row's instant or whose `first_command_s` precedes the first one — the verdict's "compare the claimed
+  endpoints with the histories they summarise". The seal at line 1020 now supplies the physics times, read the same
+  way the rest of that readback reads them (no optional groups — my first attempt invented `_PHYSICS_ALTERNATIVES`,
+  which does not exist, and the error said so by name).
+- **What its own refusal proved**: with the check in place,
+  `test_readback_reapplies_the_formal_coverage_gate` failed with **`AUDIT_WINDOW_INVALID`** instead of its expected
+  `AUDIT_FORMAL_COVERAGE_INCOMPLETE` — i.e. the relabelled-coverage fixture's window endpoints do not agree with its
+  physics history, which is exactly the class of dishonesty the check exists to catch. The fixture needs one value
+  aligned (its `physics_end_s`/`first_command_s` against the rows it seals), and the grep for those fields in the test
+  file is printed alongside this entry.
+- **Set aside rather than half-landed**; the audit suite is green again (72 passed).
+- **State.** **F14, F3 and F1 closed**; **F11 first cut landed, second cut written and staged with its fixture named**;
+  F5/F12/F13 open; the goal is paused. HEAD `e10cf5c5d`; twenty-three gates green.
