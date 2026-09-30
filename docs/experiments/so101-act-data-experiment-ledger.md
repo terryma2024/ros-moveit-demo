@@ -40356,3 +40356,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   done** (shared predicate CP-2146, lifecycle named CP-2148) with the tightening next, F1/F11 open; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `2161cb139`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2149 — F5's tightening is one fixture family away, and that family is three sites
+
+- **What I tried**: `_formal_coverage_ok` now also requires a `phase_complete` for every entry of
+  `FORMAL_PHASES`. Result: **7 failed / 142 passed**, every failure in the formal fixture family — precisely the
+  retained evidence F5 quoted (a formal seal carrying only `phase_complete(SEARCH)` plus `release`).
+- **The fix's size, read from the grep**: three formal sites emit that single phase — `test_act_episode_audit.py`
+  lines **738**, **805** and **1067** (the last inside `_self_consistent_formal`) — each a `for kind, payload in
+  ((...))` tuple that needs its `phase_complete` entry turned into all nine. One site covers
+  `test_a_self_consistent_formal_window_seals` and the five `overrides` cases; the other two are the coverage-gate
+  controls.
+- **Why this round ends reverted**: three literal expansions in fixtures I have not printed in full is exactly the
+  size that has cost this session five rounds (CP-2125/2126/2129/2131/2140), and the rule I set at CP-2145 was to
+  stop past three failures rather than leave the tree red. Reverted; audit and recorder suites verified green.
+- **The next pass, in order**: print the three sites' full statements, expand each site's single `phase_complete`
+  into one per `FORMAL_PHASES` entry (keeping each site's identity/lease and the F3 tie satisfied — one step, named
+  by the release the sites already emit), re-apply the predicate tightening, and run the four suites. Both halves
+  are now fully specified; this is the last mechanical step of F5's lifecycle requirement.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 three of four
+  steps done** with this fixture expansion left, F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**;
+  HEAD `9139ecbb2`; no push, no evidence deletion, no hardware, no second stack.
