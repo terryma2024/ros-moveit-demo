@@ -40590,3 +40590,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 six of seven steps
   done**, F1/F11 open; targeted gates **430 / 201 / 201 / 201 passed in 1.37s passed**; HEAD `5c0b564c2`; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2160 — F5's last requirement: the ratified observations live inside a physics row
+
+- **Read this round** (`episode_audit.py:349-358`, inside the observation typing): the ratified records are keys
+  **of a physics row's `observation`** — `planning_scene_observation` must satisfy `_scene_observation_ok`
+  (line 193) **and** carry `sim_time_s` equal to its parent observation's, while `controller_feedback` must be a
+  **non-empty list** whose every entry satisfies `_feedback_ok` (line 208) and joins by the same instant. So the
+  join is by the parent's own clock and needs no extra field, exactly as the A.1 decision describes.
+- **The clause F5's last step needs**: require that the formal stream contains at least one physics row whose
+  observation carries **both** records — the scene record and the feedback list — which is checkable over the rows
+  the predicate already reads.
+- **The fixture recipe to land with it**: the three **complete** writers (743, 817, 1086) add both keys to one of
+  their physics rows, and the `partial` control stays without them. The exact key sets for the two records are in
+  `_scene_observation_ok` (line 193) and `_feedback_ok` (line 208) — the one read that remains before the patch,
+  so the payloads are copied rather than invented (the lesson of CP-2157).
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 six of seven steps
+  done** with this one's shape and site set read, F1/F11 open; targeted gates **430 / 201 / 201 / 201 passed**;
+  HEAD `ef760a4a5`; no push, no evidence deletion, no hardware, no second stack.
