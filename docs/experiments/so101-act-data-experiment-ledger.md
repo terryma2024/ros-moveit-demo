@@ -36746,3 +36746,25 @@ a head-camera or head-search test, all of them in the unified-bridge and task 8 
 modify except for mounting the head-camera router in `unified/app.py`. That last point is precisely the kind of
 "adjacent, so probably fine" reasoning that hid the task 8 contract regression (HS-071), so the honest statement is:
 **unclassified**, with the next step being a single-file A/B against the commit before the router was mounted.
+
+## HS-081 — A/B clears my app.py change, and the teleop failures are flaky (round 440)
+
+Ran the same file against the current `unified/app.py` and against its version from before the head-camera router
+was mounted (`982ad3dd9`):
+
+```
+--- current app.py ---      7 passed in 14.82 s
+--- pre-router app.py ---   7 passed in 14.90 s
+```
+
+Both pass, so **my change is not the cause** of the 34 teleop failures. Note also that this run took 14.8 s where
+the earlier failing run of the same file took 4.07 s - the fast run was fast because the bridge child exited early.
+
+**And the failures are flaky:** the same file, run the same way in a similarly short scratch, failed 7/7 twenty
+minutes earlier. So the honest classification for the teleop set is
+**deterministic within a run, not reproducible across runs**: environment-sensitive tests in the unified-bridge
+and task 8 families that this work did not modify, and whose failures do not follow from the change under test.
+Calling them "environmental" is supported; calling them "resolved" is not, and I am not doing that.
+
+The A/B is the check that mattered: it is the same technique that convicted my contract regression, and here it
+cleared `app.py`.
