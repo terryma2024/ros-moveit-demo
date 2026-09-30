@@ -39404,3 +39404,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the verifier's
   three increments, the evidence-port repair and the positive test's first half plus its row step landed. HEAD
   `5bfd7ff32`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2107 — The manifest's exact shape, and the positive test reduced to one write
+
+- **Read from `require_campaign_cases`** (`task8_live_evidence.py:379-391`): the frozen manifest declares
+  `prefix_cases` (nine ids in phase order) and `full_cases` (five ids), the two lists together being the ordered
+  fourteen-case list a canonical run must execute, every id unique. That is the last unknown the positive test had.
+- **The complete recipe, therefore, in one place**:
+  1. `ValidInputs`-style artifacts, but with a manifest that also carries `prefix_cases` and `full_cases` (keeping
+     the fields the preparation path needs), prepared with `prepare_task8_bundle` and verified back so the test
+     holds the bundle's identities and manifest document digest (proved in CP-2104).
+  2. Fourteen rows via `case_row_to_journal_row` — nine `phase_prefix-0N` with an empty `live_evidence_path` and
+     five `full-0N` with a real artifact — each written as `case_root/<case_id>/journal.json`, with per-case
+     evidence and receipt bytes so the digests are distinct (CP-2105).
+  3. A campaign result with `status: "PASSED"`, `prefix_count: 9`, `consecutive_full_count: 5` and
+     `case_journal_sha256` equal to those files' digests in order, then a `QUALIFIED` document whose
+     `live_campaign` block names the case root and those digests and the receipt's digest.
+  4. Assert `verify_w8_qualification(path, {"preparation_receipt_path": str(receipt), "manifest_path":
+     str(bundle.manifest)})` returns `True`; a one-variable mutation (a journal edited after sealing) must refuse
+     with `W8_QUALIFICATION_EVIDENCE_MISMATCH`.
+- **Why this is a note and not a commit**: it is a single write of roughly forty lines across four coupled pieces,
+  and this session's remaining context has been failing at exactly that size. Every part of it is now read,
+  proved or recorded, so it is one pass for an executioner with room to run the suite afterwards.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `41b933b25`;
+  no push, no evidence deletion, no hardware, no second stack.
