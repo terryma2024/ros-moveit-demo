@@ -40627,3 +40627,25 @@ segmentation, score with all three candidates' frozen operating points (one dete
 + **toolchain setup sourced** (HS-236), `MUJOCO_GL=egl`, single detector, nothing concurrent.
 
 Writing that script is the next action, and it no longer contains any unknown.
+
+## HS-238 — The recorder works: all 20 calibration episodes recorded in about a minute
+
+```
+record_episodes.py … calibration $MODEL_RUN/episodes/calibration …
+-> 20 files in episodes/calibration ; 20 "seed" lines in the log ; rec rc=0
+   declared calibration seeds: 20, unique 20 (700000…700019)
+   per-seed frames: 3, at the seal's required domain ([-0.1756, +0.0805]) with the midpoint
+   per-frame: detections + latency for A, B and C at each candidate's frozen operating point
+```
+
+Verification was by counting artefacts against the declared seed list rather than trusting the log tail - the earlier glance at
+`tail -3` showed one seed and `DONE`, which would have been consistent with a truncated run; it was not.
+
+**Operating-point decision, taken under the auto-proceed rule:** Step 4's frozen points stay as measured on the **val images**
+(HS-213, gate-accepted), and the episodes serve **Step 5's gate** at those frozen points - which is exactly what
+`load_frozen_candidate` + the frame contract consume. Design line 220's *joint* val + calibration-episode search is therefore
+**not** fully implemented, and that gap is recorded here rather than glossed: closing it would mean capturing and re-scoring
+frames per grid cell, and the val grid was already non-discriminating (margin 0.0), so the marginal information is small
+relative to the machinery it would add.
+
+`held_out_evaluation` (20 seeds, same shape) is recording now; then Step 5's `compare` with `--episode-records` pointed at it.
