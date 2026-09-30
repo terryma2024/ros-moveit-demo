@@ -38436,3 +38436,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `21b0809a4`;
   consolidated gate `logs/task3-gate16.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2062 — Task 3: the port's planning gate is stated, not derived (option (a) from CP-2061)
+
+- **What changed.** The CP-2058 derivation is removed from `_search_evidence` and replaced by a note that
+  records why: `validate_search_result` refuses any result that did not lock the target, so a derivation there
+  would report `True` unconditionally — the decorated literal CP-2054 refuses. The document now carries the
+  explicit value with the note beside it, and the **boundary's** `planning_ok` remains the derived one that
+  reports the path proof the search establishes. This implements option (a) as announced, keeping the
+  "state it rather than manufacture it" standard the reviewer set for `scene_revision`.
+- **Evidence.** `logs/task3-note.run` rc=0 across the search-port, three task8 phase and release-boundary
+  suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile proof.
+- **Where that leaves the count.** Eleven gates on the live path are derived from observations; the SEARCH
+  document's `planning_ok` is explicitly **not** one of them, with the reason in the code. The two camera
+  gates' freshness and `mujoco_ok`'s truncation rule were confirmed by the CP-2061 experiment, whose controls
+  I could not land in that round's budget.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c21bcc329`;
+  consolidated gate `logs/task3-gate16.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
