@@ -42473,3 +42473,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Tree state**: the probe was reverted immediately; nothing of mine is dirty.
 - **State.** **F14 closed**; F3(b) landed; F3(a) correct with its control one targeted edit away; F1/F5/F11/F12/F13
   open; the goal is paused. HEAD `ba186694c`; sixteen gates green.
+
+
+## CP-2246 — F3(a)'s third attempt: same refusal, so the probe must run before any further edit
+
+- **What I tried**: rule (a) plus the `release` event appended at the **correct** site — line 1092, the relabel
+  block's own `events_lines` (CP-2245's fix, applied by line number rather than by first occurrence). Result:
+  the same `AUDIT_EVENT_INVALID` in `test_readback_reapplies_the_formal_coverage_gate`, so either the append still
+  did not reach that stream or a further rule now refuses it.
+- **The next step, and it is one line**: re-run the CP-2245 probe (print `named` from the module's tie block) under
+  this patch. `{1: True}` means the append landed and something else refuses; `{1: False}` means the site is still
+  wrong. Reasoning about which of five rules fires first has now cost three rounds, and the probe answered the
+  previous version of this question in a single run — so it runs first, before any edit.
+- **Reverted**; the audit suite is green (206 passed) and nothing of mine is dirty.
+- **State.** **F14 closed**; F3(b) landed; F3(a) has a named block, a named probe and a targeted edit, three
+  attempts reverted; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `7b64295c7`; sixteen gates green.
