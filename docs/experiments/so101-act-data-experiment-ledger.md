@@ -39230,3 +39230,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Items 0-2 completed; item 3 implementation-complete with its checkpoint pending; item 4 in progress
   with three increments landed. HEAD `85aab0497`; targeted gate `logs/task3-final.run` **430 passed**; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-2099 — The four failing tests use a different port: the `_evidence_port` factory
+
+- **Read from the tests.** `test_evidence_port_factory_seals_through_its_driver` (and its three siblings) build
+  their port with a module-level `_evidence_port(driver)` factory and drive it with **`so101_demo.act.task8`'s
+  `Task8Runner`** — not with `pick_place_runner.PickPlaceRunner`, whose `_physics`/`_missing_raw` I had been reading
+  and whose semantics I assumed. The three failed attempts (CP-2091/2092/2096) each patched the **inline**
+  `_EvidencePort` classes belonging to *other* tests in that file (lines 353 and 456), which the four failing tests
+  never instantiate.
+- **So the supply belongs in the factory's own port**: `_evidence_port(driver)` is the single place all four tests
+  get their port from, and wrapping the phase evidence **there** — not in the two inline classes — is the edit that
+  was actually needed. Before writing it, confirm against `act/task8.py`'s `Task8Runner` which evidence object its
+  raw check inspects (it may differ from the `pick_place_runner` one I read), because that is the oracle the three
+  failures never consulted.
+- **Why this took three attempts, stated plainly**: I read the *runner* that shares the file's vocabulary instead of
+  the runner the tests actually import, then patched by position in classes the tests never use. The lesson the
+  ledger now records: **read the test's imports and the factory it calls before touching a fixture**.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `ba6411e27`;
+  no push, no evidence deletion, no hardware, no second stack.
