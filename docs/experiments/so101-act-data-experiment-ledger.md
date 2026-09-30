@@ -38507,3 +38507,25 @@ the same confound HS-137 caught in the first A/B, now in a script instead of a o
 
 The pattern this session keeps producing, now for the third time, is that the correction is the same each time: hold the
 environment fixed, vary one thing, and keep the actual output rather than a summary of it.
+
+## HS-154 — The corrected run's own format is unreliable: messages contain tabs, so the columns shift
+
+Reclassifying `perid-ab2/perid2.tsv` offline with whitespace stripping still reported 24 `BOTH_FAIL_DIFF_TB`, while
+sampling the same rows with `cut -f4,5` printed what looked like identical values (`FIELDS_INVALID` on both sides). Those
+two readings cannot both be right, and the explanation is in the writer: the script emits tab-separated fields with
+`echo -e`, and **error messages can contain tabs**, so the columns shift for exactly the rows whose messages are long or
+structured - which is most of them.
+
+Consequence, stated plainly: **the corrected run has not produced a trustworthy per-id classification either.** HS-153
+retracted the first run for a confounded environment; this entry retracts the second for an unreliable encoding, before it
+is used to claim anything. Neither "zero code-dependent" nor "mostly different causes" is supported.
+
+**The fix is one line of format, not another environment:** emit a delimiter that cannot occur in the payload (a `|`
+separator with messages whitespace-collapsed, or one JSON object per line), and re-derive the table from the raw logs
+rather than from a shell variable. That belongs in the next run, along with the appending and exit codes HS-153 already
+fixed.
+
+Three measurement bugs in this one thread now - replaced PYTHONPATH, count-as-cause, and a colliding delimiter - each
+caught by a reviewer reading the artefact rather than the summary. The lesson is not subtle and it is not about
+diligence: **the artefact has to be checked as an artefact**, by parsing it back and seeing whether the parse agrees with
+what the writer meant.
