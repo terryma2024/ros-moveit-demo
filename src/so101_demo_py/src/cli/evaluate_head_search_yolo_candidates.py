@@ -392,7 +392,48 @@ def main(arguments: list[str] | None = None) -> int:
                     ),
                 )
             )
-        verdict = choose_candidate(*evaluations)
+        try:
+            verdict = choose_candidate(*evaluations)
+        except Exception as error:  # the retention guard refuses instead of choosing
+            if "RETENTION_LOST" not in str(error):
+                raise
+            # HS-251/252/255: record the refusal as a decision with evidence, then re-raise so the
+            # exit status still reports failure. Nothing is promoted; the margin is untouched.
+            from so101_demo.perception_benchmark.head_search_models import TASK_RETENTION_MARGIN
+
+            target = Path(parsed.output)
+            target.mkdir(parents=True, exist_ok=True)
+            comparison = {
+                "kind": "head-search-model-comparison",
+                "episode_split": parsed.episode_split,
+                "candidates": {
+                    item.candidate_id: {
+                        "static_image_metrics": dict(item.static_image_metrics),
+                        "held_out_episode_metrics": dict(item.held_out_episode_metrics),
+                        "latency_ms_per_frame": item.latency_ms_per_frame,
+                        "no_cup_false_candidates": item.no_cup_false_candidates,
+                    }
+                    for item in evaluations
+                },
+                "retention": {"margin": TASK_RETENTION_MARGIN, "refusal": str(error)},
+            }
+            (target / "model-comparison.json").write_text(
+                json.dumps(comparison, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            verdict_document = {
+                "kind": "head-search-model-selection-verdict",
+                "selection": None,
+                "retained_model": "C",
+                "reason": ("no supportable selection: the retained mixed model gives up more than the "
+                           "retention margin on the task domain, so the frozen evidence supports "
+                           "neither keeping it nor promoting a challenger"),
+                "retention": {"margin": TASK_RETENTION_MARGIN, "refusal": str(error)},
+                "promoted": False,
+            }
+            (target / "model-selection-verdict.json").write_text(
+                json.dumps(verdict_document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            raise
         # the paired scene-level delta: each challenger against the retained model, per episode domain
         scenes: dict[str, object] = {}
         static_intervals: dict[str, tuple[float, float]] = {}
