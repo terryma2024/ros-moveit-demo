@@ -35695,3 +35695,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL ×2, fix pass continuing:
   T3-F6 closed, F1/F2/F3/F4/F5/F7 residues open); items 4-8 pending.** HEAD `cadb9bc9e`; 39-path dirty
   baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1950 — Task 3 fix pass, sixth instalment: both self-inflicted regressions closed (T3-F7, T3-F4)
+
+- **T3-F7 fixed.** The runner now advances its event identity when the release epoch advances, so every
+  post-release `phase_complete`, `run_complete` and `run_aborted` event carries the epoch the controller
+  actually entered (2 in the existing fake port, against 1 before RELEASE). While fixing it I found a
+  second defect of the same family: the emitter passed the **live** identity dict, so an audit that
+  keeps the record in memory would see every earlier event's identity mutate to the final epoch. Events
+  now carry `dict(self._event_identity)`, a snapshot of the identity they were emitted under, and the new
+  control asserts pre-release events keep epoch 1 and post-release events carry epoch 2.
+- **T3-F4 fixed.** A v2 seal can no longer be "verified" without its evidence:
+  `verify_episode_seal(path)` on a v2 seal now refuses with `EPISODE_SEAL_AUDIT_INCOMPLETE`, and the
+  same controlled refusal covers supplying only `scope` or only `audit_manifest` (previously the latter
+  failed through `Path(None)`). When both artifacts are supplied the digests are recomputed and the
+  audit is re-verified end to end. `finish()` itself now performs that full check with the artifacts it
+  sealed, so a recorder can never complete a v2 seal that its own verifier would refuse.
+- **Evidence.** `logs/task3-fix6.run` rc=0: **106 passed** across `test_act_release_boundary.py`,
+  `test_act_recorder.py`, `test_act_episode_audit.py`, `test_act_continuous_capture.py`,
+  `test_act_supervisor.py` and `test_act_acquisition_identity.py`, with its own NVMe scratch and a
+  non-empty tempfile proof.
+- **Order of the remaining residuals.** (1) T3-F2's causality/cadence/revocation semantics with future
+  and stale frames, irregular times, accepted-then-revoked and late revocation; (2) T3-F3's readback
+  parity with the three checksum-consistent counterexamples as tests; (3) T3-F1's metadata admission
+  (collection-scope closed fields/modes, full identity, window contract), the required event kinds with
+  typed payload validators, and the raw observer-reference and physics payloads — which must be
+  implemented together and never reconstructed from phase booleans; (4) T3-F5's gating, which depends on
+  (3) being real. Then a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL ×2; T3-F6, T3-F7 and
+  T3-F4 closed, F1/F2/F3/F5 residues open); items 4-8 pending.** HEAD `993fabde9`; 39-path dirty baseline
+  untouched; no push, no evidence deletion, no hardware, no second stack.

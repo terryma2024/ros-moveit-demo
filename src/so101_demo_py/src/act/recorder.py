@@ -307,7 +307,7 @@ class EpisodeRecorder:
                 os.fsync(root_fd)
             finally:
                 os.close(root_fd)
-            verify_episode_seal(path)
+            verify_episode_seal(path, audit_manifest=audit_manifest, scope=scope)
             self._closed = True
             return path
         except (OSError, ValueError, TypeError) as error:
@@ -364,7 +364,11 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
         # a v2 seal names the raw audit and the scope it was collected under
         sha256(document["audit_manifest_sha256"])
         sha256(document["scope_sha256"])
-        if audit_manifest is not None:
+        if audit_manifest is None or scope is None:
+            # a v2 seal is only verified when both artifacts are resolved; a caller that cannot supply
+            # them must not be able to mistake this call for verified evidence
+            raise ValueError("EPISODE_SEAL_AUDIT_INCOMPLETE")
+        if True:
             audit_manifest, scope = Path(audit_manifest), Path(scope)
             if (not audit_manifest.is_file() or not scope.is_file()):
                 raise ValueError("EPISODE_SEAL_AUDIT_INVALID")

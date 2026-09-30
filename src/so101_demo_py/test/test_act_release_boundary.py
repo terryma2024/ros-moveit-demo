@@ -258,3 +258,18 @@ def test_a_port_that_cannot_observe_physics_still_runs_and_says_so():
     result = PickPlaceRunner(port, audit=audit).run(request())
     assert result["status"] == "PASSED"
     assert audit.physics == []
+
+
+def test_post_release_events_carry_the_release_epoch():
+    """Events emitted after RELEASE must not keep the pre-release epoch (T3-F7)."""
+
+    audit = RecordingAudit()
+    port = FakePort()
+    PickPlaceRunner(port, audit=audit).run(request())
+    epochs = [(event["kind"], event["payload"].get("phase"), event["identity"]["release_epoch"])
+              for event in audit.events]
+    assert all(epoch == 1 for _, phase, epoch in epochs if phase in ("SEARCH", "CLOSE", "ALIGN"))
+    for _, phase, epoch in epochs:
+        if phase in ("RELEASE", "FINAL_CHECK"):
+            assert epoch == 2
+    assert epochs[-1][0] == "run_complete" and epochs[-1][2] == 2

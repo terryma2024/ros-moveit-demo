@@ -251,11 +251,14 @@ def test_a_v2_seal_names_the_raw_audit_and_the_collection_scope(tmp_path):
     recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
                                attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
     path = recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
-    document = verify_episode_seal(path)
+    document = verify_episode_seal(path, audit_manifest=manifest, scope=scope)
     assert document["schema_version"] == 2
     assert (document["audit_manifest_sha256"]
             == hashlib.sha256(manifest.read_bytes()).hexdigest())
     assert document["scope_sha256"] == hashlib.sha256(scope.read_bytes()).hexdigest()
+    for incomplete in ({}, {"audit_manifest": manifest}, {"scope": scope}):
+        with pytest.raises(ValueError, match="EPISODE_SEAL_AUDIT_INCOMPLETE"):
+            verify_episode_seal(path, **incomplete)
     rechecked = verify_episode_seal(path, audit_manifest=manifest, scope=scope)
     assert rechecked == document
 

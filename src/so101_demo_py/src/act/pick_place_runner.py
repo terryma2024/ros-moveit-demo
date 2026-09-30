@@ -123,7 +123,9 @@ class PickPlaceRunner:
         # the event names the identity it belongs to and the monotonic instant it happened at; the
         # verified physics step lives in the kind's own payload instead of a generic detail string
         self.audit.append_source("events", {
-            "kind": kind, "identity": self._event_identity, "sim_time_s": None,
+            # a copy: the identity advances with the release epoch, and an event must keep the
+            # identity it was emitted under rather than following later mutations
+            "kind": kind, "identity": dict(self._event_identity), "sim_time_s": None,
             "monotonic_ns": int(self.clock_ns()) or 1,
             "payload": {"reason": detail, "physics_step": physics_step}
             if kind in ("run_complete", "run_aborted")
@@ -296,6 +298,9 @@ class PickPlaceRunner:
                     evidence = self.port.run_phase(phase, request)
                     if phase == "RELEASE":
                         release_epoch += 1
+                        # every event from here on belongs to the epoch the controller entered, so the
+                        # audit never mixes pre-release support evidence into post-release outcomes
+                        self._event_identity["release_epoch"] = release_epoch
                     latest_step = self._verify_phase(
                         phase, evidence, request, reset_epoch, release_epoch, latest_step,
                     )
