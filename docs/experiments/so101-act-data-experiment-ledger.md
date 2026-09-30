@@ -42506,3 +42506,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Tree state**: reverted immediately after the probe; nothing of mine is dirty and the audit suite is green.
 - **State.** **F14 closed**; F3(b) landed; F3(a) blocked by this per-row admission rather than by the rule it
   implements; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `4b716c2d6`; sixteen gates green.
+
+
+## CP-2248 — F3(a) landed: the initial epoch is the episode's own
+
+- **What landed** (`episode_audit.py`): when no previous event exists, the identity predicate compares the event's
+  release epoch with `episode_identity["release_epoch"]` — the field `_IDENTITY_REQUIRED` makes mandatory — falling
+  back to the two constants only for an identity that declares none. The relabelled-coverage control now models a
+  complete episode: a `phase_complete` and a `release` at the identity's epoch, the latter appended **at that
+  control's own site** (CP-2245's fix) and carrying **the next sequence number**.
+- **The diagnosis chain, worth keeping**: CP-2244's probe named the tie (1235) as the raiser, CP-2247's probe under
+  the corrected fixture moved the refusal to the per-row admission (1196) and proved the stream itself was right,
+  and reading that block showed the appended row had inherited the **first** row's `sequence` — a running counter a
+  copied dictionary cannot satisfy. Four attempts, but the last three each removed a candidate by execution rather
+  than by argument.
+- **Evidence.** `logs/task3-f3a.run` rc=0: **365 passed in 3.50s** across the audit, recorder, release-boundary, capture, task8,
+  qualification, W8, campaign-admission, store-commit and generic-artifact suites — the last of which is the file
+  F14's lesson added to every gate — under `pytest-xdist` with 8 workers, its own NVMe scratch and a tempfile proof.
+- **F3's remainder**: only **(c)** — the runner's event identity must carry the writer's admitted lease and it must
+  emit an actual `release` event at the release boundary, with the real-runner/formal-writer positive control the
+  verdict asks for.
+- **State.** **F14 closed**; F3 (a) and (b) landed; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `9cd9c4729`;
+  seventeen gates green.
