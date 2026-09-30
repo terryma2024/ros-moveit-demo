@@ -40682,3 +40682,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   record), then **F1** and **F11** — with **F12, F3 and F5 closed**.
 - **State.** HEAD `206650339`; targeted gates **430 / 201 / 201 / 201 / 246 passed in 2.36s passed**; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2165 — F1's plan, from the verdict's own anchors
+
+- **What F1 says, in two halves.** (a) **Registered physics never reaches the audit**: the registered step
+  contract uses `physics_step` while the audit's admitted fields (line 101) exclude it and its registered branch
+  requires `simulation_step` instead, so a complete registered sample fails admission; upstream of that, the
+  runner's flat `_raw()` (line 84) rejects the registered **session string**, **lists of contact dictionaries** and
+  the ratified nested records — and CP-2116 widened it only for the two named records. (b) **A.1 frames have no
+  production caller**: `broker.reference_frames(kind, when)` exists, but the production expert adapter
+  (`adapters/act/ros_expert.py:10`) still calls the compatibility `reference_state()`, and the tap and capture keep
+  only the four legacy raw keys, so the per-kind frames and their evaluated projection are never joined into the
+  common reference record.
+- **The verdict's required correction**: preserve and validate the registered source shape through **every**
+  forwarding boundary; wire the real per-kind frames into the common reference record; and test the real
+  adapter/tap/capture/writer/readback chain with full contacts and both observations. It also notes that counting
+  five arm names and one gripper name does not validate the **registered joint names/order** or a canonical
+  six-dimension map — a check my CP-2119 dimension fix deliberately left to the names' length.
+- **The first cut I would take, in order**: (1) the admission gap — admit `physics_step` in
+  `_PHYSICS_OBSERVATION_FIELDS` (line 101) and make the registered branch (line 322) accept the registered step
+  name, with a sample-shaped fixture; (2) the forwarding path — widen `_raw` (line 84) for the registered session
+  string, contact-dictionary lists and the ratified records, which is the boundary F12's carriers travel through;
+  (3) the A.1 wiring — the real frames through the expert adapter/tap/capture into the reference row, with a chain
+  test. Steps (1) and (2) are single-module and can be landed with their fixtures the way F5's were; step (3)
+  crosses `adapters/` and is the larger half.
+- **Other sources for the same anchors**: `act/contact_live.py:25`, `act/expert.py:33` and
+  `adapters/act/ros_expert.py:10` are the registered sample, the expert and its ROS adapter — the three places a
+  registered-shaped fixture needs to flow through before the audit sees it.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan's ruling on `sim_time_s`);
+  **F1 planned here**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 passed**; HEAD `6d2220159`; no push,
+  no evidence deletion, no hardware, no second stack.
