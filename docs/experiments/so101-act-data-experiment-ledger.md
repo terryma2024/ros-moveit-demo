@@ -40952,3 +40952,32 @@ measurement but a decision about what Task 13 consumes - and the two coherent re
 
 I am recording the first as the default under the auto-proceed rule (it is the design's own conclusion rather than a new
 experiment) and flagging that the second is available and materially more expensive.
+
+## HS-250 — Task 12 Step 6: the model decision checkpoint, and Task 13's input
+
+**Decision of record: the pinned baseline A is retained; neither challenger is promoted.**
+
+Evidence, in the order it was produced:
+
+| item | result |
+| --- | --- |
+| Step 1 inputs | pinned A weights verified by sha256 (`f281d252…`), `hf auth` gate passing, GPU recorded |
+| Step 2 dataset | 1200 head images, `generate rc=0`, `verify rc=0`, seal `7d963fdc…`, `SEED_DISJOINT_ONLY` |
+| Step 3 training | B and C trained serially `rc=0`, `device=cuda`, same frozen base, distinct weights, C at 800 head / 800 task per epoch |
+| Step 4 freeze | 18-cell val grid (margin 0.0) -> three `frozen-*.json`, accepted by the real `load_frozen_candidate` |
+| Step 5 gate | ran to completion; **refused**: `EVALUATION_TASK_RETENTION_LOST: the mixed model gives up 0.011 mask mAP on the task domain` against `TASK_RETENTION_MARGIN = 0.01` |
+| re-selection (HS-248/249) | rule declared **before** measuring, applied to both val domains: chosen cell **= C's existing point**, surfaces flat -> the refusal stands on the merits |
+
+**Task 12 is complete on the plan's terms**: every step executed, every measurement recorded, and the decision is the design's own
+retention verdict rather than an absence of one. What Task 12 does **not** hand over is a promoted challenger, because none
+qualified.
+
+**That leaves Task 13's stated input unmet, and a second, independent problem behind it.** Task 13 "consumes Task 12's selected
+candidate" - under the retention rule the selection is A, which is coherent - but Task 13's Step 1 runs
+`so101_head_search_calibration run`, and **that runtime's six phases are stubs** (HS-233: `RUN_SUCCEEDED` in 45 s producing a
+378-byte receipt and no measurements). So the 17 values the user is asked to approve **cannot currently be produced by the
+mechanism the plan names**. Before the approval pause is meaningful, that gap has to be resolved - either the phases get
+implemented, or the bundle comes from the config's existing values with the provenance stated plainly.
+
+Recorded here rather than discovered during the approval pause, because asking someone to approve seventeen numbers that no run
+produced would be the worst possible moment to mention it.
