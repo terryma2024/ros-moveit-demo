@@ -224,6 +224,38 @@ class RosBrokerDriver:
             if observer is not None:
                 observer.accept(kind,message,received_monotonic_s=received)
 
+    def reference_frames(self,kind,when):
+        """The ratified A.1 frame for one controller kind, evaluated for the instant `when`.
+
+        Only the publication basis is exposed here: the original message stays immutable beside the
+        value evaluated for `when`, and a kind whose reference arrived through an accepted interval
+        refuses rather than presenting interpolation as a publication. The interval basis belongs to
+        `reference_state`, which still owns that machinery.
+        """
+
+        with self._lock:
+            stored=self._references.get(kind)
+            names=self._reference_names.get(kind) if hasattr(self,'_reference_names') else None
+            sequence=(self._reference_sequences.get(kind)
+                      if hasattr(self,'_reference_sequences') else None)
+            if stored is None or names is None or sequence is None:
+                raise RuntimeError('REFERENCE_UNAVAILABLE')
+            values,velocities,received,stamp=stored
+            if not 0<=self.monotonic()-received<=self.max_age:
+                raise RuntimeError('REFERENCE_STALE')
+            if not 0<=stamp<=when:
+                # a publication after the requested instant cannot be evaluated for it
+                raise RuntimeError('REFERENCE_TIME_INVALID')
+            if self._reference_interval(kind) is not None:
+                raise RuntimeError('REFERENCE_EVALUATION_UNAVAILABLE')
+        return {'joint_names':names,'published_positions':values,
+                'published_velocities':velocities,'evaluated_positions':values,
+                'evaluated_velocities':velocities,
+                'evaluation':{'requested_sim_time_s':when,'basis':'published','goal_id':None,
+                              'accepted_sim_s':None,'revoked_sim_s':None},
+                'sim_stamp_ns':int(round(stamp*1e9)),'received_monotonic_ns':int(round(received*1e9)),
+                'observer_sequence':sequence}
+
     def recent_controller_references(self,kind):
         """Return the original fresh frames for one controller in this epoch."""
         with self._lock:

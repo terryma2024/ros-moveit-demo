@@ -37346,3 +37346,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   contract it must satisfy.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `04af9cf07`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2014 — Task 3: the broker exposes the ratified frame for the publication basis, and refuses the rest
+
+- **What landed, additively.** `RosBrokerDriver.reference_frames(kind, when)` returns the ratified A.1 frame
+  built from what the broker actually holds: the stored publication as `published_positions` /
+  `published_velocities`, the same values as `evaluated_positions` / `evaluated_velocities` (the publication
+  **is** the value for `when` when `when` is not beyond it), a per-kind `evaluation` with `basis:
+  "published"`, the per-kind joint names and sequence from CP-1987, and the source/receipt clocks as integer
+  nanoseconds. `reference_state` is untouched, so no live path changed behaviour.
+- **Two refusals keep it honest.** A frame is refused when the kind's reference arrived through an accepted
+  interval (`REFERENCE_EVALUATION_UNAVAILABLE`) — presenting interpolation as a publication is exactly what
+  the reviewer warned against — and when the publication is younger than the requested instant
+  (`REFERENCE_TIME_INVALID`), alongside the existing staleness and availability refusals.
+- **Evidence.** `logs/task3-fix55.run` rc=0: **68 passed in 1.39 s** across the observer, controller
+  reference, command-broker and neck suites under `pytest-xdist` with 8 workers, with its own NVMe scratch
+  and a non-empty tempfile proof; the new control builds a driver without `__init__`, the established pattern
+  in that file, and asserts both the frame's contents and the interval-basis refusal.
+- **What remains for A.1's broker hop.** The interval basis: `reference_state` still owns the accepted-interval
+  machinery, and a later pass must build per-kind `evaluated_*` values and each kind's `evaluation`
+  (`basis: "interval"`, `goal_id`, `accepted_sim_s`, `revoked_sim_s`) from those records, then let callers
+  switch from the fused projection to the per-kind frames.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f583ba984`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.

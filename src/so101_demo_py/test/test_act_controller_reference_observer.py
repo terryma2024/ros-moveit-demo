@@ -181,3 +181,27 @@ def test_the_observer_sequence_counts_publications_not_the_retained_buffer():
     observer.accept("arm", frame(2_100_000_000), received_monotonic_s=20.0)
     identity, rows = observer.recent("arm", now_monotonic_s=20.1, max_wall_age_s=1.0)
     assert rows[-1]["observer_sequence"] == 1
+
+
+def test_the_broker_exposes_a_ratified_frame_for_the_publication_basis():
+    """A.1: the publication stays immutable beside the value evaluated for the instant."""
+
+    import threading
+
+    driver = object.__new__(RosBrokerDriver)
+    driver._lock = threading.RLock()
+    driver.max_age = 0.2
+    driver.monotonic = lambda: 10.05
+    driver._references = {"arm": ((0.1, 0.2, 0.3, 0.4, 0.5), (0.0,) * 5, 10.0, 1.0)}
+    driver._reference_names = {"arm": ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex",
+                                       "wrist_roll")}
+    driver._reference_sequences = {"arm": 4}
+    driver._reference_interval = lambda kind: None
+    frame = driver.reference_frames("arm", 1.1)
+    assert frame["published_positions"] == frame["evaluated_positions"]
+    assert frame["evaluation"] == {"requested_sim_time_s": 1.1, "basis": "published",
+                                   "goal_id": None, "accepted_sim_s": None, "revoked_sim_s": None}
+    assert frame["observer_sequence"] == 4 and frame["sim_stamp_ns"] == 1_000_000_000
+    driver._reference_interval = lambda kind: [("goal-1", 1.0)]
+    with pytest.raises(RuntimeError, match="REFERENCE_EVALUATION_UNAVAILABLE"):
+        driver.reference_frames("arm", 1.1)
