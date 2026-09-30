@@ -38072,3 +38072,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4a1588916`;
   consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2044 — Task 3: the joint-feedback gate's three-way control, and open items stated once more
+
+- **What landed.** `_case` gained a `feedback` parameter (the two valid records by default, an off-instant pair
+  for `"stale"`, none when false) and a parametrised control asserts `document["joint_feedback_ok"]` is
+  `True`, `False` and `False` for present, absent and off-instant records. Together with CP-2036's scene-gate
+  control and the runner's `_EVIDENCE_GATES` rule, three of the boundary's gates now have both a derivation
+  and a control; only `controller_reference_ok` (and `planning_ok`) keep documented placeholder values there.
+- **Evidence.** `logs/task3-jf3.run` rc=0: **157 passed** across the motion-phases, close-execution, task8,
+  search-port, release-boundary, supervisor and audit suites under `pytest-xdist` with 8 workers, with its own
+  NVMe scratch and a non-empty tempfile proof.
+- **Open, in one place.** (a) `controller_reference_ok` at the boundary and the port document's two controller
+  gates — the port's fixtures are unknown to me, so that half needs a read before it is attempted.
+  (b) The full `planning_scene_observation` record's travel once the readback fills it. (c) T3-F11's
+  window-to-rows checks (CP-1997/CP-2001 recipes). (d) A fresh checkpoint after these land, which is what the
+  owner's "converge Task 3" choice points at.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `5e5d65580`;
+  consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
+  second stack.

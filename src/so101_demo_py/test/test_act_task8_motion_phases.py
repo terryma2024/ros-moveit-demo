@@ -27,7 +27,7 @@ from so101_demo.adapters.act.pick_place_search_boundary import (  # noqa: E402
 
 
 def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=True, with_template=True,
-          with_duration=True, receipt=True):
+          with_duration=True, receipt=True, feedback=True):
     screen, prefix, goals, checks, sources, _driver, _owner, _events, _qpos, _qvel = physical_inputs()
     raw = sources.capture(prefix["attempt_id"], after_step=0)
     from so101_demo.core.simulation.types import ContactEvidence
@@ -83,8 +83,16 @@ def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=Tru
     if receipt is not None:
         boundary._planning_scene_receipt = SimpleNamespace(success=receipt, failure_code=None)
     # the ratified controller records for this instant (CP-2040), which the joint-feedback gate is derived from
-    boundary._controller_feedback = tuple(
-        {"controller": kind, "sim_time_s": world.simulation_time_s} for kind in ("arm", "gripper"))
+    if feedback is True:
+        boundary._controller_feedback = tuple(
+            {"controller": kind, "sim_time_s": world.simulation_time_s} for kind in ("arm", "gripper"))
+    elif feedback == "stale":
+        # a record from another instant is not a record for this phase
+        boundary._controller_feedback = tuple(
+            {"controller": kind, "sim_time_s": world.simulation_time_s - 1.0}
+            for kind in ("arm", "gripper"))
+    else:
+        boundary._controller_feedback = None
     boundary._gate_facts = PickPlaceSearchBoundary._gate_facts   # a staticmethod: assigned, not bound
     for name in ("sequence_phase", "sequence_facts", "_checked_aggregates", "_motion_facts", "_release_facts",
                  "_gripper_open_rad",
@@ -263,3 +271,12 @@ def test_the_scene_gate_is_derived_from_the_receipt(receipt, expected):
     boundary, ticket, _capture, template, duration = _case([], receipt=receipt)
     document = _call(boundary, ticket, template, duration)
     assert document["planning_scene_ok"] is expected
+
+
+@pytest.mark.parametrize("feedback,expected", [(True, True), (False, False), ("stale", False)])
+def test_the_joint_feedback_gate_is_derived_from_the_records(feedback, expected):
+    """CP-2043's evidence: present, absent and off-instant records decide the gate."""
+
+    boundary, ticket, _capture, template, duration = _case([], feedback=feedback)
+    document = _call(boundary, ticket, template, duration)
+    assert document["joint_feedback_ok"] is expected
