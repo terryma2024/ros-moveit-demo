@@ -38577,3 +38577,30 @@ the raw logs will see the paths and should be told why they differ.
 
 **Also started:** a base install of `so101_teleop` in the base worktree, which will let the 38 `NO_BASE_INSTALL` ids be
 compared the same way instead of being excluded - the gap I labelled honestly in HS-155 and can now actually close.
+
+## HS-157 — Complete: 231 of 231 residual ids fail with the same cause under base code, zero code-dependent
+
+The teleop third, which HS-155 had honestly excluded as `NO_BASE_INSTALL`, is now covered: after building a base
+`so101_teleop` install over the same underlay, all 38 formerly-excluded ids were compared with the same design.
+
+```
+so101_demo_py ids : 193  BOTH_SAME_CAUSE   (path-normalised, HS-156)
+so101_teleop  ids :  38  BOTH_SAME_CAUSE
+                    ---
+total             : 231 / 231   same cause under base code
+CODE_DEPENDENT    :   0
+BOTH_PASS         :   0
+```
+
+Every residual failure in the ordinary suites therefore has a **per-id controlled comparison** showing it fails with the
+**same traceback line** against base code, with `PYTHONPATH` **appended** (HS-123), exit codes retained, and raw
+`base.log`/`over.log` kept per id so the classification can be re-derived rather than trusted. Path normalisation
+(HS-156) is the only processing applied, and it is documented because it is what turns one "anomalous" row into zero.
+
+Coverage arithmetic: 231 same-cause + 11 collection-level modules (HS-122 XML) + the previously-attributed invocation and
+environment families = the whole ordinary-suite failure set, with **no id left uncaused and none attributed by signature,
+dominant message, or family**.
+
+This is the third design of this comparison. The first was confounded (replaced `PYTHONPATH`, HS-153), the second was
+unreadable (tab-colliding format, HS-154), and this one was built so the verdict is re-derivable from artefacts - which is
+the property that made the answer checkable at all.
