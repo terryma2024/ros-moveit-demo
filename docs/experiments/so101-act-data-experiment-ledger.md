@@ -36113,3 +36113,14 @@ runs' own manifests rather than asserted.
 
 That closes Task 11's GPU gate. Two entries ago this gate found genuine trainer defects (HS-049), so it is worth
 noting that the same gate now also *confirms* the property it was written for.
+
+## HS-051 — The smoke candidates are non-promotable in their own manifests (round 350)
+
+Both runs record `promotable: false` in their `run-manifest.json` (read from the files, not asserted):
+`run-b-task11d-*` and `run-c-task11-*`. That is Task 3's requirement - a smoke plan is permanently
+non-promotable - verified where it matters, in the artefact the later promotion step reads.
+
+The complementary half of this gate is the **refusal**: a promotion or comparison that is handed a
+non-promotable candidate must refuse by name rather than proceed. The next round exercises that half - the
+evaluator's own refusal path - so both sides of the rule are covered: the artefact says "not promotable", and
+the gate that consumes it says "then I will not".
