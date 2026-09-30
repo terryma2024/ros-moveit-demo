@@ -114,3 +114,29 @@ def test_the_three_statuses_are_the_declared_ones() -> None:
     )
     assert plan.not_found_status(reached_bound=True) == TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL
     assert plan.not_found_status(reached_bound=False) == TARGET_NOT_FOUND
+
+
+def test_the_smoke_entry_point_plans_against_a_real_seal(tmp_path) -> None:
+    import json
+
+    from so101_demo.cli.head_search_smoke import main
+
+    seal = {
+        "seal_sha256": "a" * 64,
+        "horizontal_fov_rad": 1.3121067481206794,
+        "lock_valid_neck_rad": list(SAFE),
+        "required_search_domain_rad": [-0.29145679447786704, 0.540419500270584],
+        "anchors": {"default": {"neck_rad": 0.1}},
+        "camera": {"coarse_step_rad": 0.3},
+    }
+    path = tmp_path / "seal.json"
+    path.write_text(json.dumps(seal), encoding="utf-8")
+
+    assert main(["--geometry-seal", str(path), "--anchor", "default",
+                 "--output", str(tmp_path / "run")]) == 0
+    report = json.loads((tmp_path / "run" / "head-search-plan-default.json").read_text())
+    assert report["coverage_complete"] is True and report["stop_count"] >= 2
+    # a domain the safe interval cannot cover is refused before any motion
+    seal["required_search_domain_rad"] = [-9.0, 9.0]
+    path.write_text(json.dumps(seal), encoding="utf-8")
+    assert main(["--geometry-seal", str(path), "--anchor", "default"]) == 2
