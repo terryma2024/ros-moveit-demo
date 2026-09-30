@@ -35110,6 +35110,32 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   command's, not the code's; the reviewer is expected to report it, and it should be read as a harness
   limitation rather than a Task 5 defect.
 
+## HS-025 — Task 5 implemented: bounded search, smoke entry and the reviewer's two findings fixed
+
+- **Code (commits `4cff65798`, `61df5f6f5`, `c86ae5bdc`, `a4009a423`, `3a143e6ae`):**
+  `src/act/head_search_domain.py` carries `bounded_search_stops`/`SearchStopPlan` (nearer endpoint first,
+  a single reversal, stops clamped to the safe interval), `coverage_is_complete` (stable FOV intervals,
+  never accumulated angle) and `independent_sweep_check` (a second derivation: dense point sampling plus
+  per-leg, reversal and step checks, returning a reason). `src/cli/head_search_smoke.py` plans against a
+  real geometry seal and is registered in `setup.py`; `HeadSearchController` walks the plan when its config
+  carries the sealed domain and keeps the old path otherwise. `test/test_act_head_search_domain.py`
+  (11 passed) was written RED first (`rc=2`, module absent); `test/test_act_search.py` passes 21 under
+  `head_test_render`.
+- **Review finding 1 (fixed, `4e0448b42`):** a required domain whose ends pass the safe neck interval was
+  refused even though a stop at the bound covers it with its field of view. Legs are now clamped to the
+  safe interval, coverage is still proven against the full domain, and a domain the field of view cannot
+  reach from the bound is still refused before motion.
+- **Review finding 2 (fixed, `5a5a7f452`):** the smoke invented a coarse step of a quarter field of view
+  when neither the seal nor a contract declared one. It now reads `coarse_step_candidate_rad`/
+  `coarse_step_rad` from the sealed contract (new `--contract`) or the seal, and otherwise refuses with
+  `HEAD_SEARCH_DOMAIN_INVALID`.
+- **Review harness note:** the first review pass reported 11 import failures in `test_act_search.py`
+  because the brief sourced the ROS overlay and then called `head_test`, which resets `PYTHONPATH`; the
+  correct helper is `head_test_render`, under which the file passes 21. That is a brief error, recorded so
+  the verdict is read correctly.
+- **Owed:** the two binding test files (`test_act_task8_search_binding.py`, `test_act_head_search_binding.py`)
+  cannot run until the underlay is rebuilt (Task 11), and the installed smoke belongs to Task 11.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
