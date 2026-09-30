@@ -53,8 +53,10 @@ class MoveItExpertActionTap:
                            for index in range(len(frames[kind]["evaluated_positions"]))]
                 packed = {"frames": frames, "projected_positions": projected,
                           "projection_map": mapping}
+        # the two raw shapes are exclusive alternatives (T3-F3): the ratified packed group replaces the
+        # legacy flat keys rather than travelling beside them, which the audit refuses as a mixture
         return {"requested_sim_time_s": target, "source": "CONTROLLER_REFERENCE",
-                "positions": validate_action(reference.get("positions")), **raw, **packed}
+                "positions": validate_action(reference.get("positions")), **(packed or raw)}
 
     def label(self, at_s: float) -> tuple[float, ...]:
         return self.reference(at_s)["positions"]
