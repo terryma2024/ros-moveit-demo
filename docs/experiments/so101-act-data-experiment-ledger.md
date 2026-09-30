@@ -37565,3 +37565,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `e63e32021`;
   targeted gate `logs/task3-xdist.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2023 — Task 6: the ACT-related failures are the overlay gap, verified rather than assumed
+
+- **Why this mattered.** CP-2022's wide run listed `test_act_task8_readback.py` (35),
+  `test_act_execution_stack_launch.py` (11) and `test_act_task8_measurement_client.py` (10 errors) among the
+  32 failing files, and those are this objective's own area — so the honest question was whether any of it is a
+  regression I introduced.
+- **Answer: no, and the cause is visible line by line.** Running the first two files alone gives **43 failed
+  and 3 errors with nothing passing**, and the log's first error shows the failure happens **at fixture setup**
+  in `ament_index_python.packages.get_package_prefix('so101_demo_py')` — the same
+  `PackageNotFoundError: "package 'so101_demo_py' not found, searching: ['/opt/ros/jazzy']"` CP-2002 recorded.
+  Every item in the file fails at setup, which is why the count is the file's whole test count and why not one
+  test reports a code-level assertion (`logs/task3-classify.run`).
+- **Consequence.** The Task 6 baseline from CP-2022 stands, and its ACT-related entries are overlay-dependent
+  too; after the fresh `--install-base` overlay is built, re-running that exact command is what will separate
+  real regressions from this environment gap. Until then, the trustworthy green figure for this objective's
+  boundary remains the targeted xdist gate (`logs/task3-xdist.run`, **410 passed**).
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4466e6352`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
