@@ -192,6 +192,7 @@ git commit -m "feat: define head search model identities"
 - Create: `src/so101_demo_py/src/cli/validate_head_camera_geometry.py`
 - Create: `src/so101_demo_py/config/act/head-camera-geometry-contract-v1.json`
 - Create: `src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml`
+- Create: `src/so101_demo_py/config/perception/head_camera_yolo_seg_smoke.yaml`
 - Create: `src/so101_demo_py/src/cli/verify_head_search_dataset.py`
 - Modify: `src/so101_demo_py/assets/mujoco/act/so101.xml`
 - Modify: `src/so101_demo_py/config/mujoco/camera_views.yaml`
@@ -233,7 +234,7 @@ expect_head_red 'in_frame|geometry|head_camera|balanced_scenarios' \
 
 - [ ] **Step 3: Repair and freeze the production camera, then implement the fail-closed dataset profile.**
 
-Make the minimal production-camera correction in `assets/mujoco/act/so101.xml` and its owned camera view so the real `head_camera` sees the target-support geometry; do not add a dataset-only camera. The validator renders the production scene headlessly over `default`, `left`, `forward`, both required-domain endpoints, the legal neck grid, target-support positions and occluder extrema. It rejects any `in_frame=0`, an unsafe swept segment, insufficient FOV-union coverage, camera/MJCF drift or a required domain outside the safe interval. The YAML freezes `camera_name: head_camera`, `640x480`, exact split counts, four scenario names, seed ranges, neck-yaw sampling and the accepted geometry-seal digest. `generate_dataset()` requires `--geometry-seal`, writes each sample's `scene_group_id`, camera intrinsics/extrinsics and raw instance-mask digest, and rejects missing CameraInfo, duplicate groups, split leakage, image/label count drift, non-head camera renders, a changed production-camera digest or an existing output root.
+Make the minimal production-camera correction in `assets/mujoco/act/so101.xml` and its owned camera view so the real `head_camera` sees the target-support geometry; do not add a dataset-only camera. The validator renders the production scene headlessly over `default`, `left`, `forward`, both required-domain endpoints, the legal neck grid, target-support positions and occluder extrema. It rejects any `in_frame=0`, an unsafe swept segment, insufficient FOV-union coverage, camera/MJCF drift or a required domain outside the safe interval. The production YAML freezes `camera_name: head_camera`, `640x480`, exact 800/200/200 split counts, four scenario names, seed ranges, neck-yaw sampling and the accepted geometry-seal digest. The separate smoke YAML uses the same production camera and geometry but exactly 32/8/8 images, carries `promotable: false`, and has disjoint smoke-only seeds. `generate_dataset()` requires `--geometry-seal`, writes each sample's `scene_group_id`, camera intrinsics/extrinsics and raw instance-mask digest, and rejects missing CameraInfo, duplicate groups, split leakage, image/label count drift, non-head camera renders, a changed production-camera digest or an existing output root. No smoke manifest may satisfy the production dataset contract.
 
 - [ ] **Step 4: Run GREEN and commit the formal programs.**
 
@@ -245,6 +246,7 @@ git add src/so101_demo_py/src/act/head_camera_geometry.py \
   src/so101_demo_py/src/cli/validate_head_camera_geometry.py \
   src/so101_demo_py/config/act/head-camera-geometry-contract-v1.json \
   src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml \
+  src/so101_demo_py/config/perception/head_camera_yolo_seg_smoke.yaml \
   src/so101_demo_py/src/cli/verify_head_search_dataset.py \
   src/so101_demo_py/assets/mujoco/act/so101.xml \
   src/so101_demo_py/config/mujoco/camera_views.yaml \
@@ -258,13 +260,14 @@ git diff --cached --check
 git commit -m "feat: generate sealed head camera datasets"
 ```
 
-The installed camera-validation and 12-image dataset smokes run once at Task 11's integration boundary. Task 2 is not accepted as runtime-complete until those retained artifacts are read back there.
+The installed camera-validation and 32/8/8 non-promotable dataset smokes run once at Task 11's integration boundary. Task 2 is not accepted as runtime-complete until those retained artifacts are read back there.
 
 ### Task 3: Make B/C training reproducible and domain-balanced
 
 **Files:**
 
 - Create: `src/so101_demo_py/config/perception/head_search_yolo_training.yaml`
+- Create: `src/so101_demo_py/config/perception/head_search_yolo_training_smoke.yaml`
 - Modify: `src/so101_demo_py/src/act/head_search_training.py`
 - Modify: `src/so101_demo_py/src/adapters/perception/yolo_training.py`
 - Modify: `src/so101_demo_py/src/cli/train_yolo_seg.py`
@@ -289,19 +292,26 @@ def test_b_and_c_use_the_same_two_domain_checkpoint_score():
                       build_candidate_plan("C", head=HEAD_MANIFEST, task=TASK_MANIFEST)):
         assert candidate.checkpoint_score == "0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95"
         assert candidate.validation_domains == ("head", "task")
+
+def test_smoke_candidate_is_balanced_but_never_promotable():
+    plan = build_candidate_plan("C", head=SMOKE_HEAD, task=TASK_MANIFEST,
+                                contract=SMOKE_CONTRACT)
+    assert plan.domain_counts == {"head": 32, "task": 32}
+    assert plan.validation_counts == {"head": 8, "task": 8}
+    assert plan.promotable is False
 ```
 
 - [ ] **Step 2: Run RED.**
 
 ```zsh
-expect_head_red 'mixed_candidate|two_domain_checkpoint_score|checkpoint_score' \
+expect_head_red 'mixed_candidate|two_domain_checkpoint_score|checkpoint_score|smoke_candidate_is_balanced' \
   src/so101_demo_py/test/test_yolo_training.py \
   src/so101_demo_py/test/test_yolo_training_container.py -q || exit 1
 ```
 
 - [ ] **Step 3: Implement exact candidate plans.**
 
-`train_yolo_seg --candidate B` trains only on head train, but receives both head val and task val. `--candidate C` trains on the full head/task union and writes a deterministic balanced sampling manifest. For both, checkpoint score is exactly `0.5 * head_val_mask_mAP50_95 + 0.5 * task_val_mask_mAP50_95`; non-finite/missing cells invalidate the epoch, and an exact score tie selects the earlier epoch. Both inherit A, share optimizer/augmentation/imgsz/batch/seed/max-epoch/early-stop settings, set `YOLO_OFFLINE=true`, require a CUDA device, and atomically write weight/config/dataset/runtime digests after a successful child exit. Existing output roots remain an error.
+`train_yolo_seg --candidate B` trains only on head train, but receives both head val and task val. `--candidate C` trains on the full head/task union and writes a deterministic balanced sampling manifest. For both, checkpoint score is exactly `0.5 * head_val_mask_mAP50_95 + 0.5 * task_val_mask_mAP50_95`; non-finite/missing cells invalidate the epoch, and an exact score tie selects the earlier epoch. Both inherit A, share optimizer/augmentation/imgsz/batch/seed/max-epoch/early-stop settings, set `YOLO_OFFLINE=true`, require a CUDA device, and atomically write weight/config/dataset/runtime digests after a successful child exit. Existing output roots remain an error. The separate smoke contract runs one epoch over exactly 32 head samples for B and 32 head + 32 deterministically sampled task samples for C, with 8 head + 8 task validation images. Every smoke candidate manifest is permanently `promotable: false`; registration, comparison, calibration and qualification reject it.
 
 - [ ] **Step 4: Run GREEN and commit the reproducible training entry.**
 
@@ -309,6 +319,7 @@ expect_head_red 'mixed_candidate|two_domain_checkpoint_score|checkpoint_score' \
 head_test src/so101_demo_py/test/test_yolo_training.py \
   src/so101_demo_py/test/test_yolo_training_container.py -q || exit 1
 git add src/so101_demo_py/config/perception/head_search_yolo_training.yaml \
+  src/so101_demo_py/config/perception/head_search_yolo_training_smoke.yaml \
   src/so101_demo_py/src/act/head_search_training.py \
   src/so101_demo_py/src/adapters/perception/yolo_training.py \
   src/so101_demo_py/src/cli/train_yolo_seg.py \
@@ -542,7 +553,7 @@ git commit -m "feat: calibrate head search parameters"
 - Modify: `src/so101_demo_py/src/adapters/act/task8_calibration_search_binding.py`
 - Modify: `src/so101_demo_py/setup.py`
 
-**Interfaces:** Produces `so101_head_search_calibration run`, `verify-promoted-config`, `qualify`, and `serve-teleop`. `run` emits the calibration bundle. `qualify` consumes a complete real-runtime evidence set and only then emits closed `head-search-qualification.json` and `head-search-qualified-report.json` with `HEAD_SEARCH_QUALIFIED`. `serve-teleop` is a blocking process owner used only after qualification: it starts one fresh production stack from the frozen runtime and head-only report, publishes a readiness receipt, and performs owned teardown on signal. It is not a resume path and is not one of the three qualification `FULL_RESTART` gates.
+**Interfaces:** Produces `so101_head_search_calibration run`, `verify-promoted-config`, `qualify`, and `serve-teleop`. `run` emits the calibration bundle. `qualify` consumes a complete real-runtime evidence set and only then emits closed `head-search-qualification.json` and `head-search-qualified-report.json` with `HEAD_SEARCH_QUALIFIED`. `serve-teleop` is a blocking process owner used only after qualification: it starts one fresh production stack from the frozen runtime and head-only report, publishes a closed connection/readiness descriptor, and performs owned teardown on signal. It is not a resume path and is not one of the three qualification `FULL_RESTART` gates.
 
 - [ ] **Step 1: Write RED tests for no-resume and Task 8 isolation.**
 
@@ -567,12 +578,20 @@ def test_serve_teleop_owns_teardown_and_cannot_resume(tmp_path):
     assert receipt["graph_clear"] is True
     with pytest.raises(ValueError, match="RUN_ROOT_ALREADY_EXISTS"):
         serve_teleop(qualified_report(), tmp_path / "fresh-run")
+
+def test_serve_teleop_connection_descriptor_binds_exact_owner(tmp_path):
+    connection = serve_ready_document(qualified_report(), tmp_path / "fresh-run")
+    assert connection["operation"] == "TELEOP_ACCEPTANCE"
+    assert connection["runtime_id"] == connection["head_search_runtime_id"]
+    assert connection["owner"]["pid"] > 0
+    assert connection["owner"]["started_ticks"] > 0
+    assert connection["bridge_socket_root"].startswith(str(tmp_path))
 ```
 
 - [ ] **Step 2: Run RED.**
 
 ```zsh
-expect_head_red 'no_resume|head_only_report|TASK8' \
+expect_head_red 'no_resume|head_only_report|serve_teleop|TASK8' \
   src/so101_demo_py/test/test_act_head_search_qualification.py \
   src/so101_demo_py/test/test_head_search_calibration_cli.py \
   src/so101_demo_py/test/test_act_task8_calibration_admission.py -q || exit 1
@@ -580,7 +599,7 @@ expect_head_red 'no_resume|head_only_report|TASK8' \
 
 - [ ] **Step 3: Implement the runner and closed bridge.**
 
-`run` accepts only a new, nonexistent run root. It writes `RUNNING` once, executes the fixed phase list, then atomically writes `SUCCEEDED` or `FAILED`; a pre-existing root is always refused. A single issuer creates operation-bound head-only admission for exactly `GEOMETRY_SMOKE`, `CALIBRATION_RUN`, `QUALIFICATION_RUN`, or `TELEOP_ACCEPTANCE`. The first three bind generation, production camera, safe interval, independent sweep checker, one stack and one detector; `TELEOP_ACCEPTANCE` additionally requires the already closed `HEAD_SEARCH_QUALIFIED` report and may expose only the Teleop Head Camera consumer. Release, recorder, retreat, pick and Task 8 readiness remain refused in every mode. `run` and the initial `qualify` construction both consume this restricted admission. Task 5's smoke can run only after this issuer exists and only with `GEOMETRY_SMOKE`. `verify-promoted-config` requires the exact user-approved bundle SHA256, writes an immutable `approval-receipt.json`, and compares all values and identities byte-for-byte. `qualify` uses the same restricted owner to run one production smoke, 40 serial scenes, and one independent `FULL_RESTART` per anchor; it has no resume path and publishes nothing qualified until every required evidence digest passes. `serve-teleop` accepts a new nonexistent run root plus the exact qualification report, promoted config and approval receipt, owns one process group, writes a readiness receipt only after graph/detector/CUDA/identity probes pass, blocks until SIGINT/SIGTERM, then records controller stop, graph clear and teardown status. The final aggregator reuses `_MEASURED`, `_CAMERA_MEASURED`, `validate_head_search_shape()` and sample digest checks. `validate_head_search_binding()` accepts the strict head-only report for later Head Search consumers but `task8_live`, release, retreat and dynamic pick continue to reject it.
+`run` accepts only a new, nonexistent run root. It writes `RUNNING` once, executes the fixed phase list, then atomically writes `SUCCEEDED` or `FAILED`; a pre-existing root is always refused. A single issuer creates operation-bound head-only admission for exactly `GEOMETRY_SMOKE`, `CALIBRATION_RUN`, `QUALIFICATION_RUN`, or `TELEOP_ACCEPTANCE`. The first three bind generation, production camera, safe interval, independent sweep checker, one stack and one detector; `TELEOP_ACCEPTANCE` additionally requires the already closed `HEAD_SEARCH_QUALIFIED` report and may expose only the Teleop Head Camera consumer. Release, recorder, retreat, pick and Task 8 readiness remain refused in every mode. `run` and the initial `qualify` construction both consume this restricted admission. Task 5's smoke can run only after this issuer exists and only with `GEOMETRY_SMOKE`. `verify-promoted-config` requires the exact user-approved bundle SHA256, writes an immutable `approval-receipt.json`, and compares all values and identities byte-for-byte. `qualify` uses the same restricted owner to run one production smoke, 40 serial scenes, and one independent `FULL_RESTART` per anchor; it has no resume path and publishes nothing qualified until every required evidence digest passes. `serve-teleop` accepts a new nonexistent run root plus the exact qualification report, promoted config and approval receipt, owns one process group, and writes a closed connection descriptor only after graph/detector/CUDA/identity probes pass. The descriptor binds operation, runtime/model/bundle IDs, owner PID/start ticks/argv hash, ROS domain, simulation session, execution generation, controller and broker endpoints, frame/detection topics, and a caller-supplied unique bridge socket root. It blocks until SIGINT/SIGTERM, then records controller stop, graph clear and teardown status. The installed console script must be executed directly so the owner receives the signal; a `ros2 run` wrapper is forbidden for this long-lived subcommand. The final aggregator reuses `_MEASURED`, `_CAMERA_MEASURED`, `validate_head_search_shape()` and sample digest checks. `validate_head_search_binding()` accepts the strict head-only report for later Head Search consumers but `task8_live`, release, retreat and dynamic pick continue to reject it.
 
 - [ ] **Step 4: Run GREEN and commit the formal CLI.**
 
@@ -665,7 +684,7 @@ git commit -m "feat: bind qualified head search at startup"
 - Modify: `src/so101_teleop/so101_teleop/openapi_export.py`
 - Modify: `src/so101_teleop/CMakeLists.txt`
 
-**Interfaces:** Produces `GET /teleop/head-camera/status`, `WS /teleop/head-camera/stream`, `POST /teleop/head-camera/target`, `POST /teleop/head-camera/stop`, and `POST /teleop/head-camera/capture`. Consumes the existing detector stream and controller ownership; it does not instantiate either.
+**Interfaces:** Produces `GET /teleop/head-camera/status`, `WS /teleop/head-camera/stream`, `POST /teleop/head-camera/target`, `POST /teleop/head-camera/stop`, and `POST /teleop/head-camera/capture`. Consumes the existing detector stream and controller ownership through the closed descriptor named by `SO101_HEAD_CAMERA_CONNECTION`; it does not instantiate either. `compose_services()` derives the ROS/session/generation/controller environment from that descriptor and requires `SO101_UNIFIED_SOCKET_DIR` and `SO101_UNIFIED_RUNTIME_ID` to match its `bridge_socket_root` and `runtime_id` exactly. Missing, inherited-only, stale-owner or mismatched connection state keeps the Head Camera domain unavailable.
 
 - [ ] **Step 1: Add RED API/ownership tests.**
 
@@ -679,6 +698,18 @@ def test_out_of_range_target_is_refused_before_submit(client):
     response = client.post("/teleop/head-camera/target", json={"target_rad": 99.0}, headers=AUTH)
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "HEAD_TARGET_OUT_OF_RANGE"
+
+def test_composition_rejects_connection_descriptor_owner_or_socket_drift(tmp_path):
+    descriptor = valid_head_camera_connection(tmp_path)
+    with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
+        compose_services(environment_for(descriptor, socket_root=tmp_path / "other"))
+
+def test_bridge_child_consumes_exact_head_runtime_authority(tmp_path):
+    descriptor = valid_head_camera_connection(tmp_path)
+    services = compose_services(environment_for(descriptor))
+    assert services.head_camera.runtime_owner == descriptor["owner"]
+    assert services.head_camera.simulation_session_id == descriptor["simulation_session_id"]
+    assert services.head_camera.execution_generation == descriptor["execution_generation"]
 ```
 
 - [ ] **Step 2: Run RED.**
@@ -691,7 +722,7 @@ expect_head_red 'composed_detector_identity|HEAD_TARGET_OUT_OF_RANGE|head_camera
 
 - [ ] **Step 3: Implement typed status/frame/control/capture contracts.**
 
-The WebSocket envelope binds JPEG and detections to one `frame_sequence`, image SHA, camera stamp/frame, CameraInfo, model/bundle SHA, inference latency and search projection. Latest-frame display dropping never backpressures the production stream. Target commands are bounded absolute positions with instance authority, lease, global mutation reservation, safe interval and sweep checks. Stop remains `STOPPING` until three consecutive raw velocity samples meet the calibrated threshold. Capture atomically writes raw image, overlay inputs, detections, runtime state and manifest for the exact requested frame; stale or mismatched frames are refused.
+The WebSocket envelope binds JPEG and detections to one `frame_sequence`, image SHA, camera stamp/frame, CameraInfo, model/bundle SHA, inference latency and search projection. Latest-frame display dropping never backpressures the production stream. Before starting its bridge child, composition opens the regular no-follow connection descriptor, validates its qualification/bundle digest and live process identity, rejects an existing socket root, and injects the descriptor's exact ROS domain, simulation session, execution generation, controller/broker endpoint and frame/detection topics. It never discovers a ROS graph or socket from inherited shell state. The child proves that streamed frame/model identities and broker command acknowledgements come from that same owner; detector factory count remains zero in Teleop. Target commands are bounded absolute positions with instance authority, lease, global mutation reservation, safe interval and sweep checks. Stop remains `STOPPING` until three consecutive raw velocity samples meet the calibrated threshold. Capture atomically writes raw image, overlay inputs, detections, runtime state and manifest for the exact requested frame; stale or mismatched frames are refused.
 
 - [ ] **Step 4: Run GREEN, export the exact OpenAPI files, and commit.**
 
@@ -851,6 +882,7 @@ for executable in validate_head_camera_geometry generate_yolo_seg_dataset train_
     >/dev/null || exit 1
 done
 test -x "$TOOLCHAIN_RUN/install/so101_teleop/lib/so101_teleop/so101_unified_web_server.py" || exit 1
+test -x "$TOOLCHAIN_RUN/install/so101_demo_py/lib/so101_demo_py/so101_head_search_calibration" || exit 1
 test -f "$TOOLCHAIN_RUN/install/so101_teleop/share/so101_teleop/web/index.html" || exit 1
 ```
 
@@ -908,14 +940,15 @@ test -f "$GEOMETRY_RUN/head-camera-geometry.json" || exit 1
 
 run_logged "$TOOLCHAIN_RUN/head-dataset-smoke.console.log" \
   ros2 run so101_demo_py generate_yolo_seg_dataset \
-  --config "$PWD/src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml" \
+  --config "$PWD/src/so101_demo_py/config/perception/head_camera_yolo_seg_smoke.yaml" \
   --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" \
-  --output-root "$DATASET_SMOKE_ROOT" --generator-commit "$(git rev-parse HEAD)" \
-  --sample-limit 12 || exit 1
+  --output-root "$DATASET_SMOKE_ROOT" --generator-commit "$(git rev-parse HEAD)" || exit 1
 run_logged "$TOOLCHAIN_RUN/head-dataset-verify.console.log" \
   ros2 run so101_demo_py verify_head_search_dataset \
   --head "$DATASET_SMOKE_ROOT/dataset-manifest.json" \
-  --expected-total 12 --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" || exit 1
+  --expected-train 32 --expected-val 8 --expected-test 8 \
+  --require-non-promotable \
+  --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" || exit 1
 
 HF_ROOT="$HEAD_EVIDENCE/models/huggingface"
 YOLO_REV=b55430fb75c0207b35bd20f4e328e042bff06f3f
@@ -930,17 +963,32 @@ printf '%s  %s\n' "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40
   | sha256sum --check --strict || exit 1
 
 run_logged "$TOOLCHAIN_RUN/train-smoke-b.console.log" \
-  ros2 run so101_demo_py train_yolo_seg --candidate B --epochs 1 --fraction 0.05 \
-  --contract "$PWD/src/so101_demo_py/config/perception/head_search_yolo_training.yaml" \
+  ros2 run so101_demo_py train_yolo_seg --candidate B \
+  --contract "$PWD/src/so101_demo_py/config/perception/head_search_yolo_training_smoke.yaml" \
   --head-dataset "$DATASET_SMOKE_ROOT/dataset-manifest.json" \
   --task-dataset "$TASK_DATASET_MANIFEST" --base-model "$A_WEIGHTS" \
   --output "$TRAIN_SMOKE_CAMPAIGN/candidate-b" --run-name smoke-b || exit 1
 run_logged "$TOOLCHAIN_RUN/train-smoke-c.console.log" \
-  ros2 run so101_demo_py train_yolo_seg --candidate C --epochs 1 --fraction 0.05 \
-  --contract "$PWD/src/so101_demo_py/config/perception/head_search_yolo_training.yaml" \
+  ros2 run so101_demo_py train_yolo_seg --candidate C \
+  --contract "$PWD/src/so101_demo_py/config/perception/head_search_yolo_training_smoke.yaml" \
   --head-dataset "$DATASET_SMOKE_ROOT/dataset-manifest.json" \
   --task-dataset "$TASK_DATASET_MANIFEST" --base-model "$A_WEIGHTS" \
   --output "$TRAIN_SMOKE_CAMPAIGN/candidate-c" --run-name smoke-c || exit 1
+
+for candidate_name in b c; do
+  rejection_root="$TRAIN_SMOKE_CAMPAIGN/rejected-$candidate_name"
+  if run_logged "$TOOLCHAIN_RUN/reject-smoke-$candidate_name.console.log" \
+      ros2 run so101_demo_py evaluate_head_search_yolo_candidates calibrate \
+      --candidate "$TRAIN_SMOKE_CAMPAIGN/candidate-$candidate_name/candidate-manifest.json" \
+      --head-dataset "$DATASET_SMOKE_ROOT/dataset-manifest.json" --head-split val \
+      --task-dataset "$TASK_DATASET_MANIFEST" --task-split val \
+      --episode-partitions "$PWD/src/so101_demo_py/config/act/head-search-scenario-partitions-v1.json" \
+      --episode-split calibration --output "$rejection_root"; then
+    exit 1
+  fi
+  rg -n 'SMOKE_CANDIDATE_NOT_PROMOTABLE' \
+    "$TOOLCHAIN_RUN/reject-smoke-$candidate_name.console.log" >/dev/null || exit 1
+done
 
 run_logged "$TOOLCHAIN_RUN/head-search-smoke.console.log" \
   ros2 run so101_demo_py so101_head_search_smoke --scenario no_cup --anchor default \
@@ -994,7 +1042,7 @@ print -r -- "$server_rc" >"$BACKEND_SMOKE_ROOT/server.rc"
 trap - EXIT
 ```
 
-Read back zero `in_frame` failures, all three anchors, safe-domain containment, exactly 12 smoke images, CUDA entry in both one-epoch training logs, two-domain validation scoring for B and C, bounded no-cup coverage, expected existing-root refusal, zero detector construction by the standalone Teleop backend, and the view-only `/teleop/head-camera/status` identity. The Head Search smoke separately proves exactly one production detector. Task 14 proves the installed backend consuming that detector in the final production composition. These artifacts close the runtime portions deferred by Tasks 2, 3, 5, 7 and 9 without claiming premature Teleop control acceptance.
+Read back zero `in_frame` failures, all three anchors, safe-domain containment, exactly 32/8/8 non-promotable smoke images, CUDA entry in both one-epoch training logs, 32-head B exposure, balanced 32-head/32-task C exposure, 8-head/8-task validation scoring for both, explicit rejection of both smoke candidates by the promotion path, bounded no-cup coverage, expected existing-root refusal, zero detector construction by the standalone Teleop backend, and the view-only `/teleop/head-camera/status` identity. The Head Search smoke separately proves exactly one production detector. Task 14 proves the installed backend consuming that detector in the final production composition. These artifacts close the runtime portions deferred by Tasks 2, 3, 5, 7 and 9 without claiming premature Teleop control acceptance.
 
 - [ ] **Step 5: Run the explicit perception benchmark implementation gate.**
 
@@ -1277,6 +1325,7 @@ run_logged "$FINAL_RUN/test-teleop.console.log" /usr/bin/time -p \
 head_colcon test-result --test-result-base "$FINAL_RUN/build" --verbose \
   >"$FINAL_RUN/test-result.txt" || exit 1
 test -x "$FINAL_RUN/install/so101_teleop/lib/so101_teleop/so101_unified_web_server.py" || exit 1
+test -x "$FINAL_RUN/install/so101_demo_py/lib/so101_demo_py/so101_head_search_calibration" || exit 1
 test -f "$FINAL_RUN/install/so101_teleop/share/so101_teleop/web/index.html" || exit 1
 ```
 
@@ -1344,31 +1393,50 @@ The qualifier tears down its final `forward` restart before returning; do not de
 TELEOP_ACCEPT_ROOT="$HEAD_EVIDENCE/teleop-head-camera-acceptance-$(date -u +%Y%m%dT%H%M%SZ)"
 test ! -e "$TELEOP_ACCEPT_ROOT" || exit 1
 mkdir "$TELEOP_ACCEPT_ROOT" || exit 1
-ros2 run so101_demo_py so101_head_search_calibration serve-teleop \
+HEAD_CALIBRATION_EXE="$FINAL_RUN/install/so101_demo_py/lib/so101_demo_py/so101_head_search_calibration"
+TELEOP_CONNECTION="$TELEOP_ACCEPT_ROOT/runtime-connection.json"
+TELEOP_SOCKET_DIR="$TELEOP_ACCEPT_ROOT/bridge"
+TELEOP_RUNTIME_ID="head-teleop-$(<"$FINAL_RUN/source-commit.txt")"
+test -x "$HEAD_CALIBRATION_EXE" || exit 1
+test ! -e "$TELEOP_CONNECTION" || exit 1
+test ! -e "$TELEOP_SOCKET_DIR" || exit 1
+"$HEAD_CALIBRATION_EXE" serve-teleop \
   --run-root "$TELEOP_ACCEPT_ROOT/runtime" \
   --qualification-report "$QUAL_RUN/head-search-qualified-report.json" \
   --bundle "$CAL_RUN/head-search-calibration-bundle.json" \
   --approval-receipt "$CAL_RUN/approval-receipt.json" \
   --production-config src/so101_demo_py/config/mujoco/act/head_search_v2.json \
-  --profile mujoco --ready-file "$TELEOP_ACCEPT_ROOT/runtime-ready.json" \
+  --profile mujoco --runtime-id "$TELEOP_RUNTIME_ID" \
+  --bridge-socket-root "$TELEOP_SOCKET_DIR" --ready-file "$TELEOP_CONNECTION" \
   >"$TELEOP_ACCEPT_ROOT/runtime.log" 2>&1 &
 runtime_pid=$!
 server_pid=""
 cleanup_head_acceptance() {
-  test -z "$server_pid" || { kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null; }
-  test -z "$runtime_pid" || { kill "$runtime_pid" 2>/dev/null; wait "$runtime_pid" 2>/dev/null; }
+  set +o errexit
+  if test -n "$server_pid"; then
+    kill "$server_pid" 2>/dev/null
+    wait "$server_pid" 2>/dev/null
+  fi
+  if test -n "$runtime_pid"; then
+    kill "$runtime_pid" 2>/dev/null
+    wait "$runtime_pid" 2>/dev/null
+  fi
+  set -o errexit
 }
 trap cleanup_head_acceptance EXIT
 for attempt in {1..180}; do
-  test -f "$TELEOP_ACCEPT_ROOT/runtime-ready.json" && break
+  test -f "$TELEOP_CONNECTION" && break
   kill -0 "$runtime_pid" 2>/dev/null || exit 1
   sleep 1
 done
-test -f "$TELEOP_ACCEPT_ROOT/runtime-ready.json" || exit 1
+test -f "$TELEOP_CONNECTION" || exit 1
+test ! -e "$TELEOP_SOCKET_DIR" || exit 1
 SO101_UNIFIED_BACKEND=mujoco_py \
 SO101_UNIFIED_INSTALL_PREFIX="$FINAL_RUN/install" \
 SO101_UNIFIED_EVIDENCE_ROOT="$TELEOP_ACCEPT_ROOT" \
-SO101_UNIFIED_RUNTIME_ID="$(<"$FINAL_RUN/source-commit.txt")" \
+SO101_UNIFIED_RUNTIME_ID="$TELEOP_RUNTIME_ID" \
+SO101_UNIFIED_SOCKET_DIR="$TELEOP_SOCKET_DIR" \
+SO101_HEAD_CAMERA_CONNECTION="$TELEOP_CONNECTION" \
 SO101_UNIFIED_ROS_PYTHON="$HEAD_PYTHON" \
   "$FINAL_RUN/install/so101_teleop/lib/so101_teleop/so101_unified_web_server.py" \
   --host 127.0.0.1 --port 18082 --capture-dir "$TELEOP_ACCEPT_ROOT/captures" \
@@ -1403,11 +1471,12 @@ test $runtime_rc -eq 0 || exit 1
 print -r -- "$runtime_rc" >"$TELEOP_ACCEPT_ROOT/runtime.rc"
 runtime_pid=""
 test -f "$TELEOP_ACCEPT_ROOT/runtime/teardown-receipt.json" || exit 1
+test -f "$TELEOP_SOCKET_DIR/cleanup-receipt.json" || exit 1
 trap - EXIT
 unfunction cleanup_head_acceptance
 ```
 
-Because `SO101_TELEOP_BASE_URL` is set, Playwright must not start Vite. The case captures fresh light/dark desktop/narrow screenshots for Raw, Overlay, conflict, stale, stopping and stopped states plus exact raw/overlay frame pairs. Inspect those files and their browser URL. The page must show the same model and bundle SHA as the production process and the process/GPU readback must show one detector. The teardown receipt must prove controller stop, process-group exit and graph clear.
+Because `SO101_TELEOP_BASE_URL` is set, Playwright must not start Vite. The case captures fresh light/dark desktop/narrow screenshots for Raw, Overlay, conflict, stale, stopping and stopped states plus exact raw/overlay frame pairs. Inspect those files and their browser URL. The status, stream and broker acknowledgement must repeat the connection descriptor's runtime owner, simulation session, execution generation, model and bundle identities; a mismatch or stale owner fails before controls enable. Process/GPU readback must show one detector, while Teleop detector factory count remains zero. The runtime teardown receipt and bridge cleanup receipt must prove controller stop, both process groups exited and the ROS graph cleared.
 
 - [ ] **Step 7: Read back all evidence and close the ledger.**
 
