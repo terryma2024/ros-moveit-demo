@@ -35525,3 +35525,41 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (fix pass: F3, F4, F6 closed, F1/F2/F5
   outstanding); items 4-8 pending.** HEAD `bb325645f`; 39-path dirty baseline untouched; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-1946 — Task 3 fix pass, third instalment: the manifest, acquisitions, row bindings and seal keys now match the frozen schema
+
+- **Manifest.** It is now `ACT_EPISODE_AUDIT`, `schema_version: 2`, with exactly the declared fields
+  `kind, schema_version, scope_sha256, identity, window, files`. `scope_sha256` is the digest of the
+  scope payload the audit wrote (so it is checkable against `source.json`), `identity` is the full
+  identity mapping, and `window` is the caller's window mapping recorded as given rather than invented.
+  The previous `inputs_sha256` field and its check are gone, because the frozen manifest does not
+  declare them.
+- **Acquisitions** now carry `shape` and `dtype` alongside the identity, stamp, receipt and pixel
+  digest, canonicalised for JSON.
+- **Row bindings** moved to `row-bindings.jsonl` with the declared
+  `row_index, sim_time_s, head_acquisition_id, wrist_acquisition_id, reference_sequence`, and the
+  inventory, the writer, the semantic re-validation and the tests all follow the new name.
+- **Seal v2 uses the declared keys.** Instead of my invented nested `audit` block, the seal adds
+  exactly `audit_manifest_sha256` and `scope_sha256` to the existing closed key set; a v1 seal still has
+  neither. `verify_episode_seal(path, audit_manifest=, scope=)` can now re-read the referenced audit and
+  scope and refuses a digest mismatch or an audit that no longer verifies end to end, while a caller
+  that only has the seal still gets the digests validated as well-formed.
+- **Evidence.** `logs/task3-fix3.run` rc=0: **100 passed in 0.69 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_continuous_capture.py`, `test_act_release_boundary.py` and
+  `test_act_supervisor.py`, with its own NVMe scratch and a non-empty tempfile proof. The audit
+  verification test now also asserts the manifest's kind, version, identity and scope digest, and the
+  recorder test re-verifies v2 with the audit and scope paths supplied.
+- **Still open from the verdict.** **T3-F1**'s remaining dimensions: `events` must become
+  `sequence,kind,identity,sim_time_s,monotonic_ns,payload` with a closed payload schema per kind (today
+  it is my `physics_step`/`detail` shape); `references` must preserve the observer's raw message, joint
+  names, source/receipt timing and revocation boundaries rather than the projected six positions (the
+  observer already holds them at `adapters/act/controller_reference_observer.py:69`); `physics` must
+  carry pose, velocity, full contact pairs, support, Planning Scene and gripper/controller feedback per
+  the source contracts rather than an arbitrary raw block. **T3-F2** (semantic binding and its fixtures
+  plus wrong-camera, same-id-in-both-slots, cross-reset, unresolvable-reference and out-of-order-row
+  controls). **T3-F5** (gate full-run eligibility on the required raw physics and broker events). Then a
+  fresh checkpoint review.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (fix pass: F3, F4, F6 closed; F1 partly
+  closed; F2, F5 and F1's payload dimensions outstanding); items 4-8 pending.** HEAD `2a5e42033`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.

@@ -22,19 +22,21 @@ import math
 import os
 from pathlib import Path
 
-MANIFEST_KIND = "ACT_EPISODE_AUDIT_MANIFEST"
+MANIFEST_KIND = "ACT_EPISODE_AUDIT"
 _METADATA_FILES = ("source.json", "inputs.json", "episode.json")
-_STREAM_NAMES = ("acquisitions.jsonl", "rows.jsonl", "events.jsonl", "references.jsonl",
-                 "physics.jsonl")
+_STREAM_NAMES = ("acquisitions.jsonl", "row-bindings.jsonl", "events.jsonl",
+                 "references.jsonl", "physics.jsonl")
 SOURCE_KINDS = ("events", "references", "physics")
 _ACQUISITION_FIELDS = frozenset({"camera", "session_id", "reset_epoch", "sequence", "acquisition_id",
-                                 "stamp_s", "received_monotonic_ns", "pixel_sha256"})
-_ROW_FIELDS = frozenset({"row_index", "sim_time_s", "head_id", "wrist_id", "reference_sequence"})
+                                 "stamp_s", "received_monotonic_ns", "shape", "dtype", "pixel_sha256"})
+_ROW_FIELDS = frozenset({"row_index", "sim_time_s", "head_acquisition_id",
+                         "wrist_acquisition_id", "reference_sequence"})
 _REFERENCE_FIELDS = frozenset({"sequence", "reference_time_s", "source", "positions", "accepted"})
 _EVENT_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "physics_step", "detail"})
 _PHYSICS_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "release_epoch", "observation"})
 _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
-_MANIFEST_FIELDS = frozenset({"kind", "schema_version", "window", "files", "inputs_sha256"})
+_MANIFEST_FIELDS = frozenset({"kind", "schema_version", "scope_sha256", "identity", "window",
+                              "files"})
 
 
 def _canonical(value) -> bytes:
@@ -72,14 +74,14 @@ class _Files:
     inputs: Path
     episode: Path
     acquisitions: Path
-    rows: Path
+    row_bindings: Path
     events: Path
     references: Path
     physics: Path
 
     def streams(self) -> dict:
-        return {"acquisitions": self.acquisitions, "rows": self.rows, "events": self.events,
-                "references": self.references, "physics": self.physics}
+        return {"acquisitions": self.acquisitions, "row-bindings": self.row_bindings,
+                "events": self.events, "references": self.references, "physics": self.physics}
 
 
 class EpisodeAuditWriter:
@@ -102,7 +104,7 @@ class EpisodeAuditWriter:
         audit = self.root / "audit"
         audit.mkdir()
         self.files = _Files(audit / "source.json", audit / "inputs.json", audit / "episode.json",
-                            audit / "acquisitions.jsonl", audit / "rows.jsonl",
+                            audit / "acquisitions.jsonl", audit / "row-bindings.jsonl",
                             audit / "events.jsonl", audit / "references.jsonl",
                             audit / "physics.jsonl")
         self.scope = dict(scope)
@@ -126,6 +128,7 @@ class EpisodeAuditWriter:
     def append_acquisition(self, frame) -> None:
         self._require_open()
         record = {field: getattr(frame, field) for field in _ACQUISITION_FIELDS}
+        record["shape"] = list(record["shape"])
         _closed(record, _ACQUISITION_FIELDS, "AUDIT_SCHEMA_INVALID")
         if record["acquisition_id"] in self._acquisitions:
             raise ValueError("AUDIT_ACQUISITION_DUPLICATE")
@@ -136,7 +139,7 @@ class EpisodeAuditWriter:
         self._require_open()
         record = {"row_index": _integer(row_index, "AUDIT_ROW_INVALID"),
                   "sim_time_s": _finite(sim_time_s, "AUDIT_ROW_INVALID", nonnegative=True),
-                  "head_id": head_id, "wrist_id": wrist_id,
+                  "head_acquisition_id": head_id, "wrist_acquisition_id": wrist_id,
                   "reference_sequence": _integer(reference_sequence, "AUDIT_ROW_INVALID")}
         _closed(record, _ROW_FIELDS, "AUDIT_ROW_INVALID")
         for name, value in (("head_id", head_id), ("wrist_id", wrist_id)):
@@ -150,7 +153,7 @@ class EpisodeAuditWriter:
             raise ValueError("AUDIT_ROW_INVALID")
         self._row_indexes.add(record["row_index"])
         self._bound.update((head_id, wrist_id))
-        self._append("rows", record)
+        self._append("row-bindings", record)
 
     def append_source(self, kind, record) -> None:
         self._require_open()
@@ -202,8 +205,10 @@ class EpisodeAuditWriter:
                        self.files.episode):
             files[target.name] = {"path": target.name, "size": target.stat().st_size,
                                   "sha256": _sha256(target)}
-        manifest = {"kind": MANIFEST_KIND, "schema_version": 1, "window": dict(window),
-                    "files": files, "inputs_sha256": self.inputs["inputs_sha256"]}
+        manifest = {"kind": MANIFEST_KIND, "schema_version": 2,
+                    # the digest of the scope payload this audit was collected under
+                    "scope_sha256": _sha256(self.files.source),
+                    "identity": dict(self.identity), "window": dict(window), "files": files}
         target = self.root / "audit" / "audit-manifest.json"
         self._write_new(target, _canonical(manifest))
         self._fsync_dir(target.parent)
@@ -271,7 +276,7 @@ def verify_audit_manifest(path: Path) -> dict:
         raise ValueError("AUDIT_MANIFEST_INVALID") from error
     if not isinstance(manifest, dict) or set(manifest) != _MANIFEST_FIELDS:
         raise ValueError("AUDIT_MANIFEST_INVALID")
-    if manifest["kind"] != MANIFEST_KIND or manifest["schema_version"] != 1:
+    if manifest["kind"] != MANIFEST_KIND or manifest["schema_version"] != 2:
         raise ValueError("AUDIT_MANIFEST_INVALID")
     audit = path.parent
     expected = set(_METADATA_FILES) | set(_STREAM_NAMES)
@@ -288,10 +293,9 @@ def verify_audit_manifest(path: Path) -> dict:
         if len(payload) != entry["size"] or _sha256(target) != entry["sha256"]:
             # a changed raw reference, a rewritten stream or a deleted file lands here
             raise ValueError("AUDIT_HASH_MISMATCH")
-    declared = json.loads((audit / "inputs.json").read_bytes())
-    if (not isinstance(declared, dict)
-            or declared.get("inputs_sha256") != manifest["inputs_sha256"]):
-        # the manifest names the frozen inputs digest, and the payload must agree with it
+    if (not isinstance(manifest["identity"], dict) or not isinstance(manifest["window"], dict)
+            or manifest["scope_sha256"] != _sha256(audit / "source.json")):
+        # the manifest names the scope it was collected under, and the payload must agree with it
         raise ValueError("AUDIT_MANIFEST_INVALID")
     _verify_streams(audit)
     return manifest
@@ -317,11 +321,11 @@ def _verify_streams(audit: Path) -> None:
         acquisitions[row["acquisition_id"]] = row
     bound: set = set()
     indexes: set = set()
-    for row in _records(audit / "rows.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID"):
-        if row["row_index"] in indexes or row["head_id"] == row["wrist_id"]:
+    for row in _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID"):
+        if row["row_index"] in indexes or row["head_acquisition_id"] == row["wrist_acquisition_id"]:
             raise ValueError("AUDIT_ROW_INVALID")
         indexes.add(row["row_index"])
-        for name in ("head_id", "wrist_id"):
+        for name in ("head_acquisition_id", "wrist_acquisition_id"):
             value = row[name]
             if value not in acquisitions or value in bound:
                 raise ValueError("AUDIT_BINDING_UNKNOWN")

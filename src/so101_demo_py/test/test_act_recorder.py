@@ -253,8 +253,11 @@ def test_a_v2_seal_names_the_raw_audit_and_the_collection_scope(tmp_path):
     path = recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
     document = verify_episode_seal(path)
     assert document["schema_version"] == 2
-    assert document["audit"]["manifest_sha256"] == hashlib.sha256(manifest.read_bytes()).hexdigest()
-    assert document["audit"]["scope_sha256"] == hashlib.sha256(scope.read_bytes()).hexdigest()
+    assert (document["audit_manifest_sha256"]
+            == hashlib.sha256(manifest.read_bytes()).hexdigest())
+    assert document["scope_sha256"] == hashlib.sha256(scope.read_bytes()).hexdigest()
+    rechecked = verify_episode_seal(path, audit_manifest=manifest, scope=scope)
+    assert rechecked == document
 
 
 def test_a_seal_without_the_audit_stays_v1_and_readable(tmp_path):
@@ -263,7 +266,8 @@ def test_a_seal_without_the_audit_stays_v1_and_readable(tmp_path):
     recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
                                attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
     document = verify_episode_seal(recorder.finish(outcome("FAILED")))
-    assert document["schema_version"] == 1 and "audit" not in document
+    assert document["schema_version"] == 1
+    assert "audit_manifest_sha256" not in document and "scope_sha256" not in document
 
 
 def test_a_half_referenced_audit_is_refused(tmp_path):
@@ -294,7 +298,7 @@ def test_a_v2_seal_refuses_an_audit_that_changed_after_sealing(tmp_path):
     path = recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
     (manifest.parent / "events.jsonl").write_bytes(b'{"sequence":1}\n')
     with pytest.raises(ValueError, match="AUDIT_HASH_MISMATCH"):
-        verify_episode_seal(path)
+        verify_episode_seal(path, audit_manifest=manifest, scope=scope)
 
 
 def test_a_v2_seal_fsyncs_the_referenced_files_and_the_parent_directory(tmp_path, monkeypatch):

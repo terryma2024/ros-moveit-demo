@@ -74,11 +74,12 @@ def test_a_sealed_audit_verifies_by_recomputation(tmp_path):
     path = writer.seal(window)
     manifest = verify_audit_manifest(path)
     assert manifest["kind"] == MANIFEST_KIND
-    assert set(manifest["files"]) == {"acquisitions.jsonl", "rows.jsonl", "events.jsonl",
-                                      "references.jsonl", "physics.jsonl", "source.json",
-                                      "inputs.json", "episode.json"}
+    assert set(manifest["files"]) == {"acquisitions.jsonl", "row-bindings.jsonl",
+                                      "events.jsonl", "references.jsonl", "physics.jsonl",
+                                      "source.json", "inputs.json", "episode.json"}
     assert manifest["window"] == window
-    assert manifest["inputs_sha256"] == "a" * 64
+    assert manifest["schema_version"] == 2 and manifest["identity"] == identity()
+    assert manifest["scope_sha256"] == hashlib.sha256((path.parent / "source.json").read_bytes()).hexdigest()
 
 
 def test_a_changed_raw_reference_is_detected(tmp_path):
@@ -233,12 +234,12 @@ def test_a_checksum_consistent_reference_with_an_extra_field_is_refused(tmp_path
 def test_a_checksum_consistent_duplicate_row_index_is_refused(tmp_path):
     writer, window = complete_audit(tmp_path)
     path = writer.seal(window)
-    lines = (path.parent / "rows.jsonl").read_text().splitlines()
+    lines = (path.parent / "row-bindings.jsonl").read_text().splitlines()
     duplicated = json.loads(lines[0])
-    duplicated["head_id"] = "s/1/wrist/1"
-    duplicated["wrist_id"] = "s/1/head/1"
+    duplicated["head_acquisition_id"] = "s/1/wrist/1"
+    duplicated["wrist_acquisition_id"] = "s/1/head/1"
     payload = ("\n".join([*lines, json.dumps(duplicated, sort_keys=True,
                                               separators=(",", ":"))]) + "\n").encode()
-    _resign(writer, path, "rows.jsonl", payload)
+    _resign(writer, path, "row-bindings.jsonl", payload)
     with pytest.raises(ValueError, match="AUDIT_ROW_INVALID"):
         verify_audit_manifest(path)

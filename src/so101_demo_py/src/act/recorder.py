@@ -233,9 +233,8 @@ class EpisodeRecorder:
                     or any(scope_document.get(key) != audit_scope.get(key)
                            for key in ("mode", "scene_id", "seed"))):
                 raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
-            audit_block = {"manifest_sha256": _hash(audit_manifest.read_bytes()),
-                           "scope_sha256": _hash(scope.read_bytes()),
-                           "manifest_path": str(audit_manifest), "scope_path": str(scope)}
+            audit_block = {"audit_manifest_sha256": _hash(audit_manifest.read_bytes()),
+                           "scope_sha256": _hash(scope.read_bytes())}
         if self._failed or self._closed:
             raise RecorderInfraError("RECORDER_NOT_SEALABLE")
         if not isinstance(outcome, dict) or set(outcome) != _OUTCOME_KEYS:
@@ -291,7 +290,8 @@ class EpisodeRecorder:
                 "files": dict(sorted(self._files.items())),
             }
             if audit_block is not None:
-                seal["audit"] = audit_block
+                # the frozen v2 seal adds exactly these two digests to the existing closed keys
+                seal.update(audit_block)
             seal["manifest_sha256"] = _hash(_canonical(seal))
             data = _canonical(seal) + b"\n"
             fd, staging = tempfile.mkstemp(prefix=".seal.", dir=self.root)
@@ -315,7 +315,8 @@ class EpisodeRecorder:
             raise RecorderInfraError("RECORDER_SEAL_FAILED") from error
 
 
-def verify_episode_seal(path: Path) -> dict:
+def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
+                        scope: Path | None = None) -> dict:
     path = Path(path)
     if path.name != "seal.json" or not path.is_file() or path.is_symlink():
         raise ValueError("EPISODE_SEAL_MISSING")
@@ -325,7 +326,8 @@ def verify_episode_seal(path: Path) -> dict:
             "stopped_confirmed", "qc_passed", "committed", "session_id",
             "attempt_id", "reset_epoch", "record_count", "provenance", "files",
             "manifest_sha256"}
-    if not isinstance(document, dict) or set(document) not in (keys, keys | {"audit"}):
+    v2_keys = keys | {"audit_manifest_sha256", "scope_sha256"}
+    if not isinstance(document, dict) or set(document) not in (keys, v2_keys):
         raise ValueError("EPISODE_SEAL_SCHEMA")
     if source_bytes != _canonical(document) + b"\n":
         raise ValueError("EPISODE_SEAL_NONCANONICAL")
@@ -359,24 +361,19 @@ def verify_episode_seal(path: Path) -> dict:
         if expected != {"sha256": actual_hash, "size": actual_size}:
             raise ValueError("EPISODE_FILE_HASH_MISMATCH")
     if document["schema_version"] == 2:
-        # a v2 seal is only meaningful while the audit it names still verifies
-        audit = document["audit"]
-        if (not isinstance(audit, dict) or set(audit) != {"manifest_sha256", "scope_sha256",
-                                                          "manifest_path", "scope_path"}):
-            raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
-        sha256(audit["manifest_sha256"])
-        sha256(audit["scope_sha256"])
-        for path_key, digest_key in (("manifest_path", "manifest_sha256"),
-                                     ("scope_path", "scope_sha256")):
-            target = Path(audit[path_key])
-            if (not target.is_absolute() or ".." in target.parts or not target.is_file()
-                    or target.is_symlink()):
+        # a v2 seal names the raw audit and the scope it was collected under
+        sha256(document["audit_manifest_sha256"])
+        sha256(document["scope_sha256"])
+        if audit_manifest is not None:
+            audit_manifest, scope = Path(audit_manifest), Path(scope)
+            if (not audit_manifest.is_file() or not scope.is_file()):
                 raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
-            if _hash(target.read_bytes()) != audit[digest_key]:
+            if _hash(audit_manifest.read_bytes()) != document["audit_manifest_sha256"]:
                 raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
-        verify_audit_manifest(Path(audit["manifest_path"]))
-    elif "audit" in document:
-        raise ValueError("EPISODE_SEAL_SCHEMA")
+            if _hash(scope.read_bytes()) != document["scope_sha256"]:
+                raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
+            # and the audit must still verify end to end, not merely hash to the sealed digest
+            verify_audit_manifest(audit_manifest)
     rows = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
     if len(rows) != document["record_count"]:
         raise ValueError("EPISODE_RECORD_COUNT_MISMATCH")
