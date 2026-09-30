@@ -39507,3 +39507,19 @@ meaningful (a genuinely reused seed across splits still trips) instead of disabl
 So the fix direction stays "accept the pinned artefact as it is" while the *identity* used for the check is derived from
 what that artefact actually provides. Two rounds of the same lesson: a fallback that satisfies a validator without preserving
 what the validator is *for* is a way of turning a check off by accident.
+
+## HS-193 — Training B ran to completion: rc=0
+
+```
+train-b rc=0
+{"plan_sha256": "9f54107f760d754e9941d13ed31672f332894dea90a7c053b801c2f954055763", "run_manifest": "..."}
+```
+
+After four validation-layer fixes - the flag trio (HS-188), the cumulative manifest/root pair (HS-190), the optional
+generator-only fields (HS-191), and the scene-group identity (HS-192) - **candidate B trained on the GPU and exited 0**, with
+a plan digest and a run manifest recorded in the campaign root. C is training now, serially after B, which is the plan's
+"never concurrently" requirement satisfied by construction rather than by a lock.
+
+So the chain of failures was entirely **argument and contract validation before any GPU work**: the four failed attempts cost
+wall-clock and rounds, not training time, and the first actual training run succeeded. The remaining Step 3 checks are C's
+`rc=0` and the sampling read-back showing 800 head and 800 task images per epoch at 1:1.
