@@ -37634,3 +37634,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c75be1258`;
   targeted gate `logs/task3-xdist.run` **410 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2026 — RESOLVED: 46 lines of pre-existing uncommitted work in `pick_place_runner.py` were swept into my commit
+
+- **The answer to CP-2025's open question is yes, for one file.** The session-start backup of
+  `pick_place_runner.py` differs from the **last pre-session commit** touching it (`b0832129e`, a revert) by
+  **46 lines**, and the difference is in the backup's favour: the backup already had `"physics_step"` in the
+  phase and set-down key sets, a `def set_down(self, request: dict)` and the `_SET_DOWN_KEYS` block that the
+  commit does not. So those 46 lines were **the user's uncommitted work at session start**, and my first
+  commit touching that file (`dcef92f99`) carried them into git along with my own edits, because I staged the
+  file as a whole.
+- **`recorder.py` is clean on this question**: its backup is **byte-identical to the parent of the first
+  commit of mine that touched it** (`5709d0591`), so it had no pre-existing hunks and nothing was swept.
+  `pick_place_sources.py` and `test_act_task8_reset.py` are still modified and byte-identical to their
+  backups, and `pick_place_search_port.py` is byte-identical to its backup, so no bytes were lost anywhere.
+- **What this does and does not mean.** No user work was overwritten or deleted — the bytes are in the tree
+  and now also in history. What changed is that 46 lines of the user's work-in-progress no longer appear as
+  uncommitted changes, and they sit inside my commit rather than theirs. That is an attribution/hygiene
+  defect in how I staged files, not data loss, and I am recording it plainly rather than letting the clean
+  `git status` imply the baseline was preserved exactly.
+- **Recommended remediation, for the owner to choose.** (a) Leave it: the bytes are safe and the branch
+  history is honest about *what* changed, less so about *who* first wrote the 46 lines. (b) Reproduce the
+  original state by reverting only those hunks to the pre-session commit for that file and leaving them
+  uncommitted again — possible, but my later edits sit on the same regions, so it needs care and a green
+  acceptance run afterwards. (c) Split attribution with a small follow-up commit that records the recovered
+  lines as the user's (for example an `--author` override) without rewriting history. I did **not** rewrite
+  history, and I will not without an instruction.
+- **Process fix for future passes, stated as a rule.** Before staging any file that the session-start baseline
+  lists as dirty, stage hunks (`git add -p`) or verify against the recorded backup, never `git add <file>`.
+  The backups under `.../baseline-task3/` exist for exactly this check, and `git diff <backup> <file>` is the
+  one command that catches it before the commit.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4389a6d4c`;
+  targeted gate `logs/task3-xdist.run` **410 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
