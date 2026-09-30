@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import os
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
 from ..adapters.perception.yolo_training import prepare_training_run
 
@@ -74,6 +74,7 @@ def main(arguments: list[str] | None = None) -> int:
             print(f"training input error: --candidate needs {', '.join(missing)}", file=sys.stderr)
             return 2
         try:
+            import hashlib
             import json
 
             from so101_demo.act.head_search_training import build_candidate_plan
@@ -84,10 +85,15 @@ def main(arguments: list[str] | None = None) -> int:
                 head=json.loads(parsed.head_manifest.read_text(encoding="utf-8")),
                 task=json.loads(parsed.task_manifest.read_text(encoding="utf-8")),
                 contract=parsed.training_contract,
+                # the candidate plan must bind the very weights it starts from
+                base_model_sha256=hashlib.sha256(parsed.base_model.read_bytes()).hexdigest(),
             )
             prepared = prepare_candidate_run(
                 plan=plan,
                 contract_path=parsed.training_contract,
+                # the run re-reads each manifest from disk and compares it with the frozen digest
+                head_manifest_path=parsed.head_manifest,
+                task_manifest_path=parsed.task_manifest,
                 head_dataset_root=parsed.head_dataset_root,
                 task_dataset_root=parsed.task_dataset_root,
                 base_model_path=parsed.base_model,
