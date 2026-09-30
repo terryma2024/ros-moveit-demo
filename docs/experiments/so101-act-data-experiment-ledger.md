@@ -40136,3 +40136,28 @@ Task 12's Step 5 may be intended to run once Task 13's runtime has collected the
 
 **Still no implementation started**, per the user's "stop and discuss": this entry exists so the discussion has the missing fact
 - episode collection already exists as a subsystem - rather than a cost estimate I made without looking.
+
+## HS-219 — Every episode-related piece already exists as an executable; what is missing is orchestration
+
+Listed the toolchain's executables (from the root's own `so101_demo_py.executables`):
+
+```
+act_collect        act_collect_parallel      act_collect_contact_calibration
+act_sample         act_evaluate              act_offline_evaluate
+act_preflight      act_session               act_train
+so101_parallel_batch   so101_parallel_batch_cleanup   so101_mujoco_rgbd_batch
+evaluate_head_search_yolo_candidates   so101_head_search_calibration   so101_head_search_smoke
+```
+
+So collection, sampling, evaluation and session tooling are all **already shipped**: nothing about recording episodes needs to be
+invented. What does not exist is the **orchestration** that binds them to the partitions file's `calibration` and
+`held_out_evaluation` seeds and writes the records where the gate looks - and that orchestration is what
+`so101_head_search_calibration run` refuses to do before Task 13 (`HEAD_SEARCH_RUNTIME_REQUIRED`).
+
+**That reframes the whole question one last time, and in favour of option (b):** the plan's ordering is most likely deliberate.
+Task 12 freezes weights and operating points from the 1200 images; Task 13's runtime then collects the calibration and held-out
+episodes and runs the formal gate. Step 5 sitting under Task 12 is then a plan-text placement issue rather than a missing
+capability, and the cheapest faithful action is to close Task 12 through Step 4 with the val-only caveat explicit, and let
+Task 13's runtime produce the episodes Step 5 consumes.
+
+Recorded for the discussion; still no implementation started, per the user's "stop and discuss".
