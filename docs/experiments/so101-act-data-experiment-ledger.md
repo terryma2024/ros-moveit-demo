@@ -37421,3 +37421,33 @@ Two findings, both checkable:
 
 Together with HS-109's superseded-rows caveat (the task 8 aggregator's 16 are gone since HS-072), that is the
 per-test attribution the reviewer's gap 1 asked for, built from logs on disk rather than from a narrative.
+
+## HS-111 — Refinement: the `so101_demo` import failures are a path-mapping artifact, not a missing dependency
+
+HS-110 recorded `No module named 'so101_demo'` as the dominant reason and flagged that the name alone does not
+distinguish "stale path" from "genuinely absent". Testing it settles the question:
+
+```
+with ROS sourced, worktree src on PYTHONPATH:
+  test_act_task8_live_qualification.py -> 38 failed
+  E   ModuleNotFoundError: No module named 'so101_demo'
+```
+
+The cause is a **name mapping**, not an absent dependency: in the worktree the packages sit at `src/` as `act`,
+`adapters`, `cli`, ..., and it is the **installed** layout that maps them under `so101_demo`. So a test session must
+have the installed package on its path - which is precisely what `colcon test` provides and what my source-only
+`PYTHONPATH` did not. These 38 failures (and the other `so101_demo` import cases) are therefore an artefact of **how
+I invoked pytest**, not a property of the suite or of this work.
+
+That sharpens the attribution table into three distinct categories rather than one bucket:
+
+1. **Invocation artefacts** - `so101_demo` (installed-layout mapping), `rclpy`, `ament_*`, `sensor_msgs`,
+   `control_msgs`: the run lacked the installed package or the ROS environment. Fixed by running the installed gate,
+   not by changing code.
+2. **Environment gaps** - `mujoco` for colcon's interpreter (HS-090), `/diagnostics` unwritable (HS-085), fixed
+   socket roots under concurrent runs (HS-083).
+3. **Live-stack requirements** - suites such as `test_mujoco_runtime_observability.py` (13 failures) that need a
+   running simulator or GPU session a unit-test gate cannot provide.
+
+Category 1 is the largest and the most embarrassing to have presented as a suite result; the correction is on the
+record.
