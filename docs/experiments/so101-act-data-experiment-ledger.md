@@ -42657,3 +42657,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   suite and pass their session/attempt into the request.
 - **State.** **F14 closed**; F3 (a)(b)(c) landed, its positive control specified to the values; F1/F5/F11/F12/F13
   open; the goal is paused. HEAD `3a9ec51f7`; eighteen gates green.
+
+
+## CP-2255 — F3's positive control is fully specified: one overridden request
+
+- **Read this round**: `test_act_release_boundary.py`'s `request()` is a module-level function returning a fixed
+  dict — `{"mode": "full", "stop_after": None, "lifecycle": "FULL_RESTART", "scenario_id": "default",
+  "session_id": "s", "attempt_id": "a", "deadline_ns": 10 ** 18}` — so the control's runner needs only
+  `{**request(), "attempt_id": "attempt-1"}` to match `identity()`'s attempt while keeping everything else the same.
+- **The control, complete**: import `identity` and `_lease` from the audit suite; build the writer with
+  `mode="formal"` and identity `{**identity(), "lease": _lease()}`; run `PickPlaceRunner(FakePort(), audit=writer)`
+  with that overridden request; assert every admitted event carries the lease and that exactly one `release` event
+  names epoch 1. For the one-variable negative, keep the writer and change the request's `attempt_id` back to `"a"`,
+  so the writer refuses the foreign identity — a refusal of the same clause family, provable without touching the
+  runner.
+- **Nothing left to discover**: pattern, values, port, request override, assertions and the negative are all named
+  in CP-2251…CP-2255.
+- **State.** **F14 closed**; F3 (a)(b)(c) landed with this control one write away; F1/F5/F11/F12/F13 open; the goal is
+  paused. HEAD `60f6abd40`; eighteen gates green.
