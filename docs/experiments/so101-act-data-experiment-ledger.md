@@ -35637,6 +35637,20 @@ and finally two weaknesses in the test's own proof strength.
 **Tasks 1-9 are now complete and independently approved.** Next: Task 10, the Teleop Head Camera page and its
 visual evidence, starting with the named component tests that must fail for the right reason first.
 
+- **Task 10 RED written (round 305).** `src/so101_teleop/web/src/components/teleop/head-camera-panel.test.tsx`
+  holds eight named cases covering the plan's boundary: control disabled with a "View only" notice until
+  authority **and** qualification are present; enabled only then; the target slider bounded to the sealed
+  interval with no threshold or model editing; the frame rendering the overlay fields (mask, bbox, class and
+  confidence, track id, optical axis, deadband, vertical bounds, candidate centre, three-frame lock progress)
+  and the runtime identities; `Stopping` until the proof completes and `Stopped` after; an unavailable domain
+  showing no frame; and no detector of its own. RED gate: **nonzero exit** with the named resolve failure
+  `Failed to resolve import "./head-camera-panel"`, log and exit code retained at
+  `<evidence>/head-teleop-web-red-20260930T083827Z/`. The web toolchain is present (bun 1.3.14, vitest 1.6.0,
+  jsdom+testing-library already in `node_modules`), so this gate is real and reproducible.
+- **Next for Task 10:** implement `head-camera-panel.tsx`, `head-camera-client.ts` and its test, wire the tab
+  into `app.tsx`, add the `unified-layout.css` rules and the `schema.d.ts` entries, then GREEN and the scoped
+  commit. The e2e spec and the visual evidence are deferred to Task 14.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
