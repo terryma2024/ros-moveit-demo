@@ -40252,3 +40252,27 @@ Consequence for the recorder, stated as the open design question rather than a g
 
 Still interface work, no implementation started; recorded so the decision between "loop the generator" and "write a stepping
 harness" is made on evidence.
+
+## HS-224 — Episode length is bounded by `search_timeout_s`, which is one of the 17 values Task 13 approves
+
+Read the design's timing definitions and the config they live in:
+
+```
+design line 72/202/226: production frame rate is 10 Hz; max_age_s <= 1.5 frame periods
+design line 193: search_timeout_s = max stable stop count x per-step p99 settle/frame time x max fine corrections + ...
+config src/so101_demo_py/config/mujoco/act/head_search_v2.json (17 values):
+  search_timeout_s 12.0 | max_age_s 0.05 | stop_latency_s 0.06 | stop_velocity_rad_s 0.05
+```
+
+So an episode is a closed-loop head search at **10 Hz**, bounded by **`search_timeout_s = 12.0`** - i.e. **up to ~120 frames**
+per scene (a no-cup scene runs the full bounded scan to timeout; a found-target scene stops earlier). Feasible to record:
+seeds x 120 frames x 3 candidates is minutes of rendering plus minutes of inference on one 5080, run serially.
+
+**But it exposes an eighth plan-ordering coupling, and this one is substantive:** `search_timeout_s` is one of the **17 values
+Task 13 asks the user to approve**, while Task 12's episodes must be recorded **before** that approval. So the recordings would
+be produced under a value the user has not yet approved, and if approval changes it the episode length - and hence the frame
+counts the gate's continuous metrics are computed from - changes with it. That is not a blocker, but it is exactly the kind of
+implicit dependency the plan's ordering does not acknowledge, and it is worth deciding deliberately: either record at the
+current 12.0 s and re-record if the approved value differs, or settle that one value early.
+
+Recorded for the decision; implementation still not started pending the user's steer on this point.
