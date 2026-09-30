@@ -38410,3 +38410,24 @@ All ten now have module-level causes from real tracebacks, so no `UNCAUSED` row 
 issue. It is one test, it is not in this work's changed files (`task8_validation_campaign` does not appear in the HS-136
 diff), and it would be the first genuinely broken-code failure found in this sweep rather than an environmental one. I am
 recording it as such rather than folding it into the families.
+
+## HS-150 — Correction: the `inspect` failure does not reproduce; it was not a demonstrated code defect
+
+HS-149 flagged `test_act_task8_validation_campaign.py`'s `name 'inspect' is not defined` as "a plain code defect rather
+than an environment or contract issue". Testing that claim instead of leaving it standing:
+
+```
+test_act_task8_validation_campaign.py   (environment fixed, only the code install varying)
+  base install : 3 passed
+  overlay      : 3 passed
+```
+
+**It does not reproduce.** Under the fixed environment the file passes entirely in both installs, so the
+`inspect` failure I saw came from the earlier direct run's conditions (the `--tb=line` module sweep) rather than from a
+standing defect. My "genuinely broken code" characterisation was wrong, and it is retracted here rather than left in the
+ledger as a finding.
+
+The pattern is now familiar enough to name: in this session I have twice inferred a general property from a single run
+(HS-112's progress line, HS-148's `head -4` module list) and once flagged a defect that a controlled rerun dissolved. Each
+time the check that caught it was the same - run it again with one variable changed - and each correction is in the ledger
+next to the original claim.
