@@ -36900,3 +36900,23 @@ cause is identified - exactly the distinction the reviewer's point 2 insisted on
 
 The sequence continues with the `so101_teleop` gate and then the explicit benchmark gate with its readback. Nothing
 about the ordinary gates is claimed from this step.
+
+## HS-088 — Likely cause of the rc=2 gate: my build/install-base overrides (round 523)
+
+The installed gate for `so101_demo_py` returned `rc=2` with no test counts, while the **earlier benchmark gate that
+worked** (HS-059: `613 tests, 0 errors, 62 failures, 2 skipped`) was run **without** `--build-base`/`--install-base`
+overrides. My sequential script passed both overrides, and `colcon test` needs the test step to find the package's
+own build/install layout - so the overrides are the prime suspect for an invocation failure that never reaches
+pytest.
+
+The corrected invocation is therefore the one the repository rules actually name, with no overrides:
+
+```zsh
+colcon test --packages-select so101_demo_py            # ordinary gate, default build/install
+colcon test --packages-select so101_teleop
+colcon test --packages-select so101_demo_py --pytest-args benchmark_test   # explicit benchmark gate
+colcon test-result --all
+```
+
+I will re-run it that way once the current sequence finishes, so the two do not contend. Recorded as a hypothesis
+with a concrete test rather than as a conclusion: the override flags are suspected, not yet convicted.
