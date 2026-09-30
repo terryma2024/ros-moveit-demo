@@ -37784,3 +37784,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `b3550f3f6`;
   targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2032 — Task 3: the acceptance fixtures share one builder, so step three is close to a single edit
+
+- **Verified on the motion-phases side.** All of `test_act_task8_motion_phases.py`'s cases come from one
+  helper, `_case(calls, *, lifted=..., with_dispatch=..., ...)` at line 29, which builds `sources`, the
+  broker stub, the ticket and (below line 60) the boundary itself; every test in the file calls it
+  (`_case(calls)`, `_case(calls, lifted=False)`, `_case(calls, **kwargs)`). So supplying the boundary's
+  remembered receipt is **one line in that builder**, not six edits.
+- **Inferred, not verified, for the sibling file.** `test_act_task8_close_execution.py` contains no
+  `PickPlaceSearchBoundary(` and no builder of its own, so it most likely imports `_case`; that is where the
+  dispatch test of the acceptance set lives, and the next pass should confirm it before assuming one edit
+  covers both.
+- **The remaining pair of edits, then.** (a) `_gate_facts` drops its `@staticmethod`, takes `self`, and sets
+  `planning_scene_ok` from `getattr(self, "_planning_scene_receipt", None)` being present and successful —
+  its two call sites already use the `self.` form, so they are untouched. (b) `_case` (and the sibling
+  builder if it has one) sets a successful receipt on the boundary it returns. Then the fail-closed controls:
+  a case with no receipt and a case with an unsuccessful one must both report the gate false.
+- **Evidence for this reading** come from reads only — `test_act_task8_motion_phases.py:29-60`, the
+  `PickPlaceSearchBoundary(` greps in both files — and no code changed in this round.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `01c0c7b19`;
+  targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
