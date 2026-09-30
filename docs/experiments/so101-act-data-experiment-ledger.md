@@ -40009,3 +40009,20 @@ C: frozen-c.json | gate accepted: candidate_id=C points=['head','task']
 Each was written by `freeze_candidate` and then loaded through the gate's real `load_frozen_candidate`, which enforces the
 six-key contract, the sha256 binding and the both-domains rule (HS-201/205/207). So Step 4's producer now has a validated
 output for all three candidates, and the worktree stayed clean throughout (`git status --porcelain` empty after the grid).
+
+## HS-214 — Step 5's gate runs, after four requirements discovered by running it
+
+Each attempt failed fast and named the next requirement - the same pattern as Step 3, and the reason every step in Task 12 has
+been executed rather than inspected:
+
+| attempt | gate's answer | fix |
+| --- | --- | --- |
+| 1 | `error: the following arguments are required: --output` | pass the comparison output path |
+| 2 | `EVALUATION_WEIGHTS_MISSING: no weight file for candidate A in <frozen dir>` | the gate resolves `<weights-dir>/<ID>.pt`; provided `A.pt`/`B.pt`/`C.pt` as symlinks (A to the pinned weights, B/C to the trained ones) and passed `--weights-dir`, with digests matching the frozen documents (`f281d252…`, `86c17b58…`, `ef833f9c…`) |
+| 3 | `No such file or directory: 'src/.../head-search-scenario-partitions-v1.json'` | the runner `cd`s into the campaign root, so the path must be absolute |
+| 4 | `EVALUATION_EPISODES_UNAVAILABLE: the held-out episodes are recorded by the calibration run, so this gate needs --episode-records or a held-out-episodes directory` | **open** - the records do not exist yet |
+
+The fourth is the substantive one: Step 5 compares candidates on **held-out episodes**, and those records are produced by a
+calibration/episode run, not by static validation. So Step 5 depends on an artefact whose producer must be located the same way
+HS-198's was - by reading the code, not by guessing - and the honest state is that the gate itself is running and refusing
+correctly rather than that Task 12 is finished.
