@@ -38070,3 +38070,29 @@ Where that leaves the bisect, stated plainly: the two config candidates are clea
 modules are cleared (HS-132), and the remaining suspects are the **new modules** plus any difference in the overlay's
 `lib/` tree against the base install - which I have **not** diffed, because I only compared `share/`. That diff is the
 next command, and it is the obvious gap in what I have checked so far.
+
+## HS-136 — The `lib/` diff (the gap I admitted) names a task 8 adapter as the prime suspect
+
+Diffing the two installed **code** trees, which I had not done before:
+
+```
+7 files differ                       5 files only in the overlay
+  act/head_camera_geometry.py          act/head_search_calibration.py
+  act/head_search_binding.py           act/head_search_domain.py
+  act/search.py                        act/head_search_qualification.py
+  adapters/act/task8_calibration_search_binding.py     cli/head_search_calibration.py
+  cli/act_stack_ready.py               cli/head_search_smoke.py
+  cli/train_yolo_seg.py
+  perception_benchmark/head_search_models.py
+```
+
+Three of the differing files are already cleared by direct base-swap (HS-132), which leaves four untested, and one of
+them stands out: **`adapters/act/task8_calibration_search_binding.py`** - a **task 8** module that this work changed. A
+task 8 phase-camera test failing because a task 8 adapter changed is a far better hypothesis than anything I have
+offered so far, and unlike the previous leads it is directly testable: swap that one installed file for its base version
+and re-run the single test id.
+
+So the bisect's remaining candidate list is now explicit and short: `task8_calibration_search_binding.py`,
+`cli/act_stack_ready.py`, `cli/train_yolo_seg.py`, `perception_benchmark/head_search_models.py`, and the five new files
+(which cannot be swapped). Testing them is four one-file swaps of about a second each - the same technique that cleared
+the other three.
