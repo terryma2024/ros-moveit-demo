@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { HeadCameraPanel, type HeadCameraStatus } from "./head-camera-panel";
@@ -168,9 +168,17 @@ describe("HeadCameraPanel execute bound", () => {
     const slider = screen.getByLabelText("Target angle") as HTMLInputElement;
     expect(Number(slider.min)).toBeCloseTo(-0.2);
     expect(Number(slider.max)).toBeCloseTo(0.2);
+    // drive the control out of range so the clamp itself is exercised, not just the initial value
+    fireEvent.change(slider, { target: { value: "99" } });
+    expect(Number((screen.getByLabelText("Target angle") as HTMLInputElement).value)).toBeLessThanOrEqual(0.2);
     screen.getByRole("button", { name: "Execute" }).click();
     expect(executed).toHaveLength(1);
     expect(executed[0]).toBeGreaterThanOrEqual(-0.2);
     expect(executed[0]).toBeLessThanOrEqual(0.2);
+
+    fireEvent.change(screen.getByLabelText("Target angle"), { target: { value: "-99" } });
+    screen.getByRole("button", { name: "Execute" }).click();
+    expect(executed[1]).toBeGreaterThanOrEqual(-0.2);
+    expect(executed[1]).toBeLessThanOrEqual(0.2);
   });
 });
