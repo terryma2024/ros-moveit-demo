@@ -37879,3 +37879,33 @@ the strongest form: **run the same module at the branch base in a separate `git 
 contracts, base callers - and compare the failure set. If it fails there too, the family is pre-existing; if it passes,
 the cause is somewhere in this work and the bisect continues from there. Nothing in the current tree is touched by that
 run.
+
+## HS-129 — The base-tree A/B needs an installed base layout, and here is the exact recipe
+
+Attempting the reviewer-required A/B directly did not work, for a reason worth recording rather than working around
+blindly:
+
+```
+git worktree add --detach /tmp/.../base-ab 6d2983396     (branch base, created fine)
+pytest src/so101_demo_py/test/test_act_task8_phase_camera_measurement.py   (base source on PYTHONPATH)
+-> ImportError ... ModuleNotFoundError: No module named 'so101_demo.act'
+```
+
+The base tree keeps its packages as `src/act`, `src/cli`, ...; the `so101_demo.*` layout exists only in an **installed**
+tree. So the A/B must run against a **base install**, not base source - and a from-scratch colcon build cannot supply
+that here either (HS-108: the vendored MuJoCo stack will not build into empty bases).
+
+**The recipe that will work**, and the one I will run next:
+
+```zsh
+# in the base worktree, with the existing underlay providing the vendored stack
+colcon build --packages-select so101_demo_py \
+  --build-base /tmp/.../base-ab-build --install-base /tmp/.../base-ab-install
+# then run the module with ONLY that install plus the venv on the path
+PYTHONPATH=<base-ab-install>/so101_demo_py/lib/python3.12/site-packages:<venv>:$PYTHONPATH \
+  python3 -m pytest src/so101_demo_py/test/test_act_task8_phase_camera_measurement.py
+```
+
+If the module passes at base and fails in the current tree, the cause is inside this work and the bisect continues; if
+it fails at base as well, the family is pre-existing - which is what HS-127 claimed and did **not** prove (HS-128).
+The distinction the reviewer drew stands: unchanged inputs are not unchanged behaviour.
