@@ -38943,3 +38943,36 @@ task already owns, added **because the plan's own command line requires them**, 
 interpreter) would deviate from Step 2 instead. If further packages turn out to be missing, they are added the same way and
 listed in this entry's chain, so the venv's final provisioned set is traceable from the ledger rather than inferred from a
 `pip freeze`.
+
+## HS-170 — The frozen toolchain root exists and builds `rc=0`; one of Step 2's seven executables is missing
+
+```
+TOOLCHAIN_RUN = $HEAD_EVIDENCE/head-toolchain-20260930T115640Z
+source-commit.txt = ded04f57a730e0ed…          (written before the build, as Step 2 requires)
+build rc=0 ; 3 packages finished [35.6s]
+  so101_mujoco_support 23.1s | so101_teleop 10.8s | so101_demo_py 1.67s
+```
+
+Step 2's provenance assertions, run against that root:
+
+| check | result |
+| --- | --- |
+| `ros2 pkg prefix so101_demo_py` = `<root>/install/so101_demo_py` | **pass** |
+| `ros2 pkg prefix so101_teleop` = `<root>/install/so101_teleop` | **pass** |
+| `validate_head_camera_geometry` | ok |
+| `generate_yolo_seg_dataset` | ok |
+| `train_yolo_seg` | ok |
+| `verify_head_search_dataset` | ok |
+| `evaluate_head_search_yolo_candidates` | ok |
+| `so101_head_search_calibration` | ok |
+| **`so101_head_search_smoke`** | **MISSING** |
+
+So the frozen toolchain deliverable is **real** - it exists, it is commit-stamped, both packages resolve to it, and six of the
+seven entry points the plan names are present. **One is not**, and the plan's loop `exit 1`s on it, so Step 2 is not yet
+complete by its own criteria.
+
+That missing entry point traces back to Task 5, which created `src/cli/head_search_smoke.py`: either the console script was
+never registered in the package's entry points, or it is registered under a different name. The next step is to read the
+package's entry-point declarations against the plan's list - checking the name first, because "missing" and "named
+differently" are the same symptom and different fixes, and I have already been burned once in this task by reading one of
+those for the other.
