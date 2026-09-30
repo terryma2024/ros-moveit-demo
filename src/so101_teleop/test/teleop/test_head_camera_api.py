@@ -130,3 +130,49 @@ def test_composition_derives_the_head_runtime_from_the_closed_descriptor(tmp_pat
         compose_head_camera_service({**environment, "SO101_UNIFIED_SOCKET_DIR": str(tmp_path / "x")})
 
     assert compose_head_camera_service({}) is None, "no closed connection keeps the domain unavailable"
+
+
+def test_the_router_exposes_the_five_endpoints_over_the_composed_backend(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from so101_teleop.head_camera import head_camera_router
+
+    descriptor = valid_descriptor(tmp_path)
+    descriptor["safe_interval_rad"] = [-1.0, 1.0]
+
+    class Services:
+        def __init__(self, backend):
+            self.head_camera = backend
+
+    class Unavailable:
+        head_camera = None
+
+    def client_for(services) -> TestClient:
+        application = FastAPI()
+        application.include_router(head_camera_router(services))
+        return TestClient(application)
+
+    services = Services(compose_head_camera(environment_for(tmp_path, descriptor)))
+    client = client_for(services)
+    assert client.get("/teleop/head-camera/status").json()["detector_constructed"] == 0
+    refused = client.post("/teleop/head-camera/target", json={"target_rad": 99.0})
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "HEAD_TARGET_OUT_OF_RANGE"
+    assert client.post("/teleop/head-camera/target", json={"target_rad": 0.5}).status_code == 200
+    assert client.post("/teleop/head-camera/stop", json={}).json()["state"] == "STOPPING"
+    # the stream endpoint exists and refuses an unavailable domain; its live framing is exercised by
+    # Task 11's installed smoke and Task 14's end-to-end run, where a real socket and teardown exist
+    router = head_camera_router(services)
+    declared = {getattr(route, "path", None) for route in router.routes}
+    assert {
+        "/teleop/head-camera/status",
+        "/teleop/head-camera/stream",
+        "/teleop/head-camera/target",
+        "/teleop/head-camera/stop",
+        "/teleop/head-camera/capture",
+    } <= declared
+
+    unavailable = client_for(Unavailable())
+    assert unavailable.get("/teleop/head-camera/status").status_code == 503
+    assert unavailable.post("/teleop/head-camera/capture").status_code == 503

@@ -167,3 +167,77 @@ def compose_head_camera(environment: Mapping[str, str] | None = None, *, detecto
     if int(owner["pid"]) <= 0:
         raise CompositionBlocked("HEAD_CAMERA_CONNECTION_MISMATCH: the owner pid is not live")
     return HeadCameraBackend(descriptor=dict(descriptor))
+
+
+def head_camera_router(services) -> object:
+    """The five Teleop Head Camera endpoints over a composed backend, or over an unavailable domain.
+
+    The router reads the backend from the composed services; when the domain is unavailable every endpoint
+    reports that rather than composing anything, so a view-only process exposes no head camera.
+    """
+
+    from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+
+    router = APIRouter()
+
+    def backend_or_503():
+        backend = getattr(services, "head_camera", None)
+        if backend is None:
+            raise HTTPException(status_code=503, detail={"code": "HEAD_CAMERA_UNAVAILABLE"})
+        return backend
+
+    @router.get("/teleop/head-camera/status")
+    def status() -> dict:
+        return backend_or_503().status()
+
+    @router.websocket("/teleop/head-camera/stream")
+    async def stream(websocket: WebSocket) -> None:
+        backend = getattr(services, "head_camera", None)
+        await websocket.accept()
+        if backend is None:
+            await websocket.send_json({"code": "HEAD_CAMERA_UNAVAILABLE"})
+            await websocket.close()
+            return
+        try:
+            while True:
+                await websocket.receive_text()
+                envelope = backend.publish_once()
+                await websocket.send_json(
+                    {
+                        "sequence": envelope.sequence,
+                        "jpeg_sha256": envelope.jpeg_sha256,
+                        "model_id": envelope.model_id,
+                        "bundle_sha256": envelope.bundle_sha256,
+                    }
+                )
+        except WebSocketDisconnect:
+            return
+
+    @router.post("/teleop/head-camera/target")
+    def target(payload: dict) -> dict:
+        backend = backend_or_503()
+        interval = payload.get("safe_interval_rad") or backend.descriptor["safe_interval_rad"]
+        try:
+            return backend.submit_target(target_rad=payload["target_rad"], safe_interval_rad=interval)
+        except ValueError as error:
+            if "HEAD_TARGET_OUT_OF_RANGE" in str(error):
+                raise HTTPException(
+                    status_code=409, detail={"code": "HEAD_TARGET_OUT_OF_RANGE"}
+                ) from error
+            raise
+
+    @router.post("/teleop/head-camera/stop")
+    def stop(payload: dict | None = None) -> dict:
+        backend = backend_or_503()
+        raw_sample_ok = True if payload is None else bool(payload.get("raw_sample_ok", True))
+        return backend.stop(raw_sample_ok=raw_sample_ok)
+
+    @router.post("/teleop/head-camera/capture")
+    def capture() -> dict:
+        backend = backend_or_503()
+        try:
+            return backend.capture()
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail={"code": str(error)}) from error
+
+    return router
