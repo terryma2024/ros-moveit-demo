@@ -36718,3 +36718,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f38f9dafb`;
   gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1985 — Task 3 convergence, third instalment: the observer's sequence and the capture's forwarding (Proposal A)
+
+- **The observer records its own publication sequence.** Each per-kind frame now carries
+  `observer_sequence` (1-based, monotone by construction because the frame it appends is ordered by the
+  stamp and receipt checks just above it), which is one of the fields the ratified Proposal A requires and
+  the only one the observer did not already hold.
+- **The capture forwards the ratified packed group.** `_record_reference` now forwards
+  `frames`, `evaluation`, `projected_positions` and `projection_map` alongside the legacy flat group when
+  a message carries them, and the two groups remain alternatives that never travel together — the audit
+  refuses a record with both, so the forwarding cannot produce an ambiguous claim. The control feeds a
+  packed reference message and asserts the audit receives both frames with the gripper's sequence and the
+  final map entry intact.
+- **Evidence.** `logs/task3-fix34.run` rc=0: **139 passed in 1.56 s** across
+  `test_act_continuous_capture.py`, `test_act_episode_audit.py`, `test_act_controller_reference.py` and
+  `test_act_recorder.py`, with its own NVMe scratch and a non-empty tempfile proof.
+- **The one hop left for Proposal A is the broker.** `ros_broker.py::reference_state` still returns a
+  fused six-joint projection built from `self._references[kind] = (values, velocities, received, stamp)`
+  (line 214), so it is the only place that neither holds per-kind frames nor exposes `frames`/
+  `evaluation`. Above it, `ros_expert.py:10` passes through anything the broker supplies and the tap
+  forwards it, so exposing the ratified shape there completes the chain. That edit touches a long,
+  lock-sensitive live method, which is why it gets its own pass rather than riding along here.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `da01e7680`;
+  gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

@@ -72,6 +72,9 @@ class ControllerReferenceObserver:
                 "joint_names": names,
                 "positions": positions,
                 "velocities": velocities,
+                # the observer's own per-kind publication sequence, ratified as part of Proposal A;
+                # the ordering checks above already guarantee it is monotone by construction
+                "observer_sequence": len(history) + 1,
             })
             return True
         except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:

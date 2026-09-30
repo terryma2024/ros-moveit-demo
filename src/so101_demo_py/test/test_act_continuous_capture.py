@@ -691,3 +691,20 @@ def test_the_capture_reports_only_the_window_facts_it_observed():
     quiet = silent.window
     assert quiet["first_command_s"] is None and quiet["label_cutoff_s"] is None
     assert quiet["physics_end_s"] is None and quiet["collection_start_s"] is None
+
+
+def test_the_capture_forwards_the_ratified_packed_reference_shape():
+    """Proposal A: the packed frames/evaluation group must reach the audit unchanged."""
+
+    from test_act_episode_audit import _ratified_reference
+
+    audit = RawReferenceAudit()
+    capture, minter = build()
+    capture.audit = audit
+    start(capture)
+    frames_at(capture, minter, [1.0])
+    capture.on_reference({**reference(1.1), **_ratified_reference()})
+    recorded = audit.references[0]
+    assert set(recorded["frames"]) == {"arm", "gripper"}
+    assert recorded["frames"]["gripper"]["observer_sequence"] == 7
+    assert recorded["projection_map"][-1] == ["gripper", 0]
