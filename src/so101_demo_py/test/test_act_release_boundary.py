@@ -46,7 +46,14 @@ class FakePort:
                   "moveit_recovery": False, "holding_state": "EMPTY", "bilateral_contact": False,
                   "micro_lift_confirmed": False, "cup_off_table": False, "cup_supported": False,
                   "released": False, "no_fingertip_contact": False, "placement_stable": True,
-                  "retreat_stable": True}
+                  "retreat_stable": True,
+                  "physical_observation": {"simulation_time_s": round(0.1 * self.step, 4),
+                                           "simulation_step": self.step,
+                                           "left_contact_count": 2, "right_contact_count": 2,
+                                           "table_contact": phase in ("RELEASE", "RADIAL_RETREAT",
+                                                                      "FINAL_CHECK"),
+                                           "maximum_normal_force_n": 0.5,
+                                           "cup_position_world_m": [0.02, -0.28, 0.165]}}
         record.update(overrides)
         return record
 
@@ -153,10 +160,11 @@ def test_a_release_observation_from_the_old_epoch_is_refused():
 class RecordingAudit:
     def __init__(self):
         self.events = []
+        self.physics = []
 
     def append_source(self, kind, record):
-        assert kind == "events"
-        self.events.append(record)
+        assert kind in ("events", "physics")
+        (self.events if kind == "events" else self.physics).append(record)
 
 
 def test_the_audit_receives_the_events_the_run_actually_produced():
@@ -182,3 +190,68 @@ def test_an_aborted_run_records_its_abort_and_no_phase_it_did_not_verify():
     assert kinds.count("run_aborted") == 1
     assert "RELEASE" not in [event["detail"] for event in audit.events]
     assert "run_complete" not in kinds
+
+
+class PhysicsAudit:
+    def __init__(self):
+        self.physics = []
+        self.events = []
+
+    def append_source(self, kind, record):
+        (self.physics if kind == "physics" else self.events).append(record)
+
+
+def test_a_malformed_physical_observation_is_refused():
+    """A raw block that is not finite numbers and booleans may not enter the audit."""
+
+    port = FakePort()
+    original = port.run_phase
+
+    def poisoned(phase, request):
+        evidence = original(phase, request)
+        evidence["physical_observation"]["left_contact_count"] = "two"
+        return evidence
+
+    port.run_phase = poisoned
+    with pytest.raises(PickPlaceError, match="PHASE_EVIDENCE_INVALID"):
+        PickPlaceRunner(port, audit=PhysicsAudit()).run(request())
+
+
+def test_a_completed_run_records_offline_recomputable_physics_rows():
+    audit = PhysicsAudit()
+    port = FakePort()
+    PickPlaceRunner(port, audit=audit).run(request())
+    assert [row["kind"] for row in audit.physics] == [
+        "pose", "pose", "contact", "support", "support", "pose", "contact", "retract", "pose"]
+    assert all(row["release_epoch"] in (1, 2) for row in audit.physics)
+    assert all(row["sim_time_s"] is not None for row in audit.physics)
+    # the recorded rows alone must be enough to recompute the release-epoch physical criteria
+    released = [row for row in audit.physics if row["kind"] in ("contact", "retract", "pose")
+                and row["release_epoch"] == 2]
+    assert released and all(row["observation"]["table_contact"] is True for row in released)
+    supported = [row for row in audit.physics if row["kind"] == "support"]
+    assert supported and all(row["observation"]["supported"] is False for row in supported)
+    assert all(row["observation"]["maximum_normal_force_n"] <= 20.0 for row in audit.physics)
+
+
+def test_a_port_that_cannot_observe_physics_still_runs_and_says_so():
+    """The raw block is optional, so a port without it records no physics rather than a fake one."""
+
+    port = FakePort()
+    original_phase, original_retreat = port.run_phase, port.run_retreat_segment
+
+    def blind(phase, request):
+        evidence = original_phase(phase, request)
+        evidence.pop("physical_observation")
+        return evidence
+
+    def blind_retreat(direction, distance, request):
+        evidence = original_retreat(direction, distance, request)
+        evidence.pop("physical_observation")
+        return evidence
+
+    port.run_phase, port.run_retreat_segment = blind, blind_retreat
+    audit = PhysicsAudit()
+    result = PickPlaceRunner(port, audit=audit).run(request())
+    assert result["status"] == "PASSED"
+    assert audit.physics == []

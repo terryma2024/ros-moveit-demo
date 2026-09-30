@@ -35254,3 +35254,41 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   v2 and runner events green; raw physical observations and broker/observer events outstanding);
   items 4-8 pending.** HEAD `dcef92f99`; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1939 — Task 3 second bullet (second half): raw physics carried into the audit
+
+- **The audit can now recompute a threshold offline.** `PickPlaceRunner` accepts an optional
+  `physical_observation` block in a phase's evidence and records it as a `physics` row
+  (`append_source("physics", ...)`) with the four kinds the writer already knows
+  (`pose/contact/support/retract`), the verified `release_epoch` and the raw `simulation_time_s` when
+  the port supplies one. Each phase family maps as SEARCH/APPROACH/ALIGN/FINAL_CHECK → `pose`,
+  CLOSE/RELEASE → `contact`, MICRO_LIFT/TRANSPORT → `support`, RADIAL_RETREAT → `retract`. The
+  `support` rows additionally carry the boolean the phase concluded beside the raw numbers, so the
+  audit states both the observation and the conclusion.
+- **The block is optional and validated, which is deliberate.** It is accepted only when it is a flat
+  mapping of finite numbers, finite number lists and booleans (`PHASE_EVIDENCE_INVALID` otherwise), and
+  a phase without it records **no** physics row. That keeps every existing port and fake working
+  (129 tests pass across the task8 and supervisor suites) while refusing to let a port that cannot
+  observe physics invent one. The raw numbers the MuJoCo backend already computes —
+  `evidence_dict()` at `backends/mujoco/qualified_phases/release_retreat.py:82` with
+  `simulation_time_s/step`, `cup_position_world_m`, `cup_orientation_world_xyzw`, linear and angular
+  velocity, `left/right_contact_count`, `table_contact`, `other_contact_geoms` and
+  `maximum_normal_force_n` — fit that shape unchanged.
+- **Evidence.** `logs/task3-rawphysics.run` rc=0: **129 passed in 13.37 s** across
+  `test_act_release_boundary.py`, `test_act_episode_audit.py`, `test_act_recorder.py`,
+  `test_act_supervisor.py` and the five `test_act_task8*.py` suites, with its own NVMe scratch and a
+  non-empty tempfile proof. New cases: a malformed raw block (`"two"` for a contact count) is refused
+  with `PHASE_EVIDENCE_INVALID`; a completed run records exactly the expected kind sequence with real
+  sim times and epochs, and the criteria are **recomputed from the recorded rows alone** (table contact
+  through the whole release epoch, no support while carrying, force within the safe bound); and a port
+  that cannot observe physics still completes while recording no physics row at all.
+- **Two of my own test fixtures were wrong again and were corrected, not worked around:** the event
+  recorder asserted `kind == "events"` and so rejected the new physics rows, and the "blind port" case
+  only stripped the block from `run_phase` while the retreat segment still supplied it.
+- **Still open in Task 3.** The real backends do not yet attach `evidence_dict(...)` to the evidence
+  they return to the runner (the exact seam is the runner-facing assembly in the same module), and the
+  broker's claim/dispatch/accept/revoke/stop events plus the controller observer's raw history are not
+  yet wired into the writer. The Task 3 Codex checkpoint follows those.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD
+  `8a132b394`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

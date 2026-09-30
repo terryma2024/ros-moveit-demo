@@ -7,6 +7,7 @@ evidence gates and both camera gates agree for the same reset and attempt.
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Protocol
 
@@ -46,6 +47,13 @@ class PickPlaceRunner:
         "micro_lift_confirmed", "cup_off_table", "cup_supported", "released",
         "no_fingertip_contact", "placement_stable", "retreat_stable",
     })
+    # the raw physical numbers a phase predicate used, so the audit can recompute its thresholds
+    # offline; optional in the contract, because a port that cannot observe them must not fake them
+    _PHYSICS_KINDS = {
+        "SEARCH": "pose", "APPROACH": "pose", "CLOSE": "contact", "MICRO_LIFT": "support",
+        "TRANSPORT": "support", "ALIGN": "pose", "RELEASE": "contact",
+        "RADIAL_RETREAT": "retract", "FINAL_CHECK": "pose",
+    }
     _EVIDENCE_GATES = (
         "planning_ok", "controller_reference_ok", "joint_feedback_ok", "contact_ok",
         "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok",
@@ -68,6 +76,45 @@ class PickPlaceRunner:
         self.clock_ns = clock_ns
         # the audit receives the events this run actually produced, in the order it produced them
         self.audit = audit
+
+    @staticmethod
+    def _raw(observation) -> bool:
+        """A raw block is a flat mapping of finite numbers and booleans, or it is refused."""
+
+        if not isinstance(observation, dict) or not observation:
+            return False
+        for key, value in observation.items():
+            if not isinstance(key, str) or not key:
+                return False
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                if not math.isfinite(value):
+                    return False
+                continue
+            if (isinstance(value, (list, tuple))
+                    and all(isinstance(item, (int, float)) and not isinstance(item, bool)
+                            and math.isfinite(item) for item in value)):
+                continue
+            return False
+        return True
+
+    def _physics(self, phase: str, evidence: dict) -> None:
+        if self.audit is None or "physical_observation" not in evidence:
+            return
+        raw = dict(evidence["physical_observation"])
+        sim_time_s = raw.get("simulation_time_s")
+        if isinstance(sim_time_s, bool) or not isinstance(sim_time_s, (int, float)) \
+                or not math.isfinite(sim_time_s) or sim_time_s < 0:
+            sim_time_s = None
+        if self._PHYSICS_KINDS[phase] == "support":
+            # the raw numbers let a reader recompute this offline; the verified boolean is recorded
+            # beside them so the audit states what the run actually concluded
+            raw["supported"] = evidence["cup_supported"]
+        self.audit.append_source("physics", {"kind": self._PHYSICS_KINDS[phase],
+                                            "sim_time_s": sim_time_s,
+                                            "release_epoch": evidence["release_epoch"],
+                                            "observation": raw})
 
     def _event(self, kind: str, detail: str, physics_step: int) -> None:
         if self.audit is None:
@@ -111,7 +158,11 @@ class PickPlaceRunner:
         self, phase: str, evidence: dict, request: dict,
         reset_epoch: int, release_epoch: int, after_step: int,
     ) -> int:
-        if not isinstance(evidence, dict) or set(evidence) != self._EVIDENCE_KEYS:
+        if (not isinstance(evidence, dict)
+                or set(evidence) not in (self._EVIDENCE_KEYS,
+                                         self._EVIDENCE_KEYS | {"physical_observation"})):
+            raise PickPlaceError("PHASE_EVIDENCE_INVALID")
+        if "physical_observation" in evidence and not self._raw(evidence["physical_observation"]):
             raise PickPlaceError("PHASE_EVIDENCE_INVALID")
         if evidence["phase"] != phase or not self._scope(evidence, request, reset_epoch, release_epoch):
             raise PickPlaceError("PHASE_EVIDENCE_INVALID")
@@ -242,6 +293,7 @@ class PickPlaceRunner:
                     raise PickPlaceError("TASK8_DEADLINE_EXPIRED")
                 completed.append(phase)
                 self._event("phase_complete", phase, latest_step)
+                self._physics(phase, evidence)
                 if request["mode"] == "phase_prefix" and phase == request["stop_after"]:
                     self._stop("PHASE_PREFIX_COMPLETE", request)
                     # a prefix is never an episode: it must carry no live evidence artifact
