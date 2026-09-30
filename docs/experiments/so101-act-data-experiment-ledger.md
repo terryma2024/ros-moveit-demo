@@ -34424,3 +34424,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   model unavailable); items 2-8 pending.**
 
 - **CP-1922 addendum (recorded after the commit).** The Task 1 work is committed as `973acb565` on `codex/so101-act-data-0917a` (7 files: the two new modules, the two new test files, `act/collection.py`, `unified/admission.py`, this ledger). The 39 baseline-dirty paths were left unstaged and unmodified by that commit, and the review packet's HEAD placeholder now names `973acb565`.
+
+
+## CP-1923 — Checkpoint decision: the owner will restore gpt-6.1-sol availability first
+
+- The Task 1 checkpoint was paused exactly at the reviewer boundary (see CP-1922). The owner was
+  asked for the minimal decision and chose: **restore usability of the mandated GPT-6.1 Sol / High
+  reviewer first, then dispatch the same packet through the same `codex:0.0` session.**
+- Nothing else was started: no Task 2 work, no model substitution, no second Codex session, no push,
+  no evidence deletion, no hardware. `codex-task8-fix` stays retired; `dst-prior-20260930` stays
+  unresumed.
+- Prepared while paused (no behaviour change): `reviews/task1-review-packet.md` (pinned to the
+  reviewed commit `973acb5658b977d26a1f06034e67922cbc65aa2e`) and
+  `reviews/dispatch-task1-review.zsh`, which resolves the reviewer thread from
+  `~/.codex/state_5.sqlite` instead of guessing a UUID, prefers the supported
+  `codex queue --thread … --message …` transport, falls back to the keystroke path that was proven
+  during the checkpoint investigation, refuses to re-dispatch once a verdict exists, and waits in a
+  bounded loop for `reviews/task1-review-verdict.md`.
+- Resume condition: the owner confirms GPT-6.1 Sol / High is usable with the Codex account; then the
+  review is dispatched, the verdict is retained, actionable findings are fixed in this dst only
+  (RED→GREEN plus the affected targeted gate), and Task 2 starts only after checkpoint PASS.
+- **State.** **Task-list item 0 completed; item 1 in_progress and paused at its checkpoint; items 2-8
+  pending.** HEAD `62a9da9e3c5df2a8d68ddcc5bb9cd9a1d484a73c`; the 39 baseline-dirty paths are still
+  untouched and uncommitted by this task.
