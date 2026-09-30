@@ -38924,3 +38924,22 @@ Step 2's command instead - either way something is recorded, and I chose the one
 With both blockers now addressed - the vendored ignores (HS-166, proven at HS-142) and `empy` (this entry) - the toolchain
 root can be built with the plan's line plus the recorded ignore list, and then Step 2's provenance assertions
 (`ros2 pkg prefix` for both packages, and the seven executables) can be run against it.
+
+## HS-169 — The venv also lacked `catkin_pkg`; ROS build deps added one at a time
+
+The rebuilt toolchain got past `empy` and failed on the next missing build dependency:
+
+```
+ModuleNotFoundError: No module named 'catkin_pkg'
+CMake Error at /opt/ros/jazzy/share/ament_cmake_core/cmake/core/ament_package_xml.cmake:95
+```
+
+Same class as HS-167: `-DPython3_EXECUTABLE` points CMake at the perception venv, and the venv was never provisioned for
+**building** ROS packages - only for running the perception and test stacks. Added `catkin_pkg` and re-verified `em`,
+`catkin_pkg`, `lark`.
+
+Recorded as a continuation of the HS-168 deviation rather than a new one: these are build-time-only packages in the venv the
+task already owns, added **because the plan's own command line requires them**, and the alternative (a differently-provisioned
+interpreter) would deviate from Step 2 instead. If further packages turn out to be missing, they are added the same way and
+listed in this entry's chain, so the venv's final provisioned set is traceable from the ledger rather than inferred from a
+`pip freeze`.
