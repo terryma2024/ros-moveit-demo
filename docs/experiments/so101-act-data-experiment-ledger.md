@@ -37198,3 +37198,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `fdfaaf98a`;
   gate `logs/task3-gate8.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2006 — Task 3 fix pass: the ratified window shape is validated for whichever mode uses it (T3-F11 slice)
+
+- **A dead branch became reachable and enforced.** `_window_ok`'s `interrupted_diagnostic` outcome is legal
+  only for a diagnostic audit, but diagnostic windows were never validated, so the branch could not be
+  exercised at all. Now any window carrying exactly the ratified field set is validated against **its own
+  mode**, so a diagnostic audit that opts into the ratified shape is held to it: an interrupted diagnostic
+  window seals, while a `complete`-shaped window missing its cutoff is refused. Legacy windows stay
+  admissible on the diagnostic path, which is the separation the plan requires.
+- **Evidence.** `logs/task3-fix50.run` rc=0 across `test_act_episode_audit.py`, `test_act_recorder.py`,
+  `test_act_release_boundary.py` and `test_act_continuous_capture.py`, with its own NVMe scratch and a
+  non-empty tempfile proof. Two of my own slips were caught on the way: my module patch first searched the
+  wrong anchor text (so nothing was written, and the suite told me), and my control created the very
+  directory the writer creates for itself — the mistake I have now made three times, and the reason it is
+  written down in the handoff.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `95c550b28`;
+  gate `logs/task3-gate8.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

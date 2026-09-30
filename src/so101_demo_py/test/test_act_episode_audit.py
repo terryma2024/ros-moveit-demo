@@ -744,6 +744,16 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
         writer.seal(_window(outcome="no_command"))                  # must null both instants
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
         writer.seal(_window(outcome="interrupted_diagnostic"))      # never formal evidence
+    # a diagnostic audit may record a legacy window, but one that opts into the ratified shape is held
+    # to it: an interrupted diagnostic window is legal, a complete one without a cutoff is not
+    interrupted = EpisodeAuditWriter(tmp_path / "interrupted", scope(), identity(),
+                                     {"inputs_sha256": "a" * 64})
+    assert interrupted.seal(_window(outcome="interrupted_diagnostic", label_cutoff_s=None)).is_file()
+    bad_diagnostic = EpisodeAuditWriter(tmp_path / "bad-diagnostic", scope(), identity(),
+                                        {"inputs_sha256": "a" * 64})
+    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
+        bad_diagnostic.seal(_window(label_cutoff_s=None))
+
     # the writer creates its own root, so only its parent must exist
     diagnostic = EpisodeAuditWriter(tmp_path / "legacy", scope(), identity(),
                                     {"inputs_sha256": "a" * 64})

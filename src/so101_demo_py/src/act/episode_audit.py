@@ -777,7 +777,8 @@ class EpisodeAuditWriter:
                 raise ValueError("AUDIT_BINDING_REVOKED")
         if not isinstance(window, dict) or not window:
             raise ValueError("AUDIT_WINDOW_INVALID")
-        if self.scope.get("mode") == "formal" and not _window_ok(window, mode="formal"):
+        if (self.scope.get("mode") == "formal" or set(window) == _WINDOW_FIELDS) and not _window_ok(
+                window, mode=self.scope.get("mode")):
             # a formal audit states the ratified window; a diagnostic audit may record a legacy one
             raise ValueError("AUDIT_WINDOW_INVALID")
         for name, stream in self._streams.items():
