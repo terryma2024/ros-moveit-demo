@@ -50,16 +50,19 @@ def _episode_frames(
         raise EvaluationError(
             f"EVALUATION_PARTITION_MISSING: the partitions declare no {split} seeds"
         )
-    if records is None:
-        raise EvaluationError(
-            "EVALUATION_EPISODES_UNAVAILABLE: the held-out episodes are recorded by the calibration run, "
-            "so this gate needs --episode-records (frames with their scene_group_id and measurements)"
-        )
-    frames: list[Mapping[str, object]] = []
-    wanted = {int(seed) for seed in seeds}
+    # the declared sibling is resolved first: the pinned invocation passes no episode records, so the
+    # default must be reachable rather than shadowed by the refusal below
     if records is None:
         default = Path(partitions_path).resolve().parent / "held-out-episodes"
         records = default if default.is_dir() else None
+    if records is None:
+        raise EvaluationError(
+            "EVALUATION_EPISODES_UNAVAILABLE: the held-out episodes are recorded by the calibration run, "
+            "so this gate needs --episode-records or a held-out-episodes directory beside the partitions "
+            "file (frames with their scene_group_id and measurements)"
+        )
+    frames: list[Mapping[str, object]] = []
+    wanted = {int(seed) for seed in seeds}
     for path in sorted(Path(records).glob("*.json")):
         document = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(document, Mapping) or int(document.get("seed", -1)) not in wanted:
@@ -104,6 +107,7 @@ def _measure_static(
     operating_point: Mapping[str, object],
     device: str,
     scratch: Path,
+    document: Mapping[str, object] | None = None,
 ) -> dict[str, float]:
     """Measure one candidate on one frozen split with Ultralytics' own segmentation validation."""
 
@@ -163,11 +167,18 @@ def _measure_static(
         if (float(precision) + float(recall)) > 0
         else 0.0
     )
+    # a sealed identity declares conditions per domain and, in the document itself, at the top level;
+    # both are inspected, because a condition this path does not apply must never be silently ignored
+    document = document or {}
+    declared = dict(operating_point)
+    for key in ("tracker", "postprocess", "runtime"):
+        if key in document and key not in declared:
+            declared[key] = document[key]
     unsupported = sorted(
         key
         for key in ("min_bbox_aspect", "tracker", "postprocess", "runtime")
-        if operating_point.get(key) not in (None, {}, 0)
-        and operating_point.get(key) != {"iou": operating_point.get("tracking_iou")}
+        if declared.get(key) not in (None, {}, 0)
+        and declared.get(key) != {"iou": operating_point.get("tracking_iou")}
     )
     if unsupported:
         raise EvaluationError(
@@ -271,6 +282,7 @@ def main(arguments: list[str] | None = None) -> int:
                         operating_point,
                         parsed.device,
                         domain_scratch / "by-scene",
+                        document=candidate.document,
                     )
                     head_scene_cells[candidate.candidate_id] = per_scene
                     measured = {
@@ -415,6 +427,8 @@ def _measure_static_per_scene(
     operating_point: Mapping[str, object],
     device: str,
     scratch: Path,
+    *,
+    document: Mapping[str, object] | None = None,
 ) -> dict[str, dict[str, float]]:
     """Measure the deciding head cells one scene at a time, so their interval can be bootstrapped.
 
@@ -432,7 +446,13 @@ def _measure_static_per_scene(
         scene_scratch = scratch / f"scene-{index:04d}"
         scene_scratch.mkdir(parents=True, exist_ok=True)
         cells[scene] = _measure_static(
-            weights, dataset_root, by_scene[scene], operating_point, device, scene_scratch
+            weights,
+            dataset_root,
+            by_scene[scene],
+            operating_point,
+            device,
+            scene_scratch,
+            document=document,
         )
     return cells
 

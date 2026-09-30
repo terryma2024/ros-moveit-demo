@@ -460,3 +460,23 @@ def test_a_challenger_needs_a_scene_interval_that_excludes_zero() -> None:
     retained = choose_candidate(A_EQUIVALENT, B_EQUIVALENT, C_EQUIVALENT_RETAINED)
     assert retained.candidate_id == "C"
     require_selection_supported(retained, {})  # keeping the retained model needs no interval
+
+
+def test_a_challenger_that_wins_the_episodes_blocks_a_retained_selection() -> None:
+    """The re-review's counterexample: B beats C on episode recall and F1 by 0.09 while C is retained."""
+
+    static_best = _evaluation("A", head_ap=0.70, task_ap=0.50)
+    episode_best = _evaluation("B", head_ap=0.60, task_ap=0.50, head_recall=0.99, head_f1=0.99)
+    retained = _evaluation("C", head_ap=0.50, task_ap=0.50, head_recall=0.90, head_f1=0.90)
+    with pytest.raises(EvaluationError, match="EVALUATION_(F1|RECALL)_MARGIN"):
+        choose_candidate(static_best, episode_best, retained)
+
+
+def test_the_episode_winner_is_the_best_challenger_not_the_last_one() -> None:
+    strong = _evaluation("A", head_ap=0.60, task_ap=0.50, head_recall=0.99, head_f1=0.99)
+    weaker = _evaluation("B", head_ap=0.55, task_ap=0.50, head_recall=0.95, head_f1=0.99)
+    retained = _evaluation("C", head_ap=0.50, task_ap=0.50, head_recall=0.90, head_f1=0.90)
+    verdict = choose_candidate(strong, weaker, retained)
+    assert verdict.candidate_id == "A", (
+        "the strongest qualifying challenger wins, not the last seen"
+    )

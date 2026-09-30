@@ -378,6 +378,15 @@ def _check_safety(candidate: CandidateEvaluation, retained: CandidateEvaluation)
             )
 
 
+def _family_cell(candidate: CandidateEvaluation, family: str, domain: str, key: str) -> float:
+    metrics = (
+        candidate.static_image_metrics
+        if family == "static_image"
+        else candidate.held_out_episode_metrics
+    )
+    return _cell(metrics, domain, key)
+
+
 def _head_cells(candidate: CandidateEvaluation, family: str, key: str) -> float:
     metrics = (
         candidate.static_image_metrics
@@ -451,23 +460,41 @@ def choose_candidate(*candidates: CandidateEvaluation) -> SelectionVerdict:
     for name in ("A", "B"):
         if head_mask_map[name] - head_mask_map[static_winner] > MASK_MAP_MARGIN:
             static_winner = name
-    episode_winner = "C"
     retained_recall = _head_cells(retained, "held_out_episode", "recall")
-    for name in ("A", "B"):
-        candidate_recall = _head_cells(by_id[name], "held_out_episode", "recall")
-        f1_shortfall = retained_recall and (
-            _head_cells(retained, "held_out_episode", "f1")
-            - _head_cells(by_id[name], "held_out_episode", "f1")
-        )
-        if candidate_recall - retained_recall > RECALL_MARGIN and (
-            f1_shortfall is not False and f1_shortfall <= F1_MARGIN
-        ):
-            episode_winner = name
+    retained_f1 = _head_cells(retained, "held_out_episode", "f1")
+    qualifying = [
+        name
+        for name in ("A", "B")
+        if _head_cells(by_id[name], "held_out_episode", "recall") - retained_recall > RECALL_MARGIN
+        and retained_f1 - _head_cells(by_id[name], "held_out_episode", "f1") <= F1_MARGIN
+    ]
+    # the best qualifying challenger, never simply the last one inspected
+    episode_winner = (
+        max(qualifying, key=lambda name: _head_cells(by_id[name], "held_out_episode", "recall"))
+        if qualifying
+        else "C"
+    )
     if static_winner != episode_winner:
         static_winner = episode_winner = "C"
     winner = static_winner
     # a selection nobody can defend is refused rather than recorded: if another candidate is better than
     # the winner on a measured cell by more than the margin, the frozen evidence does not support a choice
+    for name, candidate in by_id.items():
+        if name == winner:
+            continue
+        for family in ("static_image", "held_out_episode"):
+            for key, margin, code in (
+                ("f1", F1_MARGIN, "EVALUATION_F1_MARGIN"),
+                ("recall", RECALL_MARGIN, "EVALUATION_RECALL_MARGIN"),
+            ):
+                for domain in ("head", "task"):
+                    rival = _family_cell(candidate, family, domain, key)
+                    chosen = _family_cell(by_id[winner], family, domain, key)
+                    if rival - chosen > margin:
+                        raise EvaluationError(
+                            f"{code}: {name} beats {winner} on the {family} {domain} {key} by "
+                            f"{rival - chosen:.3f}, so neither can be selected without retuning"
+                        )
     for name, candidate in by_id.items():
         if name == winner:
             continue
