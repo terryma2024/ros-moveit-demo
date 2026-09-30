@@ -37541,3 +37541,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `35ef86acb`;
   targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
   untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2022 — Task 6: the widest collectable scope measured, and its failures classified
+
+- **Run.** `src/so101_demo_py/test` with the un-collectable entrypoint file ignored, under `pytest-xdist` with
+  **8 workers on 32 logical CPUs**, `--dist loadfile`: **321 failed, 5654 passed, 155 skipped, 10 errors in
+  88.04 s**, rc=1 (`logs/task6-wide.run`, junit in that run's scratch, tempfile proof present). This is the
+  first time the ordinary module scope has been exercised in this session — the earlier gates were the
+  checkpoint's twenty files, which is why they reported 410.
+- **Classification.** The failures and errors span **32 distinct files**, and the dominant cause is the missing
+  install overlay rather than ACT behaviour: `test_perception_pick_place_launch.py` (128),
+  `test_text_pick_agent_launch.py` (39), `test_act_task8_readback.py` (35),
+  `test_text_agent_execution_provenance.py` (14), `test_launch_composition.py` (11),
+  `test_act_execution_stack_launch.py` (11), with **1555 occurrences of
+  `PackageNotFoundError: "package 'so101_demo_py' not found, searching: ['/opt/ros/jazzy']"`** in the log.
+- **Honest limit.** I counted the markers and the per-file distribution; I did **not** classify all 32 files
+  individually, so "the overwhelming majority is the overlay" is an inference from 1555 markers, not a
+  per-test verdict. The Task 6 plan is therefore: build the fresh `--install-base` overlay, re-run exactly this
+  command, and treat the resulting numbers as the baseline — the delta is the real regression surface, and the
+  ACT-related files among the 32 (`test_act_task8_readback.py`, `test_act_execution_stack_launch.py`,
+  `test_act_task8_measurement_client.py` and neighbours) are the ones this objective depends on.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `e63e32021`;
+  targeted gate `logs/task3-xdist.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
