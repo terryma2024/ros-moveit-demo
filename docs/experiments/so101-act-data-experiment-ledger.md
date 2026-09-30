@@ -37233,3 +37233,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f154ad7b1`;
   gate `logs/task3-gate8.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2008 — Task 3: gate re-verified as 410 passed in 26.67s and the handoff figure refreshed
+
+- **Gate.** `logs/task3-gate9.run` rc=0: **410 passed in 26.67s** across the checkpoint's twenty files plus the observer
+  suite, with its own NVMe scratch and a non-empty tempfile proof. The rise from 410 is CP-2005, CP-2006 and
+  CP-2007's controls.
+- **Handoff refreshed** to that figure, with the previous checkpoints' numbers kept so a reader can see the
+  trend rather than a single value.
+- **Task 3's remaining work is unchanged** and recorded in the handoff: the producer wiring (the broker's
+  fused `reference_state`, the two `planning_scene_ok: True` literals) and the window-to-rows checks that
+  need a self-consistent formal fixture; amendment **A.1** still awaits the owner.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `285f0f2ba`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
