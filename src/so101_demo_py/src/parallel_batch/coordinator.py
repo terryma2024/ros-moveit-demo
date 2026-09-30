@@ -774,17 +774,7 @@ class BatchCoordinator:
         return LeaseIdentity(**worker['lease'])
 
     def _commit(self, lease, location, request_key, *, validation, discovered=False):
-        # (owner decision ③a, CP-2219…2229) The ACT result store's verifier gates every commit: a location whose
-        # episode does not verify must not reach the coordinator's state. `_commit` is the funnel both commit
-        # paths share, and the guard is production-only — the abstract result ports used outside the production
-        # composition supply neither the exact WorkerRoot map nor the batch's own run mode.
         from so101_demo.act.result_store import ActCollectionResultVerifier
-        roots = getattr(self.result_port, 'worker_roots', None)
-        result_mode = getattr(self.result_port, 'run_mode', None)
-        if (isinstance(roots, dict) and lease.worker_id in roots
-                and result_mode is self.request.run_mode):
-            ActCollectionResultVerifier(dict(roots)).verify(lease, str(location),
-                                                            self.request.run_mode)
         kind = 'VALIDATION_COMMITTED' if validation else 'RESULT_COMMITTED'
         identity = {**self._identity(lease), 'location': str(location)}
         duplicate = self._duplicate(request_key, kind, identity)
@@ -793,6 +783,13 @@ class BatchCoordinator:
             if lease.coordinator_epoch != self.journal.coordinator_epoch:
                 raise ValueError('STALE_COORDINATOR_EPOCH')
             return deepcopy(duplicate.payload['response'])
+        # (T3-F14 correction, CP-2239) The ACT QC gate applies to an ACT execution commit and nothing else: it is
+        # selected by the result contract the port implements — the generic production adapter must keep its own
+        # paths — and it runs after the acknowledged-request branch so a replay stays journal-backed rather than
+        # depending on the filesystem. ACT validation commits are not episodes and are not gated here.
+        if (isinstance(self.result_port, ActCollectionResultVerifier)
+                and self.request.run_mode is RunMode.EXECUTE):
+            self.result_port.verify(lease, str(location), self.request.run_mode)
         point = self._state['points'].get(lease.point_id)
         worker_state = self._state['workers'].get(lease.worker_id)
         if (point is None or point.get('active_attempt') != lease.attempt_id

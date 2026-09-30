@@ -42318,3 +42318,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   receipt ages and the ratified eighth key are all recorded as **local closures**; T3-F9/F10 stay closed.
 - **State.** Task 3 remains **unconverged**; the goal is **paused** by the owner (revision 7), so the triage and any
   fix await their word. HEAD `640fffaed`; fifteen gates green.
+
+
+## CP-2239 — T3-F14 fixed: the ACT gate is scoped by contract and runs after the duplicate branch
+
+- **The finding, confirmed by execution before the fix**: the verdict named
+  `test_real_result_adapter_commits_only_matching_coordinator_event` as a concrete control, and running it at HEAD
+  `ee5445cfe` showed **six failures** — that control for `execute`, `plan_only` and `dry_run`, plus
+  `test_adapter_requires_parent_durability_after_rename_failure` for the three commit modes — with
+  `WRONG_RUN_MODE` and a missing `.../sealed/result.json`. My guard matched the generic production
+  `SealedResultAdapter` too, exactly as F14 says, so it broke the very paths the verdict told me to preserve. The
+  earlier `git checkout` could not clear it because the guard was already **committed** in `8c8bb548c`.
+- **The fix**: `_commit` now imports `ActCollectionResultVerifier` without acting on shared attributes, and applies
+  the gate **only** when `isinstance(self.result_port, ActCollectionResultVerifier)` **and** the batch's mode is
+  `RunMode.EXECUTE`; ACT validation commits are not episodes and stay ungated. It sits **after** the
+  acknowledged-request branch, so a replay is answered from the journal rather than from the filesystem. The store's
+  mode-aware `_expected` stays, since the ACT path needs it.
+- **Evidence.** `logs/task3-f14-fix.run` rc=0: **275 passed in 1.91s** across the generic artifact suite (including the control
+  F14 named), the store's commit suite, three parallel-collection suites and the audit, recorder, release-boundary,
+  task8 and W8 suites — i.e. the six failures now pass and nothing else moved — under `pytest-xdist` with 8 workers,
+  its own NVMe scratch and a non-empty tempfile proof.
+- **Step 2 next**: read the six residuals' bodies (F1/F3/F5/F11/F12/F13) and give the owner a per-item fix plan
+  before touching code again, as CP-2238 recorded.
+- **State.** Task 3 remains **unconverged** per the seventh verdict; **F14 is closed by this fix**; the goal is
+  paused unless the owner resumes it. HEAD `ee5445cfe`; sixteen gates green.
