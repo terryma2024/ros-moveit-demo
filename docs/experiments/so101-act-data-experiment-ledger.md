@@ -38172,3 +38172,19 @@ presenting it as per-test attribution.
 **Ground 2:** a genuinely fresh closure build fails on the vendored MuJoCo stack (HS-108), and the installed digests I
 recorded are not a substitute - the reviewer is right. The options are a build that ignores the vendored packages and
 records the closure boundary explicitly, or asking the user to narrow this gate as with HS-103/HS-107.
+
+## HS-140 — Exact id-to-reason pairing needs `--tb=short`; the `--tb=line` logs cannot supply it
+
+I tried to pair each failing id with its own traceback by parsing the FAILURES headers, and it produced **zero rows**:
+`--tb=line` prints one line per failure with **no per-test header**, so the reason lines and the summary's `FAILED` ids
+are two unordered sets in the same file. That is exactly the limitation HS-139 flagged, now demonstrated rather than
+assumed.
+
+**What that means for the reviewer's requirement.** Per-test attribution is achievable, but not from the logs I have:
+the next run must use `--tb=short` (which emits a `___ test_name ___` header per failure, letting a parser pair header to
+reason exactly), or `-rf` with per-test reasons in the summary. That is a one-line change to the run command and a
+one-command parse afterwards - bounded, mechanical, and the last thing standing between me and the table clause (c)
+asks for.
+
+The reason **histogram** and the failing **id list** are both already extracted (HS-139), and they are consistent with
+the families recorded in HS-114/116/124 - but consistency is not pairing, and I am not going to present it as such.
