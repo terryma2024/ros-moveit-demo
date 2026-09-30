@@ -446,7 +446,7 @@ def _window_ok(window, *, mode: str) -> bool:
                    for name, instants in schedule.items())):
         # a schedule is a chronological list per stream, not a set in arbitrary order
         return False
-    if (not isinstance(window["streams_required"], list)
+    if (not isinstance(window["streams_required"], list) or not window["streams_required"]
             or any(not isinstance(name, str) or not name for name in window["streams_required"])
             or not _number(window["cadence_s"]) or window["cadence_s"] <= 0
             or not isinstance(window["permitted_gaps_s"], list)

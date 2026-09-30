@@ -37247,3 +37247,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   need a self-consistent formal fixture; amendment **A.1** still awaits the owner.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `285f0f2ba`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2009 — Task 3 fix pass: a formal window must require at least one stream
+
+- **One more ratified-window rule.** `streams_required` may not be empty: a formal window that requires no
+  stream and observes no schedule describes nothing, so it is refused with `AUDIT_WINDOW_INVALID`; the
+  control is one line in the existing window test, the sixth increment of that shape to land first-try.
+- **Evidence.** `logs/task3-fix52.run` rc=0 across `test_act_episode_audit.py` and `test_act_recorder.py`,
+  with its own NVMe scratch and a non-empty tempfile proof.
+- **Task 3's remaining work is unchanged**: the producer wiring (broker `reference_state`, the two
+  `planning_scene_ok: True` literals) and the window-to-rows checks needing a self-consistent formal
+  fixture, plus amendment **A.1** awaiting the owner. All are recorded with recipes in the handoff document
+  and CP-1993/CP-1997/CP-2001.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `697920350`;
+  gate `logs/task3-gate9.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
