@@ -38173,3 +38173,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9c796b55d`;
   consolidated gate `logs/task3-gate12.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2049 — Session closing state: 419 passed in 10.49s at HEAD `4df164121`
+
+- **Gate.** `logs/task3-gate13.run` rc=0: **419 passed in 10.49s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof. The rise from 419 is the port's derived `joint_feedback_ok` and its fixture's stamped records
+  (CP-2048).
+- **Four gates derived, two documents covered**: `planning_scene_ok` and `joint_feedback_ok` on both the
+  boundary helper (CP-2034, CP-2043) and the SEARCH document (CP-2029, CP-2048), each from a real observation
+  — a verified SEARCH receipt and the ratified controller records at the same simulation instant — with the
+  boundary's three-way controls (CP-2036, CP-2044) and the runner's existing `_EVIDENCE_GATES` refusal.
+- **Still open, with recipes recorded**: `controller_reference_ok` and `planning_ok` on both documents, plus
+  the port's `contact_ok`/`mujoco_ok`/two RGB gates (each needs its own observation source read first); the
+  full `planning_scene_observation` record's travel once the readback fills it; T3-F11's window-to-rows checks
+  (CP-1997/CP-2001); and a fresh checkpoint after those land — which is what the owner's "converge Task 3"
+  choice points at.
+- **Objective status, stated plainly.** **Not achieved.** The work is in Task 3 of nine, Tasks 4-8 have not
+  started, and the four real input roles still lack approved values. What this session changed is that the
+  live path now derives four gates from observations instead of asserting them, with controls, and that every
+  remaining item is recorded down to the line to read and the assertion to add.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
+  deletion, no hardware, no second stack.
