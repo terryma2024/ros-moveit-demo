@@ -39113,3 +39113,30 @@ exactly the check that turned HS-171 from "missing executable" into "misnamed co
 **Note the reviewer's requirement is not yet met:** verdict 15 asked for the renamed installed command's exact invocation,
 resolved module path, exit code and coverage output. I have the first three (HS-175: resolved path, invocation, rc=2) and the
 coverage output cannot exist until the argument surface matches.
+
+## HS-176 — The plan is internally inconsistent about this CLI, and the later tasks win
+
+Checked the second side, as HS-175 promised. `--scenario` and `--evidence-root` appear in the plan **only** at:
+
+```
+line  994   ros2 run so101_demo_py so101_head_search_smoke --scenario no_cup --anchor default ...
+line  996     --evidence-root "$SEARCH_SMOKE_ROOT" || exit 1
+line 1005     --evidence-root "$HEAD_EVIDENCE"
+line 1248   --evidence-root "$HEAD_EVIDENCE"
+```
+
+i.e. in **Task 11 and Task 13's** invocations - nowhere in Task 5's definition of the executable, which is where the CLI
+surface is specified and where my implementation matches. So this is not (only) my defect: **the plan's later tasks invoke
+flags its own earlier task never defined.**
+
+**Reconciliation chosen, and why:** Task 11's acceptance *depends* on that command running and producing
+`coverage-proof.json`, and Task 13 depends on `--evidence-root` as well - so the flags are load-bearing for two downstream
+tasks while being absent from the specification of the thing that must accept them. I will therefore **extend the CLI**:
+add `--scenario` and `--evidence-root` (the latter as an alias/equivalent of the existing `--output` root, since the smoke
+already writes `coverage-proof.json` into its output root), **keeping every existing flag working** so the smoke evidence
+already recorded at HS-115-117 and the Task 7 qualification path are unaffected. That is the smaller change: adding two
+arguments versus rewriting two downstream tasks' invocations.
+
+This is recorded rather than done silently because it modifies Task 5's delivered interface in order to satisfy Task 11's
+contract, and because a reviewer should be able to see that the mismatch was resolved in favour of the later tasks with the
+reason stated.
