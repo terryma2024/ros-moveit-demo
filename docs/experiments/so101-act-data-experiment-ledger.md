@@ -38109,3 +38109,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `"planning_ok": True`).
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4deb692ab`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2046 — Task 3: the port half's exact touch points, read from the test file
+
+- **Where the port's gates are asserted**: `src/so101_demo_py/test/test_act_task8_search_port.py:404` expects
+  `"planning_scene_ok": True, "head_rgb_ok": True, "wrist_rgb_ok": True,` in the SEARCH document, so deriving
+  the two controller gates in the port requires the fixture to supply the ratified records **in the same
+  pass**, exactly as CP-2042 did for the boundary.
+- **Where the fixture lives**: `observation()` at line 36 builds the observation and `fixture(...)` at line 94
+  consumes it; the file is 637 lines and its own readback stub already computes the simulation instant as
+  `observed.physical_readback["world"].simulation_time_s + 0.1 * self._readback_clock` (line 126), which is the
+  precise expression the injected record's `sim_time_s` must match so the instant join holds.
+- **So the port half is two edits and one expectation check**: (1) in `_search_evidence`, replace
+  `"joint_feedback_ok": True` with the same derivation the boundary now uses
+  (records present and each `sim_time_s` equal to `world.simulation_time_s`); (2) in `observation()`, set
+  `controller_feedback` to the two records stamped from that observation's own
+  `physical_readback["world"].simulation_time_s`; (3) confirm line 404 still expects `True` for the
+  planning-scene gate only, and add the three-way control beside it. `controller_reference_ok` needs its own
+  source identified before it can follow.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `77cec5b70`;
+  consolidated gate `logs/task3-gate12.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
