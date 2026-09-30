@@ -132,11 +132,55 @@ def test_the_smoke_entry_point_plans_against_a_real_seal(tmp_path) -> None:
     path = tmp_path / "seal.json"
     path.write_text(json.dumps(seal), encoding="utf-8")
 
-    assert main(["--geometry-seal", str(path), "--anchor", "default",
-                 "--output", str(tmp_path / "run")]) == 0
+    assert (
+        main(
+            ["--geometry-seal", str(path), "--anchor", "default", "--output", str(tmp_path / "run")]
+        )
+        == 0
+    )
     report = json.loads((tmp_path / "run" / "head-search-plan-default.json").read_text())
     assert report["coverage_complete"] is True and report["stop_count"] >= 2
     # a domain the safe interval cannot cover is refused before any motion
     seal["required_search_domain_rad"] = [-9.0, 9.0]
     path.write_text(json.dumps(seal), encoding="utf-8")
     assert main(["--geometry-seal", str(path), "--anchor", "default"]) == 2
+
+
+def test_the_controller_walks_the_bounded_plan_instead_of_a_full_revolution() -> None:
+    from so101_demo.act.search import HeadSearchController
+
+    config = {
+        "attempt_id": "attempt",
+        "session_id": "session",
+        "search_start_rad": 0.1,
+        "horizontal_fov_rad": 1.0,
+        "coarse_step_rad": 0.5,
+        "search_timeout_s": 30.0,
+        "max_age_s": 0.1,
+        "max_skew_s": 0.05,
+        "settle_velocity_rad_s": 0.1,
+        "goal_tolerance_rad": 0.05,
+        "center_deadband_px": 20.0,
+        "vertical_bounds_px": [100.0, 380.0],
+        "min_area_px2": 64.0,
+        "min_confidence": 0.4,
+        "max_fine_corrections": 3,
+        "max_fine_total_rad": 0.5,
+        "frame_id": "camera",
+        "ray_origin_frame_id": "base",
+        "required_domain_rad": [-2.5, 2.5],
+        "lock_valid_neck_rad": list(SAFE),
+    }
+    controller = HeadSearchController(config)
+    assert controller.plan is not None and controller.plan.coverage_complete
+    walked = []
+    while True:
+        target = controller.next_target()
+        if target is None:
+            break
+        walked.append(target)
+    assert walked == list(controller.plan.targets_rad)
+    assert max(walked) <= SAFE[1] and min(walked) >= SAFE[0]
+    assert controller.plan.not_found_status(reached_bound=True) == (
+        TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL
+    )
