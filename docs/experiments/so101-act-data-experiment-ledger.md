@@ -37307,3 +37307,27 @@ uvicorn 0.54.0 · transformers 4.56.2 · PyYAML 6.0.2
 With the build command and these two digests, "installed-entry provenance" is now a fact a reader can check rather
 than an assertion - the same standard the geometry seal meets. HS-056's toolchain table stands as the environment
 half of the same record.
+
+## HS-106 — Fourth verdict: the narrowing is accepted, and three specific gaps remain (round 710)
+
+The reviewer **accepted HS-103's narrowing** - "full ordinary-suite green is no longer required" - and rejected on
+three narrower grounds. Two are mine to close by work, one is a contract question:
+
+1. **Clause (c) is unproven.** "Family-level explanations do not individually attribute every failure." Correct: I
+   attributed the ordinary-suite failures by *family* (socket roots, `/diagnostics`, missing `mujoco`, live-stack
+   needs) rather than listing each failing test with its cause. Closing this is mechanical and verifiable: run each
+   ordinary suite once with a short traceback, map **every** failing test id to a named cause category, and record the
+   table so a reader can check any row.
+2. **Dependency closure is not proven by a selected-package build.** It wants a build from a **fresh** build/install
+   base that resolves the full closure, not an incremental build into an existing overlay. That is the repository's
+   own rule about fresh colcon bases, and it is a bounded piece of work: build into empty bases, capture the package
+   list and any unresolved dependencies, and record both.
+3. **The full benchmark gate still lacks a fresh passing readback.** This one is **not** mine to waive: the benchmark
+   readback exists and is red by the 60 dataset failures plus (previously) 2 adapter ones, which I traced to
+   environment - the rasterizer set and the pinned `transformers` install - and HS-103 deliberately did **not** narrow
+   it. Either the gate passes (which needs the rasterizer configuration working under the colcon interpreter) or its
+   acceptance is narrowed explicitly by the user, exactly as HS-103 was.
+
+Progress worth noting: the verdict moved from "two headline grounds plus two more" to an acceptance of the narrowed
+contract plus three specific items, and every earlier item - final seal, dataset verify, installed server, provenance
+digests - is now accepted or closed.
