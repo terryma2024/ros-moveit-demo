@@ -36196,3 +36196,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   gate once the raw coverage exists. Then a fresh checkpoint and the consolidated gate.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c7faa3b68`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1966 — Task 3 fix pass, twentieth instalment: the raw reference frame is forwarded end to end (T3-F1)
+
+- **The consumer chain no longer drops the raw frame.** `CausalEpisodeCapture.append`
+  (`act/expert.py`) now carries the observer's `joint_names`, `sim_stamp_ns`, `received_monotonic_ns`
+  and `velocities` into the audit claim when the tap supplies them, refusing a partial group with
+  `EXPERT_REFERENCE_RAW_INCOMPLETE`; `ContinuousEpisodeCapture._record_reference` forwards the same four
+  fields to `append_source("references", ...)` when the message carries them. Combined with CP-1965's
+  group rule in the audit, a reference that has the raw frame keeps it and one that does not gains
+  nothing — so the record can no longer *look* complete while having lost the history.
+- **Evidence.** `logs/task3-fix20.run` rc=0: **125 passed in 1.36 s** across
+  `test_act_continuous_capture.py`, `test_act_episode_audit.py`, `test_act_controller_reference.py` and
+  `test_act_recorder.py`, with its own NVMe scratch and a non-empty tempfile proof. The new control
+  feeds one reference message carrying the raw frame and one without, and asserts the first arrives with
+  its joint names and stamp while the second carries none.
+- **The remaining producer step, precisely.** `MoveItExpertActionTap.reference` (`act/expert.py`, the
+  builder that returns `{"requested_sim_time_s", "source", "positions"}`) is now the **only** remaining
+  place that discards the observer's fields before my forwarding can see them; it reads from the
+  observer whose raw frames are `adapters/act/controller_reference_observer.py:71-77`. Extending that tap
+  to return the four raw fields is the next change, and the pass-through above means no other file needs
+  touching for it.
+- **Still open.** **T3-F1**: the tap step above and the window schema awaiting the owner's ratification
+  of key names and ordering (CP-1963). **T3-F5**: the fail-closed eligibility and sealing gate once the
+  raw coverage exists. Then a fresh checkpoint and the consolidated 19-file gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `a8a2d325e`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

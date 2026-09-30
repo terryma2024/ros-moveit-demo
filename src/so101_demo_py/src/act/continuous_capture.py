@@ -24,6 +24,8 @@ from .deadline import ACT_TIMEOUT_S
 _TOLERANCE_S = 1e-6
 _REFERENCE_SOURCE = "CONTROLLER_REFERENCE"
 _STREAMS = ("head", "wrist")
+# the observer's raw frame fields, forwarded to the audit when the observer supplies them
+_RAW_REFERENCE_FIELDS = ("joint_names", "sim_stamp_ns", "received_monotonic_ns", "velocities")
 
 
 @dataclass(frozen=True)
@@ -272,10 +274,12 @@ class ContinuousEpisodeCapture:
             # every message is kept, acceptance and revocation alike, so the audit holds the raw
             # history the run actually received rather than only its final state; a refusing writer
             # is terminal like every other dependency
+            raw = {name: message[name] for name in _RAW_REFERENCE_FIELDS if name in message}
             try:
                 self.audit.append_source("references", {"reference_time_s": key,
                                                         "source": _REFERENCE_SOURCE,
-                                                        "positions": values, "accepted": accepted})
+                                                        "positions": values, "accepted": accepted,
+                                                        **raw})
             except Exception as error:  # noqa: BLE001
                 self._reject(self._reason(error, "CAPTURE_AUDIT_WRITE_FAILED"))
         if (not accepted and self._last_labelled_target_s is not None

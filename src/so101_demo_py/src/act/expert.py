@@ -37,6 +37,8 @@ class CausalEpisodeCapture:
     """Build a training label and its audit claim from the same reference read."""
 
     _REFERENCE_KEYS = frozenset({"reference_time_s", "reference_source", "reference_positions"})
+    # the observer's raw frame travels with the claim when the tap preserves it, all four or none
+    _RAW_REFERENCE_KEYS = ("joint_names", "sim_stamp_ns", "received_monotonic_ns", "velocities")
 
     def __init__(self, recorder, tap: MoveItExpertActionTap) -> None:
         self.recorder = recorder
@@ -51,5 +53,11 @@ class CausalEpisodeCapture:
                  "reference_time_s": reference["requested_sim_time_s"],
                  "reference_source": reference["source"],
                  "reference_positions": positions}
+        raw = {key: reference[key] for key in self._RAW_REFERENCE_KEYS if key in reference}
+        if raw:
+            if set(raw) != set(self._RAW_REFERENCE_KEYS):
+                # a partial raw frame would misrepresent the history as complete
+                raise ValueError("EXPERT_REFERENCE_RAW_INCOMPLETE")
+            audit.update(raw)
         self.recorder.append(observation, positions, audit)
         return positions

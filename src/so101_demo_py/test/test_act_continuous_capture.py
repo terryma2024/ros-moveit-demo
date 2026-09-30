@@ -614,3 +614,29 @@ def test_an_expired_budget_does_not_replace_the_first_failure():
         capture.on_event({"kind": "phase", "sim_time_s": 9.0})
     with pytest.raises(ValueError, match="NO_NEW_ACQUISITION"):
         capture.finish(1.4)
+
+
+class RawReferenceAudit:
+    def __init__(self):
+        self.references = []
+
+    def append_source(self, kind, record):
+        assert kind == "references"
+        self.references.append(record)
+
+
+def test_the_observer_raw_frame_reaches_the_audit_when_it_is_supplied():
+    """A reference message carrying the observer's raw frame must not lose it (T3-F1)."""
+
+    audit = RawReferenceAudit()
+    capture, minter = build()
+    capture.audit = audit
+    start(capture)
+    frames_at(capture, minter, [1.0])
+    raw = {"joint_names": ["shoulder_pan", "shoulder_lift"], "sim_stamp_ns": 1100000000,
+           "received_monotonic_ns": 900000, "velocities": [0.0, 0.0]}
+    capture.on_reference({**reference(1.1), **raw})
+    capture.on_reference(reference(1.2))
+    assert audit.references[0]["joint_names"] == raw["joint_names"]
+    assert audit.references[0]["sim_stamp_ns"] == raw["sim_stamp_ns"]
+    assert "joint_names" not in audit.references[1]
