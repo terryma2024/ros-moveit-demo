@@ -43249,3 +43249,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   evidence, and a production-class integration control proving the chain end to end.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four with the fourth blocked
   on the design contradiction (CP-2285); F12 three of four with the fourth landed alongside; F5 open; goal paused.
+
+## CP-2289 - F5's starting contract: exactly what the coverage predicate checks and omits
+
+- _formal_coverage_ok, read in full, requires: non-empty physics, events and references files; every name in
+  FORMAL_PHASES appearing as a phase_complete payload (a set, so order and repetition are invisible); every
+  registered physics kind appearing (also a set); at least one physics row whose observation carries both the scene
+  record and the controller feedback; and at least one accepted reference carrying a complete raw group (legacy
+  flat keys or packed frames).
+- What it therefore omits, mapped to the verdict's words: the ordered phase/step/epoch relationships (sets cannot
+  see order); the dispatch/accept/revoke/stop/contact/final-check history; the set-down and detach/open ordering;
+  hold intervals; the final stability measurement; the registered contact/model/velocity histories; and any link
+  between a phase's own records and the physics transitions it claims. Its positive fixture mints the phase names
+  from FORMAL_PHASES after the fact, which is the shortcut the plan forbids.
+- The first half to implement, checkable from the three streams already read: require the phase_completes to be
+  strictly increasing in their physics_step and to span the registered order; require every registered kind to
+  appear with a non-decreasing step sequence; and require the physics rows' release epochs to be non-decreasing and
+  to name only epochs a release event named. Each is a real relation over records the audit already holds, so no
+  new producer is needed for this half; the second half is the producer/runner/writer/readback integration control
+  that replaces the preset-fixture shortcut.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four with the fourth blocked on
+  the design contradiction (CP-2285); F12 three of four plus its carrier cut; F5 started here; goal paused.
