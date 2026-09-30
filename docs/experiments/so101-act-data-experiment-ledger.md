@@ -34773,6 +34773,14 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `e6fbe8cc` declares the key). A fresh preparation carries it; the retained smoke run predates it.
 - **Gate:** 103 passed, 1 skipped, plus 86 passed on the Task 2 render gate; `ruff check` clean.
 
+- **Evidence readback (round 16):** both smoke runs still carry their artifacts. Each `train/results.csv`
+  has the header `epoch,time,train/box_loss,train/seg_loss,train/cls_loss,train/dfl_loss,train/sem_loss,
+  head,task,lr/pg0,lr/pg1,lr/pg2` - the two camera-domain cells are real columns in the trainer's own
+  log, which is what replaces the stock single-fitness column. Candidate C recorded one epoch
+  (`head=0, task=0`); candidate B recorded **two** epochs (`head=0, task=0` each) while its
+  `candidate-manifest.json` history holds only `[{epoch: 0, score: 0.0}]`, so the earlier-epoch tie rule
+  is visible in the artifacts themselves and not just in the manifest.
+
 ## HS-013 — Candidate B trains head-only and the earlier-epoch tie rule holds on CUDA (commit 86761e77a)
 
 - **A two-epoch candidate B smoke exits 0** (`model-campaign-smoke-b-20260930T064703Z/run-b`, same pinned
