@@ -40734,3 +40734,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 in progress** (first cut
   landed); F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 passed**; HEAD `64ff97ace`; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2167 — F1's second cut landed: the raw rule admits the registered shapes
+
+- **What landed** (`pick_place_runner.py`): `_raw` now accepts a **non-empty string** value — the registered
+  sample's session name — and a **non-empty list of non-empty dictionaries** — its contact records — beside the
+  flat numeric and string-list rules and the two ratified nested records (CP-2116). F1 named exactly these three
+  rejections, and with this the forwarding boundary no longer refuses a registered-shaped observation.
+- **The control that had to move, and why that is right**: `test_a_malformed_physical_observation_is_refused`
+  poisoned the block with the string `"two"`, which F1 says is a **legitimate** raw value now, so the control
+  poisons with a non-empty mapping under an **unratified** name instead — still refused, and now for a reason that
+  F1 does not license.
+- **Evidence.** Targeted run this round: **221 passed** across the task8, qualification, release-boundary,
+  supervisor, audit, recorder and capture suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a
+  non-empty tempfile proof.
+- **What F1 still owes**: a **registered-shaped fixture** proving a full sample flows to the audit end to end (its
+  shape is `act/contact_live.py:25`), typing `physics_step` the way `simulation_step` is typed if the loop does not
+  cover it, and F1's **third cut** — the A.1 frames through the real expert adapter (`adapters/act/ros_expert.py:10`),
+  tap and capture into the common reference record, with the chain test the verdict asks for.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
+  landed**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**; HEAD `f348b5a32`; no push, no
+  evidence deletion, no hardware, no second stack.

@@ -111,6 +111,13 @@ class PickPlaceRunner:
                 # the ratified typed records travel inside the raw block (F12/CP-2115); every other key keeps
                 # the flat rule above, and the common audit validates these records strictly for itself
                 continue
+            if isinstance(value, str) and value:
+                # F1: the registered sample names the session it came from, which is a raw value like any other
+                continue
+            if (isinstance(value, list) and value
+                    and all(isinstance(item, dict) and item for item in value)):
+                # F1: the registered sample publishes its contact records as a list of non-empty dictionaries
+                continue
             return False
         return True
 

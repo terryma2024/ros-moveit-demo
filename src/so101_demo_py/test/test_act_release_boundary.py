@@ -215,7 +215,9 @@ def test_a_malformed_physical_observation_is_refused():
 
     def poisoned(phase, request):
         evidence = original(phase, request)
-        evidence["physical_observation"]["left_contact_count"] = "two"
+        # a non-empty mapping under a name that is not one of the ratified records stays malformed: strings
+        # and lists of contact dictionaries are legitimate raw values now (F1)
+        evidence["physical_observation"]["left_contact_count"] = {"two": True}
         return evidence
 
     port.run_phase = poisoned
