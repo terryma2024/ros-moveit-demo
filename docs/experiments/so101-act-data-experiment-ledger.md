@@ -40883,3 +40883,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
   landed plus its fixture**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 247 passed in 2.33s passed**; HEAD
   `5a527e071`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2174 — F1's third cut: the wiring point, and the two shapes still to read
+
+- **Read this round**: `RosControllerReferencePort` (`adapters/act/ros_expert.py:6-11`) exposes exactly one
+  method — `reference_state(at_s)`, delegating to `broker.reference_state(at_s)` and stamping
+  `source: "CONTROLLER_REFERENCE"` — so the compatibility path is the only one the expert tap can reach. And
+  `expert.py`'s `reference(at_s)` builds its record as
+  `{requested_sim_time_s, source, positions, **raw}` with `raw` drawn from `_RAW_REFERENCE_KEYS` — **the four legacy
+  keys only** — which is exactly F1's "the tap and causal capture still preserve only the four legacy raw keys".
+- **The wiring, therefore**: give the port a `reference_frames(kind, at_s)` that delegates to the broker's own
+  `reference_frames` (it exists — F1 says the broker now offers it), and have `expert.py`'s `reference` add the
+  packed half — `frames`, `projected_positions`, `projection_map` — when the port supplies it, so the same record
+  carries the ratified A.1 group that `_reference_frames_ok` validates and the audit's packed branch accepts
+  (CP-2127).
+- **The two shapes still to read before writing it**: the broker's `reference_frames` return value, and
+  `_reference_frames_ok`'s exact expectations for `frames`/`projected_positions`/`projection_map` (line ~228). Both
+  are single reads; with them the edit is mechanical and the chain test writes itself (port → expert → capture →
+  writer → readback with the packed group present).
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
+  plus its sample fixture**, third cut planned here; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 247
+  passed**; HEAD `eabac94c0`; no push, no evidence deletion, no hardware, no second stack.
