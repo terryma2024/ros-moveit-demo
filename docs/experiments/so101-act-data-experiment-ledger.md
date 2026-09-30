@@ -35819,6 +35819,15 @@ env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHO
   smoke's `--contract` reads JSON; the smoke therefore needs to accept the perception config's own declaration
   (or a JSON projection of it) so the installed gate can run without a hand-made shim.
 
+- **The existing-root refusal smoke is now honest and green (rounds 335-336).** `qualify` on an existing run
+  root returns **rc 2** naming `RUN_ROOT_ALREADY_EXISTS` (it used to raise an uncaught traceback and exit 1,
+  fixed in `a8f9696c1`, with `run` already behaving correctly), and `verify-promoted-config` returns **rc 2**
+  naming the same once its digest matches. Two of my own probe mistakes were corrected on the way: the first
+  run omitted `--promoted-config`, so the exit code came from `HEAD_SEARCH_BUNDLE_REQUIRED` rather than the
+  root; the second used a dummy digest, so it came from `HEAD_SEARCH_APPROVAL_MISMATCH`. Both are recorded
+  because a refusal observed for the wrong reason is exactly the false confidence this session's reviews kept
+  catching in tests.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
