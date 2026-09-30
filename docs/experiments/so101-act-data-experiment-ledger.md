@@ -34263,3 +34263,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   first real input is identified.** **Task-list statuses: P1-1 in_progress, P1-6 completed, five pending** (and the list's
   text is the original seven items verbatim - a typo I introduced in the previous update, `Astra/Hard`, was corrected back
   to the original `Astra/High`).
+
+## CP-1920 — The real phase path: the same production call goes ABSENT → MEASURED at a 2 ms cadence
+
+- **RED, captured before the module existed (production boundary, not a static claim):**
+  ```
+  PhaseCameraMatrixEvaluator(document, trajectory=None, target=…, occluder_geometry=…)
+      ("SEARCH", 0) -> geometry_state "ABSENT", samples 0
+  and the driver refuses exactly that state by name:
+      MEASUREMENT_PHASE_GEOMETRY_REQUIRED: <anchor>: the phase camera reported 'ABSENT'
+  ```
+- **GREEN, with the new admitted provider (`src/so101_demo_py/src/act/task8_phase_path.py`):**
+  ```
+  anchor default: neck_start_rad=0.1 binding_velocity_limit=0.25
+  anchor left:    neck_start_rad=0.0 binding_velocity_limit=0.25
+  anchor forward: neck_start_rad=0.0 binding_velocity_limit=0.25
+      SEARCH      MEASURED samples=2 dt=[0.002] in_frame=0/2 occluded_by=[]
+      APPROACH    MEASURED samples=3 dt=[0.002] in_frame=0/3 occluded_by=[]
+      FINAL_CHECK MEASURED samples=2 dt=[0.002] in_frame=0/2 occluded_by=[]
+  ```
+  **every phase of every anchor now reports `MEASURED` at the admitted 2 ms cadence**, and the trajectory comes only
+  from admitted documents: the nine-phase joint path is the task-6 manifest's `target_positions` (one row per phase),
+  the per-anchor neck start is `task8-live-anchors.yaml`, and the advance uses the **slowest** joint limit from the
+  admitted `velocity_limit_rad_s` vector (0.25 rad/s) - a value derived from the admitted vector, not chosen here.
+- **Two measured facts recorded rather than explained away:** the sample counts are 2-3 per phase, because consecutive
+  admitted rows are close and the binding limit is slow, and `in_frame` is 0/2-3 at these configurations - **the cup is
+  genuinely outside the head camera's frame at the first segment's rows**, which is a measurement of the admitted
+  camera/target pair (the coverage question belongs to P1-3, which is still open).
+- **And one interface limitation this exposed, for the packet:** `PhaseCameraMatrixEvaluator.__call__(phase, index)`
+  takes no anchor, while the matrix admits three anchors and the driver iterates them, so **one evaluator cannot express
+  three different anchor paths** - the probe builds one provider per anchor (which is what the composition would have to
+  do), and the composition currently builds a single evaluator with a single trajectory.
+- **State:** **P1-1 in progress: the frame contract, the production client, the client wiring, the installed-tree loader
+  fix and now the real phase path are all GREEN at their boundaries; the formal run remains blocked at the
+  calibration/qualification pairing (CP-1919), whose bootstrap the gate6 provenance document itself records as having no
+  producer in this repository.** **Task-list statuses: P1-1 in_progress, P1-6 completed, five pending.**
