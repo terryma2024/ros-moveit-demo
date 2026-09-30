@@ -37049,3 +37049,23 @@ Fixing it means either recording the step beside the geometry in the seal, or le
 value from the promotable head-search config (`config/mujoco/act/head_search_v2.json`, Task 8's 17-value bundle)
 rather than from the calibration contract's *declaration* document. That is a design choice on a boundary the plan
 cares about, so it is recorded for a deliberate change with tests - not patched at the end of a round.
+
+## HS-094 — What the promotable bundle carries, for the coarse-step fix (round 694)
+
+Reading Task 8's bundle (`config/mujoco/act/head_search_v2.json`) to choose between the two fix routes:
+
+```
+keys: allow_cpu_fallback, camera, candidate_identity_sha256, controlled_dependencies, cuda_device, motion,
+      runtime_id, schema_version, tracker, unused_values, values, weight_path
+camera: {frame_id, head_camera_optical_frame, height 480, name head_camera, ray_origin_frame_id base_link, width 640}
+```
+
+So the bundle carries a `camera` block **without** `coarse_step_rad`, and it does not name a geometry seal at all - its
+`values` mapping holds the 17 approved values, and the seal binding lives in the perception configs
+(HS-047/HS-048), not here.
+
+That settles the choice from HS-093 in favour of the **seal route**: the smoke's second branch already exists for
+exactly this, so the minimal correct fix is to record the coarse step **beside the geometry in the seal**, where the
+smoke already looks, instead of adding a third branch that would have to re-derive a seal binding this bundle does
+not carry. One declaration, one consumer, no new coupling - and the refusal in HS-092 remains the guard if the
+declaration is ever missing again.
