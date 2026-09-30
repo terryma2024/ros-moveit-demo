@@ -65,7 +65,9 @@ def test_ambiguity_invalidates_bearing_and_one_revolution_is_terminal():
         result=search.tick(*evidence(1.+index*.1,q=yaw),1.+index*.1)
         if "found" in result: break
         yaw=result["neck_target_rad"]
-    assert result["status"]=="TARGET_NOT_FOUND"
+    # a full revolution observes no coverage proof, so it cannot claim the clean negative that the
+    # bounded plan earns when it covers the sealed required domain
+    assert result["status"]=="TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL"
     assert yaw==pytest.approx(2*math.pi)
 
 
