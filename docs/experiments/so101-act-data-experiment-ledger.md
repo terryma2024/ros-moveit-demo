@@ -35345,6 +35345,23 @@ callback's observations.
 **Task 6 remains `in_progress`:** its third verdict's finding (the unvalidated coarse step) is fixed in
 `e89986c7c` and its suite passes 14 tests, but no confirmation verdict has been recorded for that fix yet.
 
+## HS-032 — Task 6 APPROVED
+
+Confirmation verdict at `reviews/task6/task6-confirm-verdict.md` (GPT-6.1-Sol high, static confirmation at HEAD
+`fe9224982`, commit `e89986c7c` an ancestor, no tests run): **APPROVE** on all five items - the final verdict's
+finding is acknowledged, `calibrate_head_search` now rejects non-finite, non-positive and larger-than-half-FOV
+coarse steps before emitting a bundle (equality at half-FOV permitted), the refusal is the named
+`HEAD_SEARCH_CALIBRATION_UNSAFE_MOTION`, `test_the_coarse_step_is_validated_too` covers NaN, infinity, -0.3
+and 1.0 rad against the fixture's 1.3121-rad FOV, and the schema test asserts a nonempty
+`parameters["patternProperties"]` before iterating, so empty parameter rules cannot pass silently (schema
+execution itself remains unverified, which the reviewer states plainly).
+
+**Task 6 complete.** Commit trail: `6eb4731ea` (library), `df7a25108`, `902d0cb82` (validation and identity),
+`ac079dd8d` (intervals and scalars), `e89986c7c` (coarse step). Suite: 14 passed.
+
+**Tasks 1-7 are now complete and approved** (Task 5's HS-027, Task 7's HS-031, Task 6's HS-032; Tasks 1-4
+approved earlier). Next: Task 8, the production startup binding, with its RED tests first.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
