@@ -161,3 +161,23 @@ def test_the_broker_keeps_the_per_kind_names_and_sequence_it_received():
     assert 'self._reference_names={};self._reference_sequences={}' in text
     assert "self._reference_names[kind]=tuple(message.joint_names)" in text
     assert "self._reference_sequences[kind]=self._reference_sequences.get(kind,0)+1" in text
+
+
+def test_the_observer_sequence_counts_publications_not_the_retained_buffer():
+    """T3-F9: the sequence must keep advancing after the bounded buffer starts evicting."""
+
+    observer = ControllerReferenceObserver(max_frames=51)
+    observer.reset("session-a", 2, source_floor_ns=1_000_000_000)
+    total = 60
+    for index in range(total):
+        observer.accept("arm", frame(1_100_000_000 + index * 2_000_000),
+                        received_monotonic_s=10.0 + index * 0.002)
+    identity, rows = observer.recent("arm", now_monotonic_s=10.0 + total * 0.002,
+                                     max_wall_age_s=1.0)
+    # the buffer holds 51 frames, but the publication counter reached the real count
+    assert len(rows) == 51
+    assert rows[-1]["observer_sequence"] == total
+    observer.reset("session-a", 3, source_floor_ns=2_000_000_000)
+    observer.accept("arm", frame(2_100_000_000), received_monotonic_s=20.0)
+    identity, rows = observer.recent("arm", now_monotonic_s=20.1, max_wall_age_s=1.0)
+    assert rows[-1]["observer_sequence"] == 1

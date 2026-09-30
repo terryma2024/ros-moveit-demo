@@ -71,7 +71,6 @@ class ControllerReferenceObserver:
             if history and (stamp <= history[-1]["sim_stamp_ns"]
                             or receipt < history[-1]["received_monotonic_ns"]):
                 raise ValueError("CONTROLLER_REFERENCE_ORDER_INVALID")
-            self._sequences[kind] = self._sequences.get(kind, 0) + 1
             history.append({
                 "sim_stamp_ns": stamp,
                 "received_monotonic_ns": receipt,
@@ -82,6 +81,8 @@ class ControllerReferenceObserver:
                 # the ordering checks above already guarantee it is monotone by construction
                 "observer_sequence": self._sequences[kind] + 1,
             })
+            # the counter advances after the frame carries its number, so the first publication is 1
+            self._sequences[kind] = self._sequences.get(kind, 0) + 1
             return True
         except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
             self._hazard = str(error)

@@ -36965,3 +36965,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `408660e62`;
   gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1995 — Task 3 fix pass: the observer counter's control caught an off-by-one in the fix (T3-F9)
+
+- **The control found a real defect in my own fix.** Writing it exposed that the counter incremented
+  **before** the frame was numbered and then added one again, so the first publication was numbered 2 and
+  every later frame was one too high. The increment now happens after the frame carries its number, so
+  publication 1 is 1. Without this control the sequence would have been monotone (the ordering checks would
+  have passed) but simply wrong, and the ratified contract says the sequence starts at one.
+- **What the control proves now.** Sixty publications through a 51-frame observer: 51 rows retained, the
+  last row's `observer_sequence` equals 60, and after an epoch reset with a new source floor the next
+  publication is numbered 1 again.
+- **Why it took several attempts, recorded honestly.** My first three attempts guessed the message shape and
+  the accessor instead of reading them; my own CP-1994 note said to read the file first, and doing that
+  (`frame(...)` factory, `recent()` returning `(identity, rows)`) made the control four lines of setup.
+  The lesson is in the ledger so the next control starts from the existing helpers.
+- **Evidence.** `logs/task3-fix42.run` rc=0 across `test_act_controller_reference_observer.py`,
+  `test_act_episode_audit.py` and `test_act_continuous_capture.py`, with its own NVMe scratch and a
+  non-empty tempfile proof.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c2e873826`;
+  gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
