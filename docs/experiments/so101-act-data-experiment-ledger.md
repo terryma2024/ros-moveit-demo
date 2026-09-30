@@ -40315,3 +40315,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 half-landed**
   (shared predicate ✓, tightening pending), F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**;
   HEAD `9bb74c688`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2147 — The one decision F5's tightening needs before it is written
+
+- **The question**: the coverage predicate lives in `episode_audit.py` and the prescribed phase list is
+  `PickPlaceRunner.PHASES` in `pick_place_runner.py`. Importing the runner into the audit would make the audit
+  depend on the runner — and the runner already imports the audit — so the cycle is the real risk, not the typing.
+- **The two acceptable shapes, for the next pass to pick in one line**: (a) a phase tuple declared **in the audit
+  module** with a small test asserting it equals `PickPlaceRunner.PHASES`, so the duplication cannot drift
+  silently; or (b) the predicate taking the expected phases as an argument, with `seal()` reading them from
+  `self`/the scope and the readback reading them from the manifest/scope — which avoids duplication but widens
+  the signature the two callers share.
+- **My recommendation**: (a). The audit's job is to be readable without the runner, the equality test is cheap
+  (the file already imports across test modules, and `PickPlaceRunner.PHASES` is a class attribute), and it keeps
+  CP-2146's single shared predicate exactly as it is.
+- **Why this is written rather than tried**: a wrong choice here produces an import cycle at **collection** time,
+  which fails every suite in the file at once — the kind of failure that costs a whole round to unwind. The
+  second half of F5 is otherwise fully specified (nine phases, a complete raw reference group, the ratified
+  physics kinds and observations) and its fixtures' upgrades are the known cost.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 half-landed**
+  (CP-2146) with this decision standing between it and its second half, F1/F11 open; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `8ff9ccf97`; no push, no evidence deletion, no hardware, no second
+  stack.
