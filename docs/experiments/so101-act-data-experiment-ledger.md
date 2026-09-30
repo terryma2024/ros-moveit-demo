@@ -38731,3 +38731,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f3468dae7`;
   targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2076 — Task 3: item (a)'s carrier corrected — the reader is the observation object, not the readback mapping
+
+- **The correction.** CP-2075 said the record could travel inside `raw["observation"]` with no schema change. Re-reading
+  the reader shows that is the wrong carrier: `_search_evidence` reads
+  `getattr(observed, "planning_scene_observation", None)` — the **observation object's** field, which
+  `PickPlaceSearchObservation` declares as of CP-2066. A nested key in the readback mapping would never be seen.
+  This is the same reader-versus-carrier mix-up CP-2066 caught in the other direction, and it is corrected in the
+  brief and here rather than left for the next session to discover.
+- **What is actually missing, then.** The producer: the place that builds the observation (the boundary's search
+  path, which also holds `self.planning_scene`) sets the field from `observe_observation()` and the simulation
+  instant it owns; the document's additive carry (CP-2028), the proved channel (CP-2067) and the audit's
+  end-to-end rules then apply unchanged.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `85576f270`;
+  targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

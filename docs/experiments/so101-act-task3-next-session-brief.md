@@ -24,15 +24,15 @@ pointer. Verified position: HEAD `36df61a74`, targeted parallel gate `logs/task3
 ## 2. The four items left in Task 3
 
 **(a) Let the full `planning_scene_observation` record travel — only the producer is missing.** The port
-produces it (`RosTaskScenePort.observe_observation()`, CP-2020), the observation has the carrier
-(CP-2066), the document carries it additively when supplied (CP-2028) and that channel is proved in both
-directions (CP-2067). What is missing is the readback filling the carrier with the simulation instant the
-readback itself owns. The insertion point is `pick_place_readback.py:195-197`, where `capture(...)` (line
-86) returns the raw mapping the port consumes; the carrier that needs **no** schema change is a nested key
-inside `raw["observation"]`, since the port's closed key set covers the outer keys only. The scene port
-lives on the boundary, not on the readback, so either `capture(...)` gains an optional argument or the
-boundary augments the returned mapping before handing it to the port — the first is cleaner and is the one
-I would take. Then the audit's end-to-end verification of the full record applies.
+produces it (`RosTaskScenePort.observe_observation()`, CP-2020), the document carries it additively when
+supplied (CP-2028) and that channel is proved in both directions (CP-2067). **The reader is the
+observation attribute** — `_search_evidence` reads `getattr(observed, "planning_scene_observation", None)`
+and `PickPlaceSearchObservation` now declares that field (CP-2066) — so the record must be set on the
+**observation object**, not in the readback's raw mapping: a correction to CP-2075, which first suggested
+`raw["observation"]` before this round re-read the reader. Missing is the producer: the place that builds
+the observation (the boundary's search path, which is also where `self.planning_scene` lives) fills the
+field from `observe_observation()` plus the simulation instant it owns, after which the audit's end-to-end
+verification of the full record applies.
 
 **(b) Three-way controls - narrowed by CP-2069/CP-2070, and it is now about the boundary only.** The
 port's gates are no longer derived: its own validation refuses a non-locking result, a truncated world,
