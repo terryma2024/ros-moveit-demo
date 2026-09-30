@@ -293,6 +293,21 @@ def main(arguments: list[str] | None = None) -> int:
             )
         head_manifest = json.loads(parsed.head_dataset.read_text(encoding="utf-8"))
         task_manifest = json.loads(parsed.task_dataset.read_text(encoding="utf-8"))
+        weights_dir = parsed.weights_dir or Path(parsed.candidate[0]).resolve().parent
+        weight_paths: dict[str, Path] = {}
+        for candidate in frozen:
+            weight_path = (weights_dir / f"{candidate.candidate_id}.pt").resolve()
+            if not weight_path.is_file():
+                raise EvaluationError(
+                    f"EVALUATION_WEIGHTS_MISSING: no weight file for candidate "
+                    f"{candidate.candidate_id} in {weights_dir}"
+                )
+            if hashlib.sha256(weight_path.read_bytes()).hexdigest() != candidate.weight_sha256:
+                raise EvaluationError(
+                    "EVALUATION_FROZEN_IDENTITY_DRIFT: the weight file is not the sealed one for "
+                    f"candidate {candidate.candidate_id}"
+                )
+            weight_paths[candidate.candidate_id] = weight_path
         head_root = parsed.head_dataset_root or parsed.head_dataset.resolve().parent
         task_root = parsed.task_dataset_root or parsed.task_dataset.resolve().parent
         head_sums = _dataset_sums(Path(head_root))
@@ -313,21 +328,10 @@ def main(arguments: list[str] | None = None) -> int:
 
         scratch = Path(parsed.output)
         scratch.mkdir(parents=True, exist_ok=True)
-        weights_dir = parsed.weights_dir or Path(parsed.candidate[0]).resolve().parent
         evaluations = []
         head_scene_cells: dict[str, dict[str, dict[str, float]]] = {}
         for candidate in frozen:
-            weight_path = (weights_dir / f"{candidate.candidate_id}.pt").resolve()
-            if not weight_path.is_file():
-                raise EvaluationError(
-                    f"EVALUATION_WEIGHTS_MISSING: no weight file for candidate "
-                    f"{candidate.candidate_id} in {weights_dir}"
-                )
-            if hashlib.sha256(weight_path.read_bytes()).hexdigest() != candidate.weight_sha256:
-                raise EvaluationError(
-                    "EVALUATION_FROZEN_IDENTITY_DRIFT: the weight file is not the sealed one for "
-                    f"candidate {candidate.candidate_id}"
-                )
+            weight_path = weight_paths[candidate.candidate_id]
             static = {}
             head_scene_cells[candidate.candidate_id] = {}
             for domain, samples, root in (
@@ -526,15 +530,32 @@ def _measured_latency_p95(
 ) -> float:
     """The candidate's measured per-frame latency p95 on the partition, never a document field."""
 
-    values = sorted(
-        float((frame.get("latency_ms") or {})[candidate_id])
-        for frame in frames
-        if frame.get("split") == split
-    )
+    values = []
+    for frame in frames:
+        if frame.get("split") != split:
+            continue
+        raw = (frame.get("latency_ms") or {}).get(candidate_id)
+        # every input timing is validated, not only the quantile that is finally reported
+        if (
+            isinstance(raw, bool)
+            or not isinstance(raw, (int, float))
+            or not math.isfinite(float(raw))
+        ):
+            raise EvaluationError(
+                f"EVALUATION_LATENCY_UNMEASURED: candidate {candidate_id} has a non-finite or "
+                "non-numeric latency on a recorded frame"
+            )
+        if float(raw) < 0.0:
+            raise EvaluationError(
+                f"EVALUATION_LATENCY_UNMEASURED: candidate {candidate_id} has a negative latency on a "
+                "recorded frame"
+            )
+        values.append(float(raw))
     if not values:
         raise EvaluationError(
             f"EVALUATION_LATENCY_UNMEASURED: no measured latency for candidate {candidate_id}"
         )
+    values.sort()
     index = min(len(values) - 1, int(round(0.95 * (len(values) - 1))))
     return values[index]
 

@@ -235,14 +235,37 @@ def test_compare_cli_refuses_a_drifted_weight_file(tmp_path: Path) -> None:
     for candidate_id, digest in (("A", "a" * 64), ("B", "b" * 64), ("C", "c" * 64)):
         _write_candidate(tmp_path, candidate_id, digest)
         (tmp_path / f"{candidate_id}.pt").write_bytes(f"weights-{candidate_id}".encode())
-    (tmp_path / "head.json").write_text(
-        json.dumps({"split_counts": {"test": 1}, "samples": [{"split": "test", "image": "a.png"}]}),
-        encoding="utf-8",
+    root = tmp_path / "dataset"
+    digests = {}
+    for name, relative in (
+        ("image", "images/test/1.png"),
+        ("label", "labels/test/1.txt"),
+        ("truth", "truth/test/1.json"),
+    ):
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"payload")
+        digests[f"{name}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    sample = {
+        "seed": 1,
+        "split": "test",
+        "scene_group_id": "scene-1",
+        "image": "images/test/1.png",
+        "label": "labels/test/1.txt",
+        "truth": "truth/test/1.json",
+        **digests,
+    }
+    sealed = json.dumps(
+        {
+            "dataset_contract": "so101-head-search-yolo-seg-v1",
+            "camera_name": "head_camera",
+            "sample_count": 1,
+            "split_counts": {"test": 1},
+            "samples": [sample],
+        }
     )
-    (tmp_path / "task.json").write_text(
-        json.dumps({"split_counts": {"test": 1}, "samples": [{"split": "test", "image": "a.png"}]}),
-        encoding="utf-8",
-    )
+    (tmp_path / "head.json").write_text(sealed, encoding="utf-8")
+    (tmp_path / "task.json").write_text(sealed, encoding="utf-8")
     (tmp_path / "partitions.json").write_text(
         json.dumps({"held_out_evaluation": [1]}), encoding="utf-8"
     )
@@ -263,14 +286,20 @@ def test_compare_cli_refuses_a_drifted_weight_file(tmp_path: Path) -> None:
         "--weights-dir",
         str(tmp_path),
         "--head-dataset-root",
-        str(tmp_path),
+        str(root),
         "--task-dataset-root",
-        str(tmp_path),
+        str(root),
         "--output",
         str(tmp_path / "out"),
     ]
-    # the weight files do not hash to the sealed digests, so the gate refuses before measuring
-    assert main(arguments) == 2
+    # the weight files do not hash to the sealed digests: the gate refuses that specific reason
+    import io
+    import contextlib
+
+    captured = io.StringIO()
+    with contextlib.redirect_stdout(captured):
+        assert main(arguments) == 2
+    assert "EVALUATION_FROZEN_IDENTITY_DRIFT" in captured.getvalue(), captured.getvalue()
 
 
 def test_paired_delta_bootstrap_differences_the_two_candidates_inside_each_scene() -> None:
