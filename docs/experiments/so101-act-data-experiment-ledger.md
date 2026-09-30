@@ -35668,6 +35668,15 @@ visual evidence, starting with the named component tests that must fail for the 
   `unified-layout.css` rules, the `schema.d.ts` entries, the `bun web build` gate, and Task 10's review. The
   e2e spec and visual evidence belong to Task 14.
 
+- **Task 10 wiring done (round 308).** `HeadCameraTab` owns the status it shows - it reads the composed status
+  from the Head Camera API and renders the panel, showing an unavailable domain rather than a stale frame when
+  the read fails - and a `Head Camera` tab joins the panel navigation in `app.tsx` with one client instance.
+  Verified: **12 passed** for the client and panel suites and the **web build succeeds** (`tsc -b && vite
+  build`), so the wiring typechecks and bundles.
+- **Still owed for Task 10:** the `unified-layout.css` rules for the fixed 4:3 frame and the `schema.d.ts`
+  entries for the new endpoints, then Task 10's review. The e2e spec (`web/e2e/head-camera.spec.ts`) and the
+  visual evidence belong to Task 14, where a real stack and screenshots exist.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
