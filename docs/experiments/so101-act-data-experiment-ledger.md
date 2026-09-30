@@ -40947,3 +40947,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
   plus its sample fixture**, the third cut now fully specified; F11 open. Targeted gates **430 / 201 / 201 / 201 /
   246 / 247 passed**; HEAD `7cc4c09c9`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2177 — F1's third cut, edit 1: the port exposes the ratified per-kind frame
+
+- **What landed** (`adapters/act/ros_expert.py`): `RosControllerReferencePort.reference_frames(kind, at_s)`
+  delegating to `self.broker.reference_frames(kind, at_s)`, with a docstring naming F1's complaint — the path did
+  not exist, so the expert tap could only reach the compatibility `reference_state` — and noting that the broker
+  owns the frame, including its refusal when a kind arrived through an accepted interval rather than a publication.
+- **Why this edit first**: it is **strictly additive** (a new method beside the existing one), so it lands alone
+  and cannot move any current caller — it did, with **160 passed** across the audit, recorder, release-boundary,
+  capture and controller-reference suites.
+- **What remains of the third cut**: (2) `expert.py`'s `reference` adding `frames`, `projected_positions` and
+  `projection_map` when the port can supply them — the assembly is CP-2176's two lines, and the port attribute's
+  name inside the expert is the one detail still to read; (3) the chain test port → expert → capture → writer →
+  readback with the packed group present, which is F1's own required control.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
+  plus its sample fixture and the third cut's first edit**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 /
+  247 / 160 passed**; HEAD `7d90186f4`; no push, no evidence deletion, no hardware, no second stack.
