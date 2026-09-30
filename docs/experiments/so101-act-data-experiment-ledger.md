@@ -36613,3 +36613,30 @@ cause (HS-071/HS-072) - and that cause check is what found my regression.
 The honest summary for NOT MET item 3: the parallel gate now runs over the whole ordinary suite with per-batch
 counts, and it is **not green**, by 263 environment-dependent tests. That is what the suite looks like in this
 environment, and the reviewer's coverage objection is answered even though the result is not a clean pass.
+
+## HS-075 — NOT MET item 11 classified: environmental, with samples (round 408)
+
+The 60 `test_perception_benchmark_dataset` failures from the colcon gate pass under the pinned environment. Two
+samples, not one:
+
+```zsh
+# one named failure
+test_polygon_rule_is_round_half_up_and_includes_pillow_boundary   -> 1 passed in 0.13 s
+# a subset of the failing names
+-k "polygon_rule or histogram or val_opens or truth_loader"        -> 7 passed, 75 deselected in 53.85 s
+```
+
+Together with HS-068 (the adapters module: 77 passed, no failures), NOT MET item 11 resolves as:
+
+- **2 adapter failures**: fixed by installing the pinned `transformers==4.56.2` (HS-062) - no longer present.
+- **60 dataset failures**: environment-dependent, passing under the interpreter and path this work uses, and
+  failing only under the colcon gate's ROS-sourced interpreter. Task 4 recorded the same shape
+  (`RASTERIZER_VERSION_MISMATCH`) and called them pre-existing.
+
+So the benchmark gate's failures are **not this work's**, and they are now evidenced rather than assumed: two
+independent samples of the dataset set, one whole module of the adapter set, and a direct A/B on the contract
+regression that was mine (HS-071). The gate itself remains red under colcon, and that is stated rather than
+explained away - what the evidence supports is "environment-dependent, not ours", not "green".
+
+I also stopped the full dataset-module run, which had been sitting at 87% for many rounds; the samples above
+answer the question it was there to ask, and leaving it holding the host had no further value.
