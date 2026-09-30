@@ -51,6 +51,8 @@ class CausalEpisodeCapture:
     def __init__(self, recorder, tap: MoveItExpertActionTap) -> None:
         self.recorder = recorder
         self.tap = tap
+        # the last raw observer frame the tap preserved, for the common audit to record
+        self.raw_reference: dict | None = None
 
     def append(self, observation: dict, physical_audit: dict) -> tuple[float, ...]:
         if not isinstance(physical_audit, dict) or self._REFERENCE_KEYS.intersection(physical_audit):
@@ -62,10 +64,11 @@ class CausalEpisodeCapture:
                  "reference_source": reference["source"],
                  "reference_positions": positions}
         raw = {key: reference[key] for key in self._RAW_REFERENCE_KEYS if key in reference}
-        if raw:
-            if set(raw) != set(self._RAW_REFERENCE_KEYS):
-                # a partial raw frame would misrepresent the history as complete
-                raise ValueError("EXPERT_REFERENCE_RAW_INCOMPLETE")
-            audit.update(raw)
+        if raw and set(raw) != set(self._RAW_REFERENCE_KEYS):
+            # a partial raw frame would misrepresent the history as complete
+            raise ValueError("EXPERT_REFERENCE_RAW_INCOMPLETE")
+        # the observer's raw frame belongs to the common audit's reference stream, never to the
+        # recorder's closed row audit; publishing it here would make a valid capture fail admission
+        self.raw_reference = raw or None
         self.recorder.append(observation, positions, audit)
         return positions

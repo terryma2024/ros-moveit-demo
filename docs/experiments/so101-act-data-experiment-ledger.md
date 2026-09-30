@@ -36276,3 +36276,64 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   coverage exists. Then a fresh checkpoint and the consolidated 19-file gate.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `34712a1f4`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1969 — Task 3 fourth verdict FAIL (5 Important); the T3-F8 regression fixed first
+
+- **Verdict** (`reviews/task3-rereview3-verdict.md`, dispatch `8699a435-8a02-4531-b0bb-bed386762fe8`,
+  reviewed `158b2c8de`): **FAIL, 0 Critical / 5 Important / 0 Minor**. Recognised as genuine fixes: the
+  formal lease admission slice (registered `LeaseIdentity` reused and re-checked on readback), the closed
+  scope fields, the seven event-kind payload/type checks, the v2 artifact arguments and version-specific
+  key sets, the session/attempt/reset comparison and the nonempty recorded-row count/time checks.
+- **T3-F8 (regression I introduced) — fixed.** My CP-1966/CP-1967 forwarding put the observer's raw frame
+  into the dictionary passed to `EpisodeRecorder.append`, whose audit key set is closed, so a **valid**
+  capture with a complete raw-reference port failed with `EPISODE_AUDIT_SCHEMA` before writing any row —
+  and the legacy no-raw path hid it. `CausalEpisodeCapture.append` no longer injects the raw fields into
+  the recorder's row audit; it exposes them as `capture.raw_reference` for the common audit's reference
+  stream, and the reviewer-requested test now drives the **real recorder** through a complete
+  raw-reference port and asserts the row is written, the seal counts it, and the row audit carries none
+  of the four keys.
+- **T3-F1 residual — the physics validator strips the source document.** It currently accepts any subset
+  that contains only `simulation_time_s` (plus `supported` on support rows), so a contact/pose/retract
+  observation with nothing but a time passes; conversely the real source emits `publisher_sequence`,
+  `reset_epoch` and `paused` (`release_retreat.py:91`) which my schema **refuses**, and the runner's
+  `_raw()` rejects a nonempty `other_contact_geoms` list, so an **unchanged source document cannot travel
+  through this boundary at all**. The counts/geom-name summary also cannot replace the plan's full robot
+  contact pairs, independent Planning Scene and gripper/controller feedback. Requirement: preserve the
+  registered observer contracts, require the measurements needed per kind, and do not strip source
+  identity or physical facts to satisfy the schema. The broker hop is real but not the whole contract:
+  its result is a six-joint projection and the four flat fields neither preserve per-controller positions
+  nor identify accepted goals or revocation boundaries (and my positive fixture even allowed two joint
+  names next to six positions).
+- **T3-F3 residual — three readback gaps.** Event identity is compared only by session and attempt, so a
+  `reset_epoch`/`release_epoch` of −1 or a conflicting lease still passes and no legitimate release
+  transition is checked; physics readback accepts `sim_time_s: null` although admission requires a finite
+  value, and envelope/observation times are not correlated; sequence numbers are compared by numeric
+  equality rather than integer type, so a first sequence of `true` or `1.0` passes and
+  `reference_sequence: true` resolves integer 1. Requirement: shared typed validators, immutable
+  episode/reset/lease correlation, real release transitions, and checksum-consistent controls.
+- **T3-F4 residual — the retained positive fixture is itself not a common binding.** Readback never
+  compares the recorded action/reference claim against the reference the binding names, nor the stored
+  frame's decoded pixel digest against its bound acquisition; the reviewer decoded my own passing fixture
+  and found the audit's three references are identical while the recorder actions differ, and the audit's
+  all-zero acquisitions do not match the coloured recorder pixels. Also: the supplied scope hash is not
+  compared with the audit manifest's own scope hash on independent readback, and the count/binding loop is
+  skipped for zero recorded rows. Requirement: resolve each binding to its reference and acquisitions,
+  compare actions and decoded pixel digests, enforce scope equality on readback as well as at finish, treat
+  zero-row cases correctly, and keep separate negative controls for actions, pixels, scope and zero-row
+  bindings.
+- **T3-F5 — no coverage gate, and the packet's claim was unsupported.** `_physics()` silently returns when
+  raw evidence is absent, a full run still reports `formal_episode_eligible: True`, and a formal writer
+  with a valid lease can seal empty streams. The reviewer also notes the coverage is broader than the
+  broker hop: set-down/preflight/detach/open evidence is not retained through the common boundary, and
+  `_physics()` runs after the retreat loop so **only the last retreat segment is recorded**. Requirement:
+  deny complete formal eligibility and sealing until the producers and contracts exist, never fabricate
+  physics or goal metadata.
+- **Evidence.** `logs/task3-fix22.run` rc=0: **127 passed in 1.37 s** across `test_act_recorder.py`,
+  `test_act_controller_reference.py`, `test_act_continuous_capture.py` and `test_act_episode_audit.py`,
+  with its own NVMe scratch and a non-empty tempfile proof. Gate before this fix: `logs/task3-gate4.run`
+  **378 passed**.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (four checkpoint FAILs; T3-F8 fixed, F1's
+  physics/reference payloads, F3's three gaps, F4's action/pixel binding and F5's gate open); items 4-8
+  pending.** HEAD `158b2c8de`; 39-path dirty baseline untouched; no push, no evidence deletion, no
+  hardware, no second stack.

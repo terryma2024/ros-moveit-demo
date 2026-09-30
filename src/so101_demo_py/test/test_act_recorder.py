@@ -452,3 +452,33 @@ def test_a_recorded_row_at_a_different_instant_than_its_binding_is_refused(tmp_p
     path.write_bytes(json.dumps(seal, sort_keys=True, separators=(",", ":")).encode() + b"\n")
     with pytest.raises(ValueError, match="EPISODE_SEAL_ROWS_MISMATCH"):
         verify_episode_seal(path, audit_manifest=manifest, scope=scope)
+
+
+class _RawReferencePort:
+    def __init__(self, document):
+        self.document = document
+
+    def reference_state(self, target):
+        return {**self.document, "requested_sim_time_s": target}
+
+
+def test_a_raw_reference_port_still_writes_training_rows(tmp_path):
+    """The raw frame must not break the recorder's closed row audit (T3-F8)."""
+
+    from so101_demo.act.expert import CausalEpisodeCapture, MoveItExpertActionTap
+
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    raw = {"joint_names": ["shoulder_pan", "shoulder_lift"], "sim_stamp_ns": 1100000000,
+           "received_monotonic_ns": 900000, "velocities": [0.0, 0.0]}
+    tap = MoveItExpertActionTap(_RawReferencePort(
+        {"source": "CONTROLLER_REFERENCE", "positions": [0.1] * 6, **raw}))
+    capture = CausalEpisodeCapture(recorder, tap)
+    physical = {key: value for key, value in audit(1.0).items()
+                if key not in ("reference_time_s", "reference_source", "reference_positions")}
+    capture.append(observation(1.0), physical)
+    assert capture.raw_reference == raw
+    seal = verify_episode_seal(recorder.finish(outcome("FAILED")))
+    assert seal["record_count"] == 1
+    row = json.loads((tmp_path / "episode" / "records.jsonl").read_text().splitlines()[0])
+    assert not set(capture._RAW_REFERENCE_KEYS) & set(row["audit"])
