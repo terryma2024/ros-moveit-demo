@@ -38999,3 +38999,37 @@ the root stays consistent with its own `source-commit.txt`).
 `ros2 run so101_demo_py so101_head_search_smoke` as the plan's Task 11 step does. The smoke result stands on its own
 evidence (HS-115-117: `coverage_complete: true`, seal `7d963fdc…`), but the plan's **invocation form** could not have worked
 before this fix - which is another reason the installed-entry-point check exists.
+
+## HS-172 — Task 11's frozen toolchain deliverable is COMPLETE: all seven entry points present
+
+After renaming the console script (HS-171) and rebuilding `so101_demo_py` into the same root (`rebuild rc=0`):
+
+```
+validate_head_camera_geometry            ok
+generate_yolo_seg_dataset                ok
+train_yolo_seg                           ok
+verify_head_search_dataset               ok
+evaluate_head_search_yolo_candidates     ok
+so101_head_search_smoke                  ok        <- the one that was registered under the wrong name
+so101_head_search_calibration            ok
+```
+
+**The deliverable Task 11 called "freeze the data/model toolchain" now exists in the required form:**
+
+| requirement | state |
+| --- | --- |
+| `$HEAD_EVIDENCE/head-toolchain-<UTC>` | `head-toolchain-20260930T115640Z` |
+| `source-commit.txt` written **before** the build | `ded04f57a730e0ed…` |
+| fresh `--build-base`/`--install-base` | yes (plus one targeted `--packages-select` rebuild after the rename) |
+| `build rc=0` | 3 packages: `so101_mujoco_support`, `so101_teleop`, `so101_demo_py` |
+| `ros2 pkg prefix` = the toolchain for both packages | pass |
+| seven named executables | **7/7** |
+
+Two deviations remain on the record and both are in the ledger rather than implied: the vendored five are
+`--packages-ignore`d and supplied by the sourced underlay (HS-166), and `empy`/`catkin_pkg` were added to the perception
+venv because Step 2's own `-DPython3_EXECUTABLE` requires them (HS-167/169). One repository change was needed and is
+committed: the console-script rename in `src/so101_demo_py/setup.py` (`bcba722f7`).
+
+**Because that rename is a code change made after Task 11's approval, Task 11 goes back to review** rather than being
+declared complete on my own authority - the plan's checkpoint discipline applies to fixes as much as to features, and a
+change that adds an installed entry point is exactly the kind the entry-point check exists to police.
