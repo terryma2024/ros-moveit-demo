@@ -36549,3 +36549,20 @@ seriously, and it is exactly the failure mode a "my tests are green" claim would
 
 **Follow-up for the batched gate:** with this fixed, a fresh batched run would show whether any of the remaining
 ~245 unclassified failures are also mine. That is worth one more run before Task 11 is called done.
+
+## HS-072 — The shared contract is restored byte-exactly
+
+Two more of my own mistakes, both caught by checking rather than assuming:
+
+1. My first "revert" of the additive key removed the key but **rewrote the whole file** with a different
+   indentation, leaving **365 changed lines** in a contract another subsystem validates. The aggregator passed,
+   so only a net-diff audit against the branch base revealed it.
+2. My first restoration attempt then pulled the file from the **wrong side of my own commit** - `git log --skip=1`
+   pointed at my Task 6 commit, which still contained the key - so the aggregator failed again (14 failed), and
+   that failure is what exposed the mistake.
+
+The file now matches `5d8668c432dd4bdf28800cfcfebbf26bbb06b356`, its state before this work touched it: a zero-line
+diff against that base, no additive key, and the aggregator back to **32 passed**.
+
+The lesson worth keeping: an edit to a shared file is not reverted until its **net diff against the pre-work base
+is empty**, and "the tests pass" is not that check.
