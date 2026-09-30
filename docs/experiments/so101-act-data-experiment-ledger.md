@@ -36138,3 +36138,21 @@ evaluation path: the candidate loader should refuse a candidate whose run manife
 (`EVALUATION_CANDIDATE_NOT_PROMOTABLE`), with a test that a smoke manifest is refused and a promotable one is
 not. Recorded here rather than patched in a hurry at the end of a round, because it is a gate boundary and
 deserves its own RED-then-GREEN step like every other rule in this task.
+
+## HS-053 — View-only Teleop status with zero detector construction (round 353)
+
+Run with the pydantic-v2 interpreter and only `src/so101_teleop` on the path, against a process that never
+received a closed head-search connection:
+
+```json
+{"status_code": 503, "status_code_detail": "HEAD_CAMERA_UNAVAILABLE", "capture_code": 503,
+ "detector_constructed": 0, "verdict": "view only, no detector constructed"}
+```
+
+So without a closed connection the composed Head Camera domain is `None` - not a stub backend - `GET status`
+and `POST capture` both answer **503 `HEAD_CAMERA_UNAVAILABLE`**, and the process constructs **no detector at
+all**. That is the plan's "view-only teleop status with zero detector construction" gate, verified end to end
+rather than asserted, and it is the same property Task 9's suite covers at unit level.
+
+**Task 11 remaining:** the benchmark `colcon` gate with argv and test-result readback (which needs an installed
+package build), the README pinning of the A weights revision and SHA, and the frozen provenance record.
