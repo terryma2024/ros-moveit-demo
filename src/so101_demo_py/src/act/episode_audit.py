@@ -622,6 +622,14 @@ def _window_matches_observed(window: dict, row_times, acquisitions) -> bool:
                     for start, end in window["permitted_gaps_s"]):
                 # a gap beyond the cadence must be one the frozen inputs permit
                 return False
+    # T3-F11: the collection window is the episode's own claim about what it observed, so its endpoints must be
+    # the observed extremes rather than numbers the caller chose; each stream's held stamps are that evidence
+    observed_stamps = [value for values in held.values() for value in values if value is not None]
+    if not observed_stamps:
+        return False
+    if (abs(window["collection_start_s"] - min(observed_stamps)) > _TOLERANCE_S
+            or abs(window["collection_end_s"] - max(observed_stamps)) > _TOLERANCE_S):
+        return False
     return True
 
 

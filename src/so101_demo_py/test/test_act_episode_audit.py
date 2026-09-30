@@ -48,7 +48,7 @@ def complete_audit(tmp_path):
     # to the wrist slot, which is exactly the relationship the review's counterexample violated
     frames = {}
     for camera in ("head", "wrist"):
-        for stamp in (1.0, 1.1):
+        for stamp in (1.0, 1.1, 1.2):
             frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=stamp,
                                 received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO)
             writer.append_acquisition(frame)
@@ -717,7 +717,7 @@ def test_readback_requires_exact_types_and_correlated_clocks(tmp_path):
 
 
 def _window(**overrides):
-    window = {"source_schedule": {"head": [1.0, 1.1], "wrist": [1.0, 1.1]},
+    window = {"source_schedule": {"head": [1.0, 1.1, 1.2], "wrist": [1.0, 1.1, 1.2]},
               "streams_required": ["head", "wrist"], "cadence_s": 0.1, "permitted_gaps_s": [],
               "collection_start_s": 1.0, "collection_end_s": 1.2, "first_command_s": 1.0,
               "physics_end_s": 1.1, "label_cutoff_s": 1.0, "outcome": "complete"}
@@ -869,7 +869,7 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
     # also hold the acquisitions its schedule declares, which is the rule the matcher enforces
     minter = AcquisitionMinter()
     for camera in ("head", "wrist"):
-        for stamp in (1.0, 1.1):
+        for stamp in (1.0, 1.1, 1.2):
             complete.append_acquisition(minter.mint(
                 camera, session_id="s", reset_epoch=1, stamp_s=stamp,
                 received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO))
@@ -1112,7 +1112,7 @@ def _self_consistent_formal(tmp_path):
     minter = AcquisitionMinter()
     frames = {}
     for camera in ("head", "wrist"):
-        for stamp in (1.0, 1.1):
+        for stamp in (1.0, 1.1, 1.2):
             frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=stamp,
                                 received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO)
             writer.append_acquisition(frame)
@@ -1315,5 +1315,6 @@ def test_a_sealed_schedule_naming_no_instant_is_refused_on_readback(tmp_path):
     document = json.loads(path.read_bytes())
     document["window"]["source_schedule"]["head"] = []
     path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    # an emptied schedule fails _window_ok, which the manifest gate runs before the shared predicate
     with pytest.raises(ValueError, match="AUDIT_MANIFEST_INVALID"):
         verify_audit_manifest(path)

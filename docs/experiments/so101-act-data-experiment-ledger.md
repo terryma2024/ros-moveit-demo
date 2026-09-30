@@ -41512,3 +41512,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   five items landed and its endpoint pass one targeted delta plus two expectation flips from green; targeted gates
   **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `5df7d374e`; no
   push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2203 — F11's endpoint rule landed: the collection window must be the observed extreme
+
+- **What landed**: `_window_matches_observed` (the predicate the seal and the readback share) now requires
+  `collection_start_s` and `collection_end_s` to be the **observed** camera extremes within `_TOLERANCE_S`, refusing
+  a window that claims more than the audit holds; `_window()`'s schedule gains 1.2 for both streams and **all three**
+  minter loops mint a frame at 1.2, so every success fixture holds an acquisition at both window extremes. That is
+  F11's "the observed counts/ranges and collection endpoints are not reconstructed", closed on both boundaries at
+  once.
+- **The three slips on the way, all recorded**: the rule alone failing four expectations (CP-2200), the fixture
+  delta replacing only the **first** of three identical minter loops (CP-2202), and my blanket expectation flip
+  wrongly changing the emptied-schedule control, which `_window_ok` refuses at the earlier gate
+  (`AUDIT_MANIFEST_INVALID`) while the invented-instant control now meets the shared predicate
+  (`AUDIT_WINDOW_INVALID`) — both codes are right, for their own gate.
+- **Evidence.** `logs/task3-f11-endpoints.run` rc=0: **287 passed in 4.60s** across the audit, recorder, release-boundary,
+  capture, `test_act_task8`, qualification, W8-verifier, campaign-admission, expert-route and controller-reference
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **F11's state**: six of its seven items are landed — the Boolean defect, the shared predicate, the reader check,
+  the vacuous-schedule rule, their controls at both boundaries, and this endpoint reconstruction. The seventh,
+  **frozen policy**, waits on the plan: the audit module has no frozen home for `cadence_s`, `streams_required` or
+  `permitted_gaps_s` (CP-2195), so checking them against frozen inputs needs the plan to say where those live.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan on `sim_time_s`); **F11 six
+  of seven**; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 / 287 passed in 4.60s
+  passed**; HEAD `ec8d2ff5b`; no push, no evidence deletion, no hardware, no second stack.
