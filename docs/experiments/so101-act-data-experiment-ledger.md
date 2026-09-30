@@ -38341,3 +38341,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `32528faef`;
   consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2057 — Nine derived gates verified at HEAD `ec160c2f2`: 419 passed in 11.98s
+
+- **Gate.** `logs/task3-gate15.run` rc=0: **419 passed in 11.98s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **Nine gates derived on the live path**: the boundary helper's `planning_ok`, `controller_reference_ok`,
+  `joint_feedback_ok` and `planning_scene_ok` (none asserted any more), and the SEARCH document's
+  `planning_scene_ok`, `joint_feedback_ok`, `controller_reference_ok`, `contact_ok` and `mujoco_ok` — each
+  from an observation the search established, with three-way controls on the first two and the runner's
+  `_EVIDENCE_GATES` refusal behind all of them.
+- **The three remaining assertions in that document need a semantic decision, not an anchor**: `planning_ok`
+  (whether the gate is the search result's `found` flag, its `status` verdict, or the validated result's
+  presence), and `head_rgb_ok`/`wrist_rgb_ok` (whether freshness, shape, or the recorder's lossless digest
+  defines them). Each is a choice the plan does not make, and CP-2054 records why a presence-based shortcut is
+  refused.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
+  deletion, no hardware, no second stack.
