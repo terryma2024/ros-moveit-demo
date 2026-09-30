@@ -36816,3 +36816,18 @@ this work's changes:
 teleop bridge at the same time. The corrected gate should be re-run **alone**, with a short scratch, before its
 teleop numbers are quoted. This also means the earlier "198 failed" figure for the demo package deserves the same
 caution if a peer session was running - which it was.
+
+## HS-084 — Teleop run alone: 19 failed / 1096 passed / 42 skipped (round 494)
+
+```
+src/so101_teleop/test/teleop   (no competing session, short scratch, -n 8)
+   19 failed, 1096 passed, 42 skipped
+```
+
+Against the concurrent runs (**37** and **39** failures in the same tree), running alone cuts the failures roughly
+in half. That supports the socket-collision mechanism (HS-083) without eliminating the set: 19 remain, they are not
+concurrency artifacts, and they still need their own tracebacks. The whole-package run is now in progress, which is
+the number that answers the reviewer's coverage objection for `so101_teleop`.
+
+No head-camera or head-search test is among them (HS-081's A/B and HS-083's mechanism both bear on this), but I am
+not restating that as a conclusion about the 19 until a traceback is read.
