@@ -37195,3 +37195,23 @@ first.
 **Reviewer items now closed by evidence:** final-seal search smoke; dataset verify with an explicit output link;
 `so101_teleop` installed gate (rc=0); the shared-contract restoration. **Still open:** the standalone installed
 Teleop server smoke.
+
+## HS-101 — Standalone installed Teleop server smoke: the last open reviewer item
+
+Run against the **installed** package (the task overlay's `install/`), under a real uvicorn server rather than a
+TestClient, from a process that never received a closed head-search connection:
+
+```
+GET  /teleop/head-camera/status   -> 503  {"detail":{"code":"HEAD_CAMERA_UNAVAILABLE"}}
+POST /teleop/head-camera/capture  -> 503  {"detail":{"code":"HEAD_CAMERA_UNAVAILABLE"}}
+```
+
+So the installed server answers correctly with the domain unavailable, constructs **no detector**, and starts no
+ROS, MuJoCo or detector stack - it is a bare FastAPI process. `uvicorn` had to be added to the perception venv for
+this (0.54.0), which is the only new dependency the smoke needed and is recorded in HS-056's provenance.
+
+**Reviewer items, final state:** the final-seal search smoke (HS-100), the dataset verify with an explicit output
+link (HS-100), the `so101_teleop` installed gate (HS-089), the shared-contract restoration (HS-072), the
+non-promotable refusal (HS-052), the benchmark readbacks (HS-058/HS-059/HS-068/HS-075) and now the installed server
+smoke are all closed **by evidence**; the `so101_demo_py` installed gate is characterized by cause and its direct-run
+numbers stand in (HS-090/HS-091). Task 11 is therefore ready for a re-review rather than for more work.
