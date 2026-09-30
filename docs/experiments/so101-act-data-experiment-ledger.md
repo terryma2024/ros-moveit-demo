@@ -40720,3 +40720,34 @@ in a value I chose rather than in a key or a path.
 **This is a good outcome disguised as a failure:** the gate refused an evaluation whose inputs would have made the comparison
 meaningless - and had it not, the candidate ranking would have been computed against scenes that contradict their own declared
 conditions.
+
+## HS-242 — Found it exactly: a missing `scenario` field makes every frame count as a no-cup scene
+
+The check that refused, read at its source:
+
+```
+cli/evaluate_head_search_yolo_candidates.py:575
+    if frame.get("scenario") not in (None, "no_cup"):
+        continue
+models.py:387-388
+    raise EvaluationError(f"EVALUATION_FALSE_CANDIDATE: {candidate.candidate_id} reports "
+                          f"{candidate.no_cup_false_candidates} false candidates on empty scenes")
+```
+
+**`None` counts as `no_cup`.** My frames carry no `scenario` field, so the gate classified **all 120 frames** as empty scenes - and any
+detection in them is a false candidate. A's detections across those frames total 480, hence the refusal. So HS-241's diagnosis was
+right about the mechanism (input, not detector) and this pins the exact line that acts on it.
+
+**Two fixes are needed, and only one of them is mechanical:**
+
+1. **record `scenario` on every frame** - one line in the recorder, same class as `domain`/`split`/`latency_ms`;
+2. **know each seed's scenario** - and here the partitions file is thin: it declares the ten `condition_classes`
+   (`nominal, left_anchor, forward_anchor, distractor_present, two_cups, no_cup, low_light, partial_occlusion,
+   fast_interruption, reacquire_after_stop`) and three disjoint seed lists (`calibration` 700000+, `held_out_evaluation` 800000+,
+   `qualification` 40 items), but **no per-seed class mapping** for the calibration/held-out lists - the description only says
+   every *qualification* item carries one of the approved classes.
+
+So before re-recording, the seed-to-condition source has to be settled: either the generator's own scenario plan
+(`split_seed_plan` + `scenario_plan`, HS-234's module) is the intended authority for these seeds too, or the partitions file needs
+the mapping it currently implies but does not state. Recording this rather than guessing, because guessing the conditions would
+reproduce exactly the defect this round found - a value I chose substituting for one the plan declares.
