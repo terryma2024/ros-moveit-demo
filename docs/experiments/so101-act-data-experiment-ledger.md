@@ -41877,3 +41877,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**; **F11 closed by decision** (six items landed, the seventh
   answered here); **F13 becomes an amendment** under ②b; item 4's QC half is green and its commit half is ③a.
   HEAD `d8e24de6c`; twelve gates green.
+
+
+## CP-2218 — ②b landed: the feedback record carries a source-side instant
+
+- **What landed**, in three places plus their fixtures:
+  1. `episode_audit.py`: `_FEEDBACK_FIELDS` gains **`source_sim_time_s`** — with a comment recording that the
+     eighth key is the owner's amendment and that `sim_time_s` stays the instant the record is *for* and the join
+     its parent observation uses — and `_feedback_ok` types it as a finite non-negative number that must sit within
+     `_FEEDBACK_SOURCE_SKEW_S` (0.1) of the join instant, with a hair of slack so a stamp exactly at the bound is
+     not refused by binary rounding;
+  2. `ros_broker.py`: `controller_feedback` fills it from `commanded[3]` — the reference's own stored stamp, which
+     the driver keeps beside the values it read at line 217;
+  3. the fixtures and controls: three `_feedback` blocks plus two regex-matched records gain the key, and the
+     observer's control now asserts the **skew** rather than equality, because a stored reference stamp legitimately
+     differs from the requested instant (1.0 against 1.1 in that test).
+- **The slip worth recording**: my first assertion demanded `source_sim_time_s == sim_time_s`, which the broker
+  correctly failed; and the audit's own comparison then refused `|1.0 - 1.1| = 0.10000000000000009` — a genuine
+  robustness bug in the new validation, fixed with the 1e-9 slack rather than by loosening the test.
+- **Evidence.** `logs/task3-owner-2b.run` rc=0: **288 passed in 4.58s** across the same ten suites as CP-2206 under
+  `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision** (CP-2217), **F13's `sim_time_s`
+  amendment landed here**; item 4's QC half is green and **③a — the wiring — is next**; items 5+ wait on the four
+  blocked bindings. HEAD `74fd59541`; thirteen gates green.

@@ -270,9 +270,11 @@ class RosBrokerDriver:
             width=len(names)
             measured_positions=tuple(positions[:width]) if kind=='arm' else tuple(positions[-width:])
             measured_velocities=tuple(velocities[:width]) if kind=='arm' else tuple(velocities[-width:])
+        # CP-2217: `sim_time_s` stays the instant the record is for; the eighth key carries the instant the
+        # source itself published the commanded reference at, so a reader can judge how fresh the pair is
         return {'controller':kind,'joint_names':names,'commanded_positions':commanded[0],
                 'measured_positions':measured_positions,'measured_velocities':measured_velocities,
-                'status_sequence':sequence,'sim_time_s':when}
+                'status_sequence':sequence,'sim_time_s':when,'source_sim_time_s':commanded[3]}
 
     def reference_frames(self,kind,when):
         """The ratified A.1 frame for one controller kind, evaluated for the instant `when`.

@@ -115,9 +115,14 @@ _PHYSICS_OBSERVATION_FIELDS = frozenset({
     "planning_scene_observation", "controller_feedback"})
 _SCENE_OBSERVATION_FIELDS = frozenset({"scene_revision", "attached_objects", "world_object_ids",
                                        "is_diff", "sim_time_s", "source"})
+# the eighth key is the owner's amendment (CP-2217, F13): the source-side instant the record was evaluated
+# from, beside `sim_time_s`, which stays the instant the record is *for* and the join its parent observation uses
 _FEEDBACK_FIELDS = frozenset({"controller", "commanded_positions", "measured_positions",
-                              "measured_velocities", "joint_names", "status_sequence", "sim_time_s"})
+                              "measured_velocities", "joint_names", "status_sequence", "sim_time_s",
+                              "source_sim_time_s"})
 _FEEDBACK_CONTROLLERS = ("arm", "gripper")
+#: how far a feedback record's source instant may sit from the instant it is for (CP-2217)
+_FEEDBACK_SOURCE_SKEW_S = 0.1
 # one contact record, closed exactly as the registered contract defines it
 _CONTACT_FIELDS = frozenset({"robot_geom", "object_body", "normal_force_n", "signed_distance_m"})
 _CONTACT_LISTS = ("left_contacts", "right_contacts", "other_contacts")
@@ -220,9 +225,17 @@ def _feedback_ok(record) -> bool:
             return False
     if type(record["status_sequence"]) is not int or record["status_sequence"] < 1:
         return False
-    return (not isinstance(record["sim_time_s"], bool)
-            and isinstance(record["sim_time_s"], (int, float))
-            and math.isfinite(record["sim_time_s"]) and record["sim_time_s"] >= 0)
+    if (isinstance(record["sim_time_s"], bool) or not isinstance(record["sim_time_s"], (int, float))
+            or not math.isfinite(record["sim_time_s"]) or record["sim_time_s"] < 0):
+        return False
+    # the source instant must be a real instant, and it must belong to the instant the record is for: a source
+    # stamp far from the join would mean the record claims measurements it did not take then (CP-2217)
+    source = record["source_sim_time_s"]
+    if (isinstance(source, bool) or not isinstance(source, (int, float))
+            or not math.isfinite(source) or source < 0):
+        return False
+    # a hair of slack, so a source stamp exactly at the skew bound is not refused by binary rounding
+    return abs(source - record["sim_time_s"]) <= _FEEDBACK_SOURCE_SKEW_S + 1e-9
 
 
 def _reference_frames_ok(record, *, history: dict | None = None) -> None:

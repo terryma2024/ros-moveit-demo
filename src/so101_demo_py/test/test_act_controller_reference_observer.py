@@ -249,6 +249,9 @@ def test_the_broker_produces_the_ratified_controller_feedback_record():
     gripper = driver.controller_feedback("gripper", 1.1)
     assert gripper["measured_positions"] == (0.5,) and len(gripper["joint_names"]) == 1
     assert gripper["status_sequence"] == 1     # per kind, so the arm's reads do not advance it
+    # CP-2217: the record carries the instant the source published at, beside the instant it is for, and the
+    # two must sit within the record's own skew — the stored reference stamp need not equal the request
+    assert abs(first["source_sim_time_s"] - first["sim_time_s"]) <= 0.1 + 1e-9
     assert first["commanded_positions"] == (0.5, 0.4, 0.3, 0.2, 0.1)
     assert first["sim_time_s"] == 1.1
     assert driver.controller_feedback("arm", 1.1)["status_sequence"] == 2

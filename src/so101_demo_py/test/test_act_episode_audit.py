@@ -749,7 +749,7 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
               "sim_time_s": 1.1, "source": "scene_port"}
     _feedback = [{"controller": "arm", "joint_names": ["1"], "commanded_positions": [0.0],
                   "measured_positions": [0.0], "measured_velocities": [0.0],
-                  "status_sequence": 1, "sim_time_s": 1.1}]
+                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
                                               "release_epoch": 1,
                                               "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
@@ -845,7 +845,7 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
               "sim_time_s": 1.1, "source": "scene_port"}
     _feedback = [{"controller": "arm", "joint_names": ["1"], "commanded_positions": [0.0],
                   "measured_positions": [0.0], "measured_velocities": [0.0],
-                  "status_sequence": 1, "sim_time_s": 1.1}]
+                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     complete.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
                                               "release_epoch": 1,
                                               "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
@@ -971,10 +971,10 @@ def test_the_planning_scene_and_feedback_records_are_validated(tmp_path):
              "source": "search_boundary"}
     feedback = [{"controller": "arm", "joint_names": ["shoulder_pan", "shoulder_lift"],
                  "commanded_positions": [0.1, 0.2], "measured_positions": [0.1, 0.2],
-                 "measured_velocities": [0.0, 0.0], "status_sequence": 4, "sim_time_s": 1.1},
+                 "measured_velocities": [0.0, 0.0], "status_sequence": 4, "sim_time_s": 1.1, "source_sim_time_s": 1.1},
                 {"controller": "gripper", "joint_names": ["gripper"],
                  "commanded_positions": [0.6], "measured_positions": [0.6],
-                 "measured_velocities": [0.0], "status_sequence": 4, "sim_time_s": 1.1}]
+                 "measured_velocities": [0.0], "status_sequence": 4, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     pose = {"simulation_time_s": 1.1, "simulation_step": 11, "cup_position_world_m": [0.0, 0.0, 0.0]}
     writer = EpisodeAuditWriter(tmp_path / "ok", scope(), identity(), {"inputs_sha256": "a" * 64})
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
@@ -1136,7 +1136,7 @@ def _self_consistent_formal(tmp_path):
               "sim_time_s": 1.1, "source": "scene_port"}
     _feedback = [{"controller": "arm", "joint_names": ["1"], "commanded_positions": [0.0],
                   "measured_positions": [0.0], "measured_velocities": [0.0],
-                  "status_sequence": 1, "sim_time_s": 1.1}]
+                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
                                               "release_epoch": 1,
                                               "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
