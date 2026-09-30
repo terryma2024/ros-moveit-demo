@@ -13,13 +13,12 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
 
-from .admission import AdmissionGateway, AdmissionHook, UnifiedWorkloadService
+from .admission import AdmissionGateway, UnifiedWorkloadService
 from .arbiter import GlobalMutationArbiter
 from .bridge import BridgeLaunch, BridgeClient, BridgeProcessOwner, ActChildRegistry, process_start_marker
-from .contracts import Domain
 from .goals import GoalRegistry
 from .gpu_workload import ActGpuWorkloadArbiter
-from .instances import InstanceRegistry, LeaseBindingCoordinator
+from .instances import InstanceRegistry
 from .intent_store import IntentStore
 from .ports import UnknownBudgetSource, UnifiedServices
 from .safety import SafetyLane, SafetyLimits
@@ -322,3 +321,45 @@ class _DeferredBridgeOwner:
         from .child_runtime import NORMAL_SOCKET_NAME, SAFETY_SOCKET_NAME
 
         return root / NORMAL_SOCKET_NAME, root / SAFETY_SOCKET_NAME
+
+
+def compose_head_camera_service(environment: Mapping[str, str]):
+    """Compose the Head Camera domain from the closed head-search connection, or leave it unavailable.
+
+    The descriptor is the only source of the head-search runtime: the socket directory and runtime id this
+    process was started with must match its `bridge_socket_root` and `runtime_id` exactly, and a missing or
+    inherited-only connection keeps the domain unavailable rather than composing a second detector.
+    """
+
+    from so101_teleop.head_camera import (
+        CONNECTION_ENV,
+        HeadCameraBackend,
+        HeadCameraUnavailable,
+        load_descriptor,
+    )
+
+    if not environment.get(CONNECTION_ENV):
+        return None
+    try:
+        descriptor = load_descriptor(environment)
+    except HeadCameraUnavailable:
+        return None
+    socket_dir = environment.get(SOCKET_DIR_ENV)
+    runtime_id = environment.get(RUNTIME_ID_ENV)
+    if not socket_dir or Path(socket_dir).resolve() != Path(str(descriptor["bridge_socket_root"])).resolve():
+        raise CompositionBlocked(
+            "HEAD_CAMERA_CONNECTION_MISMATCH: the socket directory does not match the descriptor"
+        )
+    if not runtime_id or runtime_id != str(descriptor["runtime_id"]):
+        raise CompositionBlocked(
+            "HEAD_CAMERA_CONNECTION_MISMATCH: the runtime id does not match the descriptor"
+        )
+    if runtime_id != str(descriptor.get("head_search_runtime_id")):
+        raise CompositionBlocked(
+            "HEAD_CAMERA_CONNECTION_MISMATCH: the descriptor's runtime ids disagree"
+        )
+    owner = descriptor.get("owner")
+    if not isinstance(owner, Mapping) or int(owner.get("pid") or 0) <= 0:
+        raise CompositionBlocked("HEAD_CAMERA_CONNECTION_MISMATCH: the descriptor names no live owner")
+    # the domain shares the one detector through the descriptor; it never builds its own
+    return HeadCameraBackend(descriptor=dict(descriptor))

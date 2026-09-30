@@ -108,3 +108,25 @@ def test_capture_is_atomic_and_refuses_stale_or_mismatched_frames(tmp_path: Path
     services.descriptor = {**dict(services.descriptor), "bundle_sha256": "b" * 64}
     with pytest.raises(ValueError, match="HEAD_CAPTURE_FRAME_MISMATCH"):
         services.capture()
+
+
+def test_composition_derives_the_head_runtime_from_the_closed_descriptor(tmp_path: Path) -> None:
+    from so101_teleop.unified.compose import CompositionBlocked as Blocked
+    from so101_teleop.unified.compose import compose_head_camera_service
+
+    descriptor = valid_descriptor(tmp_path)
+    environment = environment_for(tmp_path, descriptor)
+    if True:
+        environment["SO101_UNIFIED_SOCKET_DIR"] = str(tmp_path)
+        environment["SO101_UNIFIED_RUNTIME_ID"] = descriptor["runtime_id"]
+    services = compose_head_camera_service(environment)
+    assert services is not None
+    assert services.detector_factory_calls == 0
+    assert services.execution_generation == descriptor["execution_generation"]
+
+    with pytest.raises(Blocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
+        compose_head_camera_service({**environment, "SO101_UNIFIED_RUNTIME_ID": "other"})
+    with pytest.raises(Blocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
+        compose_head_camera_service({**environment, "SO101_UNIFIED_SOCKET_DIR": str(tmp_path / "x")})
+
+    assert compose_head_camera_service({}) is None, "no closed connection keeps the domain unavailable"
