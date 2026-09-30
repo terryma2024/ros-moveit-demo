@@ -708,3 +708,8 @@ def test_the_capture_forwards_the_ratified_packed_reference_shape():
     assert set(recorded["frames"]) == {"arm", "gripper"}
     assert recorded["frames"]["gripper"]["observer_sequence"] == 7
     assert recorded["projection_map"][-1] == ["gripper", 0]
+    # A.1: the evaluation lives inside the frame, so no record-level evaluation may be forwarded
+    assert "evaluation" not in recorded
+    assert recorded["frames"]["arm"]["evaluation"]["requested_sim_time_s"] == 1.1
+    assert recorded["frames"]["arm"]["published_positions"] == \
+        recorded["frames"]["arm"]["evaluated_positions"]

@@ -27,7 +27,9 @@ _STREAMS = ("head", "wrist")
 # the observer's raw frame fields, forwarded to the audit when the observer supplies them
 _RAW_REFERENCE_FIELDS = ("joint_names", "sim_stamp_ns", "received_monotonic_ns", "velocities")
 # the ratified Proposal A shape; the two groups are alternatives and never travel together
-_PACKED_REFERENCE_FIELDS = ("frames", "evaluation", "projected_positions", "projection_map")
+# A.1 moved the evaluation inside each frame, so it is no longer a record-level key and forwarding
+# it would be refused by the audit's closed schema
+_PACKED_REFERENCE_FIELDS = ("frames", "projected_positions", "projection_map")
 
 
 @dataclass(frozen=True)

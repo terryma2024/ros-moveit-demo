@@ -37324,3 +37324,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the fused six-joint projection. The audit boundary is now the contract those three satisfy.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `8ba4b52cc`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2013 — Task 3: the capture hop matches A.1, and the tap was verified to need no change
+
+- **The capture no longer forwards a record-level `evaluation`.** A.1 moved that block inside each frame, so
+  the packed forward list now carries `frames`, `projected_positions` and `projection_map` only; forwarding
+  the old key would have been refused by the audit's closed schema. The existing packed-forwarding control
+  gained three assertions: no record-level `evaluation` arrives, the frame's own
+  `evaluation.requested_sim_time_s` is 1.1, and the immutable publication equals the evaluated value in the
+  fixture.
+- **The tap needs no change, verified rather than assumed.** `act/expert.py` contains no reference to
+  `frames`, `evaluation`, `projected_positions` or `projection_map`, so it neither reads nor filters those
+  keys and is a genuine pass-through — the A.1 hop there is a no-op.
+- **Evidence.** `logs/task3-fix54.run` rc=0: **127 passed in 1.24 s** across the capture, audit and recorder
+  suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile proof.
+- **The one A.1 hop left** is `adapters/act/ros_broker.py::reference_state`: it must build per-kind frames
+  (immutable publication plus the evaluated values and each kind's evaluation) from the stored
+  `self._references[kind]` publications, the per-kind names and sequences added in CP-1987, and the accepted
+  interval records, instead of returning the fused six-joint projection. The audit boundary is now the
+  contract it must satisfy.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `04af9cf07`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
