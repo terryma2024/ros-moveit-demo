@@ -569,3 +569,37 @@ def test_prepared_runtime_config_carries_only_trainer_arguments(tmp_path: Path) 
     write_png_rgb8(np.full((8, 10, 3), 255, dtype=np.uint8), victim)
     after = hashlib.sha256(victim.read_bytes()).hexdigest()
     assert after != before, "the run manifest digests file contents, not just names"
+
+
+def test_prepared_runtime_config_is_accepted_by_the_installed_ultralytics(tmp_path: Path) -> None:
+    """The reviewers' finding: a project-metadata key makes Ultralytics refuse the whole run."""
+
+    ultralytics_cfg = pytest.importorskip("ultralytics.cfg")
+    head_manifest = _sealed_manifest(tmp_path, camera="head_camera", train=32, val=8)
+    task_manifest = _sealed_manifest(tmp_path, camera="task_camera", train=32, val=8)
+    head_root = tmp_path / "head"
+    task_root = tmp_path / "task"
+    head_manifest_path = _write_domain(head_root, head_manifest)
+    task_manifest_path = _write_domain(task_root, task_manifest)
+    base_model = tmp_path / "yolo11n-seg.pt"
+    base_model.write_bytes(b"weights")
+    plan = build_candidate_plan(
+        "C",
+        head=head_manifest,
+        task=task_manifest,
+        contract=HEAD_SMOKE_CONTRACT,
+        base_model_sha256=hashlib.sha256(base_model.read_bytes()).hexdigest(),
+    )
+    prepared = prepare_candidate_run(
+        plan=plan,
+        contract_path=HEAD_SMOKE_CONTRACT,
+        head_dataset_root=head_root,
+        task_dataset_root=task_root,
+        head_manifest_path=head_manifest_path,
+        task_manifest_path=task_manifest_path,
+        base_model_path=base_model,
+        output_root=tmp_path / "candidate-cfg",
+    )
+    runtime = yaml.safe_load(prepared.training_config.read_text(encoding="utf-8"))
+    cfg = ultralytics_cfg.get_cfg(overrides=runtime)
+    assert cfg.device == "cuda" and cfg.epochs == 1

@@ -173,7 +173,6 @@ TRAINER_ARG_KEYS = (
     "plots",
     "verbose",
     "val",
-    "shuffle",
 )
 
 
