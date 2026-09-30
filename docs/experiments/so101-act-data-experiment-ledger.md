@@ -36789,3 +36789,30 @@ a long scratch directory fails outright. That fits every observation:
 the tests derive it from `TMPDIR` (in which case concurrent runs should not collide) or from a fixed location (in
 which case they do). Until that is read, the teleop set stays "environmental by evidence, unexplained by cause" -
 and the fix, if the hypothesis holds, is to give each run its own short socket root rather than to change code.
+
+## HS-083 — Verified: the teleop failures were cross-run socket collisions (round 442)
+
+The one `grep` HS-082 asked for confirms the mechanism. The teleop tests hard-code **fixed** socket roots:
+
+```
+src/so101_teleop/test/teleop/test_act_campaign_admission.py:366:  socket_root=f"/tmp/act-child/{worker_id}"
+src/so101_teleop/test/teleop/test_act_worker_port.py:160:       socket_root=f"/tmp/act-{worker_id}"
+src/so101_teleop/test/teleop/test_act_stack_probes.py:38:        socket_root=f"/tmp/a290-{uuid.uuid4().hex[:8]}"   # the one that is unique
+```
+
+Two pytest sessions running at once therefore share `/tmp/act-<worker_id>` and `/tmp/act-child/<worker_id>` for the
+same xdist worker names (`gw0`...`gw7`), and the bridge child that loses the race exits - which is precisely what
+`BRIDGE_CHILD_EXITED: 1` and the intermittent 39/34/0 failure counts recorded. One test in that family even takes
+the precaution of a random suffix (`a290-<uuid>`); the others do not.
+
+**So the teleop failures were caused by me running several gates concurrently**, not by the teleop code and not by
+this work's changes:
+
+- my own `test_head_camera_api.py` passes in every configuration,
+- the A/B against the pre-router `unified/app.py` passes both ways (HS-081),
+- the failures appear only while a peer session holds the same fixed socket paths.
+
+**Remedy, and it is a harness rule rather than a code change:** do not run two pytest sessions that touch the
+teleop bridge at the same time. The corrected gate should be re-run **alone**, with a short scratch, before its
+teleop numbers are quoted. This also means the earlier "198 failed" figure for the demo package deserves the same
+caution if a peer session was running - which it was.
