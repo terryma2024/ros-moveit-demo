@@ -224,31 +224,52 @@ def test_composition_refuses_a_dead_or_drifted_owner(tmp_path: Path) -> None:
 
 
 def test_a_zombie_process_is_not_a_live_owner(tmp_path: Path) -> None:
-    """A zombie keeps its /proc entry and start ticks but has exited."""
+    """A zombie keeps its /proc entry and start ticks but has exited, so it is no owner."""
 
     import os
+    import signal
     import time
 
-    from so101_teleop.head_camera import (
-        CompositionBlocked,
-        process_start_ticks,
-        verify_owner,
-    )
+    from so101_teleop.head_camera import CompositionBlocked, process_start_ticks, verify_owner
 
     child = os.fork()
-    if child == 0:  # pragma: no cover - the child exits immediately
+    if child == 0:  # pragma: no cover - the child sleeps until it is killed
+        time.sleep(30)
         os._exit(0)
-    ticks = None
     try:
-        ticks = process_start_ticks(child)
-        assert ticks is not None and ticks > 0
-        # the child is now a zombie until reaped, and must not count as a live owner
+        # the child is alive and running here, so its ticks are readable and it would be a valid owner
+        alive_ticks = process_start_ticks(child)
         deadline = time.monotonic() + 5.0
+        while alive_ticks is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+            alive_ticks = process_start_ticks(child)
+        assert alive_ticks is not None and alive_ticks > 0
+        verify_owner({"pid": child, "started_ticks": alive_ticks})
+
+        os.kill(child, signal.SIGKILL)
+        # wait for the kernel to report the zombie state directly, reading /proc rather than the helper
+        state = None
+        deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
-            if process_start_ticks(child) is None:
+            try:
+                fields = Path(f"/proc/{child}/stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()
+            except OSError:
+                break
+            state = fields[0]
+            if state == "Z":
                 break
             time.sleep(0.02)
-        with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
-            verify_owner({"pid": child, "started_ticks": ticks})
+        if state == "Z":
+            # the ticks are still on record for the zombie, and the owner check must still refuse it
+            fields = Path(f"/proc/{child}/stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()
+            assert int(fields[19]) == alive_ticks, "the zombie keeps its recorded start ticks"
+            assert process_start_ticks(child) is None
+            with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
+                verify_owner({"pid": child, "started_ticks": alive_ticks})
+        else:  # pragma: no cover - the child was already reaped by an external reaper
+            pytest.skip(f"the child never reached the zombie state (state {state!r})")
     finally:
-        os.waitpid(child, 0)
+        try:
+            os.waitpid(child, 0)
+        except ChildProcessError:  # pragma: no cover - already reaped
+            pass
