@@ -39837,3 +39837,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   F13's four controls' spirit satisfied for dimensions, reference age and measurements; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `6099637ad`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2125 — F3's first attempt reverted: dropping `optional` swaps one failure for its mirror
+
+- **What I tried** (reading F3's mechanism first): `_records` treats its optional set as one all-or-nothing
+  group, and the references readback passes the **union** of the legacy four keys and the packed three as that
+  group (`episode_audit.py:1015-1018`), so neither exclusive alternative can round-trip. My first fix set that
+  call site's `optional=frozenset()`, on the reasoning that the per-row checks below already validate whichever
+  group a row carries.
+- **Why it failed, exactly**: `_records` computes `base = fields - optional`, so with no optional set the **base**
+  requirement becomes the full union — a row carrying one group now fails `base <= set(row)`. The suite reported
+  **24 failed / 65 passed**, all `AUDIT_REFERENCE_INVALID`: the mirror image of the reported bug, not a fix.
+- **Reverted and verified**: the file is restored and the audit and recorder suites re-run green.
+- **The design the next attempt should implement** (now read from the code, not guessed): give `_records` an
+  explicit notion of **alternative groups** — for example `optional_any=(group_a, group_b)` — with the semantics
+  "the base fields are required; among the groups, **exactly one complete group** may be present, and none is
+  also allowed". Then the references call passes the two groups as alternatives instead of their union, the
+  all-or-nothing rule keeps protecting partial histories, and the per-row exclusivity check already in place
+  refuses a mixture. F3's required positive controls are then easy: a sealed audit whose reference carries **only**
+  the packed group must verify, and one carrying **only** the legacy group must verify — both re-signed and
+  tampered variants keeping their existing refusals.
+- **State.** Item 3's list: F12 closed, F13 down to its `sim_time_s` question, F1/F3/F5/F11 open with F3's fix
+  now designed; targeted gate `logs/task3-final.run` **430 passed**; HEAD `14399a190`; no push, no evidence
+  deletion, no hardware, no second stack.
