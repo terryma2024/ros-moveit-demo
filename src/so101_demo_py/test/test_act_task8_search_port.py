@@ -607,3 +607,31 @@ def test_approach_refuses_by_name_when_the_route_or_the_execution_is_missing():
     port._expert_route = _Route()
     with pytest.raises(PickPlaceSearchPortError, match="TASK8_PHASE_NOT_PROVISIONED: APPROACH: execute_approach"):
         port.run_phase("APPROACH", request())
+
+
+def test_the_scene_port_returns_the_ratified_observation_parts():
+    """CP-2017 step one: the record's parts come from the read the port already makes."""
+
+    from types import SimpleNamespace
+
+    from so101_demo.control.planning_scene.task_scene import RosTaskScenePort
+
+    port = object.__new__(RosTaskScenePort)
+    port._read_revision = 0
+    scene = SimpleNamespace(
+        is_diff=False,
+        world=SimpleNamespace(collision_objects=[SimpleNamespace(id="table"),
+                                                 SimpleNamespace(id="plastic_cup")]),
+        robot_state=SimpleNamespace(attached_collision_objects=[
+            SimpleNamespace(object=SimpleNamespace(id="plastic_cup"))]))
+    port._observe = lambda: SimpleNamespace(scene=scene)
+    first = port.observe_observation()
+    assert first == {"scene_revision": 1, "attached_objects": ["plastic_cup"],
+                     "world_object_ids": ["plastic_cup", "table"], "is_diff": False,
+                     "source": "ros_task_scene_port"}
+    assert port.observe_observation()["scene_revision"] == 2
+    from so101_demo.ports.planning_scene import SceneCommandReceipt
+    port._observe = lambda: SceneCommandReceipt(backend="moveit", phase="READ_BACK", success=False,
+                                                failure_code="SCENE_SERVICE_TIMEOUT", evidence={})
+    with pytest.raises(RuntimeError, match="SCENE_OBSERVATION_UNAVAILABLE"):
+        port.observe_observation()

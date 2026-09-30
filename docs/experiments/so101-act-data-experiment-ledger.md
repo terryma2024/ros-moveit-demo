@@ -37492,3 +37492,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `434a833f3`;
   targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
   untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2020 — Task 3: producer step one lands — the port returns the ratified scene observation's parts
+
+- **What landed.** `RosTaskScenePort.observe_observation(source=...)` returns the ratified
+  `planning_scene_observation`'s parts from the `/get_planning_scene` read the port already performs: the
+  sorted attached and world object ids, `is_diff`, a `source` naming the port, and `scene_revision` as the
+  port's **own successful-read counter**, documented in the method as exactly that because MoveIt's
+  `PlanningScene` message carries no revision field (CP-2019). A failed read raises
+  `SCENE_OBSERVATION_UNAVAILABLE: <failure_code>` rather than returning a half-filled record, and the
+  simulation instant is deliberately **not** stamped here: the caller that owns the simulation clock adds it
+  at the instant it derives the gate, which is the join the audit enforces.
+- **Owner-visible decision.** This implements option (a) from CP-2019 (a documented port-side read counter)
+  because it unblocks the producer without manufacturing a claim, and it is easy to revisit: if the owner
+  prefers the field amended instead, the change is the method's two lines plus the audit's schema.
+- **Evidence.** `logs/task3-fix58.run` rc=0: **57 passed in 4.16 s** across the search-port and three task8
+  phase suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile proof.
+  The control constructs the port without `__init__` (the pattern the neighbouring tests use), asserts the
+  record's parts and the counter's increment, and asserts the refusal on a failed read.
+- **Remaining producer steps (CP-2017).** (2) Have the readback that establishes the eight gates return
+  `planning_scene_observation` (and `controller_feedback` from the controller status it already reads).
+  (3) Make `_gate_facts` at the boundary's `:308`/`:402` and the port's evidence builder derive
+  `planning_scene_ok`/`joint_feedback_ok`/`controller_reference_ok` from those records on the same instant.
+  (4) Keep the six phase-document tests green (CP-2016) and add controls that a missing or off-instant record
+  fails the gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9edd46733`;
+  targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
+  untouched; no push, no evidence deletion, no hardware, no second stack.

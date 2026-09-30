@@ -216,6 +216,9 @@ class RosTaskScenePort:
             ApplyPlanningScene, "/apply_planning_scene"
         )
         self._get_client = node.create_client(GetPlanningScene, "/get_planning_scene")
+        # MoveIt's PlanningScene message carries no revision, so the ratified observation's
+        # `scene_revision` is this port's own successful-read counter, documented as such
+        self._read_revision = 0
 
     def _receipt(
         self,
@@ -288,6 +291,26 @@ class RosTaskScenePort:
             | PlanningSceneComponents.OBJECT_COLORS
         )
         return self._call(self._get_client, request, "READ_BACK")
+
+    def observe_observation(self, *, source: str = "ros_task_scene_port") -> dict:
+        """The ratified Planning Scene observation's parts, from the read the port already makes.
+
+        `scene_revision` is this port's own read counter: MoveIt's `PlanningScene` message has no revision
+        field, so the number is the port's and the field's meaning is documented here rather than invented.
+        The simulation instant is **not** stamped here — the caller that owns the simulation clock adds it,
+        at the same instant it derives the gate, which is the join the audit enforces.
+        """
+
+        response = self._observe()
+        if isinstance(response, SceneCommandReceipt):
+            raise RuntimeError("SCENE_OBSERVATION_UNAVAILABLE: %s" % response.failure_code)
+        scene = response.scene
+        self._read_revision += 1
+        return {"scene_revision": self._read_revision,
+                "attached_objects": sorted(value.object.id
+                                           for value in scene.robot_state.attached_collision_objects),
+                "world_object_ids": sorted(value.id for value in scene.world.collision_objects),
+                "is_diff": bool(scene.is_diff), "source": source}
 
     def apply_task_scene(self, geometry: TaskGeometry) -> SceneCommandReceipt:
         return self._apply(make_task_scene(geometry), "APPLY")
