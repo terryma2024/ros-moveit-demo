@@ -42762,3 +42762,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   an explicit carrier boundary, validate the registered names/order and the canonical six-dimension projection, and
   add a positive control through the real broker port); F5/F11/F12/F13 open; the goal is paused. HEAD `26010c24a`;
   nineteen gates green.
+
+
+## CP-2261 — F1's first cut: the carrier boundary normalises the producer's tuples
+
+- **What landed** (`adapters/act/ros_expert.py`): `RosControllerReferencePort.reference_frames` now copies the
+  broker's frame and converts its **tuple** values — `joint_names`, `published_positions`,
+  `published_velocities`, `evaluated_positions`, `evaluated_velocities` — to **lists**, preserving every value, so a
+  genuine broker-produced packed record no longer fails `AUDIT_SCHEMA_INVALID` at the writer's `_reference_frames_ok`
+  boundary. That is F1's "normalise the actual producer's immutable frame representation at an explicit carrier
+  boundary", and the boundary chosen is the one CP-2177 created for exactly this purpose.
+- **What was set aside with its fixtures named**: the registered joint-name/order check. Adding it broke four suite
+  tests because the audit suite's own `_ratified_reference()` fixture invents names (`arm-0` …) — the verdict says so
+  explicitly — and one more site remains at `test_act_episode_audit.py:1342` (the capture control) beside the chain
+  helper already updated at 1264. The rule and its constant `_FRAME_JOINT_NAMES` are in the tree, commented as
+  pending those fixtures, so re-landing it is one uncomment plus two fixture edits.
+- **Evidence.** Targeted run: **111 passed** across the audit, release-boundary, controller-reference and task8
+  suites with the port fix in place.
+- **F1's remainder**: the names/order check with its fixtures; the canonical six-dimension projection check; and the
+  positive control through the **real** ROS broker methods and `RosControllerReferencePort` (the verdict is explicit
+  that another list-valued test port is insufficient), plus wrong-name/order/map and frame-refusal negatives.
+- **State.** **F14 closed**; **F3 closed**; **F1 in progress** (first cut landed); F5/F11/F12/F13 open; the goal is
+  paused. HEAD `9178221a4`; nineteen gates green.

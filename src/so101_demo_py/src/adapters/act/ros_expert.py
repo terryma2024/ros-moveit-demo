@@ -19,4 +19,11 @@ class RosControllerReferencePort:
         arrived through an accepted interval rather than a publication.
         """
 
-        return self.broker.reference_frames(kind, at_s)
+        # T3-F1: the broker publishes its frame with tuple-valued names and vectors; the common audit admits
+        # lists, so this carrier boundary normalises the shape and preserves every value unchanged
+        frame = dict(self.broker.reference_frames(kind, at_s))
+        for key in ("joint_names", "published_positions", "published_velocities",
+                    "evaluated_positions", "evaluated_velocities"):
+            if isinstance(frame.get(key), tuple):
+                frame[key] = list(frame[key])
+        return frame

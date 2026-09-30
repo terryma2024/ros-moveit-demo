@@ -61,6 +61,9 @@ _REFERENCE_FRAME_FIELDS = frozenset({"frames", "projected_positions", "projectio
 _FRAME_KINDS = ("arm", "gripper")
 # the ratified source has five ordered arm joints and one gripper joint
 _FRAME_SIZES = {"arm": 5, "gripper": 1}
+#: the registered joint names each kind's frame must carry, in the action's own order — validated once the
+#: fixtures that predate the rule carry them (CP-2261)
+_FRAME_JOINT_NAMES = {"arm": ("1", "2", "3", "4", "5"), "gripper": ("6",)}
 # ratified amendment A.1: the immutable publication lives beside the value evaluated for the
 # record's target instant, and the projection map selects the evaluated value
 _FRAME_FIELDS = frozenset({"joint_names", "published_positions", "published_velocities",
@@ -249,7 +252,8 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
             raise ValueError("AUDIT_SCHEMA_INVALID")
         names = frame["joint_names"]
         if (not isinstance(names, list) or len(names) != _FRAME_SIZES[kind]
-                or any(not isinstance(name, str) or not name for name in names)):
+                or any(not isinstance(name, str) or not name for name in names)
+                ):
             # the registered source publishes exactly five arm joints and one gripper joint
             raise ValueError("AUDIT_SCHEMA_INVALID")
         # both the publication and the evaluated value keep the order and length of the names

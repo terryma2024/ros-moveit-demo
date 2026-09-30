@@ -1261,7 +1261,7 @@ def test_the_expert_carries_the_ratified_group_into_the_audit(tmp_path):
     def frame(kind, when):
         size = 5 if kind == "arm" else 1
         evaluated = projected[:5] if kind == "arm" else projected[5:]
-        return {"joint_names": [f"{kind}-{index}" for index in range(size)],
+        return {"joint_names": ([f"{index + 1}" for index in range(size)]),
                 "published_positions": [0.0] * size, "published_velocities": [0.0] * size,
                 "evaluated_positions": list(evaluated), "evaluated_velocities": [0.0] * size,
                 "evaluation": {"requested_sim_time_s": when, "basis": "published",
