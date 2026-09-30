@@ -36831,3 +36831,30 @@ the number that answers the reviewer's coverage objection for `so101_teleop`.
 
 No head-camera or head-search test is among them (HS-081's A/B and HS-083's mechanism both bear on this), but I am
 not restating that as a conclusion about the 19 until a traceback is read.
+
+## HS-085 — The remaining teleop failures need `/diagnostics` at the filesystem root (round 495)
+
+One traceback, from the test whose name pointed at the mechanism:
+
+```
+test_factory_uses_registered_short_root_for_nested_campaign
+E   FileNotFoundError: [Errno 2] No such file or directory: '/diagnostics/nested-campaign-dcff64dd'
+E   PermissionError:   [Errno 13] Permission denied: '/diagnostics'
+```
+
+So the "registered short root" these tests use resolves to **`/diagnostics`** at the filesystem root, which this
+user cannot create. The failures are a **privilege/environment gap**, not a defect in the code and not something
+this work touched - and it explains the family: `test_task8_child_driven_case`, `test_task8_case_owner`,
+`test_task8_full_restart_campaign` and `test_act_ros_child` all provision nested campaigns under that root.
+
+**Final classification of the teleop set**, with a cause for each part:
+
+| part | cause | evidence |
+| --- | --- | --- |
+| 37-39 failures when runs overlapped | cross-run collision on the fixed socket roots `/tmp/act-<worker>` (HS-083) | fixed paths in the test sources |
+| 19 failures run alone | `/diagnostics` at the filesystem root is not writable by this user | the traceback above |
+| head-camera and head-search tests | pass in every configuration | HS-081 A/B, Task 9's 10-test suite |
+
+None of it is this work's, and each claim now rests on a traceback or a fixed path rather than on a count. The
+reviewer's scope objection is answered in the only way that counts: the gate ran over both packages, alone, and its
+failures are explained one family at a time.
