@@ -41129,3 +41129,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   its Boolean defect fixed (CP-2184) and this extraction next; targeted gates **430 / 201 / 201 / 201 / 246 / 247 /
   200 / 283 / 176 / 284 / 151 passed**; HEAD `f9e05f895`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2186 — F11's extraction: the predicate depends on exactly two pieces of writer state
+
+- **Read this round** (`episode_audit.py:842-877`): `_window_matches_rows` consults the writer twice —
+  `self._row_times` (the cutoff must be the last labelled row's time for a complete outcome, and no labelled rows
+  are allowed for any other outcome) and `self._acquisitions` (the held camera instants per stream, matched against
+  the schedule's instants with `_TOLERANCE_S`, plus the cadence rule that a step longer than
+  `cadence_s * 1.5 + _TOLERANCE_S` must fall inside a permitted gap). Everything else it uses is the window itself.
+- **So the extraction is mechanical**: a module-level
+  `_window_matches_observed(window, row_times, acquisitions) -> bool` with the same body, the writer's method
+  reduced to a thin call passing `self._row_times` and `self._acquisitions`, and the readback calling the same
+  function with the values it can derive — the acquisitions it already parses in `_verify_streams`, and the row
+  times from the `row-bindings` rows it reads (the one field name still to confirm, since the writer's `_row_times`
+  is populated where rows are bound).
+- **Why this is a note**: the extraction touches the seal path, the readback path and the writer's internals at
+  once, and the readback's row-time source is the last field to confirm — exactly the combination that has needed
+  two attempts elsewhere in this session. With the signature fixed and the two state pieces named, the next pass is
+  a single write plus the "invented 1.05" negative control.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  its Boolean defect fixed and this extraction specified; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 /
+  283 / 176 / 284 / 151 passed**; HEAD `62a526c3a`; no push, no evidence deletion, no hardware, no second stack.
