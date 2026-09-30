@@ -37556,3 +37556,27 @@ irony worth recording - HS-089 rebuilt the overlay precisely so the installed ga
 hashed it, yet the source moved afterwards (the seal fix in HS-099 touched `act/head_camera_geometry.py`), so the
 overlay I then measured was stale again. **The lesson: after any source change, rebuild before quoting an installed
 run** - and hash the overlay in the same breath as running it, which HS-105 gives the means to do.
+
+## HS-116 — After the rebuild the counts are unchanged, and the dominant cause is ROS's python paths
+
+The post-rebuild run (attrib5) reports the **same** totals as before it:
+
+```
+347 failed, 4392 passed, 144 skipped, 165 error     (identical to attrib4)
+reasons: FIELDS_INVALID 67 | No module named 'rclpy' 48 | TRUSTED_FINAL_TARGET_INVALID 47 |
+         No module named 'ament_index_python' 44 | No module named 'so101_mujoco_support' 19
+```
+
+Two honest readings:
+
+1. **The rebuild did not change these numbers**, so the `_verify_phase` signature drift was not the whole story even
+   though the digest proved the overlay had been stale. The uniform `FIELDS_INVALID` / `TRUSTED_FINAL_TARGET_INVALID`
+   signatures (114 rows) remain **unexplained** - I am not going to relabel them a second time without a traceback.
+2. **The next largest family is my environment again**: `rclpy` (48) and `ament_index_python` (44) are ROS's own
+   python packages, missing because my `PYTHONPATH` is a **replacement** that drops the paths `setup.bash` had
+   installed, and `so101_mujoco_support` (19) is another installed package absent from the same list.
+
+That is the same mistake in a new costume - replacing instead of extending the environment - and it points at the
+right tool: **`colcon test`**, which builds the environment correctly, with the venv's site-packages *appended* so
+`mujoco` is visible. HS-091 tried that against a **stale** overlay and got a collection error; the overlay is current
+now (digest `bee7d3f4...`), so the retry is worth making and is launched with this entry.
