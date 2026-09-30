@@ -39466,3 +39466,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   (`act/result_store.py`, whose own suite `test_act_result_commit.py` already passes).
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `eb836ea01`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2110 — Task 4's second half is a real gap: the ACT result store is wired into nothing
+
+- **Read from the code.** `src/so101_demo_py/src/act/result_store.py` defines `ActCollectionResultStore`
+  (line 79), `ActCollectionResults` (231) and `ActCollectionResultVerifier` (305) — the exact-lease seal, the
+  independent episode verification and the commit refusals that `test_act_result_commit.py` exercises — and a grep
+  for that module's name across `src` outside its own test file returns **nothing**: no composition imports it.
+- **What *is* wired.** The coordinator side has its own apparatus in `parallel_batch/`
+  (`adaptive_runner.py`'s `CoordinatorJournal.create/append/replay/close`, and `adaptive_pool.py`'s fsync-journal
+  check), which is a different mechanism with different guarantees.
+- **So Task 4's "real commit / export refusal" half is not reachable in production**: the apparatus exists and is
+  tested, but nothing calls it. Closing that means either wiring the ACT store and verifier into the coordinator's
+  commit path, or showing that the coordinator's own journal already satisfies the requirement — and that choice
+  belongs to the frozen plan, which I still have not located.
+- **Why this is a good place to stop the round**: it converts "confirm the live composition uses the commit
+  apparatus" from a suspicion into a **measured fact with the two candidate resolutions named**, which is what the
+  next executioner needs before touching either side.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4's QC half complete (CP-2108,
+  CP-2109) with this commit-half gap recorded. HEAD `1f53475e3`; no push, no evidence deletion, no hardware, no
+  second stack.
