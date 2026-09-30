@@ -35292,3 +35292,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   yet wired into the writer. The Task 3 Codex checkpoint follows those.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD
   `8a132b394`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1940 — Task 3 second bullet (broker/observer half, first piece): the raw reference history
+
+- **The controller observer's raw history now reaches the audit.** `ContinuousEpisodeCapture` takes an
+  optional `audit` writer and appends every reference message it validates through
+  `append_source("references", ...)` — the accepted ones **and** the ones that revoke them, in arrival
+  order, with their target instant, positions and acceptance flag. The audit therefore holds the raw
+  history the run actually received rather than only the final state a label was derived from, which is
+  what an offline reviewer needs to re-derive why a row was or was not labelled. The append happens
+  after validation and before the revocation/label logic, so a malformed message never reaches the
+  audit while a revocation is never lost.
+- **Evidence.** `logs/task3-refhistory.run` rc=0: **96 passed in 0.82 s** across
+  `test_act_continuous_capture.py`, `test_act_episode_audit.py`, `test_act_release_boundary.py`,
+  `test_act_recorder.py`, `test_act_synchronizer.py` and `test_act_acquisition_identity.py`, with its
+  own NVMe scratch and a non-empty tempfile proof. New cases: an accepted reference followed by its
+  revocation and then a later accepted reference appear as `[True, False, True]` with their instants
+  preserved, all six positions and the reference source; and an invalid reference is refused before it
+  can reach the audit.
+- **Still open in Task 3 (exact seams, so the next pass needs no re-recon).** (1) The MuJoCo backend
+  must attach `evidence_dict(...)` — `backends/mujoco/qualified_phases/release_retreat.py:82`, whose
+  keys already match the validated raw shape — to the runner-facing phase evidence; the port's own
+  closed key tuple is `adapters/act/pick_place_search_port.py:36` and its evidence builder sits around
+  lines 417/470/579, fed by the validated world/contact observations at lines 344-378, with
+  `run_phase` at line 641. That adapter is one of the 39 baseline-dirty paths, so its pre-edit backup
+  from `baseline-task3/pick_place_sources.py`-style capture does **not** cover it — take a fresh
+  byte copy first. (2) The broker's real claim/dispatch/accept/revoke/stop events are still not wired
+  into the writer; only the runner's phase events and the observer's reference history are.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD
+  `c92748ed2`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second
+  stack.

@@ -37,6 +37,7 @@ class CaptureSummary:
 
 class ContinuousEpisodeCapture:
     def __init__(self, *, recorder, sampler, physical_audit, guard=None, audit_writer=None,
+                 audit=None,
                  dt_s: float = 0.1, max_source_age_s: float = 0.1, max_skew_s: float = 0.0,
                  deadline_s: float = ACT_TIMEOUT_S, monotonic=time.monotonic,
                  frame_capacity: int = 8, reference_capacity: int = 128,
@@ -58,6 +59,8 @@ class ContinuousEpisodeCapture:
         self.sampler = sampler
         self.physical_audit = physical_audit
         self.audit_writer = audit_writer
+        # the raw controller reference history goes to the episode audit when one is wired
+        self.audit = audit
         self.guard = guard if guard is not None else AcquisitionGuard()
         self.dt_s = dt_s
         self.max_source_age_s = max_source_age_s
@@ -259,6 +262,12 @@ class ContinuousEpisodeCapture:
             self._reject("CAPTURE_REFERENCE_INVALID")
         key = round(float(at_s), 6)
         accepted = message.get("accepted") is True
+        if self.audit is not None:
+            # every message is kept, acceptance and revocation alike, so the audit holds the raw
+            # history the run actually received rather than only its final state
+            self.audit.append_source("references", {"reference_time_s": key,
+                                                    "source": _REFERENCE_SOURCE,
+                                                    "positions": values, "accepted": accepted})
         if (not accepted and self._last_labelled_target_s is not None
                 and key <= self._last_labelled_target_s + _TOLERANCE_S):
             # a trajectory revoked after its instant was labelled voids that label: an irreversible

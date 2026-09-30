@@ -547,3 +547,37 @@ def test_a_recorder_refusal_is_terminal_and_loses_no_row(code):
         capture.drain()
     with pytest.raises(ValueError, match=code):
         capture.finish(1.3)
+
+
+class ReferenceAudit:
+    def __init__(self):
+        self.references = []
+
+    def append_source(self, kind, record):
+        assert kind == "references"
+        self.references.append(record)
+
+
+def test_the_audit_keeps_the_raw_reference_history_including_revocations():
+    audit = ReferenceAudit()
+    capture, minter = build()
+    capture.audit = audit
+    start(capture)
+    frames_at(capture, minter, [1.0, 1.1, 1.2])
+    capture.on_reference(reference(1.1))
+    capture.on_reference(reference(1.1, accepted=False))
+    capture.on_reference(reference(1.2))
+    assert [row["accepted"] for row in audit.references] == [True, False, True]
+    assert [row["reference_time_s"] for row in audit.references] == [1.1, 1.1, 1.2]
+    assert all(row["source"] == "CONTROLLER_REFERENCE" for row in audit.references)
+    assert all(len(row["positions"]) == 6 for row in audit.references)
+
+
+def test_an_invalid_reference_never_reaches_the_audit():
+    audit = ReferenceAudit()
+    capture, minter = build()
+    capture.audit = audit
+    start(capture)
+    with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
+        capture.on_reference(reference(1.1, positions=[0.0, 0.1, 0.2, 0.3, 0.4, "x"]))
+    assert audit.references == []
