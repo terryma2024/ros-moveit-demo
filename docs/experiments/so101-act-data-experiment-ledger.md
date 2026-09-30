@@ -43089,3 +43089,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and a tempfile proof.
 - **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 two of four cuts**;
   F5/F12 open; the goal is paused. HEAD `147380a79`; twenty-six gates green.
+
+
+## CP-2278 — F13's third cut: the rule is right, its fixtures are not there yet
+
+- **What I wrote and set aside**: `_feedback_ok` requiring `tuple(record["joint_names"])` to equal the registered
+  names for `record["controller"]`, reusing `_FRAME_JOINT_NAMES` (arm `1..5`, gripper `6`). The constant it keys on,
+  `_FEEDBACK_CONTROLLERS = ("arm", "gripper")` (line 126), names the same two kinds, so the rule's shape is right —
+  and **eleven tests refused immediately**, which is the verdict's own sentence: the audit's feedback typing "does not
+  enforce the registered per-kind names".
+- **So the work is the fixtures**: the feedback records the suite mints carry invented names (and, in at least one
+  case, a single-element list for the arm), and they are built in more than one place — the grep for
+  `commanded_positions` in the test file is printed alongside this entry so the next pass finds every site by its
+  field rather than by a guessed helper name.
+- **Set aside, suite green** (72 passed), nothing else moved.
+- **F13's remainder after this**: the per-kind names/registered dimensions and the both-kinds-required readback check
+  (this cut), and the fenced **current** scene record in place of `_planning_scene_record()` returning `None`.
+- **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 two of four cuts**;
+  F5/F12 open; the goal is paused. HEAD `6c1f457e9`; twenty-six gates green.
