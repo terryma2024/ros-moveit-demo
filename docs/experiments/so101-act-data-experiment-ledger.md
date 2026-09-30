@@ -36347,3 +36347,25 @@ configuration fix for those before falling back to a scoped note.
 
 **Provenance update:** the perception venv now carries `transformers==4.56.2` (pinned), and HS-056's table is
 amended by this entry.
+
+## HS-063 — The complete `-n 8` gate fails on xdist, and the plugin theory was incomplete (round 382)
+
+Running NOT MET item 3 as written — `-n 8` over the whole ordinary suite
+(`src/so101_demo_py/test`, ROS sourced, both incompatible ROS plugins disabled):
+
+```
+INTERNALERROR> KeyError: <WorkerController gw2>
+23 errors in 6.48s
+n8 full rc=3
+```
+
+So disabling `launch_testing` and `launch_testing_ros_pytest_entrypoint` is **not** sufficient: something else in
+the wider suite breaks xdist's worker bookkeeping, and my HS-044 explanation accounted only for the head-search
+subset. That is worth stating plainly, because HS-044 presents the plugin conflict as the cause, and this run
+shows it is at most a partial cause.
+
+**What this means for item 3:** the gate as specified does not currently run in this environment, so it is neither
+green nor an exemption - it needs a diagnosis. The next step is to find the offending module by bisecting the
+suite under `-n 8` (the 23 errors are collected quickly, so the inputs are cheap to narrow), and only if the cause
+turns out to be environmental and unfixable does a scoped exemption become the honest answer. No part of the
+ordinary suite is claimed green from this run.
