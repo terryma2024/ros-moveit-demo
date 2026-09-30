@@ -39793,3 +39793,38 @@ evaluate_head_search_yolo_candidates calibrate \
 still be refused), and nothing may write into the pinned A root - registration reads it, never edits it.
 
 Still to do: the module functions and CLI wiring, then Step 4's own runs, then Steps 5-6. Task 12 remains `in_progress`.
+
+## HS-205 — Step 4's frozen-candidate contract, complete and read from the validator itself
+
+The last unknowns are closed. A `frozen-<c>.json` that the existing gate will accept and actually apply:
+
+```json
+{
+  "candidate_id": "B",                         // in ("A","B","C")
+  "weight_sha256": "<64 hex>",                 // must match the frozen weights or IDENTITY_DRIFT
+  "promotable": true,                          // absent/anything else -> the HS-052 refusal
+  "operating_points": {
+    "head": {"min_confidence": <float>, "tracker": {"iou": <float>}},
+    "task": {"min_confidence": <float>, "tracker": {"iou": <float>}}
+  },
+  "tracker": {}, "postprocess": {}, "runtime": {}
+}
+```
+
+Rules read out of the code rather than inferred:
+
+| element | rule | site |
+| --- | --- | --- |
+| both `head` and `task` present | else `EVALUATION_FROZEN_IDENTITY_INVALID` | models.py:343 |
+| `min_confidence` | applied as the detector's `conf`, default 0.25 | evaluate…:221 |
+| `tracker` | the **only** supported form is exactly `{"iou": <number>}`; anything else is refused | evaluate…:126-134 |
+| `tracking_iou` | scalar alternative; a conflicting pair raises; default 0.5 | `_resolve_tracking_iou` |
+| `postprocess`, `runtime`, `min_area_px2`, `min_bbox_aspect` | must be absent/empty at the document level | evaluate…:150-162 |
+
+**And a correction to my own previous statement:** I wrote that `tracker`/`postprocess`/`runtime` "must be empty". That is true
+for the **document-level** keys and false for the **operating-point**-level `tracker`, which is the supported, applied form.
+Both readings were half right, and the distinction matters: a frozen candidate whose `tracker` is empty at the point where the
+validator looks seals *nothing*, which is exactly the failure the docstring warns about ("an accepted tracker declaration that
+the measurement then ignores would let a frozen condition look sealed while a different value is measured").
+
+With HS-201/202 and this entry, Step 4 can be implemented against the validator rather than against my reading of the plan.
