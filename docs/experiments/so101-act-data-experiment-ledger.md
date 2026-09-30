@@ -39033,3 +39033,31 @@ committed: the console-script rename in `src/so101_demo_py/setup.py` (`bcba722f7
 **Because that rename is a code change made after Task 11's approval, Task 11 goes back to review** rather than being
 declared complete on my own authority - the plan's checkpoint discipline applies to fixes as much as to features, and a
 change that adds an installed entry point is exactly the kind the entry-point check exists to police.
+
+## HS-173 — The reviewer is right: I reported the wrong commit, and the frozen root predates the rename
+
+Reading the actual files rather than my notes:
+
+```
+head-toolchain-20260930T115526Z   ded04f57a730   (first attempt - vendored failure, HS-166)
+head-toolchain-20260930T115541Z   215c1a0740cf   (corrected attempt - empy failure, HS-167)
+head-toolchain-20260930T115624Z   094f896cb056   (second corrected attempt - catkin_pkg failure, HS-169)
+head-toolchain-20260930T115640Z   25b1915c36ac   (the FROZEN root - rc=0, 7/7 executables)
+HEAD now                          ccd6d7ed0
+```
+
+Two errors of mine, both caught by the verdict:
+
+1. **HS-170/HS-172 report `source-commit.txt = ded04f57a730e0ed` for the frozen root.** That is the **first, failed** root's
+   commit. The frozen root's file says **`25b1915c36ac`**. I copied the value from the wrong entry in a list of four roots
+   created minutes apart - the same "confident value from an ambiguous list" error as HS-167's misread correction.
+2. **The frozen root's commit predates the rename.** `25b1915c3` was HEAD when the successful build ran; `bcba722f7` (the
+   `so101_head_search_smoke` registration) came **after** it, and the executable was added by a targeted
+   `--packages-select` rebuild into that root. So the root's declared source identity does **not** cover the content the
+   plan's seven-executable check depends on.
+
+**Reconciliation, without rewriting history:** the old roots stay exactly as they are - they are the evidence for HS-166/167/169
+and for this finding. The frozen deliverable will be **rebuilt from scratch at `ccd6d7ed0`** (the docs commit that includes the
+rename `bcba722f7`) into a new `head-toolchain-<UTC>`, with `source-commit.txt` written from that commit **before** the build and
+nothing patched afterwards, then the seven-executable and `ros2 pkg prefix` checks re-run against it. That gives one root whose
+declared commit provably contains everything it installs - which is what "frozen toolchain" has to mean.
