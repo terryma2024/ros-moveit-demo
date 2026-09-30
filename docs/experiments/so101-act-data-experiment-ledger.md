@@ -40188,3 +40188,14 @@ the operating-point search, so one collection over both splits would settle both
 
 This is the fifth time in this task that reading the artefact changed the answer, and the second where the correction was to my
 own recommendation rather than to the plan.
+
+## HS-221 — USER-AUTHORIZED: collect both episode splits, redo the operating-point search, then run Step 5
+
+Asked explicitly and the user authorized the full path: drive the existing collection tooling over **both**
+`calibration` and `held_out_evaluation` seeds, write the records under the campaign root (never into
+`src/.../config/act/held-out-episodes/`), redo Step 4's operating-point search over **val + calibration episodes** per design
+line 220, then run Step 5's `compare` to produce the model comparison Task 13 consumes.
+
+Constraints carried in: MuJoCo only, one CUDA detector, no CPU fallback, Grounded-SAM excluded, serial execution (nothing
+concurrent with a detector), and no writes anywhere in the worktree. The interface work starts by reading `act_collect`'s actual
+arguments rather than assuming them - the discipline that has found seven divergences in this task.
