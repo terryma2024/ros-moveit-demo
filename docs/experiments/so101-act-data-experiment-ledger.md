@@ -37159,3 +37159,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `d32d4f6fd`;
   gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2004 — Task 3: gate re-verified at 414 passed and the handoff refreshed
+
+- **Gate.** `logs/task3-gate8.run` rc=0: **414 passed** across the twenty files of the fifth checkpoint plus
+  the observer suite, with its own NVMe scratch and a non-empty tempfile proof. The figure rose from 403
+  because CP-1999, CP-2000 and CP-2003 added controls.
+- **Handoff refreshed** (`docs/experiments/so101-act-task3-handoff.md`): the gate line now points at
+  `logs/task3-gate8.run`, and the open-items section records what has landed since the fifth verdict
+  (readback exclusivity, the coverage gate on readback, the five extra counterexamples, the observer
+  counter's off-by-one fix) alongside the four items that remain.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `0f7670c04`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.

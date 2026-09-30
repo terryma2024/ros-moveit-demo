@@ -3,7 +3,8 @@
 Written for whoever continues `dst` execution in this worktree. The ledger
 (`docs/experiments/so101-act-data-experiment-ledger.md`, CP-1921 … CP-1997) holds the full history; this
 file is the shortest path back to working state. Everything below is verified against the worktree at HEAD
-`4b8e0485a`, gate `logs/task3-gate7.run` **403 passed in 26.69 s**.
+`4b8e0485a`, gate `logs/task3-gate8.run` **414 passed** (the figure moves as controls are added; `logs/task3-gate7.run`
+was 403 at the previous checkpoint).
 
 ## Where Task 3 actually stands
 
@@ -30,9 +31,14 @@ Open, in the order I would attack them:
    projection map selects.
 3. **T3-F3 / T3-F5 readback residuals.** Readback must refuse a reference record carrying keys from both raw
    groups, and re-apply the formal coverage gate; CP-1993 records the exact recipe.
-4. **T3-F11's window-to-rows and observed-schedule checks.** CP-1997 records the recipe: build the fixtures
-   from the audit's own contents (mint the acquisitions the window declares, bind a row, then derive the
-   window fields) behind a single self-consistent formal-episode helper.
+4. **T3-F11's window-to-rows and observed-schedule checks.** CP-1997 and CP-2001 record the two attempts and
+   the recipe: build the fixtures from the audit's own contents (mint the acquisitions the window declares,
+   bind a row, then derive the window fields) behind a single self-consistent formal-episode helper. Both
+   attempts reverted, so the checks are not in the code yet.
+
+Already landed since the fifth verdict: readback refusing both raw reference groups (CP-1999), the formal
+coverage gate re-applied on readback (CP-2000), five more re-signed counterexamples covering readback checks
+that had none (CP-2003), and the observer counter's off-by-one fix with its control (CP-1995).
 
 ## The fixture lesson, stated once
 
