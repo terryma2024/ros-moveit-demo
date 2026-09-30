@@ -37948,3 +37948,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9d81d7a62`;
   consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2039 — Task 3: the controller feedback record's fields, matched against what the broker actually holds
+
+- **Read, not guessed** (`ros_broker.py:430-437`): `_status(kind, message)` rebuilds
+  `self._statuses[kind] = {goal_id: status}` from the action status list, keeps only statuses 1/2/3, and
+  stamps `self._status_received[kind]`. It carries **no joint positions or velocities** and **no monotonic
+  sequence** — the snapshot it logs is a sorted join of goal ids to status values.
+- **Where the measured joint state actually is**: the epoch/joint-state message the broker already holds as
+  `self._positions` and `self._velocity` (read by `approval_snapshot`), with the published names in
+  `self._reference_names` (CP-1987). The commanded values are the last accepted reference's, and
+  `self._reference_sequences[kind]` counts **references**, not feedback.
+- **So one ratified field has no source here, exactly as `scene_revision` had none in the MoveIt message**:
+  `controller_feedback.status_sequence`. Two honest options, for the owner: (a) the broker keeps its own
+  **feedback-read counter**, incremented whenever it captures a joint state for a feedback record, documented
+  as the broker's counter (the same choice already implemented for `scene_revision`, CP-2020); or (b) the
+  field is amended. Inventing a plausible sequence is the one option excluded.
+- **What that means for the two gates.** `joint_feedback_ok` and `controller_reference_ok` can be derived from
+  a broker-provided feedback record as soon as that counter question is settled and the record is threaded
+  through the readback's `observation`/`reference` entry; the derivation pattern itself is proven twice
+  (CP-2029, CP-2034) with its controls (CP-2036). Until then they keep their documented placeholder values,
+  which is honest and visible rather than silent.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `0342282c0`;
+  consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
