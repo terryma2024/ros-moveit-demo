@@ -41670,3 +41670,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; items 0-2 completed;
   item 4's QC increments pass their suites but wait behind Task 3 by the plan's own rule. HEAD `fc8348819`;
   targeted gates twelve, all green.
+
+
+## CP-2209 — The authoritative input list, found: twelve roles, none of them a window policy
+
+- **What `input-candidates.json` is** (in the plan root, 9440 bytes): a
+  `ACT_FIRST_EPISODE_INPUT_CANDIDATES` v1 document naming the frozen inputs by role, with a `config_sha256`, the
+  `evidence_root`, the `source_commit` and the `source_root`. Its twelve roles, with their candidate counts,
+  approvals and blockers:
+  | role | candidates | approval | blocker |
+  | --- | --- | --- | --- |
+  | `anchor_scene` | 1 | source_controlled | — |
+  | `collection_config` | 1 | source_controlled | — |
+  | `contact_activation` | 1 | user_activation | — |
+  | `contact_proposal` | 1 | disabled_proposal | — |
+  | `path_policy` | **0** | — | **NONHEAD_INPUT_BINDING_REQUIRED** |
+  | `placement_qc` | **0** | — | **NONHEAD_INPUT_BINDING_REQUIRED** |
+  | `reference_interpolation` | 1 | source_controlled | — |
+  | `reset_recipe` | 1 | source_controlled | — |
+  | `resource_thresholds` | 2 | source_controlled | **NONHEAD_INPUT_BINDING_REQUIRED** |
+  | `rgb_skew` | **0** | — | **NONHEAD_INPUT_BINDING_REQUIRED** |
+  | `runtime_config` | 1 | source_controlled | — |
+  | `scene_model` | 1 | source_controlled | — |
+- **Two things this settles with evidence rather than inference**:
+  1. **F11's frozen-policy question may be unsatisfiable as written.** The frozen inputs are these twelve roles and
+     **none** is a window policy — no cadence, no stream list, no permitted-gap rule — so "derive/check policy from
+     the frozen inputs" has no artifact to derive from. The honest options are for the owner to say the window
+     policy is an episode parameter (as the code treats it) or to add such a role; guessing one would invent a
+     contract, which is why it stays open.
+  2. **Exactly four roles carry `NONHEAD_INPUT_BINDING_REQUIRED`**, and they are the four this session's constraints
+     recorded as lacking approved values — `path_policy`, `placement_qc`, `rgb_skew` (each with **zero** candidates)
+     and `resource_thresholds` (two candidates, still blocked). That pins item 5's prerequisite: those bindings must
+     be approved before a production composition can run, and it is the same blocking code the admission path raises.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven** — its seventh now shown to need an owner
+  decision rather than more code — **F13 residual**; items 0-2 completed; item 4's QC increments wait behind Task 3
+  by the plan's rule, and items 5+ wait on the four input bindings. HEAD `73fc3fd2c`; twelve gates green.
