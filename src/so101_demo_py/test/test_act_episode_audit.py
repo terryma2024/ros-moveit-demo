@@ -480,6 +480,14 @@ def test_readback_refuses_a_resigned_scope_document(tmp_path):
     ("references.jsonl", lambda row: row.update({"sequence": 1.0}), "AUDIT_REFERENCE_INVALID"),
     # a re-signed row carrying keys from both raw reference groups is refused on readback (T3-F3)
     ("references.jsonl", lambda row: row.update(_ratified_reference()), "AUDIT_REFERENCE_INVALID"),
+    # checks the readback already implements, each now with a re-signed counterexample
+    ("acquisitions.jsonl", lambda row: row.update({"camera": "neck"}), "AUDIT_ACQUISITION_INVALID"),
+    ("acquisitions.jsonl", lambda row: row.update({"acquisition_id": "s/1/head/9"}),
+     "AUDIT_ACQUISITION_INVALID"),
+    ("acquisitions.jsonl", lambda row: row.update({"shape": [480, 640]}), "AUDIT_ACQUISITION_INVALID"),
+    ("events.jsonl", lambda row: row.update({"identity": {**row["identity"], "reset_epoch": 9}}),
+     "AUDIT_EVENT_INVALID"),
+    ("physics.jsonl", lambda row: row.update({"kind": "hold"}), "AUDIT_PHYSICS_INVALID"),
 ])
 def test_readback_refuses_resigned_records_that_admission_would_reject(tmp_path, stream, mutate,
                                                                       code):

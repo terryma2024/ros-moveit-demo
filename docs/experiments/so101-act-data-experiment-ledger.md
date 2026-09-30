@@ -37139,3 +37139,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `90ee85dbc`;
   gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2003 — Task 3 fix pass: five more re-signed counterexamples on readback checks that lacked controls
+
+- **What landed.** The existing re-signed-record parametrisation gained five cases covering readback checks
+  that had no counterexample: an acquisition whose `camera` is not a registered stream, one whose
+  `acquisition_id` is not the canonical `session/reset/camera/sequence` value, one whose `shape` is not the
+  frozen three-dimensional form (all `AUDIT_ACQUISITION_INVALID`); an event whose identity claims a foreign
+  reset epoch (`AUDIT_EVENT_INVALID`); and a physics row with an unregistered kind
+  (`AUDIT_PHYSICS_INVALID`). Each case rewrites one stream and re-signs the manifest, so only the semantic
+  check can catch it.
+- **Evidence.** `logs/task3-fix48.run` rc=0: **58 passed in 0.41 s** in `test_act_episode_audit.py`, with its
+  own NVMe scratch and a non-empty tempfile proof. All five landed on the first attempt because they extend
+  the parametrisation instead of introducing a fixture — the same recipe that landed CP-1999 and CP-2000
+  after five reverts of the other kind.
+- **Still open.** **T3-F1**'s producer side, **T3-F11**'s window-to-rows checks (both reverted attempts are
+  recorded with their recipes), and **A.1** awaiting the owner with the reviewer's clarification.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `d32d4f6fd`;
+  gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
