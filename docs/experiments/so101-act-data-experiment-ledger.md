@@ -35166,3 +35166,31 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   only exit 2 (a manifest refusal could satisfy it); installed console-script provenance; and the two host
   gates (`mujoco_vendor` fresh closure and the full benchmark gate), both Task 11's.
 - **Gate:** benchmark suite 23 passed; ordinary suites 47 passed + 1 skipped; `ruff check` clean.
+
+## HS-024 — Task 4 APPROVED WITH FINDINGS by the seventh (execution-first) verdict
+
+- **Verdict:** `reviews/task4/task4-seventh-verdict.md`, produced by a **non-interactive** reviewer
+  (`codex exec -m gpt-6.1-sol -c model_reasoning_effort=high`), which is the reliable review vehicle on this
+  host: the interactive TUI sessions kept stalling and losing queued messages, which is what consumed so
+  many rounds of this checkpoint.
+- **It executed the checks itself.** Command 1 (`head_test benchmark_test/test_head_search_model_evaluation.py
+  -q`) returned **exit 0 with 23 passed**; command 2 (the wiring grep) returned exit 0 and its output is
+  quoted in the verdict, showing `_resolve_tracking_iou` wired into `model.val(iou=...)` and the
+  `EVALUATION_SEAL_UNVERIFIED` / `EVALUATION_FROZEN_IDENTITY_DRIFT` refusals in place.
+- **Decision: APPROVE WITH FINDINGS.** Fifth-verdict findings 4 and 6 are **CLOSED** for the concrete
+  defects - task-domain frozen-document propagation, and acceptance of selected files with no content
+  digest (now requiring an inline digest or a published-sums entry). Findings 1, 2, 3 and 5 remain closed
+  within their stated scopes.
+- **Residuals it lists and does not close** (carried forward honestly): temporal tracker evaluation beyond
+  the supported NMS IoU form; binding each frame seed to its recording record and requiring every declared
+  seed in every domain/split cell; empty-scene scenario coverage; independent verification of the
+  drifted-weight test's boundary; episode intervals as descriptive matched-fraction statistics rather than
+  pooled recall/F1/AP gating selection; independently anchored manifest/sums provenance; and the Task 11
+  items (installed console-script provenance, the `mujoco_vendor` fresh closure and the full benchmark
+  gate). It also notes the test wrapper's `rc=` field is empty under zsh because it uses Bash's
+  `PIPESTATUS`, so exit-code provenance rests on the tool-reported status plus the visible `23 passed`.
+- **Task 4 is closed.** Ledger trail: HS-018 (rejection and plan), HS-019 (rework), HS-020 (second verdict
+  and fixes), HS-021 (third verdict's P1), HS-022 (executed replays), HS-023 (fifth verdict and residuals),
+  this section (approval). Commits: 8bd48649d, 17dbaff1d, a964f4a96, 6cf3a4ddb, 6e5ff25df, d924a5cb5,
+  297ffc39c, b64aeba38, cad8a5426, cc07e5424, 9a8fe355e, bcda8550a.
+- **Next: Task 5**, specified in HS-017.
