@@ -38584,3 +38584,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `184cb6bd9`;
   targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2068 — Task 3: the truncation route is refused upstream too, so mujoco_ok may be as weak as planning_ok
+
+- **What the control found.** Marking the world `truncated` in the observation's readback makes the port refuse
+  the observation with `ValueError: physical readback scope` **before** the document exists, so — on this route
+  — `mujoco_ok` cannot be observed to be `False` any more than the SEARCH document's `planning_ok` can. Either
+  the port's readback validation rejects a truncated sample outright (in which case CP-2056's derivation is a
+  decorated literal and should be stated with its reason, like CP-2062 did for `planning_ok`), or a different
+  route reaches the gate with a truncated world (a sample that carries the flag but passes the scope checks).
+  Which one it is needs the readback's scope validation read, which is the next session's first step on item
+  (b).
+- **Reverted, and the tree verified green.** My control was restored to the committed state rather than left
+  red; the search-port suite passes at 34 after the revert.
+- **Why this matters for the brief's honesty.** CP-2061 reported that "a `truncated` world makes `mujoco_ok`
+  false" from the same experiment's first attempt; this round shows that assertion could not be reached — the
+  refusal happens first. The ledger now carries the correction, and the brief should be read with it: the gates
+  that are certainly observational are the boundary's four and the document's scene, feedback, reference,
+  contact and camera gates; `planning_ok` and possibly `mujoco_ok` are candidates for the "stated with a
+  reason" treatment.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `3908c7b9d`;
+  targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
