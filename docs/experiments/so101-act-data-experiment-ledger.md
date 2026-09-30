@@ -41344,3 +41344,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   progress** with five items landed and its frozen-policy item now a **question for the plan**; targeted gates
   **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `4256e32ab`; no
   push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2196 — F11's endpoint item, and why its strong form must break the retained fixture
+
+- **What the code checks today**: `_window_ok` enforces only internal relations — the three endpoints are numbers
+  and `collection_start_s <= physics_end_s <= collection_end_s` (lines 478-484) — while the shared predicate matches
+  schedule instants against held acquisitions and applies the cadence/gap rule. **Nothing ties an endpoint to what
+  the audit actually observed**, which is F11's "the observed counts/ranges and collection endpoints are not
+  reconstructed".
+- **The strong form of the rule**, and the one F5's own evidence points at: `collection_end_s` (and `physics_end_s`)
+  must equal the **last observed** instant rather than a number the caller chose. The retained positive fixture F5
+  quoted has `collection_end_s = 1.2` while its last camera and physics evidence is at **1.1** — the verdict calls
+  that out as a symptom, not a detail — so implementing the rule **will fail that fixture**, and the fixture must be
+  upgraded to carry evidence to its claimed end (or to claim the end its evidence supports).
+- **That cost is the point, not a problem**: F5 and F11 both say a formal seal currently claims coverage it does not
+  hold, and both name the retained fixture as the demonstration. Closing this item therefore means (1) requiring
+  endpoints to be reconstructed from observed extents in the shared predicate, so the seal and the readback agree,
+  and (2) amending the formal fixtures to hold evidence up to the end they claim — the same module-and-fixtures pass
+  this session has run four times (CP-2150, CP-2154, CP-2159, CP-2164).
+- **What has to be read before writing it**: which rows count as "observed" for each endpoint — physics rows and
+  bound rows have times, acquisitions have stamps, and the schedule's own instants are claims rather than
+  observations — so the predicate's inputs decide the rule's exact form.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan on `sim_time_s`); **F11 in
+  progress** with five items landed, its frozen-policy item waiting on the plan (CP-2195) and this endpoint item
+  specified above; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154
+  passed**; HEAD `83d6b9401`; no push, no evidence deletion, no hardware, no second stack.
