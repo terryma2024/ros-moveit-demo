@@ -37804,3 +37804,28 @@ not, they are mine a second time - and given HS-071, that possibility is not rem
 
 I am recording the location and the method rather than starting the A/B, because a bisect across that subsystem needs
 a clean run per candidate commit and my remaining context this session cannot finish one.
+
+## HS-126 — File-level A/B: the task 8 schema is untouched and the contract has a zero-line diff
+
+The cheapest form of the A/B HS-125 asked for, done first because it is decisive if it comes out clean:
+
+```
+task8_measurement_schema.py                             0 commits since the branch base
+task8-calibration-measurement-contract-v2.json          3 commits (my edit, revert, byte-exact restore)
+git diff --stat <base> HEAD -- <both files>             (empty)
+```
+
+So the schema I never touched and the contract I restored byte-exactly are **both at their pre-work state**, and
+`PHASE_CAMERA_MATRIX_INVALID` still fires from `task8_measurement_schema.py:116`. Those failures therefore **cannot be
+caused by my changes to those two files** - the files are provably identical to the branch base.
+
+What that leaves, in order of likelihood:
+
+1. **Pre-existing failures** in that subsystem, unrelated to this work (the most likely, and consistent with Task 4's
+   finding of 62 pre-existing benchmark failures in this repository).
+2. **Another file this work changed being read by those tests** - the head-search contracts and perception configs are
+   the candidates, since they are the only other task 8-adjacent things I touched.
+
+The next step is a run of that module at the branch base (a `git worktree` at `<base>` rather than a stash, so the
+current tree is untouched), which decides between (1) and (2) in one shot. It is bounded, and it is the last
+unexplained item of any size in Task 11.
