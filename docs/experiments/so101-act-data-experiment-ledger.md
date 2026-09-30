@@ -37527,3 +37527,32 @@ explained:
 The 163 `No module named` rows are the category-1 invocation/ROS-runtime family from HS-111 and stay grouped.
 Recording signatures is not attribution: the four items above are open until each gets a traceback and, if it turns
 out to be mine, an A/B like HS-071's.
+
+## HS-115 — The big failure signatures come from a STALE installed overlay, not from the source
+
+Cause-checking the most alarming signature first (a TypeError that looks exactly like my class of bug):
+
+```
+E   TypeError: PickPlaceRunner._verify_phase() takes 6 positional arguments but 7 were given
+    .../head-task2-overlay/install/so101_demo_py/lib/python3.12/site-packages/so101_demo/act/pick_place_runner.py
+```
+
+The traceback points into the **installed overlay**, while the source at `src/act/pick_place_runner.py:93` has the
+newer signature. So the overlay copy predates the source changes: every test that exercises `_verify_phase` through
+the installed package fails on a signature that no longer exists in the tree.
+
+That single fact plausibly accounts for most of the large, uniform signatures:
+
+| signature | count | likely cause |
+| --- | --- | --- |
+| `_verify_phase()` takes 6 but 7 given | 14 | stale installed overlay |
+| `FIELDS_INVALID` | 67 | same: installed code validating against an older contract shape |
+| `TRUSTED_FINAL_TARGET_INVALID` | 47 | same family |
+| `MEASUREMENT_CONTRACT_V2_INVALID` | 16 | same family |
+| `No module named <X>` | 163 | ROS runtime / invocation (HS-111 category 1) |
+
+**The fix is a rebuild, not a code change**: `colcon build` the overlay from the current source and re-run. Note the
+irony worth recording - HS-089 rebuilt the overlay precisely so the installed gates would be current, and HS-105
+hashed it, yet the source moved afterwards (the seal fix in HS-099 touched `act/head_camera_geometry.py`), so the
+overlay I then measured was stale again. **The lesson: after any source change, rebuild before quoting an installed
+run** - and hash the overlay in the same breath as running it, which HS-105 gives the means to do.
