@@ -37134,3 +37134,23 @@ So the fix is still one field - but in the **result/geometry document class** th
 next step is to read that class's `to_document` and add it there, with the RED test from HS-096. Recording the wrong
 site twice is worth keeping in the ledger: both times the mistake was reading the *nearest* matching code rather
 than the code path the CLI takes.
+
+## HS-098 — The three edits are in and the seal hash changed, but the field is still absent (round 699)
+
+State, read from the artefacts rather than from intent:
+
+- `act/head_camera_geometry.py` carries all three edits (`coarse_step_candidate_rad=contract...` at the construction
+  site, the dataclass field, and a `to_document` key), `test_act_head_search_domain.py` passes (12), `ruff` is clean.
+- `pysrc/so101_demo` is a **symlink** to the worktree `src`, so the CLI genuinely ran the edited code - no stale copy
+  in play this time.
+- The regenerated seal's hash **changed** (`f168bfc1...` -> `01f91dca...`), so the emitted document did change.
+- And yet `'coarse_step_candidate_rad' in seal` is **False**.
+
+So the write path does not serialise the `to_document` I edited: the CLI's `_write_seal(result.to_document(), ...)`
+must receive a result whose class comes from elsewhere, or the geometry document is assembled by a second builder
+before being written. That is the one thing left to find, and it is a read, not a guess - I have now twice recorded
+the wrong site by reading the nearest matching code (HS-095, HS-097), so the next step is to print the identity of
+the object the CLI writes (`type(result).__module__` and `__qualname__`) rather than to grep for a third candidate.
+
+The edits stay uncommitted until the seal demonstrably carries the field: a hash change without the field would look
+like progress in the log while leaving the smoke refusing exactly as before.
