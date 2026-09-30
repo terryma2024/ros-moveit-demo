@@ -41616,3 +41616,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3, F5 and F1 closed**; **F11 six of seven** (frozen policy awaits the plan);
   F13 residual (awaits the plan); targeted gates all green, the tables in CP-2204 and here; HEAD `d196d3b32`; no
   push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2207 — Handoff summary: what this stretch landed, what it proved, and the two questions it cannot answer
+
+- **The controls added in this stretch, each with the gate that runs it** (suites named as their files):
+  - `test_act_episode_audit.py`: the two raw-reference alternatives round-trip (line 1185); a registered live
+    sample reaches the audit and reads back (1227); the expert carries the ratified group into the audit (1245);
+    readback refuses a window naming an instant no acquisition holds (1284); a schedule naming no instant is refused
+    at seal (1297) and on readback (1306); the registered source document and the time-only block (645).
+  - `test_act_w8_qualification.py`: a prepared bundle yields the identities and manifest the verifier consumes (89);
+    journal rows for a prepared bundle (108); a qualified document over a prepared bundle and fourteen journals
+    verifies (152).
+  - All of them run inside `logs/task3-f1-chain.run` (284), `logs/task3-f1-capture.run` (288) or
+    `logs/task4-positive.run` (113), so every control has a gate with a return code and a JUnit record.
+- **The findings closed, and how**: **F12** (CP-2116…2120), **F3** (CP-2127…2142), **F5** (CP-2146…2164), **F1**
+  (CP-2166…2183 plus the capture leg in CP-2206), **F11** six of seven (CP-2184…2203). The Task 3 baseline gate
+  `logs/task3-final.run` has stayed at **430 passed** throughout, so nothing landed at the expense of the original
+  checkpoint.
+- **The two questions for the owner or the plan, each with its evidence**:
+  1. **where the frozen window policy lives** — `cadence_s`, `streams_required`, `permitted_gaps_s` are
+     caller-provided today and the audit module has no frozen home for them (CP-2195); the candidates are the
+     writer's `inputs.json` or the plan's frozen inputs;
+  2. **whether `sim_time_s` should carry an observed source instant** — the ratified `controller_feedback` record is
+     closed at seven keys and the audit requires that instant to equal its parent observation's, so F13's request
+     cannot be met without amending the record (CP-2121/CP-2124).
+- **Where a new session should start**: this ledger from **CP-2112** (the sixth verdict and its ruling) through
+  **CP-2207**; the verdict itself at
+  `…/reviews/task3-rereview5-verdict.md`; the gate table at CP-2204; and the two questions above. Nothing in this
+  stretch is unpushed or uncommitted, no evidence was deleted, no hardware was touched and no second stack exists.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; items 0-2 completed;
+  item 4's QC increments exist and pass their suites but the plan's converge-first rule keeps them behind Task 3.
+  HEAD `ea2225fb3`; targeted gates twelve, all green.
