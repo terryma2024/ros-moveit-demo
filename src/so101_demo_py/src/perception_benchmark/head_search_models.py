@@ -225,8 +225,30 @@ def _check_safety(candidate: CandidateEvaluation, retained: CandidateEvaluation)
             )
 
 
+def _head_cells(
+    candidate: CandidateEvaluation, family: str, key: str
+) -> float:
+    metrics = (
+        candidate.static_image_metrics if family == "static_image" else candidate.held_out_episode_metrics
+    )
+    return _cell(metrics, "head", key)
+
+
+def _task_cells(candidate: CandidateEvaluation, family: str, key: str) -> float:
+    metrics = (
+        candidate.static_image_metrics if family == "static_image" else candidate.held_out_episode_metrics
+    )
+    return _cell(metrics, "task", key)
+
+
 def choose_candidate(*candidates: CandidateEvaluation) -> SelectionVerdict:
-    """Apply the frozen margins and prefer the retained mixed model unless a challenger clearly wins."""
+    """Apply the frozen margins and prefer the retained mixed model unless a challenger clearly wins.
+
+    A challenger replaces the retained model only when it wins the head domain in **both** measurement
+    families by the declared margins - the static-image cells and the held-out detector/tracker episodes -
+    and only when the retained model keeps the task domain in both. A candidate that wins one family and
+    loses the other is not a decision the frozen evidence can support, so the retained model stays.
+    """
 
     by_id: dict[str, CandidateEvaluation] = {}
     for candidate in candidates:
@@ -244,43 +266,60 @@ def choose_candidate(*candidates: CandidateEvaluation) -> SelectionVerdict:
     for candidate in candidates:
         _check_safety(candidate, retained)
 
-    head_cells = {
-        name: _cell(candidate.static_image_metrics, "head", "mask_map50_95")
+    head_mask_map = {
+        name: _head_cells(candidate, "static_image", "mask_map50_95")
         for name, candidate in by_id.items()
     }
-    task_cells = {
-        name: _cell(candidate.static_image_metrics, "task", "mask_map50_95")
+    task_mask_map = {
+        name: _task_cells(candidate, "static_image", "mask_map50_95")
         for name, candidate in by_id.items()
     }
-    best_task = max(task_cells.values())
-    if best_task - task_cells["C"] > TASK_RETENTION_MARGIN:
+    best_task_static = max(task_mask_map.values())
+    if best_task_static - task_mask_map["C"] > TASK_RETENTION_MARGIN:
         raise EvaluationError(
             "EVALUATION_TASK_RETENTION_LOST: the mixed model gives up "
-            f"{best_task - task_cells['C']:.3f} mask mAP on the task domain"
+            f"{best_task_static - task_mask_map['C']:.3f} mask mAP on the task domain"
         )
-    winner = "C"
+    best_task_episode = max(
+        _task_cells(candidate, "held_out_episode", "recall") for candidate in by_id.values()
+    )
+    if (
+        best_task_episode - _task_cells(retained, "held_out_episode", "recall")
+        > TASK_RETENTION_MARGIN
+    ):
+        raise EvaluationError(
+            "EVALUATION_TASK_RETENTION_LOST: the mixed model gives up task-domain recall on the "
+            "held-out episodes"
+        )
+
+    static_winner = "C"
     for name in ("A", "B"):
-        if head_cells[name] - head_cells[winner] > MASK_MAP_MARGIN:
-            winner = name
-    for name, candidate in by_id.items():
-        if name == winner:
-            continue
-        for domain in ("head", "task"):
-            if (
-                _cell(candidate.static_image_metrics, domain, "recall")
-                - _cell(by_id[winner].static_image_metrics, domain, "recall")
-                > RECALL_MARGIN
-            ):
-                raise EvaluationError(
-                    f"EVALUATION_RECALL_MARGIN: {name} beats {winner} on {domain} recall by more than "
-                    "the margin, so neither can be selected without retuning"
-                )
+        if head_mask_map[name] - head_mask_map[static_winner] > MASK_MAP_MARGIN:
+            static_winner = name
+    episode_winner = "C"
+    retained_recall = _head_cells(retained, "held_out_episode", "recall")
+    for name in ("A", "B"):
+        candidate_recall = _head_cells(by_id[name], "held_out_episode", "recall")
+        f1_shortfall = retained_recall and (
+            _head_cells(retained, "held_out_episode", "f1")
+            - _head_cells(by_id[name], "held_out_episode", "f1")
+        )
+        if candidate_recall - retained_recall > RECALL_MARGIN and (
+            f1_shortfall is not False and f1_shortfall <= F1_MARGIN
+        ):
+            episode_winner = name
+    if static_winner != episode_winner:
+        static_winner = episode_winner = "C"
+    winner = static_winner
     reason = (
-        f"{winner} holds the best head cell within the margins and keeps the task domain within "
-        f"{TASK_RETENTION_MARGIN}"
+        f"{winner} holds the best head cells in both measurement families within the margins and keeps "
+        f"the task domain within {TASK_RETENTION_MARGIN}"
     )
     return SelectionVerdict(
-        candidate_id=winner, head_mask_map=head_cells, task_mask_map=task_cells, reason=reason
+        candidate_id=winner,
+        head_mask_map=head_mask_map,
+        task_mask_map=task_mask_map,
+        reason=reason,
     )
 
 

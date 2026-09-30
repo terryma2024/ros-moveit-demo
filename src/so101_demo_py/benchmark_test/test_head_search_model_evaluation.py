@@ -97,7 +97,11 @@ def test_a_candidate_must_win_by_a_margin_to_replace_the_retained_model() -> Non
     # B is ahead of C on the head cell but by less than the 0.01 AP margin: no replacement
     thin = _evaluation("B", head_ap=0.512, task_ap=0.508)
     assert choose_candidate(A_EQUIVALENT, thin, C_EQUIVALENT_RETAINED).candidate_id == "C"
-    clear = _evaluation("B", head_ap=0.53, task_ap=0.508)
+    # winning only the static-image family is not a decision the frozen evidence supports
+    static_only = _evaluation("B", head_ap=0.53, task_ap=0.508)
+    assert choose_candidate(A_EQUIVALENT, static_only, C_EQUIVALENT_RETAINED).candidate_id == "C"
+    # winning the head domain in both families replaces the retained model
+    clear = _evaluation("B", head_ap=0.53, task_ap=0.508, head_recall=0.95, head_f1=0.95)
     assert choose_candidate(A_EQUIVALENT, clear, C_EQUIVALENT_RETAINED).candidate_id == "B"
 
 
