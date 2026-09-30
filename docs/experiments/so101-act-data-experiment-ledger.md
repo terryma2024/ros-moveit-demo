@@ -38798,3 +38798,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f40b5b612`;
   targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2079 — Task 3: T3-F11's module anchor read, and the attempt stopped before writing
+
+- **The anchor, read rather than remembered.** The formal window gate in `seal()` is no longer the two-line
+  form CP-1997 assumed: it is a single condition that also accepts a diagnostic audit which opts into the
+  ratified shape (`set(window) == _WINDOW_FIELDS`, CP-2006), and it raises `AUDIT_WINDOW_INVALID` in the line
+  the grep above prints. My patch's first assertion failed on the remembered text and, because the script writes
+  only after every assertion passes, **nothing was modified** — the safe failure mode again.
+- **What is ready for the next attempt.** The matcher's body (CP-1997's `_window_matches_rows`, re-derived from
+  the ratified rules), the row-time bookkeeping it needs, and the fixture sketch with its derived window
+  (CP-2078). The only missing piece is the exact gate line, which the grep in this round's log shows.
+- **Why I stopped.** Two anchors in a row have now failed on text I had amended earlier in the session; an
+  exhausted context should not attempt a third blind patch, and the ledger entries above make the remaining work
+  a single careful pass for a fresh session.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `eb406305b`;
+  targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
