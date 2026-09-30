@@ -41705,3 +41705,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven** — its seventh now shown to need an owner
   decision rather than more code — **F13 residual**; items 0-2 completed; item 4's QC increments wait behind Task 3
   by the plan's rule, and items 5+ wait on the four input bindings. HEAD `73fc3fd2c`; twelve gates green.
+
+
+## CP-2210 — The input-binding module found: the twelve roles are code, and no window policy among them
+
+- **`src/so101_demo_py/src/act/first_episode_inputs.py`** (949 lines) is where the frozen inputs live: it declares
+  `CANDIDATES_KIND`/`MANIFEST_KIND` and `SCHEMA_VERSION`, the `INPUT_ROLES` tuple (line 37, printed alongside this
+  entry), the `_CANDIDATE_FIELDS`/`_ROLE_FIELDS`/`_REGISTRY_FIELDS`/`_MANIFEST_FIELDS` closures, the running
+  `_APPROVALS` set, the per-role `_ROLE_APPROVAL` map, and `_STATUS_BLOCKERS = {"MISSING":
+  "NONHEAD_INPUT_BINDING_REQUIRED"}` — the same four roles CP-2209 found blocked. Its public gate is
+  `require_nonhead_gate(report)`, which raises `NONHEAD_SAFETY_NOT_READY` when the report is not ready.
+- **What that settles for F11**: the frozen inputs are **these twelve roles in code**, and none of them is a window
+  policy. So "derive/check policy from the frozen inputs" (cadence, required streams, permitted gaps) has no artifact
+  to derive from — the question in CP-2195/CP-2209 is now answered by the module that *is* the frozen-input
+  contract, not merely by an absence of grep hits.
+- **Where each role is consumed** (grep over `src/**/*.py`): all twelve appear in
+  `so101_teleop/so101_teleop/unified/admission.py` — the admission path — with `scene_model` also in
+  `src/cli/mujoco_parallel_batch.py` and `reference_interpolation` in this module itself; the busiest names are
+  `runtime_config` (92 files) and `collection_config` (41), which is consistent with them being the configuration
+  surface rather than per-episode parameters.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven** with its seventh shown to need an owner
+  decision, **F13 residual**; item 4's QC increments wait behind Task 3; items 5+ wait on the four blocked bindings
+  (`path_policy`, `placement_qc`, `rgb_skew`, `resource_thresholds`). HEAD `7b7933f58`; twelve gates green.
