@@ -62,6 +62,7 @@ from so101_teleop.models import (
     TelemetrySnapshot,
 )
 from so101_teleop.task_artifacts import ArtifactAccessError
+from so101_teleop.head_camera import head_camera_router
 from so101_teleop.task_gateway import TaskGatewayError
 
 from .contracts import ChannelBinding, Domain, LeaseIdentity, MutationError, RequestAuthority
@@ -1054,6 +1055,7 @@ def create_unified_app(
     app.include_router(teleop_router(services))
     app.include_router(tasks_router(services))
     app.include_router(validation_router(services))
+    app.include_router(head_camera_router(services))
     _mount_static(app, static_dir, capture_dir)
     return app
 
