@@ -92,15 +92,21 @@ def main(argv: list[str] | None = None) -> int:
             if evidence_root.is_dir()
             else {}
         )
-        report = qualify_head_search(
-            {
-                "run_root": run_root,
+        try:
+            report = qualify_head_search(
+                {
+                    "run_root": run_root,
                 "runtime_id": run_root.name,
                 "bundle_sha256": _digest(promoted),
                 "evidence": evidence,
             },
-            run_root,
-        )
+                    run_root,
+                )
+        except ValueError as error:
+            if "RUN_ROOT_ALREADY_EXISTS" not in str(error):
+                raise
+            print(str(error), file=sys.stderr)
+            return 2
         print(f"{report['status']} {report['evidence_sha256_set']}")
         return 0
     if parsed.command == "run":

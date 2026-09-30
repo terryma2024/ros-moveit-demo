@@ -95,8 +95,8 @@ def test_qualify_refuses_an_existing_root_and_publishes_nothing_without_evidence
 ) -> None:
     run_root = tmp_path / "run"
     run_root.mkdir()
-    with pytest.raises(ValueError, match="RUN_ROOT_ALREADY_EXISTS"):
-        main(["qualify", "--run-root", str(run_root)])
+    # an existing root is a named refusal with exit code 2, not a traceback
+    assert main(["qualify", "--run-root", str(run_root)]) == 2
     fresh = tmp_path / "fresh"
     with pytest.raises(ValueError, match="HEAD_SEARCH_QUALIFICATION_EVIDENCE_INCOMPLETE"):
         main(["qualify", "--run-root", str(fresh)])
