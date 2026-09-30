@@ -36667,3 +36667,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c4513d048`;
   gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1982 — Owner ratified Proposals A, B and C, and chose to converge Task 3
+
+- **Ratification (2026-09-30, recorded in `docs/experiments/so101-act-data-schema-proposals.md`).**
+  Proposal A (raw controller reference frames: separate `arm`/`gripper` frames with ordered joint names,
+  positions **and** velocities, source/receipt stamps, observer sequence, an `evaluation` block and a
+  checked 5+1 → 6 projection map) is **approved for implementation**. Proposal B (collection window with
+  source schedule, required streams, cadence, permitted gaps, the observed first command, physics end,
+  label cutoff and an explicit outcome, with the reviewer's correction that `first_command <= label_cutoff`
+  does not hold for early-failure captures) is **approved for implementation**. Proposal C is approved for
+  adopting the registered `act/contact_live.py` live sample per kind **and** the owner explicitly
+  authorised replacing the literal `planning_scene_ok: True` assertions
+  (`adapters/act/pick_place_search_boundary.py:282`, `adapters/act/pick_place_search_port.py:412`) with
+  real observations, defining the Planning Scene and gripper/controller feedback records as proposed.
+- **Priority chosen: converge Task 3** — push the three ratified schemas through the producer boundaries,
+  then send the fifth Task 3 checkpoint. Order of work: B's audit-side schema (the capture already exposes
+  the observable facts, CP-1981), then A through observer → broker → port → tap → capture → audit, then
+  C's registered-sample enforcement plus the Planning Scene and feedback records and their real producers.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (unblocked by ratification); items 4-8
+  pending.** HEAD `7cc337d60`; gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline
+  untouched; no push, no evidence deletion, no hardware, no second stack.

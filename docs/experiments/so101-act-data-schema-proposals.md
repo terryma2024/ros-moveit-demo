@@ -1,6 +1,16 @@
 # Schema proposals awaiting owner ratification (Task 3)
 
-These two schemas are **proposals, not adopted contracts**. The Task 3 reviewer ruled that the exact
+**RATIFIED 2026-09-30 by the owner.** All three proposals below are approved as written: A (raw controller
+reference frames) is approved for implementation, B (collection window) is approved for implementation,
+and C is approved for adopting the registered `act/contact_live.py` live sample per kind **together with
+explicit authorisation to replace the literal `planning_scene_ok: True` assertions**
+(`adapters/act/pick_place_search_port.py:412`, `adapters/act/pick_place_search_boundary.py:282`) with real
+observations, defining the Planning Scene and gripper/controller feedback records as proposed. The owner
+also chose to converge Task 3 first: push these schemas through the producer boundaries and then send the
+fifth checkpoint. Any later amendment is recorded here and in the ledger.
+
+The text below was written before ratification and is kept unchanged so the ratified contract and the
+proposals that were reviewed stay comparable. The Task 3 reviewer ruled that the exact
 source-derived raw-frame schema and the window schema must be ratified by the owner before the
 boundaries change together, and that the absence of frozen key names does not justify accepting missing
 facts. Until they are ratified the writer records the caller's window verbatim and the raw-frame group
