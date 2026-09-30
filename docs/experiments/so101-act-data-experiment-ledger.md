@@ -36426,3 +36426,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **T3-F5**: the fail-closed eligibility and sealing gate once the producers exist.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `50fb8d67d`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1973 — Task 3 fix pass, twenty-sixth instalment: the T3-F3 readback residuals closed
+
+- **Exact integer sequences.** Reference, event and physics sequence numbers — and a binding's
+  `reference_sequence` — must be integers, not merely numerically equal: a re-signed `1.0` is refused on
+  readback (`AUDIT_REFERENCE_INVALID`, `AUDIT_EVENT_INVALID`), and admission already refuses it through
+  `_integer()`. The control that mutates a reference sequence to `1.0` now runs in the parametrised
+  re-signed-record suite, which builds a fresh sealed audit per case.
+- **One clock per physics row.** A physics row's envelope `sim_time_s` must be a finite non-negative
+  number **equal to its observation's `simulation_time_s`**; readback no longer accepts `null` there,
+  which admission never admitted either. Controls cover both sides: admission refuses a mismatched pair,
+  and a re-signed `null` envelope is refused on readback.
+- **Event identity is the episode's, with a real release transition.** One shared validator (admission and
+  readback) requires the event identity's session, attempt **and reset epoch** to match the episode's,
+  requires an integer non-negative release epoch that never goes backwards and advances one release at a
+  time, and requires a `release` event's payload epoch to equal its own identity's epoch. The previous
+  check compared session and attempt only, which is why the reviewer's `-1` and conflicting-lease cases
+  passed. Controls: a foreign reset epoch, a backwards release epoch and a `release` payload naming a
+  different epoch are all refused.
+- **Evidence.** `logs/task3-fix26.run` rc=0: **144 passed in 1.06 s** across `test_act_episode_audit.py`,
+  `test_act_release_boundary.py`, `test_act_recorder.py`, `test_act_supervisor.py` and
+  `test_act_continuous_capture.py`, with its own NVMe scratch and a non-empty tempfile proof. Two of my
+  own attempts failed first and were corrected rather than papered over: a patch whose anchor did not
+  match (so nothing was written, and I said so) and a control that reused one sealed audit for three
+  mutations, which made the second and third assertions test the wrong failure. The final version uses a
+  fresh audit per case.
+- **Still open from the fourth verdict.** **T3-F1**: the full robot contact pairs, the independent
+  Planning Scene and gripper/controller feedback are still summaries rather than source records, and the
+  broker hop plus the per-kind raw-frame shape await the reviewer's ruling. **T3-F4**: the zero-row
+  labelled-binding rule. **T3-F5**: the fail-closed eligibility and sealing gate once the producers
+  exist.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `086c4366a`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

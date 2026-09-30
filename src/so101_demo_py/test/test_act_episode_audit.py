@@ -477,6 +477,7 @@ def test_readback_refuses_a_resigned_scope_document(tmp_path):
     ("row-bindings.jsonl", lambda row: row.update({"row_index": 7}), "AUDIT_ROW_INVALID"),
     ("events.jsonl", lambda row: row["payload"].update({"physics_step": -1}), "AUDIT_EVENT_INVALID"),
     ("physics.jsonl", lambda row: row.update({"release_epoch": -1}), "AUDIT_PHYSICS_INVALID"),
+    ("references.jsonl", lambda row: row.update({"sequence": 1.0}), "AUDIT_REFERENCE_INVALID"),
 ])
 def test_readback_refuses_resigned_records_that_admission_would_reject(tmp_path, stream, mutate,
                                                                       code):
@@ -547,7 +548,8 @@ def test_a_formal_audit_requires_the_registered_lease_contract(tmp_path):
     ("revoke", {"permit_id": "permit-1", "reason": "deadline"}),
     ("stop", {"reason": "TASK8_ABORT", "stopped_confirmed": True}),
     ("contact", {"left_contacts": 2, "right_contacts": 2, "table_contact": True}),
-    ("release", {"release_epoch": 2, "supported": True, "no_fingertip_contact": True}),
+    # a release event describes the epoch its own identity claims
+    ("release", {"release_epoch": 1, "supported": True, "no_fingertip_contact": True}),
     ("final_check", {"placement_stable": True, "retreat_stable": True}),
 ])
 def test_the_required_event_kinds_are_accepted_and_refuse_a_wrong_payload(tmp_path, kind, payload):
@@ -652,3 +654,43 @@ def test_a_registered_source_document_is_admitted_and_a_time_only_block_is_not(t
         with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
             other.append_source("physics", {"kind": kind, "sim_time_s": 1.1, "release_epoch": 1,
                                             "observation": observation})
+
+
+def test_readback_requires_exact_types_and_correlated_clocks(tmp_path):
+    """Sequences are integers, clocks agree, and an event identity is the episode's (T3-F3)."""
+
+    # a boolean or float sequence is refused at admission, so the writer cannot record one
+    writer = EpisodeAuditWriter(tmp_path / "seq", scope(), identity(), {"inputs_sha256": "a" * 64})
+    with pytest.raises(ValueError, match="AUDIT_ROW_INVALID"):
+        writer.bind_row(0, 1.0, "a", "b", True)
+    # a physics envelope clock must be finite and equal the observation clock
+    with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+        writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
+                                         "observation": {"simulation_time_s": 1.2,
+                                                         "simulation_step": 1,
+                                                         "cup_position_world_m": [0.0, 0.0, 0.0]}})
+    # an event identity must be the episode's, and its release epoch cannot go backwards
+    with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+        writer.append_source("events", {"kind": "phase_start",
+                                        "identity": {**identity(), "reset_epoch": 9},
+                                        "sim_time_s": 1.0, "monotonic_ns": 1,
+                                        "payload": {"phase": "SEARCH"}})
+    writer.append_source("events", {"kind": "phase_start",
+                                    "identity": {**identity(), "release_epoch": 2},
+                                    "sim_time_s": 1.0, "monotonic_ns": 1,
+                                    "payload": {"phase": "SEARCH"}})
+    with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+        writer.append_source("events", {"kind": "phase_start", "identity": identity(),
+                                        "sim_time_s": 1.0, "monotonic_ns": 2,
+                                        "payload": {"phase": "SEARCH"}})
+    # readback repeats the clock correlation on a re-signed stream of its own
+    case = tmp_path / "sealed"
+    case.mkdir(parents=True, exist_ok=True)
+    sealed, window = complete_audit(case)
+    path = sealed.seal(window)
+    row = json.loads((path.parent / "physics.jsonl").read_text().splitlines()[0])
+    row["sim_time_s"] = None
+    payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    _resign(sealed, path, "physics.jsonl", payload)
+    with pytest.raises(ValueError, match="AUDIT_PHYSICS_INVALID"):
+        verify_audit_manifest(path)

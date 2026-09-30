@@ -174,6 +174,24 @@ def _physics_observation_typed(observation, *, kind: str) -> bool:
     return True
 
 
+def _event_identity_ok(event_identity, episode_identity, *, release_epoch: int | None) -> bool:
+    """An event identity must be the episode's, with a legitimate release transition."""
+
+    if not isinstance(event_identity, dict) or not isinstance(episode_identity, dict):
+        return False
+    if (event_identity.get("session_id") != episode_identity.get("session_id")
+            or event_identity.get("attempt_id") != episode_identity.get("attempt_id")
+            or event_identity.get("reset_epoch") != episode_identity.get("reset_epoch")):
+        return False
+    epoch = event_identity.get("release_epoch")
+    if type(epoch) is not int or epoch < 0:
+        return False
+    if release_epoch is not None and (epoch < release_epoch or epoch > release_epoch + 1):
+        # the release epoch never goes backwards and advances one release at a time
+        return False
+    return True
+
+
 def _payload_typed(payload) -> bool:
     """Type every payload value the way its key declares, per kind."""
 
@@ -308,6 +326,7 @@ class EpisodeAuditWriter:
         self._last_row_time_s: float | None = None
         self._bound_references: set = set()
         self._revoked_targets: set = set()
+        self._event_release_epoch: int | None = None
         self._row_indexes: set = set()
         self._release_epoch: int | None = None
         self._observed_epochs: dict = {}
@@ -391,6 +410,8 @@ class EpisodeAuditWriter:
             item = _closed(record, _EVENT_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
             if (not isinstance(item["kind"], str) or item["kind"] not in _EVENT_PAYLOADS
                     or not isinstance(item["identity"], dict) or not item["identity"]
+                    or not _event_identity_ok(item["identity"], self.identity,
+                                              release_epoch=self._event_release_epoch)
                     or not isinstance(item["payload"], dict)
                     or set(item["payload"]) != _EVENT_PAYLOADS[item["kind"]]):
                 # an unknown kind, an empty identity or a payload outside its kind's schema is refused
@@ -408,6 +429,10 @@ class EpisodeAuditWriter:
                 _integer(item["payload"]["physics_step"], "AUDIT_SCHEMA_INVALID")
                 if not isinstance(item["payload"]["phase"], str) or not item["payload"]["phase"]:
                     raise ValueError("AUDIT_SCHEMA_INVALID")
+            if item["kind"] == "release":
+                if item["payload"]["release_epoch"] != item["identity"]["release_epoch"]:
+                    raise ValueError("AUDIT_SCHEMA_INVALID")
+            self._event_release_epoch = item["identity"]["release_epoch"]
             item["sequence"] = self._next("events")
         elif kind == "references":
             raw_present = _REFERENCE_RAW_FIELDS & set(record) if isinstance(record, dict) else set()
@@ -439,7 +464,11 @@ class EpisodeAuditWriter:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             _finite(item["sim_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
             epoch = _integer(item["release_epoch"], "AUDIT_SCHEMA_INVALID")
+            item["sim_time_s"] = _finite(item["sim_time_s"], "AUDIT_SCHEMA_INVALID",
+                                         nonnegative=True)
             if not _physics_observation_typed(item["observation"], kind=item["kind"]):
+                raise ValueError("AUDIT_SCHEMA_INVALID")
+            if item["observation"]["simulation_time_s"] != item["sim_time_s"]:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             self._apply_epoch(epoch, item["kind"], item["observation"])
             item["sequence"] = self._next("physics")
@@ -615,7 +644,8 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     for row in _records(audit / "references.jsonl",
                         _REFERENCE_FIELDS | _REFERENCE_RAW_FIELDS, "AUDIT_REFERENCE_INVALID",
                         optional=_REFERENCE_RAW_FIELDS):
-        if (row["sequence"] != sequence + 1 or row["source"] != "CONTROLLER_REFERENCE"
+        if (type(row["sequence"]) is not int or row["sequence"] != sequence + 1
+                or row["source"] != "CONTROLLER_REFERENCE"
                 or type(row["accepted"]) is not bool
                 or not isinstance(row["positions"], list) or len(row["positions"]) != 6
                 or not isinstance(row["reference_time_s"], (int, float))
@@ -669,9 +699,11 @@ def _verify_streams(audit: Path, identity: dict) -> None:
         if target in revoked:
             raise ValueError("AUDIT_BINDING_REVOKED")
     sequence = 0
+    event_epoch: int | None = None
     for row in _records(audit / "events.jsonl", _EVENT_FIELDS, "AUDIT_EVENT_INVALID"):
         payload = row["payload"]
-        if (row["sequence"] != sequence + 1 or row["kind"] not in _EVENT_PAYLOADS
+        if (type(row["sequence"]) is not int or row["sequence"] != sequence + 1
+                or row["kind"] not in _EVENT_PAYLOADS
                 or not isinstance(row["identity"], dict) or not row["identity"]
                 or type(row["monotonic_ns"]) is not int or row["monotonic_ns"] < 1
                 or not isinstance(payload, dict)
@@ -681,9 +713,9 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                 isinstance(row["sim_time_s"], bool) or not isinstance(row["sim_time_s"], (int, float))
                 or not math.isfinite(row["sim_time_s"]) or row["sim_time_s"] < 0):
             raise ValueError("AUDIT_EVENT_INVALID")
-        if (row["identity"].get("session_id") != identity.get("session_id")
-                or row["identity"].get("attempt_id") != identity.get("attempt_id")):
+        if not _event_identity_ok(row["identity"], identity, release_epoch=event_epoch):
             raise ValueError("AUDIT_EVENT_INVALID")
+        event_epoch = row["identity"]["release_epoch"]
         if row["kind"] in ("phase_complete", "run_complete", "run_aborted"):
             if type(payload["physics_step"]) is not int or payload["physics_step"] < 0:
                 raise ValueError("AUDIT_EVENT_INVALID")
@@ -696,12 +728,14 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     epoch: int | None = None
     sequence = 0
     for row in _records(audit / "physics.jsonl", _PHYSICS_FIELDS, "AUDIT_PHYSICS_INVALID"):
-        if (row["sequence"] != sequence + 1 or row["kind"] not in _PHYSICS_KINDS
+        if (type(row["sequence"]) is not int or row["sequence"] != sequence + 1
+                or row["kind"] not in _PHYSICS_KINDS
+                or isinstance(row["sim_time_s"], bool)
+                or not isinstance(row["sim_time_s"], (int, float))
+                or not math.isfinite(row["sim_time_s"]) or row["sim_time_s"] < 0
+                or row["observation"].get("simulation_time_s") != row["sim_time_s"]
                 or type(row["release_epoch"]) is not int or row["release_epoch"] < 0
-                or (row["sim_time_s"] is not None and (
-                    isinstance(row["sim_time_s"], bool)
-                    or not isinstance(row["sim_time_s"], (int, float))
-                    or not math.isfinite(row["sim_time_s"]) or row["sim_time_s"] < 0))):
+                ):
             raise ValueError("AUDIT_PHYSICS_INVALID")
         sequence = row["sequence"]
         if epoch is None or row["release_epoch"] > epoch:
