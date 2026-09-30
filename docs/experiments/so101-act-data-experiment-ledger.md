@@ -35801,6 +35801,24 @@ env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHO
   binding suites run under the sourced environment (that is `head_test_render`), where they passed serially in
   HS-041 and HS-043; they are not part of this parallel recipe.
 
+## HS-045 — The real-seal smoke found and fixed a genuine defect (round 333)
+
+- **The gate did its job.** Running the bounded search smoke against the **real** Task 2 seal failed with
+  `list indices must be integers or slices, not str`: the real seal lists anchor **names** and carries each
+  anchor's start angle in `in_frame_matrix[anchor].neck_start_rad`, while the smoke assumed a mapping of anchor
+  to `neck_rad`. My synthetic test seal had the shape I imagined, so the unit tests could not catch it - this
+  is precisely the class of defect the installed smoke gate exists for.
+- **Fixed:** the smoke reads `in_frame_matrix` when `anchors` is a name list and still accepts the older
+  mapping shape (commit follows this note).
+- **Verified on real geometry:** with the seal at `head-camera-geometry-20260930T060039Z`
+  (`seal_sha256 b0941fb3edfdc66a`) and a step declaration naming that seal, all three anchors -
+  `default`, `left`, `forward` - return `rc=0` with `coverage_complete: true`, the first real-geometry proof
+  that the bounded plan covers the sealed domain from every anchor.
+- **Follow-up found by the same run:** the sealed coarse step lives in
+  `config/perception/head_camera_yolo_seg.yaml` (`accepted_seal_sha256` + the step), which is YAML, while the
+  smoke's `--contract` reads JSON; the smoke therefore needs to accept the perception config's own declaration
+  (or a JSON projection of it) so the installed gate can run without a hand-made shim.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
