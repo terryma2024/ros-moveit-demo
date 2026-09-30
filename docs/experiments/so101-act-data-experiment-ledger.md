@@ -38049,3 +38049,24 @@ such rather than letting it stand as the explanation of the new failure. The nex
 lines in those two files, which is a one-command check - and if the lead evaporates, the bisect returns to the
 per-config/per-module space with the candidates HS-132 left (the new modules) plus anything in the overlay's `lib/` that
 differs from the base install, which I have **not** yet diffed (I only diffed `share/`).
+
+## HS-135 — Correction: HS-134's "import" hits are strings, and the task 8 link is a document key
+
+Reading the actual lines instead of the loose grep:
+
+```
+task8_calibration_aggregator.py:269   "schema_version": SCHEMA_VERSION, "kind": "head_search_qualification",
+task8_calibration_aggregator.py:350   "head_search_qualification_sha256": _digest(sample) if sample is not None ...
+task8_calibration_aggregator.py:357   outputs["head_search_qualification"] = sample
+```
+
+So there are **no imports** of my modules from task 8 - the matches are **document keys and digests**. HS-134's lead was
+wrong, and the caveat that caught it was right to be suspicious. There is still a real link, but a different one: task 8
+**consumes a head-search qualification document** (a keyed artefact with its own digest), which this task's qualification
+bridge produces - so a change in what that document contains, or in how its digest is computed, could reach task 8
+without any import.
+
+Where that leaves the bisect, stated plainly: the two config candidates are cleared (this round), the three modified
+modules are cleared (HS-132), and the remaining suspects are the **new modules** plus any difference in the overlay's
+`lib/` tree against the base install - which I have **not** diffed, because I only compared `share/`. That diff is the
+next command, and it is the obvious gap in what I have checked so far.
