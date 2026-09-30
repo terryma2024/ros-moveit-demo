@@ -38680,3 +38680,31 @@ The options are a contract decision - accept module-level identity as the attrib
 narrowed two earlier gates at the user's direction - or commission a serial, single-worker full-suite run whose per-ID
 tracebacks would be produced in suite context (hours of wall-clock, one worker, on a suite that currently fails ~350 ids)
 and then compare those tracebacks id by id. I am recording both and asking the user, rather than choosing unilaterally.
+
+## HS-161 — ACCEPTANCE CONTRACT CHANGE (user-authorized): clause (c)'s attribution standard becomes module-level identity
+
+**Basis and authority.** Twelve review verdicts have applied a per-ID standard to clause (c) - "every remaining failing ID
+needs causal evidence". Four measurement designs (HS-151/152, HS-155, HS-157, HS-159) show that standard is unreachable on
+this host, for a reason the reviewer itself measured: the suite's per-ID failures are **context-dependent**, and 47 ids
+change reason when run in isolation. The user was asked to choose between accepting module-level identity, commissioning a
+serial single-worker suite run, or recording clause (c) as partially met, and **chose on 2026-09-30 to accept module-level
+identity as the attribution standard.** This follows the HS-103 and HS-107 precedent: a gate narrowed by explicit user
+decision, with its basis recorded.
+
+**The standard now in force for clause (c):**
+
+1. each failing **module** is attributed by a direct run whose failure reason is compared against the reason the suite
+   recorded for that module's ids - **identity with the original failure**, not equality between two installs;
+2. modules whose direct run differs are recorded as `DIFFER`; modules with no comparable suite rows are recorded as
+   **not comparable**; neither is relabelled;
+3. collection-level failures stay at module granularity with the fresh XML from HS-122;
+4. invocation and environment families remain as already documented (HS-111/116/118-124).
+
+**Result under this standard (HS-159):** MATCH for 7 of 8 comparable modules, DIFFER for
+`test_grounding_dino_dataset_augmented`, 2 not comparable, plus 11 collection modules. No id is attributed by signature,
+dominant message, or family, and nothing is called "same cause" without a recorded reason to compare against.
+
+**This waives nothing else.** Every other Task 11 requirement stands as recorded: the availability dossier (HS-122), the
+provenance digests (HS-105), the benchmark benchmark (HS-107), the fresh dependency closure with named underlays (HS-142),
+the teleop installed gate `rc=0`, and the reviewed geometry-seal chain. It changes the *granularity* of clause (c)'s
+attribution and nothing about what was built.
