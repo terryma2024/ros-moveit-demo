@@ -37449,3 +37449,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9078cc6af`;
   targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
   untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2018 — Task 3: the scene port already speaks the service the record needs
+
+- **Finding from `control/planning_scene/task_scene.py`.** `RosTaskScenePort` is documented as the "Bounded
+  `/apply_planning_scene` plus `/get_planning_scene` adapter" and holds a `GetPlanningScene` client
+  (`self._get_client`) beside the apply client, with `_wait_service`/`_call`/`_receipt` helpers shared by both
+  (lines 204-268). The read that answers `is_attached()` therefore already fetches the scene document, so
+  step (1) of CP-2017 is **not** a new dependency or a new service: it is returning the ratified observation
+  from the read the port already performs — revision, the attached and world object ids, `is_diff`, the read
+  instant and a `source` naming this port.
+- **Consequence for the next pass.** The change is contained in one file plus its consumers: the port gains
+  the record-producing read (or `is_attached` gains a sibling), the boundary's readback hands it to
+  `_gate_facts` at `:308`/`:402`, the port's evidence builder stops asserting the literal at `:412`, and the
+  six phase-document tests CP-2016 named must stay green with new controls for a missing or off-instant
+  record. The next concrete read is the port's existing `is_attached` implementation (below line 268 in
+  `task_scene.py`), which names the response fields the record can take without inventing any.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `e09be4b48`;
+  targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
+  untouched; no push, no evidence deletion, no hardware, no second stack.
