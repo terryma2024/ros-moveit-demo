@@ -36061,3 +36061,21 @@ The remaining 33 samples still contact something at the new boundaries, so the n
 rather than another single guess: probe x and y in steps, using the validator's own embedded count as the
 objective (42 -> 33 already shows the count is a usable signal), and keep the window that a resting cup is
 genuinely free in. The contract edit stays uncommitted until the seal passes, and the ledger says so.
+
+## HS-047 — The dataset verify smoke enforces the seal chain (round 345)
+
+Learning the `verify_head_search_dataset` invocation took four attempts, and each refusal was informative:
+
+- `--head` is an absolute path to the **dataset manifest file** (`<root>/dataset-manifest.json`), not a camera
+  name and not the images directory (the images directory is refused with `Is a directory`);
+- `--geometry-seal` must be the seal the dataset was actually produced under;
+- `--require-non-promotable` is the flag for the smoke's non-promotable status (there is no
+  `--expect-promotable`).
+
+With those right, the check itself then **did its job**: pointing it at the newly re-sealed geometry while the
+smoke dataset had been generated under the earlier seal produced
+`HEAD_DATASET_GEOMETRY_SEAL_DRIFT: the manifest was not produced under this seal`. That is exactly the chain the
+plan wants - a dataset is only valid under the seal it was produced with - and it means Task 11's order is fixed:
+**regenerate the 32/8/8 smoke under the new seal (`f168bfc180c215fb`)**, then verify it with
+`--require-non-promotable`. Recorded here so the next round runs it in that order rather than repeating these
+four attempts.
