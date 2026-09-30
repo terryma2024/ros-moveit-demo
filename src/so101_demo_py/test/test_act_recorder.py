@@ -405,9 +405,11 @@ def _multi_row_audit(tmp_path, instants):
             writer.append_acquisition(frame)
             frames[(camera, instant)] = frame
     for index, instant in enumerate(instants):
+        # the reference each row names must be the action that row recorded, or the binding is not common
         writer.append_source("references", {"reference_time_s": round(instant + 0.1, 6),
                                             "source": "CONTROLLER_REFERENCE",
-                                            "positions": [0.1] * 6, "accepted": True})
+                                            "positions": [round(0.1 * index, 6)] * 6,
+                                            "accepted": True})
         writer.bind_row(index, instant, frames[("head", instant)].acquisition_id,
                         frames[("wrist", instant)].acquisition_id, index + 1)
     return writer.seal({"start_s": instants[0], "end_s": instants[-1]}), scope
@@ -482,3 +484,40 @@ def test_a_raw_reference_port_still_writes_training_rows(tmp_path):
     assert seal["record_count"] == 1
     row = json.loads((tmp_path / "episode" / "records.jsonl").read_text().splitlines()[0])
     assert not set(capture._RAW_REFERENCE_KEYS) & set(row["audit"])
+
+
+def test_a_recorded_action_that_differs_from_its_bound_reference_is_refused(tmp_path):
+    """Changing the action (not the time) must break the common binding (T3-F4)."""
+
+    manifest, scope = _multi_row_audit(tmp_path, (1.0, 1.1, 1.2))
+    path = _three_row_recorder(tmp_path).finish(outcome(), audit_manifest=manifest, scope=scope)
+    records = (tmp_path / "episode" / "records.jsonl").read_text().splitlines()
+    last = json.loads(records[-1])
+    last["action"] = [9.9] * 6
+    records[-1] = json.dumps(last, sort_keys=True, separators=(",", ":"))
+    payload = ("\n".join(records) + "\n").encode()
+    (tmp_path / "episode" / "records.jsonl").write_bytes(payload)
+    seal = json.loads(path.read_bytes())
+    seal["files"]["records.jsonl"] = {"sha256": hashlib.sha256(payload).hexdigest(),
+                                      "size": len(payload)}
+    seal.pop("manifest_sha256")
+    seal["manifest_sha256"] = hashlib.sha256(
+        json.dumps(seal, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    path.write_bytes(json.dumps(seal, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+    with pytest.raises(ValueError, match="EPISODE_SEAL_ROWS_MISMATCH"):
+        verify_episode_seal(path, audit_manifest=manifest, scope=scope)
+
+
+def test_a_scope_that_is_not_the_audits_payload_is_refused_on_readback(tmp_path):
+    manifest, scope = _multi_row_audit(tmp_path, (1.0, 1.1, 1.2))
+    path = _three_row_recorder(tmp_path).finish(outcome(), audit_manifest=manifest, scope=scope)
+    other_scope = tmp_path / "other-scope.json"
+    other_scope.write_bytes(json.dumps({"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
+                                        "mode": "preselected_target_diagnostic", "scene_id": "x",
+                                        "seed": 0, "inputs_sha256": "c" * 64},
+                                       sort_keys=True, separators=(",", ":")).encode())
+    # the seal's own scope digest is compared first, so a different payload is refused there; the
+    # audit-side comparison is the guard once the seal's digest matches
+    with pytest.raises(ValueError,
+                       match="EPISODE_SEAL_AUDIT_MISMATCH|EPISODE_SEAL_AUDIT_SCOPE_MISMATCH"):
+        verify_episode_seal(path, audit_manifest=manifest, scope=other_scope)

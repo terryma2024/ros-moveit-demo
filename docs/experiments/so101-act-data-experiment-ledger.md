@@ -36337,3 +36337,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   physics/reference payloads, F3's three gaps, F4's action/pixel binding and F5's gate open); items 4-8
   pending.** HEAD `158b2c8de`; 39-path dirty baseline untouched; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-1970 — Task 3 fix pass, twenty-third instalment: the action and scope are correlated with the audit (T3-F4)
+
+- **The recorded action must be the reference its binding names.** Verification resolves each binding's
+  `reference_sequence` in the audit's reference stream and requires the recorder row's `action` to equal
+  that reference's `positions` (`EPISODE_SEAL_ROWS_MISMATCH`), so two rows naming different references at
+  the same instant can no longer pass. This is the reviewer's own observation about my passing fixture —
+  identical references against differing actions — so the fixture now records one reference per action,
+  and the new negative control changes a recorded **action** (not a time), re-signs `records.jsonl` inside
+  the seal and re-hashes the seal, leaving only the correlation able to catch it.
+- **Scope equality is enforced on readback too.** Verification compares the supplied scope with the audit
+  manifest's own `scope_sha256`; the new control hands over a valid-but-different scope and the refusal
+  that fires first is the seal's own digest comparison (`EPISODE_SEAL_AUDIT_MISMATCH`), with the
+  audit-side comparison behind it — recorded as such rather than asserted as if it were the first check.
+- **Evidence.** `logs/task3-fix23.run` rc=0: **121 passed** across `test_act_recorder.py`,
+  `test_act_episode_audit.py`, `test_act_continuous_capture.py`, `test_act_release_boundary.py` and
+  `test_act_supervisor.py`, with its own NVMe scratch and a non-empty tempfile proof.
+- **Still open from the fourth verdict.** **T3-F4**: the stored frame's **decoded pixel digest** must be
+  compared with its bound acquisition (the reviewer decoded my fixture and found all-zero audit
+  acquisitions against coloured recorder pixels), and the zero-row case needs a labelled-binding rule
+  instead of skipping the loop. **T3-F1**: the physics validator must accept the registered source
+  document (`publisher_sequence`, `reset_epoch`, `paused`) and require the measurements per kind instead
+  of accepting a time-only block; the broker hop and the per-kind raw-frame shape await your ruling.
+  **T3-F3**: event identity beyond session/attempt, legitimate release transitions, physics
+  envelope/source-clock correlation, null `sim_time_s`, and integer-not-numeric sequence types.
+  **T3-F5**: the fail-closed eligibility and sealing gate once the producers exist.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f05b1460b`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

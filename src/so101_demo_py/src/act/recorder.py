@@ -391,16 +391,28 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
                     or audit_identity.get("reset_epoch") != document["reset_epoch"]):
                 # a checksum-consistent seal naming a valid but unrelated audit is still not evidence
                 raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
+            audit_document = json.loads(audit_manifest.read_bytes())
+            if _hash(scope.read_bytes()) != audit_document["scope_sha256"]:
+                # the scope handed to verification must be the payload the audit was collected under
+                raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
             bindings = [json.loads(line)
                         for line in (audit_manifest.parent / "row-bindings.jsonl")
                         .read_text().splitlines()]
             recorded = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
+            references = {record["sequence"]: record
+                          for record in (json.loads(line) for line in
+                                         (audit_manifest.parent / "references.jsonl")
+                                         .read_text().splitlines())}
             if document["record_count"] > 0:
                 # every recorded row must be bound to the acquisitions it consumed, at the same instant
+                # and to the reference its action actually claims
                 if len(bindings) != document["record_count"]:
                     raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
                 for row, binding in zip(recorded, bindings, strict=True):
                     if binding["sim_time_s"] != row["observation"]["sim_time_s"]:
+                        raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+                    named = references.get(binding["reference_sequence"])
+                    if named is None or list(row["action"]) != list(named["positions"]):
                         raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
     rows = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
     if len(rows) != document["record_count"]:
