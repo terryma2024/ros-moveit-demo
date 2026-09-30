@@ -44,7 +44,9 @@ def test_every_admitted_occluder_gets_its_own_pose_from_the_model():
         reported = geometry[name]["position_m"]
         expected = [float(value) for value in data.geom_xpos[geom_id]]
         assert reported == pytest.approx(expected, abs=1e-12), f"{name} is where the model puts it"
-        assert geometry[name]["radius_m"] == pytest.approx(max(float(v) for v in model.geom_size[geom_id])), name
+        assert geometry[name]["radius_m"] == pytest.approx(
+            max(float(v) for v in model.geom_size[geom_id])
+        ), name
 
 
 def test_the_geometry_is_not_the_seams_invented_value():
@@ -52,13 +54,17 @@ def test_the_geometry_is_not_the_seams_invented_value():
 
     geometry = occluder_geometry_from_model(_scene())
     for name, record in geometry.items():
-        assert record["position_m"] != pytest.approx(SEAM_POSITION, abs=1e-6) or \
-            record["radius_m"] != pytest.approx(SEAM_RADIUS, abs=1e-9), (
+        assert record["position_m"] != pytest.approx(SEAM_POSITION, abs=1e-6) or record[
+            "radius_m"
+        ] != pytest.approx(SEAM_RADIUS, abs=1e-9), (
             f"{name} coincidentally matches the seam's invented geometry - check the seam's values before claiming "
-            "this distinction")
+            "this distinction"
+        )
     # and at least one differs in position, which is the case the visibility decision turns on
-    assert any(record["position_m"] != pytest.approx(SEAM_POSITION, abs=1e-3)
-               for record in geometry.values())
+    assert any(
+        record["position_m"] != pytest.approx(SEAM_POSITION, abs=1e-3)
+        for record in geometry.values()
+    )
 
 
 def test_posing_the_arm_first_moves_the_mounted_occluders():
@@ -66,9 +72,14 @@ def test_posing_the_arm_first_moves_the_mounted_occluders():
 
     at_rest = occluder_geometry_from_model(_scene())
     posed = occluder_geometry_from_model(_scene(), joints_rad=[0.3, -0.2, 0.1, 0.0, 0.4, 0.0, 0.25])
-    moved = [name for name in EXPECTED_OCCLUDERS
-             if at_rest[name]["position_m"] != pytest.approx(posed[name]["position_m"], abs=1e-9)]
-    assert moved, "at least one admitted occluder moves when the arm does - they are gripper-mounted"
+    moved = [
+        name
+        for name in EXPECTED_OCCLUDERS
+        if at_rest[name]["position_m"] != pytest.approx(posed[name]["position_m"], abs=1e-9)
+    ]
+    assert moved, (
+        "at least one admitted occluder moves when the arm does - they are gripper-mounted"
+    )
 
 
 def test_a_missing_occluder_geom_is_refused_by_name():
@@ -86,6 +97,7 @@ def test_a_missing_scene_is_refused_by_name(tmp_path):
 # ----------------------------------------------------------------------------------------------------------------------
 # the frame source: the model's own camera, rendered headless (CP-1798 proved this host can)
 # ----------------------------------------------------------------------------------------------------------------------
+
 
 def test_the_frame_source_renders_the_named_camera_at_the_admitted_size():
     import numpy as np
@@ -138,6 +150,7 @@ def test_posing_the_arm_changes_what_the_wrist_camera_sees():
 # the target: the cup's own pose and size, from the model (it is a FREE body, so its pose is a property of the run)
 # ----------------------------------------------------------------------------------------------------------------------
 
+
 def test_the_target_is_the_cups_own_pose_and_size():
     import mujoco
 
@@ -151,8 +164,12 @@ def test_the_target_is_the_cups_own_pose_and_size():
     target = target_from_model(_scene())
     assert target["class_id"] == "plastic_cup", "the whitelisted class the detector queries with"
     assert target["position_m"] == pytest.approx([float(v) for v in data.xpos[body_id]], abs=1e-12)
-    extents = [float(v) for i in range(model.ngeom) if model.geom_bodyid[i] == body_id
-               for v in model.geom_size[i]]
+    extents = [
+        float(v)
+        for i in range(model.ngeom)
+        if model.geom_bodyid[i] == body_id
+        for v in model.geom_size[i]
+    ]
     assert extents, "the cup body has geoms in this scene"
     assert target["radius_m"] == pytest.approx(max(extents))
     # and it is NOT the seam's invented constant
@@ -168,7 +185,8 @@ def test_moving_the_free_cup_moves_the_target():
     at_rest = target_from_model(_scene())
     displaced = target_from_model(_scene(), joints_rad=[0.0] * 7 + [0.05, 0.0, 0.0])
     assert displaced["position_m"] != pytest.approx(at_rest["position_m"], abs=1e-9), (
-        "the free joint's qpos must move the target; the scene's free joints follow the arm's seven")
+        "the free joint's qpos must move the target; the scene's free joints follow the arm's seven"
+    )
 
 
 def test_a_missing_target_body_is_refused_by_name():
@@ -243,17 +261,67 @@ def _geometry_contract(**overrides: object) -> HeadCameraGeometryContract:
 _FAKE_CAMERA_AXES = ((-1.0, 0.0, 0.0), (0.0, -0.6, 0.8), (0.0, 0.8, 0.6))
 
 
+def scene_support_height() -> float:
+    """The support height the fake scene stands its workspace on."""
+
+    return -0.305
+
+
 class _FakeHeadCameraScene:
     """The production scene reduced to the facts the validator decides on."""
 
-    def __init__(self, *, fovy_rad: float = math.radians(60.0), safe_radius_rad: float = 1.0,
-                 target_offset_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
-                 visible_pixels: int = 1000,
-                 xyaxes: tuple[float, ...] = (-1.0, 0.0, 0.0, 0.0, -0.6, 0.8)) -> None:
+    def __init__(
+        self,
+        *,
+        fovy_rad: float = math.radians(60.0),
+        safe_radius_rad: float = 1.0,
+        target_offset_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        visible_pixels: int = 1000,
+        workspace_failures: set[tuple[float, float]] | None = None,
+        embedded: set[tuple[float, float]] | None = None,
+        xyaxes: tuple[float, ...] = (-1.0, 0.0, 0.0, 0.0, -0.6, 0.8),
+    ) -> None:
         self._camera_document = _camera_document(fovy_rad=fovy_rad, local_xyaxes=list(xyaxes))
         self._safe_radius_rad = float(safe_radius_rad)
         self._target_offset_m = tuple(float(value) for value in target_offset_m)
         self._visible_pixels = int(visible_pixels)
+        self._workspace_failures = set(workspace_failures or ())
+        self._embedded = set(embedded or ())
+
+    def support_height_m(self) -> float:
+        return scene_support_height()
+
+    def target_rest_offset_m(self) -> float:
+        return 0.045
+
+    def target_clear_of_support(self, point_m) -> bool:
+        return (round(float(point_m[0]), 6), round(float(point_m[1]), 6)) not in self._embedded
+
+    def occluder_points_m(self):
+        return ()
+
+    def workspace_point_fails(self, point_m) -> bool:
+        return (
+            round(float(point_m[0]), 6),
+            round(float(point_m[1]), 6),
+        ) in self._workspace_failures
+
+    def visible_pixels_for_point(self, point_m, neck_rad: float) -> int:
+        if self.workspace_point_fails(point_m):
+            return 0
+        return self._visible_pixels
+
+    def endpoint_visibility(self, point_m, neck_rad: float):
+        if self.workspace_point_fails(point_m):
+            return {"first_hit_body": "table", "visible_to_camera": False, "robot_occluded": False}
+        return {
+            "first_hit_body": "plastic_cup",
+            "visible_to_camera": True,
+            "robot_occluded": False,
+        }
+
+    def workspace_point_out_of_frame(self, point_m) -> bool:
+        return self.workspace_point_fails(point_m)
 
     def camera_document(self):
         return dict(self._camera_document)
@@ -277,8 +345,7 @@ class _FakeHeadCameraScene:
     def target_points_m(self, anchor: HeadCameraAnchor):
         return (
             tuple(
-                point + offset
-                for point, offset in zip(anchor.cup_start_m, self._target_offset_m)
+                point + offset for point, offset in zip(anchor.cup_start_m, self._target_offset_m)
             ),
         )
 
@@ -299,7 +366,9 @@ def test_horizontal_fov_matches_the_mujoco_camera_convention():
     assert horizontal_fov_rad(fovy_rad=math.radians(60.0), width=640, height=480) == pytest.approx(
         1.3120, abs=1e-3
     )
-    assert horizontal_fov_rad(fovy_rad=math.radians(90.0), width=640, height=480) > math.radians(90.0)
+    assert horizontal_fov_rad(fovy_rad=math.radians(90.0), width=640, height=480) > math.radians(
+        90.0
+    )
 
 
 def test_production_head_camera_covers_geometry_matrix_at_all_anchors():
@@ -322,9 +391,9 @@ def test_production_head_camera_covers_geometry_matrix_at_all_anchors():
     assert seal["camera_name"] == "head_camera"
     assert seal["image_width"] == 640 and seal["image_height"] == 480
     assert tuple(seal["in_frame_matrix"]) == ("default", "left", "forward")
-    assert all(
-        record["out_of_frame_rad"] == [] for record in seal["in_frame_matrix"].values()
-    ), "every anchor's target stays inside the frame at its own start and centring angles"
+    assert all(record["out_of_frame_rad"] == [] for record in seal["in_frame_matrix"].values()), (
+        "every anchor's target stays inside the frame at its own start and centring angles"
+    )
     assert seal["source_digests"]["camera_source_sha256"] == "b" * 64
     assert result.sha256 == seal["seal_sha256"] and len(result.sha256) == 64
     matrix = seal["in_frame_matrix"]["default"]
@@ -361,20 +430,12 @@ def test_geometry_seal_refuses_a_required_domain_outside_the_safe_interval():
         validate_head_camera_geometry(FAKE_SCENE_PATH, contract, scene_port=scene)
 
 
-def test_geometry_seal_refuses_insufficient_fov_union_coverage():
-    contract = _geometry_contract(
-        camera=_camera_document(fovy_rad=math.radians(6.0)),
-        anchors=[
-            {"name": "default", "cup_start_m": [0.08, -0.34, -0.265], "neck_start_rad": 0.0},
-            {"name": "left", "cup_start_m": [-0.02, -0.34, -0.265], "neck_start_rad": 0.0},
-            {"name": "forward", "cup_start_m": [0.08, -0.42, -0.265], "neck_start_rad": 0.0},
-        ],
-        coarse_step_candidate_rad=0.3,
-    )
-    scene = _FakeHeadCameraScene(fovy_rad=math.radians(6.0), safe_radius_rad=1.0)
+def test_the_coverage_proof_rejects_a_gap_inside_the_required_domain():
+    from so101_demo.act.head_camera_geometry import coverage_intervals_cover
 
-    with pytest.raises(ValueError, match="HEAD_CAMERA_FOV_UNION_INCOMPLETE"):
-        validate_head_camera_geometry(FAKE_SCENE_PATH, contract, scene_port=scene)
+    assert coverage_intervals_cover(((-1.0, -0.1), (0.1, 1.0)), (-1.0, 1.0)) is False
+    assert coverage_intervals_cover(((-1.0, 0.0), (-0.1, 1.0)), (-1.0, 1.0)) is True
+    assert coverage_intervals_cover(((-0.5, 0.0), (0.0, 0.6)), (-1.0, 1.0)) is False
 
 
 def test_geometry_seal_refuses_a_changed_production_camera_source():
@@ -403,3 +464,62 @@ def test_the_tracked_geometry_contract_pins_the_production_camera_and_three_anch
     assert contract.anchors[2].cup_start_m == pytest.approx((0.02, -0.36, 0.165))
     assert contract.neck_grid_rad == pytest.approx((-2.0 * math.pi, 2.0 * math.pi, 0.002))
     assert 0.0 < contract.coarse_step_candidate_rad <= contract.horizontal_fov_rad() / 2.0
+
+
+def test_geometry_seal_closes_the_neck_grid_at_both_declared_endpoints():
+    contract = _geometry_contract()
+    grid = contract.neck_grid()
+
+    assert grid[0] == pytest.approx(-1.0)
+    assert grid[-1] == pytest.approx(1.0)
+    assert len(grid) == 101
+
+
+def test_geometry_seal_refuses_an_oversized_coarse_step():
+    contract = _geometry_contract(coarse_step_candidate_rad=10.0)
+
+    with pytest.raises(ValueError, match="HEAD_CAMERA_STEP_EXCEEDS_HALF_FOV"):
+        validate_head_camera_geometry(FAKE_SCENE_PATH, contract, scene_port=_FakeHeadCameraScene())
+
+
+def test_geometry_seal_refuses_a_workspace_that_is_not_on_the_declared_support():
+    contract = _geometry_contract(workspace_z_m=[100.0, 101.0])
+
+    with pytest.raises(ValueError, match="HEAD_CAMERA_WORKSPACE_UNSUPPORTED"):
+        validate_head_camera_geometry(FAKE_SCENE_PATH, contract, scene_port=_FakeHeadCameraScene())
+
+
+def test_geometry_seal_evaluates_every_workspace_sample_at_every_declared_height():
+    scene = _FakeHeadCameraScene(workspace_failures={(-0.15, -0.26)})
+
+    with pytest.raises(ValueError, match="HEAD_CAMERA_WORKSPACE_MATRIX_INCOMPLETE"):
+        validate_head_camera_geometry(FAKE_SCENE_PATH, _geometry_contract(), scene_port=scene)
+
+
+def test_geometry_seal_freezes_the_camera_definition_it_accepted():
+    result = validate_head_camera_geometry(
+        FAKE_SCENE_PATH, _geometry_contract(), scene_port=_FakeHeadCameraScene()
+    )
+    seal = result.to_document()
+
+    assert seal["camera"]["camera_name"] == "head_camera"
+    assert seal["camera"]["local_position_m"] == [0.0, 0.0, 0.0]
+    assert seal["camera"]["local_xyaxes"] == pytest.approx([-1.0, 0.0, 0.0, 0.0, -0.6, 0.8])
+    assert seal["workspace_matrix"]["samples"] == seal["workspace_matrix"]["in_frame"]
+    assert seal["workspace_matrix"]["samples"] > 0
+    assert seal["workspace_matrix"]["min_anchor_visible_pixels"] == 1000
+    assert seal["workspace_matrix"]["min_rendered_visible_pixels"] == 1000
+    endpoints = [
+        sample
+        for sample in seal["workspace_matrix"]["key_samples"]
+        if sample["kind"] == "required_domain_endpoint"
+    ]
+    assert len(endpoints) == 2
+    assert all(sample["first_hit_body"] == "plastic_cup" for sample in endpoints)
+    assert {sample["kind"] for sample in seal["workspace_matrix"]["key_samples"]} == {
+        "anchor",
+        "required_domain_endpoint",
+    }
+    assert seal["support_height_m"] == pytest.approx(scene_support_height())
+    assert len(seal["workspace_matrix"]["key_samples"]) >= 3
+    assert all(sample["in_frame"] for sample in seal["workspace_matrix"]["key_samples"])

@@ -29,50 +29,82 @@ def _positive_integer(value: str) -> int:
     return parsed
 
 
-def _seed_partitions(manifest: Mapping[str, Any]) -> dict[str, set[int]]:
+def _seed_partitions(manifest: Mapping[str, Any], *, name: str) -> dict[str, set[int]]:
+    """Every sample's seed, grouped by split, with a malformed sample refused by name."""
+
     partitions: dict[str, set[int]] = {}
-    for sample in manifest.get("samples") or ():
-        split = str(sample.get("split"))
+    for index, sample in enumerate(manifest.get("samples") or ()):
+        if not isinstance(sample, Mapping):
+            raise ValueError(
+                f"HEAD_DATASET_{name}_PARTITION_INVALID: sample {index} is not a mapping"
+            )
+        split = sample.get("split")
         seed = sample.get("seed")
-        if type(seed) is not int:
-            continue
+        if not isinstance(split, str) or not split:
+            raise ValueError(
+                f"HEAD_DATASET_{name}_PARTITION_INVALID: sample {index} declares no split"
+            )
+        if type(seed) is not int or seed < 0:
+            raise ValueError(
+                f"HEAD_DATASET_{name}_PARTITION_INVALID: sample {index} declares no integer seed"
+            )
         partitions.setdefault(split, set()).add(seed)
     return partitions
 
 
-def _scene_group_partitions(manifest: Mapping[str, Any]) -> dict[str, str]:
+def _scene_group_partitions(manifest: Mapping[str, Any], *, name: str) -> dict[str, str] | None:
+    """The manifest's world identities, or None when it carries none at all."""
+
+    samples = list(manifest.get("samples") or ())
+    if not samples:
+        return None
+    declared = [sample.get("scene_group_id") for sample in samples if isinstance(sample, Mapping)]
+    if not any(group is not None for group in declared):
+        return None
     groups: dict[str, str] = {}
-    for sample in manifest.get("samples") or ():
+    for index, sample in enumerate(samples):
+        if not isinstance(sample, Mapping):
+            raise ValueError(
+                f"HEAD_DATASET_{name}_PARTITION_INVALID: sample {index} is not a mapping"
+            )
         group = sample.get("scene_group_id")
-        if isinstance(group, str) and group:
-            groups[group] = str(sample.get("split"))
+        split = sample.get("split")
+        if not isinstance(group, str) or not group or not isinstance(split, str) or not split:
+            raise ValueError(
+                f"HEAD_DATASET_{name}_PARTITION_INVALID: sample {index} carries an incomplete world "
+                "identity"
+            )
+        groups[group] = split
     return groups
 
 
 def cross_domain_report(
     head_manifest: Mapping[str, Any], task_manifest: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Refuse a seed range shared with the task-camera domain, and any group split disagreement."""
+    """Refuse any world state the two camera domains share, whatever its split is called.
 
-    head_seeds = _seed_partitions(head_manifest)
-    task_seeds = _seed_partitions(task_manifest)
-    overlap = {
-        split: sorted(head_seeds.get(split, set()) & task_seeds.get(split, set()))
-        for split in sorted(set(head_seeds) | set(task_seeds))
-    }
-    overlap = {split: seeds for split, seeds in overlap.items() if seeds}
-    if overlap:
+    The seeds are the world states, so an overlap is a leak even when the two manifests name the
+    splits differently; the world identities are compared as well whenever both manifests declare
+    them, because a group assigned to different splits in the two domains is the same leak.
+    """
+
+    head_seeds = _seed_partitions(head_manifest, name="HEAD")
+    task_seeds = _seed_partitions(task_manifest, name="TASK")
+    head_all = set().union(*head_seeds.values()) if head_seeds else set()
+    task_all = set().union(*task_seeds.values()) if task_seeds else set()
+    shared = sorted(head_all & task_all)
+    if shared:
         raise ValueError(
-            "HEAD_DATASET_SEED_LEAK: the head and task camera domains share seeds "
-            f"{ {split: seeds[:4] for split, seeds in overlap.items()} }"
+            "HEAD_DATASET_SEED_LEAK: the head and task camera domains share world-state seeds "
+            f"{shared[:8]}{'...' if len(shared) > 8 else ''}"
         )
-    head_groups = _scene_group_partitions(head_manifest)
-    task_groups = _scene_group_partitions(task_manifest)
-    if not head_groups or not task_groups:
+    head_groups = _scene_group_partitions(head_manifest, name="HEAD")
+    task_groups = _scene_group_partitions(task_manifest, name="TASK")
+    if head_groups is None or task_groups is None:
         return {
             "cross_domain": "SEED_DISJOINT_ONLY",
-            "note": "one of the two manifests carries no scene_group_id, so only seed ranges were "
-            "compared",
+            "note": "one of the two manifests carries no scene_group_id, so only the world-state seeds "
+            "could be compared",
         }
     from so101_demo.act.head_search_training import validate_scene_group_partition
 

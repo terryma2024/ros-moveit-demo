@@ -352,9 +352,14 @@ class HeadCameraGeometryContract:
         return self.camera.horizontal_fov_rad
 
     def neck_grid(self) -> tuple[float, ...]:
+        """The closed grid over the approved envelope: both declared endpoints are in it."""
+
         low, high, step = self.neck_grid_rad
-        count = int(math.floor((high - low) / step + _EPSILON)) + 1
-        return tuple(low + step * index for index in range(count))
+        count = int(math.floor((high - low) / step + _EPSILON))
+        values = [low + step * index for index in range(count + 1)]
+        if abs(values[-1] - high) > _EPSILON:
+            values.append(high)
+        return tuple(values)
 
     def workspace_points_m(self) -> tuple[tuple[float, float, float], ...]:
         x_low, x_high = self.workspace_x_m
@@ -463,6 +468,20 @@ class HeadCameraScenePort(Protocol):
 
     def source_digests(self) -> Mapping[str, str]: ...
 
+    def support_height_m(self) -> float: ...
+
+    def target_rest_offset_m(self) -> float: ...
+
+    def visible_pixels_for_point(self, point_m: Sequence[float], neck_rad: float) -> int: ...
+
+    def endpoint_visibility(
+        self, point_m: Sequence[float], neck_rad: float
+    ) -> Mapping[str, Any]: ...
+
+    def target_clear_of_support(self, point_m: Sequence[float]) -> bool: ...
+
+    def occluder_points_m(self) -> tuple[tuple[float, float, float], ...]: ...
+
 
 @dataclass(frozen=True, slots=True)
 class HeadCameraGeometryResult:
@@ -470,9 +489,12 @@ class HeadCameraGeometryResult:
     image_width: int
     image_height: int
     horizontal_fov_rad: float
+    camera: CameraDefinition
     anchors: tuple[str, ...]
     in_frame_matrix: Mapping[str, Mapping[str, Any]]
     in_frame_failures: tuple[Mapping[str, Any], ...]
+    workspace_matrix: Mapping[str, Any]
+    support_height_m: float
     required_search_domain_rad: tuple[float, float]
     lock_valid_neck_rad: tuple[float, float]
     safe_interval_contains_required_domain: bool
@@ -488,11 +510,14 @@ class HeadCameraGeometryResult:
             "image_width": self.image_width,
             "image_height": self.image_height,
             "horizontal_fov_rad": self.horizontal_fov_rad,
+            "camera": self.camera.to_document(),
             "anchors": list(self.anchors),
             "in_frame_matrix": {
                 name: dict(record) for name, record in self.in_frame_matrix.items()
             },
             "in_frame_failures": [dict(record) for record in self.in_frame_failures],
+            "workspace_matrix": dict(self.workspace_matrix),
+            "support_height_m": self.support_height_m,
             "required_search_domain_rad": list(self.required_search_domain_rad),
             "lock_valid_neck_rad": list(self.lock_valid_neck_rad),
             "safe_interval_contains_required_domain": self.safe_interval_contains_required_domain,
@@ -513,7 +538,9 @@ class HeadCameraGeometryResult:
         )
 
 
-def _intervals_cover(intervals: Iterable[tuple[float, float]], domain: tuple[float, float]) -> bool:
+def coverage_intervals_cover(
+    intervals: Iterable[tuple[float, float]], domain: tuple[float, float]
+) -> bool:
     low, high = domain
     merged: list[list[float]] = []
     for start, end in sorted(intervals):
@@ -598,7 +625,26 @@ def validate_head_camera_geometry(
             "contract"
         )
 
-    bearings = [port.neck_angle_for_point(point) for point in contract.workspace_points_m()]
+    half_fov = horizontal_fov / 2.0
+    if contract.coarse_step_candidate_rad > half_fov + contract.fov_tolerance_rad:
+        raise HeadCameraGeometryError(
+            "HEAD_CAMERA_STEP_EXCEEDS_HALF_FOV: the candidate coarse step "
+            f"{contract.coarse_step_candidate_rad} exceeds half the horizontal field of view "
+            f"{half_fov}; consecutive stops would leave uncovered gaps"
+        )
+
+    support_height = float(port.support_height_m())
+    resting_height = support_height + float(port.target_rest_offset_m())
+    workspace_low_z, workspace_high_z = contract.workspace_z_m
+    if not workspace_low_z - 1e-3 <= resting_height <= workspace_high_z + 1e-3:
+        raise HeadCameraGeometryError(
+            "HEAD_CAMERA_WORKSPACE_UNSUPPORTED: the declared workspace heights "
+            f"[{workspace_low_z}, {workspace_high_z}] do not contain the model's resting target "
+            f"height {resting_height} above the support at {support_height}"
+        )
+
+    workspace_points = _workspace_matrix_points(contract)
+    bearings = [port.neck_angle_for_point(point) for point in workspace_points]
     required_domain = (min(bearings), max(bearings))
 
     safe_interval = _safe_interval(port, contract)
@@ -618,7 +664,6 @@ def validate_head_camera_geometry(
             f"{required_domain} is not inside the safe interval {lock_valid_neck_rad}"
         )
 
-    half_fov = horizontal_fov / 2.0
     intervals: list[tuple[float, float]] = []
     for anchor in contract.anchors:
         for stop in _coverage_stops(
@@ -632,7 +677,7 @@ def validate_head_camera_geometry(
                     "safe interval"
                 )
             intervals.append((stop - half_fov, stop + half_fov))
-    covers_domain = _intervals_cover(intervals, required_domain)
+    covers_domain = coverage_intervals_cover(intervals, required_domain)
     if not covers_domain:
         raise HeadCameraGeometryError(
             "HEAD_CAMERA_FOV_UNION_INCOMPLETE: the coarse stops' field-of-view union does not cover "
@@ -696,11 +741,26 @@ def validate_head_camera_geometry(
             f"{first['visible_pixels']} visible pixels)"
         )
 
+    workspace_matrix, key_samples = _evaluate_workspace_matrix(
+        port, contract, observed, workspace_points, required_domain
+    )
+
+    occluders = _occluder_overlap(port, contract, observed, matrix)
+    if occluders:
+        first = occluders[0]
+        raise HeadCameraGeometryError(
+            "HEAD_CAMERA_TARGET_OCCLUDED: occluder "
+            f"{first['occluder']} projects inside the target's frame at anchor {first['anchor']}"
+        )
+
     return HeadCameraGeometryResult(
         camera_name=observed.camera_name,
         image_width=observed.width,
         image_height=observed.height,
         horizontal_fov_rad=horizontal_fov,
+        camera=observed,
+        workspace_matrix=workspace_matrix,
+        support_height_m=support_height,
         anchors=tuple(anchor.name for anchor in contract.anchors),
         in_frame_matrix=MappingProxyType(matrix),
         in_frame_failures=(),
@@ -811,6 +871,7 @@ class _MuJoCoHeadCameraScene:
         )
         self._renderer = None
         self._segmentation_renderer = None
+        self._robot_bodies = self._descendants_of_robot()
         self._prepare_clearance()
 
     def source_digests(self) -> Mapping[str, str]:
@@ -916,6 +977,21 @@ class _MuJoCoHeadCameraScene:
                     return False
         return True
 
+    def _descendants_of_robot(self) -> frozenset[int]:
+        """Every body that belongs to the robot the head camera is mounted on."""
+
+        base_id = self._mujoco.mj_name2id(self._model, self._mujoco.mjtObj.mjOBJ_BODY, "base")
+        if base_id < 0:
+            return frozenset()
+        bodies = set()
+        for body in range(self._model.nbody):
+            ancestor = body
+            while ancestor > 0 and ancestor != base_id:
+                ancestor = int(self._model.body_parentid[ancestor])
+            if ancestor == base_id:
+                bodies.add(body)
+        return frozenset(bodies)
+
     def _prepare_clearance(self) -> None:
         """The static candidate pairs: geoms the rotating head could come within the margin of."""
 
@@ -965,12 +1041,119 @@ class _MuJoCoHeadCameraScene:
             body = int(self._model.body_parentid[body])
         return body == head_body
 
+    def support_height_m(self) -> float:
+        """The support surface the workspace rests on, read from the scene's own table geom."""
+
+        self._pose_neck(0.0)
+        for name in ("table_visual", "table_collision"):
+            geom_id = self._mujoco.mj_name2id(self._model, self._mujoco.mjtObj.mjOBJ_GEOM, name)
+            if geom_id >= 0:
+                return float(self._data.geom_xpos[geom_id][2]) + float(
+                    self._model.geom_size[geom_id][2]
+                )
+        raise HeadCameraGeometryError(
+            "HEAD_CAMERA_SUPPORT_MISSING: the scene names no support geom (table_visual)"
+        )
+
+    def target_rest_offset_m(self) -> float:
+        """How high the target's centre sits above that support when it rests on it."""
+
+        self._pose_neck(0.0)
+        return float(self._data.xpos[self._cup_body_id][2]) - self.support_height_m()
+
+    def occluder_points_m(self) -> tuple[tuple[float, float, float], ...]:
+        """The declared occluders' world centres at the scene's own arm pose."""
+
+        self._pose_neck(0.0)
+        names = (
+            "fixed_fingertip_pad_visual",
+            "moving_fingertip_pad_visual",
+            "gripper_visual_00",
+            "jaw_visual_00",
+        )
+        points = []
+        for name in names:
+            geom_id = self._mujoco.mj_name2id(self._model, self._mujoco.mjtObj.mjOBJ_GEOM, name)
+            if geom_id >= 0:
+                points.append(tuple(float(value) for value in self._data.geom_xpos[geom_id]))
+        return tuple(points)
+
+    def visible_pixels_for_point(self, point_m: Sequence[float], neck_rad: float) -> int:
+        return self._render_cup_pixels(tuple(float(value) for value in point_m), float(neck_rad))
+
+    def endpoint_visibility(self, point_m: Sequence[float], neck_rad: float) -> Mapping[str, Any]:
+        """Is the required-domain endpoint visible to this camera, robot pose aside?
+
+        The ray is cast from the camera to the point with the camera's own body excluded. If the first
+        thing it meets is the target, the endpoint is visible; if it is the robot, then only the robot
+        the camera rides on stands in the way, and whether the arm is there is a property of the
+        admitted trajectory rather than of this camera. Anything else in between is a real occlusion.
+        """
+
+        import numpy as np
+
+        self._pose_neck(neck_rad)
+        origin = np.array(self._data.cam_xpos[self._camera_id], dtype=np.float64)
+        target = np.array([float(value) for value in point_m], dtype=np.float64)
+        direction = target - origin
+        distance = float(np.linalg.norm(direction))
+        if distance <= 0.0:
+            return {"first_hit_body": None, "visible_to_camera": False, "robot_occluded": False}
+        direction = direction / distance
+        hit_geom = np.zeros(1, dtype=np.int32)
+        reached = self._mujoco.mj_ray(
+            self._model,
+            self._data,
+            origin,
+            direction,
+            None,
+            1,
+            int(self._model.cam_bodyid[self._camera_id]),
+            hit_geom,
+        )
+        if reached <= 0.0 or reached >= distance - 1e-9:
+            # the open top of a cup means a ray to its centre may meet nothing before the centre, and
+            # whatever it meets beyond the centre is not between the camera and the target
+            return {"first_hit_body": None, "visible_to_camera": True, "robot_occluded": False}
+        geom_id = int(hit_geom[0])
+        body_id = int(self._model.geom_bodyid[geom_id])
+        body_name = self._mujoco.mj_id2name(self._model, self._mujoco.mjtObj.mjOBJ_BODY, body_id)
+        robot_occluded = body_id in self._robot_bodies
+        return {
+            "first_hit_body": None if body_name is None else str(body_name),
+            "visible_to_camera": body_id == self._cup_body_id or robot_occluded,
+            "robot_occluded": robot_occluded,
+        }
+
+    def target_clear_of_support(self, point_m: Sequence[float]) -> bool:
+        """Would the target at this point intersect what it is supposed to rest on?"""
+
+        self._place_cup(point_m)
+        for index in range(int(self._data.ncon)):
+            contact = self._data.contact[index]
+            for geom_id in (int(contact.geom1), int(contact.geom2)):
+                if int(self._model.geom_bodyid[geom_id]) == self._cup_body_id:
+                    return False
+        return True
+
+    def _place_cup(self, point_m: Sequence[float]) -> None:
+        self._pose_neck(0.0)
+        if self._cup_joint_id >= 0:
+            self._data.qpos[self._cup_qpos_adr : self._cup_qpos_adr + 3] = [
+                float(value) for value in point_m
+            ]
+            self._data.qpos[self._cup_qpos_adr + 3 : self._cup_qpos_adr + 7] = (1.0, 0.0, 0.0, 0.0)
+            self._mujoco.mj_forward(self._model, self._data)
+
     def visible_pixels(self, anchor: HeadCameraAnchor, neck_rad: float) -> int:
+        return self._render_cup_pixels(anchor.cup_start_m, float(neck_rad))
+
+    def _render_cup_pixels(self, cup_position_m: Sequence[float], neck_rad: float) -> int:
         import numpy as np
 
         self._pose_neck(neck_rad)
         if self._cup_joint_id >= 0:
-            self._data.qpos[self._cup_qpos_adr : self._cup_qpos_adr + 3] = anchor.cup_start_m
+            self._data.qpos[self._cup_qpos_adr : self._cup_qpos_adr + 3] = cup_position_m
             self._data.qpos[self._cup_qpos_adr + 3 : self._cup_qpos_adr + 7] = (1.0, 0.0, 0.0, 0.0)
             self._mujoco.mj_forward(self._model, self._data)
         if self._segmentation_renderer is None:
@@ -1000,3 +1183,187 @@ class _MuJoCoHeadCameraScene:
             if int(self._model.geom_bodyid[index]) == self._cup_body_id:
                 mask |= ids == index
         return int(mask.sum())
+
+
+def _workspace_matrix_points(
+    contract: HeadCameraGeometryContract,
+) -> tuple[tuple[float, float, float], ...]:
+    """Every declared workspace sample at every declared height, not just its mid plane."""
+
+    x_low, x_high = contract.workspace_x_m
+    y_low, y_high = contract.workspace_y_m
+    z_low, z_high = contract.workspace_z_m
+    heights = (z_low, (z_low + z_high) / 2.0, z_high)
+    points: list[tuple[float, float, float]] = []
+    for x in contract._axis_values(x_low, x_high):
+        for y in contract._axis_values(y_low, y_high):
+            for z in heights:
+                points.append((x, y, z))
+    return tuple(points)
+
+
+def _evaluate_workspace_matrix(
+    port: HeadCameraScenePort,
+    contract: HeadCameraGeometryContract,
+    camera: CameraDefinition,
+    workspace_points: tuple[tuple[float, float, float], ...],
+    required_domain: tuple[float, float],
+) -> tuple[Mapping[str, Any], list[Mapping[str, Any]]]:
+    """Every workspace sample must be inside the frame when the neck points at it.
+
+    Projection decides the whole matrix; the samples that carry the required domain's endpoints are
+    additionally rendered, so the occluders the scene actually contains are part of the evidence and
+    not an assumption about them.
+    """
+
+    records = []
+    embedded = []
+    for point in workspace_points:
+        if not bool(port.target_clear_of_support(point)):
+            embedded.append({"point_m": list(point)})
+            continue
+        neck = port.neck_angle_for_point(point)
+        position, rotation = port.camera_world_pose(neck)
+        u, v, inside = project_point(
+            point_m=point,
+            camera_position_m=position,
+            camera_rotation=rotation,
+            width=camera.width,
+            height=camera.height,
+            fovy_rad=camera.fovy_rad,
+        )
+        records.append(
+            {
+                "point_m": list(point),
+                "neck_rad": neck,
+                "u": u,
+                "v": v,
+                "in_frame": bool(inside),
+                "visible_pixels": None,
+            }
+        )
+    endpoints = [
+        min(records, key=lambda record: record["neck_rad"]),
+        max(records, key=lambda record: record["neck_rad"]),
+    ]
+    anchor_samples = [
+        {
+            "point_m": list(anchor.cup_start_m),
+            "neck_rad": port.neck_angle_for_point(anchor.cup_start_m),
+            "anchor": anchor.name,
+        }
+        for anchor in contract.anchors
+    ]
+    key_records = []
+    failures = []
+    for record in endpoints + anchor_samples:
+        neck = float(record["neck_rad"])
+        point = tuple(record["point_m"])
+        kind = "anchor" if "anchor" in record else "required_domain_endpoint"
+        visible = int(port.visible_pixels_for_point(point, neck))
+        if kind == "anchor":
+            # the three qualification anchors must be visible in the scene as it stands, occluders
+            # included - that is the configuration the qualification scenes start from
+            key = {
+                **record,
+                "kind": kind,
+                "visible_pixels": visible,
+                "in_frame": visible >= contract.visible_pixel_minimum,
+            }
+        else:
+            # a required-domain endpoint must be observable by this camera: nothing but the robot the
+            # camera rides on may stand between the two. Whether the arm is actually there belongs to
+            # the admitted trajectory, so it is recorded as evidence rather than required here.
+            sight = dict(port.endpoint_visibility(point, neck))
+            key = {
+                **record,
+                "kind": kind,
+                "visible_pixels": visible,
+                "first_hit_body": sight.get("first_hit_body"),
+                "robot_occluded": bool(sight.get("robot_occluded")),
+                "in_frame": bool(sight.get("visible_to_camera")),
+            }
+        key_records.append(key)
+        if key["in_frame"] is False:
+            failures.append(key)
+    if embedded:
+        raise HeadCameraGeometryError(
+            "HEAD_CAMERA_WORKSPACE_EMBEDDED: "
+            f"{len(embedded)} declared workspace samples put the target inside the support; first is "
+            f"{embedded[0]['point_m']}"
+        )
+    out_of_frame = [record for record in records if not record["in_frame"]]
+    if out_of_frame or failures:
+        first = (out_of_frame or failures)[0]
+        raise HeadCameraGeometryError(
+            "HEAD_CAMERA_WORKSPACE_MATRIX_INCOMPLETE: "
+            f"{len(out_of_frame)} of {len(records)} workspace samples are outside the frame and "
+            f"{len(failures)} key samples are not visibly rendered; first is {first}"
+        )
+    matrix = {
+        "samples": len(records),
+        "in_frame": len(records) - len(out_of_frame),
+        "rendered_key_samples": len(key_records),
+        "key_samples": key_records,
+        "min_rendered_visible_pixels": min(int(record["visible_pixels"]) for record in key_records),
+        "min_anchor_visible_pixels": min(
+            int(record["visible_pixels"]) for record in key_records if record["kind"] == "anchor"
+        ),
+        "required_domain_rad": [required_domain[0], required_domain[1]],
+    }
+    return (MappingProxyType(matrix), key_records)
+
+
+def _occluder_overlap(
+    port: HeadCameraScenePort,
+    contract: HeadCameraGeometryContract,
+    camera: CameraDefinition,
+    matrix: Mapping[str, Mapping[str, Any]],
+) -> list[Mapping[str, Any]]:
+    """Refuse an occluder whose own geometry lands inside the target's rendered frame."""
+
+    occluders = tuple(port.occluder_points_m())
+    if not occluders:
+        return []
+    overlaps: list[Mapping[str, Any]] = []
+    for anchor in contract.anchors:
+        record = matrix.get(anchor.name)
+        if record is None:
+            continue
+        angle = float(record["neck_start_rad"])
+        position, rotation = port.camera_world_pose(angle)
+        projected = [
+            project_point(
+                point_m=point,
+                camera_position_m=position,
+                camera_rotation=rotation,
+                width=camera.width,
+                height=camera.height,
+                fovy_rad=camera.fovy_rad,
+            )
+            for point in port.target_points_m(anchor)
+        ]
+        inside = [item for item in projected if item[2]]
+        if len(inside) < 2:
+            continue
+        in_frame = [item for item in projected if not math.isnan(item[0])]
+        if not in_frame:
+            continue
+        left = min(item[0] for item in in_frame)
+        right = max(item[0] for item in in_frame)
+        top = min(item[1] for item in in_frame)
+        bottom = max(item[1] for item in in_frame)
+        for index, point in enumerate(occluders):
+            u, v, visible = project_point(
+                point_m=point,
+                camera_position_m=position,
+                camera_rotation=rotation,
+                width=camera.width,
+                height=camera.height,
+                fovy_rad=camera.fovy_rad,
+            )
+            if visible and left <= u <= right and top <= v <= bottom:
+                overlaps.append(
+                    {"anchor": anchor.name, "occluder": f"occluder-{index}", "u": u, "v": v}
+                )
+    return overlaps
