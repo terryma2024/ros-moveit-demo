@@ -40627,3 +40627,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   done** with the last one's contracts read and its site selection now a known two-line problem, F1/F11 open;
   targeted gates **430 / 201 / 201 / 201 passed**; HEAD `9c61c7071`; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2162 — F5's last step: seven pose rows, and the discriminator the next attempt should use
+
+- **What I tried**: locate each complete writer's `pose` physics row (by `"kind": "pose"` above line 700) and
+  append one row carrying both ratified records after its tail, with the predicate clause requiring such a row.
+  The scan found **seven** pose rows (741, 808, 824, 956, 967, 978, 1104) and the tail lookup failed at 956 — the
+  observation there wraps differently — so the guard aborted before writing the test file, while the predicate half
+  had been applied; both are now restored and the audit suite re-runs green.
+- **The discriminator to use next time**: the three blocks **CP-2159 extended** are exactly the complete writers'
+  physics blocks — each contains the `support`, `contact` and `retract` rows my patch added — so a site qualifies
+  iff its receiver is not `partial` **and** its block contains `"kind": "support"`. That identifies 743/753's
+  block, 827/837's and 1106/1116's without depending on how any observation is wrapped, which is what failed here.
+- **Everything else is ready**: both record contracts (CP-2161), the predicate clause (three lines), and the row to
+  append.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 six of seven steps
+  done** with the last one one predicate-block-selection away, F1/F11 open; targeted gates **430 / 201 / 201 / 201
+  passed**; HEAD `15fcf9bba`; no push, no evidence deletion, no hardware, no second stack.
