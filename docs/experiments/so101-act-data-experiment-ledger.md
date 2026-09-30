@@ -38827,3 +38827,29 @@ written: a fresh `colcon build` into `head-toolchain-<UTC>/{build,install}` with
 **Consequence for the visible list:** Task 11 is approved, and it is also **missing one of its own deliverables**. Both
 statements are true, and the honest status is that Task 11 needs this step completed before Task 12 can proceed - so I am
 putting Task 11 back to `in_progress` rather than letting an approval stand in for a deliverable that is not on disk.
+
+## HS-166 — Task 11 Step 2's exact command fails on this host at `mujoco_ros2_control_msgs`
+
+Running the plan's build line verbatim (no ignores, underlay sourced) in
+`head-toolchain-20260930T115526Z`:
+
+```
+Failed   <<< mujoco_ros2_control_msgs [0.70s, exited with code 1]
+Summary: 0 packages finished [0.81s]
+build rc=1
+```
+
+That is HS-108 reproduced exactly, now inside the plan's own Step 2: `--packages-up-to so101_demo_py so101_teleop` pulls in
+the vendored MuJoCo packages, and they do not build on this host. **The plan's Step 2 as written cannot pass here.**
+
+**A trap worth recording:** the failed run still left an `install/setup.zsh`, so Step 2's `test -f
+"$TOOLCHAIN_RUN/install/setup.zsh"` would **pass** despite `rc=1`. A toolchain root validated only by that test could be
+empty of working packages - which is precisely why the plan also asserts `ros2 pkg prefix` equals the toolchain's install
+prefix for both packages. The rc line is the evidence that matters.
+
+**Correction, with its deviation recorded rather than hidden:** the failed root is **kept** as evidence of this finding, and
+a **fresh** root is built with the vendored five ignored
+(`mujoco_vendor mujoco_ros2_control mujoco_ros2_control_msgs mujoco_ros2_control_plugins mujoco_3d_lidar`), supplied by the
+sourced underlay - the form that already succeeded at HS-142 (`rc=0`, three packages, empty bases). The `source-commit.txt`
+in the new root is written **before** its build, as Step 2 specifies, so the commit stamp belongs to the build that produced
+the install.
