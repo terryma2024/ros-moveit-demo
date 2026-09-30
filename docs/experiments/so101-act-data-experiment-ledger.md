@@ -39947,3 +39947,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: F12 closed; F3's round trips and release correlation fixed with the lease item now
   fully specified; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430 passed**;
   HEAD `7115eb4d1`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2130 — F3's lease edit, with the append sites located
+
+- **Read this round** (grep of `"events"` with context in `test_act_episode_audit.py`): bare-`identity()` event
+  appends appear at **line 59** (inside `complete_audit`, a diagnostic writer), **line 146** (a refusal test on
+  top of `complete_audit`) and **line 206** (a sealed-writer test on top of `complete_audit`) — all **diagnostic**,
+  so the lease rule cannot bite them — plus the **formal** sites that actually failed, which live in the
+  `_self_consistent_formal` helper and the window test's coverage block in the 700-800 region (the region the
+  previous round's failures came from).
+- **Why the replacement is not a blanket one**: a diagnostic event identity carrying an extra `lease` key is not
+  obviously accepted by the writer's own closure rules, so adding it everywhere would risk a second, different
+  failure. The surgical edit is to give the lease to the **formal** sites only, which is precisely the coupling
+  CP-2129 recorded.
+- **The two edits for the next pass, now with the sites named**: (1) the lease clause in `_event_identity_ok`;
+  (2) `"identity": {**identity(), "lease": _lease()}` at the **formal** event appends — `_self_consistent_formal`
+  and the window test's coverage events — leaving the three diagnostic sites at lines 59/146/206 untouched, plus
+  the unit control from CP-2129 (matching lease passes, missing or foreign refuses, a lease-less diagnostic
+  episode unaffected).
+- **State.** Item 3's list: F12 closed; F3's round trips and release correlation fixed, the lease item fully
+  located; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD
+  `860215009`; no push, no evidence deletion, no hardware, no second stack.
