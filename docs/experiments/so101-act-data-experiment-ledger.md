@@ -42033,3 +42033,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   commit half is one identity question away, its control already present in the store's suite; items 5+ wait on the
   four blocked bindings. HEAD `16611d78b`; thirteen gates green.
+
+
+## CP-2225 — ③a: the attempt string is lease-derived, and one asymmetry stands out
+
+- **Read this round** (`coordinator.py:_grant_lease_outcome_locked`, region 655-682): the function builds
+  `attempt = f'{point_id}-lease-{point["attempts"] + 1}'` and then
+  `LeaseIdentity(..., point_id, attempt, point['attempts'] + 1, now, ...)`, and **the workspace it computes uses
+  those same locals** — so CP-2224's "different identities" hypothesis is wrong too: the coordinator's workspace and
+  the lease's `point_id`/`attempt_id` come from one source.
+- **What is left, and it is an asymmetry rather than a bug in either side**: the coordinator chooses the directory
+  name by mode — `collection = 'attempts' if self.request.run_mode is RunMode.EXECUTE else 'validations'` — while the
+  store's `_workspace` **hardcodes `"attempts"`**. For an `EXECUTE` batch the two agree and the location matches; for
+  any other mode the coordinator names a directory the verifier's expectation never names, which is precisely a
+  `LEASE_LOCATION_MISMATCH`.
+- **Why that is the prime suspect even though the failing test declares `RunMode.EXECUTE`**: the coordinator may be
+  constructed before the mode is applied, or the verification may run on a path where `self.request.run_mode` is not
+  the mode the verifier's own `run_mode` attribute reports — the test hands the **verifier itself** in as the result
+  port, so the port's `run_mode` is the verifier's default (`EXECUTE`, CP-2216) rather than whatever the batch
+  carries. That is a real production concern too: the guard `result_mode is self.request.run_mode` compares the
+  port's mode with the batch's, and if the port is the verifier, both must be the same object.
+- **The one-line probe that ends it**: in that test's flow, print `workspace`, `_expected(lease)` and
+  `self.request.run_mode`/`result_port.run_mode` together. One run, one answer; then the wiring lands.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  commit half is this comparison away; items 5+ wait on the four blocked bindings. HEAD `0888b01d0`; thirteen gates
+  green.
