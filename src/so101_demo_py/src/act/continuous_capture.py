@@ -113,8 +113,13 @@ class ContinuousEpisodeCapture:
             self._reject("ACQUISITION_SESSION_MISMATCH")
         if frame.reset_epoch != self._reset_epoch:
             self._reject("ACQUISITION_RESET_MISMATCH")
-        # the pixels are checked against the identity they claim, at receipt, not at selection
-        if pixel_digest(pixels) != frame.pixel_sha256:
+        # the pixels are checked against the identity they claim, at receipt, not at selection; a
+        # helper that refuses the array itself is the same terminal class of failure
+        try:
+            digest = pixel_digest(pixels)
+        except ValueError as error:
+            self._reject(str(error))
+        if digest != frame.pixel_sha256:
             self._reject("ACQUISITION_PIXEL_MISMATCH")
         self._frames[frame.camera].append(frame)
         self._observe(frame.stamp_s)
@@ -144,9 +149,14 @@ class ContinuousEpisodeCapture:
         if isinstance(sim_time_s, (int, float)) and not isinstance(sim_time_s, bool):
             self._observe(float(sim_time_s))
         if kind == "stop":
+            stop_s = float(sim_time_s) if isinstance(sim_time_s, (int, float)) \
+                and not isinstance(sim_time_s, bool) else self._observed_sim_s
+            if (stop_s is not None and self._last_labelled_target_s is not None
+                    and stop_s <= self._last_labelled_target_s + _TOLERANCE_S):
+                # a stop delivered after the label still voids that action instant
+                self._fail("CAPTURE_LABEL_REVOKED")
             self._stopped = True
-            self._stopped_at_s = float(sim_time_s) if isinstance(sim_time_s, (int, float)) \
-                else self._observed_sim_s
+            self._stopped_at_s = stop_s
         self._events.append({"sequence": len(self._events) + 1, "kind": kind,
                              "sim_time_s": sim_time_s})
 
@@ -237,6 +247,12 @@ class ContinuousEpisodeCapture:
         positions = message.get("positions")
         if not isinstance(positions, (list, tuple)) or len(positions) != 6:
             self._reject("CAPTURE_REFERENCE_INVALID")
+        try:
+            values = [float(value) for value in positions]
+        except (TypeError, ValueError):
+            self._reject("CAPTURE_REFERENCE_INVALID")
+        if any(not math.isfinite(value) for value in values):
+            self._reject("CAPTURE_REFERENCE_INVALID")
         key = round(float(at_s), 6)
         accepted = message.get("accepted") is True
         if (not accepted and self._last_labelled_target_s is not None
@@ -252,7 +268,7 @@ class ContinuousEpisodeCapture:
         elif existing is None:
             if len(self._references) >= self._reference_capacity:
                 self._fail("CAPTURE_REFERENCE_OVERFLOW")
-            self._references[key] = {"positions": [float(value) for value in positions],
+            self._references[key] = {"positions": values,
                                      "accepted": accepted, "revoked": not accepted}
         self._reference_horizon_s = max(self._reference_horizon_s or 0.0, key)
 
@@ -289,8 +305,12 @@ class ContinuousEpisodeCapture:
             self._next_grid_s = at_s + self.dt_s
 
     def _mint(self, at_s: float, head: Acquisition, wrist: Acquisition) -> None:
-        self.guard.accept(head)
-        self.guard.accept(wrist)
+        try:
+            self.guard.accept(head)
+            self.guard.accept(wrist)
+        except ValueError as error:
+            # the guard's own refusal (reuse, regression) is terminal for the capture too
+            self._reject(str(error))
         if abs(head.stamp_s - wrist.stamp_s) > self.max_skew_s + _TOLERANCE_S:
             self._fail("CAPTURE_SOURCE_SKEW")
         observation, source_audit = self.sampler.sample_with_audit(

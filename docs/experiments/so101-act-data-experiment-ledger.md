@@ -34925,3 +34925,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   after the added cases, and the intermediate one-failure run is retained at `logs/task2-r2.run`.
 - **State.** **Task-list items 0-1 completed; item 2 in_progress (second rework green, re-review
   pending); items 3-8 pending.** Packet: `reviews/task2-rereview2-packet.md`.
+
+
+### CP-1932 third rework outcome (verdict `464c4372-0001-4171-b77d-f121563e3e7c`)
+
+- **Verdict 3 on Task 2** (`reviews/task2-rereview2-verdict.md`) on `31f5ba9f7`: FAIL, 0 Critical /
+  2 Important / 0 Minor. T2-F1 closed (the retired join is accepted; the reviewer notes `_completed`
+  still holds whole observations, so constant-memory operation is explicitly **not** certified).
+  T2-F3/F5/F6 stayed closed.
+- **T2-F2 residual fixed.** A stop boundary is now also applied to already-labelled action instants:
+  a stop whose source sim time is at or before the last labelled target fails the capture with
+  `CAPTURE_LABEL_REVOKED`, so a delayed stop can no longer leave an invalid row in a normal summary.
+  The control case (a stop after every labelled instant) is covered and still finalizes normally.
+- **T2-F4 residual fixed.** Helper-raised validation failures now latch as well: a wrong-shaped or
+  wrong-dtype pixel array (`ACQUISITION_PIXELS_INVALID` from `pixel_digest`), a non-numeric or
+  non-finite reference position, and a guard refusal or selected-image digest failure inside `_mint`
+  all flow through `_reject()`, keeping the first reason; callbacks, `drain()` and `finish()` refuse
+  afterwards. New tests: wrong-shape receipt, six-element non-numeric reference (both with subsequent
+  callback/drain/finish refusal), plus the delayed-stop and stop-after-label control.
+- **Evidence.** `logs/task2-all.run` rc=0: **174 passed in 9.65 s** (two Task 2 files plus
+  `test_act_synchronizer.py`, `test_act_recorder.py`, `test_act_contracts.py`, `test_act_collection.py`,
+  `test_act_first_episode_scope.py`, `test_act_first_episode_admission.py`,
+  `test_act_campaign_admission.py`), own NVMe scratch and non-empty tempfile proof.
+- **Open, recorded, not claimed.** `_completed` retains observation arrays (memory not certified);
+  production composition wiring, the readback t vs t+0.1 reconciliation, durable audit persistence and
+  every live camera/physics/queue behaviour remain Tasks 3/5/7.
+- **State.** **Task-list items 0-1 completed; item 2 in_progress (third rework green, re-review
+  pending); items 3-8 pending.**

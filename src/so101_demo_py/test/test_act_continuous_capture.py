@@ -424,3 +424,53 @@ def test_an_invalid_reference_is_terminal_too():
         capture.on_reference(reference(1.1))
     with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
         capture.finish(1.2)
+
+
+def test_a_delayed_stop_invalidates_an_already_written_label():
+    """A stop delivered after the label still voids the action instant it covers (T2-F2 residual)."""
+
+    capture, minter = build()
+    start(capture)
+    frames_at(capture, minter, [1.0, 1.1, 1.2])
+    capture.on_reference(reference(1.1))
+    assert capture.drain() == 1
+    with pytest.raises(ValueError, match="CAPTURE_LABEL_REVOKED"):
+        capture.on_event({"kind": "stop", "sim_time_s": 1.05})
+    with pytest.raises(ValueError, match="CAPTURE_LABEL_REVOKED"):
+        capture.finish(1.3)
+
+
+def test_a_stop_after_every_labelled_instant_is_a_normal_stop():
+    capture, minter = build()
+    start(capture)
+    frames_at(capture, minter, [1.0, 1.1, 1.2])
+    capture.on_reference(reference(1.1))
+    assert capture.drain() == 1
+    capture.on_event({"kind": "stop", "sim_time_s": 1.5})
+    summary = capture.finish(1.6)
+    assert summary.sample_count == 1
+    assert summary.label_cutoff_s == 1.0
+
+
+def test_a_wrong_shaped_pixel_array_is_terminal():
+    capture, minter = build()
+    start(capture)
+    frame = minter.mint("head", session_id="s", reset_epoch=1, stamp_s=1.0,
+                        received_monotonic_ns=1, pixels=ZERO)
+    with pytest.raises(ValueError, match="ACQUISITION_PIXELS_INVALID"):
+        capture.on_acquisition(frame, np.zeros((480, 640), dtype=np.uint8))
+    with pytest.raises(ValueError, match="ACQUISITION_PIXELS_INVALID"):
+        frames_at(capture, minter, [1.1])
+    with pytest.raises(ValueError, match="ACQUISITION_PIXELS_INVALID"):
+        capture.finish(1.2)
+
+
+def test_a_non_numeric_reference_position_is_terminal():
+    capture, minter = build()
+    start(capture)
+    with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
+        capture.on_reference(reference(1.1, positions=[0.0, 0.1, 0.2, 0.3, 0.4, "x"]))
+    with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
+        capture.on_reference(reference(1.1))
+    with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
+        capture.drain()
