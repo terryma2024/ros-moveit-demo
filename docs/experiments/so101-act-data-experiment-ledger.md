@@ -41571,3 +41571,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, F13 residual; items 0-2 completed; item 4's
   QC increments exist and pass their suites but the plan's converge-first rule keeps them behind Task 3. HEAD
   `717e5743b`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2205 — The capture leg's interface, and the one read it still needs
+
+- **Read this round** (`expert.py:65-80`): `CausalEpisodeCapture.__init__(recorder, tap)` keeps both, tracks
+  `self.raw_reference` (None until a reference is consumed) and exposes
+  `append(observation, physical_audit) -> tuple[float, ...]`, whose first guard refuses a `physical_audit` that
+  collides with `self._REFERENCE_KEYS` — so the capture's job is to pair the tap's reference read with a physical
+  observation and hand the label to the recorder.
+- **The test F1's wording asks for**: construct the capture with a fake recorder and the fake-port tap the chain
+  test already uses (CP-2183), call `append` with a minimal observation and a physical audit, and assert that the
+  label it returns is the record's `positions` — with the tap's packed group reaching the capture's own
+  `raw_reference`. That exercises the adapter/tap/capture path by name instead of by implication.
+- **The one read it needs**: the **recorder's** `append`/label API (whatever the capture calls on `self.recorder`),
+  which the continuation of `append` names; without it the fake recorder is guesswork, and a guessed recorder is the
+  CP-2157 mistake in a new place.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed** (F1's capture leg not yet named in a test), **F11 six of
+  seven** with its frozen policy awaiting the plan, F13 residual awaiting the plan; targeted gates all green, the
+  table in CP-2204; HEAD `0984abf4d`; no push, no evidence deletion, no hardware, no second stack.
