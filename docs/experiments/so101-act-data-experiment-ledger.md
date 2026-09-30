@@ -34658,3 +34658,43 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   would otherwise have required Astra.
 - **Evidence classification:** both downloads are retained artifacts under the registered root
   (`deps/`), not experiments; nothing was installed, no stack started, nothing pushed.
+
+## HS-009 — Task 3 rejected twice, then reworked (commit 5f1427423)
+
+- **Two independent reviews rejected commit `214bdfa63`.** The original `codex-download` session
+  (GPT-6.1-Sol/high) wrote `reviews/task3/task3-verdict.md` (7 major + 2 minor) and, because that session's
+  context was nearly exhausted, a second clean session `codex-review2` on the same model wrote
+  `reviews/task3/task3-verdict-freshsession.md` (7 P1). They agree: B could not be materialized at all;
+  C's runtime config was rejected by Ultralytics `get_cfg`; `train.txt` ordering could not enforce 1:1
+  batches because `BaseDataset.get_img_files` sorts and the trainer shuffles; nothing implemented the
+  two-domain checkpoint score; the plan bound neither its recipe nor its verified datasets nor A's weights;
+  sealed-input, containment and traversal checks were bypassable; a failed preparation left an unusable
+  output root; and the candidate CLI silently ignored `--epochs`/`--fraction`. The reviewer also confirmed
+  what did work: contracts with a non-CUDA device, CPU fallback, an odd batch or a foreign score are
+  refused, as are unequal train counts, a smoke head for a promotable plan, missing CLI arguments and
+  existing output roots, and it validated the accepted Task 1/2 boundary and both retained gates.
+- **What the rework does (commit `5f1427423`):** `build_candidate_plan` now requires the base weights'
+  sha256, reads both manifests as *sealed* datasets (dataset contract, camera domain, samples, per-split
+  counts), refuses split leakage and aliased domains, digests the manifest contents rather than a
+  caller-supplied string, and freezes the entire contract recipe, so a contract swap, a `classes` change
+  or a manifest edit all change the plan digest. B materializes head-only training plus **both**
+  validation domains; the smoke profile takes a deterministic subset of the larger task domain, so a
+  32/8 smoke plan slices the 800-image task split instead of failing. `prepare_candidate_run` preflights
+  every source (regular files inside their own dataset root, paired images and labels), refuses root
+  aliases and traversal run names, checks the base weights against the plan, stages the whole batch in a
+  sibling directory and publishes it with one rename, and records a content digest for every materialized
+  file. The runtime config now carries only Ultralytics arguments, and a new
+  `adapters/perception/candidate_trainer.py` implements the three rules the reviewers found missing: a
+  deterministic 1:1 per-batch domain sampler, the two-domain checkpoint score that refuses a missing or
+  non-finite cell, and the earlier-epoch tie rule, writing `candidate-manifest.json` with the selected
+  weight's sha256 only after a successful run. The CLI rejects `--epochs`/`--fraction` with `--candidate`
+  and launches the frozen trainer instead of a bare `yolo` command.
+- **Gate:** 103 passed across the training suites (17 new tests covering the reviewers' reproductions:
+  complete-recipe binding, verified manifests, aliased domains, split leakage, deterministic task subset,
+  B's head-only union with both validation domains, root alias/traversal/escape refusals, no output root
+  after a failure, the sampler's 1:1 batches and determinism, the two-domain score, the tie rule, the
+  trainer-argument allowlist and content digests) plus 86 passed on the Task 2 render gate; `ruff check`
+  clean. Nothing pushed, no stack started, no training run.
+- **Still to prove at Task 11:** the sampler and the two-domain checkpoint rule are unit-tested and wired
+  into Ultralytics' trainer, but only a real one-epoch CUDA smoke can show the framework honours them;
+  Task 11 remains the integration gate, exactly as the reviewers said.
