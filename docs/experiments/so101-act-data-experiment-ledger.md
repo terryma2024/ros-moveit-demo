@@ -40777,3 +40777,29 @@ held_out_evaluation  20 files, rec rc=0, same distribution
 Also noted: the renderer's `DatasetScenario` expresses only cup counts, so conditions like `low_light`,
 `partial_occlusion`, `fast_interruption` and `reacquire_after_stop` are **labelled but not rendered** differently from
 `nominal` - a fidelity limit of this recorder that the gate cannot see and a reviewer must know.
+
+## HS-244 — The scenario fix cut false candidates 480 -> 48; what remains is A detecting in genuinely empty scenes
+
+```
+{"failure": "EVALUATION_FALSE_CANDIDATE: A reports 48 false candidates on empty scenes"}
+evaluation/ now holds measure-{A,B,C}-{head,task} - all six cells measured before the refusal
+```
+
+A **tenfold** reduction, and it confirms the fix was the right one: previously every one of 120 frames counted as no-cup; now only
+the genuinely `no_cup`-tagged frames do. The arithmetic is clean: 2 no_cup seeds x 3 angles x 2 domains = **12 frames**, and
+48 = 12 x 4 - i.e. **candidate A reports about four detections in every frame of a scene that contains no cup**.
+
+That leaves two readings, and they are not equivalent:
+
+1. **A is genuinely noisy on empty scenes** - a real property of the pinned baseline, which the zero-false-candidate rule exists
+   to catch. On this reading the gate is doing its job and the model comparison may legitimately fail the safety check for A.
+2. **My empty scenes are not empty** - the renderer may still place the distractor objects (the bottle and a second cup body are
+   in the scene XML), so A may be correctly detecting objects that my recorder failed to remove, and the "false" candidates are
+   an artefact of the scene I built rather than of the model.
+
+These predict different next actions, so the diagnostic is specific: dump what A detects in one `no_cup` frame - class names,
+confidences, box centres - and compare against what the scene actually contains. If the boxes sit on the bottle or an unused cup
+geom, it is reading 2; if they sit on empty table, it is reading 1.
+
+**Also worth recording:** all six candidate/domain cells measured before the refusal, so the expensive half of the gate is
+working - the refusal comes from the safety check over episodes, not from any missing measurement.
