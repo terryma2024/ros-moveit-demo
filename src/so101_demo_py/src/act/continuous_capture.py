@@ -82,6 +82,8 @@ class ContinuousEpisodeCapture:
         self._next_grid_s = None
         self._physical_end_s = None
         self._observed_sim_s = None
+        self._collection_start_s = None
+        self._first_command_s = None
         self._reference_horizon_s = None
         self._last_labelled_target_s = None
         self._stopped_at_s = None
@@ -145,6 +147,9 @@ class ContinuousEpisodeCapture:
                 # the motion deadline starts once and is never reset
                 raise ValueError("CAPTURE_DEADLINE_FIXED")
             self._deadline_started = self._monotonic()
+            if isinstance(event.get("sim_time_s"), (int, float)) \
+                    and not isinstance(event.get("sim_time_s"), bool):
+                self._first_command_s = float(event["sim_time_s"])
         self._check_deadline()
         if self._failure is not None:
             raise ValueError(self._failure)
@@ -201,6 +206,23 @@ class ContinuousEpisodeCapture:
     # -- views -------------------------------------------------------------
 
     @property
+    def window(self) -> dict:
+        """The observable collection window.
+
+        Only facts this capture actually observed are reported; a fact that never happened is `None`
+        rather than an invented instant, which is what lets a reader tell "no command was issued" and
+        "nothing was labelled" apart from a real timestamp. The source schedule, cadence and permitted
+        gaps come from the frozen inputs in the composition, not from here.
+        """
+
+        instants = [value for value in (self._observed_sim_s,) if value is not None]
+        return {"collection_start_s": self._collection_start_s,
+                "collection_end_s": max(instants) if instants else None,
+                "first_command_s": self._first_command_s,
+                "physics_end_s": self._physical_end_s,
+                "label_cutoff_s": self.label_cutoff_s if self._written else None}
+
+    @property
     def pending_rows(self) -> int:
         return len(self._pending)
 
@@ -238,6 +260,8 @@ class ContinuousEpisodeCapture:
         raise ValueError(self._failure)
 
     def _observe(self, sim_time_s: float) -> None:
+        if self._collection_start_s is None or sim_time_s < self._collection_start_s:
+            self._collection_start_s = float(sim_time_s)
         if self._observed_sim_s is None or sim_time_s > self._observed_sim_s:
             self._observed_sim_s = float(sim_time_s)
 

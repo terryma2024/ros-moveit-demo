@@ -36649,3 +36649,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ratification, the two new record definitions and the producer changes they imply); items 4-8 pending.**
   HEAD `eff5ab035`; gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push,
   no evidence deletion, no hardware, no second stack.
+
+
+## CP-1981 — Task 3 fix pass, thirty-first instalment: the capture exposes the observable window (Proposal B, producer side)
+
+- **The producer half of Proposal B is in place without adopting the schema.** `ContinuousEpisodeCapture.window`
+  reports exactly the facts the capture observed — `collection_start_s` (the first source instant it saw),
+  `collection_end_s` (the last), `first_command_s` (from the `first_command` event), `physics_end_s` (from
+  finalization) and `label_cutoff_s` (only when a row was actually labelled) — and reports **`None`** for a
+  fact that never happened, so "no command was issued" and "nothing was labelled" are distinguishable from
+  a real instant instead of being invented. The source schedule, cadence and permitted gaps stay with the
+  frozen inputs in the Task 5 composition, as Proposal B states.
+- **Evidence.** `logs/task3-fix31.run` rc=0: **127 passed in 1.08 s** across
+  `test_act_continuous_capture.py`, `test_act_episode_audit.py`, `test_act_recorder.py` and
+  `test_act_release_boundary.py`, with its own NVMe scratch and a non-empty tempfile proof. The control
+  checks a completed run's five facts and a silent run's five `None`s.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c4513d048`;
+  gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

@@ -668,3 +668,26 @@ def test_the_expert_tap_preserves_the_raw_frame_its_port_supplies():
         MoveItExpertActionTap(_RawReferencePort(
             {"source": "CONTROLLER_REFERENCE", "positions": [0.1] * 6,
              "joint_names": ["a", "b"]})).reference(1.0)
+
+
+def test_the_capture_reports_only_the_window_facts_it_observed():
+    """A fact that never happened is null rather than an invented instant (Proposal B)."""
+
+    capture, minter = build()
+    start(capture)
+    frames_at(capture, minter, [1.0, 1.1, 1.2])
+    capture.on_reference(reference(1.1))
+    assert capture.drain() == 1
+    capture.finish(1.4)
+    window = capture.window
+    assert window["collection_start_s"] == 1.0
+    assert window["collection_end_s"] == 1.4
+    assert window["first_command_s"] == 1.0
+    assert window["physics_end_s"] == 1.4
+    assert window["label_cutoff_s"] == 1.0
+
+    silent, no_minter = build()
+    silent.start("s", "attempt-1", 1, 1.0)
+    quiet = silent.window
+    assert quiet["first_command_s"] is None and quiet["label_cutoff_s"] is None
+    assert quiet["physics_end_s"] is None and quiet["collection_start_s"] is None
