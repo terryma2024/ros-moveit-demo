@@ -179,6 +179,59 @@ def test_split_seal_rejects_an_extra_field() -> None:
         HeadSearchSplitSeal.from_document(seal_document(promotable=True))
 
 
+@pytest.mark.parametrize(
+    "members",
+    [
+        {"scene-1": {"grounded_sam_sha256": _sha("f")}},
+        {"scene-1": {"score": float("nan")}},
+        "scene-1",
+        (value for value in ("scene-1",)),
+    ],
+)
+def test_split_seal_never_discards_a_malformed_scene_group_payload(members: object) -> None:
+    document = seal_document(
+        scene_groups={"train": members, "val": ("scene-3",), "test": ("scene-4",)}
+    )
+
+    with pytest.raises(ValueError, match="SCENE_GROUP_PARTITION_INVALID"):
+        HeadSearchSplitSeal.from_document(document)
+
+
+def test_split_seal_rejects_an_empty_partition_for_its_own_positive_counts() -> None:
+    document = seal_document(scene_groups={"train": (), "val": (), "test": ()})
+
+    with pytest.raises(ValueError, match="SCENE_GROUP_COUNT_INVALID"):
+        HeadSearchSplitSeal.from_document(document)
+
+
+def test_split_seal_rejects_more_scene_groups_than_declared_images() -> None:
+    document = seal_document(
+        counts={"train": 1, "val": 1, "test": 1},
+        scene_groups={
+            "train": ("scene-1", "scene-4"),
+            "val": ("scene-2",),
+            "test": ("scene-3",),
+        },
+    )
+
+    with pytest.raises(ValueError, match="SCENE_GROUP_COUNT_INVALID"):
+        HeadSearchSplitSeal.from_document(document)
+
+
+def test_split_seal_accepts_one_group_per_image_and_many_images_per_group() -> None:
+    one_per_image = seal_document(
+        counts={"train": 2, "val": 1, "test": 1},
+        scene_groups={"train": ("scene-1", "scene-2"), "val": ("scene-3",), "test": ("scene-4",)},
+    )
+    many_images_per_group = seal_document(
+        counts={"train": 800, "val": 200, "test": 200},
+        scene_groups={"train": ("scene-1",), "val": ("scene-2",), "test": ("scene-3",)},
+    )
+
+    assert HeadSearchSplitSeal.from_document(one_per_image).counts["train"] == 2
+    assert HeadSearchSplitSeal.from_document(many_images_per_group).sha256
+
+
 def test_split_seal_round_trips_with_a_canonical_digest() -> None:
     document = seal_document()
     seal = HeadSearchSplitSeal.from_document(document)

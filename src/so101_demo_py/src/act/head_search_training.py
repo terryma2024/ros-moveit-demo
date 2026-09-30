@@ -119,9 +119,10 @@ class HeadSearchSplitSeal:
         seen: dict[str, str] = {}
         for split in IMAGE_SPLITS:
             members = raw_groups[split]
-            if isinstance(members, (str, bytes)) or not isinstance(members, Iterable):
+            if not isinstance(members, (list, tuple)):
                 raise ValueError(
-                    f"SCENE_GROUP_PARTITION_INVALID: {split} must list its scene_group_ids"
+                    f"SCENE_GROUP_PARTITION_INVALID: {split} must be a list or tuple of "
+                    "scene_group_ids; a mapping, string, set or generator would lose or hide members"
                 )
             values = tuple(_require_nonempty("scene_group_id", item) for item in members)
             for scene_group_id in values:
@@ -136,6 +137,12 @@ class HeadSearchSplitSeal:
                     )
                 seen[scene_group_id] = split
             groups[split] = values
+        for split in IMAGE_SPLITS:
+            if not 1 <= len(groups[split]) <= counts[split]:
+                raise ValueError(
+                    f"SCENE_GROUP_COUNT_INVALID: {split} lists {len(groups[split])} scene groups "
+                    f"for {counts[split]} declared images"
+                )
         object.__setattr__(self, "counts", MappingProxyType(counts))
         object.__setattr__(self, "scene_groups", MappingProxyType(groups))
 
