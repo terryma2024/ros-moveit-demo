@@ -312,7 +312,15 @@ class PickPlaceSearchBoundary:
                 records.append(source.controller_feedback(kind, instant))
             except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
                 return None
-        observed.controller_feedback = tuple(records)
+        # T3-F12: a frozen carrier refuses the assignment, and the refusal used to escape this helper; the
+        # boundary keeps the records it read either way, which is also what its own gates consult below
+        self._controller_feedback = tuple(records)
+        try:
+            observed.controller_feedback = tuple(records)
+        except (AttributeError, TypeError, ValueError):
+            # `dataclasses.FrozenInstanceError` is an AttributeError subclass, so an immutable observation is
+            # covered here rather than aborting the verifier chain that calls this helper
+            pass
         return None
 
     def _remember_planning_scene_receipt(self, observed):
