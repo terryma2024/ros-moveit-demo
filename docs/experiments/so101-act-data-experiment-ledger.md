@@ -43385,3 +43385,13 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, second half specified with its first obstacle named;
 - goal paused.
+
+## CP-2297 - F5's hybrid: the formal refusal is episode_audit.py:828
+
+- The probe (a real PickPlaceRunner against a formal writer, withdrawn after the run) names the refusal at
+- episode_audit.py:828 - one run, one line, no guessing between candidate rules. The block that owns line 828 is
+- printed alongside this entry, so the port change the hybrid needs is a transcription of what that rule requires.
+- The probe test itself was removed immediately (the file restored from a backup copy), so the tree is exactly as it
+- was and the suite green.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, its hybrid's obstacle now located; goal paused.
