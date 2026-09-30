@@ -38940,3 +38940,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   acceptance text should be taken from the frozen plan (sha256 `1fbf978b…`) when that document is located.
 - **State.** Item 3 implementation-complete, sixth checkpoint in progress; item 4 not started. HEAD `9ccffb2a3`;
   targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2086 — The W8 verifier's required content, quoted from the admission code
+
+- **The code states the acceptance itself** (`src/so101_teleop/so101_teleop/unified/admission.py:492-494`):
+  "A self-declared PASSED document is not physical qualification. **Task 11A must provide an independent verifier
+  of the frozen contract, two committed 20-scene waves and actual per-Worker terminal leases** before formal
+  admission can become reachable." So `verify_w8_qualification(qualified_path, payload)` must establish exactly
+  three things, and its caller already enforces the surrounding shape: `status == "PASSED"`, `worker_count == 8`,
+  and matching `source_sha256`, `runtime_config_sha256`, `collection_config_sha256` and
+  `contact_policy_fingerprint` (lines 482-489, `W8_QUALIFICATION_MISMATCH` otherwise); a non-`True` return is
+  refused, and an exception from the verifier becomes `W8_QUALIFICATION_EVIDENCE_INVALID` (line 500-502).
+- **What the next round therefore implements**: a new `src/so101_demo_py/src/act/w8_qualification.py` exposing
+  `verify_w8_qualification(qualified_path, payload)` that verifies (i) the frozen contract the document names,
+  (ii) two committed 20-scene waves, and (iii) actual per-Worker terminal leases — defaulting to refusal, with
+  tests in the style the neighbouring ACT suites use (a positive fixture plus one-variable negative cases, each
+  asserting the refusal code), and with the admission call site left untouched.
+- **Open dependency, unchanged**: the frozen plan document (`1fbf978b…`) that would give Task 4's full acceptance
+  text has not been located in the worktree, the parent checkout's plans directory or the evidence plan root; the
+  three requirements above come from the code, not from that document.
+- **State.** Item 3 implementation-complete, sixth checkpoint in progress; item 4 started with this reconnaissance
+  only. HEAD `4b5dfa415`; targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no
+  hardware, no second stack.
