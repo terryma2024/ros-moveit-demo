@@ -34619,6 +34619,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 
 - **Next:** the Task 3 review (`gpt-6.1-sol`/high), then Task 4.
 
+- **Toolchain availability verified while Task 3's review runs (read-only):** GPU is an **RTX 5080
+  (16,303 MiB, driver 595.84)**. The training interpreter is
+  `/data/work/venvs/so101-v5-t004-perception/bin/python3` - **torch 2.13.0+cu130 with
+  `torch.cuda.is_available() == True`** and **ultralytics 8.4.115**, whose `yolo` and `ultralytics`
+  console scripts live in that venv's `bin/`. The system interpreter has no torch and no `yolo` on PATH,
+  so Task 11's CUDA smokes must run with that venv on PATH (recorded here so the smoke does not fail on
+  a bare `yolo` lookup). Web-side, `bun 1.3.14` and the web package's own
+  `node_modules/.bin/playwright` are present, so Tasks 10 and 14 are not blocked on tooling.
+
 ## HS-008 — Task 12 inputs de-risked early (weights and task dataset fetched and verified)
 
 - **Why now:** Task 3's review is still running, so nothing in the Task 4 boundary may start. These are
