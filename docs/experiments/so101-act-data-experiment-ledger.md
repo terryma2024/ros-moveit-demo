@@ -43013,3 +43013,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **F14, F3 and F1 closed**; **F11 three cuts landed** (strictly increasing, endpoints versus history,
   reverse relation) with these two readback controls outstanding; F5/F12/F13 open; the goal is paused. HEAD
   `0cc24ff7e`; twenty-four gates green.
+
+
+## CP-2274 — F11's last two controls: three attempts, all silent, and the one read that ends it
+
+- **What I tried and withdrew**: (1) `writer.seal({**window, schedule})` on the diagnostic fixture — silent;
+  (2) the same on a **formal** fixture (`_self_consistent_formal`) — silent; (3) rewriting
+  `manifest["window"]["source_schedule"]` in the sealed document, on both fixtures, then `verify_audit_manifest` —
+  silent as well. Each withdrawal left the audit suite green (72 passed) and the test file clean.
+- **What the reads established**: the manifest **does** carry the window (`_MANIFEST_FIELDS` includes it, the writer
+  writes `"window": dict(window)` at 935, and the readback consults `manifest["window"]` at 1024-1036) — but the
+  predicates run only when the seal is **formal** (1025's `formal_window and _window_ok(...)`), which is why the
+  diagnostic attempts could never fire. The formal attempt then still stayed silent, so the remaining unknown is
+  narrow: what `seal` returns (line 898, `-> Path`) and whether the document my rewrite targeted is the one the
+  readback reads.
+- **The one read left**: `episode_audit.py:898-935` — the body of `seal`, where the manifest path and its `window`
+  are written — after which this control is a transcription.
+- **State.** **F14, F3 and F1 closed**; **F11 three cuts landed**, its two readback controls specified but not yet
+  firing; F5/F12/F13 open; the goal is paused. HEAD `929b8b3ef`; twenty-four gates green.
