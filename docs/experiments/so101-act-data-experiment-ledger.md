@@ -42575,3 +42575,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   demonstrates it by name is not.
 - **State.** **F14 closed**; **F3 (a), (b) and (c) landed** with that control outstanding; F1/F5/F11/F12/F13 open;
   the goal is paused. HEAD `700d5ea26`; eighteen gates green.
+
+
+## CP-2251 — F3's positive control: the recipe, with the writer construction read
+
+- **What exists to build on**: `test_act_release_boundary.py` already drives a real `PickPlaceRunner` against a real
+  `EpisodeAuditWriter` and asserts the event stream (the control CP-2250 updated), so the positive control is a
+  variant of that test rather than new machinery. Its writer construction is printed alongside this entry; the
+  formal one in `test_act_episode_audit.py` is `_formal_writer(tmp_path)` — scope `mode="formal"`, identity
+  `{**identity(), "lease": _lease()}`, inputs `{"inputs_sha256": "a" * 64}`.
+- **The control to write**: drive the same runner against a **formal** writer carrying a lease, then assert that
+  (1) the run completes, (2) every event carries that lease, (3) the stream contains a `release` event naming the
+  epoch the run entered, and (4) `writer.seal(window)` succeeds and `verify_audit_manifest` returns the audit kind —
+  i.e. the writer admits what the runner produces, which is precisely what F3(c) says was impossible.
+- **The two negatives that come with it**: the same run with the lease withheld from the identity (the first
+  `phase_complete` must be refused) and with the release event suppressed (the seal must refuse the stream through
+  the tie). Both are one-variable edits of the same fixture.
+- **The one uncertainty, stated rather than discovered later**: a formal writer's seal also runs the coverage gate,
+  so the port's evidence must satisfy nine phases, all four physics kinds, an accepted complete raw reference and
+  the ratified observations. `test_act_task8.py`'s FakePort was repaired for exactly those keys in CP-2102, and if
+  this control reuses it the gate should pass; if it uses the release-boundary port instead, that port may need the
+  same keys before the positive control can seal.
+- **State.** **F14 closed**; F3 (a)(b)(c) landed with this control outstanding; F1/F5/F11/F12/F13 open; the goal is
+  paused. HEAD `502d2632d`; eighteen gates green.
