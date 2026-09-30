@@ -39061,3 +39061,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   fixture predates the contract change, and the fix belongs in the fixture.
 - **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress, this repair being its
   next increment. HEAD `947018699`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2091 — The fixture repair moved the failure and revealed where the raw block belongs; attempt reverted
+
+- **What the attempt established.** Wrapping all three `return evidence` sites in each of that suite's **two**
+  nested `_EvidencePort` classes (found at lines 353 and 456, three returns each) moved the failure from
+  `TypeError: 'NoneType' object is not iterable` to **`PickPlaceError: SET_DOWN_EVIDENCE_INVALID`**. So the raw
+  block **is** what the phase path wanted and the artifact gap is closed there, while the **set-down document
+  refuses** that key — the block belongs only in the `run_phase` funnel, not in the `set_down` (and possibly
+  `run_retreat_segment`) overrides.
+- **Reverted, tree verified.** Rather than iterate blindly at the end of a budget, the file was restored and the
+  suite re-run: `4 failed, 34 passed` as before, so the tree carries no half-finished fixture.
+- **The next increment, now precisely bounded**: wrap only the `run_phase` funnel's return in both classes (the
+  first of the three in each), leave `set_down` and `run_retreat_segment` untouched, and re-run — if the retreat
+  path also refuses the key, the block for the required phases comes from `LiveEvidenceWindow.REQUIRED_PHASES`
+  handling alone.
+- **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress. HEAD `0791d243f`;
+  no push, no evidence deletion, no hardware, no second stack.
