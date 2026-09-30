@@ -303,17 +303,20 @@ def prepare_candidate_run(
         raise ValueError("CANDIDATE_UNION_MISMATCH: the training union is not the plan's")
     if sum(len(pairs) for pairs in val_pairs.values()) != plan.val_count:
         raise ValueError("CANDIDATE_UNION_MISMATCH: the validation union is not the plan's")
-    for domain, pairs in {**train_pairs, **val_pairs}.items():
-        for image, label in pairs:
-            if image.parent.parent.name != "images" or label.parent.parent.name != "labels":
-                raise ValueError(
-                    "CANDIDATE_SOURCE_LAYOUT_INVALID: images and labels must live under the dataset's "
-                    "images/ and labels/ directories"
-                )
-            if image.stem != label.stem:
-                raise ValueError(
-                    f"CANDIDATE_SOURCE_UNPAIRED: {image.name} and {label.name} do not belong together"
-                )
+    # both splits are checked: merging the two mappings would silently drop the training pairs
+    for split, pairs_by_domain in (("train", train_pairs), ("val", val_pairs)):
+        for domain, pairs in pairs_by_domain.items():
+            for image, label in pairs:
+                if image.parent.parent.name != "images" or label.parent.parent.name != "labels":
+                    raise ValueError(
+                        "CANDIDATE_SOURCE_LAYOUT_INVALID: images and labels must live under the "
+                        f"dataset's images/ and labels/ directories ({split} {domain})"
+                    )
+                if image.stem != label.stem:
+                    raise ValueError(
+                        f"CANDIDATE_SOURCE_UNPAIRED: {image.name} and {label.name} do not belong "
+                        f"together ({split} {domain})"
+                    )
 
     staging = output_root.parent / f".{output_root.name}.staging-{os.getpid()}"
     if staging.exists():

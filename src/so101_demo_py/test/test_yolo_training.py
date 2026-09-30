@@ -611,3 +611,44 @@ def test_prepared_runtime_config_is_accepted_by_the_installed_ultralytics(tmp_pa
     runtime = yaml.safe_load(prepared.training_config.read_text(encoding="utf-8"))
     cfg = ultralytics_cfg.get_cfg(overrides=runtime)
     assert cfg.device == "cuda" and cfg.epochs == 1
+
+
+def test_prepare_candidate_run_refuses_an_unpaired_training_sample(tmp_path: Path) -> None:
+    """The deciding reviewer's residual finding: a merged loop only checked the validation split."""
+
+    from so101_demo.adapters.perception.yolo_training import prepare_candidate_run
+
+    head_manifest = _sealed_manifest(tmp_path, camera="head_camera", train=32, val=8)
+    task_manifest = _sealed_manifest(tmp_path, camera="task_camera", train=32, val=8)
+    head_root = tmp_path / "head"
+    task_root = tmp_path / "task"
+    head_manifest_path = _write_domain(head_root, head_manifest)
+    task_manifest_path = _write_domain(task_root, task_manifest)
+    # the first training sample's manifest entry points at another image's label
+    broken = json.loads(json.dumps(head_manifest))
+    victim = broken["samples"][0]
+    victim["label"] = f"labels/train/{victim['seed'] + 1:09d}.txt"
+    head_manifest_path.write_text(
+        json.dumps(broken, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    base_model = tmp_path / "yolo11n-seg.pt"
+    base_model.write_bytes(b"weights")
+    plan = build_candidate_plan(
+        "B",
+        head=broken,
+        task=task_manifest,
+        contract=HEAD_SMOKE_CONTRACT,
+        base_model_sha256=hashlib.sha256(base_model.read_bytes()).hexdigest(),
+    )
+    with pytest.raises(ValueError, match="CANDIDATE_SOURCE_UNPAIRED"):
+        prepare_candidate_run(
+            plan=plan,
+            contract_path=HEAD_SMOKE_CONTRACT,
+            head_dataset_root=head_root,
+            task_dataset_root=task_root,
+            head_manifest_path=head_manifest_path,
+            task_manifest_path=task_manifest_path,
+            base_model_path=base_model,
+            output_root=tmp_path / "unpaired",
+        )
+    assert not (tmp_path / "unpaired").exists()
