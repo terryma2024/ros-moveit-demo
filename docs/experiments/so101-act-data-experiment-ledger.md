@@ -35360,3 +35360,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD
   `38943305d`; 39-path dirty baseline untouched (only an out-of-tree backup was added); no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-1942 — the deferred Task 2 minor closed (first failure now survives finalization)
+
+- **What was wrong.** The Task 2 checkpoint had graded one residual Minor: `finish()` set
+  `_finished = True` before `_tail_paths()` ran, so a refusing tail writer was reported once and then
+  masked by `CAPTURE_FINISHED`; and after a latched failure a later `on_event()` checked the motion
+  deadline first, so an expired budget replaced the original reason because `_fail()` overwrote
+  `_failure`.
+- **What changed in `act/continuous_capture.py`.** `_fail()` now keeps the first reason exactly like
+  `_reject()`; `_require_running()` reports a latched failure before the finished/stopped state, so the
+  real reason outranks the lifecycle; and `finish()` hands the audit-only tail off **before** declaring
+  finalization, so a refusing writer leaves the capture retryable and still reported with its own
+  reason. Three small edits, no behaviour change on any happy path.
+- **Evidence.** `logs/task2-minor.run` rc=0: **86 passed in 0.76 s** across
+  `test_act_continuous_capture.py`, `test_act_episode_audit.py`, `test_act_release_boundary.py`,
+  `test_act_recorder.py` and `test_act_acquisition_identity.py`, with its own NVMe scratch and a
+  non-empty tempfile proof. The two cases the reviewer asked for are now asserted: a refusing tail
+  writer is reported by the first `finish`, by a second `finish`, by `drain`, by a reference callback
+  and by an acquisition callback; and a latched `NO_NEW_ACQUISITION` survives an expired budget in
+  `on_event` and in `finish` instead of turning into `CAPTURE_DEADLINE_EXCEEDED`.
+- **Why this was done despite the "minors never enter the fix pass" rule.** The rule guards against
+  unbounded minor-chasing during a review's fix pass; the Task 2 checkpoint is closed, the finding was
+  deferred here as a recorded item with the reviewer's own recipe, and the packet's claim that the
+  original reason survives every later call had been explicitly called too strong. Closing it in the
+  module I own — with no live path touched — removes a known inaccuracy rather than adding scope. The
+  Task 3 work itself is unchanged by this.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** Task 3 remains:
+  attach the raw block in the port's `_search_evidence`/`_sequence_evidence`, wire the broker's
+  claim/dispatch/accept/revoke/stop events into the writer, then the Task 3 Codex checkpoint. HEAD
+  `2adbed448`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

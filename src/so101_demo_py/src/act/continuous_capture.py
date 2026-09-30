@@ -189,9 +189,12 @@ class ContinuousEpisodeCapture:
         self._physical_end_s = float(physical_end_s)
         self._observe(self._physical_end_s)
         self._service()
+        # the tail is handed off before finalization is declared, so a refusing writer leaves the
+        # capture retryable and reported with its own reason instead of finished
+        paths = tuple(self._tail_paths())
         self._finished = True
         return CaptureSummary(sample_count=self._written, label_cutoff_s=self.label_cutoff_s,
-                              audit_files=tuple(self._tail_paths()))
+                              audit_files=paths)
 
     # -- views -------------------------------------------------------------
 
@@ -214,10 +217,11 @@ class ContinuousEpisodeCapture:
     def _require_running(self) -> None:
         if self._session_id is None:
             raise ValueError("CAPTURE_NOT_STARTED")
+        if self._failure is not None:
+            # a latched failure outranks the lifecycle state, so callers keep seeing the real reason
+            raise ValueError(self._failure)
         if self._finished:
             raise ValueError("CAPTURE_FINISHED")
-        if self._failure is not None:
-            raise ValueError(self._failure)
         if self._stopped:
             raise ValueError("CAPTURE_STOPPED")
 
@@ -242,8 +246,10 @@ class ContinuousEpisodeCapture:
             self._fail("CAPTURE_DEADLINE_EXCEEDED")
 
     def _fail(self, code: str):
-        self._failure = code
-        raise ValueError(code)
+        # the first reason is the one that explains the episode; a later deadline or lifecycle state
+        # must not overwrite it
+        self._failure = code if self._failure is None else self._failure
+        raise ValueError(self._failure)
 
     def _record_reference(self, message) -> None:
         if not isinstance(message, dict) or message.get("source") != _REFERENCE_SOURCE:

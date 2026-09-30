@@ -581,3 +581,36 @@ def test_an_invalid_reference_never_reaches_the_audit():
     with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
         capture.on_reference(reference(1.1, positions=[0.0, 0.1, 0.2, 0.3, 0.4, "x"]))
     assert audit.references == []
+
+
+def test_a_refusing_tail_writer_is_reported_by_every_later_call():
+    """Finalization must not be declared before the tail handoff succeeded (Task 2 minor)."""
+
+    def refusing_writer(observation, audit):
+        raise ValueError("AUDIT_WRITE_FAILED")
+
+    capture, minter = build(audit_writer=refusing_writer)
+    start(capture)
+    frames_at(capture, minter, [1.0, 1.1, 1.2])
+    capture.on_reference(reference(1.1))
+    assert capture.drain() == 1
+    for call in (lambda: capture.finish(1.4), lambda: capture.finish(1.4), capture.drain,
+                 lambda: capture.on_reference(reference(1.5)),
+                 lambda: feed(capture, minter, camera="head", stamp_s=1.5)):
+        with pytest.raises(ValueError, match="AUDIT_WRITE_FAILED"):
+            call()
+
+
+def test_an_expired_budget_does_not_replace_the_first_failure():
+    ticks = {"now": 0.0}
+    capture, minter = build(deadline_s=120.0, clock=lambda: ticks["now"])
+    start(capture)
+    frames_at(capture, minter, [1.0])
+    feed(capture, minter, camera="head", stamp_s=1.1)      # only the head moved on
+    with pytest.raises(ValueError, match="NO_NEW_ACQUISITION"):
+        capture.drain()
+    ticks["now"] = 999.0
+    with pytest.raises(ValueError, match="NO_NEW_ACQUISITION"):
+        capture.on_event({"kind": "phase", "sim_time_s": 9.0})
+    with pytest.raises(ValueError, match="NO_NEW_ACQUISITION"):
+        capture.finish(1.4)
