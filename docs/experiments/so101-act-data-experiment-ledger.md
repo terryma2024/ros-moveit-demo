@@ -42901,3 +42901,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   task8 and generic-artifact suites.
 - **State.** **F14, F3 and F1 closed**; **F11 first cut landed, second cut determined to the two values**; F5/F12/F13
   open; the goal is paused. HEAD `e608a14b5`; twenty-three gates green.
+
+
+## CP-2268 — F11's endpoint check is in; its supply at the seal needs the call's verbatim text
+
+- **Landed** (`episode_audit.py`): `_window_matches_observed` accepts `physics_times=()` and, when given, refuses a
+  window whose `first_command_s` is later than the first physics instant or whose `physics_end_s` does not cover the
+  last one — the directions CP-2267 corrected. The fixture's `physics_end_s` is now 1.2, matching its history. With
+  the parameter defaulting to empty the check is inert, so the suite stays green (**204 passed** across the audit,
+  release-boundary, task8 and generic-artifact suites).
+- **The one thing left**: the seal must pass the physics times. Three attempts to patch that call failed on its
+  **text**, not on its shape — the committed call is not the two-argument form the earlier read showed, and my two
+  `write_text`-after-second-assert scripts died before writing, which is why the first attempt left no trace. The
+  grep for the call and its three following lines is printed alongside this entry, so the next attempt patches the
+  verbatim text with a write after each edit.
+- **State.** **F14, F3 and F1 closed**; **F11 first cut landed, second cut's check in and its supply one read away**;
+  F5/F12/F13 open; the goal is paused. HEAD `ea12605c4`; twenty-three gates green.

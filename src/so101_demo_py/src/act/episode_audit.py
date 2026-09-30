@@ -620,7 +620,7 @@ class _Files:
                 "events": self.events, "references": self.references, "physics": self.physics}
 
 
-def _window_matches_observed(window: dict, row_times, acquisitions) -> bool:
+def _window_matches_observed(window: dict, row_times, acquisitions, physics_times=()) -> bool:
     """T3-F11: one predicate for the window, shared by the seal and the readback."""
 
     """T3-F11: a formal window must describe the rows and acquisitions this audit actually holds."""
@@ -632,6 +632,12 @@ def _window_matches_observed(window: dict, row_times, acquisitions) -> bool:
     elif row_times:
         # an outcome other than complete may not accompany labelled rows
         return False
+    # T3-F11: the endpoints are compared with the physics history they claim to summarise — the command is
+    # issued before the physics moves and the end must cover the last row
+    if physics_times:
+        if (window["first_command_s"] > min(physics_times) + _TOLERANCE_S
+                or window["physics_end_s"] < max(physics_times) - _TOLERANCE_S):
+            return False
     schedule = window["source_schedule"]
     if set(window["streams_required"]) - set(schedule):
         return False
@@ -1019,7 +1025,10 @@ def verify_audit_manifest(path: Path) -> dict:
                                      "AUDIT_ACQUISITION_INVALID")
         if not _window_matches_observed(manifest["window"],
                                         [row["sim_time_s"] for row in _bound_rows],
-                                        {row["acquisition_id"]: row for row in _acquisition_rows}):
+                                        {row["acquisition_id"]: row for row in _acquisition_rows},
+                                        [row["sim_time_s"] for row in _records(
+                                            audit / "physics.jsonl", _PHYSICS_FIELDS,
+                                            "AUDIT_PHYSICS_INVALID")]):
             raise ValueError("AUDIT_WINDOW_INVALID")
     if formal_window and not _formal_coverage_ok(audit):
         # the seal gate's coverage requirement holds when the audit is read back, not only when sealed

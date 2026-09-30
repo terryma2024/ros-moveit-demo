@@ -720,7 +720,7 @@ def _window(**overrides):
     window = {"source_schedule": {"head": [1.0, 1.1, 1.2], "wrist": [1.0, 1.1, 1.2]},
               "streams_required": ["head", "wrist"], "cadence_s": 0.1, "permitted_gaps_s": [],
               "collection_start_s": 1.0, "collection_end_s": 1.2, "first_command_s": 1.0,
-              "physics_end_s": 1.1, "label_cutoff_s": 1.0, "outcome": "complete"}
+              "physics_end_s": 1.2, "label_cutoff_s": 1.0, "outcome": "complete"}
     window.update(overrides)
     return window
 
