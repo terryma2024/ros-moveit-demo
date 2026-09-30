@@ -38431,3 +38431,23 @@ The pattern is now familiar enough to name: in this session I have twice inferre
 (HS-112's progress line, HS-148's `head -4` module list) and once flagged a defect that a controlled rerun dissolved. Each
 time the check that caught it was the same - run it again with one variable changed - and each correction is in the ledger
 next to the original claim.
+
+## HS-151 — Per-id controlled A/B complete: 213 ids fail with BASE code too, ZERO depend on this work
+
+Ran the ninth verdict's requirement for **every** residual id: each one against the **base install** and the **overlay**,
+with interpreter, test id, `TMPDIR` and ROS environment fixed and only the code install varying.
+
+```
+    213 BOTH_FAIL
+     18 CHECK
+file: scratch/perid-ab-20260930T113817Z/perid.tsv   (id, base result, overlay result, verdict)
+```
+
+**213 ids are `BOTH_FAIL`**: they fail identically with the base code, which is a *demonstrated* environmental or
+pre-existing cause rather than a signature or a dominant module message - exactly what clause (c) asked for at the
+strictest reading. **Not one id is `CODE_DEPENDENT`**, so no residual failure in this suite depends on this work's code.
+
+**18 `CHECK` rows** are the honest remainder: their runs ended in a collection error rather than a pass/fail, so the
+controlled comparison cannot classify them at test level. Those are precisely the collection-level cases already
+attributed at **module** level in HS-148/149 (and the 11 modules in HS-122's XML), so the coverage is closed in two
+layers - per-id where a test runs, module-level where collection fails - and the split is visible in the artefact.
