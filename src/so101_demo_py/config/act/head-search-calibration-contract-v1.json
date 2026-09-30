@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "contract": "head-search-calibration-contract/v1",
+  "description": "The seventeen measured head-search values. Each entry names the unit, the formula that produces it, who owns it in production and which consumer field reads it; the bundle records the observed distribution and the ordered input digests for every measurement.",
+  "parameters": {
+    "horizontal_fov_rad": {
+      "unit": "rad",
+      "formula_id": "head_search.horizontal_fov_rad",
+      "margin": 0.0,
+      "production_owner": "perception",
+      "consumer_field": "head_search.horizontal_fov_rad"
+    },
+    "lock_valid_neck_rad": {
+      "unit": "rad",
+      "formula_id": "head_search.lock_valid_neck_rad",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.lock_valid_neck_rad"
+    },
+    "coarse_step_rad": {
+      "unit": "rad",
+      "formula_id": "head_search.coarse_step_rad",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.coarse_step_rad"
+    },
+    "search_timeout_s": {
+      "unit": "s",
+      "formula_id": "head_search.search_timeout_s",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.search_timeout_s"
+    },
+    "min_confidence": {
+      "unit": "ratio",
+      "formula_id": "head_search.min_confidence",
+      "margin": 0.0,
+      "production_owner": "perception",
+      "consumer_field": "head_search.min_confidence"
+    },
+    "tracking_iou": {
+      "unit": "ratio",
+      "formula_id": "head_search.tracking_iou",
+      "margin": 0.0,
+      "production_owner": "perception",
+      "consumer_field": "head_search.tracking_iou"
+    },
+    "min_bbox_aspect": {
+      "unit": "ratio",
+      "formula_id": "head_search.min_bbox_aspect",
+      "margin": 0.0,
+      "production_owner": "perception",
+      "consumer_field": "head_search.min_bbox_aspect"
+    },
+    "min_area_px2": {
+      "unit": "px^2",
+      "formula_id": "head_search.min_area_px2",
+      "margin": 0.0,
+      "production_owner": "perception",
+      "consumer_field": "head_search.min_area_px2"
+    },
+    "center_deadband_px": {
+      "unit": "px",
+      "formula_id": "head_search.center_deadband_px",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.center_deadband_px"
+    },
+    "vertical_bounds_px": {
+      "unit": "px",
+      "formula_id": "head_search.vertical_bounds_px",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.vertical_bounds_px"
+    },
+    "max_fine_corrections": {
+      "unit": "count",
+      "formula_id": "head_search.max_fine_corrections",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.max_fine_corrections"
+    },
+    "max_fine_total_rad": {
+      "unit": "rad",
+      "formula_id": "head_search.max_fine_total_rad",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.max_fine_total_rad"
+    },
+    "max_age_s": {
+      "unit": "s",
+      "formula_id": "head_search.max_age_s",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.max_age_s",
+      "bound": {
+        "maximum": 0.15
+      }
+    },
+    "max_skew_s": {
+      "unit": "s",
+      "formula_id": "head_search.max_skew_s",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.max_skew_s",
+      "bound": {
+        "maximum": 0.05
+      }
+    },
+    "submit_lead_s": {
+      "unit": "s",
+      "formula_id": "head_search.submit_lead_s",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.submit_lead_s"
+    },
+    "stop_velocity_rad_s": {
+      "unit": "rad/s",
+      "formula_id": "head_search.stop_velocity_rad_s",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.stop_velocity_rad_s"
+    },
+    "stop_latency_s": {
+      "unit": "s",
+      "formula_id": "head_search.stop_latency_s",
+      "margin": 0.0,
+      "production_owner": "controller",
+      "consumer_field": "head_search.stop_latency_s"
+    }
+  },
+  "hard_bounds": {
+    "max_age_s": {
+      "maximum": 0.15
+    },
+    "max_skew_s": {
+      "maximum": 0.05
+    }
+  },
+  "rejections": [
+    "HEAD_SEARCH_CALIBRATION_BOUND",
+    "HEAD_SEARCH_CALIBRATION_FALSE_CANDIDATE",
+    "HEAD_SEARCH_CALIBRATION_TWO_CUP_MISSING",
+    "HEAD_SEARCH_CALIBRATION_IDENTITY_SWITCH",
+    "HEAD_SEARCH_CALIBRATION_NON_FINITE",
+    "HEAD_SEARCH_CALIBRATION_TIME_REGRESSION",
+    "HEAD_SEARCH_CALIBRATION_UNSAFE_MOTION",
+    "HEAD_SEARCH_CALIBRATION_DOMAIN_UNCOVERED"
+  ]
+}

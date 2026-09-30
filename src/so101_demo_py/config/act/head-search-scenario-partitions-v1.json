@@ -1,0 +1,308 @@
+{
+  "schema_version": 1,
+  "document": "head-search-scenario-partitions/v1",
+  "description": "The single tracked source of head-search seed partitions. calibration, held_out_evaluation and the 40-item qualification list are disjoint, no scene group repeats, and every qualification item carries one of the ten approved condition classes and one of the three anchors.",
+  "condition_classes": [
+    "nominal",
+    "left_anchor",
+    "forward_anchor",
+    "distractor_present",
+    "two_cups",
+    "no_cup",
+    "low_light",
+    "partial_occlusion",
+    "fast_interruption",
+    "reacquire_after_stop"
+  ],
+  "anchors": [
+    "default",
+    "left",
+    "forward"
+  ],
+  "calibration": [
+    700000,
+    700001,
+    700002,
+    700003,
+    700004,
+    700005,
+    700006,
+    700007,
+    700008,
+    700009,
+    700010,
+    700011,
+    700012,
+    700013,
+    700014,
+    700015,
+    700016,
+    700017,
+    700018,
+    700019
+  ],
+  "held_out_evaluation": [
+    800000,
+    800001,
+    800002,
+    800003,
+    800004,
+    800005,
+    800006,
+    800007,
+    800008,
+    800009,
+    800010,
+    800011,
+    800012,
+    800013,
+    800014,
+    800015,
+    800016,
+    800017,
+    800018,
+    800019
+  ],
+  "qualification": [
+    {
+      "seed": 900000,
+      "scene_group_id": "scene-000900000",
+      "condition_class": "nominal",
+      "anchor": "default"
+    },
+    {
+      "seed": 900001,
+      "scene_group_id": "scene-000900001",
+      "condition_class": "left_anchor",
+      "anchor": "left"
+    },
+    {
+      "seed": 900002,
+      "scene_group_id": "scene-000900002",
+      "condition_class": "forward_anchor",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900003,
+      "scene_group_id": "scene-000900003",
+      "condition_class": "distractor_present",
+      "anchor": "default"
+    },
+    {
+      "seed": 900004,
+      "scene_group_id": "scene-000900004",
+      "condition_class": "two_cups",
+      "anchor": "left"
+    },
+    {
+      "seed": 900005,
+      "scene_group_id": "scene-000900005",
+      "condition_class": "no_cup",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900006,
+      "scene_group_id": "scene-000900006",
+      "condition_class": "low_light",
+      "anchor": "default"
+    },
+    {
+      "seed": 900007,
+      "scene_group_id": "scene-000900007",
+      "condition_class": "partial_occlusion",
+      "anchor": "left"
+    },
+    {
+      "seed": 900008,
+      "scene_group_id": "scene-000900008",
+      "condition_class": "fast_interruption",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900009,
+      "scene_group_id": "scene-000900009",
+      "condition_class": "reacquire_after_stop",
+      "anchor": "default"
+    },
+    {
+      "seed": 900010,
+      "scene_group_id": "scene-000900010",
+      "condition_class": "nominal",
+      "anchor": "left"
+    },
+    {
+      "seed": 900011,
+      "scene_group_id": "scene-000900011",
+      "condition_class": "left_anchor",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900012,
+      "scene_group_id": "scene-000900012",
+      "condition_class": "forward_anchor",
+      "anchor": "default"
+    },
+    {
+      "seed": 900013,
+      "scene_group_id": "scene-000900013",
+      "condition_class": "distractor_present",
+      "anchor": "left"
+    },
+    {
+      "seed": 900014,
+      "scene_group_id": "scene-000900014",
+      "condition_class": "two_cups",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900015,
+      "scene_group_id": "scene-000900015",
+      "condition_class": "no_cup",
+      "anchor": "default"
+    },
+    {
+      "seed": 900016,
+      "scene_group_id": "scene-000900016",
+      "condition_class": "low_light",
+      "anchor": "left"
+    },
+    {
+      "seed": 900017,
+      "scene_group_id": "scene-000900017",
+      "condition_class": "partial_occlusion",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900018,
+      "scene_group_id": "scene-000900018",
+      "condition_class": "fast_interruption",
+      "anchor": "default"
+    },
+    {
+      "seed": 900019,
+      "scene_group_id": "scene-000900019",
+      "condition_class": "reacquire_after_stop",
+      "anchor": "left"
+    },
+    {
+      "seed": 900020,
+      "scene_group_id": "scene-000900020",
+      "condition_class": "nominal",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900021,
+      "scene_group_id": "scene-000900021",
+      "condition_class": "left_anchor",
+      "anchor": "default"
+    },
+    {
+      "seed": 900022,
+      "scene_group_id": "scene-000900022",
+      "condition_class": "forward_anchor",
+      "anchor": "left"
+    },
+    {
+      "seed": 900023,
+      "scene_group_id": "scene-000900023",
+      "condition_class": "distractor_present",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900024,
+      "scene_group_id": "scene-000900024",
+      "condition_class": "two_cups",
+      "anchor": "default"
+    },
+    {
+      "seed": 900025,
+      "scene_group_id": "scene-000900025",
+      "condition_class": "no_cup",
+      "anchor": "left"
+    },
+    {
+      "seed": 900026,
+      "scene_group_id": "scene-000900026",
+      "condition_class": "low_light",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900027,
+      "scene_group_id": "scene-000900027",
+      "condition_class": "partial_occlusion",
+      "anchor": "default"
+    },
+    {
+      "seed": 900028,
+      "scene_group_id": "scene-000900028",
+      "condition_class": "fast_interruption",
+      "anchor": "left"
+    },
+    {
+      "seed": 900029,
+      "scene_group_id": "scene-000900029",
+      "condition_class": "reacquire_after_stop",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900030,
+      "scene_group_id": "scene-000900030",
+      "condition_class": "nominal",
+      "anchor": "default"
+    },
+    {
+      "seed": 900031,
+      "scene_group_id": "scene-000900031",
+      "condition_class": "left_anchor",
+      "anchor": "left"
+    },
+    {
+      "seed": 900032,
+      "scene_group_id": "scene-000900032",
+      "condition_class": "forward_anchor",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900033,
+      "scene_group_id": "scene-000900033",
+      "condition_class": "distractor_present",
+      "anchor": "default"
+    },
+    {
+      "seed": 900034,
+      "scene_group_id": "scene-000900034",
+      "condition_class": "two_cups",
+      "anchor": "left"
+    },
+    {
+      "seed": 900035,
+      "scene_group_id": "scene-000900035",
+      "condition_class": "no_cup",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900036,
+      "scene_group_id": "scene-000900036",
+      "condition_class": "low_light",
+      "anchor": "default"
+    },
+    {
+      "seed": 900037,
+      "scene_group_id": "scene-000900037",
+      "condition_class": "partial_occlusion",
+      "anchor": "left"
+    },
+    {
+      "seed": 900038,
+      "scene_group_id": "scene-000900038",
+      "condition_class": "fast_interruption",
+      "anchor": "forward"
+    },
+    {
+      "seed": 900039,
+      "scene_group_id": "scene-000900039",
+      "condition_class": "reacquire_after_stop",
+      "anchor": "default"
+    }
+  ]
+}
