@@ -39443,3 +39443,19 @@ command and reading the error, which is what I did.
 
 **No training has run** in either attempt (both failed in argument validation before touching the GPU), so there is no partial
 candidate and no wasted GPU time. Re-launching with `--head-dataset-root <head-dataset> --task-dataset-root <A dataset root>`.
+
+## HS-190 — The two errors were cumulative: the validator needs manifests AND roots
+
+```
+attempt 1 (manifests only)  -> training input error: --candidate needs --head-dataset-root, --task-dataset-root
+attempt 3 (roots only)      -> training input error: --candidate needs --head-manifest, --task-manifest
+```
+
+Read together, the requirement is **both pairs**, not either: the roots locate the datasets and the manifests identify them.
+Each error message named only what was missing *at that moment*, so each looked like the complete requirement - and I treated
+the second message as superseding the first rather than as the other half of it. That is the same partial-view error as
+HS-112/148/184, this time in a **sequence** of error messages rather than in one output.
+
+**Attempt 4 passes all four flags.** Still no training has run - all three failures were argument validation before the GPU
+was touched - so there is still no partial candidate and no wasted GPU time. The cost of this chain has been wall-clock and
+rounds, not artefacts.
