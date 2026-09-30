@@ -37925,3 +37925,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   after these land.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `71ec84df0`; no push,
   no evidence deletion, no hardware, no second stack.
+
+
+## CP-2038 — Task 3: where the controller feedback record must come from, read from the code
+
+- **The readback path checked first is not the source.** `pick_place_readback.py:203`'s
+  `capture_held_cup_handoff` validates *commanded* positions (`bounded_positions(commanded_positions)`) for a
+  stopped LIFT handoff; it carries no measured positions, velocities or status sequence, so the ratified
+  `controller_feedback` cannot be built there.
+- **The broker's status is the source.** `RosBrokerDriver` keeps per-kind controller status
+  (`self._statuses`, reconciled in `_reconcile_status(kind)`), which is where the measured positions and
+  velocities and a status sequence live; the SEARCH document's travel path is the readback dict's
+  `observation` or `reference` entry (both are already inside the closed key set the port validates), which is
+  what `_checked_aggregates` consumes.
+- **What the next pass must read before writing code**: `_reconcile_status` and the status handler in
+  `ros_broker.py`, to name the exact fields the record's seven keys map to, and whether the sequence it holds
+  is the monotonically increasing status sequence the schema requires. Mapping them by guesswork would repeat
+  the mistake the reviewer refused for `scene_revision`, so this stop is deliberate.
+- **Consequence.** The two controller gates (`joint_feedback_ok`, `controller_reference_ok`) stay at their
+  documented placeholder values for now; they are the last asserted gates in the SEARCH document, and the
+  pattern to replace them is already proven twice (CP-2029, CP-2034) with its controls (CP-2036).
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9d81d7a62`;
+  consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
