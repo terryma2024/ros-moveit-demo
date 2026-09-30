@@ -43461,3 +43461,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - reference halves, and a window derived from the rows the audit actually holds.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, its hybrid's last preparation done; goal paused.
+
+## CP-2303 - The hybrid fixture handed off, spec to the line, and the checkpoint that follows
+
+- What is in place for it: AlignedPort at file level (CP-2302); the minter for camera frames and the accepted
+- reference (CP-2293); _formal_writer for the lease (CP-2252); the three coverage relations it must satisfy
+- (CP-2290/2291/2292); and the release-boundary suite's request() plus FakePort.
+- What it must do, in order: build the formal writer with _formal_writer; mint head and wrist acquisitions at the
+- stamps the window will name; append one accepted reference carrying a complete raw group; run PickPlaceRunner(
+- AlignedPort(), audit=writer) with the request whose attempt is port.names['attempt_id']; then derive the window
+- from the rows the audit actually holds (the minter's stamps for source_schedule and streams_required, the runner's
+- last physics row for physics_end_s, its first for first_command_s, the last labelled row for label_cutoff_s,
+- outcome 'complete'); seal it and verify the manifest back.
+- Why it is worth finishing rather than skipping: it is the verdict's sentence that coverage be shown by an episode
+- that produced the history rather than a fixture that names it, and the current formal fixture still mints the
+- phase names from FORMAL_PHASES.
+- The checkpoint this stretch has reached, ready for an eighth review if the owner prefers that to finishing the
+- hybrid: F14, F3 and F1 closed with their required controls; F11's three source cuts landed with its two
+- negatives specified and one probe away; F12 three of four plus its carrier cut; F13 three of four with the
+- fourth blocked on CP-2285's contradiction; F5's first half complete. Every landed item names its own green run,
+- twenty-seven gates are recorded, and the tree carries nothing half-applied.
+- F14, F3 and F1 closed; goal paused; HEAD b7a6da8ef.
