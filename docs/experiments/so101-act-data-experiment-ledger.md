@@ -39339,3 +39339,14 @@ present so far (42 MB). So the correct reading of the previous round is: **auth 
 **Lesson, recorded because it is the fourth time this session that a partial view was mistaken for the whole:** a marker file
 that is appended to across runs cannot be waited on. The next wait uses a **fresh marker** created by the run in question
 (`step1b.done`), and I am not treating a reused path as a completion signal again.
+
+## HS-185 — Step 1's fetch is being waited on by process, not by a reused marker
+
+After HS-184, the wait is now anchored to the **live process** (`while pgrep -f step1b.sh`) and stamps a **fresh**
+`step1b.done` marker when it exits, rather than trusting a path the earlier run had already written. The wait outlived this
+round's tool timeout and became background job `bash-2228`; I will read its result when it reports rather than polling it.
+
+State while it runs: `hf auth whoami` ✓ (`zjumty`), `best.pt` sha256 ✓ (`OK`, `rc=0` against the pinned
+`f281d25258493e2c…`), and the 3624-file fetch in flight into
+`$HEAD_EVIDENCE/models/huggingface/so101-yolo11n-seg-plastic-cup/b55430fb…/`. Nothing else in Task 12 can start until the
+file set is complete, because Step 2 (generate and seal the head dataset) consumes the pinned A root.
