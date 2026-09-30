@@ -224,6 +224,34 @@ class RosBrokerDriver:
             if observer is not None:
                 observer.accept(kind,message,received_monotonic_s=received)
 
+    def controller_feedback(self,kind,when):
+        """The ratified `controller_feedback` record for one kind, from the state this driver holds.
+
+        `status_sequence` is this driver's own **feedback-read counter**: the action status list carries no
+        monotonic sequence (CP-2039), so the number is the driver's and the field's meaning is documented
+        here rather than invented — the same choice `scene_revision` already uses. The measured values are
+        the epoch joint state, the commanded values are the last accepted reference's, and a stale or absent
+        state refuses instead of producing a half-filled record.
+        """
+
+        with self._lock:
+            if self._epoch is None:
+                raise RuntimeError('RESET_EPOCH_UNAVAILABLE')
+            _scalar,received=self._epoch
+            positions=self._positions
+            velocities=self._velocity
+            names=getattr(self,'_reference_names',{}).get(kind)
+            commanded=self._references.get(kind)
+            if (positions is None or velocities is None or names is None or commanded is None):
+                raise RuntimeError('FEEDBACK_UNAVAILABLE')
+            if not 0<=self.monotonic()-received<=self.max_age:
+                raise RuntimeError('FEEDBACK_STALE')
+            self._feedback_reads=getattr(self,'_feedback_reads',0)+1
+            sequence=self._feedback_reads
+        return {'controller':kind,'joint_names':names,'commanded_positions':commanded[0],
+                'measured_positions':positions,'measured_velocities':velocities,
+                'status_sequence':sequence,'sim_time_s':when}
+
     def reference_frames(self,kind,when):
         """The ratified A.1 frame for one controller kind, evaluated for the instant `when`.
 

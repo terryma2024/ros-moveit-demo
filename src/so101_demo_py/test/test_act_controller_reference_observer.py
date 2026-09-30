@@ -222,3 +222,29 @@ def test_the_broker_exposes_a_ratified_frame_for_the_publication_basis():
     driver._reference_interval = lambda kind: [("goal-1", 1.0), ("goal-2", 1.0)]
     with pytest.raises(RuntimeError, match="REFERENCE_INTERVAL_INVALID"):
         driver.reference_frames("arm", 1.1)
+
+
+def test_the_broker_produces_the_ratified_controller_feedback_record():
+    """Proposal C: the feedback record comes from the state the driver holds, with its own counter."""
+
+    import threading
+
+    driver = object.__new__(RosBrokerDriver)
+    driver._lock = threading.RLock()
+    driver.max_age = 0.2
+    driver.monotonic = lambda: 10.05
+    driver._epoch = (SimpleNamespace(reset_epoch=2), 10.0)
+    driver._positions = (0.1, 0.2, 0.3, 0.4, 0.5)
+    driver._velocity = (0.0,) * 5
+    driver._reference_names = {"arm": ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex",
+                                       "wrist_roll")}
+    driver._references = {"arm": ((0.5, 0.4, 0.3, 0.2, 0.1), (0.0,) * 5, 10.0, 1.0)}
+    first = driver.controller_feedback("arm", 1.1)
+    assert first["controller"] == "arm" and first["status_sequence"] == 1
+    assert first["measured_positions"] == (0.1, 0.2, 0.3, 0.4, 0.5)
+    assert first["commanded_positions"] == (0.5, 0.4, 0.3, 0.2, 0.1)
+    assert first["sim_time_s"] == 1.1
+    assert driver.controller_feedback("arm", 1.1)["status_sequence"] == 2
+    driver._positions = None
+    with pytest.raises(RuntimeError, match="FEEDBACK_UNAVAILABLE"):
+        driver.controller_feedback("arm", 1.1)

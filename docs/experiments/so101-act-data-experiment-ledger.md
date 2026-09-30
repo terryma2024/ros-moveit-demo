@@ -37973,3 +37973,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `0342282c0`;
   consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2040 — Task 3: the broker produces the ratified controller feedback record
+
+- **What landed.** `RosBrokerDriver.controller_feedback(kind, when)` returns the ratified record from the
+  state the driver already holds: `measured_positions`/`measured_velocities` are the epoch joint state it keeps
+  for `approval_snapshot`, `commanded_positions` are the last accepted reference's, `joint_names` are the
+  published names from CP-1987, `sim_time_s` is the caller's instant, and `status_sequence` is the driver's own
+  **feedback-read counter**, documented in the docstring as exactly that because the action status list has no
+  monotonic sequence (CP-2039) — the same resolution `scene_revision` already uses. An absent state refuses
+  with `FEEDBACK_UNAVAILABLE` and an old one with `FEEDBACK_STALE`, so a half-filled record cannot leave the
+  driver.
+- **Owner-visible choice.** This implements option (a) from CP-2039 (a documented driver-side counter), which I
+  said I would take if the question went unanswered; if the owner prefers amending the field, the change is
+  this method's counter line plus the audit schema and its controls.
+- **Evidence.** `logs/task3-fb.run` rc=0: **121 passed** across the observer, audit, search-port and supervisor
+  suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile proof. The
+  control builds a driver without `__init__` and asserts the record's fields, the counter's increment and the
+  refusal when the joint state is absent.
+- **What remains for the two controller gates.** Thread this record through the readback's `observation` or
+  `reference` entry into the SEARCH document, derive `joint_feedback_ok`/`controller_reference_ok` from it at
+  the same sites that now derive the scene gate, and add the three-way control (present, absent, stale) —
+  the pattern is proven three times over (CP-2029, CP-2034, CP-2036).
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `ae3a5c6cd`;
+  consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
