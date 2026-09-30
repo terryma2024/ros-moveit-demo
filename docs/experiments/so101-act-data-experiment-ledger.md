@@ -35061,3 +35061,24 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   boundary rather than a Head Search regression but the fresh closure did **not** pass, and the benchmark
   gate is **not** green (62 pre-existing environment failures, attribution provisional). Both belong to
   Task 11, and neither is claimed as passed here.
+
+## HS-021 — Third Task 4 verdict: five findings closed, one P1 fixed (commit 297ffc39c)
+
+- **Verdict:** `reviews/task4/task4-third-verdict.md` (GPT-6.1-Sol/high, fresh session, source-only pass).
+  Findings 1, 2, 3, 5 and 6 stayed CLOSED on source evidence; finding 4 was **NOT CLOSED** with one P1.
+- **The P1 was real and mine.** Merging the frozen document's top-level `tracker`/`postprocess`/`runtime`
+  into the per-domain operating point *only when the key was absent* let a neutral per-domain value mask
+  an unsupported top-level declaration: `operating_point={"tracker": {}}` with
+  `document={"tracker": {"type": "unsupported-tracker"}}` left `declared["tracker"] == {}`, which the
+  exemption passed. Both sources are now inspected independently by `_unsupported_declarations`, the one
+  tracker form this path applies is the IoU NMS threshold wherever it is declared, and the reviewer's exact
+  masking example plus empty, neutral and conflicting variants are tests (commit `297ffc39c`).
+- **Process correction:** that verdict executed **nothing** - no reproduction, pytest, build, CUDA run or
+  installed entry point - because my brief told it not to. That is why Task 4 keeps returning "closed on
+  inspection, unverified in practice", so the next review is briefed to **run** the five outstanding
+  replays and report their outputs: the retained-C counterexample where B leads by 0.09 on episode
+  recall/F1 must raise a margin error; the strongest qualifying challenger must win; a traversing manifest
+  path must be refused; a wrong supplied digest must be refused; and the plan's Task 12 `compare` argument
+  shape must reach evaluation rather than argparse.
+- **Gate after the fix:** benchmark suite 22 passed; ordinary suites 99 passed, 1 skipped; `ruff check`
+  clean. The two host items remain Task 11's and are still not claimed.
