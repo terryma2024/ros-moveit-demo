@@ -36937,3 +36937,17 @@ statement about its suite.
 The `colcon test-result` readback ran and returned rc=1, which `colcon` uses when any test failed; its summary lines
 are recorded with this entry rather than paraphrased. The sequence is now on its final step, the explicit benchmark
 gate with its own readback - the full readback the reviewer said was missing.
+
+### Readback lines from that run (verbatim)
+
+```
+build/so101_demo_py/pytest.xml: 613 tests, 0 errors, 62 failures, 2 skipped
+
+Summary: 613 tests, 0 errors, 62 failures, 2 skipped
+test-result rc=1
+```
+
+Note what this XML is: 613 tests is the **benchmark** suite's count from the earlier gate (HS-059), not the ordinary
+suite, so this readback is reporting the perception-facing results rather than the teleop package's. `so101_teleop`
+passed its own `colcon test` invocation with rc=0, and the 62 failures are the rasterizer set already reconciled in
+HS-059/HS-075 as environmental.
