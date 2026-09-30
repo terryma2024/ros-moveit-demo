@@ -37423,3 +37423,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `e3a745319`;
   gate `logs/task3-xdist.run` **410 passed** (targeted twenty-file scope, xdist 8 workers); 39-path dirty
   baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2017 — Task 3: the exact wiring for the planning-scene producer, read from the code rather than guessed
+
+- **Call sites.** `_gate_facts(aggregates, world)` is defined at `pick_place_search_boundary.py:272` and called
+  at `:308` and `:402`, both inside the boundary, where `self.planning_scene` is already held and already read
+  for `is_attached` in `planning_attached()` (`:526-534`). On the port side, `_search_evidence(...)`
+  (`pick_place_search_port.py:313`) builds the phase document and the literal sits at `:412` inside it, with
+  `observed: PickPlaceSearchObservation` in scope — so both sites can receive a verdict without new plumbing
+  into unrelated layers.
+- **What the ratified record needs beyond the current probe.** `planning_scene_observation` requires
+  `scene_revision`, `attached_objects`, `world_object_ids`, `is_diff`, `sim_time_s` and `source`. The port's
+  only read today is `is_attached()` returning a `bool` (type-checked, refusing anything else), so the
+  producer needs `RosTaskScenePort` to expose the scene document (or its revision and object ids) before the
+  record can be honest — deriving it from `is_attached` alone would manufacture the missing fields, which the
+  reviewer explicitly refused.
+- **Ordered next steps, so the change is mechanical.** (1) Extend the scene port with a read that returns the
+  revision, the attached and world object ids, the diff flag and the read instant. (2) Have the readback that
+  establishes the eight gates return `planning_scene_observation` (and `controller_feedback` from the
+  controller status it already reads) alongside the aggregates. (3) Change `_gate_facts` and the port's
+  evidence builder to **derive** `planning_scene_ok`/`joint_feedback_ok`/`controller_reference_ok` from those
+  records on the same instant, passing the receipt in from `:308`/`:402`. (4) Keep the six phase-document
+  tests green (CP-2016 names them) and add controls that a missing or off-instant record fails the gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9078cc6af`;
+  targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
+  untouched; no push, no evidence deletion, no hardware, no second stack.
