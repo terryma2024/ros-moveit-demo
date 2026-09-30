@@ -35192,6 +35192,27 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   commits at Step 4, after the implementation makes them GREEN - so the next round implements
   `act/head_search_calibration.py`, the contract, the schema and the partitions document, then commits.
 
+## HS-028 — Task 6 implemented: the seventeen-value calibration bundle (commit 6eb4731ea)
+
+- **Code:** `src/act/head_search_calibration.py` with `MEASUREMENT_NAMES` (the seventeen),
+  `CANDIDATE_MEASUREMENTS` (the four perception values), `Measurement` (value, unit, formula id, ordered
+  input SHA256s, observed distribution, margin, production owner, consumer field),
+  `HeadSearchCalibrationBundle` (with a canonical `sha256`), `calibrate_head_search(inputs)` and
+  `load_scenario_partitions(document)`. Hard bounds: `max_age_s <= 0.15`, `max_skew_s <= 0.05`. Refusals:
+  `HEAD_SEARCH_CALIBRATION_BOUND`, `..._FALSE_CANDIDATE`, `..._TWO_CUP_MISSING`, `..._IDENTITY_SWITCH`,
+  `..._NON_FINITE`, `..._TIME_REGRESSION`, `..._UNSAFE_MOTION`, `..._DOMAIN_UNCOVERED`.
+- **Tracked documents:** `config/act/head-search-calibration-contract-v1.json` (the seventeen parameters
+  with unit, formula id, margin, owner, consumer field and the two bounds),
+  `config/act/head-search-calibration-contract-schema.json` (rejects an unknown parameter or a missing
+  field), `config/act/head-search-scenario-partitions-v1.json` (disjoint calibration, held-out and 40-item
+  qualification seeds; the ten approved condition classes; the three anchors; no repeated scene), and
+  `task8-calibration-measurement-contract-v2.json` extended with the head-search parameter list.
+- **Gate:** RED first (`rc=2`, module absent, `scratch/head-test-20260930T075246Z-S5SXl3Cr`), now 7 passed
+  for the new suite and 14 passed for the companion `test_act_calibration.py` under `head_test_render` (it
+  needs ROS, which plain `head_test` does not provide). `ruff check` clean; a lint failure stopped the first
+  commit attempt before anything was staged.
+- **Owed:** Task 6's review verdict, then Task 7.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
