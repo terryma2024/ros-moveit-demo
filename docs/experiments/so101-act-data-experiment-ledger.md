@@ -40113,3 +40113,26 @@ explicitly) that only Task 13's runtime records. Two honest options remain, unch
 - **(b)** accept the plan's dependency and treat Step 5 as belonging with Task 13, recording Task 12 complete through Step 4.
 
 Nothing further is actionable without that decision, and I am not choosing it on the user's behalf.
+
+## HS-218 — Episode recording is not a new subsystem: it is the existing collection pipeline
+
+Discussion input, read-only while the user decides (no implementation started). Searching for the producer of per-scene
+episode records:
+
+- **no test references** `held-out-episodes` / `episode-records`, so the contract is not pinned by tests the way the frozen
+  candidate identity is;
+- the modules that handle `scene_id` are the **collection family**: `act/collection.py`, `act/parallel_collection.py`,
+  `act/parallel_collection_recovery.py`, `act/sampling.py`, and `act/bundle.py` - and `bundle.py:215` already exports
+  `episodes/<scene_id>.json` in exactly the shape the gate looks for.
+
+So the "episodes recorded by the calibration run" are most plausibly the **existing ACT collection pipeline** driven over the
+partitions' `calibration` and `held_out_evaluation` seeds, not something that must be written from scratch. That changes the
+cost of HS-216/217's options (a) and (d) substantially: the remaining work would be **wiring a collector run over the
+held-out seeds and pointing `--episode-records` at its output**, rather than inventing an episode recorder.
+
+It also suggests why `so101_head_search_calibration run` refuses as Task 13's: that CLI is probably the driver that would call
+this collection for the formal campaign, which is consistent with the plan's ordering being deliberate rather than mistaken -
+Task 12's Step 5 may be intended to run once Task 13's runtime has collected the episodes.
+
+**Still no implementation started**, per the user's "stop and discuss": this entry exists so the discussion has the missing fact
+- episode collection already exists as a subsystem - rather than a cost estimate I made without looking.
