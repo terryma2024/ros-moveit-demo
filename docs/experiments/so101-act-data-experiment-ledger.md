@@ -41774,3 +41774,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4's QC increments
   wait behind Task 3 by the plan's rule and its commit half is located but not wired; items 5+ wait on the four
   blocked bindings. HEAD `960bf9a76`; twelve gates green.
+
+
+## CP-2213 — Item 4's commit half: the exact call sequence, read from both ends
+
+- **The verifier's contract** (`act/result_store.py:305-330`): `ActCollectionResultVerifier(worker_roots:
+  Mapping[str, Path])` is built from a worker-id → root map, and `verify(lease: LeaseIdentity, location: str,
+  run_mode: RunMode) -> dict` refuses with `WRONG_RUN_MODE`, `LEASE_LOCATION_MISMATCH`, `RESULT_MISSING` and
+  `RESULT_SCHEMA_INVALID` before it returns a verified document; `_expected(lease)` refuses `LEASE_IDENTITY_MISMATCH`
+  when the lease's worker is not among the roots. The existing suite constructs it as
+  `ActCollectionResultVerifier({"w00": worker_root})` and calls `verify`, so the caller's inputs are a lease, the
+  location the result claims, and the run mode.
+- **The commit point** (CP-2111): the coordinator records terminal results in `adaptive_runner.py` — `_result_document`
+  (line 68) builds the journalled document, `journal.append` writes it (118), `_apply_result` (177) is where a result
+  becomes terminal, and the replay at 138 restores them. Nothing there verifies an episode today.
+- **The sequence to wire, therefore**: before `_apply_result` lets a result become terminal, construct the verifier
+  from the run's worker roots, call `verify(result.lease, str(result.evidence_root), run_mode)`, and treat any of its
+  refusals as a **non-terminal** outcome — the episode stays uncommitted, which is exactly what the store's own tests
+  assert ("an unsealed directory cannot be committed, a corrupt episode never becomes business-failed"). The
+  `worker_roots` map and the `RunMode` are the two inputs the coordinator must be given, and the journal document is
+  unchanged: the verification gates the commit rather than adding a field.
+- **What decides the choice**: this is the wiring CP-2110/2111 located; the alternative — convincing the plan that
+  the coordinator's own journal suffices — is the owner's call, and the store's tests argue against it. The spec
+  above is what either resolution needs in code.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4's QC half exists
+  and passes its suites, its commit half now specified to the call; items 5+ wait on the four blocked bindings.
+  HEAD `ba0c26b30`; twelve gates green.
