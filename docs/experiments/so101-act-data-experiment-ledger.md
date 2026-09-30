@@ -38737,3 +38737,27 @@ the benchmark read-backs at the narrowed gate (HS-107).
 Thirteen verdicts, four self-retractions (HS-128/130, HS-153, HS-157), three measurement-design rebuilds, and one
 user-authorized contract narrowing (HS-161). Every one of those corrections is in the ledger next to the claim it
 replaced, which is the only reason the final state is legible.
+
+## HS-163 — Task 12 started: boundary, steps, and the prerequisites Step 1 checks
+
+Plan Task 12: *"Generate 1200 head images, train B/C, and run the real A/B/C gate."* The only repository edit it permits is
+this ledger's model-decision checkpoint; every dataset, weight, report and log is immutable evidence under the registered
+root. It consumes Task 11's installed toolchain and pinned A weights, and produces a sealed head dataset, B/C weights,
+three frozen candidate identities, `model-comparison.json` and `model-selection-verdict.json`.
+
+Step 1 asserts, before any download or generation:
+
+- `TOOLCHAIN_RUN` and `GEOMETRY_RUN` are set, are under `$HEAD_EVIDENCE`, and contain `install/setup.zsh` and
+  `head-camera-geometry.json` respectively;
+- the toolchain's `source-commit.txt` resolves to a real commit, and `ros2 pkg prefix so101_demo_py` points at the
+  toolchain's install prefix (the installed-provenance check from HS-105, now enforced by the plan itself);
+- `MODEL_RUN` does not already exist;
+- the A weights download is **revision-pinned** (`b55430fb75c0207b35bd20f4e328e042bff06f3f`) and then verified by
+  **sha256** against a recorded digest (`f281d25258493e2c…`), with `hf auth whoami` required and credentials never printed;
+- the scenario partitions file and the A dataset manifest exist;
+- the GPU is recorded (`nvidia-smi` → `gpu.txt`).
+
+So the first work is environmental verification, not generation, and the plan's `exit 1` guards mean a wrong toolchain root
+fails closed rather than training against the wrong install. My next step is to read the full Task 12 section and resolve
+`TOOLCHAIN_RUN`/`GEOMETRY_RUN` to the exact retained paths named in this ledger, then run Step 1's checks one at a time
+before any long-running generation.
