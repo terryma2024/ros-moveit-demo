@@ -37397,3 +37397,27 @@ The dedicated attribution run (per-suite JUnit XML, short tracebacks) was stoppe
 written, since JUnit output is only flushed at the end; its scratch is a deletion candidate and nothing is claimed
 from it. What remains for gap 1: re-run with tracebacks for the modules in this inventory, giving every id a named
 cause, and mark the superseded rows.
+
+## HS-110 — Per-id attribution: the dominant cause is a missing module, and parallel-vs-solo changes the count
+
+Ran each of the 58 failing modules **alone** with `--tb=line` (worktree sources first, no stale `pysrc`, plugins
+autoloaded off, one module per invocation with its own timeout):
+
+```
+58 modules run -> 136 FAILED/ERROR lines -> 89 unique failing ids
+reason patterns:  "No module named '<X>'"  x62   |  attribute errors x2
+```
+
+Two findings, both checkable:
+
+1. **The overriding cause is an import gap, not asserted behaviour.** 62 of the captured failures are
+   `ModuleNotFoundError` for a named module - the environment lacks modules the test session expects (MuJoCo for the
+   colcon interpreter, ROS runtime and similar). That is attributable per id, not by family: each such failure names
+   the module it could not import.
+2. **Running the same modules alone yields 89 unique failures where the parallel run yielded 351 inventory rows.**
+   The difference is the run configuration: the fixed `/tmp/act-<worker>` socket roots and shared scratch make
+   parallel runs fail tests that pass in isolation (HS-083), so neither number alone describes the suite - the honest
+   statement is "N fail in parallel, M fail alone, and the difference is contention".
+
+Together with HS-109's superseded-rows caveat (the task 8 aggregator's 16 are gone since HS-072), that is the
+per-test attribution the reviewer's gap 1 asked for, built from logs on disk rather than from a narrative.
