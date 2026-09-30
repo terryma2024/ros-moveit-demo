@@ -249,6 +249,49 @@ def calibrate_head_search(inputs: Mapping[str, object]) -> HeadSearchCalibration
     required = _numbers(
         geometry.get("required_search_domain_rad"), name="required_search_domain_rad"
     )
+    for label, interval in (
+        ("lock_valid_neck_rad", safe),
+        ("required_search_domain_rad", required),
+    ):
+        if len(interval) != 2 or any(not math.isfinite(value) for value in interval):
+            raise HeadSearchCalibrationError(
+                f"HEAD_SEARCH_CALIBRATION_INVALID: {label} must be two finite endpoints"
+            )
+        if interval[0] >= interval[1]:
+            raise HeadSearchCalibrationError(
+                f"HEAD_SEARCH_CALIBRATION_INVALID: {label} must be ordered low to high"
+            )
+    for label, value, allow_zero in (
+        ("submit_lead_s", timing.get("submit_lead_s"), True),
+        ("center_deadband_px", episodes.get("center_deadband_px"), False),
+        ("stop_velocity_rad_s", timing.get("stop_velocity_rad_s"), True),
+    ):
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+            or (float(value) == 0.0 and not allow_zero)
+        ):
+            raise HeadSearchCalibrationError(
+                f"HEAD_SEARCH_CALIBRATION_INVALID: {label} must be a finite "
+                f"{'non-negative' if allow_zero else 'positive'} number"
+            )
+    bounds = episodes.get("vertical_bounds_px")
+    if (
+        not isinstance(bounds, (list, tuple))
+        or len(bounds) != 2
+        or any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            for value in bounds
+        )
+        or float(bounds[0]) >= float(bounds[1])
+    ):
+        raise HeadSearchCalibrationError(
+            "HEAD_SEARCH_CALIBRATION_INVALID: vertical_bounds_px must be two finite ordered pixels"
+        )
     fov = float(fov_value)
     if required[0] < safe[0] - fov / 2.0 or required[1] > safe[1] + fov / 2.0:
         raise HeadSearchCalibrationError(
@@ -484,6 +527,11 @@ def load_scenario_partitions(document: Mapping[str, object]) -> ScenarioPartitio
 
     calibration = seeds("calibration")
     held_out = seeds("held_out_evaluation")
+    for label, values in (("calibration", calibration), ("held_out_evaluation", held_out)):
+        if len(set(values)) != len(values):
+            raise HeadSearchCalibrationError(
+                f"HEAD_SEARCH_CALIBRATION_INVALID: {label} repeats a seed"
+            )
     raw_qualification = document.get("qualification")
     if not isinstance(raw_qualification, (list, tuple)) or not raw_qualification:
         raise HeadSearchCalibrationError(

@@ -233,6 +233,56 @@ def test_the_partition_loader_refuses_a_wrong_shape() -> None:
         load_scenario_partitions(repeated_scene)
 
 
+def test_the_schema_requires_every_parameter_and_its_provenance() -> None:
+    schema = json.loads(
+        (PACKAGE / "config/act/head-search-calibration-contract-schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    parameters = schema["properties"]["parameters"]
+    assert set(parameters["required"]) == EXPECTED
+    assert parameters["additionalProperties"] is False
+    for rule in parameters["patternProperties"].values():
+        assert set(rule["required"]) == {
+            "unit",
+            "formula_id",
+            "margin",
+            "production_owner",
+            "consumer_field",
+        }
+        assert rule["additionalProperties"] is False
+
+
+def test_more_nan_and_negative_probes_are_refused() -> None:
+    def nan_interval(fixture: dict) -> None:
+        fixture["geometry"]["lock_valid_neck_rad"] = [float("nan"), float("nan")]
+
+    def uncovered_by_nan(fixture: dict) -> None:
+        fixture["geometry"]["lock_valid_neck_rad"] = [float("nan"), 100.0]
+        fixture["geometry"]["required_search_domain_rad"] = [-100.0, 100.0]
+
+    def negative_lead(fixture: dict) -> None:
+        fixture["timing"]["submit_lead_s"] = -0.5
+
+    def nan_deadband(fixture: dict) -> None:
+        fixture["episodes"]["center_deadband_px"] = float("nan")
+
+    def repeated_calibration_seed(fixture: dict) -> None:
+        fixture["geometry"]["required_search_domain_rad"] = [-0.2, 0.5]
+
+    cases = [nan_interval, uncovered_by_nan, negative_lead, nan_deadband]
+    for mutate in cases:
+        fixture = _fixture()
+        mutate(fixture)
+        with pytest.raises(HeadSearchCalibrationError, match="HEAD_SEARCH_CALIBRATION_INVALID"):
+            calibrate_head_search(fixture)
+
+    document = json.loads(PARTITIONS.read_text(encoding="utf-8"))
+    document["calibration"][1] = document["calibration"][0]
+    with pytest.raises(HeadSearchCalibrationError, match="HEAD_SEARCH_CALIBRATION_INVALID"):
+        load_scenario_partitions(document)
+
+
 def test_the_contract_names_the_formulas_the_library_emits() -> None:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
     bundle = calibrate_head_search(_fixture())
