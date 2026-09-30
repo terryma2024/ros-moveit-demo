@@ -39968,3 +39968,17 @@ Two findings, one fixed and one that changes HS-208's policy:
 
 `cell.py` lives in the campaign root (`$MODEL_RUN/grid/cell.py`) and takes the toolchain site-packages, the campaign root, an
 output dir, and the two operating-point values, so every cell is reproducible from the artefact.
+
+## HS-212 — HS-208's hard gate belongs to Step 5, and the grid is launched for all three candidates
+
+HS-211 found that the static measurement returns no no-cup count. Rather than bolt an episode measurement onto the grid, the
+honest resolution is that **the no-cup gate already exists where the plan puts model selection**: Step 5's `compare` computes
+`no_cup_false_candidates` per candidate and enforces it in `_check_safety`. So HS-208's item 3 is **revised**, not dropped:
+
+- Step 4's grid picks each candidate's operating point by **mask_map50_95** on the head val split (tie-break on the lower
+  confidence), with the whole grid and the runner-up margin recorded per HS-208 item 4;
+- the **zero-no-cup-false-candidates hard gate is applied by Step 5's gate**, which is the only place that quantity is
+  computed - and where a failure refuses a candidate rather than being averaged away.
+
+Launching the full grid (18 cells x A/B/C) with `_measure_static`, `os.chdir(cell)` around each call so Ultralytics' `runs/`
+output lands in the campaign root rather than the worktree (HS-211's fix), and per-candidate `*-grid.json` plus a summary.
