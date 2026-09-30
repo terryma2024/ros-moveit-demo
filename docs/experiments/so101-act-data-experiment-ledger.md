@@ -39828,3 +39828,27 @@ validator looks seals *nothing*, which is exactly the failure the docstring warn
 the measurement then ignores would let a frozen condition look sealed while a different value is measured").
 
 With HS-201/202 and this entry, Step 4 can be implemented against the validator rather than against my reading of the plan.
+
+## HS-206 — Task 7 DID implement `CandidateIdentity`; what is missing is a bridge between two schemas
+
+Greping for what Task 7 was supposed to create, rather than for what Step 4 seemed to need:
+
+```
+src/so101_demo_py/src/act/head_search_training.py:177   class CandidateIdentity
+  :181   weights_sha256: str
+  :191   requires ("weights_sha256", "postprocess_sha256", "tracker_sha256", "runtime_sha256")
+  :213   def from_document(cls, document) -> CandidateIdentity
+```
+
+So the plan's Task 7 identity type **exists**, with an `operating_point` and digest fields - and it is a **different schema** from
+what the evaluation gate consumes (`load_frozen_candidate` wants `weight_sha256` plus nested `tracker`/`postprocess`/`runtime`,
+HS-201/205). Two candidate-identity shapes live in this work: the plan-faithful one built by Task 7, and the gate's own.
+
+**That reframes the missing producer one more time, and for the better:** the job is not to invent calibration - Task 7 already
+carries an operating point and the three digests - but to **bridge** `CandidateIdentity` into the six-key document the gate
+loads, with the measurement that *chooses* `min_confidence`/`tracker.iou` on val splits and the calibration episode split.
+A small, well-defined adapter over types that already exist, rather than a new subsystem.
+
+This is the fourth framing of this gap (HS-198 missing capability, HS-199 surface only, HS-200 half-and-half, HS-206 adapter),
+and each one came from reading the code instead of the plan. The registration half is already written and committed
+(`7fb6825c7`); the freeze half is now a bridge plus a policy.
