@@ -40920,3 +40920,35 @@ Task first because the retention rule is what C failed and task retention is the
 the whole point of the campaign is head-domain capability; lower confidence last because, at equal quality, it detects more.
 This is stricter than HS-208's original (head-first) rule and it is recorded as a **change of criterion with its reason**, not as
 the same rule applied twice.
+
+## HS-249 — The declared re-selection rule chooses C's EXISTING point: the retention refusal stands on the merits
+
+Measured all 18 cells for C on **both** val domains (head and task), under the rule declared in advance in HS-248:
+
+```
+cells measured: 18
+chosen (task, then head, then lower conf): {task: 0.96510, head: 0.98819, min_confidence: 0.25, tracker_iou: 0.5}
+top four cells are IDENTICAL in both domains (0.98819 / 0.96510) across conf 0.25-0.35 and iou 0.5-0.7
+```
+
+The chosen point is **exactly the point C was already frozen at** (0.25, 0.5). So:
+
+- **the operating point is not the cause.** The rule was fixed before measuring, it was given the task-domain metric first (the very
+  quantity the retention check uses), and it still returns the same cell - the val surfaces are flat in both domains, so no
+  faithful choice among these 18 cells raises C's task mAP at all;
+- **option (b) from HS-246 is therefore exhausted**, and the refusal (`0.011 > 0.01` on the task domain) is a property of
+  candidate C on this data, not an artefact of how I froze it;
+- **no gate was relaxed to reach this conclusion**, and none will be: the margin stays 0.01.
+
+**Consequence for Task 12: the honest outcome of Step 5 is "baseline retained, no challenger promotable".** The design's retention
+rule exists to keep the baseline when a challenger spends task performance, and it did exactly that. What remains is not a
+measurement but a decision about what Task 13 consumes - and the two coherent readings are:
+
+- **A is the selection.** The retention rule's own verdict is "keep the retained model", so Task 13 proceeds with **A** as the
+  selected candidate, and the campaign's finding is that head-only and head+task training did not beat the pinned baseline without
+  costing task retention;
+- **retrain the challenger.** Option (c) from HS-246 - a different mixing ratio or training length for C - is the only route to a
+  promotable challenger, and it is a fresh campaign, not a re-selection.
+
+I am recording the first as the default under the auto-proceed rule (it is the design's own conclusion rather than a new
+experiment) and flagging that the second is available and materially more expensive.
