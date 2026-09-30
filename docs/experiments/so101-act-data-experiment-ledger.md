@@ -41965,3 +41965,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   commit half is this guarded call plus its control; items 5+ wait on the four blocked bindings. HEAD `82fa4ef0b`;
   thirteen gates green.
+
+
+## CP-2222 — ③a's first attempt: the store's suite already expects the wiring, and it disagrees about the location
+
+- **What I landed and then reverted**: the guarded verifier call inside the coordinator's production branch
+  (`ActCollectionResultVerifier(dict(roots)).verify(lease, str(workspace), self.request.run_mode)`), exactly as
+  CP-2219/2220/2221 specify. Result: **1 failed / 27 passed**, and the failure is
+  `test_act_result_commit.py::test_coordinator_journals_business_failed_only_after_verifier` refusing with
+  **`LEASE_LOCATION_MISMATCH`**.
+- **Two things that failure establishes, both useful**:
+  1. **The store's suite already contains the test for this exact property** — its name is literally "the
+     coordinator journals business_failed only after the verifier" — so ③a's control does not have to be invented;
+     it exists and it now reaches my new code;
+  2. **the location the coordinator resolves is not the location the verifier expects**: my call passes
+     `roots[worker_id]/collection/point_id/attempt`, while `verify` compares against `_expected(lease)` =
+     `_workspace(worker_roots[lease.worker_id], lease)`. One of the two layouts is wrong for the production path, and
+     that disagreement — not the verification idea — is what has to be settled.
+- **Reverted**; the store's suite re-runs green (28 passed).
+- **The next read**: that test's fixture and `_workspace()` (result_store.py, near line 53) side by side, which
+  settles whether the coordinator should pass the lease-derived path, whether the store's expectation should accept
+  the coordinator's layout, or whether the test itself builds a coordinator whose result port differs from
+  production. The wiring then lands as one call again.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  commit half is one reconciled location away, with its control already present in the store's suite; items 5+ wait on
+  the four blocked bindings. HEAD `585c658c0`; thirteen gates green.
