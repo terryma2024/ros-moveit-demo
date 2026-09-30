@@ -36075,3 +36075,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **T3-F5**: the fail-closed eligibility and sealing gate.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `010188772`
   (tree clean apart from the pre-existing 39-path baseline); no push, no evidence deletion, no hardware.
+
+
+## CP-1962 — Task 3 fix pass, sixteenth instalment: multi-row binding/record correlation closed (T3-F4)
+
+- **The correlation is in, with the recipe CP-1961 recorded.** For an episode with recorded rows the
+  audit's binding count must equal `record_count` **and** each binding's `sim_time_s` must equal the
+  corresponding recorder row's observation instant, in order (`EPISODE_SEAL_ROWS_MISMATCH`). The
+  reviewer's "a correctly identified successful recorder with multiple rows can still name insufficient
+  audit bindings" case is closed against a **real three-row PASSED episode** (six acquisitions, three
+  accepted references, three contiguous bindings), not a single-row stand-in.
+- **The negative control tampers the recorder side**, exactly as CP-1961 prescribed: it shifts the last
+  recorded row's observation instant in `records.jsonl`, re-signs that file's entry inside the seal's
+  `files` map and recomputes the seal's `manifest_sha256`, leaving the audit fully legal. Only the
+  seal-level correlation can catch it, and it does.
+- **Evidence.** `logs/task3-fix16.run` rc=0: **125 passed** across `test_act_recorder.py`,
+  `test_act_episode_audit.py`, `test_act_release_boundary.py`, `test_act_continuous_capture.py` and
+  `test_act_supervisor.py`, with its own NVMe scratch and a non-empty tempfile proof. My own control had
+  to be corrected once more: the rewritten seal lacked the trailing newline the canonical form requires,
+  so it was refused as `EPISODE_SEAL_NONCANONICAL` before the correlation could run.
+- **Still open.** **T3-F1**: the window schema needs an owner-approved key list before strict enforcement
+  (missing required facts must then be refused), and the raw controller/accepted-goal history,
+  source/receipt clocks, full physics payloads and broker event kinds with typed validators wait on their
+  producers. **T3-F5**: the fail-closed eligibility and sealing gate that depends on that raw coverage.
+  Then a fresh checkpoint and the consolidated 19-file gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `3cf74309e`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

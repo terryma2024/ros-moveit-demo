@@ -376,3 +376,79 @@ def test_a_rehashed_v1_seal_may_not_carry_v2_fields(tmp_path):
     path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
     with pytest.raises(ValueError, match="EPISODE_SEAL_SCHEMA"):
         verify_episode_seal(path)
+
+
+def _multi_row_audit(tmp_path, instants):
+    """An audit with one binding per recorded instant, plus the scope the seal must share."""
+
+    import numpy as _np
+
+    from so101_demo.act.acquisition import AcquisitionMinter
+    from so101_demo.act.episode_audit import EpisodeAuditWriter
+
+    scope_document = {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
+                      "mode": "preselected_target_diagnostic", "scene_id": "default", "seed": 0,
+                      "inputs_sha256": "c" * 64}
+    scope = tmp_path / "collection-scope.json"
+    scope.write_bytes(json.dumps(scope_document, sort_keys=True, separators=(",", ":")).encode())
+    writer = EpisodeAuditWriter(tmp_path / "audit-episode", scope_document,
+                                {"session_id": "session-1", "attempt_id": "attempt-1",
+                                 "reset_epoch": 2, "release_epoch": 1},
+                                {"inputs_sha256": "c" * 64})
+    minter = AcquisitionMinter()
+    frames = {}
+    for instant in instants:
+        for camera in ("head", "wrist"):
+            frame = minter.mint(camera, session_id="session-1", reset_epoch=2, stamp_s=instant,
+                                received_monotonic_ns=1,
+                                pixels=_np.zeros((480, 640, 3), dtype=_np.uint8))
+            writer.append_acquisition(frame)
+            frames[(camera, instant)] = frame
+    for index, instant in enumerate(instants):
+        writer.append_source("references", {"reference_time_s": round(instant + 0.1, 6),
+                                            "source": "CONTROLLER_REFERENCE",
+                                            "positions": [0.1] * 6, "accepted": True})
+        writer.bind_row(index, instant, frames[("head", instant)].acquisition_id,
+                        frames[("wrist", instant)].acquisition_id, index + 1)
+    return writer.seal({"start_s": instants[0], "end_s": instants[-1]}), scope
+
+
+def _three_row_recorder(tmp_path):
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    recorder.append(observation(1.0), (0.0,) * 6, audit(1.0))
+    recorder.append(observation(1.1), (0.1,) * 6,
+                    audit(1.1, release_epoch=1, release_event=True, reference_positions=(0.1,) * 6))
+    recorder.append(observation(1.2), (0.2,) * 6,
+                    audit(1.2, release_epoch=1, release_time_s=1.08,
+                          reference_positions=(0.2,) * 6))
+    return recorder
+
+
+def test_a_multi_row_episode_verifies_against_its_bound_audit(tmp_path):
+    manifest, scope = _multi_row_audit(tmp_path, (1.0, 1.1, 1.2))
+    path = _three_row_recorder(tmp_path).finish(outcome(), audit_manifest=manifest, scope=scope)
+    document = verify_episode_seal(path, audit_manifest=manifest, scope=scope)
+    assert document["record_count"] == 3 and document["schema_version"] == 2
+
+
+def test_a_recorded_row_at_a_different_instant_than_its_binding_is_refused(tmp_path):
+    """Tamper the recorder side so the audit stays legal and only the correlation can catch it."""
+
+    manifest, scope = _multi_row_audit(tmp_path, (1.0, 1.1, 1.2))
+    path = _three_row_recorder(tmp_path).finish(outcome(), audit_manifest=manifest, scope=scope)
+    records = (tmp_path / "episode" / "records.jsonl").read_text().splitlines()
+    last = json.loads(records[-1])
+    last["observation"]["sim_time_s"] = 1.15
+    records[-1] = json.dumps(last, sort_keys=True, separators=(",", ":"))
+    payload = ("\n".join(records) + "\n").encode()
+    (tmp_path / "episode" / "records.jsonl").write_bytes(payload)
+    seal = json.loads(path.read_bytes())
+    seal["files"]["records.jsonl"] = {"sha256": hashlib.sha256(payload).hexdigest(),
+                                      "size": len(payload)}
+    seal.pop("manifest_sha256")
+    seal["manifest_sha256"] = hashlib.sha256(
+        json.dumps(seal, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    path.write_bytes(json.dumps(seal, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+    with pytest.raises(ValueError, match="EPISODE_SEAL_ROWS_MISMATCH"):
+        verify_episode_seal(path, audit_manifest=manifest, scope=scope)
