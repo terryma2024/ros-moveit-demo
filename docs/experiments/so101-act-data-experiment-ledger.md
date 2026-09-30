@@ -42342,3 +42342,39 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   before touching code again, as CP-2238 recorded.
 - **State.** Task 3 remains **unconverged** per the seventh verdict; **F14 is closed by this fix**; the goal is
   paused unless the owner resumes it. HEAD `ee5445cfe`; sixteen gates green.
+
+
+## CP-2240 — Step 2: the six residuals read, and the repair order the owner asked for
+
+- **What each residual actually is** (seventh verdict, lines 23-106):
+  - **F1** — the real broker returns **tuples** where the writer's `_reference_frames_ok`/`_finite_vector` require
+    **lists**, so a genuine packed record fails `AUDIT_SCHEMA_INVALID` before serialization; and registered
+    names/order plus the canonical six-dimension projection are still unvalidated (counts only).
+  - **F3** — the initial-epoch rule compares against two constants instead of the episode's own `release_epoch`;
+    readback still accepts `true`/`1.0` for `reference_sequence`; and the **runner's event identity omits the
+    writer's lease** while incrementing the release epoch **without emitting a `release` event**, so a formal
+    writer refuses its very first `phase_complete` and its stream.
+  - **F5** — the shared predicate counts **names**, not retained history: no registered contact/model/velocity
+    history, no order/step/epoch relationships, no dispatch/accept/revoke/stop/final-check, set-down, detach/open,
+    hold or stability records; the preset `FORMAL_PHASES` fixture mirrors the shortcut the plan forbids.
+  - **F11** — schedules are checked one-way (every claimed instant exists) but not for distinctness, counts, ranges
+    or the reverse relation, so `[1.0]` or `[1.0, 1.0]` hide real coverage; `physics_end_s`/`first_command_s` are
+    never compared with their actual histories.
+  - **F12** — the helper reads `self.reset.broker`, which the production reset stores as a **`CommandBroker`**
+    without `controller_feedback`, so its `hasattr` branch returns silently; assigning
+    `observed.controller_feedback` on a **frozen dataclass** raises outside the catch; and the SEARCH
+    `physical_observation` still carries neither feedback nor the `pose` kind's required evidence.
+  - **F13** — the joint/reference caches are not invalidated or identity-fenced across a reset/session change, the
+    joint callback's own stamp is discarded, audit feedback typing does not enforce registered per-kind
+    dimensions or require both kinds, and the scene record is **disabled** rather than produced with a defensible
+    current fence.
+- **The order this ledger will work in**, chosen by dependency rather than by numbering: **F3** first (its runner
+  identity/release-event gap is the foundation the producers' histories are written through), then **F1** (carrier
+  normalization and registered names, independent), then **F11** (window reconstruction, self-contained), then
+  **F13** (reset fencing and a usable scene record), then **F12** (feedback through the real broker boundary, which
+  needs F13's fencing), then **F5** (outcome-aware coverage, which needs every producer above).
+- **The gate rule this stretch adopts after F14's lesson**: a change's gate must include the suites of **every file
+  it touches** — F14's 148-test run never ran `test_parallel_batch_artifacts.py`, which is exactly how the
+  regression survived. Recorded as a standing rule.
+- **State.** **F14 closed** (CP-2239); the six above are open; the goal is paused unless the owner resumes it.
+  HEAD `234464d3f`; sixteen gates green.
