@@ -35114,3 +35114,27 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
 - **Reviewer tooling note:** long-lived `codex` sessions accumulate context and stall; a fresh session per
   task with a short brief, and an explicit instruction to *execute* the checks rather than read only, is
   the pattern that has produced decisions.
+
+## HS-022 — Fourth verdict: replays executed, tracker-IoU finding fixed (commit b64aeba38)
+
+- **Verdict:** `reviews/task4/task4-fourth-verdict.md` (copied from the reviewer's own scratch, where it
+  wrote it because my brief's write-scope conflicted with the durable destination). Decision: **NOT
+  CLOSED**, for two reasons - all five focused replays were unexecuted (my nudge told it to write with what
+  it had), and one new source-derived finding.
+- **The finding was real:** `_unsupported_declarations` accepted a tracker declaration of the supported
+  form `{"iou": x}`, but the measurement read only `tracking_iou`, so a sealed tracker IoU of 0.3 was
+  silently measured as the 0.5 default - an accepted condition that was neither applied nor refused. The
+  threshold is now resolved from **both** declaration sources, and a conflict between them is refused with
+  `EVALUATION_OPERATING_POINT_CONFLICT` (commit `b64aeba38`, benchmark suite 23 passed).
+- **All five replays are now executed and retained** under `/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/task4-focused-replays-20260930T072418Z`:
+  - (a) the retained-C counterexample with B ahead by 0.09 on episode recall/F1 ->
+    `REFUSED EVALUATION_F1_MARGIN: B beats C on the static_image head f1 by 0.090`;
+  - (b) two qualifying challengers with A stronger than B -> `RESULT A`;
+  - (c) a `../../outside.png` sample -> `REFUSED EVALUATION_MANIFEST_INVALID: not a canonical relative path`;
+  - (d) a wrong `image_sha256` -> `REFUSED EVALUATION_MANIFEST_INVALID: does not match its recorded digest`;
+  - (e) the plan's Task 12 `compare` argument shape -> exit 2 with
+    `{"failure": "EVALUATION_CANDIDATE_SET_INVALID: two candidates share one frozen weight"}`, i.e. a
+    named `EVALUATION_*` refusal rather than an argparse exit.
+  Raw outputs: `replays-a-d.log`, `replays-e.log`, and the script `replays.py` in that run directory.
+- **Host gates remain Task 11's and are still not passed:** the `mujoco_vendor` fresh closure and the
+  benchmark gate's 62 pre-existing environment failures.
