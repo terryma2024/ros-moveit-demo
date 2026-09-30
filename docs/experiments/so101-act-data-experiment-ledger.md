@@ -40570,3 +40570,29 @@ teaching in different clothes: do not construct a parallel path when a verified 
 the dataset) plus the `MJCF path`/config the dataset used, and set `neck_yaw_joint` between captures - rather than opening its own
 MuJoCo renderer. The next attempt will do exactly that through the toolchain environment, and will fail loudly if the context
 still cannot be created, rather than silently producing blank frames.
+
+## HS-236 — The render path works once the toolchain environment is sourced; the neck is actuatable at qposadr 6
+
+The fix for HS-235 was environmental, exactly as suspected: source `/opt/ros/jazzy`, the workspace, **and the toolchain's
+`install/setup.bash`** (which puts the toolchain on `LD_LIBRARY_PATH`, verified), then run the probe:
+
+```
+prepared: nq=28 ncam=3
+neck joint: neck_yaw_joint qposadr 6
+RawRender fields: amodal_geom_ids, arm_pose_rad, body_names, camera_fovy_rad,
+                  camera_local_position_m, camera_local_xyaxes, … (list truncated)
+```
+
+So through the toolchain environment the verified renderer works headlessly, and it gives the recorder three things it needs:
+
+- **the scene prepares once** (`_prepare(rng, scenario)`) and can then be captured repeatedly - the loop HS-229 said was
+  impossible *inside* `_render_attempt` and which is fine outside it;
+- **the neck is a plain qpos entry** (`neck_yaw_joint`, qposadr 6), so a sweep is a write plus `mj_forward`;
+- **`RawRender` carries the camera pose as data** (`camera_fovy_rad`, `camera_local_position_m`, `camera_local_xyaxes`) - which
+  means the recorder can *check* each captured frame against the analytic `_camera_pose(neck_rad)` prediction (HS-234) instead of
+  trusting that the right joint moved.
+
+**Next action:** print `RawRender`'s full field list to identify the image field (the alphabetical excerpt stopped at `ca…`), then
+build the sweep: prepare once per seed, step the neck across the seal's required domain, capture and score each frame with all
+three candidates' frozen operating points, and emit the HS-222 record shape under the campaign root. The environment recipe above
+is part of the recorder now, not an experiment.
