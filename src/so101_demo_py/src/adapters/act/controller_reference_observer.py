@@ -25,6 +25,9 @@ class ControllerReferenceObserver:
     def __init__(self, *, max_frames):
         integer(max_frames, minimum=51)
         self._frames = {kind: deque(maxlen=max_frames) for kind in _NAMES}
+        # a publication counter per kind, independent of the bounded buffer: deriving the sequence
+        # from the retained length would freeze it once the deque is full
+        self._sequences = {kind: 0 for kind in _NAMES}
         self._identity = None
         self._floor_ns = None
         self._hazard = None
@@ -36,6 +39,8 @@ class ControllerReferenceObserver:
                 and (identity[1] <= self._identity[1] or floor < self._floor_ns)):
             raise ValueError("CONTROLLER_REFERENCE_EPOCH_INVALID")
         self._identity, self._floor_ns, self._hazard = identity, floor, None
+        for kind in self._sequences:
+            self._sequences[kind] = 0
         for history in self._frames.values():
             history.clear()
 
@@ -66,6 +71,7 @@ class ControllerReferenceObserver:
             if history and (stamp <= history[-1]["sim_stamp_ns"]
                             or receipt < history[-1]["received_monotonic_ns"]):
                 raise ValueError("CONTROLLER_REFERENCE_ORDER_INVALID")
+            self._sequences[kind] = self._sequences.get(kind, 0) + 1
             history.append({
                 "sim_stamp_ns": stamp,
                 "received_monotonic_ns": receipt,
@@ -74,7 +80,7 @@ class ControllerReferenceObserver:
                 "velocities": velocities,
                 # the observer's own per-kind publication sequence, ratified as part of Proposal A;
                 # the ordering checks above already guarantee it is monotone by construction
-                "observer_sequence": len(history) + 1,
+                "observer_sequence": self._sequences[kind] + 1,
             })
             return True
         except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:

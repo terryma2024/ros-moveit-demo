@@ -138,7 +138,8 @@ class PickPlaceRunner:
             "kind": kind, "identity": dict(self._event_identity), "sim_time_s": None,
             "monotonic_ns": int(self.clock_ns()) or 1,
             "payload": {"reason": detail, "physics_step": physics_step}
-            if kind in ("run_complete", "run_aborted")
+            # every terminal run outcome names its reason; a phase event names its phase
+            if kind in ("run_complete", "run_aborted", "run_incomplete_evidence")
             else {"phase": detail, "physics_step": physics_step}})
 
     def _validate_request(self, request: dict) -> None:

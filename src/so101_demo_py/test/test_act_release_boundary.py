@@ -9,6 +9,8 @@ missing precondition stops the run with no open at all or refuses the stale obse
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from so101_demo.act.pick_place_runner import PickPlaceRunner
@@ -305,3 +307,38 @@ def test_both_retreat_segments_record_the_raw_observation():
     assert len(retreats) == 2
     assert [row["observation"]["simulation_step"] for row in retreats] == sorted(
         row["observation"]["simulation_step"] for row in retreats)
+
+
+def test_the_missing_raw_branch_is_accepted_by_a_real_audit_writer(tmp_path):
+    """T3-F10: the non-formal epilogue must not be refused by a real writer."""
+
+    from so101_demo.act.episode_audit import EpisodeAuditWriter
+
+    audit = EpisodeAuditWriter(tmp_path / "episode",
+                               {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
+                                "mode": "preselected_target_diagnostic", "scene_id": "default",
+                                "seed": 0, "inputs_sha256": "c" * 64},
+                               {"session_id": "s", "attempt_id": "a", "reset_epoch": 1,
+                                "release_epoch": 1},
+                               {"inputs_sha256": "c" * 64})
+    port = FakePort()
+    original_phase, original_retreat = port.run_phase, port.run_retreat_segment
+
+    def blind(phase, request):
+        evidence = original_phase(phase, request)
+        evidence.pop("physical_observation")
+        return evidence
+
+    def blind_retreat(direction, distance, request):
+        evidence = original_retreat(direction, distance, request)
+        evidence.pop("physical_observation")
+        return evidence
+
+    port.run_phase, port.run_retreat_segment = blind, blind_retreat
+    result = PickPlaceRunner(port, audit=audit).run(request())
+    assert result["status"] == "PASSED" and result["formal_episode_eligible"] is False
+    assert result["live_evidence_artifact"] is None
+    events = [json.loads(line) for line in
+              (tmp_path / "episode" / "audit" / "events.jsonl").read_text().splitlines()]
+    assert events[-1]["kind"] == "run_incomplete_evidence"
+    assert set(events[-1]["payload"]) == {"reason", "physics_step"}

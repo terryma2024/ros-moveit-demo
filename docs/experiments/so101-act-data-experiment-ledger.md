@@ -36851,3 +36851,46 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f05eb0e29`;
   gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1991 — Task 3 fifth verdict FAIL (6 Important); the two regressions it named are fixed first
+
+- **Verdict** (`reviews/task3-rereview4-verdict.md`, dispatch `0e6568f1-e6d8-4695-be45-f501271fdf9c`,
+  reviewed `f05eb0e29`): **FAIL, 0 Critical / 6 Important / 0 Minor**. Six findings: T3-F1 residual (the
+  registered raw document still cannot pass the real boundaries, and the packed validator lacks the
+  provenance checks — target equality with `reference_time_s`, nonnegative evaluation clocks,
+  target-inside-accepted-interval, later revocation, per-kind history ordering, the ratified five-arm/one-
+  gripper names, and a repeated mapping pair; the two new records also lack a parent-step join because
+  their closed nested fields have no `physics_step`), T3-F3 residual (exclusive raw reference groups broken
+  on readback, semantic parity incomplete), T3-F5 residual (nonempty streams are not complete evidence and
+  the new gate is absent from readback), **T3-F9**, **T3-F10**, **T3-F11** (window validation checks field
+  types and order but not the observed schedule, the frozen policy or labelled coverage).
+- **T3-F9 fixed (my regression).** `observer_sequence` was `len(history) + 1` over a bounded deque, so once
+  the buffer filled every later publication was numbered 257 and duplicate identities were accepted. It is
+  now a per-kind publication counter, advanced only on successful admission and reset with the observer's
+  epoch, independent of deque eviction.
+- **T3-F10 fixed (my regression).** `run_incomplete_evidence` was emitted with the phase shape
+  (`{phase, physics_step}`) while its schema requires `{reason, physics_step}`, so a real
+  `EpisodeAuditWriter` refused the epilogue, the abort handler took over and the promised non-formal result
+  was replaced by an exception. The terminal branch now covers that kind, and the new control drives the
+  missing-raw path through a **real** writer, asserting the passed-but-non-formal result, no artifact and
+  the terminal event with exactly `{reason, physics_step}` — which is what the reviewer asked for, since my
+  earlier blind-port test used a fake audit that validated nothing.
+- **Evidence.** `logs/task3-fix38.run` rc=0: **91 passed in 0.79 s** across
+  `test_act_release_boundary.py`, `test_act_controller_reference_observer.py`,
+  `test_act_episode_audit.py` and `test_act_supervisor.py`, with its own NVMe scratch and a non-empty
+  tempfile proof. The counter's dedicated control (more than `max_frames + 1` publications plus an epoch
+  reset) is **not yet written** and is recorded here as the next step for T3-F9's evidence.
+- **A.1: the reviewer recommends the direction with a clarification.** Favour per-kind evaluation over
+  splitting one six-dimensional action into two records, and — this is the part that changes the amendment —
+  **moving `evaluation` alone is not sufficient**: the ratified map currently requires the projected values
+  to equal the *published* positions, while an interval evaluation at a later target may legitimately
+  differ. The amendment must distinguish per-kind **evaluated** positions from the original **published**
+  positions, state which values the projection map selects, keep every original publication immutable with
+  its own clocks, names, velocities and sequence, associate each kind's evaluation with its own
+  goal/accepted/revoked interval, carry enough accepted-goal history for offline reconstruction, and
+  propagate later revocation or stop by goal identity. The reviewer explicitly did **not** approve the
+  amendment; it recommends the direction and asks that it be ratified before all boundaries change together.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `96b9bca99`;
+  gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
