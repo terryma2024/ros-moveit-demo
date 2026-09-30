@@ -245,6 +245,7 @@ def _geometry_contract(**overrides: object) -> HeadCameraGeometryContract:
         "workspace_z_m": [-0.28, -0.24],
         "workspace_step_m": 0.05,
         "neck_grid_rad": [-1.0, 1.0, 0.02],
+        "validation_arm_rad": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         "coarse_step_candidate_rad": 0.2,
         "safe_interval_margin_rad": 1e-5,
         "safe_bisection_tolerance_rad": 1e-5,
@@ -325,6 +326,9 @@ class _FakeHeadCameraScene:
 
     def camera_document(self):
         return dict(self._camera_document)
+
+    def camera_mount_pose(self):
+        return (0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
 
     def camera_world_pose(self, neck_rad: float):
         cosine, sine = math.cos(neck_rad), math.sin(neck_rad)

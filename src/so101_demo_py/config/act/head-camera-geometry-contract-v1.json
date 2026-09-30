@@ -21,6 +21,14 @@
     ]
   },
   "neck_joint": "neck_yaw_joint",
+  "validation_arm_rad": [
+    -0.25,
+    0.0,
+    0.6,
+    0.8,
+    0.0,
+    0.8
+  ],
   "anchors": [
     {
       "name": "default",

@@ -74,6 +74,12 @@ def _scene_group_partitions(manifest: Mapping[str, Any], *, name: str) -> dict[s
                 f"HEAD_DATASET_{name}_PARTITION_INVALID: sample {index} carries an incomplete world "
                 "identity"
             )
+        previous = groups.get(group)
+        if previous is not None and previous != split:
+            raise ValueError(
+                f"SCENE_GROUP_SPLIT_LEAK: {group} is {previous} and {split} inside the {name.lower()} "
+                "manifest itself, so its partition cannot be compared with the other camera domain"
+            )
         groups[group] = split
     return groups
 

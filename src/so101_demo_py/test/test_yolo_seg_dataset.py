@@ -273,8 +273,8 @@ def test_dataset_manifest_and_labels_are_reproducible(tmp_path: Path) -> None:
         split_counts={"train": 4, "val": 4, "test": 4},
         generator_commit="a2c5e03",
     )
-    first = generate_dataset(config, tmp_path / "first", renderer=_HeadFakeRenderer())
-    second = generate_dataset(config, tmp_path / "second", renderer=_HeadFakeRenderer())
+    first = generate_dataset(config, tmp_path / "first", renderer=_FakeRenderer())
+    second = generate_dataset(config, tmp_path / "second", renderer=_FakeRenderer())
 
     assert first == second
     assert first["sample_count"] == 12
@@ -297,7 +297,7 @@ def test_dataset_manifest_records_explicit_seed_ranges(tmp_path: Path) -> None:
         seed_starts={"train": 400000, "val": 500000, "test": 600000},
     )
 
-    manifest = generate_dataset(config, tmp_path / "fresh", renderer=_HeadFakeRenderer())
+    manifest = generate_dataset(config, tmp_path / "fresh", renderer=_FakeRenderer())
 
     assert manifest["seed_ranges"] == {
         "train": [400000, 400003],
@@ -318,7 +318,7 @@ def test_generate_dataset_refuses_existing_output_root(tmp_path: Path) -> None:
     output.mkdir()
 
     with pytest.raises(FileExistsError, match="output root"):
-        generate_dataset(config, output, renderer=_HeadFakeRenderer())
+        generate_dataset(config, output, renderer=_FakeRenderer())
 
 
 def test_repository_fixture_exposes_camera_targets_distractors_and_scenarios() -> None:
@@ -385,11 +385,26 @@ class _HeadFakeRenderer:
 
     def __init__(
         self,
+        seal: dict | None = None,
         camera_name: str = "head_camera",
         local_position_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
     ) -> None:
         self.camera_name = camera_name
         self.local_position_m = tuple(float(value) for value in local_position_m)
+        self.neck_rad = 0.05
+        if seal is None:
+            self.pose = ((-0.06, 0.06, 0.43), (0.9, 0.0, 0.0, 0.44))
+        else:
+            from so101_demo.act.head_camera_geometry import (
+                camera_pose_from_seal,
+                quaternion_wxyz_from_xyaxes,
+            )
+
+            predicted, axes = camera_pose_from_seal(seal, self.neck_rad)
+            self.pose = (
+                tuple(float(value) for value in predicted),
+                quaternion_wxyz_from_xyaxes(axes),
+            )
 
     def render(self, seed: int, scenario: DatasetScenario) -> RawRender:
         base = _raw_render(cup_count=scenario.cup_count, cup_rgba=(1.0, 0.4, 0.3, 1.0))
@@ -399,11 +414,12 @@ class _HeadFakeRenderer:
             geom_body_ids=base.geom_body_ids,
             body_names=base.body_names,
             camera_name=self.camera_name,
-            neck_rad=0.05,
-            camera_position_m=(-0.06, 0.06, 0.43),
-            camera_quaternion_wxyz=(0.9, 0.0, 0.0, 0.44),
+            neck_rad=self.neck_rad,
+            camera_position_m=self.pose[0],
+            camera_quaternion_wxyz=self.pose[1],
             camera_local_position_m=self.local_position_m,
             camera_local_xyaxes=(-1.0, 0.0, 0.0, 0.0, -0.6, 0.8),
+            arm_pose_rad=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         )
 
     def close(self) -> None:
@@ -420,6 +436,9 @@ def _geometry_seal(*, mjcf_path: Path, camera_name: str = "head_camera") -> dict
     document = {
         "schema_version": 1,
         "camera_name": camera_name,
+        "validation_arm_rad": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "camera_mount_origin_m": [-0.06, 0.06, 0.43],
+        "camera_mount_xyaxes": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
         "image_width": 640,
         "image_height": 480,
         "horizontal_fov_rad": 1.312,
@@ -462,6 +481,7 @@ def _head_config(
         ),
         neck_yaw_rad=(-0.35, 0.35),
         camera_jitter_m=(0.0, 0.0),
+        arm_pose_rad=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         promotable=promotable,
     )
 
@@ -547,11 +567,11 @@ def test_head_camera_generation_requires_the_geometry_seal(tmp_path: Path) -> No
     config = _head_config(tmp_path, accepted_seal_sha256="f" * 64)
 
     with pytest.raises(ValueError, match="HEAD_CAMERA_GEOMETRY_SEAL_REQUIRED"):
-        generate_dataset(config, tmp_path / "no-seal", renderer=_HeadFakeRenderer())
+        generate_dataset(config, tmp_path / "no-seal", renderer=_HeadFakeRenderer(seal))
 
     with pytest.raises(ValueError, match="HEAD_CAMERA_GEOMETRY_SEAL_DRIFT"):
         generate_dataset(
-            config, tmp_path / "drifted", geometry_seal=seal, renderer=_HeadFakeRenderer()
+            config, tmp_path / "drifted", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
         )
 
 
@@ -560,7 +580,7 @@ def test_head_camera_generation_records_groups_camera_and_mask_digests(tmp_path:
     config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
 
     manifest = generate_dataset(
-        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
     )
 
     assert manifest["camera_name"] == "head_camera"
@@ -584,7 +604,7 @@ def test_head_camera_generation_refuses_a_non_head_camera_render(tmp_path: Path)
 
     with pytest.raises(ValueError, match="HEAD_CAMERA_GEOMETRY_SEAL_CAMERA_MISMATCH"):
         generate_dataset(
-            config, tmp_path / "wrong-camera", geometry_seal=seal, renderer=_HeadFakeRenderer()
+            config, tmp_path / "wrong-camera", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
         )
 
 
@@ -592,7 +612,7 @@ def test_verify_head_search_manifest_accepts_a_sealed_head_dataset(tmp_path: Pat
     seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
     config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
     manifest = generate_dataset(
-        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
     )
 
     report = verify_head_search_manifest(
@@ -613,7 +633,7 @@ def test_verify_head_search_manifest_refuses_a_smoke_manifest_as_production(tmp_
     seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
     config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"], promotable=False)
     manifest = generate_dataset(
-        config, tmp_path / "smoke", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        config, tmp_path / "smoke", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
     )
 
     with pytest.raises(ValueError, match="HEAD_DATASET_NOT_PROMOTABLE"):
@@ -643,7 +663,7 @@ def test_verify_head_search_manifest_refuses_count_drift_and_group_leakage(tmp_p
     seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
     config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
     manifest = generate_dataset(
-        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
     )
 
     with pytest.raises(ValueError, match="HEAD_DATASET_COUNT_MISMATCH"):
@@ -710,12 +730,12 @@ def test_head_camera_generation_never_moves_the_sealed_camera(tmp_path: Path) ->
     seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
     config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
 
-    jittered = _HeadFakeRenderer(local_position_m=(-0.014, -0.002, 0.009))
+    jittered = _HeadFakeRenderer(seal, local_position_m=(-0.014, -0.002, 0.009))
     with pytest.raises(ValueError, match="HEAD_DATASET_CAMERA_LOCAL_POSE_DRIFT"):
         generate_dataset(config, tmp_path / "jitter", geometry_seal=seal, renderer=jittered)
 
     manifest = generate_dataset(
-        config, tmp_path / "steady", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        config, tmp_path / "steady", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
     )
     sample = manifest["samples"][0]
     assert sample["camera"]["local_position_m"] == [0.0, 0.0, 0.0]
@@ -726,7 +746,7 @@ def test_verify_head_search_manifest_refuses_a_modified_file(tmp_path: Path) -> 
     seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
     config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
     manifest = generate_dataset(
-        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
     )
 
     (tmp_path / "head" / manifest["samples"][0]["image"]).write_bytes(b"CORRUPTED FILE\n")
@@ -746,7 +766,7 @@ def test_verify_head_search_manifest_refuses_a_reused_file_path(tmp_path: Path) 
     seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
     config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
     manifest = generate_dataset(
-        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
     )
 
     reused = json.loads(json.dumps(manifest))
@@ -767,7 +787,7 @@ def test_verify_head_search_manifest_refuses_an_incomplete_camera_identity(tmp_p
     seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
     config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
     manifest = generate_dataset(
-        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
     )
 
     for mutation in (
@@ -793,7 +813,7 @@ def test_verify_head_search_manifest_refuses_a_truth_that_belongs_to_another_gro
     seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
     config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
     manifest = generate_dataset(
-        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
     )
     sample = manifest["samples"][0]
     truth_path = tmp_path / "head" / sample["truth"]

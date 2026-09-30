@@ -26,6 +26,9 @@ from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SCHEMA_VERSION = 1
 _EPSILON = 1e-9
+#: the six arm joints, in the order the MJCF names them
+ARM_JOINT_NAMES = ("1", "2", "3", "4", "5", "6")
+ARM_JOINT_COUNT = len(ARM_JOINT_NAMES)
 
 CAMERA_KEYS = (
     "camera_name",
@@ -46,6 +49,7 @@ CONTRACT_KEYS = (
     "workspace_z_m",
     "workspace_step_m",
     "neck_grid_rad",
+    "validation_arm_rad",
     "coarse_step_candidate_rad",
     "safe_interval_margin_rad",
     "safe_bisection_tolerance_rad",
@@ -269,6 +273,7 @@ class HeadCameraGeometryContract:
     workspace_z_m: tuple[float, float]
     workspace_step_m: float
     neck_grid_rad: tuple[float, float, float]
+    validation_arm_rad: tuple[float, ...]
     coarse_step_candidate_rad: float
     safe_interval_margin_rad: float
     safe_bisection_tolerance_rad: float
@@ -312,6 +317,16 @@ class HeadCameraGeometryContract:
                 "and a positive step"
             )
         object.__setattr__(self, "neck_grid_rad", grid)
+        arm = tuple(
+            _finite(f"validation_arm_rad[{index}]", value)
+            for index, value in enumerate(self.validation_arm_rad)
+        )
+        if len(arm) != ARM_JOINT_COUNT:
+            raise HeadCameraGeometryError(
+                f"HEAD_CAMERA_CONTRACT_INVALID: validation_arm_rad must hold exactly "
+                f"{ARM_JOINT_COUNT} joint angles"
+            )
+        object.__setattr__(self, "validation_arm_rad", arm)
         for name in (
             "coarse_step_candidate_rad",
             "safe_interval_margin_rad",
@@ -391,6 +406,7 @@ class HeadCameraGeometryContract:
             "workspace_z_m": list(self.workspace_z_m),
             "workspace_step_m": self.workspace_step_m,
             "neck_grid_rad": list(self.neck_grid_rad),
+            "validation_arm_rad": list(self.validation_arm_rad),
             "coarse_step_candidate_rad": self.coarse_step_candidate_rad,
             "safe_interval_margin_rad": self.safe_interval_margin_rad,
             "safe_bisection_tolerance_rad": self.safe_bisection_tolerance_rad,
@@ -425,6 +441,7 @@ class HeadCameraGeometryContract:
             workspace_z_m=document["workspace_z_m"],
             workspace_step_m=document["workspace_step_m"],
             neck_grid_rad=document["neck_grid_rad"],
+            validation_arm_rad=document["validation_arm_rad"],
             coarse_step_candidate_rad=document["coarse_step_candidate_rad"],
             safe_interval_margin_rad=document["safe_interval_margin_rad"],
             safe_bisection_tolerance_rad=document["safe_bisection_tolerance_rad"],
@@ -468,6 +485,8 @@ class HeadCameraScenePort(Protocol):
 
     def source_digests(self) -> Mapping[str, str]: ...
 
+    def camera_mount_pose(self) -> tuple[Sequence[float], Sequence[float]]: ...
+
     def support_height_m(self) -> float: ...
 
     def target_rest_offset_m(self) -> float: ...
@@ -480,8 +499,6 @@ class HeadCameraScenePort(Protocol):
 
     def target_clear_of_support(self, point_m: Sequence[float]) -> bool: ...
 
-    def occluder_points_m(self) -> tuple[tuple[float, float, float], ...]: ...
-
 
 @dataclass(frozen=True, slots=True)
 class HeadCameraGeometryResult:
@@ -490,6 +507,9 @@ class HeadCameraGeometryResult:
     image_height: int
     horizontal_fov_rad: float
     camera: CameraDefinition
+    validation_arm_rad: tuple[float, ...]
+    camera_mount_origin_m: tuple[float, float, float]
+    camera_mount_xyaxes: tuple[float, ...]
     anchors: tuple[str, ...]
     in_frame_matrix: Mapping[str, Mapping[str, Any]]
     in_frame_failures: tuple[Mapping[str, Any], ...]
@@ -511,6 +531,9 @@ class HeadCameraGeometryResult:
             "image_height": self.image_height,
             "horizontal_fov_rad": self.horizontal_fov_rad,
             "camera": self.camera.to_document(),
+            "validation_arm_rad": list(self.validation_arm_rad),
+            "camera_mount_origin_m": list(self.camera_mount_origin_m),
+            "camera_mount_xyaxes": list(self.camera_mount_xyaxes),
             "anchors": list(self.anchors),
             "in_frame_matrix": {
                 name: dict(record) for name, record in self.in_frame_matrix.items()
@@ -741,17 +764,10 @@ def validate_head_camera_geometry(
             f"{first['visible_pixels']} visible pixels)"
         )
 
+    mount_origin, mount_xyaxes = _camera_mount_model(port, contract)
     workspace_matrix, key_samples = _evaluate_workspace_matrix(
         port, contract, observed, workspace_points, required_domain
     )
-
-    occluders = _occluder_overlap(port, contract, observed, matrix)
-    if occluders:
-        first = occluders[0]
-        raise HeadCameraGeometryError(
-            "HEAD_CAMERA_TARGET_OCCLUDED: occluder "
-            f"{first['occluder']} projects inside the target's frame at anchor {first['anchor']}"
-        )
 
     return HeadCameraGeometryResult(
         camera_name=observed.camera_name,
@@ -759,6 +775,9 @@ def validate_head_camera_geometry(
         image_height=observed.height,
         horizontal_fov_rad=horizontal_fov,
         camera=observed,
+        validation_arm_rad=contract.validation_arm_rad,
+        camera_mount_origin_m=mount_origin,
+        camera_mount_xyaxes=mount_xyaxes,
         workspace_matrix=workspace_matrix,
         support_height_m=support_height,
         anchors=tuple(anchor.name for anchor in contract.anchors),
@@ -860,6 +879,21 @@ class _MuJoCoHeadCameraScene:
                 f"HEAD_CAMERA_NECK_MISSING: {contract.neck_joint} is not in {scene}"
             )
         self._neck_qpos_adr = int(self._model.jnt_qposadr[self._neck_id])
+        self._arm_qpos_adr = []
+        for joint_name in ARM_JOINT_NAMES:
+            joint_id = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+            if joint_id < 0:
+                raise HeadCameraGeometryError(
+                    f"HEAD_CAMERA_ARM_JOINT_MISSING: the scene names no joint {joint_name!r}"
+                )
+            limit = self._model.jnt_range[joint_id]
+            value = float(contract.validation_arm_rad[len(self._arm_qpos_adr)])
+            if not float(limit[0]) - 1e-9 <= value <= float(limit[1]) + 1e-9:
+                raise HeadCameraGeometryError(
+                    f"HEAD_CAMERA_ARM_POSE_INVALID: joint {joint_name} at {value} is outside "
+                    f"[{float(limit[0])}, {float(limit[1])}]"
+                )
+            self._arm_qpos_adr.append(int(self._model.jnt_qposadr[joint_id]))
         self._cup_body_id = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_BODY, "plastic_cup")
         if self._cup_body_id < 0:
             raise HeadCameraGeometryError("HEAD_CAMERA_TARGET_GEOMETRY_MISSING: plastic_cup")
@@ -906,6 +940,10 @@ class _MuJoCoHeadCameraScene:
 
     def _pose_neck(self, neck_rad: float) -> None:
         self._mujoco.mj_resetData(self._model, self._data)
+        for index, joint_name in enumerate(ARM_JOINT_NAMES):
+            self._data.qpos[self._arm_qpos_adr[index]] = float(
+                self._contract.validation_arm_rad[index]
+            )
         self._data.qpos[self._neck_qpos_adr] = float(neck_rad)
         if self._cup_joint_id >= 0:
             # the anchor's own cup position is set by `target_points_m`; here the model is advanced
@@ -1041,6 +1079,23 @@ class _MuJoCoHeadCameraScene:
             body = int(self._model.body_parentid[body])
         return body == head_body
 
+    def camera_mount_pose(self) -> tuple[Sequence[float], Sequence[float]]:
+        """The mount body's world origin and its x/y axes at neck zero: the pose model of the seal."""
+
+        self._pose_neck(0.0)
+        body_id = int(self._model.cam_bodyid[self._camera_id])
+        origin = [float(value) for value in self._data.xpos[body_id]]
+        matrix = self._data.xmat[body_id].reshape(3, 3)
+        axes = [
+            float(matrix[0][0]),
+            float(matrix[1][0]),
+            float(matrix[2][0]),
+            float(matrix[0][1]),
+            float(matrix[1][1]),
+            float(matrix[2][1]),
+        ]
+        return (origin, axes)
+
     def support_height_m(self) -> float:
         """The support surface the workspace rests on, read from the scene's own table geom."""
 
@@ -1060,23 +1115,6 @@ class _MuJoCoHeadCameraScene:
 
         self._pose_neck(0.0)
         return float(self._data.xpos[self._cup_body_id][2]) - self.support_height_m()
-
-    def occluder_points_m(self) -> tuple[tuple[float, float, float], ...]:
-        """The declared occluders' world centres at the scene's own arm pose."""
-
-        self._pose_neck(0.0)
-        names = (
-            "fixed_fingertip_pad_visual",
-            "moving_fingertip_pad_visual",
-            "gripper_visual_00",
-            "jaw_visual_00",
-        )
-        points = []
-        for name in names:
-            geom_id = self._mujoco.mj_name2id(self._model, self._mujoco.mjtObj.mjOBJ_GEOM, name)
-            if geom_id >= 0:
-                points.append(tuple(float(value) for value in self._data.geom_xpos[geom_id]))
-        return tuple(points)
 
     def visible_pixels_for_point(self, point_m: Sequence[float], neck_rad: float) -> int:
         return self._render_cup_pixels(tuple(float(value) for value in point_m), float(neck_rad))
@@ -1185,6 +1223,82 @@ class _MuJoCoHeadCameraScene:
         return int(mask.sum())
 
 
+def camera_pose_from_seal(
+    seal: Mapping[str, Any], neck_rad: float
+) -> tuple[tuple[float, float, float], tuple[float, ...]]:
+    """The world pose the sealed camera must be at for one neck angle.
+
+    The neck rotates the mount about the world z axis through the sealed mount origin, so the camera's
+    world position and orientation follow from the sealed local definition alone. A dataset render or a
+    manifest that reports any other pose is describing a camera this seal does not cover.
+    """
+
+    origin = [float(value) for value in seal["camera_mount_origin_m"]]
+    mount = [float(value) for value in seal["camera_mount_xyaxes"]]
+    camera = seal["camera"]
+    local_position = [float(value) for value in camera["local_position_m"]]
+    local_axes = [float(value) for value in camera["local_xyaxes"]]
+    cosine, sine = math.cos(float(neck_rad)), math.sin(float(neck_rad))
+    rotation = ((cosine, -sine, 0.0), (sine, cosine, 0.0), (0.0, 0.0, 1.0))
+    mount_x = (mount[0], mount[1], mount[2])
+    mount_y = (mount[3], mount[4], mount[5])
+    mount_z = (
+        mount_x[1] * mount_y[2] - mount_x[2] * mount_y[1],
+        mount_x[2] * mount_y[0] - mount_x[0] * mount_y[2],
+        mount_x[0] * mount_y[1] - mount_x[1] * mount_y[0],
+    )
+    mount_columns = (mount_x, mount_y, mount_z)
+    offset = [
+        sum(mount_columns[column][row] * local_position[column] for column in range(3))
+        for row in range(3)
+    ]
+    position = [
+        origin[row] + sum(rotation[row][column] * offset[column] for column in range(3))
+        for row in range(3)
+    ]
+    axes = []
+    for local_axis in (
+        (local_axes[0], local_axes[1], local_axes[2]),
+        (local_axes[3], local_axes[4], local_axes[5]),
+    ):
+        in_mount = [
+            sum(mount_columns[column][row] * local_axis[column] for column in range(3))
+            for row in range(3)
+        ]
+        axes.append(
+            tuple(
+                sum(rotation[row][column] * in_mount[column] for column in range(3))
+                for row in range(3)
+            )
+        )
+    return (
+        tuple(position),
+        (
+            axes[0][0],
+            axes[0][1],
+            axes[0][2],
+            axes[1][0],
+            axes[1][1],
+            axes[1][2],
+        ),
+    )
+
+
+def _camera_mount_model(
+    port: HeadCameraScenePort, contract: HeadCameraGeometryContract
+) -> tuple[tuple[float, float, float], tuple[float, ...]]:
+    pose = getattr(port, "camera_mount_pose", None)
+    if pose is None:
+        raise HeadCameraGeometryError(
+            "HEAD_CAMERA_MOUNT_MODEL_MISSING: the scene cannot report the mount the camera rides on"
+        )
+    origin, axes = pose()
+    return (
+        tuple(float(value) for value in origin),
+        tuple(float(value) for value in axes),
+    )
+
+
 def _workspace_matrix_points(
     contract: HeadCameraGeometryContract,
 ) -> tuple[tuple[float, float, float], ...]:
@@ -1261,28 +1375,17 @@ def _evaluate_workspace_matrix(
         point = tuple(record["point_m"])
         kind = "anchor" if "anchor" in record else "required_domain_endpoint"
         visible = int(port.visible_pixels_for_point(point, neck))
-        if kind == "anchor":
-            # the three qualification anchors must be visible in the scene as it stands, occluders
-            # included - that is the configuration the qualification scenes start from
-            key = {
-                **record,
-                "kind": kind,
-                "visible_pixels": visible,
-                "in_frame": visible >= contract.visible_pixel_minimum,
-            }
-        else:
-            # a required-domain endpoint must be observable by this camera: nothing but the robot the
-            # camera rides on may stand between the two. Whether the arm is actually there belongs to
-            # the admitted trajectory, so it is recorded as evidence rather than required here.
-            sight = dict(port.endpoint_visibility(point, neck))
-            key = {
-                **record,
-                "kind": kind,
-                "visible_pixels": visible,
-                "first_hit_body": sight.get("first_hit_body"),
-                "robot_occluded": bool(sight.get("robot_occluded")),
-                "in_frame": bool(sight.get("visible_to_camera")),
-            }
+        # every key sample - the three anchors and both required-domain endpoints - must be rendered
+        # visible in the scene as it stands, at the arm pose this contract declares. A target the
+        # camera cannot put pixels on is not a target the search can find.
+        sight = dict(port.endpoint_visibility(point, neck))
+        key = {
+            **record,
+            "kind": kind,
+            "visible_pixels": visible,
+            "first_hit_body": sight.get("first_hit_body"),
+            "in_frame": visible >= contract.visible_pixel_minimum,
+        }
         key_records.append(key)
         if key["in_frame"] is False:
             failures.append(key)
@@ -1314,56 +1417,68 @@ def _evaluate_workspace_matrix(
     return (MappingProxyType(matrix), key_records)
 
 
-def _occluder_overlap(
-    port: HeadCameraScenePort,
-    contract: HeadCameraGeometryContract,
-    camera: CameraDefinition,
-    matrix: Mapping[str, Mapping[str, Any]],
-) -> list[Mapping[str, Any]]:
-    """Refuse an occluder whose own geometry lands inside the target's rendered frame."""
+def quaternion_wxyz_from_xyaxes(xyaxes: object) -> tuple[float, float, float, float]:
+    """The unit quaternion (w, x, y, z) of the rotation two frame axes describe.
 
-    occluders = tuple(port.occluder_points_m())
-    if not occluders:
-        return []
-    overlaps: list[Mapping[str, Any]] = []
-    for anchor in contract.anchors:
-        record = matrix.get(anchor.name)
-        if record is None:
-            continue
-        angle = float(record["neck_start_rad"])
-        position, rotation = port.camera_world_pose(angle)
-        projected = [
-            project_point(
-                point_m=point,
-                camera_position_m=position,
-                camera_rotation=rotation,
-                width=camera.width,
-                height=camera.height,
-                fovy_rad=camera.fovy_rad,
-            )
-            for point in port.target_points_m(anchor)
-        ]
-        inside = [item for item in projected if item[2]]
-        if len(inside) < 2:
-            continue
-        in_frame = [item for item in projected if not math.isnan(item[0])]
-        if not in_frame:
-            continue
-        left = min(item[0] for item in in_frame)
-        right = max(item[0] for item in in_frame)
-        top = min(item[1] for item in in_frame)
-        bottom = max(item[1] for item in in_frame)
-        for index, point in enumerate(occluders):
-            u, v, visible = project_point(
-                point_m=point,
-                camera_position_m=position,
-                camera_rotation=rotation,
-                width=camera.width,
-                height=camera.height,
-                fovy_rad=camera.fovy_rad,
-            )
-            if visible and left <= u <= right and top <= v <= bottom:
-                overlaps.append(
-                    {"anchor": anchor.name, "occluder": f"occluder-{index}", "u": u, "v": v}
-                )
-    return overlaps
+    MuJoCo hands a camera's orientation around as the x and y axes of its frame; a manifest records it
+    as a quaternion. This is the one conversion between them, so a recorded pose can be compared with
+    the pose the seal predicts instead of merely being finite.
+    """
+
+    values = [float(value) for value in xyaxes]  # type: ignore[union-attr]
+    x_axis = values[0:3]
+    y_axis = values[3:6]
+    z_axis = [
+        x_axis[1] * y_axis[2] - x_axis[2] * y_axis[1],
+        x_axis[2] * y_axis[0] - x_axis[0] * y_axis[2],
+        x_axis[0] * y_axis[1] - x_axis[1] * y_axis[0],
+    ]
+    matrix = (
+        (x_axis[0], y_axis[0], z_axis[0]),
+        (x_axis[1], y_axis[1], z_axis[1]),
+        (x_axis[2], y_axis[2], z_axis[2]),
+    )
+    trace = matrix[0][0] + matrix[1][1] + matrix[2][2]
+    if trace > 0.0:
+        scale = math.sqrt(trace + 1.0) * 2.0
+        quaternion = (
+            0.25 * scale,
+            (matrix[2][1] - matrix[1][2]) / scale,
+            (matrix[0][2] - matrix[2][0]) / scale,
+            (matrix[1][0] - matrix[0][1]) / scale,
+        )
+    elif matrix[0][0] > matrix[1][1] and matrix[0][0] > matrix[2][2]:
+        scale = math.sqrt(1.0 + matrix[0][0] - matrix[1][1] - matrix[2][2]) * 2.0
+        quaternion = (
+            (matrix[2][1] - matrix[1][2]) / scale,
+            0.25 * scale,
+            (matrix[0][1] + matrix[1][0]) / scale,
+            (matrix[0][2] + matrix[2][0]) / scale,
+        )
+    elif matrix[1][1] > matrix[2][2]:
+        scale = math.sqrt(1.0 + matrix[1][1] - matrix[0][0] - matrix[2][2]) * 2.0
+        quaternion = (
+            (matrix[0][2] - matrix[2][0]) / scale,
+            (matrix[0][1] + matrix[1][0]) / scale,
+            0.25 * scale,
+            (matrix[1][2] + matrix[2][1]) / scale,
+        )
+    else:
+        scale = math.sqrt(1.0 + matrix[2][2] - matrix[0][0] - matrix[1][1]) * 2.0
+        quaternion = (
+            (matrix[1][0] - matrix[0][1]) / scale,
+            (matrix[0][2] + matrix[2][0]) / scale,
+            (matrix[1][2] + matrix[2][1]) / scale,
+            0.25 * scale,
+        )
+    norm = math.sqrt(sum(value * value for value in quaternion))
+    if not math.isfinite(norm) or norm <= 0.0:
+        raise HeadCameraGeometryError(
+            "HEAD_CAMERA_ORIENTATION_INVALID: the axes are not a rotation"
+        )
+    return (
+        quaternion[0] / norm,
+        quaternion[1] / norm,
+        quaternion[2] / norm,
+        quaternion[3] / norm,
+    )

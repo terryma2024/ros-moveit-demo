@@ -10,12 +10,16 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from enum import Enum
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 
 import numpy as np
-from so101_demo.act.head_camera_geometry import scene_source_digests
+from so101_demo.act.head_camera_geometry import (
+    camera_pose_from_seal,
+    quaternion_wxyz_from_xyaxes,
+    scene_source_digests,
+)
 from so101_demo.adapters.perception.mujoco_scene_geometry import (
     ScenePenetrationError,
     TaskSceneGeometry,
@@ -142,6 +146,7 @@ class RawRender:
     camera_quaternion_wxyz: tuple[float, float, float, float] | None = None
     camera_local_position_m: tuple[float, float, float] | None = None
     camera_local_xyaxes: tuple[float, ...] | None = None
+    arm_pose_rad: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         rgb = np.array(self.rgb8, dtype=np.uint8, copy=True)
@@ -191,6 +196,10 @@ class RawRender:
                 self,
                 "camera_local_xyaxes",
                 tuple(float(value) for value in self.camera_local_xyaxes),
+            )
+        if self.arm_pose_rad is not None:
+            object.__setattr__(
+                self, "arm_pose_rad", tuple(float(value) for value in self.arm_pose_rad)
             )
         if self.neck_rad is not None:
             object.__setattr__(self, "neck_rad", float(self.neck_rad))
@@ -375,6 +384,7 @@ class RendererSettings:
     require_nonpenetrating_scene: bool = False
     neck_yaw_rad: tuple[float, float] | None = None
     camera_jitter_m: tuple[float, float] | None = None
+    arm_pose_rad: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         path = Path(self.mjcf_path)
@@ -398,6 +408,7 @@ class RendererSettings:
             if low < 0.0 or high < low:
                 raise ValueError("camera_jitter_m must be a nonnegative increasing two-value range")
             object.__setattr__(self, "camera_jitter_m", (low, high))
+        object.__setattr__(self, "arm_pose_rad", _arm_pose_values(self.arm_pose_rad))
         object.__setattr__(self, "mjcf_path", path)
 
 
@@ -418,6 +429,7 @@ class DatasetConfig:
     geometry_seal: GeometrySealRequirement | None = None
     neck_yaw_rad: tuple[float, float] | None = None
     camera_jitter_m: tuple[float, float] | None = None
+    arm_pose_rad: tuple[float, ...] | None = None
     promotable: bool = True
 
     def __post_init__(self) -> None:
@@ -467,6 +479,7 @@ class DatasetConfig:
             if low < 0.0 or high < low:
                 raise ValueError("camera_jitter_m must be a nonnegative increasing two-value range")
             object.__setattr__(self, "camera_jitter_m", (low, high))
+        object.__setattr__(self, "arm_pose_rad", _arm_pose_values(self.arm_pose_rad))
         if self.dataset_contract == HEAD_SEARCH_DATASET_CONTRACT:
             if self.geometry_seal is None or self.geometry_seal.required is not True:
                 raise ValueError(
@@ -507,6 +520,7 @@ class DatasetConfig:
             require_nonpenetrating_scene=self.require_nonpenetrating_scene,
             neck_yaw_rad=self.neck_yaw_rad,
             camera_jitter_m=self.camera_jitter_m,
+            arm_pose_rad=self.arm_pose_rad,
         )
 
 
@@ -809,6 +823,17 @@ def split_scene_plan(
     )
 
 
+def _arm_pose_values(document: object) -> tuple[float, ...] | None:
+    if document is None:
+        return None
+    if isinstance(document, (str, bytes)) or not isinstance(document, (list, tuple)):
+        raise ValueError("arm_pose_rad must be a sequence of joint angles")
+    values = tuple(float(value) for value in document)
+    if any(not math.isfinite(value) for value in values):
+        raise ValueError("arm_pose_rad must hold finite joint angles")
+    return values
+
+
 def _jitter_range_from_document(document: object) -> tuple[float, float] | None:
     if document is None:
         return None
@@ -907,6 +932,7 @@ def load_dataset_config(
         ),
         neck_yaw_rad=_neck_range_from_document(document.get("neck_yaw_rad")),
         camera_jitter_m=_jitter_range_from_document(document.get("camera_jitter_m")),
+        arm_pose_rad=_arm_pose_values(document.get("arm_pose_rad")),
         promotable=document.get("promotable", True),
     )
 
@@ -1312,6 +1338,27 @@ def _head_profile_context(
             "HEAD_CAMERA_GEOMETRY_SEAL_INCOMPLETE: the seal does not freeze the camera definition it "
             "accepted, so a render cannot be checked against it"
         )
+    sealed_arm = geometry_seal.get("validation_arm_rad")
+    if not isinstance(sealed_arm, (list, tuple)) or not sealed_arm:
+        raise ValueError(
+            "HEAD_CAMERA_GEOMETRY_SEAL_INCOMPLETE: the seal does not freeze the arm pose its geometry "
+            "was validated at"
+        )
+    if config.arm_pose_rad is None:
+        raise ValueError(
+            "HEAD_DATASET_ARM_POSE_UNDECLARED: the head profile must declare the arm configuration it "
+            "renders from"
+        )
+    if len(config.arm_pose_rad) != len(sealed_arm) or any(
+        not abs(observed - frozen) <= 1e-12
+        for observed, frozen in zip(
+            config.arm_pose_rad, [float(v) for v in sealed_arm], strict=True
+        )
+    ):
+        raise ValueError(
+            "HEAD_DATASET_ARM_POSE_DRIFT: the profile renders from an arm configuration the seal was "
+            f"not validated at ({list(config.arm_pose_rad)} vs {list(sealed_arm)})"
+        )
     if config.camera_jitter_m is None:
         raise ValueError(
             "HEAD_DATASET_CAMERA_JITTER_UNDECLARED: the head profile must declare its camera-mount "
@@ -1326,10 +1373,12 @@ def _head_profile_context(
         float(geometry_seal["horizontal_fov_rad"]) / 2.0
     )
     return {
+        "seal": geometry_seal,
         "seal_sha256": geometry_seal_sha256(geometry_seal),
         "focal_px": focal_px,
         "principal_point_px": (config.image_width / 2.0, config.image_height / 2.0),
         "camera": dict(sealed_camera),
+        "arm_pose_rad": tuple(float(value) for value in sealed_arm),
     }
 
 
@@ -1362,6 +1411,20 @@ def _sample_camera_document(
         raise ValueError(
             "HEAD_DATASET_CAMERA_IDENTITY_MISSING: the render did not report the camera's mounted pose"
         )
+    if render.arm_pose_rad is None:
+        raise ValueError(
+            "HEAD_DATASET_ARM_POSE_MISSING: the render did not report the arm configuration it used"
+        )
+    sealed_arm = [float(value) for value in context["arm_pose_rad"]]
+    observed_arm = [float(value) for value in render.arm_pose_rad]
+    if len(observed_arm) != len(sealed_arm) or any(
+        not abs(observed - frozen) <= 1e-12
+        for observed, frozen in zip(observed_arm, sealed_arm, strict=True)
+    ):
+        raise ValueError(
+            "HEAD_DATASET_ARM_POSE_DRIFT: the render used an arm configuration the seal was not "
+            f"validated at ({observed_arm} vs {sealed_arm})"
+        )
     sealed = context["camera"]
     sealed_local = _require_finite("camera.local_position_m", sealed.get("local_position_m"), 3)
     sealed_axes = _require_finite("camera.local_xyaxes", sealed.get("local_xyaxes"), 6)
@@ -1379,6 +1442,32 @@ def _sample_camera_document(
             f"({observed_local} vs the sealed {sealed_local}); the sealed geometry no longer describes "
             "these images"
         )
+    predicted_position, predicted_axes = camera_pose_from_seal(
+        context["seal"], float(render.neck_rad)
+    )
+    predicted_quaternion = quaternion_wxyz_from_xyaxes(predicted_axes)
+    if any(
+        not abs(observed - expected) <= 1e-6
+        for observed, expected in zip(render.camera_position_m, predicted_position, strict=True)
+    ):
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_POSE_MISMATCH: the render's world position is not the pose the "
+            "sealed mount model produces at this neck angle"
+        )
+    observed_quaternion = [float(value) for value in render.camera_quaternion_wxyz]
+    direct = max(
+        abs(observed - expected)
+        for observed, expected in zip(observed_quaternion, predicted_quaternion, strict=True)
+    )
+    flipped = max(
+        abs(observed + expected)
+        for observed, expected in zip(observed_quaternion, predicted_quaternion, strict=True)
+    )
+    if min(direct, flipped) > 1e-6:
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_POSE_MISMATCH: the render's orientation is not the pose the sealed "
+            "mount model produces at this neck angle"
+        )
     focal = float(context["focal_px"])
     cx, cy = (float(value) for value in context["principal_point_px"])
     return {
@@ -1393,6 +1482,7 @@ def _sample_camera_document(
         "local_position_m": observed_local,
         "local_xyaxes": observed_axes,
         "neck_rad": render.neck_rad,
+        "arm_rad": observed_arm,
         "scene_group_id": scene_group_id,
     }
 
@@ -1595,6 +1685,7 @@ class MuJoCoDatasetRenderer:
             self.close()
             raise
         self._neck_rad: float | None = None
+        self._arm_rad: tuple[float, ...] | None = None
         self._base_camera_position = np.array(self._model.cam_pos[self._camera_id()], copy=True)
         camera_rotation = np.asarray(self._model.cam_mat0[self._camera_id()]).reshape(3, 3)
         self._camera_local_positive_z = np.array(camera_rotation[:, 2], copy=True)
@@ -1669,6 +1760,19 @@ class MuJoCoDatasetRenderer:
         )
         self._set_free_joint_position("bottle_free_joint", bottle)
         self._neck_rad = None
+        self._arm_rad = None
+        if self._config.arm_pose_rad is not None:
+            values = tuple(float(value) for value in self._config.arm_pose_rad)
+            for index, joint_name in enumerate(("1", "2", "3", "4", "5", "6")):
+                if index >= len(values):
+                    break
+                joint_id = self._mujoco.mj_name2id(
+                    self._model, self._mujoco.mjtObj.mjOBJ_JOINT, joint_name
+                )
+                if joint_id < 0:
+                    raise RuntimeError(f"arm joint not found: {joint_name}")
+                self._data.qpos[int(self._model.jnt_qposadr[joint_id])] = values[index]
+            self._arm_rad = values
         if self._config.neck_yaw_rad is not None:
             low, high = self._config.neck_yaw_rad
             neck_id = self._mujoco.mj_name2id(
@@ -1840,6 +1944,7 @@ class MuJoCoDatasetRenderer:
             camera_quaternion_wxyz=tuple(float(value) for value in camera_quaternion),
             camera_local_position_m=tuple(float(value) for value in self._model.cam_pos[camera_id]),
             camera_local_xyaxes=_local_xyaxes(self._model.cam_mat0[camera_id]),
+            arm_pose_rad=self._arm_rad,
         )
 
     def render(
@@ -1935,6 +2040,12 @@ def verify_head_search_manifest(
             "HEAD_DATASET_GEOMETRY_SEAL_INCOMPLETE: the seal freezes no camera definition to check "
             "the samples against"
         )
+    neck_range = [float(value) for value in manifest.get("neck_yaw_rad") or []]
+    if len(neck_range) != 2:
+        raise ValueError(
+            "HEAD_DATASET_MANIFEST_INVALID: the manifest does not record the neck sampling range it "
+            "was rendered with"
+        )
     sealed_local = [float(value) for value in sealed_camera.get("local_position_m") or []]
     sealed_axes = [float(value) for value in sealed_camera.get("local_xyaxes") or []]
     if len(sealed_local) != 3 or len(sealed_axes) != 6:
@@ -1958,7 +2069,7 @@ def verify_head_search_manifest(
                 f"HEAD_DATASET_SCENE_GROUP_MISSING: seed {sample.get('seed')} declares no scene group"
             )
         camera = sample.get("camera") or {}
-        _verify_sample_camera(camera, geometry_seal, sealed_local, sealed_axes, sample.get("seed"))
+        _verify_sample_camera(camera, geometry_seal, sealed_local, sealed_axes, sample, neck_range)
         if group in groups:
             raise ValueError(
                 f"HEAD_DATASET_SCENE_GROUP_DUPLICATE: {group} is claimed by more than one sample"
@@ -1967,7 +2078,21 @@ def verify_head_search_manifest(
         scenario_counts[split][scenario] += 1
         for key in ("image", "label", "truth"):
             relative = sample.get(key)
-            if not relative or not (root / str(relative)).is_file():
+            if not isinstance(relative, str) or not relative:
+                raise ValueError(
+                    f"HEAD_DATASET_FILE_MISSING: {key} of seed {sample.get('seed')} is not a path"
+                )
+            canonical = PurePosixPath(relative)
+            if (
+                canonical.is_absolute()
+                or "\\" in relative
+                or canonical.as_posix() != relative
+                or any(part in {"", ".", ".."} for part in canonical.parts)
+            ):
+                raise ValueError(
+                    f"HEAD_DATASET_FILE_PATH_INVALID: {relative!r} is not a canonical relative path"
+                )
+            if not (root / relative).is_file():
                 raise ValueError(
                     f"HEAD_DATASET_FILE_MISSING: {key} {relative!r} of seed {sample.get('seed')} "
                     "is not on disk"
@@ -2042,9 +2167,12 @@ def _verify_sample_camera(
     geometry_seal: Mapping[str, Any],
     sealed_local: list[float],
     sealed_axes: list[float],
-    seed: object,
+    sample: Mapping[str, Any],
+    neck_range: list[float],
 ) -> None:
-    """Every sample must carry one complete, finite, and still-sealed camera identity."""
+    """Every sample must carry one complete, finite camera identity the seal predicts exactly."""
+
+    seed = sample.get("seed")
 
     def invalid(reason: str) -> ValueError:
         return ValueError(f"HEAD_DATASET_CAMERA_IDENTITY_INVALID: seed {seed} {reason}")
@@ -2052,13 +2180,24 @@ def _verify_sample_camera(
     seal_camera_name = geometry_seal.get("camera_name")
     if camera.get("frame_id") != seal_camera_name:
         raise invalid("names another camera")
-    for name, size in (("k", 9), ("distortion", 5), ("position_m", 3), ("quaternion_wxyz", 4)):
+    fields = {
+        "k": 9,
+        "distortion": 5,
+        "position_m": 3,
+        "quaternion_wxyz": 4,
+        "local_position_m": 3,
+        "local_xyaxes": 6,
+        "arm_rad": 6,
+    }
+    observed: dict[str, list[float]] = {}
+    for name, size in fields.items():
         values = camera.get(name)
         if isinstance(values, (str, bytes)) or not isinstance(values, (list, tuple)):
             raise invalid(f"has no {name}")
         numbers = [float(value) for value in values]
         if len(numbers) != size or any(not math.isfinite(value) for value in numbers):
             raise invalid(f"has a non-finite or incomplete {name}")
+        observed[name] = numbers
     neck = camera.get("neck_rad")
     if (
         isinstance(neck, bool)
@@ -2066,20 +2205,87 @@ def _verify_sample_camera(
         or not math.isfinite(float(neck))
     ):
         raise invalid("has no finite neck angle")
+    neck = float(neck)
     if camera.get("width") != geometry_seal.get("image_width") or camera.get(
         "height"
     ) != geometry_seal.get("image_height"):
         raise invalid("does not match the sealed image size")
-    local = [float(value) for value in camera.get("local_position_m") or []]
-    axes = [float(value) for value in camera.get("local_xyaxes") or []]
-    if len(local) != 3 or any(
-        abs(observed - frozen) > 1e-12 for observed, frozen in zip(local, sealed_local, strict=True)
+
+    width = float(geometry_seal["image_width"])
+    height = float(geometry_seal["image_height"])
+    focal = (width / 2.0) / math.tan(float(geometry_seal["horizontal_fov_rad"]) / 2.0)
+    expected_k = [focal, 0.0, width / 2.0, 0.0, focal, height / 2.0, 0.0, 0.0, 1.0]
+    if any(
+        not abs(value - expected) <= 1e-6
+        for value, expected in zip(observed["k"], expected_k, strict=True)
     ):
-        raise invalid("was rendered from a camera the seal does not describe")
-    if len(axes) != 6 or any(
-        abs(observed - frozen) > 1e-9 for observed, frozen in zip(axes, sealed_axes, strict=True)
+        raise ValueError(
+            f"HEAD_DATASET_CAMERA_INTRINSICS_MISMATCH: seed {seed} reports intrinsics the seal does "
+            "not describe"
+        )
+
+    lock = [float(value) for value in geometry_seal.get("lock_valid_neck_rad") or []]
+    if len(lock) != 2 or not lock[0] - 1e-9 <= neck <= lock[1] + 1e-9:
+        raise ValueError(
+            f"HEAD_DATASET_CAMERA_NECK_UNSAFE: seed {seed} was rendered at neck {neck}, outside the "
+            f"sealed interval {lock}"
+        )
+    if not neck_range[0] - 1e-9 <= neck <= neck_range[1] + 1e-9:
+        raise ValueError(
+            f"HEAD_DATASET_CAMERA_NECK_UNSAFE: seed {seed} was rendered at neck {neck}, outside the "
+            f"manifest's own sampling range {neck_range}"
+        )
+
+    expected_position, expected_axes = camera_pose_from_seal(geometry_seal, neck)
+    if any(
+        not abs(value - expected) <= 1e-6
+        for value, expected in zip(observed["position_m"], expected_position, strict=True)
+    ):
+        raise ValueError(
+            f"HEAD_DATASET_CAMERA_POSE_MISMATCH: seed {seed} reports a world pose the sealed mount "
+            "model cannot produce"
+        )
+    expected_quaternion = quaternion_wxyz_from_xyaxes(expected_axes)
+    quaternion = observed["quaternion_wxyz"]
+    norm = math.sqrt(sum(value * value for value in quaternion))
+    if not abs(norm - 1.0) <= 1e-6:
+        raise ValueError(
+            f"HEAD_DATASET_CAMERA_ORIENTATION_INVALID: seed {seed} reports a non-unit quaternion "
+            f"(norm {norm})"
+        )
+    direct = max(
+        abs(value - expected)
+        for value, expected in zip(quaternion, expected_quaternion, strict=True)
+    )
+    flipped = max(
+        abs(value + expected)
+        for value, expected in zip(quaternion, expected_quaternion, strict=True)
+    )
+    if min(direct, flipped) > 1e-6:
+        raise ValueError(
+            f"HEAD_DATASET_CAMERA_POSE_MISMATCH: seed {seed} reports an orientation the sealed mount "
+            "model cannot produce"
+        )
+
+    if any(
+        not abs(value - frozen) <= 1e-12
+        for value, frozen in zip(observed["local_position_m"], sealed_local, strict=True)
+    ):
+        raise invalid("was rendered from a camera position the seal does not describe")
+    if any(
+        not abs(value - frozen) <= 1e-9
+        for value, frozen in zip(observed["local_xyaxes"], sealed_axes, strict=True)
     ):
         raise invalid("was rendered from a camera orientation the seal does not describe")
+    sealed_arm = [float(value) for value in geometry_seal.get("validation_arm_rad") or []]
+    if len(sealed_arm) != len(observed["arm_rad"]) or any(
+        not abs(value - frozen) <= 1e-12
+        for value, frozen in zip(observed["arm_rad"], sealed_arm, strict=True)
+    ):
+        raise ValueError(
+            f"HEAD_DATASET_ARM_POSE_DRIFT: seed {seed} was rendered at an arm configuration the seal "
+            "was not validated at"
+        )
 
 
 def _verify_sample_truth(
@@ -2133,6 +2339,25 @@ def _verify_sample_truth(
             raise ValueError(
                 f"HEAD_DATASET_TRUTH_IDENTITY_MISMATCH: truth of seed {sample.get('seed')} records no "
                 "raw mask digest"
+            )
+        try:
+            mask = decode_binary_mask_rle(
+                instance.get("visible_mask_rle_counts"), instance.get("mask_shape_hw")
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                f"HEAD_DATASET_TRUTH_IDENTITY_MISMATCH: the mask of seed {sample.get('seed')} does "
+                f"not decode: {error}"
+            ) from error
+        if _mask_sha256(mask) != digest:
+            raise ValueError(
+                f"HEAD_DATASET_TRUTH_IDENTITY_MISMATCH: the stored mask of seed {sample.get('seed')} "
+                "is not the mask its digest claims"
+            )
+        if instance.get("visible_pixel_count") != int(mask.sum()):
+            raise ValueError(
+                f"HEAD_DATASET_TRUTH_IDENTITY_MISMATCH: the stored mask of seed {sample.get('seed')} "
+                "does not hold the pixel count it claims"
             )
         digests.append(digest)
     if truth.get("raw_mask_sha256") != canonical_sha256(digests):
