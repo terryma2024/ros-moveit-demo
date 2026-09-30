@@ -41216,3 +41216,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   its Boolean defect fixed and its predicate shared across both sides; targeted gates **430 / 201 / 201 / 201 / 246
   / 247 / 200 / 283 / 176 / 284 / 151 passed**; HEAD `eeb86bdca`; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2190 — F11's invented-instant control landed: the reader refuses it
+
+- **What landed** (`test_act_episode_audit.py`): `test_readback_refuses_a_window_naming_an_instant_no_acquisition_holds`
+  — seal a self-consistent formal audit, edit the manifest's `window["source_schedule"]["head"]` to include **1.05**
+  (inside `collection_start_s`/`collection_end_s` of 1.0/1.2, matching no acquisition, list kept sorted), write the
+  manifest back and assert **`AUDIT_WINDOW_INVALID`**. Before CP-2189 this passed verification, which is exactly the
+  defect F11 reported; the control now pins it.
+- **Evidence.** Targeted run this round: **152 passed** across the audit, recorder, release-boundary and capture
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **What F11 still lists**: (1) **non-vacuous schedules** — `source_schedule={"head": [], "wrist": []}` satisfies
+  name membership and every instant/gap test vacuously in an otherwise valid complete fixture, and duplicated or
+  shortened schedules can omit observed coverage; (2) **frozen policy** — cadence, required streams and permitted
+  gaps are caller-provided rather than checked against the frozen inputs; (3) **reconstructed counts/ranges and
+  collection endpoints**, with other required source histories participating rather than camera acquisitions alone;
+  (4) the remaining one-variable controls at both boundaries.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  its Boolean defect, its shared predicate and its reader control all landed; targeted gates **430 / 201 / 201 / 201
+  / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 passed**; HEAD `86ff9c3d2`; no push, no evidence deletion, no
+  hardware, no second stack.

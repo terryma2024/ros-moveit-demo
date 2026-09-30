@@ -1279,3 +1279,16 @@ def test_the_expert_carries_the_ratified_group_into_the_audit(tmp_path):
         "reference_time_s": record["requested_sim_time_s"], "accepted": True})
     path = writer.seal(window)
     assert verify_audit_manifest(path)["kind"] == "ACT_EPISODE_AUDIT"
+
+
+def test_readback_refuses_a_window_naming_an_instant_no_acquisition_holds(tmp_path):
+    """T3-F11: the reader repeats the seal's window predicate, so an invented in-range instant is refused."""
+
+    writer, window = _self_consistent_formal(tmp_path / "case")
+    path = writer.seal(window)
+    document = json.loads(path.read_bytes())
+    head = list(document["window"]["source_schedule"]["head"])
+    document["window"]["source_schedule"]["head"] = sorted([*head, 1.05])   # in range, no acquisition
+    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
+        verify_audit_manifest(path)
