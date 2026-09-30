@@ -42179,3 +42179,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
   green and commit half landed (CP-2230); items 5+ wait on the four blocked bindings. HEAD `8c8bb548c`; fourteen
   gates green.
+
+
+## CP-2232 — The four blocked input roles, reduced to a list of values the owner can fill
+
+- **Read from `input-candidates.json`**: each blocked role carries an `identity` naming the values it is judged on,
+  so "the four roles lack approved values" becomes a short, concrete request:
+  | role | checks it covers | values required |
+  | --- | --- | --- |
+  | `path_policy` | `collision` | `path_step_s`, `path_clearance_m` |
+  | `placement_qc` | `release`, `retreat` | `grasp_occlusion_window_s`, `support_distance_m`, `release_stable_s`, `retreat_distance_m`, `placement_stable_s` |
+  | `rgb_skew` | `synchronization` | `max_age_s`, `max_skew_s` |
+  | `resource_thresholds` | — | none named; it has **two** candidates, both `approved: "true"` with `source_controlled` approval, and simply needs one **selected** |
+- **Nine numbers plus one selection** is the whole distance between the current state and a production composition
+  that gets past admission's per-role gate (CP-2212's third step). `rgb_skew`'s two values are also the ones the
+  camera-freshness reasoning has been assuming implicitly (`max_age_s`, `max_skew_s` are exactly the age and skew
+  bounds the reference receipts are compared against), so approving them would make that assumption explicit.
+- **What the owner's answer unlocks**: with those bindings, items 5+ (the default production composition and the
+  installed CLI) stop being blocked at `NONHEAD_INPUT_BINDING_REQUIRED`, and the first real non-Head run becomes
+  expressible — which is the remaining distance to this objective's second half.
+- **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
+  green, commit half landed (CP-2230); **the seventh review is running** (session `01a0f2f2-…`, pid 2700637, no
+  verdict file yet); items 5+ wait on this list. HEAD `360cd52d3`; fourteen gates green.
