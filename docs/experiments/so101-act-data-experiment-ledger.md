@@ -34723,3 +34723,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   Ultralytics and prints the composition. Its earlier iterations are what exposed both bugs above.
 - **Gate after these fixes:** 103 passed (1 skipped where Ultralytics is absent) plus 86 passed on the
   Task 2 render gate; `ruff check` clean on the changed sources.
+
+## HS-011 — Task 4 interface reconnaissance (read-only, recorded for the next task)
+
+- The Task 4 CLI is fixed by the plan's Task 12 Step 5 invocation and must therefore accept:
+  `evaluate_head_search_yolo_candidates compare --candidate <frozen-a.json> --candidate <frozen-b.json>
+  --candidate <frozen-c.json> --head-dataset <head manifest> --head-split test --task-dataset <task
+  manifest> --task-split test --episode-partitions <head-search-scenario-partitions-v1.json>
+  --episode-split held_out_evaluation --bootstrap-repetitions 10000 --device cuda --output <dir>`.
+  The `frozen-<id>.json` files are the frozen candidate identities (weight + both domain operating
+  points + tracker + postprocess + runtime), sealed before any test access.
+- `held_out_evaluation` is not a dataset split but a **seed partition**: Task 6 creates the tracked
+  `config/act/head-search-scenario-partitions-v1.json` holding disjoint `calibration`,
+  `held_out_evaluation` and 40-item `qualification` seed arrays, each qualification item carrying one of
+  ten condition classes and one of the three anchors. Task 4 must read that partition rather than invent
+  episodes, and it must keep static-image metrics and held-out detector/tracker episode metrics separate.
+- Statistics to reuse rather than reinvent: `perception_benchmark.metrics.bootstrap_image_metrics` and
+  `bootstrap_paired_image_metrics` resample with `numpy.random.default_rng(seed)` and align two runs by
+  `formal_sample_index`; Task 4's `paired_scene_bootstrap` must instead resample whole
+  `scene_group_id` units and report `independent_unit == "scene_group_id"` with `unit_count` equal to the
+  number of distinct scenes.
+- Task 4's gate is a **fresh dependency-closed build** (`--packages-up-to so101_demo_py` with its own
+  `--build-base`/`--install-base`) followed by `colcon test --packages-select so101_demo_py
+  --pytest-args benchmark_test` and a `colcon test-result` readback: ordinary `test/` collection does not
+  substitute for it, and the benchmark suite must not run during ordinary feature work.
