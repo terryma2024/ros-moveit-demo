@@ -36284,3 +36284,29 @@ under `<build-base>/<package>/`; that is recorded so the empty summary is not mi
 both CLI refusals, geometry seal, 32/8/8 dataset verify, both CUDA one-epoch smokes with balanced exposure, the
 view-only teleop smoke, the non-promotable refusal, the benchmark gate with readback, the README boundary
 statement and the frozen provenance record.
+
+## HS-060 — Task 11 verdict REJECT: two NOT MET items and seven findings (round 380)
+
+Verdict at `reviews/task11/task11-verdict.md` (GPT-6.1-Sol high, printed in-session and recorded verbatim): three
+MET, seven MET WITH FINDINGS, two **NOT MET**.
+
+**The two NOT MET items, and what they actually require:**
+
+1. **Item 3 - the parallel gate's scope.** My `-n 8` run covered five head-search suites, not the two complete
+   ordinary package suites the plan names. Fix: run the parallel gate over the whole ordinary `test/` trees of
+   `so101_demo_py` and `so101_teleop` (excluding `benchmark_test`), using `-p no:launch_testing
+   -p no:launch_testing_ros_pytest_entrypoint` when the ROS environment is loaded, per HS-044.
+2. **Item 11 - the benchmark runs still fail.** 62 failures under colcon and 1 under direct pytest. Both are
+   environment gaps rather than Head Search defects (the colcon rasterizer set and the missing
+   transformers/SAM2 module), but the reviewer is right that a gate that reports failures is not a passing
+   gate. Fix: either provide what is missing (the direct failure needs `transformers` in the perception venv;
+   the colcon set is very likely `MUJOCO_GL`/rasterizer configuration under the ROS environment) or record a
+   scoped, reasoned exemption - and in either case say which, with evidence.
+
+**The seven findings worth acting on** are mostly provenance and coverage gaps: the search smoke ran against the
+earlier seal rather than the final one, the refusals' individual outputs were not linked, the seal passes only for
+the narrowed workspace, the dataset verification output needs an explicit link, the CUDA smokes lack installed
+entry provenance, the teleop evidence comes from a TestClient rather than a live installed server, and the README
+claim lacks a fresh dependency-closure check. Those belong to the same task's remaining work.
+
+Task 11 therefore stays `in_progress`, and the two NOT MET items come first.
