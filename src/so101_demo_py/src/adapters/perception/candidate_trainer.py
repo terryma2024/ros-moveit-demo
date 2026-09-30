@@ -242,7 +242,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args = deepcopy(self.args)
                 args.data = str(val_list)
                 validator = SegmentationValidator(args=args)
-                validator(model=self.ema.ema if self.ema else self.model)
+                # validate a copy: the validator mutates the module it is handed (eval/half), which
+                # would desynchronise the trainer's EMA for the next epoch
+                import copy
+
+                source = self.ema.ema if self.ema else self.model
+                validator(model=copy.deepcopy(source))
                 cells[domain] = _mask_map(validator.metrics)
             self.fitness = two_domain_fitness(cells["head"], cells["task"])
             self.metrics = dict(cells)
