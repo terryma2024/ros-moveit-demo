@@ -37668,3 +37668,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4389a6d4c`;
   targeted gate `logs/task3-xdist.run` **410 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2027 — Session-closing verification at HEAD `ee50197cd`
+
+- **Gate.** `logs/task3-gate10.run` rc=0: **412 passed in 10.34s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof. The code has not changed since `logs/task3-xdist.run` (410 passed); this run confirms the same scope
+  is green at the current HEAD, whose later commits are documentation only.
+- **Where this session leaves the objective.** Still **Task 3**, with four recorded open items: the producer
+  steps 2-4 for the two ratified records (CP-2017, with the acceptance set named in CP-2024), the consumer
+  half of A.1 (callers reading `referenceFrames` instead of the fused projection), the window-to-rows checks
+  (CP-1997/CP-2001 recipes), and the `scene_revision` wording choice (CP-2019/CP-2020). Tasks 4-8 have not
+  started, and the four real input roles still lack approved values.
+- **What is verified, not claimed.** Targeted parallel gate green at this HEAD; the module-scope baseline
+  measured and classified (CP-2022/CP-2023); the producer change's acceptance set baselined green by name
+  (CP-2024); the worktree integrity question answered with the one defect recorded plainly (CP-2025/CP-2026)
+  and a staging rule written into the handoff so it is not repeated.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
+  deletion, no hardware, no second stack.
