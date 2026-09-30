@@ -35179,6 +35179,19 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   `4e0448b42`, `5a5a7f452`, `d362d4793`, `2b610ac18`, plus this one. Owed to Task 11: the two binding test
   files (stale underlay) and the installed smoke.
 
+- **Task 6 RED written (round 185).** `src/so101_demo_py/test/test_act_head_search_calibration.py` holds the
+  plan's Step 1 tests plus the acceptance cases: exactly the seventeen measured values; `max_age_s <= 0.15`
+  and `max_skew_s <= 0.05`; per-measurement provenance (unit, formula id, ordered input SHA256s,
+  distribution, margin, production owner, consumer field); the four perception values equalling the frozen
+  candidate identity; a hard-bound refusal; the five listed refusals
+  (`HEAD_SEARCH_CALIBRATION_FALSE_CANDIDATE`, `..._TWO_CUP_MISSING`, `..._IDENTITY_SWITCH`,
+  `..._NON_FINITE`, `..._UNSAFE_MOTION`); the tracked partition document (disjoint calibration/held-out/
+  40-item qualification, three anchors, no repeated scene); and the tracked schema and contract. The RED
+  gate failed for the right reason: `rc=2`, module absent
+  (`scratch/head-test-20260930T075246Z-S5SXl3Cr`). The tests are left uncommitted on purpose - the plan
+  commits at Step 4, after the implementation makes them GREEN - so the next round implements
+  `act/head_search_calibration.py`, the contract, the schema and the partitions document, then commits.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
