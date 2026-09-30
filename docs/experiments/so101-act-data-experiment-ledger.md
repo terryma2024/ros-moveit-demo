@@ -41159,3 +41159,28 @@ read backwards: the same **retention refusal**, reported identically on stderr a
 `model-comparison.json` and `model-selection-verdict.json` on disk naming `selection: null`, `retained_model: "C"`,
 `promoted: false`. If it instead selects a candidate, something about the patch changed behaviour, which would be a defect rather
 than a result.
+
+## HS-258 — The refusal is now a recorded decision: artefacts exist, behaviour unchanged
+
+Run against the fresh root (`head-toolchain-20260930T155706Z`, commit `753561290a0c`) with `episodes5`:
+
+```
+{"failure": "EVALUATION_TASK_RETENTION_LOST: the mixed model gives up 0.011 mask mAP on the task domain", "status": "ERROR"}
+compare4 rc=2
+evaluation/model-comparison.json          candidates: ['A', 'B', 'C']
+evaluation/model-selection-verdict.json   {'selection': None, 'retained_model': 'C', 'promoted': False}
+```
+
+**Exactly what HS-257 declared in advance, and nothing else:** the same refusal, the same message, the same non-zero exit - plus the
+two artefacts, with no selection, no promotion, and the margin untouched at 0.01. The patch changed what the refusal leaves behind,
+not what it decides.
+
+**So Task 12's outcome is now auditable on disk rather than reconstructable from a log:** a reader can see the measured cells for
+all three candidates, the retention margin, the incumbent's 0.011 loss, and the explicit `selection: null` - with `retained_model: C`
+and `promoted: false` stating plainly that the frozen evidence supported no choice.
+
+**What this does and does not change for Task 13:** its first guard (`test -f …/model-selection-verdict.json`) can now pass, so the
+task is no longer blocked at step one by a missing file. It remains **inapplicable by result** - there is no selected candidate to
+promote, and its runtime's six phases are stubs (HS-233) so a formal calibration run would still measure nothing. Both facts are
+recorded; neither is something a further round of mine can resolve without the user's decision on the campaign's purpose
+(HS-254/256).
