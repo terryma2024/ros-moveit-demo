@@ -1,0 +1,49 @@
+{
+  "allow_cpu_fallback": false,
+  "camera": {
+    "frame_id": "head_camera_optical_frame",
+    "height": 480,
+    "name": "head_camera",
+    "width": 640
+  },
+  "candidate_identity_sha256": "9c8a213ed9dcbc75a697e9fe6f10003be221901a938daad4e3afde1e18f91bcc",
+  "controlled_dependencies": [
+    "ultralytics",
+    "torch"
+  ],
+  "cuda_device": "cuda:0",
+  "runtime_id": "head-search-v2",
+  "schema_version": 2,
+  "tracker": {
+    "iou_threshold": 0.3,
+    "name": "bytetrack"
+  },
+  "unused_values": [],
+  "values": {
+    "center_deadband_px": 18.0,
+    "coarse_step_rad": 0.3,
+    "horizontal_fov_rad": 1.3121067481206794,
+    "lock_valid_neck_rad": [
+      -6.283175307179587,
+      6.283175307179587
+    ],
+    "max_age_s": 0.05,
+    "max_fine_corrections": 4,
+    "max_fine_total_rad": 0.4,
+    "max_skew_s": 0.02,
+    "min_area_px2": 64.0,
+    "min_bbox_aspect": 0.5,
+    "min_confidence": 0.4,
+    "search_timeout_s": 12.0,
+    "stop_latency_s": 0.06,
+    "stop_velocity_rad_s": 0.05,
+    "submit_lead_s": 0.02,
+    "tracking_iou": 0.3,
+    "vertical_bounds_px": [
+      110.0,
+      370.0
+    ]
+  },
+  "weight_path": "models/head-search/yolo11n-seg-best.pt",
+  "weight_sha256": "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
+}

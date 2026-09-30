@@ -212,7 +212,31 @@ def validate_head_search_shape(runtime: dict) -> dict:
 
 
 def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearchBinding:
-    """Fail closed before ROS or model construction on an unqualified pairing."""
+    """Fail closed before ROS or model construction on an unqualified pairing.
+
+    Two shapes reach startup: the promoted-config/qualified-report pair, which is compared value by value,
+    and the older runtime/calibration shape, which keeps its own validation.
+    """
+
+    if (
+        isinstance(runtime, dict)
+        and isinstance(calibration, dict)
+        and ("values" in runtime and "values" in calibration)
+    ):
+        validate_promoted_pair(runtime, calibration)
+        values = dict(runtime["values"])
+        return HeadSearchBinding(
+            detector={
+                "weight_path": runtime.get("weight_path"),
+                "weight_sha256": runtime.get("weight_sha256"),
+                "detector_sha256": runtime.get("candidate_identity_sha256"),
+                "device": runtime.get("cuda_device"),
+                "allow_cpu_fallback": runtime.get("allow_cpu_fallback"),
+            },
+            camera=dict(runtime.get("camera") or {}),
+            motion={"tracker": dict(runtime.get("tracker") or {})},
+            search_values=values,
+        )
     try:
         descriptor = validate_head_search_shape(runtime)
         detector, camera, motion = (descriptor[name] for name in ("detector", "camera", "motion"))
@@ -362,3 +386,64 @@ def validate_head_only_admission(admission):
             "HEAD_ONLY_OPERATION_REFUSED: head-only admission binds exactly one stack and one detector"
         )
     return dict(admission)
+
+
+#: the seventeen fields a promoted head search config and its qualified report must agree on exactly
+HEAD_SEARCH_VALUE_FIELDS = (
+    "horizontal_fov_rad",
+    "lock_valid_neck_rad",
+    "coarse_step_rad",
+    "search_timeout_s",
+    "min_confidence",
+    "tracking_iou",
+    "min_bbox_aspect",
+    "min_area_px2",
+    "center_deadband_px",
+    "vertical_bounds_px",
+    "max_fine_corrections",
+    "max_fine_total_rad",
+    "max_age_s",
+    "max_skew_s",
+    "submit_lead_s",
+    "stop_velocity_rad_s",
+    "stop_latency_s",
+)
+#: the identities that must match between the promoted config and the qualified report
+HEAD_SEARCH_IDENTITY_FIELDS = ("weight_sha256", "candidate_identity_sha256", "runtime_id")
+
+
+def validate_promoted_pair(config, report):
+    """Fail closed before ROS or model construction when the promoted config and report disagree.
+
+    Every one of the seventeen values is compared, not sampled, and the weight, candidate and runtime
+    identities must match too: a single drifted field is enough to refuse startup.
+    """
+
+    from collections.abc import Mapping
+
+    def refuse(what: str) -> None:
+        raise ValueError(f"HEAD_SEARCH_SAMPLE_MISMATCH: {what}")
+
+    for name, document in (("config", config), ("report", report)):
+        if not isinstance(document, Mapping):
+            refuse(f"the {name} is not a document")
+    configured = config.get("values")
+    reported = report.get("values")
+    if not isinstance(configured, Mapping) or not isinstance(reported, Mapping):
+        refuse("a document declares no values")
+    if set(configured) != set(HEAD_SEARCH_VALUE_FIELDS):
+        refuse("the promoted config does not declare exactly the seventeen values")
+    if set(reported) != set(HEAD_SEARCH_VALUE_FIELDS):
+        refuse("the qualified report does not declare exactly the seventeen values")
+    for field in HEAD_SEARCH_VALUE_FIELDS:
+        if configured[field] != reported[field]:
+            refuse(f"{field} differs between the promoted config and the report")
+    for field in HEAD_SEARCH_IDENTITY_FIELDS:
+        if config.get(field) != report.get(field):
+            refuse(f"{field} differs between the promoted config and the report")
+    unused = list(config.get("unused_values") or []) + list(report.get("unused_values") or [])
+    if unused:
+        raise ValueError(f"HEAD_SEARCH_UNUSED_VALUE: nothing consumes {sorted(unused)}")
+    if config.get("allow_cpu_fallback") is not False:
+        raise ValueError("HEAD_SEARCH_CUDA_REQUIRED: startup must forbid CPU fallback")
+    return config
