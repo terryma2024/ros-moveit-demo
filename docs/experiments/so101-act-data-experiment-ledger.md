@@ -43162,3 +43162,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F13 remainder: the readback check that both kinds appear, and the fenced current scene record in place of
   _planning_scene_record() returning None.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four cuts; F5/F12 open; goal paused.
+
+## CP-2283 - F13's fourth item resolved into a specified two-file feature
+
+- Read this round: _planning_scene_record (pick_place_search_segment.py:46) is not an unexplained None. It takes the
+  readback the record would be about, looks for the port's observe_observation, and returns None with a comment
+  saying precisely why: the port's read is a fresh query that carries no observed instant of its own, so stamping it
+  with an earlier readback's simulation_time_s would manufacture exact clock equality instead of proving that scene
+  and physics describe the same step - and the audit refuses an unfenced record anyway, so a refusal is the honest
+  outcome. That is exactly what the seventh verdict credits as an honest refusal and not as completion of the
+  obligation.
+- So F13's fourth item is a feature across two files, not a patch: the search port's observation read must report
+  the simulation instant it observed, and this method must then compare that instant with raw - the fence the
+  comment names - before emitting the record. The port's current signature is printed alongside this entry.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four cuts with this fourth
+  specified; F5/F12 open; goal paused.
