@@ -36689,3 +36689,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (unblocked by ratification); items 4-8
   pending.** HEAD `7cc337d60`; gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline
   untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1984 — Task 3 convergence, second ratified schema at the audit boundary: Proposal A's raw frames
+
+- **The audit accepts and validates the ratified per-frame shape.** A reference record may now carry
+  `frames` (both `arm` and `gripper`, each with its own ordered `joint_names`, positions **and**
+  velocities of that order and length, `sim_stamp_ns`, `received_monotonic_ns` and `observer_sequence`),
+  an `evaluation` block (`requested_sim_time_s`, `basis` of `published` or `interval`, and a `goal_id`
+  with `accepted_sim_s` **required** for an interval basis or absent for a publication), the six
+  `projected_positions` and the six-entry `projection_map`. Every map entry must resolve inside its
+  frame's velocities and **equal the projected value**, and the outer `positions` the label uses must
+  equal the projection — which is the "explicit checked mapping" the reviewer required rather than a
+  silent five-plus-one fusion.
+- **The two shapes are alternatives, never mixed.** The ratified shape and the legacy flat four-field
+  group are accepted separately, a partial group of either is refused, and a record carrying both is
+  refused, so the transitional state cannot be read as one complete contract.
+- **Evidence.** `logs/task3-fix33.run` rc=0: **129 passed** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_continuous_capture.py`, `test_act_release_boundary.py` and
+  `test_act_supervisor.py`, with its own NVMe scratch and a non-empty tempfile proof. The control accepts
+  a full ratified record and refuses seven malformed variants (a publication basis carrying a goal, an
+  interval basis without one, an out-of-range map index, a projection that disagrees with the map, a
+  velocity list of the wrong length, a single frame, an extra frame kind) plus the mixed-shape case.
+- **Next in the ratified order.** The producer hops for A: the observer's per-frame `observer_sequence`,
+  the broker exposing `frames`/`evaluation` instead of its fused six-joint projection, the tap and capture
+  forwarding the new shape (they already forward the legacy group), then Proposal C's registered-sample
+  enforcement plus the Planning Scene and feedback records, then the fifth checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f38f9dafb`;
+  gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

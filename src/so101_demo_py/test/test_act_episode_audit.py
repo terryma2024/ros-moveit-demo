@@ -774,3 +774,59 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
     diagnostic = EpisodeAuditWriter(tmp_path / "diagnostic", scope(), identity(),
                                     {"inputs_sha256": "a" * 64})
     assert diagnostic.seal({"start_s": 1.0}).is_file()
+
+
+def _ratified_reference():
+    return {"frames": {
+        "arm": {"joint_names": ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex",
+                                "wrist_roll"],
+                "positions": [0.1, 0.2, 0.3, 0.4, 0.5], "velocities": [0.0] * 5,
+                "sim_stamp_ns": 1100000000, "received_monotonic_ns": 900000, "observer_sequence": 7},
+        "gripper": {"joint_names": ["gripper"], "positions": [0.6], "velocities": [0.0],
+                    "sim_stamp_ns": 1100000000, "received_monotonic_ns": 900100,
+                    "observer_sequence": 7}},
+        "evaluation": {"requested_sim_time_s": 1.1, "basis": "interval", "goal_id": "goal-1",
+                       "accepted_sim_s": 1.0, "revoked_sim_s": None},
+        "projected_positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        "projection_map": [["arm", 0], ["arm", 1], ["arm", 2], ["arm", 3], ["arm", 4],
+                           ["gripper", 0]]}
+
+
+def test_the_ratified_reference_frames_are_accepted_and_validated(tmp_path):
+    """Proposal A: per-kind frames with their clocks, an evaluation and a checked map."""
+
+    base = {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+            "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6], "accepted": True}
+    writer = EpisodeAuditWriter(tmp_path / "ok", scope(), identity(), {"inputs_sha256": "a" * 64})
+    writer.append_source("references", {**base, **_ratified_reference()})
+
+    def broken(**changes):
+        document = json.loads(json.dumps(_ratified_reference()))
+        for key, value in changes.items():
+            if value is None:
+                document.pop(key, None)
+            else:
+                document[key] = value
+        return document
+
+    frames = _ratified_reference()["frames"]
+    cases = [broken(evaluation={"requested_sim_time_s": 1.1, "basis": "published", "goal_id": "g",
+                                "accepted_sim_s": 1.0, "revoked_sim_s": None}),
+             broken(evaluation={**_ratified_reference()["evaluation"], "goal_id": None,
+                                "accepted_sim_s": None}),
+             broken(projection_map=[["arm", 0], ["arm", 1], ["arm", 2], ["arm", 3], ["arm", 4],
+                                    ["gripper", 3]]),
+             broken(projected_positions=[0.9, 0.2, 0.3, 0.4, 0.5, 0.6]),
+             broken(frames={**frames, "arm": {**frames["arm"], "velocities": [0.0] * 4}}),
+             broken(frames={"arm": frames["arm"]}),
+             broken(frames={**frames, "base": frames["gripper"]})]
+    for index, document in enumerate(cases):
+        other = EpisodeAuditWriter(tmp_path / f"bad-{index}", scope(), identity(),
+                                   {"inputs_sha256": "a" * 64})
+        with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+            other.append_source("references", {**base, **document})
+    mixed = EpisodeAuditWriter(tmp_path / "mixed", scope(), identity(), {"inputs_sha256": "a" * 64})
+    with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+        mixed.append_source("references", {**base, **_ratified_reference(),
+                                           "joint_names": ["a"], "sim_stamp_ns": 1,
+                                           "received_monotonic_ns": 1, "velocities": [0.0]})

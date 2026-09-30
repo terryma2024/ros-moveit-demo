@@ -55,6 +55,15 @@ _REFERENCE_FIELDS = frozenset({"sequence", "reference_time_s", "source", "positi
 # record preserves all of them or none, so a partial raw history can never look complete
 _REFERENCE_RAW_FIELDS = frozenset({"joint_names", "sim_stamp_ns", "received_monotonic_ns",
                                    "velocities"})
+# the ratified Proposal A shape: one frame per controller kind plus the evaluation that produced the
+# projected action, all-or-nothing like the legacy group
+_REFERENCE_FRAME_FIELDS = frozenset({"frames", "evaluation", "projected_positions", "projection_map"})
+_FRAME_KINDS = ("arm", "gripper")
+_FRAME_FIELDS = frozenset({"joint_names", "positions", "velocities", "sim_stamp_ns",
+                           "received_monotonic_ns", "observer_sequence"})
+_EVALUATION_FIELDS = frozenset({"requested_sim_time_s", "basis", "goal_id", "accepted_sim_s",
+                                "revoked_sim_s"})
+_EVALUATION_BASES = ("published", "interval")
 _EVENT_FIELDS = frozenset({"sequence", "kind", "identity", "sim_time_s", "monotonic_ns",
                            "payload"})
 # the frozen contract delegates the per-kind payload schema here; each entry is the exact key set a
@@ -160,6 +169,66 @@ def _reference_raw_ok(record, code: str) -> None:
             or any(isinstance(value, bool) or not isinstance(value, (int, float))
                    or not math.isfinite(value) for value in velocities)):
         raise ValueError(code)
+
+
+def _finite_vector(value, *, length: int | None = None) -> bool:
+    return (isinstance(value, list) and (length is None or len(value) == length)
+            and all(not isinstance(item, bool) and isinstance(item, (int, float))
+                    and math.isfinite(item) for item in value))
+
+
+def _reference_frames_ok(record) -> None:
+    """Validate the ratified per-frame raw history and its evaluation, or refuse."""
+
+    frames = record["frames"]
+    if not isinstance(frames, dict) or set(frames) != set(_FRAME_KINDS):
+        raise ValueError("AUDIT_SCHEMA_INVALID")
+    for kind, frame in frames.items():
+        if not isinstance(frame, dict) or set(frame) != _FRAME_FIELDS:
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        names = frame["joint_names"]
+        if (not isinstance(names, list) or not names
+                or any(not isinstance(name, str) or not name for name in names)):
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        # positions and velocities keep the registered order and length of the names
+        if (not _finite_vector(frame["positions"], length=len(names))
+                or not _finite_vector(frame["velocities"], length=len(names))):
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        for key in ("sim_stamp_ns", "received_monotonic_ns", "observer_sequence"):
+            if type(frame[key]) is not int or frame[key] < 1:
+                raise ValueError("AUDIT_SCHEMA_INVALID")
+    evaluation = record["evaluation"]
+    if not isinstance(evaluation, dict) or set(evaluation) != _EVALUATION_FIELDS:
+        raise ValueError("AUDIT_SCHEMA_INVALID")
+    if not _finite_vector([evaluation["requested_sim_time_s"]]) or evaluation["basis"] not in \
+            _EVALUATION_BASES:
+        raise ValueError("AUDIT_SCHEMA_INVALID")
+    goal, accepted, revoked = (evaluation["goal_id"], evaluation["accepted_sim_s"],
+                               evaluation["revoked_sim_s"])
+    if evaluation["basis"] == "interval":
+        # an interval evaluation names the accepted goal it came from, with its acceptance stamp
+        if not isinstance(goal, str) or not goal or not _finite_vector([accepted]):
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+    elif goal is not None or accepted is not None:
+        raise ValueError("AUDIT_SCHEMA_INVALID")
+    if revoked is not None and not _finite_vector([revoked]):
+        raise ValueError("AUDIT_SCHEMA_INVALID")
+    projected = record["projected_positions"]
+    mapping = record["projection_map"]
+    if not _finite_vector(projected, length=6) or not isinstance(mapping, list) or len(mapping) != 6:
+        raise ValueError("AUDIT_SCHEMA_INVALID")
+    for index, pair in enumerate(mapping):
+        if (not isinstance(pair, list) or len(pair) != 2 or pair[0] not in _FRAME_KINDS
+                or type(pair[1]) is not int):
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        source = frames[pair[0]]["positions"]
+        if pair[1] < 0 or pair[1] >= len(source):
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        if source[pair[1]] != projected[index]:
+            # the six-dimensional action must be exactly the mapped source values
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+    if list(record["positions"]) != list(projected):
+        raise ValueError("AUDIT_SCHEMA_INVALID")
 
 
 def _physics_observation_typed(observation, *, kind: str) -> bool:
@@ -555,12 +624,21 @@ class EpisodeAuditWriter:
             self._event_kinds.add(item["kind"])
             item["sequence"] = self._next("events")
         elif kind == "references":
-            raw_present = _REFERENCE_RAW_FIELDS & set(record) if isinstance(record, dict) else set()
+            keys = set(record) if isinstance(record, dict) else set()
+            packed = _REFERENCE_FRAME_FIELDS & keys
+            raw_present = _REFERENCE_RAW_FIELDS & keys
+            if packed and packed != _REFERENCE_FRAME_FIELDS:
+                raise ValueError("AUDIT_SCHEMA_INVALID")
+            if packed and raw_present:
+                # the ratified per-frame shape and the legacy flat group are alternatives
+                raise ValueError("AUDIT_SCHEMA_INVALID")
             if raw_present and raw_present != _REFERENCE_RAW_FIELDS:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
-            if raw_present:
+            if packed:
+                _reference_frames_ok(record)
+            elif raw_present:
                 _reference_raw_ok(record, "AUDIT_SCHEMA_INVALID")
-            item = _closed(record, (_REFERENCE_FIELDS | raw_present) - {"sequence"},
+            item = _closed(record, (_REFERENCE_FIELDS | packed | raw_present) - {"sequence"},
                            "AUDIT_SCHEMA_INVALID").copy()
             _finite(item["reference_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
             positions = item["positions"]
@@ -774,8 +852,9 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     references = {}
     sequence = 0
     for row in _records(audit / "references.jsonl",
-                        _REFERENCE_FIELDS | _REFERENCE_RAW_FIELDS, "AUDIT_REFERENCE_INVALID",
-                        optional=_REFERENCE_RAW_FIELDS):
+                        _REFERENCE_FIELDS | _REFERENCE_RAW_FIELDS | _REFERENCE_FRAME_FIELDS,
+                        "AUDIT_REFERENCE_INVALID",
+                        optional=_REFERENCE_RAW_FIELDS | _REFERENCE_FRAME_FIELDS):
         if (type(row["sequence"]) is not int or row["sequence"] != sequence + 1
                 or row["source"] != "CONTROLLER_REFERENCE"
                 or type(row["accepted"]) is not bool
@@ -787,7 +866,9 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                        or not math.isfinite(value) for value in row["positions"])):
             raise ValueError("AUDIT_REFERENCE_INVALID")
         sequence = row["sequence"]
-        if _REFERENCE_RAW_FIELDS & set(row):
+        if _REFERENCE_FRAME_FIELDS & set(row):
+            _reference_frames_ok(row)
+        elif _REFERENCE_RAW_FIELDS & set(row):
             _reference_raw_ok(row, "AUDIT_REFERENCE_INVALID")
         references[row["sequence"]] = row
         if row["accepted"] is not True:
