@@ -747,8 +747,8 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
     # F5: the ratified observations are retained with this writer, joined by the row's own instant
     _scene = {"scene_revision": 1, "attached_objects": [], "world_object_ids": [], "is_diff": False,
               "sim_time_s": 1.1, "source": "scene_port"}
-    _feedback = [{"controller": "arm", "joint_names": ["1"], "commanded_positions": [0.0],
-                  "measured_positions": [0.0], "measured_velocities": [0.0],
+    _feedback = [{"controller": "arm", "joint_names": ["1", "2", "3", "4", "5"], "commanded_positions": [0.0, 0.0, 0.0, 0.0, 0.0],
+                  "measured_positions": [0.0, 0.0, 0.0, 0.0, 0.0], "measured_velocities": [0.0, 0.0, 0.0, 0.0, 0.0],
                   "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
                                               "release_epoch": 1,
@@ -843,8 +843,8 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
     # F5: the ratified observations are retained with this writer, joined by the row's own instant
     _scene = {"scene_revision": 1, "attached_objects": [], "world_object_ids": [], "is_diff": False,
               "sim_time_s": 1.1, "source": "scene_port"}
-    _feedback = [{"controller": "arm", "joint_names": ["1"], "commanded_positions": [0.0],
-                  "measured_positions": [0.0], "measured_velocities": [0.0],
+    _feedback = [{"controller": "arm", "joint_names": ["1", "2", "3", "4", "5"], "commanded_positions": [0.0, 0.0, 0.0, 0.0, 0.0],
+                  "measured_positions": [0.0, 0.0, 0.0, 0.0, 0.0], "measured_velocities": [0.0, 0.0, 0.0, 0.0, 0.0],
                   "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     complete.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
                                               "release_epoch": 1,
@@ -1142,8 +1142,8 @@ def _self_consistent_formal(tmp_path):
     # F5: the ratified observations are retained with this writer, joined by the row's own instant
     _scene = {"scene_revision": 1, "attached_objects": [], "world_object_ids": [], "is_diff": False,
               "sim_time_s": 1.1, "source": "scene_port"}
-    _feedback = [{"controller": "arm", "joint_names": ["1"], "commanded_positions": [0.0],
-                  "measured_positions": [0.0], "measured_velocities": [0.0],
+    _feedback = [{"controller": "arm", "joint_names": ["1", "2", "3", "4", "5"], "commanded_positions": [0.0, 0.0, 0.0, 0.0, 0.0],
+                  "measured_positions": [0.0, 0.0, 0.0, 0.0, 0.0], "measured_velocities": [0.0, 0.0, 0.0, 0.0, 0.0],
                   "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
                                               "release_epoch": 1,
