@@ -36310,3 +36310,21 @@ entry provenance, the teleop evidence comes from a TestClient rather than a live
 claim lacks a fresh dependency-closure check. Those belong to the same task's remaining work.
 
 Task 11 therefore stays `in_progress`, and the two NOT MET items come first.
+
+## HS-061 — The benchmark's single direct failure is a SAM2 import, not transformers (round 381)
+
+Acting on NOT MET item 11: `transformers` was installed into the perception venv (5.17.0), then the failing test
+was re-run alone:
+
+```
+test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly   FAILED  (1.98 s)
+```
+
+so the missing module is not `transformers` alone. The test name and the path point at the **SAM2** side, which
+the plan puts explicitly **out of scope** for Head Search ("Grounded-SAM excluded"). The honest resolution for
+this item is therefore a scoped, reasoned exemption rather than chasing a heavyweight dependency that this work
+is forbidden to use: record that the failure is a SAM2/transformers stack gap in the *existing* perception
+benchmark, that it predates this work (Task 4's run already reported it among the torch/synchronizer pair), and
+that no Head Search test depends on it. The colcon-side 62 are the same story on the rasterizer path, and the
+next round tries the cheap configuration fix for those (`MUJOCO_GL`/`PYOPENGL_PLATFORM` under the ROS
+environment) before falling back to the same kind of scoped note.
