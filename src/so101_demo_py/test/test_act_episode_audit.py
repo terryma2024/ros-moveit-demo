@@ -970,6 +970,42 @@ def test_the_per_kind_history_must_keep_its_ordering_across_the_stream(tmp_path)
         writer.append_source("references", {**base, "reference_time_s": 1.3, **rewind})
 
 
+def test_readback_refuses_a_formal_stream_that_steps_without_a_release(tmp_path):
+    """T3-F3: a re-signed formal stream may not advance its release epoch without a release event naming it."""
+
+    (tmp_path / "case").mkdir(parents=True, exist_ok=True)
+    writer, window = complete_audit(tmp_path / "case")
+    path = writer.seal(window)
+    audit = path.parent
+    source = json.dumps(dict(scope(), mode="formal"), sort_keys=True,
+                        separators=(",", ":")).encode()
+    audit.joinpath("source.json").write_bytes(source)
+    document = json.loads(path.read_bytes())
+    document["files"]["source.json"] = {"path": "source.json", "size": len(source),
+                                        "sha256": hashlib.sha256(source).hexdigest()}
+    document["scope_sha256"] = hashlib.sha256(source).hexdigest()
+    document["window"] = _window()
+    identity_bytes = json.dumps({**identity(), "lease": _lease()}, sort_keys=True,
+                                separators=(",", ":")).encode()
+    audit.joinpath("episode.json").write_bytes(identity_bytes)
+    document["files"]["episode.json"] = {"path": "episode.json", "size": len(identity_bytes),
+                                         "sha256": hashlib.sha256(identity_bytes).hexdigest()}
+    document["identity"] = {**identity(), "lease": _lease()}
+    # the stream steps to epoch 1, and no release event names that step (CP-2137/CP-2141)
+    events_lines = (audit / "events.jsonl").read_text().splitlines()
+    events_bytes = ("\n".join(json.dumps({**json.loads(line),
+                                           "identity": {**json.loads(line)["identity"], "lease": _lease(),
+                                                        "release_epoch": 1}},
+                                          sort_keys=True, separators=(",", ":"))
+                               for line in events_lines) + "\n").encode()
+    audit.joinpath("events.jsonl").write_bytes(events_bytes)
+    document["files"]["events.jsonl"] = {"path": "events.jsonl", "size": len(events_bytes),
+                                         "sha256": hashlib.sha256(events_bytes).hexdigest()}
+    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="AUDIT_EVENT_INVALID"):
+        verify_audit_manifest(path)
+
+
 def test_readback_reapplies_the_formal_coverage_gate(tmp_path):
     """T3-F5: an audit relabelled formal without coverage must not verify."""
 

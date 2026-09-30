@@ -40203,3 +40203,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**; **F3 landed on both paths** but for that one control; F13 down to
   `sim_time_s`; **F1/F5/F11 open**; targeted gate `logs/task3-final.run` **430 passed**; HEAD `2770b6d19`; no
   push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2142 — F3 closed: the readback tie has its negative control, and every F3 item now has one
+
+- **What landed** (`test_act_episode_audit.py`): `test_readback_refuses_a_formal_stream_that_steps_without_a_release`
+  — a sealed diagnostic audit relabelled formal in the same three coupled ways CP-2132 established (source, scope,
+  identity, each recorded in the manifest document), whose events are rewritten to carry `release_epoch: 1` while
+  no `release` event names that step. It is refused with `AUDIT_EVENT_INVALID`, which is CP-2137/CP-2141's tie
+  firing on the path a re-signed stream actually travels.
+- **Evidence.** Targeted run this round: **148 passed** across the audit, recorder, release-boundary and capture
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **F3's final state — every item it listed, on both paths, with both polarities**: the two raw-reference
+  alternatives round-trip (CP-2127); a release payload's epoch is correlated with its identity (CP-2128); an event
+  identity carries the episode's lease when it names one (CP-2132); the first event names the run's own initial
+  epoch (CP-2136); every release step is named by a release event at seal (CP-2137) **and** on readback (CP-2141),
+  each with the refusal demonstrated (CP-2138's recipe realised here, CP-2142).
+- **Task 3's remaining list**: **F13**'s `sim_time_s` question (needs the plan's ruling on the closed seven-key
+  record), then **F1**, **F5** and **F11** — with **F12 closed** (CP-2120) and **F3 closed** (this entry).
+- **State.** Item 3's list: F12 ✅, F3 ✅, F13 residual, F1/F5/F11 open; targeted gate `logs/task3-final.run`
+  **430 passed**; HEAD `22f033f16`; no push, no evidence deletion, no hardware, no second stack.
