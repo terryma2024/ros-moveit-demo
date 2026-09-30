@@ -43,6 +43,26 @@ class PickPlaceSearchObservation:
 class PickPlaceSearchSegment:
     """Drive only SEARCH; the caller decides whether its evidence passes."""
 
+    def _planning_scene_record(self, raw):
+        """The ratified scene observation for this readback, or None when the port cannot supply it.
+
+        The port's own read (CP-2020) provides everything but the simulation instant, which is stamped here from
+        the readback the record is about, so the audit's instant join holds by construction (CP-2019). A port that
+        cannot answer leaves the field unset rather than producing a half-filled record, and no gate changes:
+        `planning_scene_ok` still comes from the SEARCH receipt.
+        """
+
+        port = getattr(self, "scene_port", None)
+        probe = getattr(port, "observe_observation", None)
+        if not callable(probe):
+            return None
+        try:
+            record = dict(probe())
+        except Exception:
+            return None
+        record["sim_time_s"] = raw["world"].simulation_time_s
+        return record
+
     def __init__(self, sources, adapter, scene_port, geometry: TaskGeometry, *,
                  operation_guard, history_verifier, reference_verifier,
                  owner_verifier, native_ingress_verifier,
@@ -202,7 +222,8 @@ class PickPlaceSearchSegment:
                     raise PickPlaceSearchError("SEARCH_POST_LOCK_STEP_INVALID")
                 scene_receipt = self._sync_scene(request, final_geometry)
                 observed = PickPlaceSearchObservation(
-                    result, final_raw, scene_receipt, physics_step_fence=marker)
+                    result, final_raw, scene_receipt, physics_step_fence=marker,
+                    planning_scene_observation=self._planning_scene_record(final_raw))
                 proof = self.history_verifier(observed, stopped_wall_s)
                 if (not isinstance(proof, dict)
                         or proof.get("selected_physics_step") !=
@@ -254,7 +275,8 @@ class PickPlaceSearchSegment:
                     raise PickPlaceSearchError("SEARCH_NATIVE_CONTROLLER_INGRESS_INVALID")
                 self._guard(request)
                 return PickPlaceSearchObservation(
-                    result, final_raw, scene_receipt, proof, references, owner, marker, native)
+                    result, final_raw, scene_receipt, proof, references, owner, marker, native,
+                    planning_scene_observation=self._planning_scene_record(final_raw))
         except BaseException as error:
             try:
                 stopped = self.adapter.neck_port.stop_and_confirm()

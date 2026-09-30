@@ -38748,3 +38748,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `85576f270`;
   targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2077 — Task 3: item (a)'s producer implemented — the record now travels end to end
+
+- **What landed.** `PickPlaceSearchSegment` gained `_planning_scene_record(raw)`: it asks the scene port it was
+  constructed with for `observe_observation()` (CP-2020), stamps the record with the readback's own
+  `world.simulation_time_s` so the audit's instant join holds by construction (CP-2019), and returns `None` when
+  the port cannot answer rather than producing a half-filled record. **Both** observation construction sites
+  (`pick_place_search_segment.py:204` and `:256`) pass `planning_scene_observation=...`, so the object the port
+  reads (CP-2028's reader, CP-2066's carrier) is filled on the real path.
+- **No gate moved.** `planning_scene_ok` still comes from the SEARCH receipt (CP-2034); this only supplies the
+  record the ratified schema wants, which the audit validates for shape and instant when it is present.
+- **Evidence.** `logs/task3-producer.run` rc=0: **161 passed** across the search-port, three task8 phase,
+  release-boundary, supervisor and audit suites under `pytest-xdist` with 8 workers, with its own NVMe scratch
+  and a non-empty tempfile proof. The channel it uses was proved in both directions at CP-2067.
+- **Task 3's open list is now two items**: (c) T3-F11's window-to-rows and observed-schedule checks, whose two
+  failure modes and the correct build order are in the brief (CP-2074); (d) the fresh checkpoint after it.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `b46de1926`;
+  targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
