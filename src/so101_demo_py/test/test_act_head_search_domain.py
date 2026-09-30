@@ -285,3 +285,27 @@ def test_the_smoke_refuses_when_no_sealed_step_exists(tmp_path) -> None:
         main(["--geometry-seal", str(path), "--anchor", "default", "--contract", str(contract)])
         == 0
     )
+
+
+def test_only_the_three_statuses_are_search_outcomes() -> None:
+    from so101_demo.act.head_search_domain import (
+        QUALIFICATION_STATUSES,
+        qualification_status_of,
+    )
+
+    assert QUALIFICATION_STATUSES == (
+        TARGET_LOCKED,
+        TARGET_NOT_FOUND,
+        TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL,
+    )
+    assert qualification_status_of(TARGET_LOCKED) == TARGET_LOCKED
+    assert qualification_status_of(TARGET_NOT_FOUND) == TARGET_NOT_FOUND
+    for diagnostic in (
+        "SEARCH_TIMEOUT",
+        "SEARCH_UNSAFE",
+        "TARGET_AMBIGUOUS",
+        "TARGET_NOT_CENTERED",
+    ):
+        assert qualification_status_of(diagnostic) is None, (
+            f"{diagnostic} is a diagnostic, not a search outcome"
+        )

@@ -18,6 +18,21 @@ TARGET_NOT_FOUND = "TARGET_NOT_FOUND"
 TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL = "TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL"
 
 
+#: the only statuses a head search outcome may carry for qualification; anything else is a diagnostic
+QUALIFICATION_STATUSES = (TARGET_LOCKED, TARGET_NOT_FOUND, TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL)
+
+
+def qualification_status_of(status: str) -> str | None:
+    """The search outcome a controller status maps to, or None when it is a diagnostic rather than one.
+
+    The controller also reports operational diagnostics - a timeout, an unsafe observation, an ambiguous
+    target, a target it could not centre - and those are refusals, not search outcomes: qualification only
+    reads the three statuses above, so a diagnostic must never be mistaken for a completed search.
+    """
+
+    return status if status in QUALIFICATION_STATUSES else None
+
+
 class HeadSearchDomainError(ValueError):
     """A domain the search must refuse, named so a caller can refuse by name."""
 
