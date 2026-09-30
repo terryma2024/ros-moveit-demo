@@ -42640,3 +42640,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Reverted**; the release-boundary suite is green (14 passed).
 - **State.** **F14 closed**; F3 (a)(b)(c) landed, its positive control blocked on identity/lease consistency with the
   comparison above named; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `24fab17c8`; eighteen gates green.
+
+
+## CP-2254 — F3's positive control: the formal lease contract already has a control, and the gap is the request
+
+- **Read this round**: `test_act_episode_audit.py:529` defines `_lease(**overrides)` and line 538's
+  `test_a_formal_audit_requires_the_registered_lease_contract` already builds a formal identity as
+  `{**identity(), "lease": _lease()}` and drives broken variants of it — so the formal lease contract is covered, and
+  CP-2253's refusal came from my identity **not** being `{**identity(), ...}`: I used `session_id: "s"`,
+  `attempt_id: "a"`, while `identity()` uses `session_id: "s"`, `attempt_id: "attempt-1"`.
+- **Consequence for the positive control**: it must build the writer exactly as that test does — `{**identity(),
+  "lease": _lease()}` — and the **runner's request must carry the same session/attempt**, because the writer fences
+  events against its own identity. `test_act_release_boundary.py`'s `request()` helper is printed alongside this
+  entry; either it takes those values as parameters already or the control builds its own request beside it.
+- **So the control is two named values away**, not a design question: reuse `identity()`/`_lease()` from the audit
+  suite and pass their session/attempt into the request.
+- **State.** **F14 closed**; F3 (a)(b)(c) landed, its positive control specified to the values; F1/F5/F11/F12/F13
+  open; the goal is paused. HEAD `3a9ec51f7`; eighteen gates green.
