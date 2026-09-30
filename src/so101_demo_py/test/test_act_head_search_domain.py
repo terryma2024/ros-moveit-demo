@@ -250,3 +250,25 @@ def test_a_domain_reaching_past_the_safe_interval_is_still_served_by_the_field_o
             horizontal_fov_rad=1.0,
             coarse_step_rad=0.5,
         )
+
+
+def test_the_smoke_refuses_when_no_sealed_step_exists(tmp_path) -> None:
+    import json
+
+    from so101_demo.cli.head_search_smoke import main
+
+    seal = {
+        "horizontal_fov_rad": 1.0,
+        "lock_valid_neck_rad": list(SAFE),
+        "required_search_domain_rad": [-0.2, 0.5],
+        "anchors": {"default": {"neck_rad": 0.1}},
+    }
+    path = tmp_path / "seal.json"
+    path.write_text(json.dumps(seal), encoding="utf-8")
+    assert main(["--geometry-seal", str(path), "--anchor", "default"]) == 2
+    contract = tmp_path / "contract.json"
+    contract.write_text(json.dumps({"coarse_step_candidate_rad": 0.3}), encoding="utf-8")
+    assert (
+        main(["--geometry-seal", str(path), "--anchor", "default", "--contract", str(contract)])
+        == 0
+    )

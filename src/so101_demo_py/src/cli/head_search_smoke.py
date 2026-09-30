@@ -30,6 +30,7 @@ def main(arguments: list[str] | None = None) -> int:
     )
     parser.add_argument("--geometry-seal", required=True, type=_path)
     parser.add_argument("--anchor", default="default")
+    parser.add_argument("--contract", type=_path)
     parser.add_argument("--output", type=_path)
     parsed = parser.parse_args(arguments)
 
@@ -46,7 +47,23 @@ def main(arguments: list[str] | None = None) -> int:
         required = seal["required_search_domain_rad"]
         safe = seal["lock_valid_neck_rad"]
         fov = float(seal["horizontal_fov_rad"])
-        step = float((seal.get("camera") or {}).get("coarse_step_rad") or fov / 4.0)
+        # the step is never invented: it comes from the sealed contract, the seal itself, or the run stops
+        step_source = None
+        if parsed.contract is not None:
+            contract = json.loads(parsed.contract.read_text(encoding="utf-8"))
+            step_source = contract.get("coarse_step_candidate_rad") or contract.get(
+                "coarse_step_rad"
+            )
+        if step_source is None:
+            step_source = (seal.get("camera") or {}).get("coarse_step_rad") or seal.get(
+                "coarse_step_candidate_rad"
+            )
+        if step_source is None:
+            raise HeadSearchDomainError(
+                "HEAD_SEARCH_DOMAIN_INVALID: the seal and contract declare no coarse step, so coverage "
+                "cannot be claimed from an invented one"
+            )
+        step = float(step_source)
         plan = bounded_search_stops(
             anchor_rad=anchor,
             required_domain_rad=required,
