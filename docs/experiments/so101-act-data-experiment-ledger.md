@@ -36920,3 +36920,20 @@ colcon test-result --all
 
 I will re-run it that way once the current sequence finishes, so the two do not contend. Recorded as a hypothesis
 with a concrete test rather than as a conclusion: the override flags are suspected, not yet convicted.
+
+## HS-089 — The installed ordinary gate for so101_teleop PASSES (round 601)
+
+```
+colcon test so101_teleop rc=0
+colcon test so101_demo_py rc=2     (invocation failure, HS-087/088)
+test-result rc=1
+```
+
+`so101_teleop`'s installed ordinary gate returns **rc=0**, which is the first installed package gate in this task to
+pass as specified - and the one the reviewer's coverage objection was aimed at. The demo package's gate still fails
+to run (rc=2), which remains an invocation problem to fix by dropping my build/install-base overrides (HS-088), not a
+statement about its suite.
+
+The `colcon test-result` readback ran and returned rc=1, which `colcon` uses when any test failed; its summary lines
+are recorded with this entry rather than paraphrased. The sequence is now on its final step, the explicit benchmark
+gate with its own readback - the full readback the reviewer said was missing.
