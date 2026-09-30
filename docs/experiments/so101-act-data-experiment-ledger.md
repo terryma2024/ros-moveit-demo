@@ -35392,6 +35392,32 @@ approved earlier). Next: Task 8, the production startup binding, with its RED te
   is deferred to Task 11 for the same reason as the adapter wiring in HS-028, so it is not shipped
   unverified. Task 8 also still owes its review.
 
+## HS-033 — Task 8 review rounds and fixes
+
+- **Round 1 verdict** (`reviews/task8/task8-verdict.md`, GPT-6.1-Sol high, static at the three files):
+  **REJECT** - the pair check compared the seventeen values and three digests but ignored camera, tracker,
+  `cuda_device`, controlled dependencies and `weight_path`, and let an absent identity pass as
+  `None == None`; `cuda_device: "cpu"` passed with fallback false; and the binding was only shallowly
+  frozen, leaving nested mappings and lists mutable and shared with the input.
+- **Fixes (`38fdc8305`):** all five context fields are compared, an absent identity refuses, both documents
+  must explicitly forbid CPU fallback, a device not starting with `cuda` is refused, an undeclared key is
+  refused as unconsumed, and `_freeze` makes the binding deeply immutable (read-only mapping proxies and
+  tuples). Startup suite 8 passed.
+- **Round 2 verdict** (`reviews/task8/task8-rereview-verdict.md`, captured verbatim from the reviewer's
+  session because it did not write the file): the identity, fallback, unused-key and immutability fixes are
+  present, but **REJECT** remains for one defect - a binding built from the promoted config raised `KeyError`
+  in `search_config()` because the camera frame ids and motion limits were missing.
+- **Fix (`3ec7b4f41`):** the config carries `camera.ray_origin_frame_id` and a `motion` block
+  (`settle_velocity_rad_s` defaulting to the measured stop velocity, `goal_tolerance_rad`), and a test builds
+  a real search config from a promoted binding and pins its exact eighteen keys. Startup suite 9 passed.
+- **Round 3 verdict** (`reviews/task8/task8-final-verdict.md`): **REJECT** on one point - the motion values
+  were fed into the binding but `HEAD_SEARCH_CONTEXT_FIELDS` omitted `motion`, so differing motion blocks
+  were accepted.
+- **Fix (`c263220df`):** `motion` is a compared context field, with a test drifting each of its two values.
+  Startup suite 10 passed; all five head-search suites 56 passed.
+- **Owed:** confirmation of this final fix, and the runtime call-site wiring deferred to Task 11 with its
+  reason in the Task 8 note above (its tests are underlay-blocked).
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
