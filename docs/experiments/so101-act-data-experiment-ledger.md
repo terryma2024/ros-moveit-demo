@@ -35362,6 +35362,22 @@ execution itself remains unverified, which the reviewer states plainly).
 **Tasks 1-7 are now complete and approved** (Task 5's HS-027, Task 7's HS-031, Task 6's HS-032; Tasks 1-4
 approved earlier). Next: Task 8, the production startup binding, with its RED tests first.
 
+- **Task 8 RED written (round 247).** `src/so101_demo_py/test/test_act_head_search_startup.py` holds four
+  cases: the shipped `config/mujoco/act/head_search_v2.json` declares exactly the seventeen values with its
+  weight/candidate/camera/tracker/runtime identities, `allow_cpu_fallback` false and no unconsumed value; one
+  field of drift between config and report raises `HEAD_SEARCH_SAMPLE_MISMATCH`; a drifted weight SHA,
+  candidate identity or runtime id also raises it; and an extra unconsumed value raises
+  `HEAD_SEARCH_UNUSED_VALUE`. RED gate: `rc=1`
+  (`scratch/head-test-20260930T081411Z-UT9ib9KV`) - the config does not exist and
+  `validate_head_search_binding` still takes `(runtime, calibration)` rather than the promoted
+  config/report pair, so both the artifact and the drift refusal are genuinely absent. The plan's own RED
+  command targets `test_act_head_search_binding.py`, which the stale underlay blocks, so this runnable file
+  carries the same boundary until Task 11's rebuild.
+- **Next for Task 8:** create `config/mujoco/act/head_search_v2.json`, extend
+  `validate_head_search_binding` to the config/report pair with the drift and unused-value refusals plus the
+  effective-config readback, wire it into `runtime/launch_composition.py` and `cli/act_stack_ready.py`, then
+  GREEN and the scoped commit.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
