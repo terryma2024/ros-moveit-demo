@@ -37265,3 +37265,17 @@ Recorded with its basis: the full-suite numbers (198 failed / 5505 passed / 85 e
 19 failed / 1096 passed / 42 skipped teleop alone, HS-084) and the per-family causes (HS-076/083/085/090), none of
 which is attributable to this work, together with the fact that some of those tests require a live simulator stack
 that a unit-test gate cannot provide by construction.
+
+## HS-104 — The third verdict's third ground: installed-entry provenance
+
+HS-102 recorded two grounds; the verdict also said "Fresh dependency-closed build and installed-entry provenance
+remain unproven". The build half is done and evidenced - `colcon build --packages-select so101_demo_py so101_teleop`
+returned rc=0 with `Finished <<<` lines for both (HS-089), and the overlay it installs into is the one every smoke
+above ran against. The **provenance** half is not yet a document: nothing records, in one place, which installed
+files the gates exercised and which dependency versions they were resolved against.
+
+Closing it is a small, concrete piece of work rather than a judgement call: record for the overlay's
+`so101_demo_py` and `so101_teleop` install trees their entry points, the interpreter and dependency versions from the
+perception venv, and the recursive file hash of each installed package, next to the commands that produced them -
+i.e. extend HS-056's toolchain table with installed-entry rows. That is the honest reading of "installed-entry
+provenance", and it is the same standard the geometry seal already meets.
