@@ -37301,3 +37301,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `1cb823f3a`
   (which records the owner's ratification of amendment A.1 and the evaluated-position mapping);
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2012 — Task 3: the ratified A.1 frame schema is implemented at the audit boundary
+
+- **What changed.** Each frame now carries its **immutable publication** (`published_positions`,
+  `published_velocities`) beside the values **evaluated for the record's target instant**
+  (`evaluated_positions`, `evaluated_velocities`), with its **own** `evaluation` block
+  (`{requested_sim_time_s, basis, goal_id, accepted_sim_s, revoked_sim_s}`) instead of the single flat block,
+  plus `joint_names`, `sim_stamp_ns`, `received_monotonic_ns` and `observer_sequence`. The record level keeps
+  `projected_positions` and `projection_map`, and **the map now resolves against `evaluated_positions`** —
+  the choice the owner ratified, so an interval evaluation at a later target is labelled as what it is while
+  the publication stays untouched. Every per-kind evaluation must still name the record's target instant, and
+  the acceptance/revocation ordering rules apply per kind.
+- **Evidence.** `logs/task3-fix53.run` rc=0: **84 passed in 1.13 s** in the audit and recorder suites, run
+  under `pytest-xdist` with 8 workers (`--dist loadfile`) as the gate requires, with its own NVMe scratch and
+  a non-empty tempfile proof. The ratified fixture and eleven negative variants were rewritten to the new
+  shape in the same pass, so acceptance and every refusal are exercised against A.1 rather than the old form.
+- **What remains for A.1's six boundaries**: the tap (`act/expert.py`) and the capture
+  (`act/continuous_capture.py`) must forward the packed group in the new shape, and
+  `adapters/act/ros_broker.py::reference_state` must expose per-kind frames with their evaluations instead of
+  the fused six-joint projection. The audit boundary is now the contract those three satisfy.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `8ba4b52cc`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.

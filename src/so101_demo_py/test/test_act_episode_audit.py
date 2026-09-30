@@ -804,20 +804,28 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
     assert diagnostic.seal({"start_s": 1.0}).is_file()
 
 
+def _arm_evaluation():
+    return {"requested_sim_time_s": 1.1, "basis": "interval", "goal_id": "goal-1",
+            "accepted_sim_s": 1.0, "revoked_sim_s": None}
+
+
 def _ratified_reference():
-    return {"frames": {
-        "arm": {"joint_names": ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex",
-                                "wrist_roll"],
-                "positions": [0.1, 0.2, 0.3, 0.4, 0.5], "velocities": [0.0] * 5,
-                "sim_stamp_ns": 1100000000, "received_monotonic_ns": 900000, "observer_sequence": 7},
-        "gripper": {"joint_names": ["gripper"], "positions": [0.6], "velocities": [0.0],
-                    "sim_stamp_ns": 1100000000, "received_monotonic_ns": 900100,
-                    "observer_sequence": 7}},
-        "evaluation": {"requested_sim_time_s": 1.1, "basis": "interval", "goal_id": "goal-1",
-                       "accepted_sim_s": 1.0, "revoked_sim_s": None},
-        "projected_positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-        "projection_map": [["arm", 0], ["arm", 1], ["arm", 2], ["arm", 3], ["arm", 4],
-                           ["gripper", 0]]}
+    """The ratified A.1 shape: immutable publication beside the evaluated value per kind."""
+
+    arm = {"joint_names": ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex",
+                           "wrist_roll"],
+           "published_positions": [0.1, 0.2, 0.3, 0.4, 0.5], "published_velocities": [0.0] * 5,
+           "evaluated_positions": [0.1, 0.2, 0.3, 0.4, 0.5], "evaluated_velocities": [0.0] * 5,
+           "evaluation": _arm_evaluation(),
+           "sim_stamp_ns": 1100000000, "received_monotonic_ns": 900000, "observer_sequence": 7}
+    gripper = {"joint_names": ["gripper"], "published_positions": [0.6],
+               "published_velocities": [0.0], "evaluated_positions": [0.6],
+               "evaluated_velocities": [0.0], "evaluation": _arm_evaluation(),
+               "sim_stamp_ns": 1100000000, "received_monotonic_ns": 900100, "observer_sequence": 7}
+    return {"frames": {"arm": arm, "gripper": gripper},
+            "projected_positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            "projection_map": [["arm", 0], ["arm", 1], ["arm", 2], ["arm", 3], ["arm", 4],
+                               ["gripper", 0]]}
 
 
 def test_the_ratified_reference_frames_are_accepted_and_validated(tmp_path):
@@ -838,10 +846,10 @@ def test_the_ratified_reference_frames_are_accepted_and_validated(tmp_path):
         return document
 
     frames = _ratified_reference()["frames"]
-    cases = [broken(evaluation={"requested_sim_time_s": 1.1, "basis": "published", "goal_id": "g",
-                                "accepted_sim_s": 1.0, "revoked_sim_s": None}),
-             broken(evaluation={**_ratified_reference()["evaluation"], "goal_id": None,
-                                "accepted_sim_s": None}),
+    cases = [broken(frames={**frames, "arm": {**frames["arm"], "evaluation": {
+                 **_arm_evaluation(), "basis": "published", "goal_id": "g", "accepted_sim_s": 1.0}}}),
+             broken(frames={**frames, "arm": {**frames["arm"], "evaluation": {
+                 **_arm_evaluation(), "goal_id": None, "accepted_sim_s": None}}}),
              broken(projection_map=[["arm", 0], ["arm", 1], ["arm", 2], ["arm", 3], ["arm", 4],
                                     ["gripper", 3]]),
              broken(projected_positions=[0.9, 0.2, 0.3, 0.4, 0.5, 0.6]),
@@ -849,17 +857,24 @@ def test_the_ratified_reference_frames_are_accepted_and_validated(tmp_path):
              broken(frames={"arm": frames["arm"]}),
              broken(frames={**frames, "base": frames["gripper"]}),
              # the provenance checks the fifth verdict named as independent of A.1
-             broken(evaluation={**_ratified_reference()["evaluation"],
-                                "requested_sim_time_s": 1.3}),
-             broken(evaluation={**_ratified_reference()["evaluation"], "accepted_sim_s": 1.2}),
-             broken(evaluation={**_ratified_reference()["evaluation"], "revoked_sim_s": 1.0}),
+             broken(frames={**frames, "gripper": {**frames["gripper"], "evaluation": {
+                 **_arm_evaluation(), "requested_sim_time_s": 1.3}}}),
+             broken(frames={**frames, "gripper": {**frames["gripper"], "evaluation": {
+                 **_arm_evaluation(), "accepted_sim_s": 1.2}}}),
+             broken(frames={**frames, "gripper": {**frames["gripper"], "evaluation": {
+                 **_arm_evaluation(), "revoked_sim_s": 1.0}}}),
              broken(projection_map=[["arm", 0]] * 6),
              broken(frames={**frames, "arm": {**frames["arm"], "joint_names": ["a"] * 4,
-                                              "positions": [0.1] * 4, "velocities": [0.0] * 4}}),
+                                              "published_positions": [0.1] * 4,
+                                              "published_velocities": [0.0] * 4,
+                                              "evaluated_positions": [0.1] * 4,
+                                              "evaluated_velocities": [0.0] * 4}}),
              broken(frames={**frames, "gripper": {**frames["gripper"],
                                                   "joint_names": ["g", "h"],
-                                                  "positions": [0.6, 0.7],
-                                                  "velocities": [0.0, 0.0]}})]
+                                                  "published_positions": [0.6, 0.7],
+                                                  "published_velocities": [0.0, 0.0],
+                                                  "evaluated_positions": [0.6, 0.7],
+                                                  "evaluated_velocities": [0.0, 0.0]}})]
     for index, document in enumerate(cases):
         other = EpisodeAuditWriter(tmp_path / f"bad-{index}", scope(), identity(),
                                    {"inputs_sha256": "a" * 64})
@@ -921,7 +936,8 @@ def test_the_per_kind_history_must_keep_its_ordering_across_the_stream(tmp_path)
     writer = EpisodeAuditWriter(tmp_path / "ordered", scope(), identity(), {"inputs_sha256": "a" * 64})
     writer.append_source("references", {**base, **_ratified_reference()})
     later = json.loads(json.dumps(_ratified_reference()))
-    later["evaluation"]["requested_sim_time_s"] = 1.2
+    later["frames"]["arm"]["evaluation"]["requested_sim_time_s"] = 1.2
+    later["frames"]["gripper"]["evaluation"]["requested_sim_time_s"] = 1.2
     later["frames"]["arm"]["sim_stamp_ns"] = 1200000000
     later["frames"]["arm"]["received_monotonic_ns"] = 901000
     later["frames"]["arm"]["observer_sequence"] = 8
@@ -929,7 +945,8 @@ def test_the_per_kind_history_must_keep_its_ordering_across_the_stream(tmp_path)
                                   "received_monotonic_ns": 901100, "observer_sequence": 8}
     writer.append_source("references", {**base, "reference_time_s": 1.2, **later})
     rewind = json.loads(json.dumps(later))
-    rewind["evaluation"]["requested_sim_time_s"] = 1.3
+    rewind["frames"]["arm"]["evaluation"]["requested_sim_time_s"] = 1.3
+    rewind["frames"]["gripper"]["evaluation"]["requested_sim_time_s"] = 1.3
     rewind["frames"]["arm"]["sim_stamp_ns"] = 1100000000
     with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
         writer.append_source("references", {**base, "reference_time_s": 1.3, **rewind})

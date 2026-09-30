@@ -57,12 +57,15 @@ _REFERENCE_RAW_FIELDS = frozenset({"joint_names", "sim_stamp_ns", "received_mono
                                    "velocities"})
 # the ratified Proposal A shape: one frame per controller kind plus the evaluation that produced the
 # projected action, all-or-nothing like the legacy group
-_REFERENCE_FRAME_FIELDS = frozenset({"frames", "evaluation", "projected_positions", "projection_map"})
+_REFERENCE_FRAME_FIELDS = frozenset({"frames", "projected_positions", "projection_map"})
 _FRAME_KINDS = ("arm", "gripper")
 # the ratified source has five ordered arm joints and one gripper joint
 _FRAME_SIZES = {"arm": 5, "gripper": 1}
-_FRAME_FIELDS = frozenset({"joint_names", "positions", "velocities", "sim_stamp_ns",
-                           "received_monotonic_ns", "observer_sequence"})
+# ratified amendment A.1: the immutable publication lives beside the value evaluated for the
+# record's target instant, and the projection map selects the evaluated value
+_FRAME_FIELDS = frozenset({"joint_names", "published_positions", "published_velocities",
+                           "evaluated_positions", "evaluated_velocities", "evaluation",
+                           "sim_stamp_ns", "received_monotonic_ns", "observer_sequence"})
 _EVALUATION_FIELDS = frozenset({"requested_sim_time_s", "basis", "goal_id", "accepted_sim_s",
                                 "revoked_sim_s"})
 _EVALUATION_BASES = ("published", "interval")
@@ -235,10 +238,11 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
                 or any(not isinstance(name, str) or not name for name in names)):
             # the registered source publishes exactly five arm joints and one gripper joint
             raise ValueError("AUDIT_SCHEMA_INVALID")
-        # positions and velocities keep the registered order and length of the names
-        if (not _finite_vector(frame["positions"], length=len(names))
-                or not _finite_vector(frame["velocities"], length=len(names))):
-            raise ValueError("AUDIT_SCHEMA_INVALID")
+        # both the publication and the evaluated value keep the order and length of the names
+        for key in ("published_positions", "published_velocities", "evaluated_positions",
+                    "evaluated_velocities"):
+            if not _finite_vector(frame[key], length=len(names)):
+                raise ValueError("AUDIT_SCHEMA_INVALID")
         for key in ("sim_stamp_ns", "received_monotonic_ns", "observer_sequence"):
             if type(frame[key]) is not int or frame[key] < 1:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
@@ -252,32 +256,33 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
                 # each kind's raw history keeps its own ordering across the stream
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             history[kind] = frame
-    evaluation = record["evaluation"]
-    if not isinstance(evaluation, dict) or set(evaluation) != _EVALUATION_FIELDS:
-        raise ValueError("AUDIT_SCHEMA_INVALID")
-    if not _finite_vector([evaluation["requested_sim_time_s"]]) or evaluation["basis"] not in \
-            _EVALUATION_BASES:
-        raise ValueError("AUDIT_SCHEMA_INVALID")
-    target = evaluation["requested_sim_time_s"]
-    if abs(target - record["reference_time_s"]) > _TOLERANCE_S:
-        # the evaluation must describe the instant the label actually uses
-        raise ValueError("AUDIT_SCHEMA_INVALID")
-    goal, accepted, revoked = (evaluation["goal_id"], evaluation["accepted_sim_s"],
-                               evaluation["revoked_sim_s"])
-    if evaluation["basis"] == "interval":
-        # an interval evaluation names the accepted goal it came from, with its acceptance stamp
-        if not isinstance(goal, str) or not goal or not _finite_vector([accepted]):
+    for kind, frame in frames.items():
+        evaluation = frame["evaluation"]
+        if not isinstance(evaluation, dict) or set(evaluation) != _EVALUATION_FIELDS:
             raise ValueError("AUDIT_SCHEMA_INVALID")
-    elif goal is not None or accepted is not None:
-        raise ValueError("AUDIT_SCHEMA_INVALID")
-    if revoked is not None and not _finite_vector([revoked]):
-        raise ValueError("AUDIT_SCHEMA_INVALID")
-    if accepted is not None and accepted > target + _TOLERANCE_S:
-        # an acceptance after the instant it is supposed to cover proves nothing
-        raise ValueError("AUDIT_SCHEMA_INVALID")
-    if revoked is not None and revoked < target - _TOLERANCE_S:
-        # a goal revoked before the target instant may not label it
-        raise ValueError("AUDIT_SCHEMA_INVALID")
+        if (not _finite_vector([evaluation["requested_sim_time_s"]])
+                or evaluation["basis"] not in _EVALUATION_BASES):
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        target = evaluation["requested_sim_time_s"]
+        if abs(target - record["reference_time_s"]) > _TOLERANCE_S:
+            # every kind's evaluation must describe the instant the label actually uses
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        goal, accepted, revoked = (evaluation["goal_id"], evaluation["accepted_sim_s"],
+                                   evaluation["revoked_sim_s"])
+        if evaluation["basis"] == "interval":
+            # an interval evaluation names the accepted goal it came from, with its acceptance stamp
+            if not isinstance(goal, str) or not goal or not _finite_vector([accepted]):
+                raise ValueError("AUDIT_SCHEMA_INVALID")
+        elif goal is not None or accepted is not None:
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        if revoked is not None and not _finite_vector([revoked]):
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        if accepted is not None and accepted > target + _TOLERANCE_S:
+            # an acceptance after the instant it is supposed to cover proves nothing
+            raise ValueError("AUDIT_SCHEMA_INVALID")
+        if revoked is not None and revoked < target - _TOLERANCE_S:
+            # a goal revoked before the target instant may not label it
+            raise ValueError("AUDIT_SCHEMA_INVALID")
     projected = record["projected_positions"]
     mapping = record["projection_map"]
     if not _finite_vector(projected, length=6) or not isinstance(mapping, list) or len(mapping) != 6:
@@ -291,7 +296,8 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
         if (not isinstance(pair, list) or len(pair) != 2 or pair[0] not in _FRAME_KINDS
                 or type(pair[1]) is not int):
             raise ValueError("AUDIT_SCHEMA_INVALID")
-        source = frames[pair[0]]["positions"]
+        # A.1 ratified: the map selects the evaluated value, the publication stays untouched
+        source = frames[pair[0]]["evaluated_positions"]
         if pair[1] < 0 or pair[1] >= len(source):
             raise ValueError("AUDIT_SCHEMA_INVALID")
         if source[pair[1]] != projected[index]:
