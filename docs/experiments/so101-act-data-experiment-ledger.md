@@ -40827,3 +40827,30 @@ all** in the 12 no_cup frames (0 detections across head and task cameras at all 
 **Fix applied:** detections are now lists of `{conf, cx, cy}`. Recorded because the lesson generalises past this bug: the gate's
 contract is not "a mapping keyed by candidate" but "an ordered collection whose length is the detection count", and the earlier
 loader message ("an absent measurement is not an empty detection list") was already telling me so.
+
+## HS-246 — Step 5 runs to completion and returns a SUBSTANTIVE refusal: the mixed model loses task retention
+
+```
+{"failure": "EVALUATION_TASK_RETENTION_LOST: the mixed model gives up 0.011 mask mAP on the task domain"}
+```
+
+This is the first run in which the gate was not stopped by a contract violation of mine: every measurement (six image cells, both
+episode domains), the paired bootstrap, and the retention comparison all executed, and the gate then **refused the promotion on
+model grounds** - candidate C, the head+task mixed model, gives up **0.011 mask mAP on the task domain** against the retained
+baseline A. The design's retention rule exists precisely to stop a challenger that buys head-domain gains by spending task-domain
+performance, and it fired.
+
+**So Task 12's honest Step 5 outcome is: no challenger selected.** That is a result, not a failure of the run - and it is not the
+result the plan's Task 13 was written to consume ("Consumes Task 12's selected candidate"), which makes it a decision point of the
+kind the user delegated to me:
+
+- **(a) record "no selection" as the outcome and report it** - honest, and it leaves Task 13 without its input until the situation
+  is resolved;
+- **(b) revisit the operating point** - C's frozen point came from the val grid that was **non-discriminating** (HS-213: margin
+  0.0 across 18 cells), so C may be evaluated at a point that costs task mAP for no head-domain gain;
+- **(c) revisit the training** - the mixing ratio or epochs for C are the knobs the loss points at.
+
+I am taking **(a)** as the recorded state and **(b)** as the next experiment, because (b) is the cheapest change that is *not*
+tuning-until-it-passes: the val grid's flatness is evidence that the operating point was never really chosen, so re-selecting it on
+the criterion the design names (val images **plus** calibration episodes, design line 220) is the faithful next step rather than a
+knob turned to make a gate go green. Under no circumstances does the gate get satisfied by relaxing the retention rule.
