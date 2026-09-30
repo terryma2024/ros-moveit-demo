@@ -42156,3 +42156,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision** (CP-2217), **F13 amended** (CP-2218);
   item 4: QC half green, commit half landed here; items 5+ wait on the four blocked bindings. HEAD `48686e6d5`;
   fourteen gates green.
+
+
+## CP-2231 — The seventh checkpoint review is dispatched
+
+- **How**: `codex exec -c model="gpt-6.1-sol" -c model_reasoning_effort="high"` in the worktree, with the packet
+  `reviews/task3-review7-packet.md` as the prompt plus the instruction to review source and artifacts only, to write
+  no file in the worktree, and to **write its verdict to `reviews/task3-rereview6-verdict.md`** — the same shape as
+  the sixth verdict, which the packet cites as the model.
+- **Evidence of a correct dispatch**: the CLI banner in `logs/task3-review7-dispatch.log` reports
+  `model: gpt-6.1-sol`, `reasoning effort: high`, `approval: never`, `sandbox: workspace-write [workdir, /tmp,
+  $TMPDIR]`, and **session id `01a0f2f2-6d22-7681-b03e-0f7d6b6cb2a9`**; the process is pid 2700637 and runs with
+  `nohup`, so it survives this session's rounds. Nothing was substituted: the required model and effort are the ones
+  the task model table names for checkpoint reviews.
+- **What the packet asks it to judge**: whether Task 3 is now converged for the purpose the sixth verdict denied it,
+  with the six findings' closures listed by CP number (F12 CP-2116…2120, F3 CP-2127…2142, F5 CP-2146…2164, F1
+  CP-2166…2206, F11 CP-2184…2203 plus the owner decision CP-2217, F13's amendment CP-2218), the fourteen green
+  gates, the four blocked input bindings, and an explicit "what is not claimed" section.
+- **Cadence**: this is a `nohup` process rather than a tracked job, so no completion notice arrives; the verdict file
+  is the signal, and the dispatch log carries progress. The session should check the log at a few rounds' interval
+  rather than every round, and must not claim a review result before the file exists.
+- **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
+  green and commit half landed (CP-2230); items 5+ wait on the four blocked bindings. HEAD `8c8bb548c`; fourteen
+  gates green.
