@@ -41278,3 +41278,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
   four items landed and this control half-proven; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 /
   176 / 284 / 151 / 152 passed**; HEAD `316043e4d`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2193 — The empty-schedule control splits cleanly: seal yes, readback needs one diagnostic
+
+- **Probe result**: `_self_consistent_formal`'s `seal()` returns `<case>/formal/formal/audit/audit-manifest.json`
+  (valid JSON, 1842 bytes, the usual `{"files": {...}}` head), so passing that path to `verify_audit_manifest` is
+  the same call CP-2190 made.
+- **Split result**: as two separate tests, `…refused_at_seal` **passes** — CP-2191's rule fires at the seal, which is
+  the half that needed proving — while `…refused_on_readback` still fails with `AUDIT_MANIFEST_INVALID` from the
+  manifest **parse** path, not the window rule. So the readback half's rewrite is not reaching the document the
+  verifier parses, despite the probe showing a valid manifest; the difference from CP-2190's working rewrite is the
+  fixture family (a self-consistent formal audit versus a relabelled diagnostic one), and the next pass should
+  print the bytes it wrote and the verifier's own read of the same path side by side.
+- **Reverted**; the audit suite re-runs green. The seal half's control is written and proven, and is recorded here
+  so the next pass can land both halves in one edit rather than rediscovering the split.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  four items landed and this control half-proven; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 /
+  176 / 284 / 151 / 152 passed**; HEAD `6f46422cc`; no push, no evidence deletion, no hardware, no second stack.
