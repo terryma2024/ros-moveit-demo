@@ -39744,3 +39744,21 @@ specified job than "calibration is missing" - and the ledger now carries the int
 so the work, if authorised, starts from the consumer's own contract.
 
 Still awaiting the user's decision on the HS-200 fork; no implementation has been started.
+
+## HS-203 — Step 3's remaining confirmations pass: both jobs on CUDA, same frozen base, distinct weights
+
+The plan's Step 3 asks to "confirm both jobs used CUDA and the same frozen" base. Read from the candidates' own manifests:
+
+| candidate | `device` | `base_model_sha256` | `best_weight_sha256` |
+| --- | --- | --- | --- |
+| B | **`cuda`** | `f281d25258493e2c…` | `86c17b58c9c678ac…` |
+| C | **`cuda`** | `f281d25258493e2c…` | `ef833f9c990292f5…` |
+| pinned A weights on disk | - | `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` | - |
+
+So both candidates trained **on CUDA**, both descended from **exactly the pinned A weights** (their `base_model_sha256`
+equals the sha256 of the verified `best.pt` computed again here), and they produced **distinct** trained weights - which is
+what makes them two candidates rather than one run twice.
+
+With HS-194 (B and C `rc=0`, serial), HS-195 (C's 800 head / 800 task sampling), and this entry, **Task 12 Step 3 is complete
+against every confirmation the plan lists**, and Steps 1-2 were already complete (HS-186, HS-187). Step 4 remains the open
+fork from HS-200.
