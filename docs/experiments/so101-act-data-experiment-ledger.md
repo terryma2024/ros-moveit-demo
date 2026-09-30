@@ -37709,3 +37709,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `685675740`;
   targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2029 — Task 3: the SEARCH gate is derived from the receipt it carries, and the literal is gone
+
+- **What landed.** `_search_evidence` no longer asserts `planning_scene_ok`. It reads
+  `observed.planning_scene` — the `SceneCommandReceipt` the boundary already puts on
+  `PickPlaceSearchObservation` (`pick_place_search_segment.py:27`) — and the gate is `receipt.success is True`,
+  so a missing or unsuccessful receipt fails the gate instead of claiming it. This is the change the owner
+  authorised ("replace the literal assertions with real observations") at the first of the two sites, and it
+  is a **derivation**, not a restatement: the value now comes from the receipt object rather than from the
+  helper's default.
+- **The acceptance set stayed green**, which is the fact CP-2016 could not establish: 91 passed across the
+  search-port, three task8 phase, release-boundary and supervisor suites under `pytest-xdist` with 8 workers
+  (`logs/task3-step3.run` rc=0). CP-2016's six failures came from the **boundary** helper
+  (`_gate_facts`), not from this port document — the boundary's receipt is what makes this site true, so
+  removing the literal here is safe while the boundary's placeholder still needs its supplier.
+- **What remains of step 3.** `_gate_facts` (`pick_place_search_boundary.py:272`, called at `:308`/`:402`)
+  still defaults `planning_scene_ok` (and the two controller gates) to true. Its supplier is the SEARCH
+  validation (`search()` at `:739`), and the smallest honest change is storing the validated receipt and its
+  simulation instant there and deriving the three gates from it; the six CP-2016 tests are the acceptance set,
+  and controls for a missing or off-instant receipt are what step 4 adds. The ratified record itself
+  (`scene_revision` from `RosTaskScenePort.observe_observation()`, CP-2020, plus the instant the caller
+  stamps) travels through the additive unpack landed in CP-2028.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `83333ecc0`;
+  targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

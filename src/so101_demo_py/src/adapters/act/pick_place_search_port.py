@@ -402,6 +402,11 @@ class PickPlaceSearchPhasePort:
             raise ValueError("neck path")
         supported = any(item.body2 == "table" and item.normal_force_n > 0
                         for item in world.other_object_contacts)
+        # CP-2017 step 3: the gate is the Planning Scene receipt the observation carries, not a literal.
+        # `PickPlaceSearchObservation.planning_scene` is a SceneCommandReceipt, so `success is True` is the
+        # observed verdict; a missing or unsuccessful receipt fails the gate instead of asserting it.
+        receipt = getattr(observed, "planning_scene", None)
+        planning_scene_ok = getattr(receipt, "success", None) is True
         return {
             "phase": "SEARCH", "session_id": request["session_id"],
             "attempt_id": request["attempt_id"], "reset_epoch": reset_epoch,
@@ -415,7 +420,7 @@ class PickPlaceSearchPhasePort:
             # step 3 flips it to a derivation; the audit refuses a record whose instant or fields disagree.
             **({"planning_scene_observation": observed.planning_scene_observation}
                if getattr(observed, "planning_scene_observation", None) is not None else {}),
-            "planning_scene_ok": True, "head_rgb_ok": True,
+            "planning_scene_ok": planning_scene_ok, "head_rgb_ok": True,
             "wrist_rgb_ok": True, "manual_intervention": False,
             "moveit_recovery": False, "holding_state": "EMPTY",
             "bilateral_contact": False, "micro_lift_confirmed": False,
