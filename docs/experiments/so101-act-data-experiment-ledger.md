@@ -39322,3 +39322,20 @@ printed or logged; `hf-auth-retry.txt` records only the tool's own output.
 
 Remaining Step 1 item: a **complete** download (`rc=0`), since the first attempt verified `best.pt` by sha256 but ended on an
 `httpx.ReadTimeout` for a sibling file. Re-running with the token in place, and with the already-verified `best.pt` retained.
+
+## HS-184 — My wait matched a STALE `DONE`, and Step 1's fetch is still running
+
+The status file is **append-only across runs**, so the `DONE` written by the first script satisfied my wait even though the
+re-download was still in flight. The evidence that gave it away was the download log itself:
+
+```
+Fetching 3624 files:   4%| 163/3624 ...
+```
+
+i.e. the fetch is live, and `best.pt`, `README.md`, `SHA256SUMS`, `dataset/{dataset-manifest.json,dataset.yaml,images/}` are
+present so far (42 MB). So the correct reading of the previous round is: **auth ✓ (Logged in, zjumty), sha256 of `best.pt` ✓
+(OK, rc=0), and the full file set still downloading** - not "Step 1 complete".
+
+**Lesson, recorded because it is the fourth time this session that a partial view was mistaken for the whole:** a marker file
+that is appended to across runs cannot be waited on. The next wait uses a **fresh marker** created by the run in question
+(`step1b.done`), and I am not treating a reused path as a completion signal again.
