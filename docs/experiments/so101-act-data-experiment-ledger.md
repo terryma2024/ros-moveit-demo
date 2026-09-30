@@ -36640,3 +36640,30 @@ explained away - what the evidence supports is "environment-dependent, not ours"
 
 I also stopped the full dataset-module run, which had been sitting at 87% for many rounds; the samples above
 answer the question it was there to ask, and leaving it holding the host had no further value.
+
+## HS-076 — The ROS-environment failures come from a stale `pysrc` copy, not from the code
+
+The re-review flagged "15 aggregator failures plus a measurement-contract failure" in the batched log. Checking
+that claim directly, because it contradicts my clean-environment result:
+
+```zsh
+# pinned clean environment:      32 passed
+# ROS-sourced environment:       15 failed, 17 passed
+# one failure, ROS-sourced:      ValueError: MEASUREMENT_CONTRACT_V2_INVALID
+#                                /tmp/.../LuFlHq6a/pysrc/so101_demo/act/task8_measurement_schema.py:116
+```
+
+The traceback names the cause: the ROS-sourced runs put **`$HEAD_LOWRATE/pysrc` first on `PYTHONPATH`**, and that
+tree is a stale copy of `so101_demo` from the earlier underlay work. So those tests import an old
+`task8_measurement_schema` and an old `so101_teleop` - which is also exactly the reviewer's
+`ModuleNotFoundError: No module named 'so101_teleop.unified'`.
+
+**Consequences, stated plainly:**
+
+1. My contract fix is sound: the clean-environment run is 32 passed, and the A/B that convicted the edit
+   (14 failed with it, 32 without) was in that same environment.
+2. The **batched gate's 263 failures/errors are therefore not a fair measure of the suite** - they are dominated
+   by tests importing stale code from `pysrc`. The gate must be re-run with the worktree source ahead of the stale
+   tree, or with `pysrc` removed, before its numbers mean anything.
+3. The reviewer was right to reject: the log it read does show those failures, and my summary did not explain
+   them. It is also right that the batch script covers only `so101_demo_py`; `so101_teleop` was never in it.
