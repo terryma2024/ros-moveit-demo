@@ -42439,3 +42439,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and `backup-stale-pytest-plan-20260924`) that are not mine and must not be dropped or applied.
 - **State.** **F14 closed**; F3(b) landed, F3(a) two attempts reverted with the diagnostic named; F1/F5/F11/F12/F13
   open; the goal is paused. Sixteen gates green.
+
+
+## CP-2244 — F3(a)'s refusal named: `episode_audit.py:1235`, the readback tie
+
+- **The diagnostic, run under the patch and reverted afterwards**: the traceback ends at
+  `episode_audit.py:1235`, inside `verify_audit_manifest` (called from 996), i.e. the **readback's release tie**
+  (CP-2141's block) raising `AUDIT_EVENT_INVALID` — not the initial-epoch rule, not the payload correlation and not
+  the lease clause. So with the epoch aligned to the identity's 1, the stream still steps to an epoch the tie does
+  not see named, even though a `release` event at epoch 1 was appended.
+- **Why that is worth the round**: it narrows a four-way guess to one block. The block re-reads `events.jsonl` and
+  builds `named[epoch] = named.get(epoch, False) or kind == "release"`, so the append should have named the step —
+  unless the appended line's `identity`/`kind` did not survive the fixture's rewrite loop, which is the first thing
+  the next attempt should print (`kind`, `identity["release_epoch"]` for each line) rather than reason about.
+- **Tree state**: the patch was reverted immediately after the diagnostic; no file of mine is dirty.
+- **State.** **F14 closed**; F3(b) landed; F3(a) one named block away with the next step specified as a print of the
+  rewritten stream; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `85086bb6e`; sixteen gates green.
