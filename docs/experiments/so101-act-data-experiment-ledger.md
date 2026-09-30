@@ -43450,3 +43450,14 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, its hybrid now specified to the class;
 - goal paused.
+
+## CP-2302 - The aligned port is a file-level class now
+
+- AlignedPort moved out of the CP-2260 test to file level, resolving the writer's own session and attempt in its
+- constructor (so it no longer needs a closure) and keeping its six aligned evidence methods. The existing test now
+- instantiates it and reads port.names for the request it builds.
+- GREEN 15 passed in the release-boundary suite; wider gate recorded with the commit. This is the last preparation
+- the hybrid fixture needed: next comes _runner_backed_formal itself, using this class, the minter's camera and
+- reference halves, and a window derived from the rows the audit actually holds.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, its hybrid's last preparation done; goal paused.
