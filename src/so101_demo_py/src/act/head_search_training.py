@@ -286,6 +286,7 @@ TRAINING_CONTRACT_KEYS = (
     "amp",
     "optimizer",
     "patience",
+    "plots",
     "shuffle",
     "checkpoint_score",
     "validation_domains",
