@@ -366,24 +366,5 @@
       "unit": "m",
       "window": "\u5168 phase"
     }
-  },
-  "head_search_parameters": [
-    "horizontal_fov_rad",
-    "lock_valid_neck_rad",
-    "coarse_step_rad",
-    "search_timeout_s",
-    "min_confidence",
-    "tracking_iou",
-    "min_bbox_aspect",
-    "min_area_px2",
-    "center_deadband_px",
-    "vertical_bounds_px",
-    "max_fine_corrections",
-    "max_fine_total_rad",
-    "max_age_s",
-    "max_skew_s",
-    "submit_lead_s",
-    "stop_velocity_rad_s",
-    "stop_latency_s"
-  ]
+  }
 }
