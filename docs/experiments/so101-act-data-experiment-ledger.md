@@ -40528,3 +40528,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 five of seven steps
   done** with this one fully specified, F1/F11 open; targeted gates **430 / 201 / 201 passed**; HEAD `1a49d3451`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2157 — F5's physics rows are kind-specific: the pose row is not a template for the other three
+
+- **What I tried**: with each site's receiver parsed from its own append line (743→`writer`, 801→`partial`,
+  1086→`writer`), three rows per site copied from the pose row with `kind` changed, plus the predicate clause
+  requiring every registered kind. Result: **7 failed / 142 passed**, now with `AUDIT_SCHEMA_INVALID` rather than a
+  coverage refusal — i.e. the **writer's own physics validation refused my fabricated rows**. The pose row is
+  therefore not a template: each kind's `observation` follows its **own** contract.
+- **Where that contract lives** (the audit's own comment at line 98): the MuJoCo source contract "taken from what
+  the backend already publishes (`backends/mujoco/qualified_phases/release_retreat.py::evidence_dict`) plus the
+  verified support boolean the runner adds for support rows". So the fixture rows must mirror the backend's
+  `evidence_dict` per kind — the next pass should read that function and copy its keys for `contact`, `retract` and
+  `support`.
+- **Reverted, tree verified green.**
+- **Two method lessons now confirmed twice**: parse each site's receiver (CP-2156) and never assume one kind's
+  payload fits another (this entry) — both cost a round in this stretch, and both are cheap to check before
+  patching.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 five of seven steps
+  done** with this one's last unknown named (the backend's per-kind keys), F1/F11 open; targeted gates **430 / 201 /
+  201 passed**; HEAD `cc495032b`; no push, no evidence deletion, no hardware, no second stack.
