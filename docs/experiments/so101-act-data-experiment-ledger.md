@@ -39677,3 +39677,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list F1/F3/F5/F11/F12/F13 stands with F12's carrier now correct; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `a8427bbd7`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2118 — F12's scene half is joined end to end; the feedback half has a precise, known wiring point
+
+- **Verified, not assumed** (grep this round): the segment fills `planning_scene_observation` at **both**
+  observation constructions (`pick_place_search_segment.py:226`, `:279`), the field is declared at `:40`, the port
+  reads it at `:417` and the document's block carries it at `:464`. So the scene record's producer → carrier →
+  document join **is** complete; what F12 called "no production caller" is now true only of the **feedback** half.
+- **The feedback half's wiring point, read from the code**: the segment holds no broker (`grep broker` finds only
+  the field declaration), but the **boundary** does (`self.reset.broker`, used by its verifier lambdas), and those
+  lambdas receive `observed` — the very object the port later reads. So the natural, already-proven pattern is the
+  one CP-2031 used for the scene receipt: inside the boundary's `search()` verifier callbacks, fill
+  `observed.controller_feedback` from `broker.controller_feedback(kind, instant)` (CP-2040) for both kinds at the
+  readback's instant. Nothing else has to change for the record to travel: the port's block already accepts it
+  once the field is non-None, and the audit validates it.
+- **F13's corrections belong to the same edit**, because they change what those records contain: five measured
+  values for the arm and one for the gripper (selected by the kind's registered names), aged by the stored
+  joint/reference receipt rather than the physics epoch, with reset/session fences; and the scene query's own
+  observed source time instead of the earlier readback's (segment `_planning_scene_record`).
+- **State.** Item 3's list F1/F3/F5/F11/F12/F13 stands with F12's scene half joined and its feedback half fully
+  specified; targeted gate `logs/task3-final.run` **430 passed**; HEAD `41b9c0fb2`; no push, no evidence deletion,
+  no hardware, no second stack.
