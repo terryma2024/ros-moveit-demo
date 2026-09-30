@@ -41727,3 +41727,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven** with its seventh shown to need an owner
   decision, **F13 residual**; item 4's QC increments wait behind Task 3; items 5+ wait on the four blocked bindings
   (`path_policy`, `placement_qc`, `rgb_skew`, `resource_thresholds`). HEAD `7b7933f58`; twelve gates green.
+
+
+## CP-2211 — The non-Head gate's exact shape, and how it differs from the W8 verifier
+
+- **What `require_nonhead_gate(report)` requires** (`first_episode_inputs.py:77-106`): a dict carrying
+  `schema_version` (exactly 1), `status`, `source_commit`, `config_sha256`, `source_provenance_sha256`,
+  `measurements` and `checks`; the status must be one of `CALIBRATION_REQUIRED`, `TASK8_READY`, `QUALIFIED`; the
+  commit must be forty hex characters; and its documented rule is that **a `PASS` for any check must carry that
+  check's measurements**, so a PASS cannot outrun its evidence. The two **Head** checks (`fov`, `search`) are not
+  required to be anything — its own docstring calls that "the whole substitution this milestone makes", which is the
+  non-Head first episode's premise.
+- **One deliberate weakening, recorded by the owner**: the report's `source_commit`/provenance identity is checked
+  **for shape only**, not compared with the running tree (the CP-1928 amendment, quoted in the docstring), so this
+  gate does not fail merely because the tree moved on.
+- **How it differs from the W8 verifier this stretch built** (CP-2077…2109): that one re-derives a campaign's
+  journal digests from disk and delegates to the qualification producer's own `validate_case_journals`; this one
+  validates a **safety-calibration report's** shape and evidence-to-claim consistency. They are different gates over
+  different evidence, and the admission path consults both — which is worth keeping straight when reading
+  `admission.py`.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven** (its seventh needs an owner decision),
+  **F13 residual**; item 4's QC increments wait behind Task 3 by the plan's rule; items 5+ wait on the four blocked
+  input bindings. HEAD `36626a040`; twelve gates green.
