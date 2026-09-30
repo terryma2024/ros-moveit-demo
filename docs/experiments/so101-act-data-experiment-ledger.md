@@ -37601,3 +37601,27 @@ for a collection-level reason I have now chased through three variants (stale ov
 venv). The measurements that ARE valid for that suite are the direct runs, whose numbers and per-reason categories are
 in HS-077, HS-084, HS-110, HS-111, HS-113, HS-114 and HS-116 - with 114 rows still unexplained and left that way on
 purpose rather than relabelled. Further time here buys nothing; the reviewer's clause (d) already covers it.
+
+## HS-118 — The collection error is the ROS `launch_testing` plugin, i.e. HS-044's trap inside the installed gate
+
+Reading the failing line rather than stopping at "1 test, 1 error":
+
+```
+pluggy._manager.PluginValidationError: Plugin 'launch_testing' for hook 'pytest_pycollect_makemodule'
+```
+
+So the installed `colcon test` session autoloads ROS's `launch_testing` pytest plugin, whose hook signatures do not
+match this pytest, and collection aborts - the **same trap HS-044** documented for the parallel gate, where the fix
+was `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`. That fix was never applied to the `colcon test` invocation itself, which is
+why HS-090/091/117 all died the same way regardless of overlay staleness or PYTHONPATH shape.
+
+The corrected invocation is therefore:
+
+```zsh
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH="$HEAD_VENV_SITE:$PYTHONPATH" \
+  colcon test --packages-select so101_demo_py
+```
+
+and it is launched with this entry. If it collects, the installed gate finally produces a real readback for the demo
+package - the last piece of the reviewer's ordinary-gate item - and if it does not, the cause will be a different line
+that I can name.
