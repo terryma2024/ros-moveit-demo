@@ -38872,3 +38872,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   plan document's path (or its Task 4 text) is what I need next.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint pending); items 4-8 pending.**
   HEAD `14c397541`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2083 — The nine-task enumeration located: Task 4 is "independent QC / real commit / export refusal"
+
+- **Where it was, and why it matters.** The frozen enumeration lives in this ledger's own authority entry (the one
+  recording the owner's approval), not in a plan file inside the worktree: items are **0 takeover/environment;
+  1 mode isolation and input freezing; 2 acquisition and continuous causal capture; 3 raw audit and physical
+  criteria; 4 independent QC / real commit / export refusal; 5 default production composition and installed CLI;
+  6 freeze/build/integration gates; 7 one real FULL_RESTART closure; 8 negative copies and delivery**, with
+  "contents frozen; only status changes".
+- **The two frozen hashes are recorded there too**, so the detailed plan document can be identified rather than
+  guessed: design `e74bc9f2b6fb13b90947913e2790c70d01b9052f00ccf79206af4104f33c47a9`, plan
+  `1fbf978b184134436a62e30de7165e44fc0bd06a3235e9f5fcf7082b17091e96`. My searches of
+  `docs/superpowers/plans/` (worktree and parent checkout) and the evidence plan root did not find that document,
+  so its path is still unknown; the frozen enumeration above is nevertheless enough to name Task 4's scope from a
+  session-recorded source rather than from memory.
+- **Status of the visible list after this round.** Items 0-2 completed; item 3 implementation-complete with its
+  sixth checkpoint dispatched (`32c54563-a7b4-438d-bfc1-620b13d28b6e`); item 4 **not started** (its detailed
+  acceptance text is inside the frozen plan document, which I have not located); items 5-8 pending.
+- **State.** HEAD `0dd1407c5`; targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence
+  deletion, no hardware, no second stack.
