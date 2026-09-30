@@ -9,6 +9,8 @@ JSON 404 instead of an HTML page.
 
 from __future__ import annotations
 
+import inspect
+
 import asyncio
 import json
 from contextlib import asynccontextmanager
