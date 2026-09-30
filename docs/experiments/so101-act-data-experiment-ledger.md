@@ -39350,3 +39350,26 @@ State while it runs: `hf auth whoami` ✓ (`zjumty`), `best.pt` sha256 ✓ (`OK`
 `f281d25258493e2c…`), and the 3624-file fetch in flight into
 `$HEAD_EVIDENCE/models/huggingface/so101-yolo11n-seg-plastic-cup/b55430fb…/`. Nothing else in Task 12 can start until the
 file set is complete, because Step 2 (generate and seal the head dataset) consumes the pinned A root.
+
+## HS-186 — Task 12 Step 1 COMPLETE: auth ✓, pinned digest ✓, download rc=0
+
+The retry loop did exactly what it was there for:
+
+```
+attempt 1 rc=1      (httpx.ReadTimeout)
+attempt 2 rc=1      (httpx.ReadTimeout)
+attempt 3 rc=0      <- complete
+files on disk: 10875   (model/** and dataset/** are many files, not 3624)
+best.pt sha256: OK, rc=0 against f281d25258493e2c…
+hf auth whoami: ✓ Logged in (zjumty)
+```
+
+So Step 1's three obligations are all green: the plan's `hf auth whoami` gate passes with the plan's own
+`HF_ROOT="$HEAD_EVIDENCE/models/huggingface"`; the A weights match the pinned digest
+`f281d25258493e2c7c220dd1a84a7ca4f0501adf99ed4a921a065d74ace40781` under `sha256sum --check --strict`; and the
+revision-pinned download (`b55430fb75c0207b35bd20f4e328e042bff06f3f`) exited **0** on the third attempt. The GPU is recorded
+(`NVIDIA GeForce RTX 5080`, 16303 MiB), and no detector or second stack is running.
+
+Three host-environment obstacles were cleared to get here, each recorded rather than worked around silently: the httpx
+`no_proxy` bug (HS-181), the token store moving with `HF_HOME` (HS-182/183), and the transient read timeouts that the retry
+loop absorbs (this entry). **Step 2 - generate and seal the exact head dataset - is next**, and it consumes this root.
