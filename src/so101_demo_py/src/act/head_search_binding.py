@@ -226,16 +226,18 @@ def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearch
         validate_promoted_pair(runtime, calibration)
         values = dict(runtime["values"])
         return HeadSearchBinding(
-            detector={
-                "weight_path": runtime.get("weight_path"),
-                "weight_sha256": runtime.get("weight_sha256"),
-                "detector_sha256": runtime.get("candidate_identity_sha256"),
-                "device": runtime.get("cuda_device"),
-                "allow_cpu_fallback": runtime.get("allow_cpu_fallback"),
-            },
-            camera=dict(runtime.get("camera") or {}),
-            motion={"tracker": dict(runtime.get("tracker") or {})},
-            search_values=values,
+            detector=_freeze(
+                {
+                    "weight_path": runtime.get("weight_path"),
+                    "weight_sha256": runtime.get("weight_sha256"),
+                    "detector_sha256": runtime.get("candidate_identity_sha256"),
+                    "device": runtime.get("cuda_device"),
+                    "allow_cpu_fallback": runtime.get("allow_cpu_fallback"),
+                }
+            ),
+            camera=_freeze(runtime.get("camera") or {}),
+            motion=_freeze({"tracker": runtime.get("tracker") or {}}),
+            search_values=_freeze(values),
         )
     try:
         descriptor = validate_head_search_shape(runtime)
@@ -410,6 +412,31 @@ HEAD_SEARCH_VALUE_FIELDS = (
 )
 #: the identities that must match between the promoted config and the qualified report
 HEAD_SEARCH_IDENTITY_FIELDS = ("weight_sha256", "candidate_identity_sha256", "runtime_id")
+#: the context that must match as well, so a swapped camera or tracker cannot pass on equal values alone
+HEAD_SEARCH_CONTEXT_FIELDS = (
+    "weight_path",
+    "camera",
+    "tracker",
+    "cuda_device",
+    "controlled_dependencies",
+)
+#: every key a promoted config or qualified report may carry; anything else is unconsumed
+HEAD_SEARCH_DOCUMENT_KEYS = frozenset(
+    {
+        "schema_version",
+        "runtime_id",
+        "weight_path",
+        "weight_sha256",
+        "candidate_identity_sha256",
+        "camera",
+        "tracker",
+        "cuda_device",
+        "allow_cpu_fallback",
+        "controlled_dependencies",
+        "values",
+        "unused_values",
+    }
+)
 
 
 def validate_promoted_pair(config, report):
@@ -439,13 +466,35 @@ def validate_promoted_pair(config, report):
         if configured[field] != reported[field]:
             refuse(f"{field} differs between the promoted config and the report")
     for field in HEAD_SEARCH_IDENTITY_FIELDS:
-        if config.get(field) != report.get(field):
+        if not config.get(field) or not report.get(field):
+            refuse(f"{field} is missing, so an absent identity cannot pass as agreement")
+        if config[field] != report[field]:
             refuse(f"{field} differs between the promoted config and the report")
+    # the camera, tracker, device and dependency identities are compared too, not just the three digests
+    for field in HEAD_SEARCH_CONTEXT_FIELDS:
+        if not config.get(field) or not report.get(field):
+            refuse(f"{field} is missing from one of the documents")
+        if config[field] != report[field]:
+            refuse(f"{field} differs between the promoted config and the report")
+    for name, document in (("config", config), ("report", report)):
+        if document.get("allow_cpu_fallback") is not False:
+            raise ValueError(
+                f"HEAD_SEARCH_CUDA_REQUIRED: the {name} must forbid CPU fallback explicitly"
+            )
+    device = str(config.get("cuda_device"))
+    if not device.startswith("cuda"):
+        raise ValueError(
+            f"HEAD_SEARCH_CUDA_REQUIRED: the promoted config names {device!r} rather than a CUDA device"
+        )
+    for name, document in (("config", config), ("report", report)):
+        undeclared = set(document) - HEAD_SEARCH_DOCUMENT_KEYS
+        if undeclared:
+            raise ValueError(
+                f"HEAD_SEARCH_UNUSED_VALUE: the {name} carries unconsumed keys {sorted(undeclared)}"
+            )
     unused = list(config.get("unused_values") or []) + list(report.get("unused_values") or [])
     if unused:
         raise ValueError(f"HEAD_SEARCH_UNUSED_VALUE: nothing consumes {sorted(unused)}")
-    if config.get("allow_cpu_fallback") is not False:
-        raise ValueError("HEAD_SEARCH_CUDA_REQUIRED: startup must forbid CPU fallback")
     return config
 
 
@@ -465,3 +514,15 @@ def load_promoted_head_search(config_path, report_path=None):
     report = json.loads(_Path(report_path).read_text(encoding="utf-8"))
     validate_promoted_pair(config, report)
     return config
+
+
+def _freeze(value):
+    """Return a deeply immutable copy, so a bound value cannot be changed after startup agreed to it."""
+
+    from types import MappingProxyType
+
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value

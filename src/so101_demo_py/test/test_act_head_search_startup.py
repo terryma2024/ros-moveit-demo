@@ -87,3 +87,47 @@ def test_the_loader_validates_the_pair_before_anything_is_constructed(tmp_path: 
     report_path.write_text(json.dumps(report), encoding="utf-8")
     with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
         load_promoted_head_search(config_path, report_path)
+
+
+def test_startup_rejects_camera_tracker_device_and_dependency_drift() -> None:
+    config = _config()
+
+    for mutate in (
+        lambda doc: doc["camera"].__setitem__("width", 1280),
+        lambda doc: doc["tracker"].__setitem__("name", "ocsort"),
+        lambda doc: doc.__setitem__("cuda_device", "cuda:1"),
+        lambda doc: doc.__setitem__("controlled_dependencies", ["ultralytics"]),
+        lambda doc: doc.__setitem__("weight_path", "models/other.pt"),
+    ):
+        report = copy.deepcopy(config)
+        mutate(report)
+        with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
+            validate_head_search_binding(config, report)
+
+
+def test_startup_refuses_a_cpu_device_and_an_absent_identity() -> None:
+    config = _config()
+    cpu = copy.deepcopy(config)
+    cpu["cuda_device"] = "cpu"
+    with pytest.raises(ValueError, match="HEAD_SEARCH_CUDA_REQUIRED"):
+        validate_head_search_binding(cpu, copy.deepcopy(cpu))
+
+    missing = copy.deepcopy(config)
+    missing["weight_sha256"] = ""
+    with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
+        validate_head_search_binding(missing, copy.deepcopy(missing))
+
+
+def test_startup_refuses_an_undeclared_key_and_binds_immutably() -> None:
+    config = _config()
+    extra = copy.deepcopy(config)
+    extra["mystery"] = 1
+    with pytest.raises(ValueError, match="HEAD_SEARCH_UNUSED_VALUE"):
+        validate_head_search_binding(extra, copy.deepcopy(extra))
+
+    binding = validate_head_search_binding(config, copy.deepcopy(config))
+    with pytest.raises(TypeError):
+        binding.search_values["min_confidence"] = 0.9
+    with pytest.raises(TypeError):
+        binding.camera["width"] = 1280
+    assert isinstance(binding.search_values["vertical_bounds_px"], tuple)
