@@ -35138,3 +35138,26 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   Raw outputs: `replays-a-d.log`, `replays-e.log`, and the script `replays.py` in that run directory.
 - **Host gates remain Task 11's and are still not passed:** the `mujoco_vendor` fresh closure and the
   benchmark gate's 62 pre-existing environment failures.
+
+## HS-023 — Fifth verdict: two blockers fixed with real-data seal proof (commits cad8a5426, cc07e5424)
+
+- **Verdict:** `reviews/task4/task4-fifth-verdict.md` (GPT-6.1-Sol/high). It independently read all four prior
+  verdicts, HS-018 to HS-022, **and the retained replay logs with `cat`**, then judged findings 1, 2, 3 and 5
+  CLOSED, the later strongest-challenger and sibling-fallback findings CLOSED, and returned **REJECT** on
+  findings 4 and 6.
+- **Finding 4 (fixed, `cad8a5426`):** the tracker-IoU resolver was wired and tested, but the **task-domain**
+  `_measure_static` call never received the frozen candidate document, so a top-level tracker declaration
+  could be ignored on that path. It now receives it.
+- **Finding 6 (fixed, `cc07e5424`):** per-file digests were optional, so a manifest could name files nothing
+  vouched for. A selected file now needs either its own digest or a published sums entry, and the gate
+  refuses with `EVALUATION_SEAL_UNVERIFIED` when neither exists; the CLI looks the sums up beside the dataset
+  root. The pinned task dataset publishes `SHA256SUMS` (fetched into `deps/so101-task-dataset/`), and its
+  **real 200-sample test split verifies against 3,623 published sums**.
+- **Residuals the verdict lists and does not consider closed** (these are honest gaps, not passes):
+  binding every frame seed to its containing record and requiring each declared seed in each domain/split
+  cell; validating the whole latency distribution as finite and nonnegative rather than only the selected
+  p95; the empty-scene scenario filter's coverage; episode intervals remaining descriptive matched-fraction
+  statistics rather than pooled recall/F1/AP gating selection; the drifted-weight regression test asserting
+  only exit 2 (a manifest refusal could satisfy it); installed console-script provenance; and the two host
+  gates (`mujoco_vendor` fresh closure and the full benchmark gate), both Task 11's.
+- **Gate:** benchmark suite 23 passed; ordinary suites 47 passed + 1 skipped; `ruff check` clean.
