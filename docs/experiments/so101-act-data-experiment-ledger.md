@@ -42131,3 +42131,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   commit half is one insertion at the top of `_commit`, with the store's suite already carrying its control;
   items 5+ wait on the four blocked bindings. HEAD `eae141aa5`; thirteen gates green.
+
+
+## CP-2230 — ③a landed: the coordinator's commit funnel verifies before it records
+
+- **What landed**: the top of `BatchCoordinator._commit` (coordinator.py:776, the funnel `commit_result` and
+  `commit_validation` both delegate to) now constructs `ActCollectionResultVerifier` from the result port's own
+  `worker_roots` — guarded by the production conditions the coordinator already uses, `worker_roots` being a mapping
+  that contains the lease's worker and `result_port.run_mode is self.request.run_mode` — and calls
+  `verify(lease, str(location), self.request.run_mode)`; a refusal propagates, so the location never reaches the
+  coordinator's state. `result_store._expected` became **mode-aware** in the same pass, naming `validations` when the
+  verifier's mode is not `EXECUTE`, which is the asymmetry CP-2225 spotted and CP-2227's misplacement had hidden.
+- **The route there, now fully recorded**: CP-2219/2220/2221 chose the place by reading, CP-2222/2223/2224/2225/2226
+  built and discarded four hypotheses, **CP-2227's probe proved the wiring was inside `grant_lease`** — before any
+  result exists — and CP-2228/2229 relocated it to the funnel. The store's suite already contained the control
+  (`test_coordinator_journals_business_failed_only_after_verifier`), so landing the guard turned that test green
+  rather than requiring a new one.
+- **Evidence.** `logs/task3-owner-3a.run` rc=0: **148 passed in 1.26s** across the store's commit suite, four parallel-collection
+  suites and the audit, recorder and release-boundary suites under `pytest-xdist` with 8 workers, its own NVMe
+  scratch and a non-empty tempfile proof.
+- **Item 4's state: both halves now exist** — the W8 verifier's independent QC (CP-2077…2109, green) and this commit
+  gate — with the plan's converge-first rule still keeping them behind Task 3's closure, which the seventh review is
+  to confirm.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision** (CP-2217), **F13 amended** (CP-2218);
+  item 4: QC half green, commit half landed here; items 5+ wait on the four blocked bindings. HEAD `48686e6d5`;
+  fourteen gates green.

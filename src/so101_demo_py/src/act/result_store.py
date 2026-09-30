@@ -313,7 +313,11 @@ class ActCollectionResultVerifier:
         _identity(lease)
         if lease.worker_id not in self.worker_roots:
             raise ValueError("LEASE_IDENTITY_MISMATCH")
-        return _workspace(self.worker_roots[lease.worker_id], lease)
+        # the coordinator names this directory by mode (`attempts` for an execution batch, `validations` when it
+        # commits separate validation evidence); the expectation must switch the same way
+        collection = "attempts" if self.run_mode is RunMode.EXECUTE else "validations"
+        return _safe(_safe(self.worker_roots[lease.worker_id]) / collection / lease.point_id
+                     / lease.attempt_id)
 
     def verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode) -> dict:
         if run_mode is not RunMode.EXECUTE:
