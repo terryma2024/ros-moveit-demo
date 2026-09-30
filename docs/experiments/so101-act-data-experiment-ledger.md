@@ -40223,3 +40223,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   record), then **F1**, **F5** and **F11** — with **F12 closed** (CP-2120) and **F3 closed** (this entry).
 - **State.** Item 3's list: F12 ✅, F3 ✅, F13 residual, F1/F5/F11 open; targeted gate `logs/task3-final.run`
   **430 passed**; HEAD `22f033f16`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2143 — F5's plan: one shared coverage predicate, and the list it must require
+
+- **What F5 says, read from the verdict**: the writer's formal gate requires only a **nonempty reference
+  dictionary** (`episode_audit.py:775`), the readback's requires an **accepted** reference (`:968`), and neither
+  requires full raw references, full registered physics, the ratified scene/feedback observations, or the
+  prescribed broker and physical lifecycle history — so a bare `phase_complete(SEARCH)` plus `release` seals as
+  formal/complete. The reviewer also points at retained positive evidence, not a hypothetical.
+- **What the shared predicate must enumerate, all of it knowable from the code in this worktree**:
+  1. **lifecycle**: one `phase_complete` event for **every phase in `PickPlaceRunner.PHASES`** — that class
+     attribute *is* the prescribed order (CP-1974-era work used it for the release epoch), so the required set does
+     not need the plan document; plus the `release` event (already required);
+  2. **references**: an **accepted** reference whose raw half is one of the two **complete** exclusive groups —
+     exactly what F3's alternatives and `_reference_raw_ok` now validate — rather than a nonempty dict;
+  3. **physics**: the ratified rows for the phases that must carry them, with the registered physics names;
+  4. **observations**: the ratified `planning_scene_observation` and `controller_feedback` records, which F12 now
+     wires end to end and the audit already validates when present.
+- **The shape of the edit**: one predicate (a module-level function beside `_event_identity_ok`) that both
+  `seal()` (line 775) and the readback (line 968) call, each feeding it the rows it has already parsed; the gate
+  then refuses formal/complete eligibility until those records exist, which is precisely the "do not move the
+  missing contract into independent QC implicitly" instruction. The runner side is `pick_place_runner.py:109`
+  (CP-1991's raw gate), where the missing records must actually be produced rather than the gate relaxed.
+- **Ordering note**: this is the largest of Task 3's remaining items. F13's `sim_time_s` needs a plan ruling and
+  F1/F11 are separate; F5 is the item that decides whether a formal seal means anything, so it should be its own
+  pass with the runner-side production (2)-(4) done first, then the gate tightened.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 planned here**,
+  F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD `3220bf760`; no push, no evidence
+  deletion, no hardware, no second stack.
