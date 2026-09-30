@@ -40080,3 +40080,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   part 1 written and reverted pending that fixture; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `e5ee6166e`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2136 — F3's initial-epoch half landed with its test re-derived in the same pass
+
+- **What landed** (`episode_audit.py`): `_event_identity_ok` now requires the **first** event's release epoch to
+  be 0 or 1 — an episode cannot open with an epoch unrelated to its own run — while later events keep the
+  never-backwards, one-at-a-time rule. Whether a **later** step is tied to a release event is a property of the
+  stream and belongs to the seal-time check (CP-2134's part 2, still open).
+- **The test, re-derived rather than patched** (`test_readback_requires_exact_types_and_correlated_clocks`): its
+  first accepted event now names epoch **1**; the sequence then asserts a **backwards** epoch (1 → 0) is refused,
+  and that an identity from **another attempt** is not the episode's. The case that had asserted a refusal for an
+  event carrying a lease while the episode names none is **removed**, because the clause is deliberately inert
+  there — and it is exercised by its own unit control instead, which is the honest place for it.
+- **Evidence.** Targeted run this round: **199 passed** across the audit, recorder, release-boundary, capture,
+  `test_act_task8` and qualification suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a
+  non-empty tempfile proof.
+- **F3's remainder**: only the seal-time tie (every epoch step named by a `release` event in the same audit),
+  whose design CP-2134 records and whose fixtures CP-2133 identified.
+- **State.** Item 3's list: **F12 closed**; **F3** round trips, release correlation, lease and initial epoch
+  closed with the seal-time tie left; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `4fc0e6470`; no push, no evidence deletion, no hardware, no second
+  stack.

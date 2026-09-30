@@ -409,7 +409,11 @@ def _event_identity_ok(event_identity, episode_identity, *, release_epoch: int |
     epoch = event_identity.get("release_epoch")
     if type(epoch) is not int or epoch < 0:
         return False
-    if release_epoch is not None and (epoch < release_epoch or epoch > release_epoch + 1):
+    if release_epoch is None:
+        # F3: the first event of an episode names the run's own initial release epoch, never an unrelated one;
+        # whether a later step is tied to a release event is a property of the stream, checked when it is sealed
+        return epoch in (0, 1)
+    if epoch < release_epoch or epoch > release_epoch + 1:
         # the release epoch never goes backwards and advances one release at a time
         return False
     return True

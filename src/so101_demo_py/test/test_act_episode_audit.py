@@ -688,12 +688,20 @@ def test_readback_requires_exact_types_and_correlated_clocks(tmp_path):
                                         "sim_time_s": 1.0, "monotonic_ns": 1,
                                         "payload": {"phase": "SEARCH"}})
     writer.append_source("events", {"kind": "phase_start",
-                                    "identity": {**identity(), "release_epoch": 2},
+                                    "identity": {**identity(), "release_epoch": 1},
                                     "sim_time_s": 1.0, "monotonic_ns": 1,
                                     "payload": {"phase": "SEARCH"}})
+    # a backwards release epoch is refused, and an identity from another attempt is not the episode's; the
+    # lease clause applies to an episode that names one, so it is exercised by its own unit control
     with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
-        writer.append_source("events", {"kind": "phase_start", "identity": {**identity(), "lease": _lease()},
+        writer.append_source("events", {"kind": "phase_start",
+                                        "identity": {**identity(), "release_epoch": 0},
                                         "sim_time_s": 1.0, "monotonic_ns": 2,
+                                        "payload": {"phase": "SEARCH"}})
+    with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+        writer.append_source("events", {"kind": "phase_start",
+                                        "identity": {**identity(), "attempt_id": "other"},
+                                        "sim_time_s": 1.0, "monotonic_ns": 3,
                                         "payload": {"phase": "SEARCH"}})
     # readback repeats the clock correlation on a re-signed stream of its own
     case = tmp_path / "sealed"
