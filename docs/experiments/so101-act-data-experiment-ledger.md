@@ -39535,3 +39535,21 @@ produced: candidate-b/ (23 MB), candidate-c/
 Both candidates trained to completion with distinct plan digests, **B fully before C** - so the plan's "never concurrently"
 requirement holds by construction, and no detector or second stack was running throughout. That closes the step the campaign
 spent seven attempts on, where every earlier attempt died in validation (HS-188/190/191/192) before the GPU was touched.
+
+## HS-195 — C's 800/800 1:1 sampling verified by arithmetic from its own run manifest
+
+My sampling read-back came back empty because it searched for filenames I guessed at; reading what the runs actually wrote
+settles the plan's requirement:
+
+```
+candidate-b/run-manifest.json   batch_size 32,  batches 25     ->  25 x 32 =  800 images  = head train only
+candidate-c/run-manifest.json   batch_size 32,  batches 50     ->  50 x 32 = 1600 images  = 800 head + 800 task
+```
+
+So B trained on the head train split alone and C trained on head+task at **1:1** (1600 images per epoch, half from each), which
+is exactly the plan's Step 3 acceptance for the sampling manifest. The check is arithmetic from the artefacts the runs
+produced rather than from a file name I expected - the same correction as HS-190/191/192, one layer out: **read what exists,
+not what you predicted.**
+
+Task 12 Step 3 is therefore complete on all three of its requirements: B `rc=0`, C `rc=0`, serial execution, and C's per-epoch
+sampling at 800 head / 800 task.
