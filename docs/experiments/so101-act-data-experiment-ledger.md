@@ -41800,3 +41800,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4's QC half exists
   and passes its suites, its commit half now specified to the call; items 5+ wait on the four blocked bindings.
   HEAD `ba0c26b30`; twelve gates green.
+
+
+## CP-2214 — What the coordinator already carries, and the two inputs the wiring adds
+
+- **`CommittedPointResult`** (`parallel_batch/adaptive_contracts.py:281`) is
+  `{point_id: str, status: PointStatus, evidence_root: Path, infra_attempts: int}` — so the coordinator's terminal
+  result **already names the evidence root** the verifier needs as its `location`, and **carries neither a lease nor
+  a run mode**.
+- **What that means for CP-2213's sequence**: of the verifier's three inputs, one (`location`) is in hand; the other
+  two — the `LeaseIdentity` and the `RunMode` — have to reach the commit point from the collection's own context
+  (the lease the worker was given and the mode the run was launched in), either as fields on the result or as
+  arguments to the coordinator. That is the concrete prerequisite the wiring needs, and it is a **data-plumbing**
+  question rather than a verification one: the verifier itself needs no change.
+- **Where `RunMode` lives**: the grep across `src/**/*.py` for its class or assignment printed nothing, so it is
+  imported from wherever the collection contracts define it — the next read for the pass that does the wiring, and
+  the reason this entry stops at the field inventory rather than proposing an edit.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4's QC half passes
+  its suites and its commit half is specified to the call with this field inventory; items 5+ wait on the four
+  blocked bindings. HEAD `c884a638b`; twelve gates green.
