@@ -34816,3 +34816,51 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   queue behaviour remain Task 7 findings.
 - **State.** **Task-list items 0-1 completed; item 2 in_progress (modules and producer identity
   green, checkpoint review pending); items 3-8 pending.**
+
+
+## CP-1932 — Task 2 verdict FAIL (5 Important, 1 Minor) and the agreed rework plan
+
+- **Verdict** (`reviews/task2-verdict.md`, dispatch `ee22320b-1403-4fa9-8e72-5888ba9e4fc9`) on
+  `1d111c3f1`: FAIL, 0 Critical / 5 Important / 1 Minor. The reviewer accepted the producer boundary
+  (identity minted from the real published frame) and the strict-drain hole refusal, and confirmed the
+  deferred Task 5/7 items are not findings. The five Important findings are real gaps in
+  `act/continuous_capture.py`:
+  - **T2-F1** `_complete()` only inspects the newest minted row once, so a reference arriving later
+    never completes an earlier pending row; `_minted` is unbounded while reference history is not.
+    An interior unlabelled row can therefore sit *before* the reported label cutoff.
+  - **T2-F2** an accepted reference is written straight into a label; a revocation arriving before the
+    target instant cannot invalidate it, and the normalized reference record drops goal/epoch identity
+    and the revocation boundary.
+  - **T2-F3** `on_acquisition(frame, pixels)` ignores the pixels, so the images the sampler supplies
+    are only stamp-checked: different pixels can be recorded under a genuine acquisition's identity.
+  - **T2-F4** `finish()` ignores the deadline, the latched failure flag and the started state, and
+    `deadline_s` is not validated (inf/NaN/>120 defeats or extends the fixed budget).
+  - **T2-F5** `finish()` drains non-strictly, so an interior source hole with later frames and
+    references still queued is silently truncated instead of failing.
+  - **T2-F6 (Minor)** `CaptureSummary.audit_files` returns mutable audit dictionaries, not the declared
+    `tuple[Path, ...]`, and gives no supported handoff for the audit-only tail.
+- **Rework plan (agreed, to implement next).**
+  1. Keep a bounded, ordered *pending row* queue (capacity explicit; overflow fails with
+     `CAPTURE_PENDING_OVERFLOW`) and service it from every `drain()`/`finish()`, not only at mint time.
+  2. Label a row only when (a) an accepted reference exists exactly at `t + 0.1`, (b) no revocation
+     with a boundary at or before that instant invalidates it, and (c) the capture has observed sim
+     time strictly past `t + 0.1`, proving the instant happened. Preserve the accepted/revoked history
+     per target instant instead of a bare boolean.
+  3. Refuse to write past an unresolved earlier row: an interior label gap fails
+     (`CAPTURE_LABEL_GAP`); only genuinely terminal rows, whose instant never got a legal reference,
+     stay audit-only.
+  4. Bind pixels to identity: verify `pixel_digest(observation[stream])` equals the bound acquisition's
+     `pixel_sha256` for both cameras before recording (`ACQUISITION_PIXEL_MISMATCH`).
+  5. Validate `deadline_s` (finite, `0 < deadline_s <= ACT_TIMEOUT_S`), latch terminal failures, and
+     make `finish()` require started, refuse after a latched failure and refuse once the motion budget
+     is spent; an on-time terminal finalization stays permitted.
+  6. Enforce continuity during finalization too: only a genuine terminal audit-only tail may be
+     trimmed; non-empty future queues across an interior missing instant fail.
+  7. Give the audit-only tail a supported handoff: `CaptureSummary.audit_files` becomes the tuple of
+     paths produced by an injected `audit_writer` (Task 3's writer; empty when none is wired), and the
+     unlabelled rows are exposed explicitly rather than as "audit files".
+  8. New tests for every case the reviewer named: delayed reference, missing interior reference,
+     pending overflow, accepted-then-revoked and accepted-then-stopped, same-stamp/different-pixels,
+     finish-at-expiry, finish-after-failure, invalid/extended budget, and the finish-time hole.
+- **State.** **Task-list items 0-1 completed; item 2 in_progress (rework outstanding); items 3-8
+  pending.** No push, no evidence deletion, baseline untouched.
