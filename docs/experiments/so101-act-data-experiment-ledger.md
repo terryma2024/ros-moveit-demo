@@ -40751,3 +40751,29 @@ So before re-recording, the seed-to-condition source has to be settled: either t
 (`split_seed_plan` + `scenario_plan`, HS-234's module) is the intended authority for these seeds too, or the partitions file needs
 the mapping it currently implies but does not state. Recording this rather than guessing, because guessing the conditions would
 reproduce exactly the defect this round found - a value I chose substituting for one the plan declares.
+
+## HS-243 — Declared condition plan (an assumption, recorded as one) and episodes re-recorded with `scenario`
+
+No artefact maps partition seeds to conditions: the config's `seed_starts` are the dataset's own ranges
+(4,000,000/4,100,000/4,200,000), the partitions file lists the ten `condition_classes` and no per-seed class for
+calibration/held-out, and **no code or plan text reads `condition_classes` at all**. So the mapping does not exist and had to be
+declared rather than discovered. Under the auto-proceed rule I took the reading the file itself suggests:
+
+```
+two consecutive seeds per class, in the declared class order:
+  index // 2 -> condition_classes[index // 2]      (20 seeds / 10 classes = 2 each)
+  cup count  -> 0 for no_cup, 2 for two_cups, else 1
+frames now carry "scenario": <class> as well as domain/split/camera/neck_rad
+```
+
+Recorded as an **assumption a reviewer can override**, not as a finding: the partitions file's own description promises the class
+mapping only for *qualification* items, so this plan extends that intent to the other two lists by position.
+
+```
+calibration          20 files, rec rc=0, 10 classes x 12 frames (= 2 seeds x 3 angles x 2 domains)
+held_out_evaluation  20 files, rec rc=0, same distribution
+```
+
+Also noted: the renderer's `DatasetScenario` expresses only cup counts, so conditions like `low_light`,
+`partial_occlusion`, `fast_interruption` and `reacquire_after_stop` are **labelled but not rendered** differently from
+`nominal` - a fidelity limit of this recorder that the gate cannot see and a reviewer must know.
