@@ -40854,3 +40854,33 @@ I am taking **(a)** as the recorded state and **(b)** as the next experiment, be
 tuning-until-it-passes: the val grid's flatness is evidence that the operating point was never really chosen, so re-selecting it on
 the criterion the design names (val images **plus** calibration episodes, design line 220) is the faithful next step rather than a
 knob turned to make a gate go green. Under no circumstances does the gate get satisfied by relaxing the retention rule.
+
+## HS-247 — C misses retention by one thousandth: the margin is 0.01 and the loss is 0.011
+
+Read the rule rather than inferring it:
+
+```
+head_search_models.py:33   TASK_RETENTION_MARGIN = 0.01
+                     :467  best_task_static = max(task_mask_map.values())          # best over ALL candidates
+                     :468  if best_task_static - task_mask_map["C"] > TASK_RETENTION_MARGIN:
+                     :469      raise EVALUATION_TASK_RETENTION_LOST: … gives up {diff:.3f} mask mAP
+```
+
+So the refusal is real and the rule is explicit - and C is **0.011** below the best task-domain mask mAP against a **0.01** margin,
+i.e. **one thousandth of a mAP point outside it**. Two consequences:
+
+1. **No relaxation is warranted, and none will be made.** The margin is the design's stated tolerance and C exceeds it; the gate
+   behaved correctly.
+2. **But C's operating point was never genuinely selected.** HS-213 found the val grid **completely flat** (runner-up margin
+   0.000 across all 18 cells), so the frozen point is a tie-break, not a choice - and design line 220 asks for that choice to be
+   made jointly on **val images and calibration episodes**, which is the half of Step 4 I recorded as not implemented (HS-238).
+
+So the legitimate next step is the one already on the ledger: **re-select C's operating point on val + calibration episodes**, using
+the 20 calibration episodes already recorded (`episodes5/calibration`, both domains, 12 frames per condition class). If a
+faithfully chosen point brings C within the margin, that is a result of doing the design's own procedure rather than of tuning
+against the gate; if it does not, then "no challenger selected" stands as Task 12's outcome and Task 13's input stays unresolved
+until the user decides.
+
+**Nobody should mistake the 0.001 for permission.** The distinction that matters is procedural, not numerical: choosing the
+operating point on the criterion the design names, before looking at the retention verdict, versus choosing it until the verdict
+turns green. The first was always owed; the second would be the one thing this task has refused throughout.
