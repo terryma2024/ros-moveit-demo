@@ -43436,3 +43436,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, its hybrid's real next step being the aligned fixture;
 - goal paused.
+
+## CP-2301 - The aligned port subclass is required, not optional
+
+- Testing the cheaper hope - a plain FakePort with only the request aligned to the writer's attempt - produced
+- BEGIN_EVIDENCE_INVALID: the port builds its own begin evidence from its own constants rather than from the
+- request, so aligning the request alone leaves the two fences disagreeing. The audit's refusal followed.
+- So F5's hybrid needs CP-2260's AlignedPort after all: the class that rewrites session_id and attempt_id in every
+- evidence method (begin, evidence, release_preflight, run_phase, run_retreat_segment, set_down). That test already
+- proves a formal writer accepts such a run end to end, which is why the hybrid is a copy of it plus the camera and
+- reference halves rather than a new discovery.
+- Withdrawn; the suite is green (15 passed) and the test file is clean.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, its hybrid now specified to the class;
+- goal paused.
