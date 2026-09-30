@@ -178,10 +178,17 @@ def test_the_audit_receives_the_events_the_run_actually_produced():
     PickPlaceRunner(port, audit=audit).run(request())
     assert [(event["kind"], event["payload"].get("phase") or event["payload"].get("reason"))
             for event in audit.events] == (
-        [("phase_complete", phase) for phase in PickPlaceRunner.PHASES]
+        # T3-F3(c): the release event names the epoch the controller entered, emitted before that phase's own
+        # phase_complete; its payload is the release schema, so this projection sees no phase or reason for it
+        [entry for phase in PickPlaceRunner.PHASES
+         for entry in (((("release", None),) if phase == "RELEASE" else ())
+                       + (("phase_complete", phase),))]
         + [("run_complete", "FULL_COMPLETE")])
-    assert [event["payload"]["physics_step"] for event in audit.events] == sorted(
-        event["payload"]["physics_step"] for event in audit.events)
+    # the release event carries the ratified release schema, which has no physics_step, so only the events
+    # that do carry one are compared (T3-F3(c))
+    assert [event["payload"]["physics_step"] for event in audit.events
+            if "physics_step" in event["payload"]] == sorted(
+        event["payload"]["physics_step"] for event in audit.events if "physics_step" in event["payload"])
     assert all(event["sim_time_s"] is None for event in audit.events)
     assert all(event["identity"]["session_id"] == "s" for event in audit.events)
     assert all(event["monotonic_ns"] >= 1 for event in audit.events)

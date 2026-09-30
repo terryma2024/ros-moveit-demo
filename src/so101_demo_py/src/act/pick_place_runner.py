@@ -142,7 +142,7 @@ class PickPlaceRunner:
                                             "release_epoch": evidence["release_epoch"],
                                             "observation": raw})
 
-    def _event(self, kind: str, detail: str, physics_step: int) -> None:
+    def _event(self, kind: str, detail: str, physics_step: int, *, payload: dict | None = None) -> None:
         if self.audit is None:
             return
         # the event names the identity it belongs to and the monotonic instant it happened at; the
@@ -152,10 +152,12 @@ class PickPlaceRunner:
             # identity it was emitted under rather than following later mutations
             "kind": kind, "identity": dict(self._event_identity), "sim_time_s": None,
             "monotonic_ns": int(self.clock_ns()) or 1,
-            "payload": {"reason": detail, "physics_step": physics_step}
-            # every terminal run outcome names its reason; a phase event names its phase
-            if kind in ("run_complete", "run_aborted", "run_incomplete_evidence")
-            else {"phase": detail, "physics_step": physics_step}})
+            # a caller that owns the kind's schema supplies the payload; otherwise every terminal run outcome
+            # names its reason and a phase event names its phase
+            "payload": payload if payload is not None
+            else ({"reason": detail, "physics_step": physics_step}
+                  if kind in ("run_complete", "run_aborted", "run_incomplete_evidence")
+                  else {"phase": detail, "physics_step": physics_step})})
 
     def _validate_request(self, request: dict) -> None:
         if not isinstance(request, dict) or set(request) != self._REQUEST_KEYS:
@@ -308,6 +310,10 @@ class PickPlaceRunner:
             self._event_identity = {"session_id": request["session_id"],
                                     "attempt_id": request["attempt_id"],
                                     "reset_epoch": reset_epoch, "release_epoch": release_epoch}
+            # T3-F3(c): a formal writer admits a registered lease, and its events may not omit it
+            _lease = getattr(self.audit, "identity", None)
+            if isinstance(_lease, dict) and _lease.get("lease") is not None:
+                self._event_identity["lease"] = _lease["lease"]
             completed: list[str] = []
             for phase in self.PHASES:
                 if request["deadline_ns"] <= self.clock_ns():
@@ -335,6 +341,13 @@ class PickPlaceRunner:
                         # every event from here on belongs to the epoch the controller entered, so the
                         # audit never mixes pre-release support evidence into post-release outcomes
                         self._event_identity["release_epoch"] = release_epoch
+                        # T3-F3(c): the epoch advances here, so the event that names it is emitted here — the
+                        # formal seal tie refuses a stream whose release step no release event names
+                        self._event("release", "RELEASE", latest_step,
+                                    payload={"release_epoch": release_epoch,
+                                             "supported": bool(evidence.get("cup_supported")),
+                                             "no_fingertip_contact": bool(
+                                                 evidence.get("no_fingertip_contact", True))})
                     latest_step = self._verify_phase(
                         phase, evidence, request, reset_epoch, release_epoch, latest_step,
                     )

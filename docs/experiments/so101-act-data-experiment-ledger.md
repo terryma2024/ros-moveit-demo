@@ -42552,3 +42552,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   plus one-variable controls for a missing lease and a missing release transition.
 - **State.** **F14 closed**; F3 (a) and (b) landed; F3(c) has all three anchors read and nothing left to discover;
   F1/F5/F11/F12/F13 open; the goal is paused. HEAD `700d5ea26`; seventeen gates green.
+
+
+## CP-2250 — F3(c) landed: the runner carries the lease and emits the release event
+
+- **What landed** (`pick_place_runner.py`, three edits): (1) beside `self._event_identity` the runner now merges the
+  audit's admitted `identity["lease"]` when the writer names one, so its events satisfy the writer's lease clause;
+  (2) `_event(kind, detail, physics_step, *, payload=None)` accepts a caller-owned payload for the kind, keeping the
+  reason/phase construction as the default; (3) at `RELEASE`, after the epoch advances, the runner emits
+  `self._event("release", "RELEASE", latest_step, payload={release_epoch, supported, no_fingertip_contact})` taken
+  from that phase's own evidence, so the new epoch is named by the event that belongs to it.
+- **The control that had to follow, and did**: `test_the_audit_receives_the_events_the_run_actually_produced` now
+  expects the `release` event **before** the RELEASE phase's `phase_complete` (the order the runner emits), with
+  `None` in the phase-or-reason projection because the release payload is the ratified schema, and it compares
+  physics steps only over the events that carry one.
+- **Evidence.** `logs/task3-f3c.run` rc=0: **354 passed in 1.91s** across the task8, release-boundary, qualification, audit,
+  supervisor, recorder, capture, store-commit, generic-artifact and W8 suites under `pytest-xdist` with 8 workers,
+  its own NVMe scratch and a tempfile proof.
+- **What F3 still owes**: the verdict's **new positive control** — a real runner against a **formal writer** whose
+  first `phase_complete` is accepted, whose stream carries a lease and a `release`, and which seals — plus its
+  one-variable negatives (missing lease, missing release transition). The behaviour is in place; the control that
+  demonstrates it by name is not.
+- **State.** **F14 closed**; **F3 (a), (b) and (c) landed** with that control outstanding; F1/F5/F11/F12/F13 open;
+  the goal is paused. HEAD `700d5ea26`; eighteen gates green.
