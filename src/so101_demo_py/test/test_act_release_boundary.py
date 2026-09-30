@@ -363,37 +363,7 @@ def test_a_formal_writer_admits_the_runners_events_and_refuses_a_foreign_identit
     from test_act_episode_audit import _lease, identity
     from so101_demo.act.episode_audit import EpisodeAuditWriter
 
-    names = {"session_id": identity()["session_id"], "attempt_id": identity()["attempt_id"]}
-
-    class AlignedPort(FakePort):
-        """Every document this port returns names the writer's own session and attempt.
-
-        The runner fences its begin and phase evidence to the request, and the writer fences events to its
-        identity, so all three documents have to agree before a formal writer admits a single event.
-        """
-
-        @staticmethod
-        def _aligned(evidence):
-            return None if evidence is None else {**evidence, **names}
-
-        def evidence(self, phase, request):
-            # most phase documents are built here, so aligning it covers them in one place
-            return self._aligned(super().evidence(phase, request))
-
-        def begin(self, request):
-            return self._aligned(super().begin(request))
-
-        def release_preflight(self, request):
-            return self._aligned(super().release_preflight(request))
-
-        def run_phase(self, phase, request):
-            return self._aligned(super().run_phase(phase, request))
-
-        def run_retreat_segment(self, direction, distance, request):
-            return self._aligned(super().run_retreat_segment(direction, distance, request))
-
-        def set_down(self, request):
-            return self._aligned(super().set_down(request))
+    port = AlignedPort()
 
     def formal(root):
         return EpisodeAuditWriter(root,
@@ -404,7 +374,7 @@ def test_a_formal_writer_admits_the_runners_events_and_refuses_a_foreign_identit
                                   {"inputs_sha256": "c" * 64})
 
     audit = formal(tmp_path / "admitted")
-    PickPlaceRunner(AlignedPort(), audit=audit).run({**request(), "attempt_id": names["attempt_id"]})
+    PickPlaceRunner(port, audit=audit).run({**request(), "attempt_id": port.names["attempt_id"]})
     # the formal writer admitted every event, so each carries the lease its identity requires; the writer keeps
     # no in-memory list, so the stream is read back from the audit it wrote
     rows = [json.loads(line) for line in
@@ -419,3 +389,42 @@ def test_a_formal_writer_admits_the_runners_events_and_refuses_a_foreign_identit
     foreign = formal(tmp_path / "foreign")
     with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
         PickPlaceRunner(FakePort(), audit=foreign).run(request())
+
+
+class AlignedPort(FakePort):
+    """Every document this port returns names the writer's own session and attempt.
+
+    The runner fences its begin and phase evidence to the request, and a formal writer fences events to its
+    identity, so all three documents have to agree before such a writer admits a single event.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from test_act_episode_audit import identity
+
+        self.names = {"session_id": identity()["session_id"], "attempt_id": identity()["attempt_id"]}
+
+    def _aligned(self, evidence):
+        return None if evidence is None else {**evidence, **self.names}
+
+    def evidence(self, phase, request):
+        return self._aligned(super().evidence(phase, request))
+
+    def begin(self, request):
+        return self._aligned(super().begin(request))
+
+    def release_preflight(self, request):
+        return self._aligned(super().release_preflight(request))
+
+    def run_phase(self, phase, request):
+        return self._aligned(super().run_phase(phase, request))
+
+    def run_retreat_segment(self, direction, distance, request):
+        return self._aligned(super().run_retreat_segment(direction, distance, request))
+
+    def set_down(self, request):
+        return self._aligned(super().set_down(request))
