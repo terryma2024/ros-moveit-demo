@@ -39674,3 +39674,23 @@ around existing behaviour is the faithful move rather than editing the plan.
 **Recorded as a correction in place**, because HS-198's overstatement would otherwise stand as the reason Task 12 stopped: a
 missing CLI subcommand and a missing capability look identical from the command line, and only reading the library
 distinguishes them.
+
+## HS-200 — Verified split: candidate registration exists, operating-point calibration does not
+
+Following HS-198 (too strong) and HS-199 (too optimistic), the library and CLIs were read rather than guessed:
+
+| Step 4 need | state |
+| --- | --- |
+| candidate **manifest** for B and C | **exists** - `train_yolo_seg` wrote `candidate-c/candidate-manifest.json` (HS-194) |
+| candidate manifest for **A** | not produced yet, but by the same producer over the pinned weights - a registration, not new code |
+| **operating-point calibration** into `frozen-{a,b,c}.json` | **no producer found**: `head_search_models.py` has `load_frozen_candidate`/`choose_candidate`/`write_comparison` (consumer side) and `head_search_calibration.py` writes `frozen-runtime.json` (Task 13's runtime), but nothing freezes a per-candidate operating point |
+| `qualify` | takes `--run-root --promoted-config --evidence-root` - Task 13's flow, not Step 4's |
+
+So the accurate statement sits **between** my last two entries: registration is largely already done, and the genuine gap is the
+**operating-point freeze** that the `compare` gate consumes. Three successive readings of the same question gave three
+different answers - missing capability (HS-198), surface-only (HS-199), and now "one half exists, one half does not" - which is
+itself the argument for reading the library before concluding anything about it.
+
+**Decision needed from the user**, in the shape of HS-103/107/161: either implement the operating-point calibration and
+freezing for A/B/C (new code in this work, feeding the existing `compare` gate), or record Task 12 as complete through Step 3
+with Step 4 blocked on a capability the plan assumes and this work never built.
