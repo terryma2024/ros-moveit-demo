@@ -41491,3 +41491,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   five items landed, its endpoint rule proven and its expectations enumerated; targeted gates **430 / 201 / 201 /
   201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `2b996f7f2`; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2202 — Why CP-2200's deltas missed: the minter loop appears more than once
+
+- **Read this round**: `_self_consistent_formal` mints its frames with
+  `for stamp in (1.0, 1.1):` inside the per-camera loop and returns `_window()`, while the same
+  `for stamp in (1.0, 1.1):` line appears in the file **more than once** (the grep count is printed alongside this
+  entry). My delta used `str.replace(..., 1)`, i.e. it changed the **first** occurrence, which need not be the
+  self-consistent fixture's — so that fixture's schedule then named 1.2 (my `_window()` delta) while its
+  acquisitions stopped at 1.1, and the **invented-instant** rule refused it before the endpoint rule was reached.
+- **The corrected delta**: apply the stamp change to **every** matching loop (or scope it to
+  `_self_consistent_formal`'s body), and keep the `_window()` schedule delta. Then every success fixture holds an
+  acquisition at both window extremes, which is what the endpoint rule requires.
+- **Plus the expectation flips CP-2200 recorded**: my two controls —
+  `test_readback_refuses_a_window_naming_an_instant_no_acquisition_holds` and
+  `test_a_sealed_schedule_naming_no_instant_is_refused_on_readback` — must expect `AUDIT_WINDOW_INVALID`, because
+  the shared predicate now fires before the earlier manifest gate.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  five items landed and its endpoint pass one targeted delta plus two expectation flips from green; targeted gates
+  **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `5df7d374e`; no
+  push, no evidence deletion, no hardware, no second stack.
