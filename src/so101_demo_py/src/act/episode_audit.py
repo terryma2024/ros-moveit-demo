@@ -151,15 +151,34 @@ class EpisodeAuditWriter:
                   "head_acquisition_id": head_id, "wrist_acquisition_id": wrist_id,
                   "reference_sequence": _integer(reference_sequence, "AUDIT_ROW_INVALID")}
         _closed(record, _ROW_FIELDS, "AUDIT_ROW_INVALID")
-        for name, value in (("head_id", head_id), ("wrist_id", wrist_id)):
+        if head_id == wrist_id:
+            # the same acquisition in both slots is never a real stereo pair
+            raise ValueError("AUDIT_BINDING_INVALID")
+        for value, camera in ((head_id, "head"), (wrist_id, "wrist")):
             if not isinstance(value, str) or not value or value not in self._acquisitions:
                 # a row may not be bound to an acquisition the audit never saw
                 raise ValueError("AUDIT_BINDING_UNKNOWN")
+            frame = self._acquisitions[value]
+            if frame["camera"] != camera:
+                # the head slot takes a head acquisition and the wrist slot a wrist one
+                raise ValueError("AUDIT_BINDING_INVALID")
+            if (frame["session_id"] != self.identity.get("session_id")
+                    or frame["reset_epoch"] != self.identity.get("reset_epoch")):
+                # a frame from another session or reset epoch does not belong to this episode
+                raise ValueError("AUDIT_BINDING_INVALID")
             if value in self._bound:
                 # one acquisition fills one row, the same rule the capture enforces
                 raise ValueError("AUDIT_BINDING_REUSED")
         if record["row_index"] in self._row_indexes:
             raise ValueError("AUDIT_ROW_INVALID")
+        if record["row_index"] != len(self._row_indexes):
+            # rows are a contiguous schedule: no gaps, no reordering
+            raise ValueError("AUDIT_ROW_ORDER_INVALID")
+        entry = self._references.get(record["reference_sequence"])
+        target = round(record["sim_time_s"] + 0.1, 6)
+        if entry is None or entry["reference_time_s"] != target or entry["accepted"] is not True:
+            # the binding must name a reference this episode accepted for exactly that instant
+            raise ValueError("AUDIT_BINDING_REFERENCE_INVALID")
         self._row_indexes.add(record["row_index"])
         self._bound.update((head_id, wrist_id))
         self._append("row-bindings", record)
@@ -199,6 +218,7 @@ class EpisodeAuditWriter:
             if item["source"] != "CONTROLLER_REFERENCE" or type(item["accepted"]) is not bool:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             item["sequence"] = self._next("references")
+            self._references[item["sequence"]] = item
         else:
             item = _closed(record, _PHYSICS_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
             if item["kind"] not in _PHYSICS_KINDS or not isinstance(item["observation"], dict):

@@ -35598,3 +35598,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   manifest/acquisition/row-binding/seal/event dimensions closed; F1's reference/physics payloads, F2 and
   F5 outstanding); items 4-8 pending.** HEAD `0166a25fd`; 39-path dirty baseline untouched; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-1948 — Task 3 fix pass, fifth instalment: T3-F2 closed (semantic row binding with controls)
+
+- **Binding is now semantic, not presence-plus-single-use.** `bind_row` refuses the same acquisition in
+  both slots (`AUDIT_BINDING_INVALID`), requires the head slot to hold a `head` acquisition and the
+  wrist slot a `wrist` one, requires each frame's session and reset epoch to match the writer's own
+  identity, requires the row index to be the next one in a contiguous schedule
+  (`AUDIT_ROW_ORDER_INVALID`), and requires `reference_sequence` to resolve to a reference this episode
+  recorded as accepted for exactly `sim_time_s + 0.1` (`AUDIT_BINDING_REFERENCE_INVALID`). References are
+  now addressable by their own sequence inside the writer.
+- **The reviewer's counterexample is fixed at its source.** `complete_audit()` no longer appends
+  camera-first and binds `frames[0]`/`frames[1]`; it keeps one frame per camera per instant and binds
+  the head frame to the head slot and the wrist frame to the wrist slot. That fixture is what made the
+  "complete audit" pass while binding two head frames, so the fixture was wrong, not the rule.
+- **Five new controls**, all reaching the semantic checks rather than a shape error: a swapped
+  head/wrist pair, the same acquisition in both slots, a frame minted under a different reset epoch, a
+  binding naming a nonexistent sequence or a reference for another instant or a revoked reference, and a
+  first row bound at index 1.
+- **Evidence.** `logs/task3-fix5.run` rc=0: **105 passed in 0.69 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_continuous_capture.py`, `test_act_release_boundary.py` and
+  `test_act_supervisor.py`, with its own NVMe scratch and a non-empty tempfile proof. Three of my own
+  intermediate mistakes were caught by the suite and fixed rather than worked around: a stale anchor
+  made the first module patch a no-op, the audit fixture still bound two head frames, and the new
+  helper did not create its parent directory.
+- **Still open from the verdict.** **T3-F1**'s last two dimensions: `references` must preserve the
+  observer's raw message, joint names, source/receipt timing and revocation boundaries (the observer
+  already holds them at `adapters/act/controller_reference_observer.py:69`), and `physics` must carry
+  pose, velocity, full contact pairs, support, Planning Scene and gripper/controller feedback per the
+  source contracts rather than an arbitrary raw block. **T3-F5** (gate full-run eligibility on the
+  required raw physics and broker events). Then a fresh checkpoint review.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (fix pass: F2, F3, F4, F6 closed;
+  F1's manifest/acquisition/row-binding/seal/event dimensions closed; F1's reference and physics
+  payloads plus F5 outstanding); items 4-8 pending.** HEAD `63b451a7d`; 39-path dirty baseline
+  untouched; no push, no evidence deletion, no hardware, no second stack.

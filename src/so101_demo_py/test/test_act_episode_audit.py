@@ -39,13 +39,15 @@ def complete_audit(tmp_path):
                                                        "scene_id": "default", "seed": 0},
                                 identity(), {"inputs_sha256": "a" * 64})
     minter = AcquisitionMinter()
-    frames = []
+    # one frame per camera per instant: a row binds the head frame to the head slot and the wrist frame
+    # to the wrist slot, which is exactly the relationship the review's counterexample violated
+    frames = {}
     for camera in ("head", "wrist"):
         for stamp in (1.0, 1.1):
             frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=stamp,
                                 received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO)
             writer.append_acquisition(frame)
-            frames.append(frame)
+            frames[(camera, stamp)] = frame
     writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
                                         "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
                                         "accepted": True})
@@ -56,7 +58,8 @@ def complete_audit(tmp_path):
                                      "observation": {"supported": True, "contacts": 2}})
     writer.append_source("physics", {"kind": "retract", "sim_time_s": 1.2, "release_epoch": 1,
                                      "observation": {"distance_m": 0.05}})
-    writer.bind_row(0, 1.0, frames[0].acquisition_id, frames[1].acquisition_id, 1)
+    writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id,
+                    frames[("wrist", 1.0)].acquisition_id, 1)
     window = {"start_s": 1.0, "end_s": 1.2, "label_cutoff_s": 1.0}
     return writer, window
 
@@ -117,6 +120,9 @@ def test_one_acquisition_cannot_fill_two_rows(tmp_path):
                         received_monotonic_ns=1, pixels=ZERO)
     writer.append_acquisition(head)
     writer.append_acquisition(wrist)
+    writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+                                        "accepted": True})
     writer.bind_row(0, 1.0, head.acquisition_id, wrist.acquisition_id, 1)
     with pytest.raises(ValueError, match="AUDIT_BINDING_REUSED"):
         writer.bind_row(1, 1.1, head.acquisition_id, wrist.acquisition_id, 1)
@@ -247,3 +253,68 @@ def test_a_checksum_consistent_duplicate_row_index_is_refused(tmp_path):
     _resign(writer, path, "row-bindings.jsonl", payload)
     with pytest.raises(ValueError, match="AUDIT_ROW_INVALID"):
         verify_audit_manifest(path)
+
+
+def _staging(tmp_path, *, reset_epoch=1, identity_reset=1):
+    """A writer with one real head/wrist pair at 1.0 and one accepted reference at 1.1."""
+
+    from so101_demo.act.acquisition import AcquisitionMinter
+
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    writer = EpisodeAuditWriter(tmp_path / "episode",
+                                {"mode": "diagnostic", "scene_id": "default", "seed": 0},
+                                {"session_id": "s", "attempt_id": "a",
+                                 "reset_epoch": identity_reset, "scene_id": "default", "seed": 0},
+                                {"inputs_sha256": "a" * 64})
+    minter = AcquisitionMinter()
+    frames = {}
+    for camera in ("head", "wrist"):
+        frame = minter.mint(camera, session_id="s", reset_epoch=reset_epoch, stamp_s=1.0,
+                            received_monotonic_ns=1, pixels=ZERO)
+        writer.append_acquisition(frame)
+        frames[camera] = frame.acquisition_id
+    writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+                                        "accepted": True})
+    return writer, frames
+
+
+def test_a_row_may_not_bind_the_wrong_camera(tmp_path):
+    """The head slot takes a head acquisition and the wrist slot a wrist one (T3-F2)."""
+
+    writer, frames = _staging(tmp_path)
+    with pytest.raises(ValueError, match="AUDIT_BINDING_INVALID"):
+        writer.bind_row(0, 1.0, frames["wrist"], frames["head"], 1)
+
+
+def test_the_same_acquisition_may_not_fill_both_slots(tmp_path):
+    writer, frames = _staging(tmp_path)
+    with pytest.raises(ValueError, match="AUDIT_BINDING_INVALID"):
+        writer.bind_row(0, 1.0, frames["head"], frames["head"], 1)
+
+
+def test_a_cross_reset_acquisition_is_refused(tmp_path):
+    writer, frames = _staging(tmp_path, reset_epoch=7, identity_reset=1)
+    with pytest.raises(ValueError, match="AUDIT_BINDING_INVALID"):
+        writer.bind_row(0, 1.0, frames["head"], frames["wrist"], 1)
+
+
+def test_a_binding_must_name_an_accepted_reference_for_that_instant(tmp_path):
+    writer, frames = _staging(tmp_path)
+    with pytest.raises(ValueError, match="AUDIT_BINDING_REFERENCE_INVALID"):
+        writer.bind_row(0, 1.0, frames["head"], frames["wrist"], 2)      # no such sequence
+    with pytest.raises(ValueError, match="AUDIT_BINDING_REFERENCE_INVALID"):
+        writer.bind_row(0, 0.9, frames["head"], frames["wrist"], 1)      # reference is at 1.0, not 1.1
+    other, other_frames = _staging(tmp_path / "second")
+    other.append_source("references", {"reference_time_s": 1.2, "source": "CONTROLLER_REFERENCE",
+                                       "positions": [0.1] * 6, "accepted": False})
+    with pytest.raises(ValueError, match="AUDIT_BINDING_REFERENCE_INVALID"):
+        other.bind_row(0, 1.0, other_frames["head"], other_frames["wrist"], 2)
+
+
+def test_rows_must_be_a_contiguous_schedule(tmp_path):
+    writer, frames = _staging(tmp_path)
+    writer.append_source("references", {"reference_time_s": 1.2, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1] * 6, "accepted": True})
+    with pytest.raises(ValueError, match="AUDIT_ROW_ORDER_INVALID"):
+        writer.bind_row(1, 1.1, frames["head"], frames["wrist"], 2)
