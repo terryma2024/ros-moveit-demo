@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -119,3 +120,38 @@ def test_the_binding_accepts_only_restricted_head_only_admission() -> None:
     ):
         with pytest.raises(ValueError, match="HEAD_ONLY_OPERATION_REFUSED"):
             validate_head_only_admission(refused)
+
+
+def test_serve_teleop_owns_teardown_and_cannot_resume(tmp_path: Path) -> None:
+    """The blocking owner stops on SIGTERM, records its teardown, and the root can never be reused."""
+
+    import multiprocessing
+    import os
+    import signal
+    import time
+
+    from so101_demo.act.head_search_qualification import serve_teleop as _serve
+
+    run_root = tmp_path / "fresh-run"
+    report = _qualified_report(run_root)
+    context = multiprocessing.get_context("fork")
+    process = context.Process(target=_serve, args=(report, run_root))
+    process.start()
+    try:
+        descriptor = run_root / "head-camera-connection.json"
+        deadline = time.monotonic() + 20.0
+        while not descriptor.is_file() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert descriptor.is_file(), "the owner never published its connection descriptor"
+        os.kill(process.pid, signal.SIGTERM)
+        process.join(timeout=20.0)
+        assert process.exitcode == 0
+    finally:
+        if process.is_alive():  # pragma: no cover - defensive teardown
+            process.terminate()
+            process.join(timeout=5.0)
+    receipt = json.loads((run_root / "teardown-receipt.json").read_text(encoding="utf-8"))
+    assert receipt["controller_stopped"] is True
+    assert receipt["graph_clear"] is True
+    with pytest.raises(ValueError, match="RUN_ROOT_ALREADY_EXISTS"):
+        _serve(report, run_root, probe_only=True)
