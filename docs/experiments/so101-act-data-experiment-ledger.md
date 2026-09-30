@@ -43120,3 +43120,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   appear, and doing it in one pass with the module rule re-applied is the cheapest honest order.
 - **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 two of four cuts**,
   the third staged to the five sites above; F5/F12 open; the goal is paused. HEAD `34e52a905`; twenty-six gates green.
+
+
+## CP-2280 — F13's third cut: the batch recipe, field by field
+
+- **The rule to re-apply** (already written once, CP-2278): in `_feedback_ok`, after the non-empty string-list test,
+  require `tuple(record["joint_names"]) == _FRAME_JOINT_NAMES[record["controller"]]`.
+- **What each of the five sites needs** (`test_act_episode_audit.py`):
+  - **750 / 846 / 1145** — `_feedback = [{"controller": "arm", "joint_names": ["1"], "commanded_positions": [0.0],
+    "measured_positions": [0.0], "measured_velocities": [0.0], …}]`: the name list becomes `["1","2","3","4","5"]`
+    and each of the three vectors becomes five elements; if any of these lists also feeds a *gripper* record, that one
+    becomes `["6"]` with one-element vectors;
+  - **972** — the inline record with `[0.1, 0.2]`: five names and five-element vectors;
+  - **975** — the inline record with `[0.6]`: either the gripper's `["6"]` with one element (if its controller is
+    `gripper`) or the arm's five (if it is `arm`).
+- **Why it is a batch and not a rename**: the vectors must grow with the names, and the assertions that compare those
+  lengths move with them — which is exactly the kind of change that wants one pass, one run, and a revert if more
+  than three places disagree.
+- **Order that keeps every intermediate state green**: upgrade the five fixtures **without** the rule (the suite stays
+  green and shows whether any length assertion depended on the old shapes), then re-apply the rule, then add the
+  readback check that both kinds appear.
+- **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 two of four cuts**,
+  the third staged to this recipe; F5/F12 open; the goal is paused. HEAD `92bedca9a`; twenty-six gates green.
