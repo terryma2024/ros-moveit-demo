@@ -42708,3 +42708,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   asked for.
 - **State.** **F14 closed**; F3 (a)(b)(c) landed; its positive control is a three-part fixture whose every value is
   now named; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `7dbd23cfd`; eighteen gates green.
+
+
+## CP-2258 — F3's positive control: three fences, and the wrapper must cover every evidence method
+
+- **The third fence, found the same way**: with the port's `begin` aligned to the writer's identity, the run now
+  refuses with `PHASE_EVIDENCE_INVALID` — so `run_phase`'s own evidence is fenced to the **request** as well, not
+  just `begin`. The runner therefore cross-checks three documents that all name the same episode: the request (phase
+  evidence), the begin evidence, and the writer's identity (events).
+- **The consequence for the fixture**: aligning one method is never enough; the port must be a small subclass whose
+  evidence-producing methods — `begin`, `run_phase`, `set_down`, `run_retreat_segment` and any other that returns a
+  document — all rewrite `session_id`/`attempt_id` to the writer's own pair. The grep for those method names in this
+  file is printed alongside this entry, so the subclass is a direct transcription rather than a search.
+- **Reverted**; the release-boundary suite is green (14 passed).
+- **State.** **F14 closed**; F3 (a)(b)(c) landed, its positive control blocked by this third fence with the subclass
+  route named; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `8c30fda8e`; eighteen gates green.
