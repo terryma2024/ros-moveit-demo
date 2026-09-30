@@ -37279,3 +37279,31 @@ Closing it is a small, concrete piece of work rather than a judgement call: reco
 perception venv, and the recursive file hash of each installed package, next to the commands that produced them -
 i.e. extend HS-056's toolchain table with installed-entry rows. That is the honest reading of "installed-entry
 provenance", and it is the same standard the geometry seal already meets.
+
+## HS-105 — Installed-entry provenance, recorded (closes the third ground of the third verdict)
+
+The task overlay the gates ran against is
+`/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-task2-overlay/install`, installed by
+
+```zsh
+colcon build --packages-select so101_demo_py so101_teleop \
+  --build-base /tmp/so101-debug-head-search-antzb-LuFlHq6a/colcon/build \
+  --install-base <overlay>/install          # rc=0, Finished <<< for both (HS-089)
+```
+
+| installed entry | files | recursive digest |
+| --- | --- | --- |
+| `so101_demo_py` | 1098 | `628839ba0bee2b93bae4b68f754ebb9ec89d31620474db2f43b9de6cd33f8b48` |
+| `so101_teleop` | 258 | `9cf8f1fc4f7f2d468b79a317415550124c85acb50ff7b0a253e50fb2fea5fccc` |
+
+Each digest is `find <install>/<pkg> -type f | sort | xargs sha256sum | sha256sum`, so it is reproducible from the
+overlay alone. The interpreter and the dependency versions the gates resolved against (perception venv):
+
+```
+python 3.12.3 · torch 2.13.0 · ultralytics 8.4.115 · pydantic 2.13.5 · fastapi 0.142.1
+uvicorn 0.54.0 · transformers 4.56.2 · PyYAML 6.0.2
+```
+
+With the build command and these two digests, "installed-entry provenance" is now a fact a reader can check rather
+than an assertion - the same standard the geometry seal meets. HS-056's toolchain table stands as the environment
+half of the same record.
