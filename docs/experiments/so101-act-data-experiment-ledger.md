@@ -35028,19 +35028,42 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and a non-empty tempfile proof.
 - **Carried to the coordinator.** The Codex session still cannot certify its own model id/effort;
   dispatch evidence is `codex queue -m gpt-6.1-sol` plus the `GPT-6.1-Sol high` banner.
-- **Task 3 start point (next boundary, not started).** Plan Task 3, "共同不可变 audit/seal 与物理安全
-  判据/停止语义": create `act/audit_manifest.py` (canonical manifest v1; `source.json`/`inputs.json`/
-  `episode.json`; `audit/samples.jsonl` with the 40-field audit row including acquisition ids, source
-  schedules and reference interpolation; monotone event log) and extend `act/recorder.py` /
-  `act/result_store.py` so one audit writer feeds both the recorder and row bindings, the seal carries
-  the common audit manifest hash and the scope, `verify_episode_seal` recomputes it, and seal 2 is
-  refused once v1 exists. Physical criteria: supported release, gripper real open, stable placement
-  before retreat, no unsupported held cup — and on failure/stop/revoke the capture only stops/holds,
-  never opens the gripper or auto-resets. The plan's RED uses
-  `test_act_task8_reset.py::test_unsupported_held_cup_is_held_not_released` plus new cases in
-  `test_act_episode_audit.py`, `test_act_episode_seal.py`, `test_act_recorder.py`. The two
-  `test_act_task8_reset.py` tests named by the plan must be backed up externally (hash + single
-  read-back) **before** any edit, because that file is one of the 39 baseline-dirty paths.
+- **Task 3 start point (next boundary, not started) — corrected against the frozen plan.**
+  Plan Task 3 ("共同原始审计与物理安全判据/停止语义"), quoted: Files — create
+  `src/so101_demo_py/src/act/episode_audit.py`; modify `act/recorder.py`,
+  `act/pick_place_runner.py`, `adapters/act/pick_place_sources.py` and the actual broker
+  dispatch/reference observer; tests `test/test_act_episode_audit.py`, existing
+  `test_act_controller_reference.py`, `test_act_physics.py`. Interfaces —
+  `EpisodeAuditWriter(root:Path, scope:dict, identity:dict, inputs:dict)` with `append_acquisition`,
+  `bind_row(row_index, sim_time_s, head_id, wrist_id, reference_sequence)`, `append_source(kind,
+  record)`, `seal(window:dict)->Path`; the writer is the only writer, source kinds are exactly
+  `events, references, physics` with a closed schema each, and the audit manifest is the raw-audit
+  index sealed last. RED — a changed raw reference, a missing acquisition binding, stale support used
+  across a release epoch, an audit seal rewrite and an unknown extra schema field must all refuse; the
+  minimal test must actually touch the writer/verifier (the plan's `test_sealed_audit_is_not_overwritten`
+  fixture `complete_audit` is built in this task and must create real files and hashes), and the
+  directed command is `"$TEST_PYTHON" -m pytest src/so101_demo_py/test/test_act_episode_audit.py
+  src/so101_demo_py/test/test_act_controller_reference.py src/so101_demo_py/test/test_act_physics.py
+  -q --junitxml="$TEST_RUN/junit.xml"`. Remaining checklist items: wire the broker's real
+  claim/dispatch/accept/revoke/stop events and the controller observer's raw history into the audit with
+  phase names produced by real runner events; keep the raw observations needed to recompute the
+  physical criteria offline (desktop initial state, bilateral contact, micro-lift height and off-table,
+  hold/collision through the run, placement support, detach/open order, the current release epoch's
+  finger-contact-free window, final pose/velocity stability and retreat) rather than consuming phase
+  booleans; verify the current release order at `PickPlaceRunner`/its port and fix only the root cause
+  if it is insufficient, with RED/GREEN for detach-failure-zero-open, unsupported stop/hold, release
+  epoch change and stale-observation refusal, never physically attaching or teleporting; and make the
+  Recorder seal v2 reference the audit/scope digest, fsync every file and the parent directory before
+  returning, keeping the old schema readable for audit only while the new closure must be v2.
+- **My earlier Task 3 note was wrong and is corrected here.** It named `act/audit_manifest.py` and
+  non-existent files, and it quoted a `test_act_task8_reset.py::test_unsupported_held_cup_is_held_not_released`
+  test that does not exist (that file has 10 tests and none matches hold/release/unsupported). Inspection
+  of the frozen plan replaced memory, which is why the corrected boundary above is quoted verbatim.
+- **Pre-edit backups (verified).** Because Task 3 edits three baseline-dirty paths plus the recorder,
+  byte copies were taken first into `baseline-task3/` with sha256 read-back, all OK:
+  `recorder.py` `e2007f41…908f`, `pick_place_runner.py` `25e93c1c…cba8`, `pick_place_sources.py`
+  `597ac257…65e8`, `test_act_task8_reset.py` `6e726709…0ef28` (recorded in
+  `baseline-task3/backup.sha256`). No file has been edited yet for Task 3.
 - **State.** **Task-list items 0, 1 and 2 completed; item 3 in_progress (not started); items 4-8
   pending.** HEAD `e6f7e4787`; 39-path dirty baseline untouched (`837d602e…ae2a7`); no push, no
   evidence deletion, no hardware.
