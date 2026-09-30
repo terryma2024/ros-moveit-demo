@@ -37493,3 +37493,37 @@ suite to completion instead of reading its shape.
 So the honest ordinary-suite statement is: **347 failed / 4392 passed / 165 error under the installed layout**, with
 per-id causes in categories 1-3 of HS-111, and the earlier numbers preserved so the sequence is visible rather than
 overwritten. One progress line is not a measurement.
+
+## HS-114 — Per-reason categorization of the ordinary suites (gap 1's substance)
+
+From the completed runs with `--tb=line` (installed layout, venv, ROS, `-n 8`):
+
+**`src/so101_demo_py/test` — 347 failed, 4392 passed, 144 skipped, 165 error**
+
+| count | reason |
+| --- | --- |
+| 163 | `No module named <X>` |
+| 67 | `FIELDS_INVALID` |
+| 47 | `TRUSTED_FINAL_TARGET_INVALID` |
+| 16 | `MEASUREMENT_CONTRACT_V2_INVALID` |
+| 14 | `PickPlaceRunner._verify_phase() takes N positional arguments but N were given` |
+| 6 | `SOURCE_PROVENANCE_EXTERNAL_MISSING` |
+| 6 | `PHASE_CAMERA_MATRIX_INVALID` |
+| 5 | `Regex pattern did not match` |
+
+**`src/so101_teleop/test` — 107 failed, 494 passed, 1 skipped, 55 error**
+
+Three of these deserve cause checks rather than a category label, and they are flagged here as open rather than
+explained:
+
+1. **`PickPlaceRunner._verify_phase()` signature drift (14)** - an API/test mismatch is exactly the shape of my task 8
+   contract regression, so it gets the same treatment: an A/B against the commit before this work touched the
+   signature.
+2. **`MEASUREMENT_CONTRACT_V2_INVALID` (16)** - the same message HS-076 traced to a stale `pysrc`, but this run had
+   `pysrc` removed, so the cause is not yet established; the 16 may be the task 8 aggregator family again.
+3. **`FIELDS_INVALID` (67) and `TRUSTED_FINAL_TARGET_INVALID` (47)** - large, uniform signatures that could be a
+   contract-shape change or an environment difference; `FIELDS_INVALID` in particular is worth a single traceback.
+
+The 163 `No module named` rows are the category-1 invocation/ROS-runtime family from HS-111 and stay grouped.
+Recording signatures is not attribution: the four items above are open until each gets a traceback and, if it turns
+out to be mine, an A/B like HS-071's.
