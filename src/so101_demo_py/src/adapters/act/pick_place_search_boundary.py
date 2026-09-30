@@ -296,12 +296,20 @@ class PickPlaceSearchBoundary:
         world = raw.get("world") if isinstance(raw, dict) else None
         instant = getattr(world, "simulation_time_s", None)
         broker = getattr(self.reset, "broker", None)
-        if instant is None or broker is None or not hasattr(broker, "controller_feedback"):
+        # T3-F12: the production reset hands this helper a `CommandBroker`, which does not read controller
+        # feedback itself — the ratified reader hangs off whatever the broker wraps — so the search walks the
+        # broker and its driver rather than giving up on the first object that lacks the method
+        source = None
+        for candidate in (broker, getattr(broker, "driver", None), getattr(broker, "_driver", None)):
+            if candidate is not None and hasattr(candidate, "controller_feedback"):
+                source = candidate
+                break
+        if instant is None or source is None:
             return None
         records = []
         for kind in ("arm", "gripper"):
             try:
-                records.append(broker.controller_feedback(kind, instant))
+                records.append(source.controller_feedback(kind, instant))
             except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
                 return None
         observed.controller_feedback = tuple(records)
