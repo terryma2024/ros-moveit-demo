@@ -65,6 +65,9 @@ def qualification_parser() -> argparse.ArgumentParser:
         command.add_argument("--run-root", type=Path, required=True)
         if name == "verify-promoted-config":
             command.add_argument("--approved-bundle-sha256")
+        if name == "qualify":
+            command.add_argument("--promoted-config", type=Path)
+            command.add_argument("--evidence-root", type=Path)
         if name == "serve-teleop":
             command.add_argument("--bridge-socket-root", type=Path)
     return parser

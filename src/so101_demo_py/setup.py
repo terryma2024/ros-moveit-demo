@@ -173,6 +173,7 @@ setup(
             "verify_head_search_dataset = "
             "so101_demo.cli.verify_head_search_dataset:main",
             "head_search_smoke = so101_demo.cli.head_search_smoke:main",
+            "so101_head_search_calibration = so101_demo.cli.head_search_calibration:main",
             "evaluate_head_search_yolo_candidates = "
             "so101_demo.cli.evaluate_head_search_yolo_candidates:main",
             "rgbd_sensor_capture = so101_demo.cli.rgbd_sensor_capture:main",
