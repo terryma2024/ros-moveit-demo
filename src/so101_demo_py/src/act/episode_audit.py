@@ -878,6 +878,9 @@ def verify_audit_manifest(path: Path) -> dict:
         # the manifest names the scope it was collected under, and the payload must agree with it
         raise ValueError("AUDIT_MANIFEST_INVALID")
     _verify_streams(audit, manifest["identity"])
+    if formal_window and not _formal_coverage_ok(audit):
+        # the seal gate's coverage requirement holds when the audit is read back, not only when sealed
+        raise ValueError("AUDIT_FORMAL_COVERAGE_INCOMPLETE")
     return manifest
 
 
@@ -901,6 +904,22 @@ def _records(path: Path, fields: frozenset, code: str, *,
 def _hex64(value) -> bool:
     return (isinstance(value, str) and len(value) == 64
             and all(character in "0123456789abcdef" for character in value))
+
+
+def _formal_coverage_ok(audit: Path) -> bool:
+    """The coverage a formal seal requires, re-checked when the audit is read back."""
+
+    def rows(name):
+        return [json.loads(line) for line in (audit / name).read_text().splitlines()]
+
+    try:
+        physics, events, references = (rows("physics.jsonl"), rows("events.jsonl"),
+                                       rows("references.jsonl"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return bool(physics and events and references
+                and any(row["accepted"] is True for row in references)
+                and any(row["kind"] == "release" for row in events))
 
 
 def _verify_streams(audit: Path, identity: dict) -> None:

@@ -37076,3 +37076,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `5c2d88221`;
   gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2000 — Task 3 fix pass: the formal coverage gate re-applied on readback (T3-F5)
+
+- **What landed.** `verify_audit_manifest` now refuses an audit whose scope is formal but which lacks the
+  coverage a formal seal requires — a non-empty physics, references and events stream, an accepted
+  reference and a `release` event — with `AUDIT_FORMAL_COVERAGE_INCOMPLETE`, so the gate is no longer only an
+  admission-time promise.
+- **The control uses the tamper path CP-1999 recorded**, and needed one more step than I first wrote: a
+  formal audit also requires the registered lease identity (`AUDIT_METADATA_INVALID` fired first), so the
+  control rewrites `episode.json` with the lease, `source.json` to the formal mode, the window to the
+  ratified shape, and re-signs both entries plus `scope_sha256`. `complete_audit`'s audit has no `release`
+  event, which is exactly the missing coverage the gate then reports.
+- **Evidence.** `logs/task3-fix46.run` rc=0 across `test_act_episode_audit.py`, `test_act_recorder.py` and
+  `test_act_release_boundary.py`, with its own NVMe scratch and a non-empty tempfile proof.
+- **Still open.** **T3-F1**'s producer side, **T3-F11**'s window-to-rows checks (CP-1997 recipe), and
+  **A.1** awaiting the owner with the reviewer's clarification.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `93d2bd3ad`;
+  gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

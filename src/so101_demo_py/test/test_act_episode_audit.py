@@ -907,3 +907,31 @@ def test_the_per_kind_history_must_keep_its_ordering_across_the_stream(tmp_path)
     rewind["frames"]["arm"]["sim_stamp_ns"] = 1100000000
     with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
         writer.append_source("references", {**base, "reference_time_s": 1.3, **rewind})
+
+
+def test_readback_reapplies_the_formal_coverage_gate(tmp_path):
+    """T3-F5: an audit relabelled formal without coverage must not verify."""
+
+    (tmp_path / "case").mkdir(parents=True, exist_ok=True)
+    writer, window = complete_audit(tmp_path / "case")
+    path = writer.seal(window)
+    audit = path.parent
+    # relabel the scope as formal and give it a ratified window, so only coverage can fail
+    source = json.dumps(dict(scope(), mode="formal"), sort_keys=True,
+                        separators=(",", ":")).encode()
+    audit.joinpath("source.json").write_bytes(source)
+    document = json.loads(path.read_bytes())
+    document["files"]["source.json"] = {"path": "source.json", "size": len(source),
+                                        "sha256": hashlib.sha256(source).hexdigest()}
+    document["scope_sha256"] = hashlib.sha256(source).hexdigest()
+    document["window"] = _window()
+    # a formal audit also names the registered lease, so the identity is rewritten to match
+    identity_bytes = json.dumps({**identity(), "lease": _lease()}, sort_keys=True,
+                                separators=(",", ":")).encode()
+    audit.joinpath("episode.json").write_bytes(identity_bytes)
+    document["files"]["episode.json"] = {"path": "episode.json", "size": len(identity_bytes),
+                                         "sha256": hashlib.sha256(identity_bytes).hexdigest()}
+    document["identity"] = {**identity(), "lease": _lease()}
+    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
+        verify_audit_manifest(path)
