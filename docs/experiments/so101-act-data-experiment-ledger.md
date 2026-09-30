@@ -38993,3 +38993,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   digest bindings. That delegation is the next increment, and its exact requirements belong to the frozen plan.
 - **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress. HEAD `4b5dfa415`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2088 — Task 4: the verifier now re-checks the campaign's own summary, not just the digests
+
+- **What landed.** `verify_w8_qualification` loads the campaign result the document cites and passes it through
+  `validate_campaign_summary`, so the verifier refuses a campaign that is not `PASSED`, not complete (nine prefix
+  cases and five consecutive fulls), or whose journal digests are duplicated or malformed — and then requires the
+  summary's `case_journal_sha256` to equal the document's own `journal_sha256`, so the document cannot point at a
+  campaign whose summary says something else. It still re-derives every journal digest from disk.
+- **Evidence.** `logs/task4-w8.run` rc=0 (**9 passed**, one positive fixture of fourteen distinct journals plus the
+  negative cases), and the new suite passes alongside both teleop admission suites.
+- **Two of my own fixture mistakes, caught by the suite**: `write_bytes(json.dumps(...))` raised
+  `TypeError: memoryview: a bytes-like object is required` (needs `.encode()`), and reusing one journal digest
+  fourteen times was refused as `TASK8_QUALIFICATION_JOURNAL_DUPLICATE` — both fixed in the fixture, never by
+  loosening a check.
+- **A pre-existing failure, isolated rather than attributed to me.** A wider Task 4 gate surfaced four failures in
+  `test_act_task8_live_qualification.py`. Stashing my two edited files and re-running the same command gives **the
+  same 4 failed / 34 passed**, and the log contains **zero** mentions of my module, so those failures are
+  pre-existing in this environment; the first reason is `TypeError: 'NoneType' object is not iterable` inside a
+  retire path. They are recorded as a separate, unexamined issue for Task 4 rather than folded into my change.
+- **Still to come for the verifier**, per the admission comment's three requirements: the per-Worker terminal
+  leases and the frozen-contract binding inside `validate_case_journals`, which needs the manifest and identities
+  the payload carries (`manifest_path`/`manifest_sha256`, `preparation_receipt_path`) — the next increment.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `e91cef036`;
+  no push, no evidence deletion, no hardware, no second stack.

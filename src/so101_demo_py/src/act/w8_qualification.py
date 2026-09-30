@@ -65,6 +65,21 @@ def verify_w8_qualification(qualified_path, payload) -> bool:
     if _digest(campaign_result) != block["campaign_result_sha256"]:
         # the campaign the document cites is not the campaign on disk
         raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH")
+    # the campaign result's own summary must qualify on its terms (PASSED, complete, unbroken, unique
+    # journal digests) and its digests must be exactly the ones the document cites, so a document cannot
+    # point at a campaign whose summary says something else
+    try:
+        summary = json.loads(campaign_result.read_bytes())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID") from error
+    from .task8_live_qualification import validate_campaign_summary
+
+    try:
+        summary = validate_campaign_summary(summary)
+    except ValueError as error:
+        raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH") from error
+    if list(summary["case_journal_sha256"]) != list(block["journal_sha256"]):
+        raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH")
     for expected in block["journal_sha256"]:
         if not isinstance(expected, str) or len(expected) != 64:
             raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID")

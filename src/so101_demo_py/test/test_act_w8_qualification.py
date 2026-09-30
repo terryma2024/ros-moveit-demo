@@ -9,19 +9,26 @@ from so101_demo.act.w8_qualification import verify_w8_qualification
 
 
 def _document(tmp_path, **overrides):
+    """A qualified document whose campaign summary and journals really exist on disk."""
+
     case_root = tmp_path / "campaign"
     case_root.mkdir(parents=True, exist_ok=True)
+    digests = []
+    for index in range(14):                      # nine prefix cases and five fulls, all distinct
+        journal = case_root / f"case-{index}" / "journal.json"
+        journal.parent.mkdir(parents=True, exist_ok=True)
+        journal.write_bytes(json.dumps({"case": index}).encode())
+        digests.append(hashlib.sha256(journal.read_bytes()).hexdigest())
     campaign = case_root / "campaign-result.json"
-    campaign.write_bytes(b'{"status": "PASSED"}')
-    journal = case_root / "case-0" / "journal.json"
-    journal.parent.mkdir(parents=True, exist_ok=True)
-    journal.write_bytes(b'{"case": 0}')
+    campaign.write_bytes(json.dumps({"status": "PASSED", "prefix_count": 9,
+                                     "consecutive_full_count": 5,
+                                     "case_journal_sha256": digests}).encode())
     document = {"status": "QUALIFIED", "worker_count": 8,
                 "live_campaign": {
                     "case_root": str(case_root),
                     "campaign_result_sha256": hashlib.sha256(campaign.read_bytes()).hexdigest(),
                     "preparation_receipt_sha256": "0" * 64,
-                    "journal_sha256": [hashlib.sha256(journal.read_bytes()).hexdigest()]}}
+                    "journal_sha256": digests}}
     document.update(overrides)
     path = tmp_path / "qualified.json"
     path.write_text(json.dumps(document))
