@@ -119,3 +119,52 @@ landings versus five reverts). Reusable helpers live in `test_act_recorder.py`, 
 so a fixture creates only the parent. Every run needs a fresh NVMe scratch with `TMPDIR`/`TMP`/`TEMP` and a
 tempfile proof. The **full module scope cannot be collected** here until Task 6 builds an install overlay
 (CP-2002), so the xdist gate covers the checkpoint's twenty files plus the observer suite.
+
+---
+
+# UPDATE 2026-09-30 (final) — worktree integrity, and the staging rule that prevents a repeat
+
+## What happened
+
+`pick_place_runner.py` had **46 lines of uncommitted work** at session start (`"physics_step"` added to the
+phase and set-down key sets, `def set_down(...)`, `_SET_DOWN_KEYS`). Because I staged that file whole
+(`git add <file>`), the first commit of mine touching it (`dcef92f99`) carried those 46 lines into git
+together with my own edits. The bytes are not lost — they are in the tree and now in history — but they no
+longer appear as uncommitted changes and they sit inside my commit rather than the author's.
+
+Verified the other four baseline files are intact: `recorder.py`'s backup is byte-identical to the parent of
+the first commit of mine that touched it (so nothing was swept there), `pick_place_sources.py` and
+`test_act_task8_reset.py` are still modified and byte-identical to their backups, and
+`pick_place_search_port.py` is byte-identical to its backup. **No history was rewritten.**
+
+## Options for the owner (nothing is urgent, since no bytes were lost)
+
+1. Leave it, accepting that history records *what* changed but not who first wrote those 46 lines.
+2. Reproduce the original state: revert only those hunks for that file to `b0832129e` and leave them
+   uncommitted again. My later edits sit on the same regions, so this needs care plus a green acceptance run.
+3. Split attribution with a small follow-up commit (for example `--author` on the recovered lines) without
+   rewriting history.
+
+## Rule for every future pass in this worktree
+
+Before staging **any** file that the session-start baseline lists as dirty, either `git add -p` and stage
+hunks, or check it against the recorded backups first:
+
+```
+git diff /data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/nonhead-first-episode-plan.hKhvkON3/baseline-task3/<flattened-name> <path>
+```
+
+An empty diff means the file is safe to stage whole. The backups are flattened as
+`src_so101_demo_py_src_act_recorder.py` and so on.
+
+## Where the numbers stand
+
+- Targeted parallel gate (the checkpoint's twenty files plus the observer suite): `logs/task3-xdist.run`,
+  **410 passed**, xdist with 8 workers on 32 CPUs — the trustworthy green figure for this objective's boundary.
+- Ordinary module scope, first measurement (CP-2022): **5654 passed / 321 failed / 155 skipped / 10 errors**
+  with the un-collectable entrypoint file ignored, dominated by the missing install overlay (1555
+  `PackageNotFoundError` markers, CP-2023 confirmed the ACT-related entries fail at fixture setup); Task 6
+  re-runs that exact command after building the overlay and treats the delta as the regression surface.
+- Producer change's acceptance set (CP-2024), all green today by name: the micro-lift, release and
+  radial-retreat tests in `test_act_task8_motion_phases.py`, the dispatch test in
+  `test_act_task8_close_execution.py`, and the final-check pair.
