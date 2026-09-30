@@ -30,14 +30,14 @@ observation supplies it (CP-2028), and the message carries the field (CP-2041). 
 readback filling it with the caller's simulation instant, and then the audit verifying the full record end to
 end.
 
-**(b) Three-way controls for the gates that lack them.** The boundary's scene and feedback gates have them
-(CP-2036, CP-2044, both at `test_act_task8_motion_phases.py` via `_case(..., receipt=..., feedback=...)`). Still
-missing: the port's gates. CP-2061 records what an experiment already established — `mujoco_ok` follows the
-world sample (a `truncated` world is false) and a stale camera stamp is refused by the source check itself
-(`RGB source skew`) — and that my two attempts at the control did not converge, so start from
-`test_act_task8_search_port.py`'s own helpers (`observation()` at line 36, `fixture(...)` at line 98 which
-already uses `replace(observed, physical_readback=raw)`, and the `Task8SearchObservation` import at line 18 —
-note the name differs from the segment module's class).
+**(b) Three-way controls - narrowed by CP-2069/CP-2070, and it is now about the boundary only.** The
+port's gates are no longer derived: its own validation refuses a non-locking result, a truncated world,
+contact evidence from another step and any stamp outside `skew` before the document exists, so those four
+are stated with a reason block and a control for them would only test the validator. What still lacks a
+control is the **boundary's `controller_reference_ok` and `planning_ok`** (the scene and feedback gates
+have theirs at CP-2036/CP-2044 via `_case(..., receipt=..., feedback=...)`): add `reference=`/`planning=`
+parameters to `_case` in `test_act_task8_motion_phases.py` (line 29) and assert the document's values
+for a present, an absent and a wrong-shape proof, mirroring CP-2044.
 
 **(c) T3-F11's window-to-rows and observed-schedule checks.** Two attempts reverted; the recipes are CP-1997
 and CP-2001. Build the fixtures **from the audit's own contents**: mint the acquisitions the window declares,

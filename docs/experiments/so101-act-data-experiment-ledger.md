@@ -38663,3 +38663,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   proof.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2072 — Task 3: item (b) narrowed to the boundary's two remaining gates
+
+- **Why the plan changed.** Item (b) asked for three-way controls on the port's gates. CP-2069 established that
+  those gates are guaranteed by the port's own validation, so CP-2070 stated them with a reason block and a
+  control there would only exercise the validator. What genuinely lacks a control is the **boundary's
+  `controller_reference_ok` and `planning_ok`** — both derived from proofs that can be absent, both currently
+  covered only by the fixtures that supply them.
+- **The concrete recipe, now in the brief**: add `reference=`/`planning=` parameters to `_case`
+  (`test_act_task8_motion_phases.py:29`, beside `receipt=`/`feedback=`) and assert the document's values for a
+  present, an absent and a wrong-shape proof, mirroring CP-2044.
+- **Open list after this round**: (a) the record's producer; (b) the boundary's two controls; (c) T3-F11's
+  window-to-rows checks; (d) the fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `09c30c897`;
+  targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
