@@ -37585,3 +37585,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   boundary remains the targeted xdist gate (`logs/task3-xdist.run`, **410 passed**).
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4466e6352`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2024 — Task 3: the acceptance set for the producer change is baselined green, by name
+
+- **The six tests CP-2016 identified as the acceptance set pass today**, which is the RED→GREEN scaffolding the
+  producer change needs: `test_micro_lift_aims_at_the_resolved_target_and_the_runner_accepts_the_document`,
+  `test_release_opens_the_gripper_at_the_models_own_limit_and_the_runner_accepts_it`,
+  `test_radial_retreat_moves_to_the_retreat_target_and_reports_the_released_facts` (all
+  `test_act_task8_motion_phases.py`), `test_close_dispatches_the_admitted_target_and_the_runner_accepts_the_document`
+  (`test_act_task8_close_execution.py`) and the final-check pair. Running their six files together gives
+  **91 passed** under `pytest-xdist` with 8 workers (`logs/task3-accept.run`, rc=0), and the per-case status was
+  read back from the JUnit XML rather than from the summary line, so "micro-lift, release, radial retreat,
+  dispatch and the final-check pair are all `pass`" is a per-test verdict.
+- **How to use it.** When `_gate_facts` stops defaulting `planning_scene_ok` to true and derives it from a
+  recorded observation (CP-2017 steps 2-4), these six must still pass **and** the new controls must show a
+  missing or off-instant record failing the gate; if any of the six goes red, the change has reached a path
+  where no record was supplied and the wiring is incomplete rather than the test being wrong.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `2acc186b4`;
+  targeted gate `logs/task3-xdist.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
