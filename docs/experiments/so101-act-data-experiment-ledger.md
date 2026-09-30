@@ -35299,6 +35299,31 @@ Also recorded: the reviewer could not verify the 34-passed gate itself. Task 7 t
 with these items open; the adapter wiring remains deferred to Task 11 with the stale-underlay reason in
 HS-028.
 
+## HS-030 — HS-029 rework list closed (commits b324807d2, 16afe8e0d)
+
+Every item from the Task 7 confirmation verdict is addressed, each with a test:
+
+1. `verify-promoted-config` no longer succeeds in an arbitrary pre-existing root: it takes the promoted
+   bundle by path (`--promoted-config`) and writes its receipt into a **new** root, so it obeys the same
+   no-resume rule as every other runner.
+2. `qualify` writes `FAILED` and re-raises instead of leaving `RUNNING` behind; a probe records `PROBED`
+   rather than looking like a running owner; `run` writes `run-receipt.json` before the terminal state
+   inside its guarded region; and `_require_new_root` claims the root with an **exclusive** `mkdir`, so the
+   check-then-create race is gone.
+3. The bundle is hashed as **bytes**, so a formatting-only change is caught (a test re-serialises the same
+   document and requires refusal), and the approval receipt is created with `O_EXCL`, so a concurrent
+   writer cannot overwrite it.
+4. `serve-teleop` takes `--report` and never reads from the root it is about to claim; the owner publishes
+   the kernel's own process start ticks (`/proc/self/stat` field 22) rather than a monotonic timestamp; and
+   teardown is **observed, not asserted** - the receipt records what a teardown callback reported, and
+   without one it honestly says `not-attempted` with both flags false.
+5. The weak negative branch is replaced: tests exercise a real formatting drift and the missing-input paths
+   rather than empty evidence.
+
+Gate: 37 passed across `test_act_head_search_qualification.py`, `test_head_search_calibration_cli.py` and
+`test_act_task8_calibration_admission.py`; `ruff check` clean. A confirmation review of these six items is
+requested; Task 7 stays `in_progress` until it reports.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
