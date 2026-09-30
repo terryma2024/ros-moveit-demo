@@ -36484,3 +36484,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   checkpoint.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9972a11d5`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1975 — Task 3 fix pass, twenty-eighth instalment: the formal claim is denied without raw evidence (T3-F5, first half)
+
+- **Fail closed on the claim, not on the motion.** The runner now records every phase that arrives
+  without a `physical_observation` block and, when any is missing, still completes and stops the motion
+  but returns `formal_episode_eligible: False` with `live_evidence_artifact: None`, stopping with
+  `FULL_COMPLETE_INCOMPLETE_EVIDENCE` and emitting a `run_incomplete_evidence` audit event (declared as a
+  kind with the same closed payload as the other run outcomes). Fabricating eligibility, or failing the
+  motion, would both be wrong: the reviewer's requirement is that a formal claim without raw coverage is
+  never made.
+- **The legacy expectation had to change, and I say so explicitly.** `test_act_task8.py`
+  (a baseline-clean file) asserted that a full run is formal; its fake port supplies no raw observations,
+  which under the amended contract is exactly the case that must be denied. I updated that assertion to
+  `is False` with `live_evidence_artifact is None` and a comment naming the contract change, rather than
+  weakening the gate. The real formal path stays reachable: Task 7's live run uses a port that supplies
+  the raw blocks.
+- **Evidence.** `logs/task3-fix28.run` rc=0 across `test_act_release_boundary.py`,
+  `test_act_supervisor.py`, the four `test_act_task8*.py` suites, `test_act_episode_audit.py` and
+  `test_act_recorder.py`, with its own NVMe scratch and a non-empty tempfile proof. My blind-port control
+  now asserts the denied claim, no sealed artifact and a `FULL_COMPLETE_INCOMPLETE_EVIDENCE` stop.
+- **Still open from the fourth verdict.** **T3-F5's second half**: sealing must also refuse empty source
+  streams for a formal audit. **T3-F1**: the full robot contact pairs, independent Planning Scene and
+  gripper/controller feedback are still summaries, and the reviewer's ruling requires the exact
+  source-derived frame schema to be **owner-ratified before the boundaries change together** — including
+  positions as well as velocities, per-frame identity and the 5+1 joint mapping, and distinguishing
+  original publications from references evaluated at a requested future instant. The window schema
+  likewise needs owner ratification, with the reviewer's correction that
+  `first_command <= label_cutoff` does not hold for early-failure captures.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `cfbfe80a3`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

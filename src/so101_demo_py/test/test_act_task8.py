@@ -150,7 +150,10 @@ def test_release_detaches_before_opening_and_retreat_has_two_ordered_segments():
     port = FakePort()
     result = PickPlaceRunner(port).run(request("full", None))
     assert result["completed_phases"] == list(PickPlaceRunner.PHASES)
-    assert result["formal_episode_eligible"] is True
+    # Task 3: a formal episode now requires the raw observation of every phase; this fake port supplies
+    # none, so the run still completes and stops, but it is not a formal episode and seals no artifact
+    assert result["formal_episode_eligible"] is False
+    assert result["live_evidence_artifact"] is None
     assert port.calls.index(("detach_moveit", None)) < port.calls.index(("phase", "RELEASE"))
     assert port.calls.index(("planning_attached", None)) < port.calls.index(("phase", "RELEASE"))
     assert [call for call in port.calls if call[0] == "retreat"] == [

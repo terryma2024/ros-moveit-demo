@@ -238,8 +238,8 @@ def test_a_completed_run_records_offline_recomputable_physics_rows():
     assert all(row["observation"]["maximum_normal_force_n"] <= 20.0 for row in audit.physics)
 
 
-def test_a_port_that_cannot_observe_physics_still_runs_and_says_so():
-    """The raw block is optional, so a port without it records no physics rather than a fake one."""
+def test_a_port_that_cannot_observe_physics_is_refused_rather_than_claimed():
+    """No raw observation means no formal claim: the run fails closed (T3-F5)."""
 
     port = FakePort()
     original_phase, original_retreat = port.run_phase, port.run_retreat_segment
@@ -258,7 +258,10 @@ def test_a_port_that_cannot_observe_physics_still_runs_and_says_so():
     audit = PhysicsAudit()
     result = PickPlaceRunner(port, audit=audit).run(request())
     assert result["status"] == "PASSED"
+    assert result["formal_episode_eligible"] is False
+    assert result["live_evidence_artifact"] is None
     assert audit.physics == []
+    assert port.stops[-1] == "FULL_COMPLETE_INCOMPLETE_EVIDENCE"
 
 
 def test_post_release_events_carry_the_release_epoch():

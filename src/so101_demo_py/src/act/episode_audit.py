@@ -59,6 +59,7 @@ _EVENT_PAYLOADS = {
     "phase_complete": frozenset({"phase", "physics_step"}),
     "run_complete": frozenset({"reason", "physics_step"}),
     "run_aborted": frozenset({"reason", "physics_step"}),
+    "run_incomplete_evidence": frozenset({"reason", "physics_step"}),
     # the remaining kinds the plan requires; each value is typed below so a boolean can never stand in
     # for a physical fact and an unknown key cannot be smuggled into a known kind
     "dispatch": frozenset({"owner", "permit_id"}),

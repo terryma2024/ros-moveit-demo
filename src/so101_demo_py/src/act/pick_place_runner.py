@@ -77,6 +77,7 @@ class PickPlaceRunner:
         # the audit receives the events this run actually produced, in the order it produced them
         self.audit = audit
         self._event_identity: dict = {}
+        self._missing_raw: list = []
         self._ran = False
 
     @staticmethod
@@ -106,7 +107,11 @@ class PickPlaceRunner:
         return True
 
     def _physics(self, phase: str, evidence: dict) -> None:
-        if self.audit is None or "physical_observation" not in evidence:
+        if "physical_observation" not in evidence:
+            # a phase that carries no raw observation cannot support a formal claim
+            self._missing_raw.append(phase)
+            return
+        if self.audit is None:
             return
         raw = dict(evidence["physical_observation"])
         sim_time_s = raw.get("simulation_time_s")
@@ -325,6 +330,14 @@ class PickPlaceRunner:
                     return {"status": "PASSED", "completed_phases": completed,
                             "stopped_confirmed": True, "formal_episode_eligible": False,
                             "live_evidence_artifact": None}
+            if self._missing_raw:
+                # fail closed on the claim, not on the motion: without the raw observation of every
+                # phase the run may finish, but it is never a formal episode and seals no live artifact
+                self._stop("FULL_COMPLETE_INCOMPLETE_EVIDENCE", request)
+                self._event("run_incomplete_evidence", "FORMAL_EVIDENCE_INCOMPLETE", latest_step)
+                return {"status": "PASSED", "completed_phases": completed,
+                        "stopped_confirmed": True, "formal_episode_eligible": False,
+                        "live_evidence_artifact": None}
             # only a full case that reached FINAL_CHECK may seal its live evidence
             sealer = getattr(self.port, "seal_live_evidence", None)
             if not callable(sealer):
