@@ -428,6 +428,7 @@ HEAD_SEARCH_CONTEXT_FIELDS = (
     "weight_path",
     "camera",
     "tracker",
+    "motion",
     "cuda_device",
     "controlled_dependencies",
 )

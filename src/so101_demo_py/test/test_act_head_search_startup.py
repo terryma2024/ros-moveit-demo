@@ -163,3 +163,16 @@ def test_the_promoted_binding_can_build_a_search_config() -> None:
         "frame_id",
         "ray_origin_frame_id",
     }
+
+
+def test_startup_rejects_a_drifted_motion_block() -> None:
+    config = _config()
+    report = copy.deepcopy(config)
+    report["motion"]["goal_tolerance_rad"] = 0.5
+    with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
+        validate_head_search_binding(config, report)
+
+    report = copy.deepcopy(config)
+    report["motion"]["settle_velocity_rad_s"] = 0.9
+    with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
+        validate_head_search_binding(config, report)
