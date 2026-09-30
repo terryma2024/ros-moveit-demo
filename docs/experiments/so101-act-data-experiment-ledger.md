@@ -37472,3 +37472,24 @@ command and killed my session mid-step. That is the fourth self-kill in this tas
 `n8-noauto` run, the `codex-review*` sweep, and now this). The rule to follow, stated once and for all: **never put
 a kill in the same command whose text matches the pattern** - resolve the PID first, in a separate call, and kill by
 PID.
+
+## HS-113 — Correction: with the installed layout the demo suite has MORE failures, not one
+
+HS-112 read a single `F` from one progress line and concluded the failure count was "on the order of one". The
+complete run (with `--max-worker-restart=0`, so it actually printed a summary) says otherwise:
+
+```
+src/so101_demo_py/test, installed layout + venv + ROS, -n 8:
+  347 failed, 4392 passed, 144 skipped, 165 error
+```
+
+That is **more** failures than the source-only invocation (198 failed / 5505 passed / 85 error, HS-077), and the
+direction makes sense: with the installed layout the modules import, so tests that previously **errored at
+collection** now **run and fail** for their real environmental reasons - a live ROS/MuJoCo stack, GPU sessions,
+writable `/diagnostics`, uncontended socket roots. HS-111's point stands (the import failures were my invocation),
+but my HS-112 inference from a single progress line was wrong, and the correction is the whole point of running the
+suite to completion instead of reading its shape.
+
+So the honest ordinary-suite statement is: **347 failed / 4392 passed / 165 error under the installed layout**, with
+per-id causes in categories 1-3 of HS-111, and the earlier numbers preserved so the sequence is visible rather than
+overwritten. One progress line is not a measurement.
