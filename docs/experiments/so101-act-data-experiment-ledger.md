@@ -36667,3 +36667,20 @@ tree is a stale copy of `so101_demo` from the earlier underlay work. So those te
    tree, or with `pysrc` removed, before its numbers mean anything.
 3. The reviewer was right to reject: the log it read does show those failures, and my summary did not explain
    them. It is also right that the batch script covers only `so101_demo_py`; `so101_teleop` was never in it.
+
+## HS-077 — Corrected batched gate (worktree source first, no stale pysrc, both packages)
+
+```
+batch=so101_demo_py:test              rc=1  198 failed 5505 passed 85 error
+batch=so101_demo_py:characterization  rc=0    7 passed
+batch=so101_demo_py:contracts         rc=0   12 passed
+```
+
+Read against the stale-path run (172 failed / 5492 passed / 91 error), the corrected run has **more** failures -
+198 against 172 - and that is the expected direction, not a regression: with the worktree source ahead of the
+stale tree, tests that previously imported old code now import the current code and fail for their real
+environmental reasons (a live ROS/MuJoCo stack or GPU session this gate does not provide). A run that imports
+stale code is not a safer run, just a differently wrong one.
+
+The `characterization` and `contracts` batches pass cleanly under eight workers, and the `so101_teleop` batches are
+still to come - that package's coverage was the reviewer's second objection.
