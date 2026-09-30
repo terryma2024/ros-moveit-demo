@@ -35767,6 +35767,16 @@ root it passes, so that was my path error, not a suite failure.
   files report **24 passed**, and the new check is covered by **11 passed** in the startup suite. Commit
   `a2cf25e89` (adapter) and this one close both deferrals from HS-028 and Task 8.
 
+- **A mis-scoped test invocation, recorded so it is not misread (round 331).** I ran the helper's python with
+  `-c "import xdist"`, but the helper passes its arguments straight to pytest, so **pytest collected the whole
+  workspace** and reported 217 collection errors from unrelated packages (ROS `ament_index_python`/`rclpy` and
+  the system pydantic v1), plus a duplicate-basename clash between `so101_demo_py/test` and
+  `so101_teleop/test`. Those are environment facts about other packages, **not** regressions in this work: none
+  of them touch the head-search suites, and the scoped gates recorded in HS-041 remain green. Two corrections
+  for Task 11: never invoke the helper without an explicit path, and the helper's interpreter still lacks
+  `pytest-xdist`, so the `-n 8` gate needs xdist installed in **that** interpreter (the cached wheels are in
+  the low-rate root's `pip-probe` directory) before the parallel package gates can run as the plan specifies.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
