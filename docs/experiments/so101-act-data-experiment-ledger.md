@@ -40609,3 +40609,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 six of seven steps
   done** with this one's shape and site set read, F1/F11 open; targeted gates **430 / 201 / 201 / 201 passed**;
   HEAD `ef760a4a5`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2161 — F5's last step: each site now matches two tails, and the records' keys are read
+
+- **Both record contracts are now known** (read this round): a scene record's keys are exactly
+  `_SCENE_OBSERVATION_FIELDS` and must satisfy `_scene_observation_ok` (int revision ≥ 0, two **sorted** string
+  lists, a bool diff flag, a finite instant and a non-empty source); a feedback entry's keys are exactly
+  `_FEEDBACK_FIELDS`, with a registered controller, a non-empty name list, three vectors of that list's length, a
+  status sequence ≥ 1 and the same instant. So the fixture payloads are copyable rather than invented.
+- **Why the patch aborted, and the fix it implies**: the tail matcher now finds **six** sites — (743, 753), (827,
+  837) and (1106, 1116) — because CP-2159's insertion added a `retract` row that ends with the **same** tail, so
+  each writer's physics block has **two** matching lines. The next attempt must take the **first** tail of each
+  group (or, better, insert once per block by locating the block's start) and keep skipping the `partial` control.
+  The predicate half was applied and is reverted with it; the audit suite re-runs green.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 six of seven steps
+  done** with the last one's contracts read and its site selection now a known two-line problem, F1/F11 open;
+  targeted gates **430 / 201 / 201 / 201 passed**; HEAD `9c61c7071`; no push, no evidence deletion, no hardware, no
+  second stack.
