@@ -35518,6 +35518,17 @@ no second detector, with its RED tests first.
   venv's pytest and must not be on the path for these tests; and `PYTHONPATH` must be *prepended* to, never
   replace, the ROS paths when ROS is needed.
 
+- **Task 9 endpoints in the app (rounds 277-278).** `head_camera_router(services)` serves the five
+  endpoints - GET status, WS stream, POST target, stop and capture - from the composed backend, reporting
+  `HEAD_CAMERA_UNAVAILABLE` with 503 when the domain is unavailable and 409 `HEAD_TARGET_OUT_OF_RANGE`
+  before submit for an out-of-interval target. It is mounted in `unified/app.py` next to the existing
+  routers. Verified: head-camera suite **8 passed** with the recorded interpreter, covering the status
+  readback with zero detector constructions, the 409 refusal and the accepted in-range target, the stop
+  proof, the unavailable domain and all five declared paths. The websocket's live framing is deliberately
+  left to Task 11's installed smoke and Task 14's end-to-end run.
+- **Still owed for Task 9:** the `openapi_export.py` re-export of the new endpoints (both OpenAPI files) and
+  the `CMakeLists.txt` entry, then Task 9's review.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
