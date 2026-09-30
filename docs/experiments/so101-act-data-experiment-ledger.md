@@ -37936,3 +37936,29 @@ Two conclusions, and the first one is on me:
 This is the first time in Task 11 that an A/B has convicted this work rather than clearing it, and it happened because a
 reviewer refused to accept a proof of the wrong proposition. The next step is to run that one test id against the
 intermediate commits touching the task 8 path, which is now a bounded bisect rather than a search.
+
+## HS-131 — The bisect's first pass eliminates the obvious candidates and localises the change set
+
+Working HS-130's lead (`test_the_shipped_matrix_is_frozen_and_a_scaffold_is_refused`, `PHASE_CAMERA_MATRIX_INVALID`
+from `load_phase_camera_matrix()`):
+
+| candidate | state |
+| --- | --- |
+| `config/act/task8-phase-camera-matrix-v1.json` | **0 commits, no diff** since base (my work never touched it) |
+| `config/act/task8-calibration-measurement-contract-v2.json` | zero-line diff vs base (HS-072) |
+| `config/act/task8-calibration-measurement-contract-schema.json` | untouched; installed copy byte-identical (HS-127) |
+| `src/act/task8_measurement_contract.py` (the loader) | **0 commits** since base; imports 7 modules, **none** of them mine |
+| `src/act/task8_measurement_schema.py` | **0 commits** since base |
+
+And the modules this work **did** change under `src/act/`: `head_camera_geometry.py`, `head_search_binding.py`,
+`head_search_calibration.py`, `head_search_domain.py`, `head_search_qualification.py`, `search.py`.
+
+So the failing test's own file, its loader, its schema and its data are all at base, and the loader does not import any
+of my modules - yet the test passes at base and fails here. That leaves the difference in one of my six changed `act`
+modules reached **indirectly** (through the controller or a binding the test exercises), or in a third-party/installed
+artifact that differs between the two installs.
+
+**Next step, precise and bounded:** run just this test id with each of my six modules swapped to its base version in
+turn - six one-file A/Bs of ~1 s each, no commits - which identifies the culprit directly instead of bisecting commits. I
+recorded the plan rather than starting it because the runs need the same environment each time and my remaining context
+this session cannot complete the set.
