@@ -35084,6 +35084,16 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   clean. The two host items remain Task 11's and are still not claimed.
 
 
+- **Task 5 in progress (commits 4cff65798, HEAD+1).** `src/act/head_search_domain.py` carries the bounded
+  two-direction stop plan (`bounded_search_stops`, `SearchStopPlan`, `coverage_is_complete`) with the three
+  exact statuses, coverage proven from stable FOV intervals, a half-FOV step limit, and refusal before
+  motion when the safe interval cannot cover the required domain; `src/cli/head_search_smoke.py` plans
+  against a real geometry seal and is registered in `setup.py`. Tests: `test/test_act_head_search_domain.py`
+  (7 passed, RED first with rc=2 for the missing module). **Still owed in Task 5:** wiring
+  `HeadSearchController` (`src/act/search.py`) to consume the plan, the updates to
+  `test_act_search.py` / `test_act_task8_search_binding.py` / `test_act_head_search_binding.py`, and the
+  independent sweep checker alongside the calibration binding.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
