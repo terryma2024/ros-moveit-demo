@@ -152,3 +152,26 @@ Boundaries that change together when ratified: the port/backend that produces ea
 `physical_observation` (currently `backends/mujoco/qualified_phases/release_retreat.py`), the runner's
 `_raw()` and `_physics()`, `act/episode_audit.py` (closed physics observation schema, required members per
 kind, readback parity) and any test fixtures that stand in for a real port.
+
+
+### Where the last two records stand (recon result, 2026-09-30)
+
+Neither exists as a recorded observation today, and that is a finding about the **producers**, not only
+about the schema:
+
+- **Planning Scene**: `planning_scene_ok` is a boolean in the runner's and the port's closed evidence sets
+  (`act/pick_place_runner.py:45,59,69,231`, `adapters/act/pick_place_search_port.py:33,41`), and at least
+  two sites **construct it as a literal** — `adapters/act/pick_place_search_port.py:412` and
+  `adapters/act/pick_place_search_boundary.py:282` set `"planning_scene_ok": True` rather than reading a
+  scene. No closed record of attached objects, scene diff or scene revision was found anywhere under
+  `act/` or `adapters/act/`.
+- **Gripper/controller feedback**: the closest existing state is the broker's controller state
+  (`adapters/act/ros_broker.py`) and the per-request fields the port exposes; no feedback record with a
+  gripper opening, commanded versus measured positions, or a controller status sequence was found.
+
+Consequences to ratify together with the shapes above: (1) a Planning Scene observation record and a
+gripper/controller feedback record must be **defined** (values, units, source revision and stamp), because
+nothing registered exists to adopt; (2) the adapters that currently assert `planning_scene_ok: True` must
+**observe** instead — otherwise a formal episode would carry a boolean whose truth no source produced; and
+(3) the physics proposal must say which kinds require them, so the formal gate can refuse a run whose
+scene/feedback evidence is asserted rather than observed.

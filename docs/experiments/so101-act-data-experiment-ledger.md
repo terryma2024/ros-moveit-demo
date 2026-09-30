@@ -36627,3 +36627,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ratification plus the two unnamed source records); items 4-8 pending.** HEAD `e06411ba7`; gate
   `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence deletion,
   no hardware.
+
+
+## CP-1980 — Task 3: the last two source records do not exist, and the adapters assert one of them
+
+- **Recon result, recorded in Proposal C.** `planning_scene_ok` is a boolean in the runner's and port's
+  closed evidence sets, and at least two sites **construct it as a literal** —
+  `adapters/act/pick_place_search_port.py:412` and `adapters/act/pick_place_search_boundary.py:282` set
+  `"planning_scene_ok": True` instead of reading a scene. No closed record of attached objects, a scene
+  diff or a scene revision exists under `act/` or `adapters/act/`. For gripper/controller feedback the
+  closest state is the broker's controller state (`adapters/act/ros_broker.py`) and the port's per-request
+  fields; no record with a gripper opening, commanded versus measured positions, or a controller status
+  sequence was found.
+- **Why this matters beyond the schema.** The plan requires a Planning Scene record and gripper/controller
+  feedback in the common physics evidence. Since nothing registered exists to adopt, the records must be
+  **defined** (values, units, source revision and stamp) and the adapters that currently assert
+  `planning_scene_ok: True` must **observe** instead, or a formal episode would carry a boolean no source
+  produced. The formal-seal gate already refuses a formal audit without coverage, which is what keeps this
+  from silently passing in the meantime.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (T3-F1 waits on Proposals A/B/C
+  ratification, the two new record definitions and the producer changes they imply); items 4-8 pending.**
+  HEAD `eff5ab035`; gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push,
+  no evidence deletion, no hardware, no second stack.
