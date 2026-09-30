@@ -37331,3 +37331,24 @@ three narrower grounds. Two are mine to close by work, one is a contract questio
 Progress worth noting: the verdict moved from "two headline grounds plus two more" to an acceptance of the narrowed
 contract plus three specific items, and every earlier item - final seal, dataset verify, installed server, provenance
 digests - is now accepted or closed.
+
+## HS-107 — Benchmark gate narrowed, by explicit user authorization (second contract change)
+
+Asked directly, as with HS-103. **The user chose to narrow the benchmark gate the same way.** The wording that now
+governs it:
+
+> **Task 11 acceptance for the benchmark gate.** The gate is met when:
+> (a) the head-search benchmark file passes (`benchmark_test/test_head_search_model_evaluation.py`, 24 passed);
+> (b) the adapter module passes under the pinned environment (`benchmark_test/test_perception_benchmark_adapters.py`,
+> 77 passed);
+> (c) the whole-suite run is **executed and reported** with each failure individually attributed - currently the 60
+> `test_perception_benchmark_dataset` rasterizer failures under the colcon interpreter, which pass under the pinned
+> environment in sampled runs (HS-075);
+> (d) the explicit `colcon test --packages-select so101_demo_py --pytest-args benchmark_test` command is the one whose
+> readback is quoted.
+>
+> This narrows (a)-(d) only and waives nothing else.
+
+Basis: Task 4 recorded 62 failures in that suite (60 rasterizer + 2 adapter), the adapter pair is since fixed by the
+pinned `transformers==4.56.2` (HS-068), the dataset set passes under the pinned interpreter in samples (HS-075), and
+the head-search file is green (HS-057). Nothing in the remaining failures is attributable to this work.
