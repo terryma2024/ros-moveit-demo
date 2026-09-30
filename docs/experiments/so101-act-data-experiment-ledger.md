@@ -35473,6 +35473,19 @@ no second detector, with its RED tests first.
   until the package imports for the right reason; the gates are recorded as blocked on Task 11's environment
   rather than reported as passing. Nothing in Task 9 may be described as verified until then.
 
+- **Task 9 source written, gates still blocked (round 273).** `src/so101_teleop/so101_teleop/head_camera.py`
+  and `src/so101_teleop/test/teleop/test_head_camera_api.py` express the boundary: the backend consumes the
+  closed `SO101_HEAD_CAMERA_CONNECTION` descriptor for its owner, simulation session and execution
+  generation; it constructs no detector (the injected reference is the only one and the factory count is
+  reported as zero); composition refuses socket-directory or runtime-id drift with
+  `HEAD_CAMERA_CONNECTION_MISMATCH` and reports the domain unavailable without a closed connection; an
+  out-of-interval target is refused before submit; a stop is `STOPPING` until three consecutive raw samples;
+  and capture refuses a missing, stale or bundle-mismatched frame. Both files compile and pass `ruff check`.
+  **No Task 9 gate is claimed as RED or GREEN** - the package cannot be imported on this host until the
+  pydantic-v2 environment exists, which is Task 11's work. The remaining Task 9 items (the `unified/` port,
+  compose, app, arbiter and OpenAPI wiring plus `CMakeLists.txt`) wait on the same environment, because their
+  tests cannot run either.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
