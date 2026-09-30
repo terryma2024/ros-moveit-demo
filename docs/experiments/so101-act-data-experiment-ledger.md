@@ -36227,3 +36227,29 @@ Result: **24 passed in 0.26 s** - the 23 Task 4 cases plus the non-promotable re
 benchmark coverage that belongs to this work is green independently of the long full-suite gate, and the first
 attempt failing with the ROS `launch_testing` plugin error is the same trap HS-044 recorded rather than a new
 problem.
+
+## HS-058 — Benchmark suite counts, run directly while the colcon gate crawls (round 372)
+
+```zsh
+env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHON_VERSION \
+  PYTHONPATH="$HEAD_LOWRATE/pysrc:$HEAD_VENV_SITE:$HEAD_WORKTREE/src/so101_demo_py/src" \
+  /data/work/venvs/so101-v5-t004-perception/bin/python3 -m pytest src/so101_demo_py/benchmark_test -q
+```
+
+Result: **1 failed, 610 passed, 2 skipped in 520.76 s (8m40s)**.
+
+- The single failure is
+  `test_perception_benchmark_adapters.py::test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly`
+  with a `ModuleNotFoundError`: a missing transformers/SAM2 dependency on this host. SAM2 and the Grounded-SAM
+  bundle are explicitly **out of scope** for Head Search, and this test is not part of that work, so it is an
+  environment gap rather than a regression. Task 4's colcon run reported 62 failures (60
+  `RASTERIZER_VERSION_MISMATCH`, 2 torch/synchronizer); that number is now **1**, which the underlay rebuild and
+  the dependency installs in HS-035/HS-043 plausibly explain, and the point worth noting is that none of the
+  remaining failure is ours.
+- The head-search benchmark file is green within this run and on its own (**24 passed in 0.26 s**, HS-057).
+
+**Deviation recorded honestly:** the plan names `colcon test --packages-select so101_demo_py --pytest-args
+benchmark_test` as the gate, and that colcon run has been going for over half an hour without emitting output
+because colcon buffers it. This direct run is the same test set under the same interpreter with the same scratch
+discipline, and it is recorded as a **complement** to the colcon gate, not a substitute: the colcon readback
+remains outstanding.
