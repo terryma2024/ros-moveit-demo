@@ -35110,3 +35110,42 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (first bullet green, review pending);
   items 4-8 pending.** HEAD before this commit `06d841fb3`; 39-path dirty baseline untouched; no push,
   no evidence deletion, no hardware, no second stack.
+
+
+## CP-1935 — Task 3 third bullet: the release boundary verified, and the tests it was missing
+
+- **Verification result: the order is already correct, so no production fix was made.** Read at
+  `src/so101_demo_py/src/act/pick_place_runner.py`: `_set_down` (lines 141-156) requires
+  `holding_state == "HOLDING"` with `cup_supported`, `bilateral_contact`, `controller_stopped` and
+  every gate true; `_release_preflight` (158-176) then requires `HOLDING` + `cup_supported` + `fresh` +
+  `planning_attached`, calls `detach_moveit` and requires `planning_attached(request) is False` before
+  the RELEASE phase is ever run, so `DETACH_NOT_CONFIRMED` and `RELEASE_UNSUPPORTED` both refuse with
+  the gripper still closed; the RELEASE phase itself runs only for `phase == "RELEASE"` with the
+  release epoch already incremented (line 228) so the acceptance evidence must carry the new epoch;
+  `_verify_phase` refuses any evidence whose `physics_step` did not strictly increase or whose
+  reset/release epoch does not match, which is the stale-observation rule; and any failure inside
+  `run()` calls `_stop("TASK8_ABORT")` (256-259) instead of proceeding. This bullet was therefore
+  verification plus protection, not a root-cause fix, and no production line changed.
+- **The protection the plan asked for was genuinely missing.** Searching `src/so101_demo_py/test/`
+  showed `DETACH_NOT_CONFIRMED`, `RELEASE_UNSUPPORTED` and `RELEASE_PREFLIGHT_INVALID` had **no test at
+  all** anywhere in the suite, so the release boundary was carried only by inspection.
+- **New `test_act_release_boundary.py`** holds it with a fake port faithful enough to complete a full
+  run, so the negative controls mean something: the positive control opens exactly once
+  (`port.opened == ["RELEASE"]`), stops with `FULL_COMPLETE` and seals schema_version 2; a detach
+  failure refuses with `DETACH_NOT_CONFIRMED`, opens nothing and stops with `TASK8_ABORT`; an
+  unsupported cup refuses with `RELEASE_UNSUPPORTED` and opens nothing; a non-advancing set-down
+  observation refuses with `SET_DOWN_EVIDENCE_INVALID` and opens nothing; and a release observation
+  carrying the previous release epoch is refused with `PHASE_EVIDENCE_INVALID` and stops the run. No
+  test attaches or teleports anything, and no live motion is authorized by them.
+- **Evidence.** `logs/task3-release.run` rc=0: **51 passed in 0.87 s** for the release-boundary tests
+  plus `test_act_episode_audit.py`, `test_act_controller_reference.py` and `test_act_physics.py`, with
+  its own NVMe scratch and a non-empty tempfile proof. No RED was recorded for this bullet because the
+  behaviour under test already existed and was not modified; the refusals are asserted directly instead.
+- **Still open in Task 3 (not claimed).** Wiring the broker's real
+  claim/dispatch/accept/revoke/stop events and the controller observer's raw history into
+  `EpisodeAuditWriter`; recording the raw observations needed to recompute the physical criteria
+  offline rather than consuming phase booleans; and the Recorder seal v2 that references the
+  audit/scope digest with fsync of every file and the parent directory.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (audit writer and release boundary
+  green; review pending); items 4-8 pending.** 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
