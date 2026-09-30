@@ -38761,3 +38761,17 @@ So the first work is environmental verification, not generation, and the plan's 
 fails closed rather than training against the wrong install. My next step is to read the full Task 12 section and resolve
 `TOOLCHAIN_RUN`/`GEOMETRY_RUN` to the exact retained paths named in this ledger, then run Step 1's checks one at a time
 before any long-running generation.
+
+### Task 12 steps (verbatim from the plan)
+
+- Step 1: Create a new model-campaign root and verify inputs.
+- Step 2: Generate and seal the exact head dataset.
+- Step 3: Train B then C, never concurrently.
+- Step 4: Calibrate and freeze each candidate operating point on val/calibration episodes.
+- Step 5: Run the actual frozen-model evaluation gate.
+- Step 6: Append and commit the model decision checkpoint.
+
+Step 3's "never concurrently" matters given the standing constraint of one CUDA detector and no second stack: B and C are
+trained **serially**, and no detector process may be running while training holds the GPU. Step 1 is the gate that makes
+that safe to start - it resolves the toolchain and geometry roots, proves the installed package resolves to the toolchain,
+and refuses a pre-existing `MODEL_RUN`.
