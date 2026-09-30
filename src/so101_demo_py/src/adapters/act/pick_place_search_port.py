@@ -418,6 +418,12 @@ class PickPlaceSearchPhasePort:
         # the physics gate is a content property too: a truncated MuJoCo sample is not a sample the phase
         # may claim, which is the rule the registered live sample's own `truncated` flag exists for
         mujoco_ok = getattr(world, "truncated", None) is False
+        # the planning gate is the search result's own verdict: the port consumes the validated result, and
+        # this reports what that result says it found (the target locked) rather than that a result exists
+        search_result = observed.search_result
+        planning_ok = (isinstance(search_result, dict)
+                       and search_result.get("found") is True
+                       and search_result.get("status") == "TARGET_LOCKED")
         contact_ok = (isinstance(raw["contact"], dict)
                       and raw["contact"].get("physics_step") == world.simulation_step)
         reference_readback = raw["reference"]
@@ -431,7 +437,7 @@ class PickPlaceSearchPhasePort:
             "phase": "SEARCH", "session_id": request["session_id"],
             "attempt_id": request["attempt_id"], "reset_epoch": reset_epoch,
             "release_epoch": 0, "physics_step": world.simulation_step,
-            "planning_ok": True,
+            "planning_ok": planning_ok,
             "controller_reference_ok": controller_reference_ok, "joint_feedback_ok": joint_feedback_ok,
             "contact_ok": contact_ok, "mujoco_ok": mujoco_ok,
             # CP-2017 step 2, additive half: when the readback that established these gates carries the

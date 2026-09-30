@@ -38360,3 +38360,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   refused.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2058 — Task 3: planning_ok derived from the search result's verdict, leaving two RGB gates
+
+- **What landed.** `_search_evidence` reports `planning_ok` as "the search result says it found the target and
+  its status is `TARGET_LOCKED`" — the result's own verdict, which the port already consumes through
+  `validate_search_result`, rather than the presence of a validated result (which would be a tautology). This
+  implements option (ii) from my CP-2057 question as the documented choice, revisitable by the owner the same
+  way `scene_revision`'s counter and `status_sequence`'s counter are.
+- **Evidence.** `logs/task3-plok.run` rc=0 across the search-port, three task8 phase, release-boundary and
+  supervisor suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile
+  proof; the fixture's search result carries exactly that verdict, so the gate is `True` there by content.
+- **What remains asserted**: only `head_rgb_ok` and `wrist_rgb_ok` in the SEARCH document, still needing the
+  freshness/shape/digest choice from CP-2057's second question. After that: the full record's travel, T3-F11's
+  window-to-rows checks, and a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `a2d4f7ba3`;
+  consolidated gate `logs/task3-gate15.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
