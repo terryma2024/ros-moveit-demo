@@ -1125,6 +1125,13 @@ def _formal_coverage_ok(audit: Path) -> bool:
                 or any(later < earlier for earlier, later in zip(times, times[1:]))):
             return False
     # F5: the ratified observations must actually be retained, so at least one physics row carries both records
+    # F5: the physics stream and the event stream had never been related, so the epochs the physics rows declare
+    # must never decrease and every one of them must be an epoch a release event actually named
+    named_epochs = {row["payload"].get("release_epoch") for row in events if row["kind"] == "release"}
+    epochs = [row["release_epoch"] for row in physics]
+    if (any(type(epoch) is not int or epoch not in named_epochs for epoch in epochs)
+            or any(later < earlier for earlier, later in zip(epochs, epochs[1:]))):
+        return False
     observed = any(isinstance(row.get("observation"), dict)
                    and "planning_scene_observation" in row["observation"]
                    and "controller_feedback" in row["observation"] for row in physics)
