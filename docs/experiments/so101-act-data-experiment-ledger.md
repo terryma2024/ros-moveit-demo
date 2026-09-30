@@ -41370,3 +41370,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   progress** with five items landed, its frozen-policy item waiting on the plan (CP-2195) and this endpoint item
   specified above; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154
   passed**; HEAD `83d6b9401`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2197 — F11's endpoint rule: the exact comparisons, and which of them passes today
+
+- **Both functions read in full**: `_window_ok` (lines 478-492) checks only that the endpoints are numbers, that
+  `collection_start_s <= physics_end_s <= collection_end_s`, that every scheduled instant lies inside the window and
+  that every permitted gap does too; the shared predicate (lines 596-626) matches schedule instants against the
+  stamps of **held acquisitions** and applies the cadence/gap rule. Neither compares an endpoint with what was
+  observed.
+- **The rule to add, stated as two comparisons the predicate can already make** (`held` gives the camera stamps;
+  `row_times` gives the labelled rows):
+  - `collection_start_s` must equal the **earliest** observed instant (camera stamps and row times together);
+  - `collection_end_s` must equal the **latest** observed instant.
+- **Which one passes the retained fixture today**: the formal fixture's window starts at **1.0** and its earliest
+  acquisition and row time are also **1.0**, so the start comparison passes as-is. Its end is **1.2** while its last
+  camera and physics evidence is **1.1**, so the end comparison **fails**, exactly as F5 and F11 describe — the fix
+  is either to carry evidence to 1.2 in those fixtures (acquisitions at 1.2, a physics row at 1.2, the schedule
+  naming 1.2) or to let them claim 1.1, and the first is the honest one because the window is the episode's claim
+  about itself.
+- **What that means for the next pass**: one predicate edit (two comparisons inside `_window_matches_observed`,
+  which both the seal and the readback already share) plus the **fixture upgrade** CP-2196 predicted — three
+  complete writers, patched by line number, given evidence that reaches the end they claim.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  five items landed, its frozen-policy item waiting on the plan and this endpoint item one edit plus a fixture
+  upgrade from done; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154
+  passed**; HEAD `ec1494e01`; no push, no evidence deletion, no hardware, no second stack.
