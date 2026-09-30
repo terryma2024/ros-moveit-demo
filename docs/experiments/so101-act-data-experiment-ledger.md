@@ -43421,3 +43421,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, its hybrid's obstacle localized to one predicate;
 - goal paused.
+
+## CP-2300 - The refusal was my own probe's fixture: attempt_id 'a' against the writer's 'attempt-1'
+
+- Third instrumentation, decisive in one run: session_id 's' vs 's' (equal), attempt_id **'a' vs 'attempt-1'**
+- (different), reset_epoch 1 vs 1 (equal), lease equal, release 1 against the writer's None which F3(a) resolves
+- against the episode's own 1 (equal). The single failing clause is the attempt id - exactly the fence CP-2257
+- discovered when the formal writer refused a foreign identity.
+- So the F5 hybrid's obstacle was never in the audit or the runner: my probe used this file's request() ('a') with a
+- writer built from identity() ('attempt-1'). The fix is to reuse CP-2260's AlignedPort and the matching request,
+- which the release-boundary suite already contains and which a formal writer accepts end to end.
+- That also revises CP-2299's reading: the epoch adoption committed there is green and harmless but was never the
+- cure, because the cure is in the fixture, not the producer. Recorded so the two entries do not contradict.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, its hybrid's real next step being the aligned fixture;
+- goal paused.
