@@ -38257,3 +38257,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `ad446dbf7`;
   consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2053 — Task 3: the port's controller-reference gate is derived, leaving four asserted gates
+
+- **What landed.** `_search_evidence` reports `controller_reference_ok` as the presence of the reference
+  readback the document is built from (`raw["reference"]`, whose key set the port already validates and whose
+  contents a verifier establishes before assembly), instead of a literal. Seven gates are now derived across
+  the live path: the boundary helper's four (none asserted) and the SEARCH document's `planning_scene_ok`,
+  `joint_feedback_ok` and `controller_reference_ok`.
+- **Evidence.** `logs/task3-pref.run` rc=0 across the search-port, three task8 phase, release-boundary and
+  supervisor suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **What is left asserted in the SEARCH document**: `planning_ok`, `contact_ok`, `mujoco_ok`, `head_rgb_ok`,
+  `wrist_rgb_ok` — the first three have identifiable sources (the search result's status, the contact evidence
+  the port already inspects, the world evidence it type-checks) and the two RGB gates need their sources read.
+  Then the full record's travel, T3-F11's window-to-rows checks and a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `86d25f51b`;
+  consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
