@@ -38881,3 +38881,12 @@ vendored packages.
 
 Option 1 keeps the plan's command intact and is a build-time-only dependency, so it is the smaller deviation - but it does
 modify the venv, and that is the sort of change this ledger records rather than performs quietly.
+
+### Correction to HS-167
+
+Checked directly rather than left as inference: **the perception venv *does* have `em`** (needed by `rosidl_adapter`), while
+`/usr/bin/python3` does not. So the `ModuleNotFoundError: No module named 'em'` in that build did **not** come from the
+`-DPython3_EXECUTABLE` the plan passes - it came from a *different* interpreter that CMake or the underlay selected for
+`so101_mujoco_support`'s rosidl step. HS-167's first reading ("the venv lacks `empy`") was wrong, and the corrected
+statement is narrower: some interpreter in that build lacked `em`, and identifying which one is the next step - not
+changing the venv, which would have been a fix for a problem it does not have.
