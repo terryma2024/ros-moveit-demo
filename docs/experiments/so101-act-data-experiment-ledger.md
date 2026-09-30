@@ -38096,3 +38096,28 @@ So the bisect's remaining candidate list is now explicit and short: `task8_calib
 `cli/act_stack_ready.py`, `cli/train_yolo_seg.py`, `perception_benchmark/head_search_models.py`, and the five new files
 (which cannot be swapped). Testing them is four one-file swaps of about a second each - the same technique that cleared
 the other three.
+
+## HS-137 — The task 8 adapter is cleared too, and the A/B turns out to be confounded
+
+```
+baseline (my adapter): 1 failed
+base adapter:          1 failed        (file restored, __pycache__ cleared)
+```
+
+So `task8_calibration_search_binding.py` - the task 8 adapter this work changed (`a2cf25e89`) and my best hypothesis so
+far - is **not** the cause. Of the four differing, untested code files, the remaining ones are `cli/act_stack_ready.py`,
+`cli/train_yolo_seg.py` and `perception_benchmark/head_search_models.py`, none of which a task 8 phase-camera test is
+likely to import, plus the five files that are new and therefore cannot be swapped to base.
+
+**And a limitation I should state before someone else does:** the base-vs-current A/B varies **code and environment
+together**. The base run used a separate install base under `/tmp` with no overlay on the path; the current run uses the
+task overlay. So "one new failure" is evidence that *something* differs between those two configurations, not proof that
+the difference is in this work's code - it could be the overlay's environment, a stale `.pyc`, or the install layout. My
+HS-130 conclusion ("one of the task 8 measurement failures is therefore regression-shaped and must be bisected") was
+stated more strongly than the experiment supports, and this entry corrects it: the failure is **unexplained and
+configuration-sensitive**, with the code-level candidates now narrowed to three unlikely CLI/benchmark modules and five
+new modules, and the environment-level candidates not yet controlled for.
+
+That is where I stop this thread for the session. What it leaves for the next one is specific: control the environment
+(same interpreter, same paths, only the code install varying) and re-run the single test id, which separates the code
+hypothesis from the environment one in a single comparison.
