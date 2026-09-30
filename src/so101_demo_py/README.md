@@ -475,6 +475,11 @@ The two assets are not interchangeable. The ACT detector is `YoloSegDetector`, a
 `best.pt` from the YOLO repository. The Grounded-SAM bundle is a separate, complementary formal asset; it is recorded
 here and is wired only where an existing production path names it.
 
+The Head Search calibration and Teleop work uses the YOLO11n-Seg detector only. It loads `best.pt` from
+`zjumty/so101-yolo11n-seg-plastic-cup` at `b55430fb75c0207b35bd20f4e328e042bff06f3f`, whose SHA256 is
+`f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781`, and it does not use the Grounded-SAM bundle at
+any stage: no Head Search dataset, training run, calibration or Teleop view loads it.
+
 | asset | repository | immutable revision | role |
 | --- | --- | --- | --- |
 | YOLO11n-seg plastic cup | `zjumty/so101-yolo11n-seg-plastic-cup` | `b55430fb75c0207b35bd20f4e328e042bff06f3f` | weights for the ACT detector (`best.pt`); `model/provenance.json` carries the training provenance |
