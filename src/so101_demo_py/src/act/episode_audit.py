@@ -582,6 +582,46 @@ class _Files:
                 "events": self.events, "references": self.references, "physics": self.physics}
 
 
+def _window_matches_observed(window: dict, row_times, acquisitions) -> bool:
+    """T3-F11: one predicate for the window, shared by the seal and the readback."""
+
+    """T3-F11: a formal window must describe the rows and acquisitions this audit actually holds."""
+
+    if window["outcome"] == "complete":
+        if not row_times or abs(window["label_cutoff_s"] - max(row_times)) > _TOLERANCE_S:
+            # the cutoff is the last labelled observation, not a number chosen to fit
+            return False
+    elif row_times:
+        # an outcome other than complete may not accompany labelled rows
+        return False
+    schedule = window["source_schedule"]
+    if set(window["streams_required"]) - set(schedule):
+        return False
+
+    def parts(entry):
+        if isinstance(entry, dict):
+            return entry.get("camera"), entry.get("stamp_s")
+        return getattr(entry, "camera", None), getattr(entry, "stamp_s", None)
+
+    held = {}
+    for entry in acquisitions.values():
+        camera, stamp = parts(entry)
+        held.setdefault(camera, []).append(stamp)
+    for stream, instants in schedule.items():
+        observed = sorted(value for value in held.get(stream, []) if value is not None)
+        if not all(any(abs(instant - stamp) <= _TOLERANCE_S for stamp in observed)
+                   for instant in instants):
+            # a scheduled instant no camera published is an invented schedule entry
+            return False
+        for earlier, later in zip(instants, instants[1:], strict=False):
+            if later - earlier > window["cadence_s"] * 1.5 + _TOLERANCE_S and not any(
+                    start - _TOLERANCE_S <= earlier and later <= end + _TOLERANCE_S
+                    for start, end in window["permitted_gaps_s"]):
+                # a gap beyond the cadence must be one the frozen inputs permit
+                return False
+    return True
+
+
 class EpisodeAuditWriter:
     """The single writer of one episode's raw audit."""
 
@@ -840,41 +880,7 @@ class EpisodeAuditWriter:
     # -- helpers -----------------------------------------------------------
 
     def _window_matches_rows(self, window: dict) -> bool:
-        """T3-F11: a formal window must describe the rows and acquisitions this audit actually holds."""
-
-        if window["outcome"] == "complete":
-            if not self._row_times or abs(window["label_cutoff_s"] - max(self._row_times)) > _TOLERANCE_S:
-                # the cutoff is the last labelled observation, not a number chosen to fit
-                return False
-        elif self._row_times:
-            # an outcome other than complete may not accompany labelled rows
-            return False
-        schedule = window["source_schedule"]
-        if set(window["streams_required"]) - set(schedule):
-            return False
-
-        def parts(entry):
-            if isinstance(entry, dict):
-                return entry.get("camera"), entry.get("stamp_s")
-            return getattr(entry, "camera", None), getattr(entry, "stamp_s", None)
-
-        held = {}
-        for entry in self._acquisitions.values():
-            camera, stamp = parts(entry)
-            held.setdefault(camera, []).append(stamp)
-        for stream, instants in schedule.items():
-            observed = sorted(value for value in held.get(stream, []) if value is not None)
-            if not all(any(abs(instant - stamp) <= _TOLERANCE_S for stamp in observed)
-                       for instant in instants):
-                # a scheduled instant no camera published is an invented schedule entry
-                return False
-            for earlier, later in zip(instants, instants[1:], strict=False):
-                if later - earlier > window["cadence_s"] * 1.5 + _TOLERANCE_S and not any(
-                        start - _TOLERANCE_S <= earlier and later <= end + _TOLERANCE_S
-                        for start, end in window["permitted_gaps_s"]):
-                    # a gap beyond the cadence must be one the frozen inputs permit
-                    return False
-        return True
+        return _window_matches_observed(window, self._row_times, self._acquisitions)
 
     def _apply_epoch(self, epoch: int, kind: str, observation: dict) -> None:
         if self._release_epoch is None:

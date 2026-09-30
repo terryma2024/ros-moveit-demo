@@ -41173,3 +41173,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   its Boolean defect fixed (CP-2184) and this extraction fully specified (CP-2185/2186/2187); targeted gates
   **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 passed**; HEAD `0a03c1e51`; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-2188 — F11's predicate is now shared: one module-level function, the writer delegating
+
+- **What landed** (`episode_audit.py`): `_window_matches_observed(window, row_times, acquisitions) -> bool` at module
+  level, carrying the former method's body verbatim except for the two writer reads, and
+  `EpisodeAuditWriter._window_matches_rows` reduced to
+  `return _window_matches_observed(window, self._row_times, self._acquisitions)`. The seal path (line 818) is
+  unchanged, so behaviour is identical — which the suites confirm, **151 passed**.
+- **The surgery, and the one slip it left**: the body was moved by re-indenting the method's lines and substituting
+  the two reads, then the method was turned into the delegating call — which initially left the old body behind as a
+  dead `_window_matches_rows_removed`; it is deleted, and the file parses with a single predicate.
+- **What remains for F11's first item, both fully specified (CP-2187)**: the **readback** calling this function at
+  its formal gate (line 958) with row times from `row-bindings.jsonl` and acquisitions from `acquisitions.jsonl`
+  keyed by acquisition id, plus the verdict's negative control — a relabelled manifest whose window claims an
+  invented in-range instant (1.05) must be refused.
+- **Evidence.** Targeted run this round: **151 passed** across the audit, recorder, release-boundary and capture
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  its Boolean defect fixed and its predicate now shared; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 /
+  283 / 176 / 284 / 151 passed**; HEAD `2f89a99e3`; no push, no evidence deletion, no hardware, no second stack.
