@@ -34447,3 +34447,56 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list item 0 completed; item 1 in_progress and paused at its checkpoint; items 2-8
   pending.** HEAD `62a9da9e3c5df2a8d68ddcc5bb9cd9a1d484a73c`; the 39 baseline-dirty paths are still
   untouched and uncommitted by this task.
+
+
+## CP-1924 — Task 1 verdict FAIL (0C/5I/2M) and the one-pass fix, RED→GREEN
+
+- **Verdict received** at `reviews/task1-review-verdict.md` (dispatch `f8ffca3a-a9e2-4a93-a26a-ca8dcbed97b3`,
+  reviewed commit `973acb5658b977d26a1f06034e67922cbc65aa2e`): FAIL with Critical 0, Important 5
+  (F1-F5) and Minor 2 (F6, F7). The reviewer also flagged an evidence gap: the final run's
+  `tempfile-proof.log` was zero bytes, so the exact-interpreter readback was asserted but not
+  substantiated.
+- **Reviewer identity.** The 400 from CP-1922 was a name problem, not an account limit: the running
+  TUI was launched with the display form `gpt-6-1-sol`, which is not a catalogue slug, while the
+  catalogue slug is `gpt-6.1-sol` (`supported_in_api: true`). The review was dispatched to the same
+  thread with `codex queue --thread 01a0f116-8b02-7822-8281-ea3a499341e3 -m gpt-6.1-sol --message …`
+  (`reviews/task1-review-dispatch.json`); a probe turn completed in 4009 ms with no error and the
+  pane banner reads `GPT-6.1-Sol high`. No model was substituted and no global configuration was
+  changed. The reviewer itself could not certify its own model id from runtime metadata and said so;
+  that residual process question is for the coordinator.
+- **Fixes, each with a test that failed on the reviewed code first** (`logs/fix-pass-red.run` rc=1,
+  seven behavioural failures, one per finding; `logs/fix-pass-green.run` rc=0, **81 passed**):
+  - **F1** `_read_verified` now returns bytes; `json.loads` runs only for the five JSON-contract roles
+    (`_JSON_ROLES`), so real YAML/XML/Python inputs freeze instead of being rejected.
+  - **F2** new `verify_frozen_inputs()` re-reads every frozen role beneath the manifest directory and
+    refuses a missing, resized, replaced, symlinked or escaping file; admission calls it instead of
+    trusting the manifest metadata.
+  - **F3** admission now binds each payload artifact to its frozen role by resolved path (and by the
+    declared digest where the closed payload carries one), requires the scope's `scene_id`/`seed` to
+    equal the frozen anchor identity, and requires the manifest's `evidence_root` to equal the
+    payload's, before any resource is taken.
+  - **F4** `freeze_inputs` copies the bytes `_verify_roles` verified; it no longer re-reads the
+    candidate, so a file replaced between verification and copying cannot be frozen.
+  - **F5** the resource role no longer reports READY with null stop points: `rtf_hard_stop` and
+    `disk_hard_stop` have no approved source anywhere in this repository, so the role is MISSING with
+    `NONHEAD_INPUT_BINDING_REQUIRED` naming exactly `rtf_hard_stop,disk_hard_stop`, while the queue
+    stop is bound from the source-controlled `parallel_collection_v3.yaml` recorder block
+    (high watermark 12 samples, hold 0.2 s, recovery 8, `lossless: true`) and the start guard from
+    `parallel_batch_v3.yaml`. The real inspection now reports four MISSING roles (path_policy,
+    placement_qc, rgb_skew, resource_thresholds), all with the documented blocker.
+  - **Process** the tempfile proof now prints the interpreter and resolved `tempdir` and asserts
+    `TMPDIR`/`TMP`/`TEMP`, so the evidence is substantive (`logs/fix-pass-green.run`).
+- **RED method (ruling).** The reviewed module has no `verify_frozen_inputs`, so checking the old file
+  out would have failed on import rather than on behaviour. RED therefore used a defect-injection
+  overlay: a hard-linked copy of both packages whose only differences are the reviewed function
+  bodies plus a metadata-only `verify_frozen_inputs` stub. Cost if wrong: the RED rests on a faithful
+  re-instantiation of the reviewed code rather than on the literal old file; the overlay and both
+  reviewed files' hashes are retained (`scratch/fix-pass-red/overlay`,
+  `logs/fix-pass-backup/fixed.sha256`).
+- **Deferred minors (not fixed, per the executing-plans rule that minors never enter the fix pass).**
+  F6: `training_eligible` raises `TypeError` for a container `collection_mode` (`[]`/`{}`) instead of
+  returning ineligible. F7: `_ledger_referenced_json` strips a leading `/` before the absolute check,
+  so a candidate referenced only by an absolute path can be misreported as missing. Both are one-line
+  fixes with a test each, carried for the owner's decision.
+- **State.** **Task-list item 1 in_progress, awaiting the re-review verdict; items 2-8 pending.**
+  Re-review packet: `reviews/task1-rereview-packet.md`.

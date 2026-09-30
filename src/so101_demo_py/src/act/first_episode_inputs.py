@@ -227,24 +227,66 @@ def read_inputs_manifest(path: Path) -> dict:
     return document
 
 
-def _read_verified(entry: dict) -> tuple[bytes, dict]:
+# only these roles carry a JSON contract this module must read; the rest are frozen as bytes
+_JSON_ROLES = frozenset({"contact_proposal", "contact_activation", "path_policy", "placement_qc",
+                         "rgb_skew"})
+
+
+def verify_frozen_inputs(manifest_path: Path) -> dict:
+    """Read the manifest and verify every frozen file it names, not only its metadata.
+
+    A self-consistent manifest can describe files that never existed or that changed after the
+    freeze, so admission re-reads each role beneath the manifest's own directory and refuses
+    anything missing, replaced, resized, symlinked or outside that directory.
+    """
+
+    manifest_path = Path(manifest_path)
+    document = read_inputs_manifest(manifest_path)
+    root = manifest_path.parent.resolve()
+    for role, item in document["roles"].items():
+        path = manifest_path.parent / item["path"]
+        try:
+            if path.is_symlink() or not path.is_file():
+                raise ValueError(f"INPUTS_FROZEN_BYTES_INVALID: {role}")
+            resolved = path.resolve()
+            if not resolved.is_relative_to(root):
+                raise ValueError(f"INPUTS_FROZEN_BYTES_INVALID: {role}")
+            payload = resolved.read_bytes()
+        except OSError as error:
+            raise ValueError(f"INPUTS_FROZEN_BYTES_INVALID: {role}") from error
+        if len(payload) != item["bytes"] or hashlib.sha256(payload).hexdigest() != item["sha256"]:
+            raise ValueError(f"INPUTS_FROZEN_BYTES_INVALID: {role}")
+    return document
+
+
+def _read_verified(entry: dict) -> bytes:
+    """Return the exact approved bytes, refusing a symlink, a missing file or a changed digest."""
+
     path = Path(entry["path"])
     if path.is_symlink() or not path.is_file():
         raise ValueError("INPUT_IDENTITY_MISMATCH")
     payload = path.read_bytes()
     if hashlib.sha256(payload).hexdigest() != entry["sha256"]:
         raise ValueError("INPUT_IDENTITY_MISMATCH")
+    return payload
+
+
+def _parse_json(payload: bytes) -> dict:
     try:
         document = json.loads(payload)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("INPUT_IDENTITY_MISMATCH") from error
     if not isinstance(document, dict):
         raise ValueError("INPUT_IDENTITY_MISMATCH")
-    return payload, document
+    return document
 
 
-def _verify_roles(registry: dict) -> tuple[dict, dict]:
-    """Resolve one approved candidate per role, then run the semantic cross-checks."""
+def _verify_roles(registry: dict) -> dict:
+    """Resolve one approved candidate per role, run the semantic cross-checks, return the bytes.
+
+    The verified bytes are handed back so a freeze copies exactly what was approved. Reading the
+    candidate a second time would let a file that changed after verification be frozen instead.
+    """
 
     for role in INPUT_ROLES:
         item = registry["roles"].get(role)
@@ -264,9 +306,8 @@ def _verify_roles(registry: dict) -> tuple[dict, dict]:
         if entry["approval"] == "source_controlled":
             if not Path(entry["path"]).is_relative_to(Path(registry["source_root"])):
                 raise ValueError("INPUT_NOT_APPROVED")
-    documents, payloads = {}, {}
-    for role in INPUT_ROLES:
-        payloads[role], documents[role] = _read_verified(registry["roles"][role]["selected"])
+    payloads = {role: _read_verified(registry["roles"][role]["selected"]) for role in INPUT_ROLES}
+    documents = {role: _parse_json(payloads[role]) for role in _JSON_ROLES}
 
     from .contact_calibration import verify_disabled_proposal
 
@@ -299,7 +340,7 @@ def _verify_roles(registry: dict) -> tuple[dict, dict]:
     for role in INPUT_ROLES:
         if registry["roles"][role]["selected"]["approval"] == "nonhead_calibration":
             require_nonhead_gate(documents[role], source_commit=registry["source_commit"])
-    return documents, payloads
+    return payloads
 
 
 def freeze_inputs(candidates_path: Path, output: Path) -> Path:
@@ -313,7 +354,7 @@ def freeze_inputs(candidates_path: Path, output: Path) -> Path:
     target = Path(output)
     if target.exists():
         raise ValueError("INPUT_OUTPUT_EXISTS")
-    _verify_roles(registry)
+    payloads = _verify_roles(registry)
     roles = {}
     try:
         target.mkdir(parents=True)
@@ -322,7 +363,8 @@ def freeze_inputs(candidates_path: Path, output: Path) -> Path:
             relative = Path(role) / Path(entry["path"]).name
             destination = target / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
-            payload = Path(entry["path"]).read_bytes()
+            # the bytes that were verified, never a second read of the candidate
+            payload = payloads[role]
             with open(destination, "wb") as stream:
                 stream.write(payload)
                 stream.flush()
@@ -570,26 +612,56 @@ def _inspect_motion_config(root: Path) -> tuple[dict, dict]:
 
 
 def _inspect_resource_thresholds(root: Path) -> dict:
+    """The start guard, the motion and disk hard stops and the queue backpressure stop.
+
+    The plan's value table requires an approved, hash-bound source for the RTF, disk and queue
+    hard stops as well as for the start guard. A value that exists is recorded together with the
+    digest of the file carrying it; a required value with no approved source is a blocker, never a
+    default, and the role stays MISSING so a freeze refuses instead of running without a stop point.
+    """
+
     import yaml
 
     runtime = Path(root) / RUNTIME_CONFIG_FILE
-    if not runtime.is_file():
-        return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED", "runtime config absent", None, [])
+    collection = Path(root) / COLLECTION_CONFIG_FILE
+    if not runtime.is_file() or not collection.is_file():
+        return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED", "runtime/collection config absent",
+                     None, [])
     document = yaml.safe_load(runtime.read_text())
-    guard = document.get("start_guard") if isinstance(document, dict) else None
-    if not isinstance(guard, dict) or any(key not in guard for key in _RESOURCE_KEYS):
+    document = document if isinstance(document, dict) else {}
+    guard = document.get("start_guard")
+    guard = guard if isinstance(guard, dict) else {}
+    hard = document.get("hard_stops")
+    hard = hard if isinstance(hard, dict) else {}
+    recorder = (yaml.safe_load(collection.read_text()) or {})
+    recorder = recorder.get("recorder") if isinstance(recorder, dict) else {}
+    recorder = recorder if isinstance(recorder, dict) else {}
+
+    guard_values = {key: guard.get(key) for key in _RESOURCE_KEYS}
+    guard_complete = all(
+        not isinstance(value, bool) and isinstance(value, (int, float)) and value > 0
+        for value in guard_values.values())
+    queue_keys = ("queue_high_watermark_samples", "queue_high_watermark_hold_s",
+                  "queue_recovery_watermark_samples", "lossless")
+    queue_values = {key: recorder.get(key) for key in queue_keys}
+    queue_complete = all(value is not None for value in queue_values.values())
+    identity = {
+        "start_guard": guard_values if guard_complete else None,
+        "runtime_config_sha256": _digest(runtime),
+        "collection_config_sha256": _digest(collection),
+        "rtf_hard_stop": hard.get("rtf_min"),
+        "disk_hard_stop": hard.get("disk_free_min_bytes"),
+        "queue_hard_stop": (dict(queue_values, source="collection_config.recorder")
+                            if queue_complete else None),
+    }
+    missing = [name for name in ("start_guard", "rtf_hard_stop", "disk_hard_stop", "queue_hard_stop")
+               if identity[name] is None]
+    candidates = [{"path": str(runtime), "sha256": identity["runtime_config_sha256"],
+                   "approved": True, "approval": "source_controlled"}]
+    if missing:
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED",
-                     "the runtime config names no complete start_guard block", None, [])
-    values = {key: guard[key] for key in _RESOURCE_KEYS}
-    if any(isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0
-           for value in values.values()):
-        return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED",
-                     "a start_guard value is not a positive number", None, [])
-    identity = {"start_guard": values, "runtime_config_sha256": _digest(runtime),
-                "rtf_hard_stop": None, "disk_hard_stop": None, "queue_hard_stop": None}
-    entry = {"path": str(runtime), "sha256": _digest(runtime), "approved": True,
-             "approval": "source_controlled"}
-    return _selected(_role("READY", None, None, identity, [entry]))
+                     "no approved source for " + ",".join(missing), identity, candidates)
+    return _selected(_role("READY", None, None, identity, candidates))
 
 
 def _inspect_source_role(root: Path, relative: str, role: str, identity=None) -> dict:

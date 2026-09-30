@@ -32,6 +32,7 @@ from so101_demo.act.first_episode_inputs import (
     read_candidate_registry,
     read_inputs_manifest,
     require_nonhead_gate,
+    verify_frozen_inputs,
 )
 
 INPUTS_SHA = "a" * 64
@@ -302,8 +303,12 @@ def _entry(path, approval="source_controlled"):
             "approved": True, "approval": approval}
 
 
-def _registry(tmp_path):
-    """One approved candidate per role, with the two evidence-bound roles verified for real."""
+def _registry(tmp_path, *, contents=None):
+    """One approved candidate per role, with the two evidence-bound roles verified for real.
+
+    `contents` overrides the placeholder bytes of a role, so a test can freeze the formats the
+    production inputs actually use (YAML, XML, Python) instead of JSON placeholders.
+    """
 
     source_root = tmp_path / "source"
     source_root.mkdir(exist_ok=True)
@@ -326,13 +331,18 @@ def _registry(tmp_path):
                      "approved": True, "approval": "nonhead_calibration"}
         else:
             path = source_root / f"{role}.json"
-            if not path.exists():
+            payload = (contents or {}).get(role)
+            if payload is not None:
+                path.write_bytes(payload)
+            elif not path.exists():
                 path.write_bytes(_canonical({"role": role}))
             entry = _entry(path)
         roles[role] = {"status": "READY", "candidates": [entry], "selected": entry,
                        "identity": None, "blocker": None}
     roles["scene_model"]["identity"] = {"model_sha256": "1" * 64, "scene_sha256": "2" * 64,
                                         "mujoco_version": "3.12.0"}
+    roles["anchor_scene"]["identity"] = {"scene_id": "default", "seed": 0,
+                                         "cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.1}
     return {"kind": CANDIDATES_KIND, "schema_version": 1, "source_root": str(source_root),
             "source_commit": SOURCE_COMMIT, "evidence_root": str(tmp_path), "roles": roles}
 
@@ -522,3 +532,97 @@ def test_a_diagnostic_collection_record_is_never_trainable():
     # exporter boundary that refuses a missing mode is Task 4's
     assert training_eligible({key: value for key, value in record().items()
                               if key != "collection_mode"})
+
+
+def test_freeze_accepts_the_production_input_formats(tmp_path):
+    """The real inputs are YAML, XML and Python; only the policy roles carry a JSON contract."""
+
+    registry = _registry(tmp_path, contents={
+        "anchor_scene": b"schema_version: 1\nanchors:\n  default:\n    neck_start_rad: 0.1\n",
+        "scene_model": b"<mujoco><worldbody><body name='cup'/></worldbody></mujoco>\n",
+        "reset_recipe": b"def pick_place_reset_targets(model, manifest, request):\n    return None\n",
+        "reference_interpolation": b"class MoveItExpertActionTap:\n    def reference(self, at_s):\n        return at_s\n",
+        "collection_config": b"recorder:\n  sample_rate_hz: 10\n",
+        "runtime_config": b"start_guard:\n  timeout_s: 2.0\n",
+        "resource_thresholds": b"start_guard:\n  timeout_s: 2.0\n",
+    })
+    manifest_path = freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
+    manifest = read_inputs_manifest(manifest_path)
+    frozen = manifest_path.parent / manifest["roles"]["scene_model"]["path"]
+    assert frozen.read_bytes().startswith(b"<mujoco>")
+    anchor = manifest_path.parent / manifest["roles"]["anchor_scene"]["path"]
+    assert anchor.read_bytes().startswith(b"schema_version")
+
+
+def test_frozen_bytes_are_re_verified_not_just_described(tmp_path):
+    """A self-consistent manifest must not satisfy admission once its files are gone or changed."""
+
+    manifest_path = freeze_inputs(_write_registry(tmp_path, _registry(tmp_path)),
+                                  tmp_path / "inputs")
+    manifest = read_inputs_manifest(manifest_path)
+    verify_frozen_inputs(manifest_path)
+    victim = manifest_path.parent / manifest["roles"]["path_policy"]["path"]
+
+    original = victim.read_bytes()
+    victim.unlink()
+    with pytest.raises(ValueError, match="INPUTS_FROZEN_BYTES_INVALID"):
+        verify_frozen_inputs(manifest_path)
+
+    victim.write_bytes(original + b"\n")
+    with pytest.raises(ValueError, match="INPUTS_FROZEN_BYTES_INVALID"):
+        verify_frozen_inputs(manifest_path)
+
+    victim.unlink()
+    victim.symlink_to(tmp_path / "elsewhere.json")
+    (tmp_path / "elsewhere.json").write_bytes(original)
+    with pytest.raises(ValueError, match="INPUTS_FROZEN_BYTES_INVALID"):
+        verify_frozen_inputs(manifest_path)
+    assert read_inputs_manifest(manifest_path)["inputs_sha256"] == manifest["inputs_sha256"]
+
+
+def test_freeze_copies_the_verified_bytes_not_a_second_read(tmp_path, monkeypatch):
+    """A candidate replaced between verification and copying must not become the frozen input."""
+
+    from so101_demo.act import first_episode_inputs
+
+    registry = _registry(tmp_path)
+    victim = Path(registry["roles"]["reset_recipe"]["selected"]["path"])
+    original = victim.read_bytes()
+    real_verify = first_episode_inputs._verify_roles
+
+    def racing_verify(document):
+        payloads = real_verify(document)
+        victim.write_bytes(b"replaced after verification\n")
+        return payloads
+
+    monkeypatch.setattr(first_episode_inputs, "_verify_roles", racing_verify)
+    manifest_path = freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
+    manifest = read_inputs_manifest(manifest_path)
+    frozen = manifest_path.parent / manifest["roles"]["reset_recipe"]["path"]
+    assert frozen.read_bytes() == original
+    assert manifest["roles"]["reset_recipe"]["sha256"] == hashlib.sha256(original).hexdigest()
+    verify_frozen_inputs(manifest_path)
+
+
+def test_resource_role_refuses_missing_hard_stops(tmp_path):
+    """A start guard alone is not the resource policy: the plan also requires the stop points."""
+
+    from so101_demo.act.first_episode_inputs import _inspect_resource_thresholds
+
+    root = tmp_path / "source"
+    (root / "src/so101_demo_py/config/act").mkdir(parents=True)
+    (root / "src/so101_demo_py/config/mujoco").mkdir(parents=True)
+    (root / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml").write_text(
+        "start_guard:\n  timeout_s: 2.0\n  cpu_busy_warn_fraction: 0.9\n"
+        "  ram_minimum_bytes: 1073741824\n  ram_minimum_fraction: 0.05\n"
+        "  gpu_minimum_bytes: 1073741824\n")
+    (root / "src/so101_demo_py/config/act/parallel_collection_v3.yaml").write_text(
+        "recorder:\n  sample_rate_hz: 10\n  queue_high_watermark_samples: 12\n"
+        "  queue_high_watermark_hold_s: 0.2\n  queue_recovery_watermark_samples: 8\n"
+        "  lossless: true\n")
+    role = _inspect_resource_thresholds(root)
+    assert role["status"] == "MISSING"
+    assert role["blocker"] == "NONHEAD_INPUT_BINDING_REQUIRED"
+    assert role["identity"]["rtf_hard_stop"] is None and role["identity"]["disk_hard_stop"] is None
+    assert role["identity"]["queue_hard_stop"]["queue_high_watermark_samples"] == 12
+    assert role["identity"]["start_guard"]["timeout_s"] == 2.0

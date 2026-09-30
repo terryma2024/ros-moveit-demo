@@ -526,16 +526,28 @@ class UnifiedWorkloadService:
         physical_uuid = resolve_physical_gpu(self.gpu_selector, current_visible)
         return payload, children, physical_uuid
 
+    # every runtime artifact a diagnostic payload names must be the frozen copy of this role; the
+    # second element says whether the closed payload also carries that artifact's digest
+    _DIAGNOSTIC_FROZEN_BINDINGS = {
+        "source": ("reset_recipe", True), "manifest": ("anchor_scene", True),
+        "runtime_config": ("runtime_config", True), "collection_config": ("collection_config", True),
+        "calibration_report": ("path_policy", True),
+        "proposal": ("contact_proposal", False),
+        "activation_receipt": ("contact_activation", False)}
+
     def _require_diagnostic_scope(self, payload: dict, root: Path) -> dict:
         """Bind one diagnostic episode to its frozen inputs and its explicit mode record.
 
-        The scope names the mode; the manifest names the frozen bytes; the payload pins both files.
-        The scope's `inputs_sha256` must equal the manifest's frozen digest, so neither the mode nor
-        the inputs can be swapped after the fact.
+        The scope names the mode, the manifest names the frozen bytes, and every runtime artifact
+        the payload carries must be the frozen copy of its role: a caller cannot keep a valid
+        manifest while pointing the run at a different config, report or activation pair. The
+        scope's `inputs_sha256` must equal the manifest's frozen digest and its scene and seed must
+        equal the frozen anchor, so neither the mode, the inputs nor the initial state can be
+        swapped after admission.
         """
 
         from so101_demo.act.collection_scope import CollectionMode, read_collection_scope
-        from so101_demo.act.first_episode_inputs import read_inputs_manifest
+        from so101_demo.act.first_episode_inputs import verify_frozen_inputs
 
         for name in ("collection_scope", "inputs_manifest"):
             path = Path(payload[f"{name}_path"])
@@ -543,13 +555,28 @@ class UnifiedWorkloadService:
                     or not path.resolve().is_relative_to(root.resolve())):
                 raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
             self._verify_artifact(str(path), payload[f"{name}_sha256"])
+        manifest_path = Path(payload["inputs_manifest_path"])
         try:
-            manifest = read_inputs_manifest(Path(payload["inputs_manifest_path"]))
-            return read_collection_scope(Path(payload["collection_scope_path"]),
-                                         expected_mode=CollectionMode.DIAGNOSTIC,
-                                         expected_inputs_sha256=manifest["inputs_sha256"])
+            manifest = verify_frozen_inputs(manifest_path)
+            frozen_root = manifest_path.parent.resolve()
+            for key, (role, digest_declared) in self._DIAGNOSTIC_FROZEN_BINDINGS.items():
+                entry = manifest["roles"][role]
+                expected = (frozen_root / entry["path"]).resolve()
+                if Path(payload[f"{key}_path"]).resolve() != expected:
+                    raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
+                if digest_declared and payload[f"{key}_sha256"] != entry["sha256"]:
+                    raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
+            scope = read_collection_scope(Path(payload["collection_scope_path"]),
+                                          expected_mode=CollectionMode.DIAGNOSTIC,
+                                          expected_inputs_sha256=manifest["inputs_sha256"])
+            anchor = manifest["roles"]["anchor_scene"]["identity"]
+            if (not isinstance(anchor, dict) or scope["scene_id"] != anchor.get("scene_id")
+                    or scope["seed"] != anchor.get("seed")
+                    or manifest["evidence_root"] != payload["evidence_root"]):
+                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
         except (OSError, KeyError, TypeError, ValueError) as error:
             raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND") from error
+        return scope
 
     def start(self, spec: OperationSpec, *, allow_existing: bool = True) -> AdmittedCampaignContext:
         """Validate everything, acquire resources and persist one context atomically."""
