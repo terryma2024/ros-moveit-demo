@@ -35462,6 +35462,17 @@ no second detector, with its RED tests first.
   Task 9 test may be counted as RED until the import succeeds for the right reason. Source work that does not
   require importing the teleop package can still proceed.
 
+- **Task 9 dependency source identified (round 272) and the resulting strategy.** `src/so101_teleop` is a ROS
+  package (`package.xml`, `CMakeLists.txt`, `pytest.ini`, `launch/`, `scripts/`, `web/`), so its Python
+  dependencies come from the ROS/apt environment rather than from a venv: the pydantic v2 it needs is the
+  distribution package (the system python here has v1.10.14, and neither `/data/work/venvs` environment has
+  pydantic at all). Installing that dependency is Task 11 toolchain work, alongside the stale
+  `so101_mujoco_support` underlay.
+  **Strategy, consistent with the earlier deferrals:** write `so101_teleop/so101_teleop/head_camera.py` and
+  its tests so the boundary is expressed in source, but do **not** claim any Task 9 gate as RED or GREEN
+  until the package imports for the right reason; the gates are recorded as blocked on Task 11's environment
+  rather than reported as passing. Nothing in Task 9 may be described as verified until then.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
