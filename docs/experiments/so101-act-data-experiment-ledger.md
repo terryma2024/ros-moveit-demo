@@ -36999,3 +36999,30 @@ different import.
 installed gate (rc=0); the demo package's installed gate does not run its ordinary suite here, for an import reason
 whose first cause (`mujoco`) I found and fixed without clearing the readback. The direct-run numbers remain the
 valid measurement of that suite.
+
+## HS-092 — The final seal cannot support the search smoke: no coarse step is declared (round 692)
+
+Acting on the reviewer's item 4 ("search smoke used the earlier seal; final-seal evidence remains open"), I ran the
+smoke against the **final** seal (`head-camera-probe5-20260930T085930Z`, `seal_sha256 f168bfc1...`), with the tracked
+calibration contract and the perception config:
+
+```
+head_search_smoke --geometry-seal <final> --contract config/act/head-search-calibration-contract-v1.json \
+                  --perception-config config/perception/head_camera_yolo_seg.yaml --output ...
+-> rc=2
+{"failure": "HEAD_SEARCH_DOMAIN_INVALID: the seal and contract declare no coarse step, so coverage cannot be
+             claimed from an invented one", "status": "ERROR"}
+```
+
+So the **final** seal does not carry the coarse step the smoke needs, and the smoke refuses by name rather than
+inventing one - the same "no invented declaration" boundary HS-045 recorded, now firing on the re-sealed geometry.
+That means the re-seal in HS-046 narrowed the workspace correctly but did **not** carry the step declaration the
+smoke reads, so the reviewer's point stands: final-seal search evidence does not exist yet, and the gap is a missing
+declaration rather than an environment problem.
+
+**Next step, concretely:** either re-seal with the coarse step recorded alongside the in-frame matrix, or make the
+smoke read the step from the tracked contract document for this path as well - the fix HS-045 claimed to have made
+for the earlier seal. The refusal message is the specification for whichever route is chosen.
+
+Worth noting: the first two invocations failed for my own reasons (`--anchors` is not a flag; `--contract` was
+missing), so this finding only appeared on the third attempt with the correct arguments.
