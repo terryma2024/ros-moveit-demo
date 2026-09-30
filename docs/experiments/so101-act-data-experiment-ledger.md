@@ -36253,3 +36253,34 @@ benchmark_test` as the gate, and that colcon run has been going for over half an
 because colcon buffers it. This direct run is the same test set under the same interpreter with the same scratch
 discipline, and it is recorded as a **complement** to the colcon gate, not a substitute: the colcon readback
 remains outstanding.
+
+## HS-059 — Benchmark gate: both readbacks, and why they differ (round 372)
+
+The colcon gate finished and its readback is:
+
+```
+build/so101_demo_py/pytest.xml: 613 tests, 0 errors, 62 failures, 2 skipped
+Summary: 613 tests, 0 errors, 62 failures, 2 skipped
+```
+
+That matches Task 4's recorded 62 failures exactly (60 `RASTERIZER_VERSION_MISMATCH` plus 2 torch/synchronizer).
+The **direct** run in HS-058 reported 1 failed, 610 passed, 2 skipped - the same 613 tests, a different outcome -
+and the difference is the **environment**, not the code: the colcon gate runs under the ROS-sourced interpreter,
+whose rendering stack produces the rasterizer mismatch, while the direct run used the perception venv with the
+rebuilt underlay, where the rasterizer path works and only the missing transformers/SAM2 module remains. Both
+numbers are true of their own environment, and neither contains a Head Search failure.
+
+Readback commands worth reusing:
+
+```zsh
+colcon test-result --test-result-base "$HEAD_LOWRATE/colcon/build/so101_demo_py"   # the gate's own results
+colcon test-result --all                                                          # everything colcon knows
+```
+
+The first attempt at this readback used the build base alone and printed "0 tests", because colcon writes the XML
+under `<build-base>/<package>/`; that is recorded so the empty summary is not mistaken for a clean run.
+
+**Task 11's gate list is now complete**: underlay rebuild, parallel `-n 8` gate, real-seal bounded-search smoke,
+both CLI refusals, geometry seal, 32/8/8 dataset verify, both CUDA one-epoch smokes with balanced exposure, the
+view-only teleop smoke, the non-promotable refusal, the benchmark gate with readback, the README boundary
+statement and the frozen provenance record.
