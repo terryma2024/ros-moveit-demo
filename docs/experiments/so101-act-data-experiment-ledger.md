@@ -37580,3 +37580,24 @@ That is the same mistake in a new costume - replacing instead of extending the e
 right tool: **`colcon test`**, which builds the environment correctly, with the venv's site-packages *appended* so
 `mujoco` is visible. HS-091 tried that against a **stale** overlay and got a collection error; the overlay is current
 now (digest `bee7d3f4...`), so the retry is worth making and is launched with this entry.
+
+## HS-117 — The installed demo gate still cannot collect, with the overlay current and the venv appended
+
+The retry HS-116 proposed, run properly:
+
+```
+colcon test --packages-select so101_demo_py        (overlay digest bee7d3f4..., PYTHONPATH appended with the venv)
+colcon test-result --test-result-base build/so101_demo_py
+   Summary: 1 test, 1 error, 0 failures, 0 skipped
+```
+
+Identical to HS-091's outcome **before** the overlay was rebuilt, so the overlay's staleness was not the cause of this
+one either. The installed ordinary gate for `so101_demo_py` does not collect its suite in this environment, and the
+reason is whatever single error the readback names - which is what HS-103 clause (d) already records: reported as
+unavailable here rather than as passing.
+
+**Conclusion of this thread, stated once:** the demo package's installed gate is **unavailable** in this environment
+for a collection-level reason I have now chased through three variants (stale overlay, replaced PYTHONPATH, appended
+venv). The measurements that ARE valid for that suite are the direct runs, whose numbers and per-reason categories are
+in HS-077, HS-084, HS-110, HS-111, HS-113, HS-114 and HS-116 - with 114 rows still unexplained and left that way on
+purpose rather than relabelled. Further time here buys nothing; the reviewer's clause (d) already covers it.
