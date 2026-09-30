@@ -37625,3 +37625,18 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH="$HEAD_VENV_SITE:$PYTHONPATH" \
 and it is launched with this entry. If it collects, the installed gate finally produces a real readback for the demo
 package - the last piece of the reviewer's ordinary-gate item - and if it does not, the cause will be a different line
 that I can name.
+
+## HS-119 — Disabling the plugin fixed collection: `1 test, 1 error` became `11 tests, 11 errors`
+
+```
+build/so101_demo_py/pytest.xml: 11 tests, 11 errors, 0 failures, 0 skipped
+```
+
+So HS-118's diagnosis was right and the fix is real: with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` the installed gate
+**collects** instead of aborting, and the readback moved from a single collection error to eleven collected tests that
+each error during setup. Those eleven are the next cause to read - most likely the same environment families already
+catalogued (the colcon interpreter's missing `mujoco`, ROS runtime paths, or the fixtures these tests need) - and the
+one thing I will not do is call them "environmental" without reading a line.
+
+Worth noting how much this thread was worth: the installed demo gate was reported as unavailable for four rounds, and
+the actual blocker was a plugin flag I had already learned to use elsewhere (HS-044) and simply had not applied here.
