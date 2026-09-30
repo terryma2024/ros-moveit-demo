@@ -35608,6 +35608,15 @@ no second detector, with its RED tests first.
 - **Why this mattered:** the earlier version would have gone green most of the time while proving nothing on
   the runs that did not race - worse than a failing test, because it manufactures confidence.
 
+- **Task 9 test confirmation round 3 (commit follows):** the revised zombie test was accepted on substance -
+  live owner verified, kernel state `Z` observed directly, ticks unchanged, helper and owner rejection
+  asserted - but its **skip branch was too broad**: a timeout with a still-readable process, or any
+  unexpected `/proc` read error, took the same path as external reaping and could hide a child that never
+  became a zombie. Now only a `/proc` entry that has genuinely gone away skips; a readable process that never
+  reports `Z` **fails**. Two consecutive runs: 10 passed each. This is the third consecutive round in which
+  the reviewer's finding was about the *strength of the proof* rather than the code, which is exactly the
+  failure mode that manufactures false confidence in a suite.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
