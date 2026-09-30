@@ -38566,3 +38566,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `b229b22bb`;
   targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2067 — Task 3: the scene record's travel proved, with the negative case
+
+- **What landed.** A control in `test_act_task8_search_port.py` asserts both halves of CP-2028 and CP-2066
+  together: a document built from an observation **without** the record contains no
+  `planning_scene_observation` key at all (so the additive unpack never leaks an absent record), and one built
+  from an observation carrying a well-formed record contains exactly that record. The fixture's own instant is
+  used, so the record would also satisfy the audit's instant join.
+- **Evidence.** `logs/task3-travel.run` rc=0: the search-port suite's own count, run under `pytest-xdist` with
+  8 workers, with its own NVMe scratch and a non-empty tempfile proof.
+- **What is left of item (a).** Still the producer: the readback that establishes the eight gates must fill
+  `planning_scene_observation` from `RosTaskScenePort.observe_observation()` plus the simulation instant it owns,
+  and then the audit's end-to-end verification of the full record applies. The channel it travels through is now
+  proved in both directions.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `184cb6bd9`;
+  targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

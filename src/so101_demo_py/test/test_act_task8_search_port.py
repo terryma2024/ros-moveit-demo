@@ -639,3 +639,17 @@ def test_the_scene_port_returns_the_ratified_observation_parts():
                                                 failure_code="SCENE_SERVICE_TIMEOUT", evidence={})
     with pytest.raises(RuntimeError, match="SCENE_OBSERVATION_UNAVAILABLE"):
         port.observe_observation()
+
+
+def test_the_document_carries_the_scene_record_when_the_observation_supplies_one():
+    """CP-2028's reader and CP-2066's carrier, proved together."""
+
+    observed = observation()
+    port, _events = fixture()
+    assert "planning_scene_observation" not in port._search_evidence(observed, request())
+    record = {"scene_revision": 1, "attached_objects": [],
+              "world_object_ids": ["table", "pedestal", "plastic_cup"], "is_diff": False,
+              "sim_time_s": observed.physical_readback["world"].simulation_time_s,
+              "source": "ros_task_scene_port"}
+    carried = replace(observed, planning_scene_observation=record)
+    assert port._search_evidence(carried, request())["planning_scene_observation"] == record
