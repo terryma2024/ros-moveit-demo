@@ -42528,3 +42528,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   verdict asks for.
 - **State.** **F14 closed**; F3 (a) and (b) landed; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `9cd9c4729`;
   seventeen gates green.
+
+
+## CP-2249 — F3(c)'s three edits, with every anchor read
+
+- **The lease is available**: `EpisodeAuditWriter.identity` (`episode_audit.py:685`) holds the writer's admitted
+  identity, lease included for a formal episode, and the runner already keeps `self.audit` — so the runner can carry
+  it without any new plumbing.
+- **The release boundary is line ~333**: at `RELEASE` the runner does `release_epoch += 1` and updates
+  `self._event_identity["release_epoch"]`, emitting **no** `release` event, which is exactly what the seventh
+  verdict's F3(c) says and why the formal writer refuses its stream.
+- **The three edits, in order**:
+  1. `pick_place_runner.py`, next to `self._event_identity = {...}`: merge the audit's `identity["lease"]` into the
+     event identity when the audit names one, so events carry the lease the writer admits;
+  2. `_event(self, kind, detail, physics_step, payload=None)`: let a caller supply the kind's payload, keeping the
+     existing reason/phase construction as the default (the `release` schema is
+     `{release_epoch, supported, no_fingertip_contact}`, `episode_audit.py:89`);
+  3. at the `RELEASE` branch, after the epoch advances, emit `self._event("release", ...)` with that payload taken
+     from the phase's own evidence (`cup_supported`, and the fingertip-contact flag the same evidence carries), so
+     the new epoch is named by the event that belongs to it.
+- **Controls to add with it**: the real-runner/formal-writer positive control the verdict asks for — a formal audit
+  whose first `phase_complete` is accepted, whose stream carries a lease and a `release` event, and which seals —
+  plus one-variable controls for a missing lease and a missing release transition.
+- **State.** **F14 closed**; F3 (a) and (b) landed; F3(c) has all three anchors read and nothing left to discover;
+  F1/F5/F11/F12/F13 open; the goal is paused. HEAD `700d5ea26`; seventeen gates green.
