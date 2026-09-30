@@ -43031,3 +43031,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   are written — after which this control is a transcription.
 - **State.** **F14, F3 and F1 closed**; **F11 three cuts landed**, its two readback controls specified but not yet
   firing; F5/F12/F13 open; the goal is paused. HEAD `929b8b3ef`; twenty-four gates green.
+
+
+## CP-2275 — F11's last two controls handed off, with the probe that will settle them
+
+- **Fourth attempt also silent**, so per CP-2274's own commitment the half stops here. What was tried: the seal-side
+  schedule on the diagnostic fixture, on the formal fixture, the manifest window rewrite on both, and — after reading
+  that the readback decides formality from `source.json` — rewriting that stream's `mode` to `"formal"` through
+  `_resign` before rewriting the window. `verify_audit_manifest` returned normally every time.
+- **What those reads did establish, which is what makes the hand-off cheap**: the manifest is
+  `audit/audit-manifest.json` (returned by `seal`, line 936-937) and it **does** carry `window`; `_window_ok` runs at
+  seal time for a formal scope (line 917-920); and the readback's `formal_window` comes from `source.json`. So the
+  remaining question is a **branch**, not a location: which predicate the readback takes and why it does not reach the
+  window.
+- **The probe that answers it in one run** (the technique that ended CP-2244's and CP-2247's guesses): print, inside
+  the readback, the values of `formal_window`, the manifest's `schema_version`, and whether
+  `_window_ok(manifest["window"], mode="formal")` is evaluated at all for this document — then write the control to
+  match what the probe shows rather than what the source suggests.
+- **State.** **F14, F3 and F1 closed**; **F11's three substantive cuts landed and green**, its two negatives (shortened
+  and repeated schedules) handed off with the probe above; **F5/F12/F13 open**, F13 next by dependency; the goal is
+  paused. HEAD `a6b0c3b7b`; twenty-four gates green.
