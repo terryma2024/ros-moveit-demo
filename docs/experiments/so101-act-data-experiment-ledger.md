@@ -34924,3 +34924,45 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - The independent sweep checker the plan requires must be a *separate* implementation from the plan's own
   arithmetic (it re-derives which neck angles the plan visits and proves the required domain's field-of-view
   union covers it), so the test can compare two independent answers rather than one function with itself.
+
+## HS-018 — Task 4 REJECTED by the deciding review; the six findings and the fix plan
+
+Verdict: `reviews/task4/task4-verdict.md` (GPT-6.1-Sol/high, fresh session). It confirms the gate's
+mechanics that work - scene-less frames and a two-candidate set refused, a drifted weight refused once
+episodes are supplied, the 601-case benchmark XML with **all 12 Task 4 tests passing**, and the
+`mujoco_vendor` fresh-closure diagnosis as a reasonable adaptation - and it rejects the task on six
+findings, all of which are correct:
+
+1. **The plan's own `compare` invocation fails.** Task 12 supplies candidates, manifests, partitions,
+   repetitions, device and output; my CLI additionally requires `--weights-dir`, `--head-dataset-root` and
+   `--task-dataset-root`, so the pinned argument shape exits 2 inside argparse. Fix: the frozen candidate
+   identity must carry (or be resolvable to) its weight location, and the dataset roots must be derived
+   from the manifests' own location, so the pinned invocation works unchanged; `--episode-records` must
+   likewise be derived from a declared evidence location rather than a new required flag.
+2. **Empty-scene safety is asserted, not measured.** `no_cup_false_candidates` is read from the candidate
+   document instead of being counted on the recorded empty-scene frames, and latency is metadata rather
+   than a measured p95 against the spec's budget. Fix: count false candidates from the records, compute the
+   latency distribution from per-frame timings, and refuse when the records do not carry them.
+3. **Incomplete held-out evidence is accepted.** A partition of two seeds with only one recorded is
+   accepted, absent candidate detections are treated as an empty list, and bbox p95 falls back to 0 when
+   nothing matches. Fix: require complete seed and candidate coverage and distinguish an absent
+   measurement from a genuine empty output.
+4. **F1 and the frozen operating conditions are not evaluated faithfully.** Installed Ultralytics exposes
+   precision/recall but no F1 key, so my fallback yields NaN; selection never checks static F1; and
+   `_measure_static` forwards only confidence and IoU, ignoring the sealed area/aspect, tracker,
+   postprocess and runtime settings. Fix: derive F1 from measured precision and recall, make it part of the
+   selection margins, and apply - or explicitly refuse - every frozen operating condition the measurement
+   does not honour.
+5. **The bootstrap does not establish selection equivalence.** Selection runs before the bootstrap and the
+   bootstrap uses a generic frame value, so changing candidate predictions leaves its interval unchanged.
+   Fix: bootstrap the paired per-candidate static-cell deltas and require the intervals to support the
+   decision that was taken.
+6. **The test manifests are not verified seals.** `{"split_counts": {...}, "samples": [{"image":
+   "../../outside.png"}]}` is accepted. Fix: verify the manifests through the existing dataset-verification
+   boundary (contents, containment, distinctness, sealed provenance) instead of trusting declared counts.
+
+**Gate status is also not yet defensible:** `TEST_SELECT_RC=1` because the benchmark suite fails 62
+pre-existing environment cases (60 rasterizer mismatches, 2 torch/synchronizer) and the fresh-closure
+build stops at `mujoco_vendor`. The verdict rightly says Task 4 cannot be called gated on that basis; the
+plan puts the full gate at Task 11, so the fix plan includes either repairing the environment (an
+interpreter that owns torch and the pinned rasterizer) or recording a formal, reviewed quarantine.
