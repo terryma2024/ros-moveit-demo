@@ -459,6 +459,9 @@ def _window_ok(window, *, mode: str) -> bool:
     schedule = window["source_schedule"]
     if (not isinstance(schedule, dict) or not schedule
             or any(not isinstance(name, str) or not name or not isinstance(instants, list)
+                   # T3-F11: an empty list satisfied every instant and gap test vacuously, so a schedule
+                   # naming no instant for a stream is not a schedule
+                   or not instants
                    or any(not _number(instant) for instant in instants)
                    or instants != sorted(instants)
                    for name, instants in schedule.items())):

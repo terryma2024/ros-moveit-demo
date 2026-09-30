@@ -41237,3 +41237,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   its Boolean defect, its shared predicate and its reader control all landed; targeted gates **430 / 201 / 201 / 201
   / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 passed**; HEAD `86ff9c3d2`; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-2191 — F11's vacuous-schedule hole closed
+
+- **What landed** (`episode_audit.py`, in `_window_ok`): a stream's schedule must now name **at least one instant** —
+  `or not instants` inside the schedule's `any(...)`. Before this, `source_schedule={"head": [], "wrist": []}`
+  satisfied name membership and every instant and gap test **vacuously** in an otherwise valid complete fixture,
+  which is F11's second item; the rule lives in `_window_ok`, so the seal and the readback both apply it (the
+  readback reaches it through `_window_ok` and now through the shared predicate, CP-2189).
+- **Why it could land alone**: it is **strictly more refusing** and no existing fixture used an empty stream
+  schedule — **152 passed** across the audit, recorder, release-boundary and capture suites.
+- **The control F11 asks for, ready to write**: a self-consistent formal fixture whose schedule empties one
+  required stream's list must be refused (and the same edit on a sealed manifest must be refused on readback),
+  which is the same two-boundary shape as CP-2190's invented instant.
+- **What F11 still lists**: **frozen policy** (cadence, required streams and permitted gaps are caller-provided),
+  **reconstructed counts/ranges and collection endpoints** with other required source histories participating, and
+  the remaining one-variable controls at both boundaries.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  four of its items landed (Boolean defect, shared predicate, reader check, vacuous schedules); targeted gates
+  **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 passed**; HEAD `8682eeb9d`; no push, no
+  evidence deletion, no hardware, no second stack.
