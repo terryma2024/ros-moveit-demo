@@ -39384,3 +39384,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `W8_QUALIFICATION_EVIDENCE_MISMATCH`.
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `8fedaa12f`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2106 — The positive test's last prerequisite: a manifest that declares the fourteen campaign cases
+
+- **Read from the validator** (`task8_live_evidence.py`, `require_campaign_cases(manifest)`, called by
+  `validate_case_journals`): the manifest must **declare the campaign's cases**, so the manifest the
+  `ValidInputs` fixture writes for the bundle suite is not enough on its own — that one is the minimal
+  `{"schema_version": 2, "kind": "ACT_TASK8_LIVE", "manifest_sha256": …}` shape the preparation path needs.
+- **What that means for the remaining work**: the positive test must build a manifest carrying the nine
+  `phase_prefix-0N` and five `full-0N` cases (with whatever per-case fields `require_campaign_cases` insists on),
+  place it as the bundle's manifest so `verify_prepared_task8_bundle` returns it, write the fourteen journal rows
+  as `case_root/<case_id>/journal.json` — each case's evidence, both retirement receipts and digests **distinct per
+  case** so the summary's uniqueness rule holds — and a campaign result whose `status`/counts/`case_journal_sha256`
+  satisfy `validate_campaign_summary` and equal the document's list.
+- **Why I stopped at the read rather than writing it blind.** The manifest's case-entry shape is exactly the kind of
+  detail that cost this session five fixture attempts; it is one read away
+  (`require_campaign_cases`'s remaining lines), and the journal-row helper is already proved (CP-2105).
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the verifier's
+  three increments, the evidence-port repair and the positive test's first half plus its row step landed. HEAD
+  `5bfd7ff32`; no push, no evidence deletion, no hardware, no second stack.
