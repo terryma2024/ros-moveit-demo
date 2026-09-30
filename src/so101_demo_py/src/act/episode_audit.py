@@ -253,7 +253,9 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
         names = frame["joint_names"]
         if (not isinstance(names, list) or len(names) != _FRAME_SIZES[kind]
                 or any(not isinstance(name, str) or not name for name in names)
-                ):
+                # T3-F1: the count alone let any six-entry map permute dimensions, so the names must be the
+                # registered ones in their registered order — the action the projection is supposed to carry
+                or tuple(names) != _FRAME_JOINT_NAMES[kind]):
             # the registered source publishes exactly five arm joints and one gripper joint
             raise ValueError("AUDIT_SCHEMA_INVALID")
         # both the publication and the evaluated value keep the order and length of the names

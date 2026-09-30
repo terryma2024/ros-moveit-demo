@@ -888,13 +888,12 @@ def _arm_evaluation():
 def _ratified_reference():
     """The ratified A.1 shape: immutable publication beside the evaluated value per kind."""
 
-    arm = {"joint_names": ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex",
-                           "wrist_roll"],
+    arm = {"joint_names": ["1", "2", "3", "4", "5"],
            "published_positions": [0.1, 0.2, 0.3, 0.4, 0.5], "published_velocities": [0.0] * 5,
            "evaluated_positions": [0.1, 0.2, 0.3, 0.4, 0.5], "evaluated_velocities": [0.0] * 5,
            "evaluation": _arm_evaluation(),
            "sim_stamp_ns": 1100000000, "received_monotonic_ns": 900000, "observer_sequence": 7}
-    gripper = {"joint_names": ["gripper"], "published_positions": [0.6],
+    gripper = {"joint_names": ["6"], "published_positions": [0.6],
                "published_velocities": [0.0], "evaluated_positions": [0.6],
                "evaluated_velocities": [0.0], "evaluation": _arm_evaluation(),
                "sim_stamp_ns": 1100000000, "received_monotonic_ns": 900100, "observer_sequence": 7}
@@ -1261,7 +1260,8 @@ def test_the_expert_carries_the_ratified_group_into_the_audit(tmp_path):
     def frame(kind, when):
         size = 5 if kind == "arm" else 1
         evaluated = projected[:5] if kind == "arm" else projected[5:]
-        return {"joint_names": ([f"{index + 1}" for index in range(size)]),
+        return {"joint_names": ([f"{index + 1}" for index in range(size)]
+                                  if kind == "arm" else ["6"]),
                 "published_positions": [0.0] * size, "published_velocities": [0.0] * size,
                 "evaluated_positions": list(evaluated), "evaluated_velocities": [0.0] * size,
                 "evaluation": {"requested_sim_time_s": when, "basis": "published",
@@ -1339,7 +1339,8 @@ def test_the_capture_preserves_the_packed_reference_the_tap_supplies(tmp_path):
     def frame(kind, when):
         size = 5 if kind == "arm" else 1
         evaluated = projected[:5] if kind == "arm" else projected[5:]
-        return {"joint_names": [f"{kind}-{index}" for index in range(size)],
+        return {"joint_names": ([f"{index + 1}" for index in range(size)]
+                                  if kind == "arm" else ["6"]),
                 "published_positions": [0.0] * size, "published_velocities": [0.0] * size,
                 "evaluated_positions": list(evaluated), "evaluated_velocities": [0.0] * size,
                 "evaluation": {"requested_sim_time_s": when, "basis": "published",

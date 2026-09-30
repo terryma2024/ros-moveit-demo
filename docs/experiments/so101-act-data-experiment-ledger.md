@@ -42784,3 +42784,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   that another list-valued test port is insufficient), plus wrong-name/order/map and frame-refusal negatives.
 - **State.** **F14 closed**; **F3 closed**; **F1 in progress** (first cut landed); F5/F11/F12/F13 open; the goal is
   paused. HEAD `9178221a4`; nineteen gates green.
+
+
+## CP-2262 — F1's second cut: the audit requires the registered joint names and order
+
+- **What landed** (`episode_audit.py`): `_reference_frames_ok` now compares each frame's `joint_names` with
+  `_FRAME_JOINT_NAMES[kind]` — `("1" … "5")` for the arm and `("6",)` for the gripper, the action's own order — so
+  the "count five arm names and one gripper name" weakness the verdict named is closed: a permuted six-entry map can
+  no longer pass by permuting its projection with it.
+- **What it cost, and why the first attempt failed**: the fixtures were the work. `_ratified_reference()` carried
+  invented arm names (`shoulder_pan` …) and `gripper`; the two chain helpers built `arm-0`-style names; and — the
+  reason the second attempt still failed while the grep for those patterns returned nothing — both helpers named the
+  **gripper** `"1"` because they generated `f"{index + 1}"` for every kind. Fixing that one value is what let the
+  rule land.
+- **Evidence.** `logs/task3-f1-names.run` rc=0: **345 passed in 2.27s** across the audit, release-boundary,
+  controller-reference, task8, recorder, capture, qualification, W8, generic-artifact and store-commit suites under
+  `pytest-xdist` with 8 workers, its own NVMe scratch and a tempfile proof.
+- **F1's remainder**: the canonical six-dimension projection check, and the positive control through the **real** ROS
+  broker methods and `RosControllerReferencePort` with its wrong-name/order/map and frame-refusal negatives.
+- **State.** **F14 closed**; **F3 closed**; **F1 two of four cuts**; F5/F11/F12/F13 open; the goal is paused. HEAD
+  `bdf51204b`; twenty gates green.
