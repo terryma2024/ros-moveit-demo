@@ -40,9 +40,9 @@ NONHEAD_CHECKS = frozenset({"collision", "synchronization", "execution", "releas
 _CANDIDATE_FIELDS = frozenset({"path", "sha256", "approved", "approval"})
 _ROLE_FIELDS = frozenset({"status", "candidates", "selected", "identity", "blocker"})
 _REGISTRY_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_commit",
-                              "evidence_root", "roles"})
+                              "config_sha256", "evidence_root", "roles"})
 _MANIFEST_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_commit",
-                              "evidence_root", "roles", "inputs_sha256"})
+                              "config_sha256", "evidence_root", "roles", "inputs_sha256"})
 _MANIFEST_ROLE_FIELDS = frozenset({"path", "sha256", "bytes", "approval", "identity"})
 _APPROVALS = frozenset({"source_controlled", "disabled_proposal", "user_activation",
                         "nonhead_calibration"})
@@ -166,6 +166,8 @@ def _require_registry(document) -> None:
             raise ValueError("INPUT_CANDIDATES_INVALID")
     if not isinstance(document["source_commit"], str) or not _HEX40.fullmatch(document["source_commit"]):
         raise ValueError("INPUT_CANDIDATES_INVALID")
+    if not isinstance(document["config_sha256"], str) or not _HEX64.fullmatch(document["config_sha256"]):
+        raise ValueError("INPUT_CANDIDATES_INVALID")
     roles = document["roles"]
     if not isinstance(roles, dict) or not set(roles) <= set(INPUT_ROLES):
         raise ValueError("INPUT_CANDIDATES_INVALID")
@@ -207,6 +209,8 @@ def read_inputs_manifest(path: Path) -> dict:
     if document["kind"] != MANIFEST_KIND or document["schema_version"] != SCHEMA_VERSION:
         raise ValueError("INPUTS_MANIFEST_INVALID")
     if not isinstance(document["source_commit"], str) or not _HEX40.fullmatch(document["source_commit"]):
+        raise ValueError("INPUTS_MANIFEST_INVALID")
+    if not isinstance(document["config_sha256"], str) or not _HEX64.fullmatch(document["config_sha256"]):
         raise ValueError("INPUTS_MANIFEST_INVALID")
     if not isinstance(document["inputs_sha256"], str) or not _HEX64.fullmatch(document["inputs_sha256"]):
         raise ValueError("INPUTS_MANIFEST_INVALID")
@@ -282,11 +286,15 @@ def _parse_json(payload: bytes) -> dict:
     return document
 
 
-def _verify_roles(registry: dict) -> dict:
+def _verify_roles(registry: dict, *, source_identity_probe=None) -> dict:
     """Resolve one approved candidate per role, run the semantic cross-checks, return the bytes.
 
     The verified bytes are handed back so a freeze copies exactly what was approved. Reading the
     candidate a second time would let a file that changed after verification be frozen instead.
+
+    Source provenance is established, not assumed: the probe must succeed and must name the
+    registry's commit. A caller with a controlled source tree may inject its own probe; a probe
+    failure is a refusal, never a licence to freeze an unproven identity.
     """
 
     for role in INPUT_ROLES:
@@ -310,13 +318,17 @@ def _verify_roles(registry: dict) -> dict:
     payloads = {role: _read_verified(registry["roles"][role]["selected"]) for role in INPUT_ROLES}
     documents = {role: _parse_json(payloads[role]) for role in _JSON_ROLES}
 
-    # the registry's asserted source identity must be the tree it claims, when that tree is a git
-    # worktree at all; a synthetic or archived candidate root is checked for structure only
+    # the registry's asserted source identity must be the tree it claims
+    probe = source_identity_probe or _git_commit
     try:
-        current_commit = _git_commit(Path(registry["source_root"]))
-    except ValueError:
-        current_commit = None
-    if current_commit is not None and current_commit != registry["source_commit"]:
+        current_commit = probe(Path(registry["source_root"]))
+    except ValueError as error:
+        raise ValueError("INPUT_SOURCE_PROVENANCE_UNAVAILABLE") from error
+    if current_commit != registry["source_commit"]:
+        raise ValueError("INPUT_IDENTITY_MISMATCH")
+    # and the calibration policies must belong to this tree's config identity
+    current_config = profile_config_identity(Path(registry["source_root"]))
+    if registry["config_sha256"] != current_config:
         raise ValueError("INPUT_IDENTITY_MISMATCH")
 
     # the identity of the anchor and of the resource policy is derived from the verified bytes and
@@ -367,13 +379,20 @@ def _verify_roles(registry: dict) -> dict:
         raise ValueError("INPUT_ACTIVATION_STALE") from error
     if documents["contact_activation"]["evidence_root"] != registry["evidence_root"]:
         raise ValueError("INPUT_ACTIVATION_STALE")
+    calibration_digests = set()
     for role in INPUT_ROLES:
         if registry["roles"][role]["selected"]["approval"] == "nonhead_calibration":
-            require_nonhead_gate(documents[role], source_commit=registry["source_commit"])
+            require_nonhead_gate(documents[role], source_commit=registry["source_commit"],
+                                 config_sha256=current_config)
+            calibration_digests.add(registry["roles"][role]["selected"]["sha256"])
+    if len(calibration_digests) > 1:
+        # one approved measurement report supplies every calibration role; two different reports
+        # would need two separate current-config proofs and are refused as ambiguous evidence
+        raise ValueError("INPUT_IDENTITY_MISMATCH")
     return payloads
 
 
-def freeze_inputs(candidates_path: Path, output: Path) -> Path:
+def freeze_inputs(candidates_path: Path, output: Path, *, source_identity_probe=None) -> Path:
     """Copy the uniquely verified candidates into a new directory and bind their bytes.
 
     The output directory must not exist: a freeze is a new immutable input set, never a merge into
@@ -384,7 +403,7 @@ def freeze_inputs(candidates_path: Path, output: Path) -> Path:
     target = Path(output)
     if target.exists():
         raise ValueError("INPUT_OUTPUT_EXISTS")
-    payloads = _verify_roles(registry)
+    payloads = _verify_roles(registry, source_identity_probe=source_identity_probe)
     roles = {}
     try:
         target.mkdir(parents=True)
@@ -406,6 +425,7 @@ def freeze_inputs(candidates_path: Path, output: Path) -> Path:
         manifest = {"kind": MANIFEST_KIND, "schema_version": SCHEMA_VERSION,
                     "source_root": registry["source_root"],
                     "source_commit": registry["source_commit"],
+                    "config_sha256": registry["config_sha256"],
                     "evidence_root": registry["evidence_root"], "roles": roles,
                     "inputs_sha256": hashlib.sha256(_canonical(roles)).hexdigest()}
         manifest_path = target / "inputs-manifest.json"
@@ -454,6 +474,27 @@ _RESOURCE_KEYS = ("timeout_s", "cpu_busy_warn_fraction", "ram_minimum_bytes",
 
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def profile_config_identity(source_root: Path) -> str:
+    """The ACT profile digest, computed from the source tree the same way the installed probe does.
+
+    `so101_demo.act.calibration.installed_calibration_identity()` digests every file under the
+    installed `assets/mujoco/act` and `config/mujoco/act` keyed by its package-relative path. The
+    freeze derives the same value from the named source root, so a calibration report's
+    `config_sha256` can be required to be the config of the tree being frozen rather than a value the
+    registry asserts.
+    """
+
+    package = Path(source_root) / "src/so101_demo_py"
+    roots = (package / "assets/mujoco/act", package / "config/mujoco/act")
+    if any(not root.is_dir() for root in roots):
+        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
+    files = {str(path.relative_to(package)): _digest(path)
+             for root in roots for path in sorted(root.rglob("*")) if path.is_file()}
+    if not files:
+        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
+    return hashlib.sha256(_canonical(files)).hexdigest()
 
 
 def _source_file(root: Path, relative: str, role: str, approval: str, identity=None) -> dict:
@@ -509,14 +550,22 @@ def _ledger_referenced_json(ledger: Path, evidence_root: Path) -> tuple[Path, ..
         text = Path(ledger).read_text(errors="replace")
     except OSError as error:
         raise ValueError("INPUT_LEDGER_INVALID") from error
+    root = Path(evidence_root).resolve()
     found = set()
     for match in re.finditer(r"[^\s`\"'()\[\],;:]*[^\s`\"'()\[\],;:]+\.json", text):
         token = match.group(0)
         path = Path(token)
+        if ".." in path.parts:
+            continue
         # an absolute reference stays absolute; only a genuinely relative one is resolved against
-        # the registered root, and both must stay inside it
-        resolved = path if path.is_absolute() else evidence_root / token
-        if resolved.is_relative_to(evidence_root) and resolved.is_file():
+        # the registered root, and containment is decided on the canonical paths so a symlink or a
+        # traversal cannot smuggle a file from outside the root into the candidate set
+        candidate = path if path.is_absolute() else root / token
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if resolved.is_relative_to(root) and resolved.is_file():
             found.add(resolved)
     return tuple(sorted(found))
 
@@ -912,6 +961,7 @@ def inspect_inputs(source_root: Path, ledger: Path) -> dict:
     for role in ("path_policy", "placement_qc", "rgb_skew"):
         roles[role] = _inspect_calibration_role(role, referenced, commit)
     document = {"kind": CANDIDATES_KIND, "schema_version": SCHEMA_VERSION, "source_root": str(root),
-                "source_commit": commit, "evidence_root": str(evidence_root), "roles": roles}
+                "source_commit": commit, "config_sha256": profile_config_identity(root),
+                "evidence_root": str(evidence_root), "roles": roles}
     _require_registry(document)
     return document

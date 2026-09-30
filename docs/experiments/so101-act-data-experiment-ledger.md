@@ -34537,3 +34537,44 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   proof, including the previous 81.
 - **State.** **Task-list item 1 in_progress, awaiting the third verdict; items 2-8 pending.**
   Re-review packet: `reviews/task1-rereview2-packet.md`.
+
+
+## CP-1926 — Third fix pass: F3's calibration-config binding, F8 provenance fail-closed, F9 containment
+
+- **Verdict 3** (`reviews/task1-rereview2-verdict.md`, dispatch `ab481b34-b0d9-47e4-9bf9-b4d4d200723b`):
+  FAIL, 0 Critical / 2 Important / 1 Minor. CLOSED: F1, F2, F4 (unchanged), F5, F6, F7. Remaining:
+  F3's last gap (distinct calibration roles had no current-config binding), F8 (a provenance probe
+  failure was converted into permission to freeze), F9 (minor: ledger containment was lexical).
+- **F3 closed.** `profile_config_identity(source_root)` derives the ACT profile digest from the source
+  tree exactly as `installed_calibration_identity()` does over the installed share; the candidate
+  registry and the frozen manifest now carry it. Freeze requires every calibration role's report to
+  carry that config (`require_nonhead_gate(..., config_sha256=current_config)`), and requires the
+  three calibration roles to be one and the same report by digest, because one approved measurement
+  report is what supplies all three value groups. Admission requires `manifest.config_sha256` to
+  equal the `current_config` the calibration gate already uses and re-checks the single-report rule,
+  all before resources.
+- **F8 closed.** Freeze now *requires* source provenance: the probe must succeed and must name the
+  registry's commit, and a failure raises `INPUT_SOURCE_PROVENANCE_UNAVAILABLE` instead of skipping
+  the check. `freeze_inputs(..., source_identity_probe=...)` lets a synthetic test state a controlled
+  identity; the production default remains `_git_commit`, which already refuses a source root that is
+  not its own worktree top level.
+- **F9 closed.** `_ledger_referenced_json` refuses any `..` component, resolves candidates and
+  decides containment on canonical paths, so a traversal or a symlink to outside the registered root
+  cannot enter the candidate set; the test compares canonical sets rather than lexical ones.
+- **RED/GREEN.** RED `logs/fix3-red.run` rc=1: **6 behavioural failures** through the defect overlay
+  `scratch/fix-pass-red/overlay3b` (current modules with exactly these three behaviours reverted).
+  GREEN `logs/fix3-green.run` rc=0: **95 passed in 7.84 s**, own scratch and non-empty tempfile proof.
+  Real inspection rc=0: 8 READY, 4 MISSING (`path_policy`, `placement_qc`, `rgb_skew`,
+  `resource_thresholds`) with `NONHEAD_INPUT_BINDING_REQUIRED`, and a derived `config_sha256` recorded
+  in the registry.
+- **Disclosed incident.** The first overlay for this pass was built with `cp -al` (hard links) and the
+  defect patch wrote through the link, temporarily overwriting the two modules in the worktree. It was
+  detected by the GREEN run failing identically to the RED, and repaired by re-applying this pass's
+  patch; GREEN re-verified at 95 passed. The overlay was then rebuilt with real copies (`cp -a`) and
+  the inode identity checked, and the retained RED comes from that build. No committed work, no
+  baseline-dirty file and no evidence was affected.
+- **Process correction.** Verdict 3 also noted that the previous packet quoted a GREEN time from a
+  different run than the pointer it named. Every run now gets its own scratch directory and its own
+  pointer, and the packet quotes the numbers read back from that pointer's own log.
+- **State.** **Task-list item 1 in_progress, awaiting verdict 4; items 2-8 pending.**
+  Packet: `reviews/task1-rereview3-packet.md`.

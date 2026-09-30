@@ -470,7 +470,8 @@ class UnifiedWorkloadService:
         ):
             raise ValueError("POLICY_NOT_ACTIVATED")
         if diagnostic:
-            self._require_diagnostic_scope(payload, root, current_source=current_source)
+            self._require_diagnostic_scope(payload, root, current_source=current_source,
+                                           current_config=current_config)
         if spec.kind.startswith("act_collection") and not payload["qualification_mode"]:
             qualified_path = payload["qualification_receipt_path"]
             if not isinstance(qualified_path, str):
@@ -535,7 +536,8 @@ class UnifiedWorkloadService:
         "proposal": ("contact_proposal", False),
         "activation_receipt": ("contact_activation", False)}
 
-    def _require_diagnostic_scope(self, payload: dict, root: Path, *, current_source: str) -> dict:
+    def _require_diagnostic_scope(self, payload: dict, root: Path, *, current_source: str,
+                                  current_config: str) -> dict:
         """Bind one diagnostic episode to its frozen inputs and its explicit mode record.
 
         The scope names the mode, the manifest names the frozen bytes, and every runtime artifact
@@ -582,10 +584,17 @@ class UnifiedWorkloadService:
                     or scope["seed"] != derived_anchor["seed"]
                     or manifest["evidence_root"] != payload["evidence_root"]):
                 raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
-            # the frozen set must belong to the source identity this admission is running under,
-            # and its resource policy is re-derived from the frozen config bytes rather than
-            # trusted from the manifest's own summary
-            if manifest["source_commit"] != current_source:
+            # the frozen set must belong to the source and config identity this admission is
+            # running under, and its resource policy is re-derived from the frozen config bytes
+            # rather than trusted from the manifest's own summary
+            if (manifest["source_commit"] != current_source
+                    or manifest["config_sha256"] != current_config):
+                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
+            # one approved measurement report supplies every calibration role; two different reports
+            # would each need their own current-config proof
+            calibration_digests = {manifest["roles"][role]["sha256"] for role in
+                                   ("path_policy", "placement_qc", "rgb_skew")}
+            if len(calibration_digests) > 1:
                 raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
             derived_resource = resource_policy_identity(frozen("runtime_config"),
                                                         frozen("collection_config"))
