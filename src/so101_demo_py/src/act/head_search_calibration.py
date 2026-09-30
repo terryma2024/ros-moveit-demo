@@ -161,9 +161,41 @@ def calibrate_head_search(inputs: Mapping[str, object]) -> HeadSearchCalibration
     episodes = _section(inputs, "episodes")
     identities = _section(inputs, "identities")
 
+    fov_value = geometry.get("horizontal_fov_rad")
+    if (
+        isinstance(fov_value, bool)
+        or not isinstance(fov_value, (int, float))
+        or not math.isfinite(float(fov_value))
+        or not 0.0 < float(fov_value) < math.pi
+    ):
+        raise HeadSearchCalibrationError(
+            "HEAD_SEARCH_CALIBRATION_INVALID: the horizontal field of view must be finite and inside "
+            "(0, pi)"
+        )
+    timeout = timing.get("search_timeout_s")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise HeadSearchCalibrationError(
+            "HEAD_SEARCH_CALIBRATION_INVALID: the search timeout must be a positive finite duration"
+        )
+    for name in (
+        "val_false_candidates",
+        "two_cup_detections",
+        "tracker_identity_switches",
+        "max_fine_corrections",
+    ):
+        value = episodes.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise HeadSearchCalibrationError(
+                f"HEAD_SEARCH_CALIBRATION_INVALID: {name} must be a non-negative whole count"
+            )
     # the unsafe-motion and identity risks are checked before the finite-sample scan, so a caller hears the
     # reason that matters rather than a generic one
-    fov_sealed = float(geometry.get("horizontal_fov_rad", float("nan")))
+    fov_sealed = float(fov_value)
     fine_total = episodes.get("max_fine_total_rad")
     if (
         isinstance(fine_total, bool)
@@ -213,38 +245,6 @@ def calibrate_head_search(inputs: Mapping[str, object]) -> HeadSearchCalibration
             f"HEAD_SEARCH_CALIBRATION_BOUND: max_skew_s {max_skew} exceeds {MAX_SKEW_BOUND_S}"
         )
 
-    fov_value = geometry.get("horizontal_fov_rad")
-    if (
-        isinstance(fov_value, bool)
-        or not isinstance(fov_value, (int, float))
-        or not math.isfinite(float(fov_value))
-        or not 0.0 < float(fov_value) < math.pi
-    ):
-        raise HeadSearchCalibrationError(
-            "HEAD_SEARCH_CALIBRATION_INVALID: the horizontal field of view must be finite and inside "
-            "(0, pi)"
-        )
-    timeout = timing.get("search_timeout_s")
-    if (
-        isinstance(timeout, bool)
-        or not isinstance(timeout, (int, float))
-        or not math.isfinite(float(timeout))
-        or float(timeout) <= 0.0
-    ):
-        raise HeadSearchCalibrationError(
-            "HEAD_SEARCH_CALIBRATION_INVALID: the search timeout must be a positive finite duration"
-        )
-    for name in (
-        "val_false_candidates",
-        "two_cup_detections",
-        "tracker_identity_switches",
-        "max_fine_corrections",
-    ):
-        value = episodes.get(name)
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise HeadSearchCalibrationError(
-                f"HEAD_SEARCH_CALIBRATION_INVALID: {name} must be a non-negative whole count"
-            )
     safe = _numbers(geometry.get("lock_valid_neck_rad"), name="lock_valid_neck_rad")
     required = _numbers(
         geometry.get("required_search_domain_rad"), name="required_search_domain_rad"
