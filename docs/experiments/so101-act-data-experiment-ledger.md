@@ -37988,3 +37988,27 @@ Two things follow:
 
 Note this also corrects HS-131's phrasing: it listed six "changed" modules, but three are new rather than changed, which
 matters because "revert it to base" is not available for them.
+
+## HS-133 — The new failure's lead is config-level: my geometry contract and perception seal changed
+
+Diffing the two **installed share trees** (base install vs the task overlay) isolates what differs between the run where
+the target test passes and the run where it fails:
+
+```
+DIFFER   config/act/head-camera-geometry-contract-v1.json          (my Task 11 workspace narrowing)
+NEW      config/act/head-search-calibration-contract-v1.json
+NEW      config/act/head-search-calibration-contract-schema.json
+NEW      config/act/head-search-scenario-partitions-v1.json
+NEW      config/mujoco/act/head_search_v2.json
+DIFFER   config/perception/head_camera_yolo_seg.yaml               (the re-pointed seal)
+DIFFER   config/perception/head_camera_yolo_seg_smoke.yaml         (the re-pointed seal)
+```
+
+Everything else in `src/act` and the installed share is identical - and notably `task8-phase-camera-matrix-v1.json` is
+**not** in the list, consistent with HS-131/127.
+
+So the new failure is caused by one of these **config changes of mine**, most plausibly the narrowed
+`head-camera-geometry-contract-v1.json` (workspace_x/y/z) or the re-pointed perception seal, since those are the only
+edits that alter values another subsystem reads rather than adding new files nobody consumes yet. That is a real,
+attributable regression-shaped effect of Task 11's re-seal - and the lead is now specific enough to test directly: swap
+those two configs to their base versions in the overlay and re-run the single test id.
