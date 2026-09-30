@@ -36079,3 +36079,21 @@ plan wants - a dataset is only valid under the seal it was produced with - and i
 **regenerate the 32/8/8 smoke under the new seal (`f168bfc180c215fb`)**, then verify it with
 `--require-non-promotable`. Recorded here so the next round runs it in that order rather than repeating these
 four attempts.
+
+## HS-048 — The seal chain is anchored on the perception config (round 346)
+
+Two more refusals, both correct and both informative:
+
+1. **The generator refuses an existing output root** - my own `mkdir -p "$ROOT/tmp"` created it and the run was
+   refused with `output root already exists`. The scratch directory must live outside the output root; that is
+   my mistake, and the no-resume behaviour is right.
+2. With a fresh root, the generator refused with
+   `HEAD_CAMERA_GEOMETRY_SEAL_DRIFT: the supplied seal is not the accepted production-camera seal`. So the chain
+   is: the geometry **contract** pins the accepted scene digest, the validator produces the **seal**, and the
+   **perception config** (`config/perception/head_camera_yolo_seg_smoke.yaml` and
+   `head_camera_yolo_seg.yaml`) pins `geometry_seal.accepted_seal_sha256` - which still names the **old** seal
+   `b0941fb3...`. My newly generated seal `f168bfc180c215fb` is therefore not yet accepted by the generator.
+
+**The correct Task 11 order is now fully pinned:** re-seal (done, `f168bfc1...`) -> re-point the perception
+configs' `accepted_seal_sha256` at the new seal -> regenerate the 32/8/8 smoke -> verify it with
+`--require-non-promotable`. Every step refuses to run out of order, which is what makes the chain worth having.
