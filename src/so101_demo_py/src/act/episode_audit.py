@@ -1172,6 +1172,10 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             raise ValueError("AUDIT_ROW_SCHEDULE_INVALID")
         last_time = row["sim_time_s"]
         target = round(row["sim_time_s"] + _GRID_S, 6)
+        if type(row["reference_sequence"]) is not int:
+            # T3-F3 residual: the writer admits an exact integer for this binding, and Python's key equality
+            # would let `true` or `1.0` resolve integer key 1 on readback, so the type is required on both sides
+            raise ValueError("AUDIT_ROW_INVALID")
         named = references.get(row["reference_sequence"])
         if named is None or named["reference_time_s"] != target or named["accepted"] is not True:
             # the binding must resolve to a reference this episode accepted for exactly that instant

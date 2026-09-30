@@ -42378,3 +42378,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   regression survived. Recorded as a standing rule.
 - **State.** **F14 closed** (CP-2239); the six above are open; the goal is paused unless the owner resumes it.
   HEAD `234464d3f`; sixteen gates green.
+
+
+## CP-2241 — Step 3 begins: F3(b) landed, F3(a) needs one fixture read first
+
+- **F3(b) landed** (`episode_audit.py`): the readback now requires `type(row["reference_sequence"]) is int` before
+  resolving the binding, matching the writer's own `_integer` admission — Python's key equality would otherwise let
+  `true` or `1.0` resolve integer key 1, which is the residual the sixth verdict named and the seventh repeated.
+  Suites green (**112 passed** across the audit, recorder and task8 files).
+- **F3(a) attempted and reverted, with its prerequisite now read**: the rule should compare the first event's epoch
+  with `episode_identity["release_epoch"]`. The test file's `identity()` **does** declare `release_epoch: 1` (line
+  31), so the rule is well-founded — but applying it refused the relabelled-coverage control, whose events carry
+  epoch **0** because CP-2142 set them there to keep the seal tie inert. Aligning them to 1 did **not** clear it, so
+  the interaction between this rule, that fixture and the tie needs one read before the rule is re-applied: the
+  fixture's event list as it stands plus which of the two rules fires first.
+- **Why it is reverted rather than half-landed**: the tree must stay green between attempts, and F3's own required
+  correction asks for a shared predicate at both boundaries *with* its one-variable controls, not a rule whose
+  control still disagrees.
+- **Remaining F3 work**: (a) the initial-epoch correlation with its fixture alignment; (c) the runner's event
+  identity carrying the writer's full lease and emitting an actual `release` event, plus the real-runner/formal-writer
+  positive control the verdict asks for.
+- **State.** **F14 closed**; F3 two-thirds open ((b) done); F1/F5/F11/F12/F13 open; the goal is paused. HEAD
+  `6f93fd145`; sixteen gates green.
