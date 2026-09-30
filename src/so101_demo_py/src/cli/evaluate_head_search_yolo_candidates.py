@@ -22,7 +22,7 @@ from so101_demo.perception_benchmark.head_search_models import (
     EvaluationError,
     choose_candidate,
     load_frozen_candidate,
-    paired_scene_bootstrap,
+    paired_scene_delta_bootstrap,
     write_comparison,
 )
 
@@ -239,20 +239,47 @@ def main(arguments: list[str] | None = None) -> int:
                 )
             )
         verdict = choose_candidate(*evaluations)
-        bootstrap = paired_scene_bootstrap(
-            frames, repetitions=parsed.bootstrap_repetitions, seed=20260930
-        )
+        # the paired scene-level delta: each challenger against the retained model, per episode domain
+        scenes: dict[str, object] = {}
+        for domain in ("head", "task"):
+            domain_frames = [
+                frame
+                for frame in frames
+                if isinstance(frame, Mapping)
+                and frame.get("domain") == domain
+                and frame.get("split") == parsed.episode_split
+            ]
+            valued = [
+                {
+                    "scene_group_id": frame.get("scene_group_id"),
+                    **{f"value_{name}": _matched_fraction(frame, name) for name in CANDIDATE_IDS},
+                }
+                for frame in domain_frames
+            ]
+            if not valued:
+                continue
+            scenes[domain] = {}
+            for challenger in ("A", "B"):
+                delta = paired_scene_delta_bootstrap(
+                    valued,
+                    left_key=f"value_{challenger}",
+                    right_key="value_C",
+                    repetitions=parsed.bootstrap_repetitions,
+                    seed=20260930,
+                )
+                scenes[domain][f"{challenger}_minus_C"] = {
+                    "independent_unit": delta.independent_unit,
+                    "unit_count": delta.unit_count,
+                    "mean": delta.mean,
+                    "interval": list(delta.interval),
+                    "repetitions": delta.repetitions,
+                }
         paths = write_comparison(
             parsed.output,
             candidates=evaluations,
             verdict=verdict,
             bootstrap_repetitions=parsed.bootstrap_repetitions,
-            scenes={
-                "independent_unit": bootstrap.independent_unit,
-                "unit_count": bootstrap.unit_count,
-                "mean": bootstrap.mean,
-                "interval": list(bootstrap.interval),
-            },
+            scenes=scenes,
         )
     except (EvaluationError, OSError, ValueError) as error:
         print(json.dumps({"failure": str(error), "status": "ERROR"}, sort_keys=True))
@@ -273,6 +300,29 @@ def main(arguments: list[str] | None = None) -> int:
         )
     )
     return 0
+
+
+def _matched_fraction(frame: Mapping[str, object], candidate_id: str) -> float:
+    """The fraction of a frame's true objects one candidate matched, for the paired bootstrap."""
+
+    truths = frame.get("truth") or []
+    if not truths:
+        return 0.0
+    detections = (frame.get("detections") or {}).get(candidate_id) or []
+    matched: set[int] = set()
+    for detection in detections:
+        best, best_distance = None, None
+        for index, truth in enumerate(truths):
+            if index in matched:
+                continue
+            distance = float(
+                ((detection["x"] - truth["x"]) ** 2 + (detection["y"] - truth["y"]) ** 2) ** 0.5
+            )
+            if best_distance is None or distance < best_distance:
+                best, best_distance = index, distance
+        if best is not None and float(best_distance) <= float(frame.get("match_radius_px", 8.0)):
+            matched.add(best)
+    return len(matched) / len(truths)
 
 
 def _episode_cells(
