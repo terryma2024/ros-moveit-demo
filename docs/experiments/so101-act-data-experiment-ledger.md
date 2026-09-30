@@ -37096,3 +37096,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `93d2bd3ad`;
   gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2001 — Task 3: the window-to-rows checks reverted again; a note on where this session stands
+
+- **Fifth revert of the same shape.** I re-attempted T3-F11's window-to-rows and observed-schedule checks,
+  this time with the self-consistent formal fixture my own CP-1997 recipe prescribed (mint the acquisitions
+  the window declares, bind a row, derive the window fields). The module checks and the fixture were written,
+  but one of the four negative variants did not raise, and with the round's budget spent I restored both
+  files to the last green revision (`b070c4982`) rather than iterate blindly:
+  `logs/task3-fix47.run` rc=0, 93 passed across the audit, recorder and release-boundary suites.
+- **Pattern, stated plainly for whoever continues.** Two rounds landed first-try when the control was an
+  **extension of an existing parametrisation** (CP-1999, CP-2000); five rounds reverted when the control
+  needed a **new** fixture whose consistency with the module's invariants I had to get exactly right
+  (CP-1961, CP-1993, CP-1994, CP-1997, CP-2001). The lesson is not "the checks are wrong" — three of the five
+  fixes are already committed and verified — it is that this work needs a round that can afford two or three
+  iterations, which my remaining context cannot.
+- **Consequence for Task 3's remaining items.** Every unlanded item (T3-F1's producer side, T3-F11's checks,
+  the A.1 schema change) needs either an owner decision or that kind of budget. The four items and their
+  recipes are recorded in `docs/experiments/so101-act-task3-handoff.md` and in CP-1993/CP-1997/CP-2001.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `b070c4982`;
+  gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
