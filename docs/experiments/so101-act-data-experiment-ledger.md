@@ -40035,3 +40035,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   production-path item now identified by a failing real-path test; F13 down to `sim_time_s`; F1/F5/F11 open;
   targeted gate `logs/task3-final.run` **430 passed**; HEAD `1956cba24`; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-2134 — F3's last item, with the runner's epoch assignment located and the check's shape decided
+
+- **Read this round** (`pick_place_runner.py`): the runner builds each event from `self._event_identity`
+  (line 146), initialises that dict at line **301** (session, attempt, reset) and **reassigns**
+  `self._event_identity["release_epoch"] = release_epoch` at line **330**, inside its per-phase loop — so a
+  `phase_complete` event can carry a **new** release epoch before any `release` event names it. That is exactly
+  what CP-2133's rule refused on the real path.
+- **Why the rule cannot simply stay a per-event predicate**: enforcing "only a release advances the epoch" **per
+  event** would force the runner to reorder its emissions (release before the phase that carries it), a live-path
+  change with its own risks. The requirement F3 states — increments **tied to** release events — is a property of
+  the **stream**, not of one row.
+- **The shape the next pass should implement**, in two parts: (1) the per-event rule keeps its **initial-epoch**
+  half (the first event names 0 or 1, and the epoch never goes backwards), which the writer and the readback can
+  both apply; (2) the **tie** is enforced at `seal()` on the collected stream — every observed epoch step must be
+  named by a `release` event in the same audit — which needs the writer to remember each event's
+  `(kind, release_epoch)` as it appends them (it already collects `self._event_kinds`).
+- **Fixtures**: with the tie checked at seal, the two failures CP-2133 saw become the fixtures' business (an
+  event stream whose steps lack a release is now refused at seal), and the real-path test keeps exercising a run
+  that does emit its release.
+- **State.** Item 3's list: F12 closed; F3's round trips, release correlation and lease closed, its last item
+  located and designed; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430
+  passed**; HEAD `4afaa1020`; no push, no evidence deletion, no hardware, no second stack.
