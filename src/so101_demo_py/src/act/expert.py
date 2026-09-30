@@ -7,6 +7,10 @@ import math
 from .contracts import finite, validate_action
 
 
+# the observer's raw frame fields; the tap preserves them when its port supplies them, all four or none
+_RAW_REFERENCE_KEYS = ("joint_names", "sim_stamp_ns", "received_monotonic_ns", "velocities")
+
+
 class MoveItExpertActionTap:
     def __init__(self, reference_port, *, dt_s: float = 0.1) -> None:
         self.reference_port = reference_port
@@ -26,8 +30,12 @@ class MoveItExpertActionTap:
                 or not math.isclose(reference["requested_sim_time_s"], target,
                                     rel_tol=0, abs_tol=1e-6)):
             raise ValueError("EXPERT_REFERENCE_SOURCE_INVALID")
+        raw = {key: reference[key] for key in _RAW_REFERENCE_KEYS if key in reference}
+        if raw and set(raw) != set(_RAW_REFERENCE_KEYS):
+            # a partial raw frame may not be presented as the observer's history
+            raise ValueError("EXPERT_REFERENCE_RAW_INCOMPLETE")
         return {"requested_sim_time_s": target, "source": "CONTROLLER_REFERENCE",
-                "positions": validate_action(reference.get("positions"))}
+                "positions": validate_action(reference.get("positions")), **raw}
 
     def label(self, at_s: float) -> tuple[float, ...]:
         return self.reference(at_s)["positions"]

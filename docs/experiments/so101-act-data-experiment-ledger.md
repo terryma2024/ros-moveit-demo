@@ -36223,3 +36223,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   raw coverage exists. Then a fresh checkpoint and the consolidated 19-file gate.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `a8a2d325e`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1967 — Task 3 fix pass, twenty-first instalment: the raw frame survives the expert tap (T3-F1)
+
+- **Every consumer hop now preserves the observer's raw frame, with the same all-or-none rule.**
+  `MoveItExpertActionTap.reference` (`act/expert.py`) includes `joint_names`, `sim_stamp_ns`,
+  `received_monotonic_ns` and `velocities` when its port's document carries them and refuses a partial
+  group with `EXPERT_REFERENCE_RAW_INCOMPLETE`; `CausalEpisodeCapture.append` forwards them into the
+  audit claim (CP-1966); `ContinuousEpisodeCapture` forwards them to the audit (CP-1966); and the audit
+  validates and stores them (CP-1965). The chain port → tap → capture → audit is therefore lossless for
+  a reference that has the frame, and gains nothing for one that does not.
+- **Evidence.** `logs/task3-fix21.run` rc=0: **126 passed in 1.34 s** across
+  `test_act_continuous_capture.py`, `test_act_controller_reference.py`, `test_act_episode_audit.py` and
+  `test_act_recorder.py`, with its own NVMe scratch and a non-empty tempfile proof. The new control uses
+  a port that supplies the frame, a port that supplies none, and a port that supplies a partial group
+  (refused).
+- **The single remaining hop, precisely.** `reference_state(target)` — the port method the tap calls — is
+  where the frame is still absent in production: the observer holds
+  `{sim_stamp_ns, received_monotonic_ns, joint_names, positions, velocities}` per frame at
+  `adapters/act/controller_reference_observer.py:71-77`, and the port built on it must expose those four
+  fields in the document it returns. That port is the next change; nothing above it needs touching, and
+  the audit will refuse a malformed or partial group the moment it starts supplying them.
+- **Still open.** **T3-F1**: the port hop above and the window schema awaiting the owner's ratification of
+  key names and ordering (CP-1963). **T3-F5**: the fail-closed eligibility and sealing gate once the raw
+  coverage exists. Then a fresh checkpoint and the consolidated 19-file gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c7b2eb6fa`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

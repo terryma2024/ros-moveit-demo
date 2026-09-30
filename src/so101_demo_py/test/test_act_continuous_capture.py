@@ -640,3 +640,31 @@ def test_the_observer_raw_frame_reaches_the_audit_when_it_is_supplied():
     assert audit.references[0]["joint_names"] == raw["joint_names"]
     assert audit.references[0]["sim_stamp_ns"] == raw["sim_stamp_ns"]
     assert "joint_names" not in audit.references[1]
+
+
+class _RawReferencePort:
+    def __init__(self, document):
+        self.document = document
+
+    def reference_state(self, target):
+        return {**self.document, "requested_sim_time_s": target}
+
+
+def test_the_expert_tap_preserves_the_raw_frame_its_port_supplies():
+    from so101_demo.act.expert import MoveItExpertActionTap
+
+    raw = {"joint_names": ["shoulder_pan", "shoulder_lift"], "sim_stamp_ns": 1100000000,
+           "received_monotonic_ns": 900000, "velocities": [0.0, 0.0]}
+    tap = MoveItExpertActionTap(_RawReferencePort(
+        {"source": "CONTROLLER_REFERENCE", "positions": [0.1] * 6, **raw}))
+    document = tap.reference(1.0)
+    assert document["joint_names"] == raw["joint_names"]
+    assert document["sim_stamp_ns"] == raw["sim_stamp_ns"]
+    assert document["requested_sim_time_s"] == 1.1
+    plain = MoveItExpertActionTap(_RawReferencePort(
+        {"source": "CONTROLLER_REFERENCE", "positions": [0.1] * 6})).reference(1.0)
+    assert "joint_names" not in plain
+    with pytest.raises(ValueError, match="EXPERT_REFERENCE_RAW_INCOMPLETE"):
+        MoveItExpertActionTap(_RawReferencePort(
+            {"source": "CONTROLLER_REFERENCE", "positions": [0.1] * 6,
+             "joint_names": ["a", "b"]})).reference(1.0)
