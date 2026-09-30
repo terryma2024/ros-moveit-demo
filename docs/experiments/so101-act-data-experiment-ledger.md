@@ -42400,3 +42400,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   positive control the verdict asks for.
 - **State.** **F14 closed**; F3 two-thirds open ((b) done); F1/F5/F11/F12/F13 open; the goal is paused. HEAD
   `6f93fd145`; sixteen gates green.
+
+
+## CP-2242 — F3(a)'s blocker identified: the fixture needs a `release` event, not a different epoch
+
+- **The read**: the relabelled-coverage fixture rewrites its events in exactly **one** place (line 1095-1097),
+  setting `release_epoch: 0` — so my earlier attempt edited the right site, and its failure was not a mis-edit.
+  With the epoch aligned to the identity's 1, rule (a) passes; what then refuses the stream is the **seal tie**
+  (CP-2137): every release step must be named by a `release` event, and `complete_audit`'s event list has a
+  `phase_complete` but **no `release`**, so with all events at epoch 1 the step to 1 is unnamed and the tie
+  raises `AUDIT_EVENT_INVALID` — the exact error observed.
+- **That is why CP-2142 chose 0**: at epoch 0 there is no step and the tie is inert. So (a) and the tie together
+  require the **fixture to model a complete episode**, i.e. to append a `release` event naming epoch 1 — which is
+  the same direction F5's correction points (a fixture that demonstrates real lifecycle history rather than a
+  shortcut).
+- **The two-part edit for the next pass**: re-apply rule (a) (compare the first event's epoch with the episode's
+  declared `release_epoch`, falling back to the two accepted constants when the episode declares none) **and** give
+  the relabelled fixture a `release` event at epoch 1 beside its `phase_complete`, so the stream is complete under
+  both rules; then run the audit, recorder, task8 and qualification suites.
+- **State.** **F14 closed**; F3(b) landed; F3(a) one specified edit away; F1/F5/F11/F12/F13 open; the goal is
+  paused. HEAD `704c31023`; sixteen gates green.
