@@ -41043,3 +41043,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   plus its sample fixture and the third cut's first two edits plus the exclusivity fix**; F11 open. Targeted gates
   **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 passed**; HEAD `cc743914b`; no push, no evidence deletion,
   no hardware, no second stack.
+
+
+## CP-2182 — The chain's hard half passes: frames and projection validate; only the row's key set remains
+
+- **The milestone**: with the frames built from the canonical projection (arm's five then gripper's one) and the
+  port's `positions` equal to those six values, the record passed **`_reference_frames_ok` entirely** — the nine
+  frame keys, the evaluation with `basis: "published"` and null `goal_id`/`accepted_sim_s`, the six-pair map, the
+  evaluated-value equality and the `positions == projected` rule (line 308) — so F1's **hard half is validated**:
+  the ratified A.1 group the expert now emits is exactly what the common audit accepts.
+- **What remains is one key-set rule**: `append_source` then calls
+  `_closed(record, (_REFERENCE_FIELDS | packed | raw_present) - {"sequence"})` (line 760), i.e. the row's keys must
+  be **exactly** the reference fields plus whichever raw group it carries. My probe row has the record's seven keys
+  plus `accepted` and `reference_time_s`, so one of them is outside that union — `_REFERENCE_FIELDS` is printed
+  alongside this entry, which settles it in one edit.
+- **Why the chain test has not landed yet**: each probe has removed exactly one rule, and the last one is a key
+  membership question rather than a semantic one — the next call fixes the fixture and writes the test together.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
+  plus its sample fixture, the third cut's first two edits and the alternativity fix**; F11 open. Targeted gates
+  **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 passed**; HEAD `c34ae8c0c`; no push, no evidence deletion,
+  no hardware, no second stack.
