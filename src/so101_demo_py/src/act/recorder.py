@@ -443,7 +443,12 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
                             for record in (json.loads(line) for line in
                                            (audit_manifest.parent / "acquisitions.jsonl")
                                            .read_text().splitlines())}
-            if document["record_count"] > 0:
+            if document["record_count"] == 0:
+                # a labelled binding means a training row was written, so a zero-row episode may not
+                # name one; raw unlabelled acquisitions are a different thing and stay allowed
+                if bindings:
+                    raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+            else:
                 # every recorded row must be bound to the acquisitions it consumed, at the same instant
                 # and to the reference its action actually claims
                 if len(bindings) != document["record_count"]:

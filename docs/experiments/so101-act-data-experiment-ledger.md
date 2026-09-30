@@ -36460,3 +36460,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   exist.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `086c4366a`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1974 — Task 3 fix pass, twenty-seventh instalment: the zero-row labelled-binding rule (T3-F4)
+
+- **A zero-row episode may not name a labelled binding.** Verification now refuses a seal whose
+  `record_count` is zero while the audit carries `row-bindings.jsonl` entries
+  (`EPISODE_SEAL_ROWS_MISMATCH`), because a binding means a training row was written; raw **unlabelled**
+  acquisitions remain allowed, which is the distinction the reviewer asked for ("raw unlabelled tail
+  acquisitions should be allowed without inventing such labelled matches").
+- **My fixture was the thing that had to change.** The failed-seal fixture paired zero recorded rows with
+  an audit holding one binding — exactly the inconsistency the reviewer flagged — so the binding is gone
+  from that fixture while the multi-row tests keep exercising bindings against real rows. The new control
+  seals a zero-row episode against the three-binding audit and asserts the refusal through both layers
+  (`RECORDER_SEAL_FAILED` with `EPISODE_SEAL_ROWS_MISMATCH` as its cause).
+- **Evidence.** `logs/task3-fix27.run` rc=0: **125 passed in 1.10 s** across `test_act_recorder.py`,
+  `test_act_episode_audit.py`, `test_act_continuous_capture.py` and `test_act_release_boundary.py`, with
+  its own NVMe scratch and a non-empty tempfile proof.
+- **Still open from the fourth verdict.** **T3-F1**: the full robot contact pairs, the independent
+  Planning Scene and gripper/controller feedback are still summaries rather than source records, and the
+  broker hop plus the per-kind raw-frame shape await the reviewer's ruling. **T3-F5**: the fail-closed
+  eligibility and sealing gate once the producers exist. Then the consolidated gate and a fresh
+  checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9972a11d5`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

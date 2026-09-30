@@ -240,7 +240,7 @@ def _audit_and_scope(tmp_path, *, session="session-1", attempt="attempt-1"):
     writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
                                         "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
                                         "accepted": True})
-    writer.bind_row(0, 1.0, frames["head"].acquisition_id, frames["wrist"].acquisition_id, 1)
+    # a zero-row failed episode names no labelled binding; the multi-row tests exercise bindings
     manifest = writer.seal({"start_s": 1.0, "end_s": 1.2})
     return manifest, scope
 
@@ -536,3 +536,14 @@ def test_an_acquisition_that_does_not_identify_the_stored_frame_is_refused(tmp_p
     with pytest.raises(Exception, match="RECORDER_SEAL_FAILED") as caught:
         recorder.finish(outcome(), audit_manifest=manifest, scope=scope)
     assert "EPISODE_SEAL_PIXELS_MISMATCH" in str(caught.value.__cause__)
+
+
+def test_a_zero_row_seal_may_not_name_a_labelled_binding(tmp_path):
+    """A labelled binding means a row was written, so a zero-row episode may not carry one (T3-F4)."""
+
+    manifest, scope = _multi_row_audit(tmp_path, (1.0, 1.1, 1.2))
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    with pytest.raises(Exception, match="RECORDER_SEAL_FAILED") as caught:
+        recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
+    assert "EPISODE_SEAL_ROWS_MISMATCH" in str(caught.value.__cause__)
