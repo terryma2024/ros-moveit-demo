@@ -42955,3 +42955,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Withdrawn cleanly**; the audit suite is green (72 passed).
 - **State.** **F14, F3 and F1 closed**; **F11 two of four cuts**, the third now specified as the reverse relation;
   F5/F12/F13 open; the goal is paused. HEAD `98796b842`; twenty-three gates green.
+
+
+## CP-2271 — F11's third cut: two attempts withdrawn, HEAD green, and the lesson recorded
+
+- **Round's account**: the exactness/distinctness rule refused five tests including the by-construction-valid
+  fixture (withdrawn, CP-2270); withdrawing the endpoint check and its supply to compensate then left
+  `test_the_formal_window_must_describe_the_rows_and_frames[overrides2]` failing, and reverting the fixture's
+  `physics_end_s` did not clear it either — so the working tree was returned to HEAD, where the four suites are green
+  again (**204 passed**) and my files are untouched (the 35 dirty `src` entries are the preserved pre-existing work,
+  unchanged).
+- **What HEAD contains for F11**: the strictly increasing schedule (CP-2265) and the endpoint-versus-history check
+  with its supply and the aligned fixture (CP-2268) — both committed and both green.
+- **What the third cut must be, now with evidence**: the **reverse relation** in `_window_matches_observed` — every
+  instant a stream claims must be one the episode actually acquired — because distinctness between streams is
+  legitimate for synchronised cameras and exactness against `streams_required` was never the audit's contract. The
+  parametrised negative `[overrides2]` is the control that will say whether the phrasing is right, and it must be run
+  **before** any further edit.
+- **Discipline adopted after this round**: one edit, one write, one targeted run, then decide — no script that asserts
+  twice and writes once, and no compensating withdrawal without re-running the suite that the withdrawal touches.
+- **State.** **F14, F3 and F1 closed**; **F11 first and second cuts landed and green**; third cut specified and its
+  control named; F5/F12/F13 open; the goal is paused. HEAD `7b4d0b6e0`; twenty-three gates green.
