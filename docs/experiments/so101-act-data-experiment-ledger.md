@@ -36101,3 +36101,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   Then a fresh checkpoint and the consolidated 19-file gate.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `3cf74309e`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1963 — Task 3 fix pass, seventeenth instalment: the required event kinds with typed payloads (T3-F1)
+
+- **All seven remaining kinds the plan names are declared**, each with a closed payload and a type for
+  every value: `dispatch {owner, permit_id}`, `accept {permit_id}`, `revoke {permit_id, reason}`,
+  `stop {reason, stopped_confirmed}`, `contact {left_contacts, right_contacts, table_contact}`,
+  `release {release_epoch, supported, no_fingertip_contact}` and
+  `final_check {placement_stable, retreat_stable}`, alongside the four run kinds already present. The
+  writer and readback share one typed validator, so a boolean cannot stand in for a contact count, a
+  string cannot stand in for a release epoch, and an unknown key cannot be smuggled into a known kind.
+  This is the part of the third verdict's complaint ("the four current event payloads are not the
+  complete event contract") that can be settled without the producers; the broker still has to emit
+  them, which is why T3-F5's coverage gate remains open.
+- **Evidence.** `logs/task3-fix17.run` rc=0: **73 passed in 0.48 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py` and `test_act_release_boundary.py`, with its own NVMe scratch and a non-empty
+  tempfile proof. The new control accepts each of the seven kinds and then refuses, for each one, both an
+  extra key and a value of the wrong type.
+- **The one item that genuinely needs an owner decision: the window schema.** The plan names the window's
+  contents (source schedule, collection start and end, first command, physical end, label cutoff) but
+  fixes no key names, and the reviewer's position is that this warrants pinning an explicit schema and
+  must not be used to justify accepting missing facts. My proposal, offered for ratification rather than
+  adopted unilaterally: `{"source_schedule": {stream: [instants]}, "collection_start_s": float,
+  "collection_end_s": float, "first_command_s": float, "physics_end_s": float, "label_cutoff_s": float}`
+  with the ordering rules `collection_start_s <= first_command_s <= label_cutoff_s <= physics_end_s <=
+  collection_end_s`, all finite and non-negative, and a formal window additionally requiring a complete
+  source schedule while a diagnostic window may record an unfinished one. Until that is ratified the
+  writer keeps recording the caller's window verbatim, and every other admission rule around it stands.
+- **Still open.** **T3-F1**: the window schema above (owner decision) and the raw controller/accepted-goal
+  history, source/receipt clocks and full physics payloads, which need their producers. **T3-F5**: the
+  fail-closed eligibility and sealing gate on that coverage. Then a fresh checkpoint and the consolidated
+  gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9fe3816f7`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

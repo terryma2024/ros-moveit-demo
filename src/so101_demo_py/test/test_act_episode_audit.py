@@ -527,3 +527,33 @@ def test_a_formal_audit_requires_the_registered_lease_contract(tmp_path):
                                {"inputs_sha256": "a" * 64})
     # a diagnostic audit stays admissible without a lease, keeping the modes distinct
     EpisodeAuditWriter(tmp_path / "diagnostic", scope(), identity(), {"inputs_sha256": "a" * 64})
+
+
+@pytest.mark.parametrize("kind, payload", [
+    ("dispatch", {"owner": "worker-1", "permit_id": "permit-1"}),
+    ("accept", {"permit_id": "permit-1"}),
+    ("revoke", {"permit_id": "permit-1", "reason": "deadline"}),
+    ("stop", {"reason": "TASK8_ABORT", "stopped_confirmed": True}),
+    ("contact", {"left_contacts": 2, "right_contacts": 2, "table_contact": True}),
+    ("release", {"release_epoch": 2, "supported": True, "no_fingertip_contact": True}),
+    ("final_check", {"placement_stable": True, "retreat_stable": True}),
+])
+def test_the_required_event_kinds_are_accepted_and_refuse_a_wrong_payload(tmp_path, kind, payload):
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope(), identity(),
+                                {"inputs_sha256": "a" * 64})
+    writer.append_source("events", {"kind": kind, "identity": identity(), "sim_time_s": 1.0,
+                                    "monotonic_ns": 1000, "payload": payload})
+    # a boolean where a count belongs and an extra key are both refused for a declared kind
+    for broken in ({**payload, "extra": 1},
+                   {**payload, **({"left_contacts": True} if kind == "contact"
+                                  else {"reason": True} if "reason" in payload
+                                  else {"permit_id": 1} if "permit_id" in payload
+                                  else {"stopped_confirmed": 1} if kind == "stop"
+                                  else {"release_epoch": True} if kind == "release"
+                                  else {"placement_stable": "yes"} if kind == "final_check"
+                                  else {"owner": 1})}):
+        other = EpisodeAuditWriter(tmp_path / f"bad-{len(broken)}", scope(), identity(),
+                                   {"inputs_sha256": "a" * 64})
+        with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+            other.append_source("events", {"kind": kind, "identity": identity(), "sim_time_s": 1.0,
+                                           "monotonic_ns": 1000, "payload": broken})

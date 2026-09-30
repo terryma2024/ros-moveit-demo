@@ -51,11 +51,24 @@ _EVENT_FIELDS = frozenset({"sequence", "kind", "identity", "sim_time_s", "monoto
 # the frozen contract delegates the per-kind payload schema here; each entry is the exact key set a
 # kind may carry, so a success boolean can never stand in for a physical fact
 _EVENT_PAYLOADS = {
-    "phase_complete": frozenset({"phase", "physics_step"}),
     "phase_start": frozenset({"phase"}),
+    "phase_complete": frozenset({"phase", "physics_step"}),
     "run_complete": frozenset({"reason", "physics_step"}),
     "run_aborted": frozenset({"reason", "physics_step"}),
+    # the remaining kinds the plan requires; each value is typed below so a boolean can never stand in
+    # for a physical fact and an unknown key cannot be smuggled into a known kind
+    "dispatch": frozenset({"owner", "permit_id"}),
+    "accept": frozenset({"permit_id"}),
+    "revoke": frozenset({"permit_id", "reason"}),
+    "stop": frozenset({"reason", "stopped_confirmed"}),
+    "contact": frozenset({"left_contacts", "right_contacts", "table_contact"}),
+    "release": frozenset({"release_epoch", "supported", "no_fingertip_contact"}),
+    "final_check": frozenset({"placement_stable", "retreat_stable"}),
 }
+_EVENT_STRINGS = {"phase": "phase", "reason": "reason", "owner": "dispatch", "permit_id": "accept"}
+_EVENT_FLAGS = {"stopped_confirmed", "table_contact", "supported", "no_fingertip_contact",
+                "placement_stable", "retreat_stable"}
+_EVENT_COUNTS = {"left_contacts", "right_contacts"}
 _PHYSICS_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "release_epoch", "observation"})
 _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
 # the frozen source contract: rows sit on the 10 Hz grid, a frame is at most one grid step old and
@@ -75,6 +88,30 @@ def _canonical(value) -> bytes:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _payload_typed(payload) -> bool:
+    """Type every payload value the way its key declares, per kind."""
+
+    for key, value in payload.items():
+        if key in _EVENT_FLAGS:
+            if type(value) is not bool:
+                return False
+        elif key in _EVENT_COUNTS:
+            if type(value) is not int or value < 0:
+                return False
+        elif key == "physics_step":
+            if type(value) is not int or value < 0:
+                return False
+        elif key == "release_epoch":
+            if type(value) is not int or value < 0:
+                return False
+        elif key in _EVENT_STRINGS:
+            if not isinstance(value, str) or not value:
+                return False
+        else:
+            return False
+    return True
 
 
 def _scope_ok(scope) -> bool:
@@ -280,6 +317,9 @@ class EpisodeAuditWriter:
                 _finite(item["sim_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
             if item["kind"] in ("run_complete", "run_aborted"):
                 _integer(item["payload"]["physics_step"], "AUDIT_SCHEMA_INVALID")
+            if not _payload_typed(item["payload"]):
+                # every value must be the type its key declares, per kind
+                raise ValueError("AUDIT_SCHEMA_INVALID")
             if item["kind"] == "phase_complete":
                 _integer(item["payload"]["physics_step"], "AUDIT_SCHEMA_INVALID")
                 if not isinstance(item["payload"]["phase"], str) or not item["payload"]["phase"]:
@@ -547,6 +587,8 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                 raise ValueError("AUDIT_EVENT_INVALID")
         if row["kind"] == "phase_complete" and (not isinstance(payload["phase"], str)
                                                 or not payload["phase"]):
+            raise ValueError("AUDIT_EVENT_INVALID")
+        if not _payload_typed(payload):
             raise ValueError("AUDIT_EVENT_INVALID")
         sequence = row["sequence"]
     epoch: int | None = None
