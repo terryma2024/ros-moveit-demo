@@ -261,6 +261,18 @@ def calibrate_head_search(inputs: Mapping[str, object]) -> HeadSearchCalibration
             raise HeadSearchCalibrationError(
                 f"HEAD_SEARCH_CALIBRATION_INVALID: {label} must be ordered low to high"
             )
+    step = geometry.get("coarse_step_rad")
+    if (
+        isinstance(step, bool)
+        or not isinstance(step, (int, float))
+        or not math.isfinite(float(step))
+        or float(step) <= 0.0
+        or float(step) > float(fov_value) / 2.0
+    ):
+        raise HeadSearchCalibrationError(
+            "HEAD_SEARCH_CALIBRATION_UNSAFE_MOTION: the coarse step must be a positive finite angle no "
+            "larger than half a field of view"
+        )
     for label, value, allow_zero in (
         ("submit_lead_s", timing.get("submit_lead_s"), True),
         ("center_deadband_px", episodes.get("center_deadband_px"), False),

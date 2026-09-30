@@ -242,6 +242,7 @@ def test_the_schema_requires_every_parameter_and_its_provenance() -> None:
     parameters = schema["properties"]["parameters"]
     assert set(parameters["required"]) == EXPECTED
     assert parameters["additionalProperties"] is False
+    assert parameters["patternProperties"], "the schema must describe parameter rules"
     for rule in parameters["patternProperties"].values():
         assert set(rule["required"]) == {
             "unit",
@@ -293,3 +294,25 @@ def test_the_contract_names_the_formulas_the_library_emits() -> None:
             name
         )
         assert contract["parameters"][name]["consumer_field"] == measurement.consumer_field, name
+
+
+def test_the_coarse_step_is_validated_too() -> None:
+    def nan_step(fixture: dict) -> None:
+        fixture["geometry"]["coarse_step_rad"] = float("nan")
+
+    def infinite_step(fixture: dict) -> None:
+        fixture["geometry"]["coarse_step_rad"] = float("inf")
+
+    def negative_step(fixture: dict) -> None:
+        fixture["geometry"]["coarse_step_rad"] = -0.3
+
+    def wider_than_half_fov(fixture: dict) -> None:
+        fixture["geometry"]["coarse_step_rad"] = 1.0
+
+    for mutate in (nan_step, infinite_step, negative_step, wider_than_half_fov):
+        fixture = _fixture()
+        mutate(fixture)
+        with pytest.raises(
+            HeadSearchCalibrationError, match="HEAD_SEARCH_CALIBRATION_UNSAFE_MOTION"
+        ):
+            calibrate_head_search(fixture)
