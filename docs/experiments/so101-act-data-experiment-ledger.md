@@ -34980,6 +34980,15 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   split now verifies - **200 samples, 200 seeds** - while traversal, digest mismatches and cross-split
   leakage remain refused.
 
+- **Console-script provenance is not yet established, and that is a Task 11 item (round 40).** The gate
+  build `head-benchmark-code-gate-20260930T065404Z/install-select` contains the package but exposes no
+  console scripts in its `bin/` (the head-search entry points added in Tasks 2 and 4 are absent), and the
+  Task 2 overlay `head-task2-overlay` predates the Task 4 entry point entirely, so
+  `evaluate_head_search_yolo_candidates` is currently resolvable as a module (through the overlay's
+  symlink-install build) but not as an installed command. The plan's Task 11 explicitly requires
+  "pkg-prefix and console-script provenance", so that gate must install and run every planned entry point
+  by name rather than assuming this task's build produced them.
+
 ## HS-019 — Task 4 rework: all six rejection findings addressed (commits a964f4a96, 6cf3a4ddb, 6e5ff25df)
 
 - **Finding 1, the pinned invocation.** `compare` no longer requires locations the plan's own call does
