@@ -41139,3 +41139,23 @@ Tasks 13-14 do not apply. If promotion, the route is HS-254 option (2) - a fresh
 follows the plan as written.
 
 Recorded so the next reader does not spend a round hunting for work that the evidence has already ruled out.
+
+## HS-257 — Fresh frozen root at the verdict-artefact commit, and the gate is re-running on it
+
+```
+TOOLCHAIN_RUN = $HEAD_EVIDENCE/head-toolchain-20260930T155706Z
+source_commit = 753561290a0c85259f8777854c6e71feb74919e6      (= HEAD, which contains the verdict patch)
+build rc=0 ; prefix_demo = <root>/install/so101_demo_py
+assertions record retention_patch_lines=1 in the INSTALLED module
+```
+
+Built from scratch rather than rebuilt into an older root, per HS-173: a root's `source-commit.txt` must contain the code it
+installs, and the earlier root's stamp was already stale (HS-196). The assertions file also verifies the patch reached the
+**installed** module - the difference between "I edited the source" and "the run will execute the edit", which HS-211 and HS-230
+both punished when I skipped it.
+
+The gate is re-running against it with `episodes5` and the same flags as before. Expected outcome, stated in advance so it cannot be
+read backwards: the same **retention refusal**, reported identically on stderr and with the same non-zero exit status - **plus**
+`model-comparison.json` and `model-selection-verdict.json` on disk naming `selection: null`, `retained_model: "C"`,
+`promoted: false`. If it instead selects a candidate, something about the patch changed behaviour, which would be a defect rather
+than a result.
