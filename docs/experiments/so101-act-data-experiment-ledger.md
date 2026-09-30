@@ -39919,3 +39919,26 @@ needed to run a module straight from the worktree.
 **Deletion candidates (pending user authorization):** empty roots `head-toolchain-20260930T125637Z` and `…T125856Z`; the
 superseded success roots `…T115640Z`, `…T115927Z`, `…T120204Z`; ~130 scratch dirs under the evidence root; the
 `probe-calibration-*` dir.
+
+## HS-210 — Budget extended to 2000 rounds at the user's request; measurement entry point inspected
+
+The user granted another 1000 rounds ("再授予1000budget"). The goal had reached its 1000-round limit and been marked
+`blocked`/`disarmed` by that limit; `max_goal_rounds` is now **2000** and the goal is **rearmed** (phase active, revision 6).
+No work changed state because of the limit - the ledger, the tree and the evidence root are exactly as HS-209 left them.
+
+Continuing Step 4, the grid runner will **reuse the gate's own measurement** rather than reimplement it:
+
+```
+_measure_static(weights, dataset_root, samples, operating_point, device, scratch,
+                document=None) -> dict[str, float]
+  - refuses any device other than "cuda"          (EVALUATION_DEVICE_INVALID)
+  - refuses a missing ultralytics                 (EVALUATION_MEASUREMENT_UNAVAILABLE)
+  - refuses a validator returning no metrics
+  - returns at least "mask_map50_95" from metrics/mAP50-95(M)
+  - writes its own val list into `scratch`
+```
+
+So each grid cell is one call with a distinct scratch directory, and the head-criterion of HS-208
+(`mask_map50_95` first, zero no-cup false candidates as a hard gate) can be evaluated on the same code path the final gate
+uses - which keeps calibration and evaluation measuring the same thing, the property the gate's own docstring insists on.
+Next: the runner over that function, then the three `freeze` calls, then Step 5's `compare`.
