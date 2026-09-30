@@ -42115,3 +42115,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   commit half is one relocation into this method; items 5+ wait on the four blocked bindings. HEAD `b0e8dae69`;
   thirteen gates green.
+
+
+## CP-2229 — ③a's ideal home is the funnel both commit paths share
+
+- **Read this round**: what line 832 actually is is `commit_validation(self, lease, sealed_location, *, request_key)`
+  — my grep's number was a few lines off — and it refuses `WRONG_EXECUTION_MODE` for an execution batch and then
+  delegates to `self._commit(lease, sealed_location, request_key, validation=True)`. Its sibling `commit_result`
+  delegates the same way, so **`_commit` is the single funnel** through which a lease and a sealed location reach the
+  coordinator's state.
+- **Therefore the guard goes at the top of `_commit`**, not in either public method: one insertion covers both the
+  physical commit and the validation-evidence commit, and a refusal there means neither can proceed — which is
+  exactly what "no unverified episode becomes terminal" means. CP-2228's "start of `commit_result`" is narrowed by
+  this entry to the shared funnel.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  commit half is one insertion at the top of `_commit`, with the store's suite already carrying its control;
+  items 5+ wait on the four blocked bindings. HEAD `eae141aa5`; thirteen gates green.
