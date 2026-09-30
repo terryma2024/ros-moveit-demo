@@ -34874,3 +34874,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   untouched by this task, in a system interpreter that has no torch. This is the first concrete evidence
   that Task 11's gate must run the benchmark suite in an interpreter that owns the benchmark
   dependencies, and it is recorded as such rather than as a Task 4 defect.
+
+## HS-017 — Task 5 reconnaissance (read-only, recorded for the next task)
+
+- `src/act/search.py` (142 lines) holds one class, `HeadSearchController`, documented as "one cumulative
+  revolution with independently bounded RGB centering". `reset(config)` requires exactly 18 keys
+  (`attempt_id`, `session_id`, `search_start_rad`, `horizontal_fov_rad`, `coarse_step_rad`,
+  `search_timeout_s`, `max_age_s`, `max_skew_s`, `settle_velocity_rad_s`, `goal_tolerance_rad`,
+  `center_deadband_px`, `vertical_bounds_px`, `min_area_px2`, `min_confidence`,
+  `max_fine_corrections`, `max_fine_total_rad`, `frame_id`, `ray_origin_frame_id`) and refuses anything
+  where `not 0 < coarse_step_rad <= fov/2 < pi` with `SEARCH_CONFIG_INVALID`. It keeps `target`,
+  `coarse_angle`, `fine_angle`, `fine_count`, `lock_count`, `track`, three clocks and a `state` that
+  starts at `SAFE_OBSERVE`; results are built through `contracts.validate_search_result` with
+  `bearing_rad` from `act.bearing.bearing` and the neck target echoed in every command.
+- `src/act/head_search_binding.py` (230 lines) holds `HeadSearchBinding`, the measured-key tuples
+  `_MEASURED`/`_CAMERA_MEASURED`, `validate_head_search_shape(runtime)` and
+  `validate_head_search_binding(runtime, calibration)`, plus `_regular_bytes`/`_regular_digest` (no-follow
+  regular-file reads) and `_valid_neck_interval`.
+- **Task 5 must therefore:** add `act/head_search_domain.py` carrying the bounded two-direction stop plan
+  (nearer required-domain endpoint first, then the reverse direction), the FOV-union coverage proof, and
+  the three exact statuses `TARGET_LOCKED` / `TARGET_NOT_FOUND` / `TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL`;
+  make `HeadSearchController` consume that plan instead of a cumulative revolution; add
+  `cli/head_search_smoke.py`; and update `test/test_act_search.py`,
+  `test/test_act_task8_search_binding.py`, `test/test_act_head_search_binding.py` plus the new
+  `test/test_act_head_search_domain.py`. `setup.py` gains the smoke entry point.
+- The independent sweep checker the plan requires must be a *separate* implementation from the plan's own
+  arithmetic (it re-derives which neck angles the plan visits and proves the required domain's field-of-view
+  union covers it), so the test can compare two independent answers rather than one function with itself.
