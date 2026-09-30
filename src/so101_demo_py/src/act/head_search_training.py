@@ -532,11 +532,16 @@ def _manifest_splits(
         split = sample.get("split")
         if split not in by_split:
             continue
+        # ``scene_group_id`` is emitted by this work's generator; the pinned external A dataset
+        # (revision b55430fb...) identifies scenes by ``scenario`` instead. Falling back keeps the
+        # split-leak check meaningful for both shapes rather than skipping it for one of them.
         for key, seen, label in (
             ("seed", seeds, "seed"),
             ("scene_group_id", groups, "scene group"),
         ):
             value = sample.get(key)
+            if value is None and key == "scene_group_id":
+                value = sample.get("scenario")
             if value is None:
                 raise CandidatePlanError(
                     f"CANDIDATE_MANIFEST_INVALID: {name} has a {split} sample without a {label}"
