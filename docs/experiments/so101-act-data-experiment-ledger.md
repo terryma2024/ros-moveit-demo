@@ -35082,3 +35082,35 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   shape must reach evaluation rather than argparse.
 - **Gate after the fix:** benchmark suite 22 passed; ordinary suites 99 passed, 1 skipped; `ruff check`
   clean. The two host items remain Task 11's and are still not claimed.
+
+
+---
+
+## RESUME POINT (updated every checkpoint, read this first)
+
+- **Where:** worktree `/data/work/ws_moveit/.worktrees/so101-act-data-0917a`, branch
+  `codex/so101-act-data-0917a`, host antzb (`AI-STATION-001`). Nothing is pushed; no real SO-101 is
+  touched; no second ROS/MuJoCo/detector stack is started. Evidence root:
+  `/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m`; low-rate scratch:
+  `/tmp/so101-debug-head-search-antzb-LuFlHq6a` (shell helper `head-test-shell.sh`).
+- **Tasks 1-3: completed and review-approved** (Task 2 with findings, all fixed; Task 3 with findings, all
+  fixed). Ledger HS-001 to HS-015.
+- **Task 4: implemented, all findings from three reviews fixed, awaiting a fourth (execute-first) verdict.**
+  Code: `src/perception_benchmark/head_search_models.py`, `src/cli/evaluate_head_search_yolo_candidates.py`,
+  `benchmark_test/test_head_search_model_evaluation.py`, `setup.py`. Findings and fixes: HS-018 (rejection
+  and plan), HS-019 (rework and real-artifact verification), HS-020 (second verdict, fixes, host items),
+  HS-021 (third verdict's P1 and the process correction). Gates: benchmark suite 22 passed; ordinary
+  suites 99 passed, 1 skipped; `ruff check` clean. Host items explicitly NOT claimed and owned by Task 11:
+  the `mujoco_vendor` fresh closure never completed, and the benchmark gate is not green (62 pre-existing
+  environment failures); console-script provenance is also a Task 11 item.
+- **Next actions in order:** (1) obtain `reviews/task4/task4-fourth-verdict.md` from the running
+  execute-first reviewer session (`codex-review8`) and fold in any finding; (2) mark Task 4 completed and
+  Task 5 in_progress in the visible list; (3) implement Task 5 exactly as HS-017 specifies -
+  `bounded_search_stops(...)` visiting the nearer required-domain endpoint first and reversing once,
+  coverage proven by stable FOV intervals rather than accumulated angle, every target and segment passing
+  the calibration binding and an independent sweep checker, and rejection before motion when the safe
+  interval cannot cover the required domain, with the three exact statuses; (4) request each later task's
+  review from a fresh per-task reviewer session with a short, execute-first brief.
+- **Reviewer tooling note:** long-lived `codex` sessions accumulate context and stall; a fresh session per
+  task with a short brief, and an explicit instruction to *execute* the checks rather than read only, is
+  the pattern that has produced decisions.
