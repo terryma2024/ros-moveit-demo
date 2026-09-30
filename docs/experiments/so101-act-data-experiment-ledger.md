@@ -35146,6 +35146,23 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   `in_progress`; nothing is claimed as approved. Both hangs are recorded as a host/tooling limitation of the
   reviewer session, not as a Task 5 outcome.
 
+## HS-026 — Task 5 verdict REJECT: both NOT MET findings fixed (commits d362d4793, 2b610ac18)
+
+- **Verdict:** `reviews/task5/task5-verdict.md` (GPT-6.1-Sol high, interactive session, static review of the
+  four requested files). Claims 1-3 **MET**; two **NOT MET**:
+  4. a clean negative was not earned - plan exhaustion unconditionally passed `reached_bound=True`, and the
+     legacy accumulated-angle path reported `TARGET_NOT_FOUND` without observing any coverage;
+  5. the step's source was not sealed - `--contract` could supply an arbitrary step with no association to
+     the geometry seal.
+- **Fixes:** exhaustion now asks `not_found_status(reached_bound=not plan.coverage_complete)`, so only a
+  plan that proved coverage earns the clean `TARGET_NOT_FOUND`, while the legacy revolution reports
+  `TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL` (its test updated for that reason); and the smoke applies a
+  contract's step only when the contract names the very `seal_sha256` the run measured against - the seal
+  must carry one - refusing `HEAD_SEARCH_STEP_UNSEALED` otherwise, with tests for the unsealed refusal and
+  the sealed acceptance.
+- **Gate:** `test_act_head_search_domain.py` 11 passed; `test_act_search.py` 21 passed under the review
+  helper; `ruff check` clean on the changed files.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
