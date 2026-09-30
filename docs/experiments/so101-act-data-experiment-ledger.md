@@ -42058,3 +42058,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   commit half is this comparison away; items 5+ wait on the four blocked bindings. HEAD `0888b01d0`; thirteen gates
   green.
+
+
+## CP-2226 — ③a: the store's `_expected` text, and the one line my patch missed
+
+- **Read verbatim this round** (`result_store.py:305-315`): the verifier's `__init__` stores
+  `{name: _safe(Path(root)) for name, root in worker_roots.items()}` — so the roots are already normalised and
+  symlink-checked — and sets `self.run_mode = RunMode.EXECUTE`; `_expected(lease)` then calls `_identity(lease)`
+  **first**, checks the worker is registered, and returns `_workspace(self.worker_roots[lease.worker_id], lease)`,
+  i.e. `<root>/attempts/<point_id>/<attempt_id>` with every segment through `_safe`.
+- **Why my store patch aborted**: I wrote `_expected` without the leading `_identity(lease)` line, so the text match
+  failed and the file was left untouched — the guard doing its job rather than writing a wrong replacement.
+- **What that leaves**: the coordinator's `workspace` and the verifier's `_expected` agree on the root (both use the
+  same map, normalised on the verifier's side) and on `point_id`/`attempt_id` (CP-2225), so the remaining candidate
+  is the **collection directory**, whose name the coordinator switches by mode (`attempts`/`validations`) while
+  `_workspace` hardcodes `attempts`. The mode-aware `_expected` is therefore still the fix to try, now with the
+  exact text in hand — `_identity(lease)` included — and the coordinator wiring lands with it.
+- **Reverted**; the store's suite re-runs green (28 passed).
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  commit half is this one comparison away; items 5+ wait on the four blocked bindings. HEAD `3498c13a6`; thirteen
+  gates green.
