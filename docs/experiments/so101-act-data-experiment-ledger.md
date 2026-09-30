@@ -40353,3 +40353,25 @@ while the first keeps a single rendering path. The seal already declares per-anc
 
 Recorded as the decision point before writing the recorder; the contract (HS-222), workload (HS-225) and frame source (HS-226)
 are all pinned, so this is the last choice before implementation.
+
+## HS-228 — Harness plan against the renderer's actual internals
+
+`MuJoCoDatasetRenderer` (line 1701) exposes, in order of relevance:
+
+```
+__init__(config)                      lazy construction
+_prepare(random, scenario)            scene setup for one seed, from an RNG
+_set_free_joint_position(name, xyz)   object placement via a free joint
+_camera_id()  _segmentation()  _render_attempt(...)   camera and frame capture
+render(seed, scenario)                the public one-shot entry point
+close()
+```
+
+So a harness can construct the renderer, `_prepare(...)` a seed, then per step pose the head and capture through the existing
+camera/segmentation path - reusing the real renderer rather than duplicating MuJoCo setup, which is what keeps the recorder
+inside the one-stack constraint. The private methods are a fragility to acknowledge, not to hide: the alternative (extending
+the protocol publicly) is cleaner but puts the verified dataset path back on the critical line (HS-227).
+
+The step-pose mechanism is the last unknown: whether the neck/head angle is set through a joint write, a dedicated setter, or
+by re-preparing the scene per step. Reading it is the next action; then the harness is written, run over the 20 calibration
+seeds first (cheaper, and it is what Step 4's redo needs), and only then the 20 held-out seeds for Step 5.
