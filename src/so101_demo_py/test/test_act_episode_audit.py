@@ -968,10 +968,12 @@ def test_the_planning_scene_and_feedback_records_are_validated(tmp_path):
     scene = {"scene_revision": 3, "attached_objects": ["plastic_cup"],
              "world_object_ids": ["plastic_cup", "table"], "is_diff": False, "sim_time_s": 1.1,
              "source": "search_boundary"}
-    feedback = [{"controller": "arm", "joint_names": ["shoulder_pan", "shoulder_lift"],
-                 "commanded_positions": [0.1, 0.2], "measured_positions": [0.1, 0.2],
-                 "measured_velocities": [0.0, 0.0], "status_sequence": 4, "sim_time_s": 1.1, "source_sim_time_s": 1.1},
-                {"controller": "gripper", "joint_names": ["gripper"],
+    feedback = [{"controller": "arm", "joint_names": ["1", "2", "3", "4", "5"],
+                 "commanded_positions": [0.1, 0.2, 0.0, 0.0, 0.0],
+                 "measured_positions": [0.1, 0.2, 0.0, 0.0, 0.0],
+                 "measured_velocities": [0.0, 0.0, 0.0, 0.0, 0.0],
+                 "status_sequence": 4, "sim_time_s": 1.1, "source_sim_time_s": 1.1},
+                {"controller": "gripper", "joint_names": ["6"],
                  "commanded_positions": [0.6], "measured_positions": [0.6],
                  "measured_velocities": [0.0], "status_sequence": 4, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     pose = {"simulation_time_s": 1.1, "simulation_step": 11, "cup_position_world_m": [0.0, 0.0, 0.0]}

@@ -221,7 +221,10 @@ def _feedback_ok(record) -> bool:
         return False
     names = record["joint_names"]
     if (not isinstance(names, list) or not names
-            or any(not isinstance(name, str) or not name for name in names)):
+            or any(not isinstance(name, str) or not name for name in names)
+            # T3-F13: the length alone let any name list through; the registered names and dimensions of the
+            # controller that produced the record are what make the vectors comparable to the action
+            or tuple(names) != _FRAME_JOINT_NAMES.get(record["controller"])):
         return False
     for key in ("commanded_positions", "measured_positions", "measured_velocities"):
         if not _finite_vector(record[key], length=len(names)):
