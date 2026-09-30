@@ -39425,3 +39425,21 @@ That is HS-112's lesson recurring in a new disguise: a process-matching check th
 **Reconciliation:** re-run Step 3 through the installed flags (`--training-contract`, `--head-manifest`, `--task-manifest`),
 keeping the plan's semantics and recording the spelling difference - not editing the plan, and not adding aliases to a training
 CLI for one invocation.
+
+## HS-189 — The training CLI's *validator* wants the dataset ROOTS, which `--help` did not list
+
+HS-188 replaced the plan's flags with the installed trio, and the CLI rejected that too, naming a pair `--help` never showed:
+
+```
+training input error: --candidate needs --head-dataset-root, --task-dataset-root
+train-b rc=2      train-c rc=2
+```
+
+So `--head-manifest`/`--task-manifest` exist in the parser but the combination check for `--candidate` requires the **root**
+flags. That is a third layer in the same family as HS-175/176/188: the plan's spelling, the parser's surface, and the
+validator's actual requirement are three different things, and only running it reveals which one binds. It also means
+`--help` is not sufficient evidence of a CLI's contract - the read-only check that would have caught this is running the
+command and reading the error, which is what I did.
+
+**No training has run** in either attempt (both failed in argument validation before touching the GPU), so there is no partial
+candidate and no wasted GPU time. Re-launching with `--head-dataset-root <head-dataset> --task-dataset-root <A dataset root>`.
