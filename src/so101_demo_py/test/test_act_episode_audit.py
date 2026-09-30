@@ -590,3 +590,39 @@ def test_the_physics_observation_must_follow_the_source_contract(tmp_path):
         with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
             other.append_source("physics", {"kind": "contact", "sim_time_s": 1.1,
                                             "release_epoch": 1, "observation": broken})
+
+
+def test_a_reference_record_may_preserve_the_observer_raw_frame(tmp_path):
+    """The audit must be able to hold the raw history the observer keeps (T3-F1)."""
+
+    raw = {"joint_names": ["shoulder_pan", "shoulder_lift"], "sim_stamp_ns": 1100000000,
+           "received_monotonic_ns": 900000, "velocities": [0.0, 0.0]}
+    writer = EpisodeAuditWriter(tmp_path / "ok", scope(), identity(), {"inputs_sha256": "a" * 64})
+    writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1] * 6, "accepted": True, **raw})
+    for broken in ({"joint_names": []}, {"sim_stamp_ns": 0}, {"received_monotonic_ns": -1},
+                   {"velocities": [0.0]}, {"velocities": ["x", "y"]}):
+        other = EpisodeAuditWriter(tmp_path / f"bad-{sorted(broken)[0]}-{len(str(broken))}", scope(),
+                                   identity(), {"inputs_sha256": "a" * 64})
+        with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+            other.append_source("references", {"reference_time_s": 1.1,
+                                               "source": "CONTROLLER_REFERENCE",
+                                               "positions": [0.1] * 6, "accepted": True, **broken})
+    # a partial raw group is refused: all four fields or none
+    third = EpisodeAuditWriter(tmp_path / "partial", scope(), identity(), {"inputs_sha256": "a" * 64})
+    with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+        third.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                           "positions": [0.1] * 6, "accepted": True,
+                                           "joint_names": ["a", "b"]})
+
+
+def test_readback_refuses_a_resigned_partial_raw_reference(tmp_path):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    lines = (path.parent / "references.jsonl").read_text().splitlines()
+    row = json.loads(lines[0])
+    row["joint_names"] = ["a", "b"]
+    payload = ("\n".join([json.dumps(row, sort_keys=True, separators=(",", ":"))]) + "\n").encode()
+    _resign(writer, path, "references.jsonl", payload)
+    with pytest.raises(ValueError, match="AUDIT_REFERENCE_INVALID"):
+        verify_audit_manifest(path)

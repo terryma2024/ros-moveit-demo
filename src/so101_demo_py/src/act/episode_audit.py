@@ -46,6 +46,10 @@ _ACQUISITION_FIELDS = frozenset({"camera", "session_id", "reset_epoch", "sequenc
 _ROW_FIELDS = frozenset({"row_index", "sim_time_s", "head_acquisition_id",
                          "wrist_acquisition_id", "reference_sequence"})
 _REFERENCE_FIELDS = frozenset({"sequence", "reference_time_s", "source", "positions", "accepted"})
+# the observer's raw frame fields (adapters/act/controller_reference_observer.py): either a reference
+# record preserves all of them or none, so a partial raw history can never look complete
+_REFERENCE_RAW_FIELDS = frozenset({"joint_names", "sim_stamp_ns", "received_monotonic_ns",
+                                   "velocities"})
 _EVENT_FIELDS = frozenset({"sequence", "kind", "identity", "sim_time_s", "monotonic_ns",
                            "payload"})
 # the frozen contract delegates the per-kind payload schema here; each entry is the exact key set a
@@ -102,6 +106,24 @@ def _canonical(value) -> bytes:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _reference_raw_ok(record, code: str) -> None:
+    """Validate the observer's raw frame fields when a reference record carries them."""
+
+    names = record["joint_names"]
+    if (not isinstance(names, list) or not names
+            or any(not isinstance(name, str) or not name for name in names)):
+        raise ValueError(code)
+    if type(record["sim_stamp_ns"]) is not int or record["sim_stamp_ns"] < 1:
+        raise ValueError(code)
+    if type(record["received_monotonic_ns"]) is not int or record["received_monotonic_ns"] < 1:
+        raise ValueError(code)
+    velocities = record["velocities"]
+    if (not isinstance(velocities, list) or len(velocities) != len(names)
+            or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(value) for value in velocities)):
+        raise ValueError(code)
 
 
 def _physics_observation_typed(observation, *, kind: str) -> bool:
@@ -377,7 +399,13 @@ class EpisodeAuditWriter:
                     raise ValueError("AUDIT_SCHEMA_INVALID")
             item["sequence"] = self._next("events")
         elif kind == "references":
-            item = _closed(record, _REFERENCE_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
+            raw_present = _REFERENCE_RAW_FIELDS & set(record) if isinstance(record, dict) else set()
+            if raw_present and raw_present != _REFERENCE_RAW_FIELDS:
+                raise ValueError("AUDIT_SCHEMA_INVALID")
+            if raw_present:
+                _reference_raw_ok(record, "AUDIT_SCHEMA_INVALID")
+            item = _closed(record, (_REFERENCE_FIELDS | raw_present) - {"sequence"},
+                           "AUDIT_SCHEMA_INVALID").copy()
             _finite(item["reference_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
             positions = item["positions"]
             if (not isinstance(positions, (list, tuple)) or len(positions) != 6
@@ -521,13 +549,19 @@ def verify_audit_manifest(path: Path) -> dict:
     return manifest
 
 
-def _records(path: Path, fields: frozenset, code: str) -> list:
+def _records(path: Path, fields: frozenset, code: str, *,
+             optional: frozenset = frozenset()) -> list:
     try:
         rows = [json.loads(line) for line in path.read_text().splitlines()]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError(code) from error
+    base = fields - optional
     for row in rows:
-        if not isinstance(row, dict) or set(row) != fields:
+        if not isinstance(row, dict) or not base <= set(row) or not set(row) <= fields:
+            raise ValueError(code)
+        present = optional & set(row)
+        if present and present != optional:
+            # an optional group is all-or-nothing, so a partial raw history cannot pass as complete
             raise ValueError(code)
     return rows
 
@@ -567,7 +601,9 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     revoked = set()
     references = {}
     sequence = 0
-    for row in _records(audit / "references.jsonl", _REFERENCE_FIELDS, "AUDIT_REFERENCE_INVALID"):
+    for row in _records(audit / "references.jsonl",
+                        _REFERENCE_FIELDS | _REFERENCE_RAW_FIELDS, "AUDIT_REFERENCE_INVALID",
+                        optional=_REFERENCE_RAW_FIELDS):
         if (row["sequence"] != sequence + 1 or row["source"] != "CONTROLLER_REFERENCE"
                 or type(row["accepted"]) is not bool
                 or not isinstance(row["positions"], list) or len(row["positions"]) != 6
@@ -578,6 +614,8 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                        or not math.isfinite(value) for value in row["positions"])):
             raise ValueError("AUDIT_REFERENCE_INVALID")
         sequence = row["sequence"]
+        if _REFERENCE_RAW_FIELDS & set(row):
+            _reference_raw_ok(row, "AUDIT_REFERENCE_INVALID")
         references[row["sequence"]] = row
         if row["accepted"] is not True:
             revoked.add(row["reference_time_s"])

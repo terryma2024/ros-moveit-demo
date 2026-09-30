@@ -36166,3 +36166,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   consolidated 19-file gate.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `980e982a3`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1965 — Task 3 fix pass, nineteenth instalment: the audit can hold the observer's raw reference frame (T3-F1)
+
+- **Where the raw history is lost, now pinpointed.** The observer keeps the raw frame —
+  `sim_stamp_ns`, `received_monotonic_ns`, `joint_names`, `positions`, `velocities`
+  (`adapters/act/controller_reference_observer.py:71-77`) — but its consumer projects it down to just
+  `reference_time_s`, `reference_source` and `reference_positions` (`act/expert.py:39` declares that
+  three-key set and line 53 builds the record). That projection is exactly the loss the third verdict
+  described, and it is the seam the producer wiring has to change.
+- **The audit is now able to hold the raw frame, with the group rule.** A reference record may carry
+  `joint_names`, `sim_stamp_ns`, `received_monotonic_ns` and `velocities`; it must carry **all four or
+  none**, so a partial raw history can never look complete, and each is typed (non-empty string names,
+  positive integer stamps and receipts, one finite velocity per joint). Readback applies the same rule
+  through the shared record validator, so a re-signed reference carrying only `joint_names` is refused
+  with `AUDIT_REFERENCE_INVALID`.
+- **Evidence.** `logs/task3-fix19.run` rc=0: **76 passed in 0.50 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py` and `test_act_release_boundary.py`, with its own NVMe scratch and a non-empty
+  tempfile proof. Controls: an empty name list, a zero stamp, a negative receipt, a short velocity
+  vector, a non-numeric velocity and the partial-group case at both the writer and readback.
+- **Next step for this seam (recorded so it does not have to be rediscovered).** Extend the reference
+  record built at `act/expert.py:53` to forward the observer's four raw fields, extend the capture's
+  `append_source("references", ...)` call in `continuous_capture.py` to pass them through, and add a test
+  that a run's audit carries the observer's joint names, sim stamps and receipts. Only after that does
+  the record actually preserve the raw history rather than being merely able to.
+- **Still open.** **T3-F1**: the window schema still needs the owner's ratification of key names and
+  ordering (CP-1963), and the producer wiring above. **T3-F5**: the fail-closed eligibility and sealing
+  gate once the raw coverage exists. Then a fresh checkpoint and the consolidated gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c7faa3b68`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
