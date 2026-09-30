@@ -39897,3 +39897,27 @@ ledger before running it is the difference between a calibration and a number th
 
 Still to implement: the grid runner over the val splits, then `register` A, `freeze` A/B/C, and Step 5's `compare`. My context
 is exhausted for this round, so the policy is written down rather than half-coded.
+
+## HS-209 — Candidate A registered: digest matches the pinned weights byte for byte
+
+Ran the new `register_candidate` against the pinned A weights (through a temporary source-layout shim, since the worktree keeps
+`src/act` while the installed layout is `so101_demo/act`; the shim is removed after use):
+
+```
+registered candidate: A   weight_sha256: f281d25258493e2c
+candidate-a/candidate-manifest.json
+  candidate_id  "A"
+  kind          "head-search-candidate"
+  weight_sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
+  weights       <pinned A best.pt path>
+re-hashed on disk: f281d25258493e2c…
+```
+
+So the registered digest equals the **pinned** digest exactly - the same value verified at Step 1 (HS-186) and used as
+`base_model_sha256` by both training runs (HS-203) - and the pinned weights were **read, never written**, which is the property
+the plan's sha256 pin exists to guarantee.
+
+**Step 4 status:** all three candidates now have manifests (B and C from training in HS-194, A from this registration), the
+`freeze_candidate` producer is written and schema-checked against the gate (HS-205/207), and the operating-point selection
+policy is fixed in advance (HS-208). What remains is the val-split grid measurement that chooses `min_confidence` and
+`tracking_iou`, then the three `freeze` calls and Step 5's `compare`.
