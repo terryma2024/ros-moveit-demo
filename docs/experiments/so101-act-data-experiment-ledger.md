@@ -39459,3 +39459,34 @@ HS-112/148/184, this time in a **sequence** of error messages rather than in one
 **Attempt 4 passes all four flags.** Still no training has run - all three failures were argument validation before the GPU
 was touched - so there is still no partial candidate and no wasted GPU time. The cost of this chain has been wall-clock and
 rounds, not artefacts.
+
+## HS-191 — Real incompatibility: the pinned A task manifest predates the fields this work's training CLI requires
+
+Attempt 4 cleared the argument surface, and the failure moved from invocation to **data**:
+
+```
+training input error: CANDIDATE_MANIFEST_INVALID: task manifest is missing dataset_contract, promotable
+```
+
+Inspected directly, `<A root>/dataset/dataset-manifest.json` has:
+
+```
+['artifacts','camera_name','class_instance_totals','generator_commit','image_height','image_width',
+ 'mjcf_sha256','sample_count','samples','schema_version','seed_ranges','split_counts']
+has dataset_contract: False     has promotable: False
+```
+
+So the **pinned A artefact** - the revision `b55430fb…` the plan fixes and verifies by sha256 - carries a manifest schema
+**without** `dataset_contract` and `promotable`, while the training CLI built in this work requires both. This is not an
+invocation mistake and not something the retry loop can absorb: it is a genuine contract gap between a pinned external
+artefact and this work's CLI.
+
+**Why it matters and why I am not "fixing" it:** the plan pins A precisely so the baseline cannot drift, and HS-052's
+non-promotable rule exists because a candidate must not be promoted without the right provenance. The two options both have
+consequences: (a) relax the CLI to accept a manifest lacking `dataset_contract`/`promotable` - a code change that would weaken
+the very check that distinguishes promotable from non-promotable; or (b) treat the A manifest as needing a registered
+upgrade - which edits pinned evidence and is not mine to do. Neither is a silent edit, and both are the kind of decision this
+task has been escalating (HS-103/107/161) rather than taking unilaterally.
+
+Recording it as **open**, with the exact field list and the exact error, so the next step is a decision rather than another
+attempt.
