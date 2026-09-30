@@ -40026,3 +40026,30 @@ The fourth is the substantive one: Step 5 compares candidates on **held-out epis
 calibration/episode run, not by static validation. So Step 5 depends on an artefact whose producer must be located the same way
 HS-198's was - by reading the code, not by guessing - and the honest state is that the gate itself is running and refusing
 correctly rather than that Task 12 is finished.
+
+## HS-215 — The plan's exact Step 5 command, and the two places my implementation diverges from it
+
+Read verbatim from the plan:
+
+```zsh
+ros2 run so101_demo_py evaluate_head_search_yolo_candidates compare \
+  --candidate "$MODEL_RUN/frozen-a.json" --candidate "$MODEL_RUN/frozen-b.json" --candidate "$MODEL_RUN/frozen-c.json" \
+  --head-dataset "$MODEL_RUN/head-dataset/dataset-manifest.json" --head-split test \
+  --task-dataset "$TASK_DATASET_MANIFEST" --task-split test \
+  --episode-partitions "$SCENARIO_PARTITIONS" --episode-split held_out_evaluation \
+  --bootstrap-repetitions 10000 --device cuda --output "$MODEL_RUN/evaluation"
+```
+
+Two divergences, both informative:
+
+1. **Weights location.** The plan passes **no** `--weights-dir`, so it expects the gate's default to find the weights beside the
+   frozen documents as `<MODEL_RUN>/<ID>.pt`. My earlier run passed `--weights-dir <dir>` instead. The plan-faithful arrangement
+   is now in place: `A.pt`/`B.pt`/`C.pt` symlinked into the campaign root (`A.pt` to the pinned weights, B/C to the trained
+   ones), so the plan's command line works unmodified. That is a **my-runner** deviation, not an implementation one.
+2. **Held-out episodes.** The plan passes no `--episode-records`, expecting `--episode-split held_out_evaluation` to resolve the
+   records itself; my gate refuses with `EVALUATION_EPISODES_UNAVAILABLE: ... needs --episode-records or a held-out-episodes
+   directory`. That is an **implementation-versus-plan** divergence in the other direction, and it is the sixth in this task
+   (HS-175/188/191/197/198/215) - the gate demands an artefact the plan assumes is found automatically.
+
+Both are recorded rather than papered over; the next step is to determine which side is right about the episodes, which means
+reading how the gate resolves them and what the partitions file's `held_out_evaluation` split is meant to point at.
