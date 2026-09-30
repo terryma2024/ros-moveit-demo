@@ -35684,6 +35684,16 @@ visual evidence, starting with the named component tests that must fail for the 
   passed** and the **web build succeeds**.
 - **Owed for Task 10:** its review, then Task 11. The e2e spec and visual evidence remain Task 14's.
 
+- **Task 10 verdict REJECT and its three findings fixed (round 314).** The reviewer found: the overlays were
+  **empty placeholders** rather than a rendering of the frame; the target could remain **outside the sealed
+  interval** because only the slider's attributes bounded it; and `stop()` forwarded an **unrestricted
+  payload** through which other keys could ride along. Fixed: the overlay is drawn as an SVG from the frame
+  (positioned bbox and mask rect, candidate centre, optical axis, deadband and vertical bounds) with a fixed
+  4:3 frame box; the target is clamped into the sealed interval **wherever the value came from**, including
+  `onExecute`; and `stop()` forwards only `neck_velocity_rad_s` and `sim_time_s`. Tests pin all three -
+  geometry from the frame, clamping, and a payload carrying extra keys that must not be forwarded. Verified:
+  **15 passed** and the web build succeeds.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
