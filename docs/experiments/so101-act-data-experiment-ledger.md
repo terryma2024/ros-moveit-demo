@@ -37766,3 +37766,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `26802ccad`;
   targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2031 — Task 3: the boundary remembers the verified SEARCH receipt (step 3's supplier half)
+
+- **What landed.** `search()`'s history verifier now calls `_remember_planning_scene_receipt(observed)`
+  before delegating to `verify_search_stationary_physics`; the helper stores the observation's
+  `planning_scene` receipt **only when `success is True`** and returns `None`, so the `or` still yields the
+  verifier's own verdict and the search path's behaviour is unchanged. A failed receipt is deliberately not
+  kept: a failed search aborts rather than licensing a later gate, and storing it would let a phase derive a
+  verdict from a scene read that never verified.
+- **Why it is additive.** Nothing reads `self._planning_scene_receipt` yet, so the six acceptance tests stay
+  green — 91 passed across the port, three task8 phase, release-boundary and supervisor suites under
+  `pytest-xdist` with 8 workers (`logs/task3-step3b.run` rc=0). CP-2030's four-step order is now at step (1)
+  done; what remains is (2) the instance-method conversion and derivation in `_gate_facts`, (3) the six
+  fixtures supplying a receipt or driving a real SEARCH, and (4) the fail-closed controls.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `b3550f3f6`;
+  targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
