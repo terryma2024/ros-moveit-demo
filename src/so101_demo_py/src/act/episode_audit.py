@@ -80,18 +80,37 @@ _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
 # (backends/mujoco/qualified_phases/release_retreat.py::evidence_dict) plus the verified support boolean
 # the runner adds for support rows; another source would extend this set when it exists
 _PHYSICS_OBSERVATION_FIELDS = frozenset({
+    # the registered live sample (act/contact_live.py) carries the real source records
+    "simulation_session_id", "model_qpos", "model_qvel", "cup_position_m", "cup_velocity_m_s",
+    "left_contacts", "right_contacts", "other_contacts", "truncated",
+    "diagnostic_hazard_breached",
+    # the MuJoCo summary fields stay admissible for sources that only publish them
     "publisher_sequence", "simulation_time_s", "simulation_step", "reset_epoch", "paused",
     "cup_position_world_m", "cup_orientation_world_xyzw",
     "cup_linear_velocity_world_m_s", "cup_angular_velocity_world_rad_s", "left_contact_count",
     "right_contact_count", "table_contact", "other_contact_geoms", "maximum_normal_force_n",
     "supported"})
+# one contact record, closed exactly as the registered contract defines it
+_CONTACT_FIELDS = frozenset({"robot_geom", "object_body", "normal_force_n", "signed_distance_m"})
+_CONTACT_LISTS = ("left_contacts", "right_contacts", "other_contacts")
 # each kind must carry the measurements its verdict is made of, not merely a timestamp
+# the required members are the ones the current producers actually publish; the registered live
+# sample (left/right/other_contacts, model_qpos/qvel, cup_position_m/cup_velocity_m_s) is admitted and
+# validated when present, and becomes required per kind once the port supplies it (Proposal C)
 _PHYSICS_REQUIRED = {
     "support": frozenset({"simulation_time_s", "simulation_step", "table_contact", "supported"}),
     "contact": frozenset({"simulation_time_s", "simulation_step", "left_contact_count",
                           "right_contact_count", "table_contact"}),
     "pose": frozenset({"simulation_time_s", "simulation_step", "cup_position_world_m"}),
     "retract": frozenset({"simulation_time_s", "simulation_step", "cup_position_world_m"}),
+}
+_PHYSICS_REQUIRED_REGISTERED = {
+    "support": frozenset({"left_contacts", "right_contacts", "other_contacts", "cup_position_m",
+                          "supported"}),
+    "contact": frozenset({"left_contacts", "right_contacts", "other_contacts", "cup_position_m",
+                          "truncated", "diagnostic_hazard_breached"}),
+    "pose": frozenset({"cup_position_m", "model_qpos"}),
+    "retract": frozenset({"cup_position_m", "cup_velocity_m_s"}),
 }
 _PHYSICS_INTEGERS = {"simulation_step", "left_contact_count", "right_contact_count",
                      "publisher_sequence", "reset_epoch"}
@@ -100,6 +119,7 @@ _PHYSICS_BOOLEANS = {"table_contact", "supported", "paused"}
 _PHYSICS_VECTORS = {"cup_position_world_m": 3, "cup_orientation_world_xyzw": 4,
                     "cup_linear_velocity_world_m_s": 3, "cup_angular_velocity_world_rad_s": 3}
 _PHYSICS_STRINGS = {"other_contact_geoms"}
+_PHYSICS_VECTOR_LISTS = {"model_qpos", "model_qvel", "cup_position_m", "cup_velocity_m_s"}
 # the frozen source contract: rows sit on the 10 Hz grid, a frame is at most one grid step old and
 # the two cameras are published together
 _GRID_S = 0.1
@@ -141,12 +161,45 @@ def _physics_observation_typed(observation, *, kind: str) -> bool:
     """Type the raw physics block the way the source contract declares it."""
 
     if (not isinstance(observation, dict) or not observation
-            or not set(observation) <= _PHYSICS_OBSERVATION_FIELDS
-            or not _PHYSICS_REQUIRED[kind] <= set(observation)):
-        # a subset that merely carries a timestamp is not a physical observation of that kind
+            or not set(observation) <= _PHYSICS_OBSERVATION_FIELDS):
+        return False
+    # only the keys unique to the registered live sample identify that shape; `supported` is shared
+    registered = set(observation) & {"left_contacts", "right_contacts", "other_contacts",
+                                     "model_qpos", "model_qvel", "cup_position_m",
+                                     "cup_velocity_m_s"}
+    if registered:
+        # a registered live sample must carry the measurements its kind is judged on
+        if not (_PHYSICS_REQUIRED_REGISTERED[kind] | {"simulation_time_s", "simulation_step"}
+                <= set(observation)):
+            return False
+    elif not _PHYSICS_REQUIRED[kind] <= set(observation):
+        # the summary shape must still carry its own measurements, so a timestamp alone is never enough
         return False
     for key, value in observation.items():
-        if key in _PHYSICS_INTEGERS:
+        if key in _CONTACT_LISTS:
+            if not isinstance(value, list):
+                return False
+            for contact in value:
+                if not isinstance(contact, dict) or set(contact) != _CONTACT_FIELDS:
+                    return False
+                if (not isinstance(contact["robot_geom"], str) or not contact["robot_geom"]
+                        or not isinstance(contact["object_body"], str) or not contact["object_body"]
+                        or isinstance(contact["normal_force_n"], bool)
+                        or not isinstance(contact["normal_force_n"], (int, float))
+                        or not math.isfinite(contact["normal_force_n"]) or contact["normal_force_n"] < 0
+                        or isinstance(contact["signed_distance_m"], bool)
+                        or not isinstance(contact["signed_distance_m"], (int, float))
+                        or not math.isfinite(contact["signed_distance_m"])):
+                    return False
+        elif key in _PHYSICS_VECTOR_LISTS:
+            if (isinstance(value, bool) or not isinstance(value, list) or not value
+                    or any(isinstance(item, bool) or not isinstance(item, (int, float))
+                           or not math.isfinite(item) for item in value)):
+                return False
+        elif key in ("truncated", "diagnostic_hazard_breached"):
+            if type(value) is not bool:
+                return False
+        elif key in _PHYSICS_INTEGERS:
             if type(value) is not int or value < 0:
                 return False
         elif key in _PHYSICS_BOOLEANS:
@@ -159,6 +212,9 @@ def _physics_observation_typed(observation, *, kind: str) -> bool:
                 return False
         elif key in _PHYSICS_STRINGS:
             if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+                return False
+        elif key == "simulation_session_id":
+            if not isinstance(value, str) or not value:
                 return False
         elif key == "simulation_time_s":
             if (isinstance(value, bool) or not isinstance(value, (int, float))

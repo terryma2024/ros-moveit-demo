@@ -36600,3 +36600,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   Scene and feedback records plus owner ratification of Proposals A/B/C); items 4-8 pending.** HEAD
   `87b7cc5d5`; gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no
   evidence deletion, no hardware.
+
+
+## CP-1979 — Task 3 fix pass, thirtieth instalment: the registered physics sample is admitted and validated (T3-F1)
+
+- **The audit now understands the registered live sample.** `physics.jsonl` accepts the closed sample from
+  `act/contact_live.py` (`simulation_session_id`, `model_qpos`, `model_qvel`, `cup_position_m`,
+  `cup_velocity_m_s`, `left_contacts`, `right_contacts`, `other_contacts`, `truncated`,
+  `diagnostic_hazard_breached`) alongside the MuJoCo summary fields, and validates every contact entry
+  against the registered four-key record (`robot_geom`, `object_body`, `normal_force_n`,
+  `signed_distance_m`) with typed values, plus boolean truncation/hazard flags and finite vectors.
+- **Two shapes, each with its own required members.** A block carrying any key unique to the registered
+  sample must satisfy that kind's registered member set; a summary-shaped block must satisfy the summary
+  set. My first attempt keyed the distinction on any overlapping key, which made `supported` (shared by
+  both shapes) select the registered branch and broke 23 fixtures; the marker is now the keys unique to
+  the registered sample, and the suite is green again.
+- **What is deliberately not yet required, and why.** Requiring the registered shape per kind today would
+  refuse every producer that still publishes summaries — the port does not emit the registered sample yet,
+  and the two remaining source records (a Planning Scene observation and gripper/controller feedback) are
+  still unnamed. That requirement belongs with Proposal C's ratification and the producer wiring, and the
+  formal-seal gate keeps a formal audit from being sealed in the meantime.
+- **Evidence.** `logs/task3-fix30.run` rc=0 across `test_act_episode_audit.py`, `test_act_recorder.py`,
+  `test_act_release_boundary.py` and `test_act_continuous_capture.py`, with its own NVMe scratch and a
+  non-empty tempfile proof.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (T3-F1 waits on Proposals A/B/C
+  ratification plus the two unnamed source records); items 4-8 pending.** HEAD `e06411ba7`; gate
+  `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence deletion,
+  no hardware.
