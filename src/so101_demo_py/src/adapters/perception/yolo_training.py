@@ -329,12 +329,13 @@ def prepare_candidate_run(
                 for image, label in pairs_by_domain[domain]:
                     name = f"{domain}-{image.name}"
                     target_image = union / "images" / split / name
+                    published_image = output_root / "dataset/images" / split / name
                     target_label = union / "labels" / split / f"{domain}-{label.name}"
                     _link(image, target_image)
                     _link(label, target_label)
                     files[target_image.relative_to(staging).as_posix()] = _sha256_file(image)
                     files[target_label.relative_to(staging).as_posix()] = _sha256_file(label)
-                    linked.append(target_image)
+                    linked.append(published_image)
                 domain_files[split][domain] = linked
 
         def _interleave(split: str) -> list[Path]:

@@ -554,6 +554,14 @@ def test_prepared_runtime_config_carries_only_trainer_arguments(tmp_path: Path) 
     assert runtime["device"] == "cuda" and runtime["epochs"] == 1
     assert (prepared.output_root / "val-head.txt").is_file()
     assert (prepared.output_root / "val-task.txt").is_file()
+    for name in ("train.txt", "val.txt", "val-head.txt", "val-task.txt"):
+        for line in (prepared.output_root / name).read_text().split():
+            recorded = Path(line)
+            assert recorded.is_absolute(), f"{name} must record the published path: {line}"
+            assert recorded.is_relative_to(prepared.output_root), (
+                f"{name} must not point at a staging directory: {line}"
+            )
+            assert recorded.is_file(), f"{name} points at a missing {line}"
     assert prepared.trainer_script.is_file()
     manifest = json.loads(prepared.run_manifest.read_text(encoding="utf-8"))
     assert manifest["checkpoint_score"] == ("0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95")
