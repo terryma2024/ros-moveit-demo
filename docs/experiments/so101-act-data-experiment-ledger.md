@@ -38714,3 +38714,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `afd61fbcb`;
   targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2075 — Task 3: item (a)'s insertion point and the carrier that needs no schema change
+
+- **Read from the code.** The readback builds the mapping the port consumes in `capture(...)`
+  (`pick_place_readback.py:86`) and returns it at lines **195-197** with exactly the seven keys the port's closed
+  set expects (`world`, `scene`, `contact`, `observation`, `reference`, `source_stamps_s`,
+  `source_received_wall_s`). So the record can travel **inside `raw["observation"]`** — a nested key — with no
+  change to that closed set and none to the audit, which is the cheapest honest route.
+- **Who holds the scene port.** The boundary does (`self.planning_scene`, used by `planning_attached`), not the
+  readback. Two options, both recorded in the brief: `capture(...)` gains an optional scene argument (cleaner, my
+  choice) or the boundary augments the returned mapping before handing it to the port. Everything else for the
+  item is already in place: the port's producer (CP-2020), the observation's carrier (CP-2066), the document's
+  additive carry (CP-2028) and the proved channel (CP-2067).
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f3468dae7`;
+  targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

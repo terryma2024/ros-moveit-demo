@@ -23,12 +23,16 @@ pointer. Verified position: HEAD `36df61a74`, targeted parallel gate `logs/task3
 
 ## 2. The four items left in Task 3
 
-**(a) Let the full `planning_scene_observation` record travel.** The port can already produce it
-(`RosTaskScenePort.observe_observation()`, CP-2020: sorted attached and world ids, `is_diff`, `source`, and
-`scene_revision` as the port's own documented read counter). The SEARCH document carries it additively when an
-observation supplies it (CP-2028), and the message carries the field (CP-2041). What is missing is the
-readback filling it with the caller's simulation instant, and then the audit verifying the full record end to
-end.
+**(a) Let the full `planning_scene_observation` record travel — only the producer is missing.** The port
+produces it (`RosTaskScenePort.observe_observation()`, CP-2020), the observation has the carrier
+(CP-2066), the document carries it additively when supplied (CP-2028) and that channel is proved in both
+directions (CP-2067). What is missing is the readback filling the carrier with the simulation instant the
+readback itself owns. The insertion point is `pick_place_readback.py:195-197`, where `capture(...)` (line
+86) returns the raw mapping the port consumes; the carrier that needs **no** schema change is a nested key
+inside `raw["observation"]`, since the port's closed key set covers the outer keys only. The scene port
+lives on the boundary, not on the readback, so either `capture(...)` gains an optional argument or the
+boundary augments the returned mapping before handing it to the port — the first is cleaner and is the one
+I would take. Then the audit's end-to-end verification of the full record applies.
 
 **(b) Three-way controls - narrowed by CP-2069/CP-2070, and it is now about the boundary only.** The
 port's gates are no longer derived: its own validation refuses a non-locking result, a truncated world,
