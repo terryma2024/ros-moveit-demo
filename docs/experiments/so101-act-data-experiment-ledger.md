@@ -36979,3 +36979,23 @@ failure families traced in HS-083, HS-085 and HS-076.
 `so101_teleop` (`colcon test` rc=0) and is **not achievable** for `so101_demo_py` in this environment without
 installing `mujoco` for the system interpreter; the honest answer is that direct-run evidence stands in, and that
 this limitation is stated rather than papered over.
+
+## HS-091 — The venv-backed demo gate: rc 0, but the readback still reports one error
+
+```
+PYTHONPATH="$HEAD_VENV_SITE" colcon test --packages-select so101_demo_py
+   -> "1 package had test failures: so101_demo_py", rc=0
+colcon test-result --test-result-base build/so101_demo_py
+   Summary: 1 test, 1 error, 0 failures, 0 skipped
+```
+
+Exposing the perception venv's `mujoco` to the gate changed colcon's exit status to 0, but the readback still reports
+one test and one error, so the gate is **not** resolved by that change alone - and I am not going to claim it is. Two
+possibilities remain open and are recorded as such rather than guessed: the XML may be the earlier collection-error
+run's, since the readback path is the worktree's default build base, or the new session may still error for a
+different import.
+
+**Status of the reviewer's item:** still open for `so101_demo_py`. What is established: `so101_teleop` passes its
+installed gate (rc=0); the demo package's installed gate does not run its ordinary suite here, for an import reason
+whose first cause (`mujoco`) I found and fixed without clearing the readback. The direct-run numbers remain the
+valid measurement of that suite.
