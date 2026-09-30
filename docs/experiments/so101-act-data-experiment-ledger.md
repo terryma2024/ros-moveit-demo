@@ -38550,3 +38550,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `188536bb8`; the same scope measured 337 when this session's Task 3 work began.
 - Dirty baseline: 24 tracked and 13 untracked paths preserved; the staging rule with its backup diff is in the
   brief and CP-2026.
+
+
+## CP-2066 — Task 3: the scene record's carrier added, so CP-2028's reader has something to read
+
+- **A gap found while re-reading item (a).** CP-2028's document builder reads
+  `getattr(observed, "planning_scene_observation", None)`, but `PickPlaceSearchObservation` had no such field —
+  the reader existed and the carrier did not, so the record could never travel. The observation now declares
+  `planning_scene_observation: dict | None = None` beside `controller_feedback` (CP-2041), and nothing fills it
+  yet: what remains for item (a) is the readback filling it with the caller's simulation instant and the audit
+  verifying the full record end to end.
+- **Evidence.** `logs/task3-carrier.run` rc=0 across the search-port, three task8 phase, release-boundary,
+  supervisor and audit suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty
+  tempfile proof.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `b229b22bb`;
+  targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

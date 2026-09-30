@@ -35,6 +35,9 @@ class PickPlaceSearchObservation:
     # from them the way the Planning Scene gate is derived today. Nothing fills or reads it yet, so the
     # gates keep their documented values until that pass updates the fixtures in step.
     controller_feedback: tuple | None = None
+    # CP-2028's document builder already looks for this attribute, so the record's travel had a reader
+    # without a carrier; this is the carrier, and nothing fills it yet (CP-2017 item (a))
+    planning_scene_observation: dict | None = None
 
 
 class PickPlaceSearchSegment:
