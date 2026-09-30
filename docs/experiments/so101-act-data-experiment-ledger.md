@@ -37397,3 +37397,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   remaining half of T3-F1.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `8415e4586`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2016 — Task 3: experiment shows the two planning-scene literals are load-bearing, with the exact acceptance set
+
+- **What I tried.** Making the two authorised literals fail-closed by default (`planning_scene_ok: False` in
+  `_gate_facts`, `pick_place_search_boundary.py:282`, and in the search port's evidence helper,
+  `pick_place_search_port.py:412`), on the theory that the real verdict is supplied by callers. **Reverted**:
+  six tests failed, so the callers do **not** supply it on those paths —
+  `test_act_task8_motion_phases.py`'s micro-lift, release and radial-retreat documents,
+  `test_act_task8_close_execution.py`'s dispatch document, and the final-check pair all failed with
+  `PHASE_EVIDENCE_INVALID` (`logs/task3-fix57.run`, 6 failed / 84 passed). Restored and re-verified green.
+- **What that proves, which is worth more than the patch.** The literal `planning_scene_ok: True` is
+  **load-bearing**, not a dead default: those phase documents genuinely claim the gate with no observation
+  behind it, which is exactly the reviewer's T3-F1 point. Removing the literals therefore requires the
+  producer first — the readback that validates the scene must return the
+  `planning_scene_observation`/`controller_feedback` records and the helpers must derive their booleans —
+  and the six tests above are the **acceptance set** that change has to keep green (plus the new controls
+  asserting the derived gate).
+- **Boundary class at those sites, for whoever continues.** `RosTaskScenePort` is imported at
+  `pick_place_search_boundary.py:25` and `self.planning_scene` is read at `:529` for `is_attached`, so the
+  scene port is already reachable inside the boundary; threading its verdict (and the record the ratified
+  definitions require) to `_gate_facts` is the smallest honest step, and it is a live-path change that needs
+  a round with room to iterate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `e3a745319`;
+  gate `logs/task3-xdist.run` **410 passed** (targeted twenty-file scope, xdist 8 workers); 39-path dirty
+  baseline untouched; no push, no evidence deletion, no hardware, no second stack.
