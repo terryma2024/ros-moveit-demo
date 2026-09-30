@@ -35988,3 +35988,21 @@ Re-sealing the head-camera geometry for Task 11 needed three corrections in a ro
 **Status and honesty note:** the `accepted_scene_sha256` edit is deliberately **left uncommitted** until the
 workspace question is settled, because committing half a re-seal would leave the tree claiming a seal that the
 validator still refuses. The camera work itself is unaffected - the drift was the scene alone.
+
+### HS-046 addendum — the scene geometry behind `HEAD_CAMERA_WORKSPACE_EMBEDDED`
+
+Reading the committed scene (`src/so101_demo_py/assets/mujoco/act/head_search_scene.xml`, created by Task 2's
+`3139fe23a`) against the contract explains the refusal:
+
+- the **table** is a body at `pos="0 -0.20 0.10"` with box half-sizes `0.25 0.30 0.02`, so its top surface sits
+  at **z = 0.12** and its footprint spans **x ∈ [-0.25, 0.25]**, **y ∈ [-0.50, 0.10]**;
+- the contract declares `workspace_x_m: [-0.15, 0.12]`, `workspace_y_m: [-0.4, -0.24]`,
+  `workspace_z_m: [0.165, 0.166]`, so every declared sample lies **within the table's footprint** at only
+  0.045 m above its surface;
+- the first refused sample `[-0.15, -0.24, 0.165]` is exactly that: inside the footprint, too low for the
+  cup-height clearance the validator requires.
+
+So the contract's workspace and the current committed scene disagree about the target's standing height and
+extent, and the resolution is a deliberate contract update (raise the z range to the cup's centre height and
+confirm the x/y extent against the table) rather than a silent edit - the validator's refusal is correct and the
+choice needs the target's actual dimensions, which the cups in the scene supply.
