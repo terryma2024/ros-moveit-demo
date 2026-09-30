@@ -39096,3 +39096,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   blind patch. CP-2091's bound was right in spirit and wrong in mechanism: it should read, not count.
 - **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress. HEAD `e5c9dc56a`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2093 — The verifier's third increment, designed from the code (read before write)
+
+- **What `validate_case_journals` actually demands** (`task8_live_qualification.py:109-127`): all fourteen case
+  journals under one case root, each a complete row of evidence plus **both retirement receipts**, **bound to the
+  bundle's identity**, with a prefix carrying **no** live-evidence artifact and a full carrying one. That is this
+  codebase's expression of the admission comment's "per-Worker terminal leases and the frozen contract", so
+  delegating to it is the right way to satisfy that requirement rather than re-implementing it.
+- **Where the verifier's inputs come from**: the admission payload carries `manifest_path`/`manifest_sha256`
+  (verified at `admission.py:404-407`) and the receipt pair (`preparation_receipt_path`/`_sha256`, line 253), and
+  the producer's own route is `verify_prepared_task8_bundle(preparation_receipt)` → `bundle.identities` and
+  `bundle.manifest` → `json.loads(...)` → `validate_case_journals(case_root, manifest, identities=...,
+  manifest_document_sha256=manifest["manifest_document_sha256"])`.
+- **The edit to make next**: in `verify_w8_qualification`, after the digest bindings, (i) open the preparation
+  receipt named by the payload and take the same bundle, (ii) require the bundle's manifest digest to equal the
+  document's `preparation_receipt_sha256` and the payload's `manifest_sha256` to match the manifest on disk, and
+  (iii) call `validate_case_journals` with those identities. Refusals map to
+  `W8_QUALIFICATION_EVIDENCE_INVALID` for a missing or malformed bundle and
+  `W8_QUALIFICATION_EVIDENCE_MISMATCH` for any disagreement — and the tests need a real prepared bundle fixture,
+  which is the part that makes this a full increment rather than a patch.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD
+  `ecebf3a67`; no push, no evidence deletion, no hardware, no second stack.
