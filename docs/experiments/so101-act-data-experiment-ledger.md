@@ -39852,3 +39852,25 @@ A small, well-defined adapter over types that already exist, rather than a new s
 This is the fourth framing of this gap (HS-198 missing capability, HS-199 surface only, HS-200 half-and-half, HS-206 adapter),
 and each one came from reading the code instead of the plan. The registration half is already written and committed
 (`7fb6825c7`); the freeze half is now a bridge plus a policy.
+
+## HS-207 — The plan itself carries two candidate-identity schemas, and Step 5's consumer decides
+
+Step 4's stated expectation, verbatim:
+
+> "Expected: three frozen identities containing weight, both domain operating points, **tracker, postprocess and runtime
+> digests**. Test manifests remain unopened"
+
+"Digests" matches **Task 7's** `CandidateIdentity`, which requires exactly `weights_sha256`, `postprocess_sha256`,
+`tracker_sha256`, `runtime_sha256` (HS-206). But Step 5 consumes those files through `compare` -> `load_frozen_candidate`,
+which requires `weight_sha256` plus nested `tracker`/`postprocess`/`runtime` **objects** and refuses any declaration it cannot
+apply (HS-201/205). So the plan's Task 12 describes its output in one schema and hands it to a consumer that speaks another.
+
+**Resolution, following HS-176's precedent (the later, load-bearing acceptance wins):** the frozen document is written in the
+**gate's** schema, because that is what Step 5 must load for Task 12 to complete at all - and my `freeze_candidate`
+(`c5156c1cf`) does exactly that, with `tracker`/`postprocess`/`runtime` empty at document level and the applied values sealed
+per domain. The plan's "digests" wording is Task 7's schema and is **not** what the gate accepts; that difference is now
+recorded rather than silently resolved.
+
+**Fifth framing of this same gap**, and the first where the inconsistency is inside the plan rather than between plan and
+implementation. Each previous framing came from reading code; this one came from reading the plan's own acceptance line
+against its own consumer - which is the check I should have run at HS-198 instead of concluding "missing capability".
