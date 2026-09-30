@@ -36250,3 +36250,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   coverage exists. Then a fresh checkpoint and the consolidated 19-file gate.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c7b2eb6fa`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1968 — Task 3 fix pass: the port hop is already lossless; the broker is the single remaining producer
+
+- **Verified rather than assumed.** `RosControllerReferencePort.reference_state`
+  (`adapters/act/ros_expert.py:10`) returns `{**state, "source": "CONTROLLER_REFERENCE"}`, so every field
+  the broker supplies — including the observer's raw frame — passes through to the tap unchanged. With
+  CP-1967's tap change, no code above the broker needs touching for the raw history to reach the audit.
+- **Where the frame is actually lost now.** The broker's `reference_state`
+  (`adapters/act/ros_broker.py:291`) builds its document from a per-kind tuple
+  `self._references[kind] = (values, velocities, received, stamp)`; that tuple stores positions,
+  velocities, the receipt and the publication stamp but **no joint names**, and the method returns a
+  projected document (`requested_sim_time_s`, `epoch`, `stop_confirmed_wall_s`, per-kind positions and
+  velocities). So the one remaining change is inside the broker: keep the observer's `joint_names` with
+  each `_references[kind]` entry and expose `joint_names`, `sim_stamp_ns`, `received_monotonic_ns` and
+  `velocities` in the returned document. Everything downstream — port, tap, capture, audit — already
+  preserves and validates that group, refusing a partial one.
+- **Why I did not make that change this round.** It edits a live broker whose `_references` tuple shape is
+  consumed inside a long, lock-sensitive method, and my remaining budget could not land it with the same
+  RED/GREEN plus regression standard as the rest of the increment. The seam above is exact, so the next
+  pass can start there directly; no file above the broker changes.
+- **Still open.** **T3-F1**: the broker hop above and the window schema awaiting the owner's ratification
+  of key names and ordering (CP-1963). **T3-F5**: the fail-closed eligibility and sealing gate once the raw
+  coverage exists. Then a fresh checkpoint and the consolidated 19-file gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `34712a1f4`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
