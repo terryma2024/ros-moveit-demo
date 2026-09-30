@@ -40645,3 +40645,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 six of seven steps
   done** with the last one one predicate-block-selection away, F1/F11 open; targeted gates **430 / 201 / 201 / 201
   passed**; HEAD `15fcf9bba`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2163 — F5's last step: the anchor exists, my matcher was one character short
+
+- **What happened**: I anchored on `"supported": True}}`, which matches nothing, because CP-2159's own inserted
+  rows end with `"supported": True}})` — the closing parenthesis of `append_source(`. The grep this round confirms
+  **three** such lines, i.e. exactly the three complete writers whose blocks need the record. The predicate half had
+  been applied again; both files are restored and the audit suite re-runs green.
+- **So the next attempt is a one-character fix to a script whose every other part is now verified**: find the three
+  lines ending `"supported": True}})`, parse each receiver from the `append_source("physics"` line above it (skip
+  `partial`), append the record-carrying row (CP-2161's contracts) and the three-line predicate clause, then run the
+  four suites.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 six of seven steps
+  done** with this one a verified one-character matcher fix away, F1/F11 open; targeted gates **430 / 201 / 201 /
+  201 passed**; HEAD `6e796ff60`; no push, no evidence deletion, no hardware, no second stack.
