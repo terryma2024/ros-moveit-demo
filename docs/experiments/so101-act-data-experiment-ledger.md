@@ -39574,3 +39574,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** HEAD `52987e41d`; item 3's findings F1/F3/F5/F11/F12/F13 are the next pass's list with F12's contract
   now fixed in writing; targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-2114 — Correction to CP-2113's first edit: the SEARCH document has no `physical_observation` block today
+
+- **Read rather than assumed**: the SEARCH document's keys are exactly `_PHASE_EVIDENCE_KEYS`
+  (`pick_place_search_port.py:445-457`), the port asserts that closure itself at **line 929**
+  (`if set(document) != _PHASE_EVIDENCE_KEYS`), and `physical_observation` is **not** among them. So my CP-2113
+  wording — "merge the record into the block it already builds" — was wrong: there is no block yet.
+- **The corrected edit 1**, therefore: the port **builds** a `physical_observation` block from the readback it
+  already validates (the flat numbers and flags, keeping `_raw` satisfied), carries the typed
+  `planning_scene_observation`/`controller_feedback` records **inside** it under their ratified names, allows the
+  document's key set to be `_PHASE_EVIDENCE_KEYS | {"physical_observation"}`, and relaxes its own closure
+  assertion at line 929 to that union. The runner already accepts exactly that set, so F12's first half is closed
+  by construction; the audit validates the typed records strictly where the block carries them.
+- **What F12's second half still needs** (unchanged and, if anything, sharpened by this read): a production caller
+  that actually **fills** the records — the segment fills the scene record (CP-2077) and the broker produces
+  feedback (CP-2040) but nothing joins them into this block — and the gates derived from those joined current
+  records rather than from cached receipts.
+- **Why the correction matters more than the code this round**: CP-2113 is the contract the next pass will
+  implement from, and its first sentence would have sent that pass looking for a block that does not exist. The
+  ledger now says what is actually there.
+- **State.** HEAD `fe3a55174`; item 3's list unchanged (F1/F3/F5/F11/F12/F13); targeted gate
+  `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no hardware, no second stack.
