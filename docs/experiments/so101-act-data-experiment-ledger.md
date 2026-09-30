@@ -43207,3 +43207,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   entry's sources: task_scene.py:295-301 and pick_place_search_segment.py:59-64.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four cuts with the fourth
   blocked on this contradiction; F5/F12 open; goal paused.
+
+## CP-2286 - F12's first cut: the feedback reader is reached through the broker's driver
+
+- pick_place_search_boundary._remember_controller_feedback took `self.reset.broker` and gave up unless that object
+  had controller_feedback; the production reset hands it a CommandBroker (command_broker.py:31), which wraps the
+  driver that actually reads the ratified records - so the hasattr branch returned None silently and the SEARCH
+  feedback gate never saw records, exactly as the verdict described.
+- The helper now walks the broker, its `driver` and its `_driver` and uses whichever holds the method, keeping the
+  readback's own simulation instant as `when`. Name-agnostic on purpose: the decision belongs to the object graph,
+  not to a guessed attribute name.
+- Still open from F12: the frozen-observation assignment (`observed.controller_feedback = ...` on a frozen
+  dataclass raises outside the catch), carrying a normalised typed record into the writer's physical observation,
+  and deriving the later gates from current fenced records rather than cached receipts.
+- GREEN 120 passed across the search-port, audit and task8 suites. F14, F3 and F1 closed; F11 three cuts with two
+- negatives handed off; F13 three of four with the fourth blocked on the design contradiction (CP-2285); F12 in
+  progress; F5 open; goal paused.
