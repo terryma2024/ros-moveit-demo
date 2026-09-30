@@ -35651,6 +35651,23 @@ visual evidence, starting with the named component tests that must fail for the 
   into `app.tsx`, add the `unified-layout.css` rules and the `schema.d.ts` entries, then GREEN and the scoped
   commit. The e2e spec and the visual evidence are deferred to Task 14.
 
+- **Task 10 GREEN: the Head Camera panel (round 306).** `head-camera-panel.tsx` implements the boundary its
+  RED tests named: control disabled behind a "View only" notice until authority **and** qualification are
+  present; the target slider bounded to the sealed interval with no threshold or model editing; the frame
+  rendering mask, bbox, class and confidence, track id, optical axis, deadband, vertical bounds, candidate
+  centre and the three-frame lock progress, plus the runtime identities; `Stopping` until the proof completes
+  and `Stopped` after; an unavailable domain showing no frame; and the detector count reported rather than
+  implied. Verified: **7 passed** (`NODE_ENV=test bun run test -- src/components/teleop/head-camera-panel.test.tsx`).
+- **Two environment facts learned here (for Task 11 provenance).** The web suite must run with
+  **`NODE_ENV=test`**, otherwise React resolves to its production build and every rendering test fails with
+  `act(...) is not supported in production builds of React` - this affected the pre-existing sibling tests too,
+  so it is an invocation fact, not a defect in this work. And this repository's web tests use **vitest plus
+  testing-library without jest-dom**, so assertions must use plain matchers (`toHaveProperty("disabled", ...)`,
+  `textContent`) rather than `toBeDisabled`/`toBeVisible`/`toHaveTextContent`.
+- **Still owed for Task 10:** `head-camera-client.ts` and its test, the tab wiring in `app.tsx`, the
+  `unified-layout.css` rules, the `schema.d.ts` entries, the `bun web build` gate, and Task 10's review. The
+  e2e spec and visual evidence belong to Task 14.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
