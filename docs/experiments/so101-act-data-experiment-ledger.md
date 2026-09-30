@@ -40549,3 +40549,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 five of seven steps
   done** with this one's last unknown named (the backend's per-kind keys), F1/F11 open; targeted gates **430 / 201 /
   201 passed**; HEAD `cc495032b`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2158 — F5's physics rows, fully specified: the summary shape's keys per kind
+
+- **The validator read this round**: `_physics_observation_typed` (line 310) accepts an observation whose keys
+  stay inside `_PHYSICS_OBSERVATION_FIELDS` (line 101), and it distinguishes **two shapes** — a *registered live
+  sample* (any of `left_contacts`, `right_contacts`, `other_contacts`, `model_qpos`, `model_qvel`,
+  `cup_position_m`, `cup_velocity_m_s`) which must also carry `_PHYSICS_REQUIRED_REGISTERED[kind]`, and a
+  **summary** shape which must carry `_PHYSICS_REQUIRED[kind]`. The fixtures use the summary shape, and the
+  required keys are (lines 127-133):
+  - `support`: `simulation_time_s`, `simulation_step`, `table_contact`, `supported`;
+  - `contact`: `simulation_time_s`, `simulation_step`, `left_contact_count`, `right_contact_count`,
+    `table_contact`;
+  - `pose`: `simulation_time_s`, `simulation_step`, `cup_position_world_m` (what the fixtures already send);
+  - `retract`: the four lines' last entry (line 131-133, printed above).
+- **So the patch is now mechanical, and this time the payloads are read rather than assumed**: three rows per
+  formal site, each with its kind's summary keys, plus the predicate clause requiring every registered kind
+  (CP-2155). The receiver must still be parsed per site (CP-2156) and only the three formal sites (743, 801, 1086)
+  touched.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 five of seven steps
+  done** with this one's contract now fully read, F1/F11 open; targeted gates **430 / 201 / 201 passed**; HEAD
+  `ddad91683`; no push, no evidence deletion, no hardware, no second stack.
