@@ -13,6 +13,12 @@ export type HeadCameraStatus = {
   safe_interval_rad: [number, number];
 };
 
+/** The raw sample a stop proof is built from; nothing else is forwarded to the backend. */
+export type HeadCameraRawSample = {
+  neck_velocity_rad_s?: number;
+  sim_time_s?: number;
+};
+
 export type HeadCameraCommandResult = {
   ok: boolean;
   code: string | null;
@@ -47,8 +53,12 @@ export class HeadCameraClient {
     return this.post(`${BASE}/target`, { target_rad: targetRad }, authority);
   }
 
-  async stop(authority: ControllerAuthority, rawSample?: Record<string, unknown>): Promise<HeadCameraCommandResult> {
-    return this.post(`${BASE}/stop`, rawSample ?? {}, authority);
+  async stop(authority: ControllerAuthority, rawSample?: HeadCameraRawSample): Promise<HeadCameraCommandResult> {
+    // only the sample fields the backend reads are forwarded, so no other key can ride along
+    const body: Record<string, unknown> = {};
+    if (rawSample?.neck_velocity_rad_s !== undefined) body.neck_velocity_rad_s = rawSample.neck_velocity_rad_s;
+    if (rawSample?.sim_time_s !== undefined) body.sim_time_s = rawSample.sim_time_s;
+    return this.post(`${BASE}/stop`, body, authority);
   }
 
   async capture(authority: ControllerAuthority): Promise<HeadCameraCommandResult> {

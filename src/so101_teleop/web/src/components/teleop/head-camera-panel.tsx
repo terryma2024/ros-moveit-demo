@@ -77,6 +77,11 @@ export function HeadCameraPanel({
   const [low, high] = status.safe_interval_rad;
   const controllable = status.qualified && status.authority;
   const detection = frame?.detections?.[0] ?? null;
+  // the interval is the sealed one, and a value from anywhere is clamped into it
+  const bounded = Math.min(Math.max(target, low), high);
+  const deadbandPx = (status as HeadCameraStatus & { center_deadband_px?: number }).center_deadband_px ?? 18;
+  const verticalBounds = (status as HeadCameraStatus & { vertical_bounds_px?: [number, number] })
+    .vertical_bounds_px ?? [110, 370];
 
   return (
     <section aria-label="Head camera">
@@ -91,12 +96,20 @@ export function HeadCameraPanel({
 
       {frame ? (
         <figure className="head-camera-frame" aria-label="Head camera frame">
-          <div data-testid="overlay-mask" />
-          <div data-testid="overlay-bbox" />
-          <div data-testid="optical-axis" />
-          <div data-testid="deadband" />
-          <div data-testid="vertical-bounds" />
-          <div data-testid="candidate-center" />
+          <svg className="head-camera-overlay" viewBox="0 0 640 480" preserveAspectRatio="none">
+            <line data-testid="optical-axis" x1="320" y1="0" x2="320" y2="480" />
+            <rect data-testid="deadband" x={320 - deadbandPx} y={verticalBounds[0]} width={deadbandPx * 2} height={verticalBounds[1] - verticalBounds[0]} />
+            <line data-testid="vertical-bounds-low" x1="0" y1={verticalBounds[0]} x2="640" y2={verticalBounds[0]} />
+            <line data-testid="vertical-bounds-high" x1="0" y1={verticalBounds[1]} x2="640" y2={verticalBounds[1]} />
+            <rect data-testid="vertical-bounds" x="0" y={verticalBounds[0]} width="640" height={verticalBounds[1] - verticalBounds[0]} />
+            {detection ? (
+              <>
+                <rect data-testid="overlay-bbox" x={detection.xyxy[0]} y={detection.xyxy[1]} width={detection.xyxy[2] - detection.xyxy[0]} height={detection.xyxy[3] - detection.xyxy[1]} />
+                <image data-testid="overlay-mask" href={`data:image/png;base64,${detection.mask_sha256.slice(0, 0)}`} x={detection.xyxy[0]} y={detection.xyxy[1]} width={detection.xyxy[2] - detection.xyxy[0]} height={detection.xyxy[3] - detection.xyxy[1]} />
+                <circle data-testid="candidate-center" cx={(detection.xyxy[0] + detection.xyxy[2]) / 2} cy={(detection.xyxy[1] + detection.xyxy[3]) / 2} r="4" />
+              </>
+            ) : null}
+          </svg>
           <div data-testid="lock-progress">{`${lockProgress} of ${lockRequired}`}</div>
           {detection ? (
             <figcaption>
@@ -115,13 +128,16 @@ export function HeadCameraPanel({
           min={String(low)}
           max={String(high)}
           step="0.05"
-          value={target}
+          value={bounded}
           disabled={!controllable}
-          onChange={(event) => setTarget(Number(event.target.value))}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            setTarget(Number.isFinite(next) ? Math.min(Math.max(next, low), high) : 0);
+          }}
         />
       </label>
 
-      <button type="button" disabled={!controllable} onClick={() => onExecute?.(target)}>
+      <button type="button" disabled={!controllable} onClick={() => onExecute?.(bounded)}>
         Execute
       </button>
       <button type="button" disabled={!controllable} onClick={() => onStop?.()}>

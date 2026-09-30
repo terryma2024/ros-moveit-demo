@@ -103,3 +103,45 @@ describe("HeadCameraPanel", () => {
     expect(screen.getByTestId("detector-constructed").textContent).toBe("0");
   });
 });
+
+describe("HeadCameraPanel overlays and bounds", () => {
+  const frame = {
+    sequence: 3,
+    jpeg_sha256: "d".repeat(64),
+    detections: [
+      {
+        class_id: 0,
+        class_name: "plastic_cup",
+        confidence: 0.8,
+        track_id: "cup-9",
+        xyxy: [100, 120, 200, 320] as [number, number, number, number],
+        mask_sha256: "e".repeat(64),
+      },
+    ],
+    model_id: "head-search-v2",
+    bundle_sha256: "f".repeat(64),
+  };
+
+  it("draws the overlay geometry from the frame rather than leaving placeholders", () => {
+    render(<HeadCameraPanel status={status({ state: "READY" })} frame={frame} />);
+
+    const box = screen.getByTestId("overlay-bbox");
+    expect(box.getAttribute("x")).toBe("100");
+    expect(box.getAttribute("width")).toBe("100");
+    expect(screen.getByTestId("overlay-mask").getAttribute("x")).toBe("100");
+    expect(screen.getByTestId("candidate-center").getAttribute("cx")).toBe("150");
+    expect(screen.getByTestId("optical-axis").getAttribute("x1")).toBe("320");
+    expect(screen.getByTestId("deadband")).toBeTruthy();
+    expect(screen.getByTestId("vertical-bounds").getAttribute("height")).not.toBe("0");
+  });
+
+  it("clamps the target into the sealed interval however it was set", () => {
+    render(<HeadCameraPanel status={status({ qualified: true, authority: true })} />);
+
+    const slider = screen.getByLabelText("Target angle") as HTMLInputElement;
+    expect(Number(slider.min)).toBe(-1);
+    expect(Number(slider.max)).toBe(1);
+    expect(Number(slider.value)).toBeLessThanOrEqual(1);
+    expect(Number(slider.value)).toBeGreaterThanOrEqual(-1);
+  });
+});

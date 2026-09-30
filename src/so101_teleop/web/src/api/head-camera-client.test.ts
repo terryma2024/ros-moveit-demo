@@ -62,3 +62,21 @@ describe("HeadCameraClient", () => {
     expect(client.streamUrl()).toMatch(/\/teleop\/head-camera\/stream$/);
   });
 });
+
+describe("HeadCameraClient stop payload", () => {
+  it("forwards only the raw sample fields and nothing else", async () => {
+    const calls: Call[] = [];
+    const client = new HeadCameraClient(fetcher([{ status: 200, body: { state: "STOPPING" } }], calls));
+
+    await client.stop(authority, {
+      neck_velocity_rad_s: 0.01,
+      sim_time_s: 1.5,
+      ...({ safe_interval_rad: [-99, 99], model_id: "other" } as Record<string, unknown>),
+    } as never);
+
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
+      neck_velocity_rad_s: 0.01,
+      sim_time_s: 1.5,
+    });
+  });
+});
