@@ -111,3 +111,40 @@ scope cannot even be collected in the live-source environment — CP-2002, and t
 real `FULL_RESTART` MuJoCo pick-and-place with the Recorder's lossless files; and the negative-copy delivery
 step. The four real input roles (`path_policy`, `placement_qc`, `rgb_skew`, `resource_thresholds`) still need
 approved values before Tasks 6/7 can run.
+
+
+---
+
+# TASK 4 HANDOFF (added round 169) — what exists, what is left, and the rule that settles the last failure
+
+**Landed already (three increments, all green).** `src/so101_demo_py/src/act/w8_qualification.py` now provides
+`verify_w8_qualification(qualified_path, payload)`: it requires a `QUALIFIED` document with `worker_count == 8`
+and a `live_campaign` block of exactly four keys, **re-derives** the campaign-result and journal digests from
+disk, passes the campaign result through `validate_campaign_summary` and requires its digests to equal the
+document's, and — when the payload names a preparation receipt — opens that bundle and delegates the fourteen
+case journals to `validate_case_journals` with the bundle's identities. Refusals are
+`W8_QUALIFICATION_EVIDENCE_INVALID` and `W8_QUALIFICATION_EVIDENCE_MISMATCH`. `so101_teleop`'s admission now
+reaches this verifier instead of failing with `W8_QUALIFICATION_VERIFIER_UNAVAILABLE`, and its
+self-declared-PASSED test was updated to the verifier's refusal code with the reason in the test.
+
+**Left in Task 4, in order.**
+1. **The qualification suite's evidence port** (`test_act_task8_live_qualification.py`, four failures traced in
+   CP-2089 to the amended fail-closed contract — not to the environment). The runner records `_missing_raw` in
+   `_physics` (`pick_place_runner.py:109-120`) whenever a phase's evidence lacks `physical_observation`, and that
+   list is what makes `live_evidence_artifact` `None`. Three attempts to supply it by wrapping `run_phase`'s
+   funnel return failed identically (CP-2091/2092/2096), so **read those four tests' bodies and the port
+   methods they actually drive before wrapping anything**; the SEARCH document already carries the key additively
+   (CP-2028) and the set-down document refuses it (CP-2091).
+2. **The verifier's positive test**: a committed prepared bundle (`test_act_task8_artifact_bundle.py:34-86`'s
+   `ValidInputs`/`_inputs` is the model) plus fourteen journals that satisfy `validate_case_journals` — the
+   journals come from the suite in item 1, so the two are one increment (CP-2095).
+3. **Then**: with the qualification path green, confirm the live production composition actually uses the
+   commit/export-refusal apparatus (`act/result_store.py`, `test_act_result_commit.py`) — item 4's second half.
+4. **Settle with the owner or the frozen plan**: the admission comment assigns the independent verifier to
+   **Task 11A** ("Task 11A must provide an independent verifier …"), while this objective's frozen enumeration
+   calls item 4 "independent QC / real commit / export refusal" (CP-2087).
+
+**Still unresolved from Task 3's own list.** Item 3 is implementation-complete (T3-F11 landed, gate
+`logs/task3-final.run` **430 passed**) but its **sixth checkpoint's verdict has not appeared** across many
+rounds (`reviews/task3-rereview5-verdict.md`, dispatch `32c54563-a7b4-438d-bfc1-620b13d28b6e`); nothing should
+be claimed about Task 3's closure until that file exists and is read.

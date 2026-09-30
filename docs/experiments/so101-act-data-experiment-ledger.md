@@ -39214,3 +39214,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   this context level risks leaving the tree red, which is worse than a precise instruction.
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the verifier's
   three increments landed. HEAD `5ef673856`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2098 — Task 4's handoff section added to the brief, and my own efficiency limit stated
+
+- **The brief now carries a Task 4 section** (appended this round): the three landed increments with their exact
+  behaviour and refusal codes; the ordered remainder (the evidence-port repair with the `_physics` rule and the
+  warning that three wraps failed; the verifier's positive test being the same increment as that repair; then the
+  commit/export path check); the unresolved Task 11A-versus-item-4 attribution; and the fact that Task 3's sixth
+  verdict has still not appeared, so nothing may be claimed about Task 3's closure yet.
+- **Why this is the round's honest output.** Four consecutive fixture attempts failed and each narrowed the
+  search; at this context level the reliable contribution is a handoff precise enough that the next session needs
+  one or two reads, not another guess. The ledger records every attempt with its reason (CP-2088/2089/2091/2092/
+  2096/2097), and the brief now states the same in one place.
+- **State.** Items 0-2 completed; item 3 implementation-complete with its checkpoint pending; item 4 in progress
+  with three increments landed. HEAD `85aab0497`; targeted gate `logs/task3-final.run` **430 passed**; no push, no
+  evidence deletion, no hardware, no second stack.
