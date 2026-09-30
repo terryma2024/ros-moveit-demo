@@ -78,10 +78,19 @@
 | Discuss approaches; write designs, implementation plans, and guides | GPT-6 Sol / High (`gpt-6-sol`, reasoning effort `high`) |
 | Independently review approaches, designs, implementation plans, and guides | GPT-6 Astra / High (`gpt-6-astra`, reasoning effort `high`) |
 | Execute implementation plans | DeepSeek Harness TUI, launched with `dst` in a `tmux` session |
+| Review checkpoints during `dst` plan execution | GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`), through a Codex session in `tmux` on the execution machine |
 | Monitor execution and review execution results | GPT-6 Sol / High (`gpt-6-sol`, reasoning effort `high`) |
 | Other tasks (default) | GPT-6 Sol / High (`gpt-6-sol`, reasoning effort `high`) |
 
-- Use an independent GPT-6 Astra / High reviewer for the review tasks listed above.
+- Use an independent GPT-6 Astra / High reviewer for approaches, designs, implementation plans,
+  and guides outside `dst` plan execution. Review checkpoints during `dst` plan execution follow
+  the workflow below instead.
+- When `dst` reaches a required review checkpoint, it must first start or reuse a Codex session
+  in `tmux` on the machine where it is executing the plan, and select GPT-6.1 Sol / High
+  (`gpt-6.1-sol`, reasoning effort `high`) to perform the review.
+- If that machine has no usable Codex environment, `dst` must pause the task and wait for the
+  coordinator to perform the review and communicate the result. Resume only after receiving the
+  result and satisfying the review checkpoint's requirements.
 - If a required model or tool is unavailable, report the limitation explicitly. Do not silently
   substitute another model or tool or automatically switch to a lower-capability model.
 - These task rules do not authorize changes to global default model configuration.
