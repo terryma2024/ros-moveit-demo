@@ -42201,3 +42201,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
   green, commit half landed (CP-2230); **the seventh review is running** (session `01a0f2f2-…`, pid 2700637, no
   verdict file yet); items 5+ wait on this list. HEAD `360cd52d3`; fourteen gates green.
+
+
+## CP-2233 — The binding machinery already exists, so the owner's nine values are one pass away
+
+- **Read this round** (`first_episode_inputs.py:398-418`): the module already writes each role's payload to its
+  destination with `flush` + `fsync`, records per role `{path, sha256, bytes, approval, identity}`, builds the
+  manifest (`ACT_FIRST_EPISODE_INPUTS`, schema 1) with `source_root`, `source_commit`, `config_sha256`,
+  `evidence_root`, `roles` and `inputs_sha256`, and writes `inputs-manifest.json` durably (fsync on the file and on
+  the directory). So preparing the four bindings is **data entry through existing code**, not new machinery.
+- **What that means for the plan's items 5+**: with CP-2232's nine numbers and one selection, the bindings are a
+  single pass — the role files carry the values, this builder produces the manifest, and admission's per-role gate
+  (CP-2212's third step) stops raising `NONHEAD_INPUT_BINDING_REQUIRED`.
+- **Review status at this round**: the seventh review is still running (pid 2700637, 1:08 elapsed, no verdict file
+  yet); no worktree change was made in this round beyond documentation.
+- **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
+  green, commit half landed; items 5+ wait on the values above. HEAD `af3585bb8`; fourteen gates green.
