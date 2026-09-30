@@ -40408,3 +40408,30 @@ exist. The honest options are now:
 
 So the choice is (i) - a contained refactor of a verified module, reviewed as such - rather than the untouched-module harness I
 recommended two rounds ago. Recorded as a correction to my own recommendation, before any code exists to defend.
+
+## HS-230 — Redirect: the closed-loop head search already exists in the ACT stack, not in the dataset renderer
+
+Searched for where the neck is actually actuated, filtering out the geometry/contract/calibration modules:
+
+```
+adapters/act/ros_neck.py                    <- the neck, driven over ROS
+adapters/act/pick_place_search_port.py      <- the search port
+adapters/act/selected_physics_join.py, pick_place_reset.py, pick_place_child_port.py, …
+```
+
+So the closed-loop machinery - neck actuation, search port, physics reset, child processes - lives in the **ACT/MuJoCo stack**,
+which is exactly the "one ROS/MuJoCo/detector stack" the handoff permits and which the collection CLIs (`act_collect`,
+`act_collect_parallel`, `so101_parallel_batch`) are built to drive. The dataset renderer, by contrast, is a **one-shot sample
+generator** (HS-227/229) and was never the episode path.
+
+**This supersedes the last three rounds' framing:** HS-227's "sibling harness" and HS-229's "refactor the renderer" were both
+answers to the wrong question - whether the *dataset renderer* can produce sequences. It cannot, and it is not supposed to. The
+episodes should be recorded by **driving the ACT stack over the partition seeds**, reusing `ros_neck` for the head sweep and the
+search port for the closed loop, with the head-camera detector scoring frames as they are produced.
+
+What that changes concretely: the remaining work is likely **wiring** an existing stack to the `calibration`/`held_out_evaluation`
+seed lists and emitting the HS-222 record shape - not building a renderer harness, and not touching the verified dataset path at
+all. HS-229's recommendation is withdrawn along with HS-227's.
+
+Next read, deliberately not assumed: whether `ros_neck` + the search port can be driven headlessly per seed outside Task 13's
+runtime, or whether that runtime is the only driver - which is what `HEAD_SEARCH_RUNTIME_REQUIRED` refuses.
