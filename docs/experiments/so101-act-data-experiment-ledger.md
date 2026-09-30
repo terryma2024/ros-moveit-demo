@@ -39490,3 +39490,20 @@ task has been escalating (HS-103/107/161) rather than taking unilaterally.
 
 Recording it as **open**, with the exact field list and the exact error, so the next step is a decision rather than another
 attempt.
+
+## HS-192 — The scenario fallback collapsed scenes; (scenario, seed) is the faithful group identity
+
+Keeping the leak check and adding a fallback were both right, but the fallback key was wrong:
+
+```
+training input error: CANDIDATE_SPLIT_LEAK: task manifest puts the same scene group 'no_cup' in both train and val
+```
+
+Keying a scene group on `scenario` alone makes **every** `no_cup` sample one group, so the check correctly reported a leak
+that my fallback had invented. A scene is one rendered episode, so `(scenario, seed)` identifies it for manifests predating
+`scene_group_id` - the A manifest carries both fields per sample and `seed_ranges` at top level - which keeps the check
+meaningful (a genuinely reused seed across splits still trips) instead of disabling it.
+
+So the fix direction stays "accept the pinned artefact as it is" while the *identity* used for the check is derived from
+what that artefact actually provides. Two rounds of the same lesson: a fallback that satisfies a validator without preserving
+what the validator is *for* is a way of turning a check off by accident.

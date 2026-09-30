@@ -541,7 +541,10 @@ def _manifest_splits(
         ):
             value = sample.get(key)
             if value is None and key == "scene_group_id":
-                value = sample.get("scenario")
+                # A scene is one rendered episode, so (scenario, seed) identifies it for manifests
+                # that predate scene_group_id. Keying on scenario alone would collapse every
+                # no_cup sample into one group and trip the leak check this code exists to run.
+                value = (sample.get("scenario"), sample.get("seed"))
             if value is None:
                 raise CandidatePlanError(
                     f"CANDIDATE_MANIFEST_INVALID: {name} has a {split} sample without a {label}"
