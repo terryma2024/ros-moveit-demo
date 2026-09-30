@@ -35102,6 +35102,14 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   underlays from test failures). `test_act_search.py` (21 passed) and `test_act_head_search_domain.py`
   (9 passed) run and pass in the same environment.
 
+- **A brief error in the Task 5 review request (recorded so the verdict is read correctly).** The request's
+  second command sourced the ROS overlay and then called `head_test`, but that helper **resets
+  `PYTHONPATH`**, so the sourced ROS paths were dropped and 11 tests in `test_act_search.py` failed at
+  import. The correct helper for ROS-dependent suites is `head_test_render`, which sets the overlay itself:
+  run that way, `test_act_search.py` reports **21 passed** (verified in this worktree). The failure is my
+  command's, not the code's; the reviewer is expected to report it, and it should be read as a harness
+  limitation rather than a Task 5 defect.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
