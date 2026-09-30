@@ -309,6 +309,12 @@ def load_frozen_candidate(
     document = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(document, Mapping):
         raise EvaluationError("EVALUATION_FROZEN_IDENTITY_INVALID: the document must be a mapping")
+    # a candidate that is not promotable - a smoke plan, for instance - never enters model selection
+    if "promotable" in document and document["promotable"] is not True:
+        raise EvaluationError(
+            "EVALUATION_CANDIDATE_NOT_PROMOTABLE: this candidate records promotable "
+            f"{document['promotable']!r}, so it cannot be selected"
+        )
     for key in (
         "candidate_id",
         "weight_sha256",

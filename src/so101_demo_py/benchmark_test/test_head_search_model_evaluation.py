@@ -293,8 +293,8 @@ def test_compare_cli_refuses_a_drifted_weight_file(tmp_path: Path) -> None:
         str(tmp_path / "out"),
     ]
     # the weight files do not hash to the sealed digests: the gate refuses that specific reason
-    import io
     import contextlib
+    import io
 
     captured = io.StringIO()
     with contextlib.redirect_stdout(captured):
@@ -562,3 +562,27 @@ def test_a_supported_tracker_declaration_is_applied_or_refused() -> None:
     assert _resolve_tracking_iou({"tracking_iou": 0.25}, {"tracker": {"iou": 0.25}}) == 0.25
     with pytest.raises(EvaluationError, match="EVALUATION_OPERATING_POINT_CONFLICT"):
         _resolve_tracking_iou({"tracker": {"iou": 0.3}}, {"tracker": {"iou": 0.7}})
+
+
+def test_a_non_promotable_candidate_is_refused(tmp_path: Path) -> None:
+    """A smoke candidate records promotable false and must not enter model selection."""
+
+    from so101_demo.perception_benchmark.head_search_models import load_frozen_candidate
+
+    document = {
+        "candidate_id": "C",
+        "weight_sha256": "a" * 64,
+        "operating_points": {"head": {}, "task": {}},
+        "tracker": {"iou": 0.3},
+        "postprocess": {},
+        "runtime": {},
+        "promotable": False,
+    }
+    path = tmp_path / "frozen-smoke.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(EvaluationError, match="EVALUATION_CANDIDATE_NOT_PROMOTABLE"):
+        load_frozen_candidate(path)
+
+    document["promotable"] = True
+    path.write_text(json.dumps(document), encoding="utf-8")
+    assert load_frozen_candidate(path).candidate_id == "C", "a promotable candidate still loads"
