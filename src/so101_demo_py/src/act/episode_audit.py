@@ -325,6 +325,12 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
             raise ValueError("AUDIT_SCHEMA_INVALID")
     if list(record["positions"]) != list(projected):
         raise ValueError("AUDIT_SCHEMA_INVALID")
+    # T3-F1: the map must be the canonical six-dimension action — the arm's five in their registered order, then
+    # the gripper's one — because a permuted map with a correspondingly permuted projection proved nothing about
+    # the order the controller actually receives
+    if mapping != ([["arm", index] for index in range(_FRAME_SIZES["arm"])]
+                   + [["gripper", index] for index in range(_FRAME_SIZES["gripper"])]):
+        raise ValueError("AUDIT_SCHEMA_INVALID")
 
 
 def _physics_observation_typed(observation, *, kind: str) -> bool:

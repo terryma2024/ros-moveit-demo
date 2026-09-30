@@ -42804,3 +42804,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   broker methods and `RosControllerReferencePort` with its wrong-name/order/map and frame-refusal negatives.
 - **State.** **F14 closed**; **F3 closed**; **F1 two of four cuts**; F5/F11/F12/F13 open; the goal is paused. HEAD
   `bdf51204b`; twenty gates green.
+
+
+## CP-2263 — F1's third cut: the projection map must be the canonical action
+
+- **What landed** (`episode_audit.py`): after the existing value checks, `_reference_frames_ok` now requires
+  `projection_map` to be exactly `[["arm", 0] … ["arm", 4], ["gripper", 0]]` — the arm's five in their registered
+  order, then the gripper's one. With the registered-name check (CP-2262) this closes the verdict's sentence that "a
+  six-entry unique map can permute dimensions provided the supplied projection and positions are permuted with it":
+  the dimensions can no longer be reordered at all, so the six values are provably the action the controller receives.
+- **First try, no fixture work**: the map every fixture already builds is the canonical one, so the rule landed
+  without touching a test — in contrast to the two cuts before it, where the fixtures were the whole difficulty.
+- **Evidence.** `logs/task3-f1-canonical.run` rc=0: **365 passed in 2.35s** across the audit, release-boundary,
+  controller-reference, task8, recorder, capture, qualification, W8, generic-artifact, store-commit and supervisor
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a tempfile proof.
+- **F1's remainder, now one item**: the positive control through the **real** ROS broker methods and
+  `RosControllerReferencePort` — a real frame forwarded through tap, capture, writer and readback — with its
+  wrong-name, wrong-order, wrong-map and frame-refusal negatives. The three source cuts the verdict asked for are in.
+- **State.** **F14 closed**; **F3 closed**; **F1 three of four cuts**; F5/F11/F12/F13 open; the goal is paused. HEAD
+  `af652027e`; twenty-one gates green.
