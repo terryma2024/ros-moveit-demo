@@ -37451,3 +37451,24 @@ That sharpens the attribution table into three distinct categories rather than o
 
 Category 1 is the largest and the most embarrassing to have presented as a suite result; the correction is on the
 record.
+
+## HS-112 — Re-measured with the installed layout: 1 visible failure against the earlier 198 (run parked before its summary)
+
+Running the ordinary demo suite the way these tests are built to run - the overlay's installed site-packages first
+(so `so101_demo` resolves), the perception venv's `mujoco`, ROS sourced, plugin autoload off, `-n 8`:
+
+```
+progress to 99%:  a single F among otherwise clean lines  (earlier source-only invocation: 198 failed)
+```
+
+The run **parked past 99%** without writing its summary - the same xdist end-game pattern as the JUnit attempt - so
+the counts are not yet quotable. What the progress lines do show, and what matters for the attribution, is that the
+failure count under the correct invocation is on the order of **one**, not hundreds: HS-111's finding that the leading
+cause was my own path mapping is confirmed by the shape of the run, and the honest status is "one failure observed,
+final number pending".
+
+**Process note, fourth occurrence:** stopping it, my own `pkill -f 'pytest -n 8 ...'` matched the shell running the
+command and killed my session mid-step. That is the fourth self-kill in this task (HS-021's `codex exec`, the
+`n8-noauto` run, the `codex-review*` sweep, and now this). The rule to follow, stated once and for all: **never put
+a kill in the same command whose text matches the pattern** - resolve the PID first, in a separate call, and kill by
+PID.
