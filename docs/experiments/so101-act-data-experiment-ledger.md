@@ -36524,3 +36524,28 @@ environmental reason (a runtime or artifact the gate does not provide) or for so
 touched - the two share the task 8 calibration contracts, and this task did edit
 `config/act/task8-calibration-measurement-contract-v2.json`. That check is the next step, and until it is done the
 honest statement is that the failures are unrelated **by name**, not yet by cause.
+
+## HS-071 — A real regression of mine, found by cause and fixed (commit 99d3da58f)
+
+**What happened.** Task 6 added a `head_search_parameters` list to
+`config/act/task8-calibration-measurement-contract-v2.json`. That file is the ACT task 8 measurement contract whose
+receipts the calibration aggregator validates, so the addition broke **14 of its 32 tests**, including
+`test_a_payload_carrying_the_inner_head_search_block_matches_the_sealed_descriptor`.
+
+**How it was found.** HS-070 classified the 270 non-passing tests by name and concluded nothing head-search
+related was failing, while recording that "not ours by name is weaker than not ours by cause". Acting on that,
+running `test_act_task8_calibration_aggregator.py` under the pinned environment gave 14 failed; swapping in the
+**pre-edit** contract gave **32 passed**; swapping back returned the failures. A controlled A/B on one variable,
+which convicts the edit.
+
+**The fix.** The key was unnecessary - the head-search parameter names already live in
+`config/act/head-search-calibration-contract-v1.json` - so it is reverted. Verified: aggregator **32 passed**,
+head-search calibration and startup suites **25 passed**.
+
+**Why this is the most important Task 11 entry.** Every gate in Task 11 was designed to prove that nothing else
+broke; the one real breakage was mine, in a neighbouring subsystem, and it was invisible to every head-search test
+because those tests never read that file. It was only visible by taking a reviewer's objection about cause
+seriously, and it is exactly the failure mode a "my tests are green" claim would have concealed.
+
+**Follow-up for the batched gate:** with this fixed, a fresh batched run would show whether any of the remaining
+~245 unclassified failures are also mine. That is worth one more run before Task 11 is called done.
