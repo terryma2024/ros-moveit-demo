@@ -42882,3 +42882,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Set aside rather than half-landed**; the audit suite is green again (72 passed).
 - **State.** **F14, F3 and F1 closed**; **F11 first cut landed, second cut written and staged with its fixture named**;
   F5/F12/F13 open; the goal is paused. HEAD `e10cf5c5d`; twenty-three gates green.
+
+
+## CP-2267 — F11's second cut pinned: the directions were inverted, and the fixture's end is 1.2
+
+- **Read this round**: `_window()` (lines 722-723) carries `collection_start_s: 1.0`, `collection_end_s: 1.2`,
+  `first_command_s: 1.0`, `physics_end_s: 1.1`, `label_cutoff_s: 1.0`, and line 777 already uses
+  `_window(first_command_s=1.5)` as the "command after the physics end" negative.
+- **The two corrections, both determined**:
+  1. the check's direction for the command endpoint was **inverted**: a command is issued *before* the physics moves,
+     so the admissible relation is `first_command_s <= min(physics_times) + _TOLERANCE_S`, not `>=`; the physics end
+     must **cover** the last row, i.e. `physics_end_s >= max(physics_times) - _TOLERANCE_S`;
+  2. the fixture's `physics_end_s` must therefore be **1.2** (its physics history runs to 1.2), while line 777's
+     negative keeps biting: `first_command_s = 1.5` is later than the first physics instant, which the corrected
+     direction refuses.
+- **With those two, the write is mechanical**: re-apply the check with the corrected directions, change 1.1 to 1.2 at
+  line 723, keep the seal's physics read as the rest of that readback does it, and run the audit, release-boundary,
+  task8 and generic-artifact suites.
+- **State.** **F14, F3 and F1 closed**; **F11 first cut landed, second cut determined to the two values**; F5/F12/F13
+  open; the goal is paused. HEAD `e608a14b5`; twenty-three gates green.
