@@ -23,6 +23,9 @@ import os
 from pathlib import Path
 
 MANIFEST_KIND = "ACT_EPISODE_AUDIT_MANIFEST"
+_METADATA_FILES = ("source.json", "inputs.json", "episode.json")
+_STREAM_NAMES = ("acquisitions.jsonl", "rows.jsonl", "events.jsonl", "references.jsonl",
+                 "physics.jsonl")
 SOURCE_KINDS = ("events", "references", "physics")
 _ACQUISITION_FIELDS = frozenset({"camera", "session_id", "reset_epoch", "sequence", "acquisition_id",
                                  "stamp_s", "received_monotonic_ns", "pixel_sha256"})
@@ -111,6 +114,7 @@ class EpisodeAuditWriter:
         self._streams = {name: self._open(path) for name, path in self.files.streams().items()}
         self._sequence = {name: 0 for name in self._streams}
         self._acquisitions: dict = {}
+        self._references: dict = {}
         self._bound: set = set()
         self._row_indexes: set = set()
         self._release_epoch: int | None = None
@@ -193,9 +197,11 @@ class EpisodeAuditWriter:
             stream.flush()
             os.fsync(stream.fileno())
             stream.close()
-        files = {path.name: _sha256(path) for path in self.files.streams().values()}
-        files.update({path.name: _sha256(path) for path in (self.files.source, self.files.inputs,
-                                                            self.files.episode)})
+        files = {}
+        for target in (*self.files.streams().values(), self.files.source, self.files.inputs,
+                       self.files.episode):
+            files[target.name] = {"path": target.name, "size": target.stat().st_size,
+                                  "sha256": _sha256(target)}
         manifest = {"kind": MANIFEST_KIND, "schema_version": 1, "window": dict(window),
                     "files": files, "inputs_sha256": self.inputs["inputs_sha256"]}
         target = self.root / "audit" / "audit-manifest.json"
@@ -250,7 +256,13 @@ class EpisodeAuditWriter:
 
 
 def verify_audit_manifest(path: Path) -> dict:
-    """Re-read a sealed audit and recompute it; a rewritten file or lost binding is refused."""
+    """Re-read a sealed audit and recompute it.
+
+    The inventory is **required**, not trusted: every expected stream and metadata file must be listed
+    with a safe relative path, its size and its digest, so a manifest that omits a stream cannot leave
+    that stream unchecked. Each stream is then re-validated semantically with the same closed schemas
+    and relationships the writer enforced, because a checksum only proves the bytes did not change.
+    """
 
     path = Path(path)
     try:
@@ -262,28 +274,77 @@ def verify_audit_manifest(path: Path) -> dict:
     if manifest["kind"] != MANIFEST_KIND or manifest["schema_version"] != 1:
         raise ValueError("AUDIT_MANIFEST_INVALID")
     audit = path.parent
-    for name, digest in manifest["files"].items():
+    expected = set(_METADATA_FILES) | set(_STREAM_NAMES)
+    files = manifest["files"]
+    if not isinstance(files, dict) or set(files) != expected:
+        # an inventory that omits a stream, or invents one, is refused rather than partially checked
+        raise ValueError("AUDIT_MANIFEST_INVENTORY_INVALID")
+    for name, entry in files.items():
         target = audit / name
-        if not target.is_file() or _sha256(target) != digest:
+        if (not isinstance(entry, dict) or set(entry) != {"path", "size", "sha256"}
+                or entry["path"] != name or not target.is_file() or target.is_symlink()):
+            raise ValueError("AUDIT_MANIFEST_INVENTORY_INVALID")
+        payload = target.read_bytes()
+        if len(payload) != entry["size"] or _sha256(target) != entry["sha256"]:
             # a changed raw reference, a rewritten stream or a deleted file lands here
             raise ValueError("AUDIT_HASH_MISMATCH")
+    declared = json.loads((audit / "inputs.json").read_bytes())
+    if (not isinstance(declared, dict)
+            or declared.get("inputs_sha256") != manifest["inputs_sha256"]):
+        # the manifest names the frozen inputs digest, and the payload must agree with it
+        raise ValueError("AUDIT_MANIFEST_INVALID")
+    _verify_streams(audit)
+    return manifest
+
+
+def _records(path: Path, fields: frozenset, code: str) -> list:
+    try:
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(code) from error
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != fields:
+            raise ValueError(code)
+    return rows
+
+
+def _verify_streams(audit: Path) -> None:
     acquisitions = {}
-    for line in (audit / "acquisitions.jsonl").read_text().splitlines():
-        record = json.loads(line)
-        acquisitions[record["acquisition_id"]] = record
+    for row in _records(audit / "acquisitions.jsonl", _ACQUISITION_FIELDS,
+                        "AUDIT_ACQUISITION_INVALID"):
+        if row["acquisition_id"] in acquisitions:
+            raise ValueError("AUDIT_ACQUISITION_INVALID")
+        acquisitions[row["acquisition_id"]] = row
     bound: set = set()
-    for line in (audit / "rows.jsonl").read_text().splitlines():
-        record = json.loads(line)
+    indexes: set = set()
+    for row in _records(audit / "rows.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID"):
+        if row["row_index"] in indexes or row["head_id"] == row["wrist_id"]:
+            raise ValueError("AUDIT_ROW_INVALID")
+        indexes.add(row["row_index"])
         for name in ("head_id", "wrist_id"):
-            value = record[name]
+            value = row[name]
             if value not in acquisitions or value in bound:
                 raise ValueError("AUDIT_BINDING_UNKNOWN")
             bound.add(value)
+    sequence = 0
+    for row in _records(audit / "references.jsonl", _REFERENCE_FIELDS, "AUDIT_REFERENCE_INVALID"):
+        if row["sequence"] != sequence + 1:
+            raise ValueError("AUDIT_REFERENCE_INVALID")
+        sequence = row["sequence"]
+    sequence = 0
+    for row in _records(audit / "events.jsonl", _EVENT_FIELDS, "AUDIT_EVENT_INVALID"):
+        if row["sequence"] != sequence + 1 or not isinstance(row["kind"], str) or not row["kind"]:
+            raise ValueError("AUDIT_EVENT_INVALID")
+        sequence = row["sequence"]
     epoch: int | None = None
-    for line in (audit / "physics.jsonl").read_text().splitlines():
-        record = json.loads(line)
-        if epoch is None or record["release_epoch"] > epoch:
-            epoch = record["release_epoch"]
-        elif record["release_epoch"] < epoch:
+    sequence = 0
+    for row in _records(audit / "physics.jsonl", _PHYSICS_FIELDS, "AUDIT_PHYSICS_INVALID"):
+        if row["sequence"] != sequence + 1:
+            raise ValueError("AUDIT_PHYSICS_INVALID")
+        sequence = row["sequence"]
+        if epoch is None or row["release_epoch"] > epoch:
+            epoch = row["release_epoch"]
+        elif row["release_epoch"] < epoch:
             raise ValueError("AUDIT_RELEASE_EPOCH_STALE")
-    return manifest
+        if row["kind"] == "support" and type(row["observation"].get("supported")) is not bool:
+            raise ValueError("AUDIT_PHYSICS_INVALID")

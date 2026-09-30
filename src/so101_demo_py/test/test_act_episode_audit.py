@@ -9,6 +9,7 @@ trusted.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -181,3 +182,63 @@ def test_every_source_kind_is_closed_and_the_writer_is_exclusive(tmp_path):
     with pytest.raises(FileExistsError):
         EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"}, identity(),
                            {"inputs_sha256": "a" * 64})
+
+
+def _resign(writer, manifest_path, name, payload):
+    """Rewrite one stream and make the manifest agree, so only semantics can catch it."""
+
+    (manifest_path.parent / name).write_bytes(payload)
+    document = json.loads(manifest_path.read_bytes())
+    document["files"][name] = {"path": name, "size": len(payload),
+                               "sha256": hashlib.sha256(payload).hexdigest()}
+    manifest_path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    return manifest_path
+
+
+def test_an_inventory_that_omits_a_stream_is_refused(tmp_path):
+    """A manifest may not leave a stream unchecked by leaving it out (T3-F3)."""
+
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    document = json.loads(path.read_bytes())
+    del document["files"]["references.jsonl"]
+    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="AUDIT_MANIFEST_INVENTORY_INVALID"):
+        verify_audit_manifest(path)
+
+
+def test_an_inventory_entry_with_an_unsafe_path_is_refused(tmp_path):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    document = json.loads(path.read_bytes())
+    document["files"]["events.jsonl"] = {"path": "../events.jsonl", "size": 0, "sha256": "a" * 64}
+    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="AUDIT_MANIFEST_INVENTORY_INVALID"):
+        verify_audit_manifest(path)
+
+
+def test_a_checksum_consistent_reference_with_an_extra_field_is_refused(tmp_path):
+    """Re-validating semantics is what catches a self-consistent but schema-breaking stream."""
+
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    row = json.loads((path.parent / "references.jsonl").read_text().splitlines()[0])
+    row["extra"] = True
+    payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    _resign(writer, path, "references.jsonl", payload)
+    with pytest.raises(ValueError, match="AUDIT_REFERENCE_INVALID"):
+        verify_audit_manifest(path)
+
+
+def test_a_checksum_consistent_duplicate_row_index_is_refused(tmp_path):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    lines = (path.parent / "rows.jsonl").read_text().splitlines()
+    duplicated = json.loads(lines[0])
+    duplicated["head_id"] = "s/1/wrist/1"
+    duplicated["wrist_id"] = "s/1/head/1"
+    payload = ("\n".join([*lines, json.dumps(duplicated, sort_keys=True,
+                                              separators=(",", ":"))]) + "\n").encode()
+    _resign(writer, path, "rows.jsonl", payload)
+    with pytest.raises(ValueError, match="AUDIT_ROW_INVALID"):
+        verify_audit_manifest(path)

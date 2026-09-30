@@ -35488,3 +35488,40 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL, fix pass part-way);
   items 4-8 pending.** HEAD `4a01c0607`; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1945 — Task 3 fix pass, second instalment: T3-F3 closed (closed-inventory, semantic readback)
+
+- **The inventory is required, not trusted.** `verify_audit_manifest` no longer iterates whatever the
+  manifest happens to list: it requires the exact expected inventory (the three metadata documents plus
+  the five streams), requires each entry to be exactly `{path, size, sha256}` with `path` equal to the
+  file's own safe relative name and the file present, regular and not a symlink, and refuses any
+  inventory that omits a stream or invents one (`AUDIT_MANIFEST_INVENTORY_INVALID`). Sizes are checked
+  as well as digests, so a manifest may not silently leave a stream unchecked — the exact hole the
+  finding described.
+- **Every stream is re-validated semantically, because a checksum only proves bytes did not change.**
+  Acquisitions must be unique by id with closed fields; row bindings must have unique `row_index`,
+  distinct head/wrist ids and ids that resolve to appended acquisitions; references and events must have
+  closed fields and strictly increasing sequences from 1; physics must have closed fields, increasing
+  sequences, monotic release epochs and a boolean `supported` on support rows. The manifest now also
+  has to agree with the payload it names: its `inputs_sha256` must equal the digest declared inside
+  `inputs.json` (`AUDIT_MANIFEST_INVALID` otherwise).
+- **The writer emits the declared entry shape.** `files` entries became `{path, size, sha256}` instead
+  of a bare filename→digest mapping, which is also the shape the frozen plan declares for the manifest.
+- **Evidence.** `logs/task3-fix2.run` rc=0: **80 passed in 0.67 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_continuous_capture.py` and `test_act_release_boundary.py`, with its
+  own NVMe scratch and a non-empty tempfile proof. Four new controls, two of them the
+  checksum-consistent cases the finding said were missed: an inventory omitting `references.jsonl`; an
+  entry with an unsafe `../` path; a reference row with an extra field **and** a re-signed manifest; and
+  a duplicated `row_index` **and** a re-signed manifest — the last two must be caught by semantics
+  alone, and are.
+- **Remaining from the verdict.** **T3-F1** (the frozen `ACT_EPISODE_AUDIT` v2 contract: manifest kind
+  and version, `scope_sha256`/`identity`/`window` fields, `shape`/`dtype` on acquisitions,
+  `row-bindings.jsonl` naming, events with `identity`/`monotonic_ns`/per-kind `payload`, references
+  preserving the observer's raw message and revocation boundaries, physics carrying pose/velocity/contact
+  pairs/support/planning scene/feedback, and seal v2 adding `audit_manifest_sha256`/`scope_sha256` on the
+  existing closed keys — or an owner amendment). **T3-F2** with its fixtures and negative controls.
+  **T3-F5** gating full-run eligibility on the required raw physics and broker events.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (fix pass: F3, F4, F6 closed, F1/F2/F5
+  outstanding); items 4-8 pending.** HEAD `bb325645f`; 39-path dirty baseline untouched; no push, no
+  evidence deletion, no hardware, no second stack.
