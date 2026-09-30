@@ -42013,3 +42013,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   commit half is this one comparison away, with its control already in the store's suite; items 5+ wait on the four
   blocked bindings. HEAD `786af0c95`; thirteen gates green.
+
+
+## CP-2224 — Correction to CP-2223: `_safe` is not a normaliser, so the difference is the identity, not the spelling
+
+- **What `_safe` actually does** (`result_store.py:37-44`): it requires an **absolute** path with no `..` and **no
+  symlink** in the path or any parent, raising `RESULT_PATH_INVALID` otherwise. It does **not** normalise spelling or
+  resolve links — so CP-2223's "spelling difference" hypothesis is wrong, and a real spelling difference would have
+  raised `RESULT_PATH_INVALID` rather than the `LEASE_LOCATION_MISMATCH` that was observed.
+- **The better hypothesis, and it fits the failure**: both sides build the same layout
+  (`<root>/attempts/<point_id>/<attempt_id>`), so they differ only if they are given **different identities**. The
+  coordinator computes its `workspace` from the surrounding function's own `point_id`/`attempt` locals, while
+  `_expected(lease)` derives them from the **lease's** fields — in the failing test the coordinator grants, acks and
+  then reports on the same point, but a mismatch between the local attempt counter and `lease.attempt_id` is exactly
+  the kind of off-by-one this codebase's lease machinery is careful about.
+- **The one probe that settles it**: print `workspace`, `_expected(lease)` and the lease's `point_id`/`attempt_id`
+  side by side in that test's flow — three lines — before touching either side. Recording the hypothesis is not the
+  same as knowing it, and this stretch's ledger already shows what guessing costs.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  commit half is one identity question away, its control already present in the store's suite; items 5+ wait on the
+  four blocked bindings. HEAD `16611d78b`; thirteen gates green.
