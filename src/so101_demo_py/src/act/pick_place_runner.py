@@ -77,6 +77,7 @@ class PickPlaceRunner:
         # the audit receives the events this run actually produced, in the order it produced them
         self.audit = audit
         self._event_identity: dict = {}
+        self._ran = False
 
     @staticmethod
     def _raw(observation) -> bool:
@@ -254,6 +255,11 @@ class PickPlaceRunner:
 
     def run(self, request: dict) -> dict:
         self._validate_request(request)
+        if self._ran:
+            # one runner owns one attempt: a second run would otherwise let an early failure attribute
+            # its events to the previous attempt's identity
+            raise PickPlaceError("TASK8_RUNNER_REUSED")
+        self._ran = True
         started = False
         latest_step = 0
         try:

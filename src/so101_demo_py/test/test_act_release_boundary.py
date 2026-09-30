@@ -273,3 +273,17 @@ def test_post_release_events_carry_the_release_epoch():
         if phase in ("RELEASE", "FINAL_CHECK"):
             assert epoch == 2
     assert epochs[-1][0] == "run_complete" and epochs[-1][2] == 2
+
+
+def test_a_runner_is_one_shot_so_an_early_failure_cannot_inherit_an_identity():
+    """A second attempt must not attribute its events to the previous attempt (T3-F7 minor)."""
+
+    audit = RecordingAudit()
+    port = FakePort(detach=False)
+    runner = PickPlaceRunner(port, audit=audit)
+    with pytest.raises(PickPlaceError, match="DETACH_NOT_CONFIRMED"):
+        runner.run(request())
+    recorded = len(audit.events)
+    with pytest.raises(PickPlaceError, match="TASK8_RUNNER_REUSED"):
+        runner.run(request())
+    assert len(audit.events) == recorded

@@ -35894,3 +35894,40 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   F7's normal defect closed; F1, F3, F4, F5 and F7's Minor residual open); items 4-8 pending.** HEAD
   `7c13372e2`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-1955 — Task 3 fix pass, tenth instalment: one common scope payload and a one-shot runner
+
+- **T3-F4's core defect fixed.** The audit and the seal now name **one approved immutable scope payload**.
+  The audit's `source.json` admits exactly the approved closed scope fields again (the embedded
+  `scope_sha256` key is gone, so no unapproved schema amendment is required to make a valid scope work),
+  the recorder no longer demands an embedded digest of an external file, and it requires the scope file
+  the caller supplies to be **byte-for-byte the audit's own scope payload** — same canonical bytes, so
+  the seal's `scope_sha256` and the audit manifest's `scope_sha256` are the same digest by construction.
+  A scope file that merely shares mode/scene/seed is refused with `EPISODE_SEAL_AUDIT_SCOPE_MISMATCH`.
+  This is the incompatibility the reviewer identified: previously a scope dictionary containing exactly
+  the approved fields passed audit admission but could never pass recorder finish, and my positive
+  fixtures hid it by adding the extra embedded field.
+- **T3-F7's Minor residual fixed by making the runner one-shot.** `run()` refuses a second call with
+  `TASK8_RUNNER_REUSED` before any task-owned activity, so an early `begin` failure can no longer reach
+  the abort handler carrying the previous attempt's identity; the control asserts the second call adds
+  no events and no fabricated epoch.
+- **Evidence.** `logs/task3-fix10.run` rc=0: **91 passed** across `test_act_recorder.py`,
+  `test_act_episode_audit.py`, `test_act_release_boundary.py`, `test_act_supervisor.py`,
+  `test_act_task8.py` and `test_act_continuous_capture.py`, with its own NVMe scratch and a non-empty
+  tempfile proof. One of my own fixture mistakes was caught by the suite: the fixture wrote the scope
+  file with a trailing newline while the audit writes the payload without one, so the bytes differed.
+- **Still open (from CP-1954, unchanged).** **T3-F1**: reuse the registered `LeaseIdentity` contract at
+  `parallel_batch/contracts.py:184` for formal admission and tie it to episode/event identity; pin and
+  get an owner decision on the window schema (source schedule, first command, physical end, label
+  cutoff) while refusing missing facts; then the raw controller/accepted-goal history, source/receipt
+  clocks, full physics payloads and the broker event kinds with typed validators. **T3-F3**: shared
+  typed validators and cross-stream checks for the concrete readback misses the reviewer listed
+  (non-contiguous row index, non-finite reference position, per-camera stamp monotonicity, negative
+  physics step/epoch, event sim time, and comparing the scope and inputs digests). **T3-F4's remaining
+  correlation**: readback must compare the audit identity with the seal identity and correlate
+  labelled bindings/count/times/actions against the recorder rows, plus exact version-specific field
+  gates. **T3-F5**: the fail-closed/non-formal eligibility and sealing gate once the raw producers are
+  wired. Then a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD
+  `29434de9f`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

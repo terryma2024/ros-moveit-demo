@@ -229,12 +229,14 @@ class EpisodeRecorder:
                 raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
             with scope.open("rb") as stream:
                 scope_document = json.loads(stream.read())
-            if (audit_scope.get("scope_sha256") != _hash(scope.read_bytes())
-                    or any(scope_document.get(key) != audit_scope.get(key)
-                           for key in ("mode", "scene_id", "seed"))):
+            if scope_document != audit_scope or _hash(scope.read_bytes()) != _hash(
+                    (audit_manifest.parent / "source.json").read_bytes()):
+                # the scope the seal names must be byte-for-byte the payload the audit recorded
                 raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
+            # one approved immutable scope payload: the audit's own source.json is the scope, and the
+            # seal names that same payload's digest under its own name for the file the caller supplied
             audit_block = {"audit_manifest_sha256": _hash(audit_manifest.read_bytes()),
-                           "scope_sha256": _hash(scope.read_bytes())}
+                           "scope_sha256": _hash((audit_manifest.parent / "source.json").read_bytes())}
         if self._failed or self._closed:
             raise RecorderInfraError("RECORDER_NOT_SEALABLE")
         if not isinstance(outcome, dict) or set(outcome) != _OUTCOME_KEYS:

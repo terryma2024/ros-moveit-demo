@@ -214,20 +214,18 @@ def _audit_and_scope(tmp_path):
     from so101_demo.act.episode_audit import EpisodeAuditWriter
 
     def canonical(document):
-        return json.dumps(document, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        # byte-for-byte the payload the audit writes, so the seal and the audit name one scope
+        return json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
 
     # the scope exists first: the audit records the digest of the scope this episode ran under
     scope = tmp_path / "collection-scope.json"
     scope.write_bytes(canonical({"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
                                  "mode": "preselected_target_diagnostic", "scene_id": "default",
                                  "seed": 0, "inputs_sha256": "c" * 64}))
-    scope_sha256 = _hashlib.sha256(scope.read_bytes()).hexdigest()
 
-    writer = EpisodeAuditWriter(tmp_path / "audit-episode",
-                                {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
-                                 "mode": "preselected_target_diagnostic", "scene_id": "default",
-                                 "seed": 0, "inputs_sha256": "c" * 64,
-                                 "scope_sha256": scope_sha256},
+
+    scope_document = json.loads(scope.read_bytes())
+    writer = EpisodeAuditWriter(tmp_path / "audit-episode", scope_document,
                                 {"session_id": "session-1", "attempt_id": "attempt-1",
                                  "reset_epoch": 2, "release_epoch": 1, "scene_id": "default",
                                  "seed": 0},
@@ -256,6 +254,8 @@ def test_a_v2_seal_names_the_raw_audit_and_the_collection_scope(tmp_path):
     assert document["schema_version"] == 2
     assert (document["audit_manifest_sha256"]
             == hashlib.sha256(manifest.read_bytes()).hexdigest())
+    manifest_document = json.loads(manifest.read_bytes())
+    assert document["scope_sha256"] == manifest_document["scope_sha256"]
     assert document["scope_sha256"] == hashlib.sha256(scope.read_bytes()).hexdigest()
     for incomplete in ({}, {"audit_manifest": manifest}, {"scope": scope}):
         with pytest.raises(ValueError, match="EPISODE_SEAL_AUDIT_INCOMPLETE"):

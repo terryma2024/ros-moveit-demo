@@ -27,8 +27,7 @@ from .acquisition import CAMERAS, canonical_acquisition_id
 MANIFEST_KIND = "ACT_EPISODE_AUDIT"
 _METADATA_FILES = ("source.json", "inputs.json", "episode.json")
 # the frozen collection-scope contract, field for field
-_SCOPE_FIELDS = frozenset({"kind", "schema_version", "mode", "scene_id", "seed",
-                           "inputs_sha256", "scope_sha256"})
+_SCOPE_FIELDS = frozenset({"kind", "schema_version", "mode", "scene_id", "seed", "inputs_sha256"})
 _SCOPE_MODES = ("formal", "preselected_target_diagnostic")
 # the plan names session/reset/release as part of the identity; the rest of the lease document is
 # recorded verbatim because the plan does not fix its key names here
@@ -77,7 +76,7 @@ def _scope_ok(scope) -> bool:
 
     return bool(
         isinstance(scope, dict)
-        and set(scope) in (_SCOPE_FIELDS, _SCOPE_FIELDS - {"scope_sha256"})
+        and set(scope) == _SCOPE_FIELDS
         and scope.get("kind") == "ACT_COLLECTION_SCOPE" and scope.get("schema_version") == 1
         and scope.get("mode") in _SCOPE_MODES and isinstance(scope.get("scene_id"), str)
         and scope.get("scene_id") and type(scope.get("seed")) is int and scope["seed"] >= 0
