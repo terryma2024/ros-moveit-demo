@@ -40102,3 +40102,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   closed with the seal-time tie left; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `4fc0e6470`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2137 — F3's seal-time tie landed: every release step must be named by a release event
+
+- **What landed** (`episode_audit.py`): the writer now records, per release epoch, whether a `release` event
+  actually named it (`self._release_named`, filled beside `self._event_kinds`), and `seal()`'s formal gate refuses
+  a stream in which any epoch above 0 was reached without one — so "some release happened" is no longer enough;
+  every step the stream takes must be named.
+- **Why this shape**: enforcing the tie per event would have forced the runner to reorder its emissions (CP-2134),
+  whereas the requirement is a property of the stream, which is exactly what seal() sees.
+- **Evidence.** Targeted run this round: **147 passed** across the audit, recorder, release-boundary and capture
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof. The real-path
+  test that CP-2133's per-event variant broke passes here, because that variant demanded an ordering the runner
+  does not owe.
+- **F3's state**: round trips, release correlation, lease, initial epoch and this tie are **all landed**; what F3
+  still owes is the **negative control** for this tie — a re-signed stream that steps to an epoch no `release`
+  names must be refused at seal (the verdict's "re-signed boundary controls for the remaining differences").
+- **State.** Item 3's list: **F12 closed**, **F3 closed but for that one control**; F13 down to `sim_time_s`
+  (needs the plan's ruling); **F1/F5/F11 open**; targeted gate `logs/task3-final.run` **430 passed**; HEAD
+  `d0c8331ba`; no push, no evidence deletion, no hardware, no second stack.

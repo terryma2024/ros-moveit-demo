@@ -621,6 +621,9 @@ class EpisodeAuditWriter:
         self._revoked_targets: set = set()
         self._event_release_epoch: int | None = None
         self._event_kinds: set = set()
+        # F3: which release epochs a `release` event actually named, so seal() can require that every step the
+        # stream takes is named by one rather than only that some release happened somewhere
+        self._release_named: dict = {}
         self._reference_history: dict = {}
         self._row_indexes: set = set()
         self._row_times: list = []
@@ -731,6 +734,10 @@ class EpisodeAuditWriter:
                     raise ValueError("AUDIT_SCHEMA_INVALID")
             self._event_release_epoch = item["identity"]["release_epoch"]
             self._event_kinds.add(item["kind"])
+            _epoch = item["identity"].get("release_epoch")
+            if type(_epoch) is int:
+                self._release_named[_epoch] = (self._release_named.get(_epoch, False)
+                                               or item["kind"] == "release")
             item["sequence"] = self._next("events")
         elif kind == "references":
             keys = set(record) if isinstance(record, dict) else set()
@@ -788,7 +795,9 @@ class EpisodeAuditWriter:
             # producers exist this refuses rather than sealing an empty audit
             if (not self._sequence["physics"] or not self._sequence["references"]
                     or not self._sequence["events"] or not self._references
-                    or "release" not in self._event_kinds):
+                    or "release" not in self._event_kinds
+                    # F3: every release step the stream takes must be named by a release event, not just one
+                    or any(epoch > 0 and not named for epoch, named in self._release_named.items())):
                 raise ValueError("AUDIT_FORMAL_COVERAGE_INCOMPLETE")
         for sequence in sorted(self._bound_references):
             entry = self._references.get(sequence)
