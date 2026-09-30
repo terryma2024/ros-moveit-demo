@@ -37640,3 +37640,30 @@ one thing I will not do is call them "environmental" without reading a line.
 
 Worth noting how much this thread was worth: the installed demo gate was reported as unavailable for four rounds, and
 the actual blocker was a plugin flag I had already learned to use elsewhere (HS-044) and simply had not applied here.
+
+## HS-120 — The installed gate's remaining errors are bare-name sibling imports needing the test dir on `sys.path`
+
+Reading the error text out of the readback XML rather than trusting the count:
+
+```
+test.test_act_pick_place_approach_execution -> ImportError while importing test module ...
+E   ModuleNotFoundError: No module named 'test_act_pick_place_approach_path_screen'
+```
+
+The eleven entries are **module collection failures**, and the cause is that these test modules import their
+**siblings by bare name** (`import test_act_pick_place_approach_path_screen`), which only resolves when the test
+directory itself is on `sys.path`. Under a plain pytest invocation pytest's rootdir handling puts it there; under
+`colcon test`'s invocation it does not.
+
+So the fix is one more `PYTHONPATH` element - the package's `test/` directory - and it is, for the fifth or sixth time
+in this thread, an **invocation** matter rather than a code or environment defect:
+
+```zsh
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+PYTHONPATH="$HEAD_VENV_SITE:$HEAD_WORKTREE/src/so101_demo_py/test:$PYTHONPATH" \
+  colcon test --packages-select so101_demo_py
+```
+
+The chain of causes for this one gate, each found only by reading a line: plugin autoload (HS-118) -> collection
+(HS-119) -> bare sibling imports (this entry). That is the whole story of why the demo package's installed gate was
+"unavailable": four separate invocation details, none of them the code.
