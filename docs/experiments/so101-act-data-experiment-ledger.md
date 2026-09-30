@@ -41318,3 +41318,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   five of its items landed (Boolean defect, shared predicate, reader check, vacuous schedules, both controls);
   targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD
   `1e32ef428`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2195 — F11's frozen policy has no home in this module, and that is a question for the plan
+
+- **Read this round**: `_window_ok(window, *, mode)` (line 454) is called from the seal gate (line 857, under
+  `self.scope.get("mode") == "formal"`) and from the readback (line 966, under the formal mode read from
+  `source.json`), and it validates the window's three policy fields — `cadence_s`, `streams_required`,
+  `permitted_gaps_s` (lines 470-475) — purely for internal consistency and positivity.
+- **What is frozen today, and what is not**: the scope is validated as an `ACT_COLLECTION_SCOPE` v1 carrying
+  `mode`, `scene_id`, `seed` and `inputs_sha256` (lines 526-529) — **no cadence, no stream list, no gap policy**.
+  So F11's "derive/check policy from the frozen inputs" has **no counterpart in the audit module**: the three
+  policy fields a window claims are exactly what the caller supplies, and nothing in this worktree says where a
+  frozen copy should live. The verdict's own list of frozen input roles (`path_policy`, `placement_qc`, `rgb_skew`,
+  `resource_thresholds`) does not name one either.
+- **The two candidate homes, neither confirmed**: the writer's `inputs.json` (the `inputs` mapping it seals with
+  `inputs_sha256`), or the plan's frozen input set. Choosing between them is an owner/plan decision — guessing it
+  would either invent a contract the plan does not have or freeze the wrong document, which is the class of mistake
+  this session has recorded repeatedly.
+- **What F11 has landed so far, all evidence-backed**: the Boolean defect (CP-2184), the shared window predicate
+  across seal and readback (CP-2188/2189), the invented-instant control (CP-2190), the non-vacuous schedule rule
+  (CP-2191) and its controls at both boundaries (CP-2194). The remaining item is **reconstructed counts/ranges and
+  collection endpoints**, which is implementable from the rows the audit already holds and does not need the plan.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan on `sim_time_s`); **F11 in
+  progress** with five items landed and its frozen-policy item now a **question for the plan**; targeted gates
+  **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `4256e32ab`; no
+  push, no evidence deletion, no hardware, no second stack.
