@@ -37091,3 +37091,23 @@ no step.
 This also supersedes HS-094's route reasoning with something stronger: neither the promotable bundle nor a hand-added
 seal field was needed - the declaration already exists in the tracked geometry contract and is simply not
 propagated.
+
+## HS-096 — Fix plan for the seal step propagation, pinned for the next round
+
+Where the change goes, established by reading rather than guessing:
+
+1. **Producer**: `act/head_camera_geometry.py` builds the geometry document (line 424 carries
+   `coarse_step_candidate_rad`); the field is already an accepted contract key (line 57) and is read back on load
+   (line 459). The written seal omits it, so the write path - not the contract or the smoke - is where it drops.
+2. **RED test**: extend the geometry validator's own test module (the file that exercises
+   `validate_head_camera_geometry`, found by grepping the suite for it) with a case asserting a contract that
+   declares `coarse_step_candidate_rad` yields a seal document carrying it; assert the refusal still happens for a
+   contract that declares none.
+3. **GREEN**: write the field in the seal writer; re-run the validator's tests plus
+   `test_act_head_search_domain.py` (which already references the field) to catch fallout.
+4. **Then**: regenerate the seal from the tracked contract (`coarse_step_candidate_rad: 0.3`), which changes
+   `seal_sha256`, so the perception configs' seal pointer and the dataset verify chain must be re-pointed exactly as
+   in HS-046/HS-047 - and only then run the final-seal smoke that HS-092 showed refusing.
+
+Sequencing matters here: the seal hash change ripples into the dataset chain, so this is a small change with a
+medium blast radius and belongs at the start of a round, not the end of one.
