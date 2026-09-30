@@ -965,6 +965,16 @@ def verify_audit_manifest(path: Path) -> dict:
         # the manifest names the scope it was collected under, and the payload must agree with it
         raise ValueError("AUDIT_MANIFEST_INVALID")
     _verify_streams(audit, manifest["identity"])
+    if formal_window:
+        # T3-F11: the seal's window-to-observed predicate is repeated here, from the rows this readback holds,
+        # so an invented in-range instant cannot pass by satisfying `_window_ok` and the coverage gate alone
+        _bound_rows = _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID")
+        _acquisition_rows = _records(audit / "acquisitions.jsonl", _ACQUISITION_FIELDS,
+                                     "AUDIT_ACQUISITION_INVALID")
+        if not _window_matches_observed(manifest["window"],
+                                        [row["sim_time_s"] for row in _bound_rows],
+                                        {row["acquisition_id"]: row for row in _acquisition_rows}):
+            raise ValueError("AUDIT_WINDOW_INVALID")
     if formal_window and not _formal_coverage_ok(audit):
         # the seal gate's coverage requirement holds when the audit is read back, not only when sealed
         raise ValueError("AUDIT_FORMAL_COVERAGE_INCOMPLETE")

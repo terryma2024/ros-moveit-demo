@@ -41194,3 +41194,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
   its Boolean defect fixed and its predicate now shared; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 /
   283 / 176 / 284 / 151 passed**; HEAD `2f89a99e3`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2189 — F11's reader half landed: the readback now repeats the shared window predicate
+
+- **What landed** (`episode_audit.py`, in the module-level verifier): before the formal coverage gate, a
+  `formal_window` branch parses `row-bindings.jsonl` and `acquisitions.jsonl`, calls
+  `_window_matches_observed(manifest["window"], row times, acquisitions keyed by id)` — the very predicate the seal
+  uses (CP-2188) — and raises `AUDIT_WINDOW_INVALID` when the claimed window does not describe what the audit
+  holds. That is exactly F11's "share window-to-observed-history validation between seal and readback": an invented
+  in-range instant can no longer pass by satisfying `_window_ok`, stream validation and the coverage gate alone.
+- **Evidence.** Targeted run this round: **151 passed** across the audit, recorder, release-boundary and capture
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **The control F11 asks for, ready to write in one pass**: seal a self-consistent formal audit, then edit the
+  **manifest document's** `window["source_schedule"]` to name an invented in-range camera instant — 1.05, which is
+  inside `collection_start_s`/`collection_end_s` (1.0/1.2) and matches no acquisition — record the new window in the
+  manifest (the window is not covered by stream hashes, F11's own observation), re-sign, and assert
+  `AUDIT_WINDOW_INVALID`. The relabel machinery already exists in the suite (CP-2132), so this is a variant of an
+  existing test rather than new infrastructure.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  its Boolean defect fixed and its predicate shared across both sides; targeted gates **430 / 201 / 201 / 201 / 246
+  / 247 / 200 / 283 / 176 / 284 / 151 passed**; HEAD `eeb86bdca`; no push, no evidence deletion, no hardware, no
+  second stack.
