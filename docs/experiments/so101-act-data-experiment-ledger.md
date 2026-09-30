@@ -38412,3 +38412,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   reader who starts from the handoff sees the milestone and what it does not cover.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2061 — Task 3: a control found the port's planning gate to be upstream-guaranteed, and the control was reverted
+
+- **The finding, from a RED I did not paper over.** Driving `_search_evidence` with a search result whose
+  `found` is `False` does **not** yield a document with `planning_ok: False` — the port refuses the observation
+  with `SEARCH_INVALID` before the document exists. So the SEARCH document's `planning_ok` derivation
+  (CP-2058) can only ever report `True`; it is **upstream-guaranteed**, exactly the "decorated literal"
+  CP-2054 warned about. The boundary's `planning_ok` is not affected: it reports the path proof
+  `execute_approach` establishes, which a search can genuinely fail to produce.
+- **The controls did not land.** My first version asserted `planning_ok is False` (RED: `SEARCH_INVALID`) and
+  my second expected that refusal explicitly; the suite still failed, and with the round's budget spent I
+  restored the test file to its committed state rather than iterate blindly. Verified green afterwards
+  (`revert_rc=0`, the search-port suite's own count), so the tree carries no red test.
+- **What the same experiment did establish, before it was reverted**: `mujoco_ok` follows the world sample (a
+  `truncated` world reports the gate false), and a camera stamp ten seconds stale is refused by the source
+  check itself — so the freshness the two camera gates report is enforced upstream, not merely restated.
+- **What should happen next, recorded rather than improvised.** Either the port's `planning_ok` becomes a
+  documented note ("the search already refused any result that did not lock") or it is given a real source
+  (the path/approval evidence the boundary holds). Both change what the gate means, which is why the choice
+  belongs to the owner or a reviewer rather than to a hurried patch.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `21b0809a4`;
+  consolidated gate `logs/task3-gate16.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
