@@ -37034,3 +37034,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `83a6b271e`;
   gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1998 — Task 3: consolidated gate re-verified and a resumption handoff written
+
+- **Gate.** `logs/task3-gate7.run` rc=0: **403 passed in 26.69 s** across the twenty files used for the
+  fifth checkpoint plus the observer suite. The tree is at HEAD `4b8e0485a` with the 39-path baseline
+  untouched (37 dirty entries as at the start of this session, the two others being this task's own tracked
+  edits committed since).
+- **Handoff written** for whoever resumes: `docs/experiments/so101-act-task3-handoff.md` states where Task 3
+  stands, the four open items in the order I would attack them (T3-F1's producer side, amendment A.1 with the
+  reviewer's clarification, the T3-F3/T3-F5 readback residuals with CP-1993's recipe, and T3-F11 with
+  CP-1997's recipe), the fixture lesson from the four reverted instalments with the exact helpers each test
+  file already provides, the environment facts a fresh run needs, and what the objective still requires
+  (Tasks 4-8 plus the four unapproved input roles).
+- **Why this round was verification plus handoff rather than another implementation attempt.** My last four
+  implementation rounds ended in reverts when a new control could not be built within budget, and the two
+  remaining schema-level items (A.1, the producer wiring) need the owner's decision. A verified gate plus a
+  document that makes resumption cheap is worth more than a fifth coin-flip, and it is what I would want to
+  read if I picked this worktree up cold.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (the four items above); items 4-8 pending.**
+  HEAD `4b8e0485a`; gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no
+  evidence deletion, no hardware, no second stack.
