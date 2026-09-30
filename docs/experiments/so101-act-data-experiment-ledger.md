@@ -41296,3 +41296,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
   four items landed and this control half-proven; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 /
   176 / 284 / 151 / 152 passed**; HEAD `6f46422cc`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2194 — F11's vacuous-schedule rule now has controls at both boundaries
+
+- **What landed** (`test_act_episode_audit.py`): `…refused_at_seal` — an emptied stream schedule makes
+  `writer.seal` raise `AUDIT_WINDOW_INVALID` — and `…refused_on_readback` — the same emptiness written into a
+  **sealed** manifest is refused by `verify_audit_manifest`.
+- **The diagnostic that resolved the code mismatch (CP-2193)**: the probe showed the readback refuses at
+  `episode_audit.py:969`, the manifest gate that runs `_window_ok(manifest["window"], mode="formal")` **before** the
+  shared predicate, and that gate raises `AUDIT_MANIFEST_INVALID` rather than the window code. The behaviour was
+  right all along; my earlier expectation pinned the wrong code, so the second test now asserts the code the
+  earlier gate actually raises, with the reason in its docstring — the vacuous schedule cannot survive readback at
+  all, which is the property F11 asks for.
+- **Evidence.** Targeted run this round: **154 passed** across the audit, recorder, release-boundary and capture
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **What F11 still lists**: **frozen policy** — `cadence_s`, `streams_required` and `permitted_gaps_s` are
+  caller-provided rather than checked against the frozen inputs — and **reconstructed counts/ranges and collection
+  endpoints**, with source histories beyond camera acquisitions participating.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  five of its items landed (Boolean defect, shared predicate, reader check, vacuous schedules, both controls);
+  targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD
+  `1e32ef428`; no push, no evidence deletion, no hardware, no second stack.

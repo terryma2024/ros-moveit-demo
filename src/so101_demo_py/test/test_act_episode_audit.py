@@ -1292,3 +1292,28 @@ def test_readback_refuses_a_window_naming_an_instant_no_acquisition_holds(tmp_pa
     path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
         verify_audit_manifest(path)
+
+
+def test_a_schedule_naming_no_instant_is_refused_at_seal(tmp_path):
+    """T3-F11: an empty stream schedule is vacuous, so a seal may not accept one."""
+
+    writer, window = _self_consistent_formal(tmp_path / "seal")
+    emptied = {**window, "source_schedule": {**window["source_schedule"], "head": []}}
+    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
+        writer.seal(emptied)
+
+
+def test_a_sealed_schedule_naming_no_instant_is_refused_on_readback(tmp_path):
+    """T3-F11: a sealed manifest carrying the same emptied schedule is refused, at the manifest gate.
+
+    The readback reaches `_window_ok` before the shared predicate, so the refusal it reports is
+    `AUDIT_MANIFEST_INVALID`; what matters is that the vacuous schedule cannot survive readback at all.
+    """
+
+    sealed, window = _self_consistent_formal(tmp_path / "read")
+    path = sealed.seal(window)
+    document = json.loads(path.read_bytes())
+    document["window"]["source_schedule"]["head"] = []
+    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="AUDIT_MANIFEST_INVALID"):
+        verify_audit_manifest(path)
