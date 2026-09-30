@@ -40798,3 +40798,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
   landed** with this fixture one read away; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**;
   HEAD `52f24646e`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2170 — Line 787's neighbourhood, and the probe that settles it
+
+- **Read this round** (`episode_audit.py:776-795`): the physics branch checks, in order, the row's **closed**
+  top-level key set (`_PHYSICS_FIELDS` minus `sequence`), the registered `kind`, that `observation` is a dict, a
+  finite non-negative `sim_time_s`, an integer `release_epoch`, `_physics_observation_typed(observation, kind=…)`,
+  the correlation `observation["simulation_time_s"] == row["sim_time_s"]`, and `_apply_epoch` — which raises
+  `AUDIT_SCHEMA_INVALID` only for a `support` row whose `supported` is not a bool, tracking epochs otherwise.
+  Counting from 776, the reported line 787 is the **correlation check** or the **typing call** immediately above
+  it (the pypath copy is the same file, so the offset is one of those two).
+- **By my reading the sample satisfies every one of them** — thirteen admissible keys, `physics_step` admitted
+  (CP-2166), `_PHYSICS_REQUIRED_REGISTERED["contact"]` fully present, non-empty finite vectors, four-key contact
+  dictionaries, booleans where declared, `sim_time_s` equal on both levels — so the refusal is a detail the reading
+  missed rather than a design gap.
+- **The probe to run next, one round, three variants**: append the same row with (a) `other_contacts` non-empty
+  instead of `[]`, (b) `model_qpos`/`model_qvel` of length six instead of one, and (c) `reset_epoch` omitted or
+  matched to the writer's — each in its own writer so the failure list names which value rule bit. That converts
+  the last unknown into a single green fixture without another revert.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
+  landed**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**; HEAD `b5c58b990`; no push, no
+  evidence deletion, no hardware, no second stack.
