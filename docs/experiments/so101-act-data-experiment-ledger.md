@@ -39508,3 +39508,43 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   plan.
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4's QC half complete, its commit
   half now located from both sides. HEAD `c9098a953`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2112 — Sixth checkpoint verdict: FAIL (0 Critical / 6 Important), and its ruling on priority
+
+- **Verdict** (`reviews/task3-rereview5-verdict.md`, dispatch `32c54563-a7b4-438d-bfc1-620b13d28b6e`, reviewed
+  checkpoint `14c397541`, patch sha256 `5ca55fa7…`): **FAIL — 0 Critical / 6 Important / 0 Minor.** Closed by it:
+  **T3-F9** (the per-kind observer counter and its 60-publication control) and **T3-F10** (the terminal event's own
+  payload, driven through a real writer), plus the exactly-once retreat recording; several packed-frame admission
+  checks are called genuine improvements. Not closed: **F1/F3/F5/F11**, and two **new** defects, **F12/F13**.
+- **The ruling that changes the order of work**: "**Task 3 is not converged** … Under the owner's stated
+  converge-before-Task-4 decision, this checkpoint **cannot** be used as a completed Task 3 dependency for
+  independent QC." The reviewer explicitly puts the post-checkpoint W8 work outside its scope ("not approved or
+  rejected here"), so my Task 4 increments are neither blessed nor condemned — but the plan's own rule says Task 3
+  comes first.
+- **F12 (producer carriers do not compose with the phase contract)**: the real SEARCH segment fills
+  `planning_scene_observation`, the document forwards it as a **top-level key**, and the runner accepts only its old
+  key set or those keys plus `physical_observation` — so a real scene observation makes that document fail with
+  `PHASE_EVIDENCE_INVALID`. The broker's new feedback method likewise has **no production caller** filling either
+  the observation's or the boundary's feedback, so the new `joint_feedback_ok` gate reports false on the normal
+  path; and the boundary bases later gates on **cached** receipt/proof presence rather than a current phase's typed,
+  identity-fenced observations. Required: one agreed carrier contract wired through segment → port → runner →
+  writer, gates derived from the **joined current** records, and a producer-to-runner integration control that
+  seeds nothing by hand.
+- **F13 (feedback dimensions and manufactured freshness)** — these are defects in what I built in the Task 4
+  stretch, and they are precise: `controller_feedback(kind, when)` returns **all six** measured positions and
+  velocities for both kinds while the arm carries five names/commands and the gripper one, which the ratified
+  per-controller dimension/order contract refuses; its age check uses the **physics epoch's** receipt time rather
+  than the stored **joint/reference** receipt time, so fresh physics can make stale caches look current, including
+  across a reset; `sim_time_s` is the caller's arbitrary `when`, not an observed source instant; and
+  `_planning_scene_record()` runs a **new** scene query then stamps it with the **earlier** world readback's time,
+  querying twice during SEARCH and manufacturing exact clock equality. Required: select measured arrays by the
+  kind's registered names, validate the actual joint/reference receipt age and reset/session fences, keep
+  defensible source-time/skew evidence for the scene query, refuse when the joins cannot be proved, and add
+  fresh-physics/stale-joint, per-kind-dimension, reset and delayed-scene controls.
+- **Where the work stands.** Items 0-2 completed. Item 3 is **not converged**: F1, F3, F5, F11 plus F12 and F13 are
+  open, and the next pass should treat the six as its list, in the reviewer's order, with the "one agreed carrier
+  contract" of F12 as the structural piece. Item 4's QC increments exist and pass their suites, but the plan's rule
+  keeps them behind Task 3's convergence.
+- **State.** HEAD `17a77694d`; targeted gate `logs/task3-final.run` **430 passed** (as the verdict itself re-read);
+  no push, no evidence deletion, no hardware, no second stack.
