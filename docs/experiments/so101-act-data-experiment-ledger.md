@@ -39198,3 +39198,30 @@ precisely what verdict 15 said an executable inventory could not establish.
 `115640Z` (first success, wrong provenance - HS-173), `115927Z` (reconciled provenance), `120204Z` (CLI flags),
 **`120313Z` (final: everything including the coverage proof)**. Two superseded-success roots are deletion candidates under
 the repo rule, pending user authorization.
+
+## HS-179 — Task 11 APPROVED WITH FINDINGS (16th verdict), including the missing frozen-toolchain deliverable
+
+```
+Verified the final root's commit stamp, successful build, package prefixes, and seven executables.
+The installed smoke returns rc=0 and writes coverage-proof.json with coverage_complete=true against seal 7d963fdc.
+Finding: --scenario is accepted but unused; this smoke proves planning coverage, not a live no-cup outcome.
+Previously accepted contract limitations and named-underlay deviations remain.
+```
+
+**Task 11 is complete**, now including the deliverable its first approval did not cover (HS-165). The finding is correct and
+is retained as a limitation, not argued away: **`--scenario` is accepted but unused**, so the smoke proves *planning*
+coverage - `coverage_complete: true` against the reviewed seal - and **not** a live no-cup search outcome. My CLI patch
+(HS-176) added the flag because the plan's invocation required it; it never wired the scenario into behaviour, and the
+reviewer noticed the difference between "the command runs" and "the scenario is exercised".
+
+**What Task 11 delivered, all verified:** the reviewed geometry-seal chain (`7d963fdc…`, coarse step 0.3, configs re-pointed,
+dataset regenerated and verified, smoke `coverage_complete: true`); the installed `so101_teleop` gate `rc=0`; the head-camera
+API and panel (Tasks 9-10); provenance digests (HS-105); the non-promotable refusal (HS-052); the benchmark read-backs at the
+narrowed gate (HS-107); clause (c) attribution under the user-authorized module-level standard (HS-161); the per-ID and
+module-level comparisons (HS-159/161); and now the **frozen toolchain root** `head-toolchain-20260930T120313Z` whose
+assertions file records build `rc=0`, both package prefixes, seven executables, the resolved script path, the plan's exact
+smoke invocation, `smoke rc=0`, `coverage-proof.json present` and `"coverage_complete": true`.
+
+**Retained limitations, stated so they are not mistaken for passes:** the `--scenario` finding above; one `DIFFER` module and
+two non-comparable modules in clause (c) (HS-159); collection failures attributed at module level only (HS-122); the demo
+installed gate **unavailable** (HS-122); fresh closure via **named underlays** (HS-142); no full-suite-green claim.
