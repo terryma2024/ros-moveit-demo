@@ -39225,3 +39225,30 @@ smoke invocation, `smoke rc=0`, `coverage-proof.json present` and `"coverage_com
 **Retained limitations, stated so they are not mistaken for passes:** the `--scenario` finding above; one `DIFFER` module and
 two non-comparable modules in clause (c) (HS-159); collection failures attributed at module level only (HS-122); the demo
 installed gate **unavailable** (HS-122); fresh closure via **named underlays** (HS-142); no full-suite-green claim.
+
+## HS-180 — Task 12 Step 1: every input check passes except `hf auth whoami`
+
+Ran Step 1's verifications read-only, before creating a campaign root or downloading anything:
+
+| check | result |
+| --- | --- |
+| `TOOLCHAIN_RUN` under `$HEAD_EVIDENCE` | ok (`head-toolchain-20260930T120313Z`) |
+| `GEOMETRY_RUN` under `$HEAD_EVIDENCE` | ok (`head-camera-probe11-20260930T101722Z`) |
+| `install/setup.zsh`, `head-camera-geometry.json` | present |
+| `source-commit.txt` resolves to a commit | ok (`0f8a4e938400…`, HS-178's root) |
+| scenario partitions file | present |
+| GPU | `NVIDIA GeForce RTX 5080`, 16303 MiB |
+| **`hf auth whoami`** | **fails** - Python traceback inside `httpx/_urlparse.py:409 normalize_port` |
+| detector/second-stack processes | none (only my own command matched) |
+
+So the environmental gate stops exactly where the plan's own `hf auth whoami || exit 1` would stop it: **the Hugging Face CLI
+cannot authenticate on this host as invoked**, and Step 1 therefore cannot be completed, which means the A-weights download
+(`--revision b55430fb…`) and everything after it are blocked behind this.
+
+**Diagnosing rather than routing around it:** the failure is inside URL parsing (`normalize_port`), which points at a
+malformed endpoint or proxy variable in the environment rather than at missing credentials - credentials would produce an
+auth error, not a traceback. I have not changed any Hugging Face or proxy variable, and I will not: that is the environment
+the plan expects, and "make the gate pass by adjusting the environment" is the same class of shortcut as writing a
+`source-commit.txt` beside an existing install (HS-165). The next step is to read the traceback's tail for the offending
+URL/variable and report it, then decide with the user whether to fix the environment or to treat this host as unable to run
+the model campaign.
