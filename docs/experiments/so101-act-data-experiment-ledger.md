@@ -38383,3 +38383,30 @@ Two details worth keeping:
 With this, the attribution artefact is complete in the sense the contract asks: 194 ids with per-test causes, 37 previously
 uncaused now attributed at module level, 11 collection failures at module level, and each family tied to a demonstrated
 cause or a controlled comparison.
+
+## HS-149 — All TEN uncaused modules attributed, and the reviewer was right that HS-148 covered four
+
+The eighth verdict caught a real error: "The table's 37 UNCAUSED rows span **10 modules, not four**." Correct - I had read
+a `head -4` of a sorted list and treated it as the whole set, which is the **same mistake as HS-112** (inferring a total
+from a truncated view). Every module with uncaused rows, run directly:
+
+| module | result | dominant cause |
+| --- | --- | --- |
+| `test_act_path_proof_permits.py` | 54 failed | 54 `FIELDS_INVALID` |
+| `test_act_task8_calibration_aggregator.py` | 16 failed, 16 passed | 14 `MEASUREMENT_CONTRACT_V2_INVALID` |
+| `test_act_task8_formal_measurement_entry.py` | 1 failed, 2 passed | 1 `PHASE_CAMERA_MATRIX_INVALID` |
+| `test_act_task8_measurement_contract.py` | 3 failed, 16 passed | 2 `MEASUREMENT_CONTRACT_V2_INVALID` |
+| `test_act_task8.py` | 9 failed, 5 passed | 9 `_verify_phase()` TypeError |
+| `test_act_task8_validation_campaign.py` | 1 failed, 2 passed | **1 `name 'inspect' is not defined`** |
+| `test_grounding_dino_dataset_augmented.py` | 5 failed, 7 passed | 3 regex mismatch |
+| `test_nonpenetrating_train_val_contract.py` | 2 failed, 97 passed | 2 unsupported/missing fields |
+| `test_parallel_batch_cli.py` | 47 failed, 72 passed | 45 `TRUSTED_FINAL_TARGET_INVALID` |
+| `test_task8_child_driven_case.py` | 5 failed, 2 passed | 5 `ACT_TASK8_PORT_INVALID` |
+
+All ten now have module-level causes from real tracebacks, so no `UNCAUSED` row in the table is unattributed at any level.
+
+**One entry deserves separate attention:** `test_act_task8_validation_campaign.py` fails with
+`name 'inspect' is not defined` - a missing import, i.e. a **plain code defect** rather than an environment or contract
+issue. It is one test, it is not in this work's changed files (`task8_validation_campaign` does not appear in the HS-136
+diff), and it would be the first genuinely broken-code failure found in this sweep rather than an environmental one. I am
+recording it as such rather than folding it into the families.
