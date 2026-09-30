@@ -1,11 +1,3 @@
-"""Task 1 of the non-head first-episode plan: explicit mode and closed scope binding.
-
-The diagnostic mode replaces only target selection and the Head prerequisite. Robot, contact,
-controller, reset, collision, holding, release, sampling and identity gates all still apply, so
-these tests assert both directions: the diagnostic mode must not clear a non-Head safety gate, and
-the formal mode must still require real Head qualification.
-"""
-
 import hashlib
 import json
 import os
@@ -303,15 +295,66 @@ def _entry(path, approval="source_controlled"):
             "approved": True, "approval": approval}
 
 
-def _registry(tmp_path, *, contents=None):
-    """One approved candidate per role, with the two evidence-bound roles verified for real.
+ANCHOR_YAML = (b"schema_version: 1\nmeasurement_experiment: EXP-115\nanchors:\n"
+               b"  default:\n    cup_start_m: [0.02, -0.28, 0.165]\n    neck_start_rad: 0.1\n")
+RUNTIME_YAML = (b"start_guard:\n  timeout_s: 2.0\n  cpu_busy_warn_fraction: 0.9\n"
+                b"  ram_minimum_bytes: 1073741824\n  ram_minimum_fraction: 0.05\n"
+                b"  gpu_minimum_bytes: 1073741824\nhard_stops:\n  rtf_min: 0.5\n"
+                b"  disk_free_min_bytes: 5368709120\n")
+COLLECTION_YAML = (b"recorder:\n  sample_rate_hz: 10\n  queue_capacity_samples: 16\n"
+                   b"  queue_high_watermark_samples: 12\n"
+                   b"  queue_recovery_watermark_samples: 8\n"
+                   b"  queue_high_watermark_hold_s: 0.2\n  lossless: true\n")
 
-    `contents` overrides the placeholder bytes of a role, so a test can freeze the formats the
-    production inputs actually use (YAML, XML, Python) instead of JSON placeholders.
+
+def _derived_anchor_identity(payload: bytes) -> dict:
+    import yaml
+
+    document = yaml.safe_load(payload)
+    anchor = document["anchors"]["default"]
+    return {"scene_id": "default", "seed": 0,
+            "cup_start_m": [float(value) for value in anchor["cup_start_m"]],
+            "neck_start_rad": float(anchor["neck_start_rad"]),
+            "anchor_file_sha256": hashlib.sha256(payload).hexdigest(),
+            "measurement_experiment": document.get("measurement_experiment")}
+
+
+def _derived_resource_identity(runtime_bytes: bytes, collection_bytes: bytes) -> dict:
+    """The same shape the gate derives; tolerant of broken bytes so a negative case can be built."""
+
+    import yaml
+
+    runtime = yaml.safe_load(runtime_bytes) or {}
+    guard = runtime.get("start_guard") or {}
+    hard = runtime.get("hard_stops") or {}
+    recorder = (yaml.safe_load(collection_bytes) or {}).get("recorder") or {}
+    return {"start_guard": {key: guard.get(key) for key in
+                            ("timeout_s", "cpu_busy_warn_fraction", "ram_minimum_bytes",
+                             "ram_minimum_fraction", "gpu_minimum_bytes")},
+            "rtf_hard_stop": hard.get("rtf_min"),
+            "disk_hard_stop": hard.get("disk_free_min_bytes"),
+            "queue_hard_stop": {"queue_capacity_samples": recorder.get("queue_capacity_samples"),
+                                "queue_high_watermark_samples": recorder.get("queue_high_watermark_samples"),
+                                "queue_recovery_watermark_samples": recorder.get("queue_recovery_watermark_samples"),
+                                "queue_high_watermark_hold_s": recorder.get("queue_high_watermark_hold_s"),
+                                "lossless": recorder.get("lossless"),
+                                "sample_rate_hz": recorder.get("sample_rate_hz"),
+                                "source": "collection_config.recorder"},
+            "runtime_config_sha256": hashlib.sha256(runtime_bytes).hexdigest(),
+            "collection_config_sha256": hashlib.sha256(collection_bytes).hexdigest()}
+
+
+def _registry(tmp_path, *, contents=None):
+    """One approved candidate per role, with the evidence-bound roles built as the real gate reads
+    them: the anchor and the resource policy are derived from the bytes their roles carry.
     """
 
     source_root = tmp_path / "source"
     source_root.mkdir(exist_ok=True)
+    supplied = dict(contents or {})
+    supplied.setdefault("anchor_scene", ANCHOR_YAML)
+    supplied.setdefault("runtime_config", RUNTIME_YAML)
+    supplied.setdefault("collection_config", COLLECTION_YAML)
     proposal_path, receipt_path = _proposal_and_receipt(tmp_path)
     calibration = tmp_path / "calibration-nonhead.json"
     calibration.write_bytes(_canonical(_calibration_document(tmp_path)))
@@ -330,8 +373,10 @@ def _registry(tmp_path, *, contents=None):
                      "sha256": hashlib.sha256(calibration.read_bytes()).hexdigest(),
                      "approved": True, "approval": "nonhead_calibration"}
         else:
-            path = source_root / f"{role}.json"
-            payload = (contents or {}).get(role)
+            suffix = ".yaml" if role in ("anchor_scene", "runtime_config", "collection_config",
+                                         "resource_thresholds") else ".json"
+            path = source_root / f"{role}{suffix}"
+            payload = supplied.get(role)
             if payload is not None:
                 path.write_bytes(payload)
             elif not path.exists():
@@ -341,8 +386,13 @@ def _registry(tmp_path, *, contents=None):
                        "identity": None, "blocker": None}
     roles["scene_model"]["identity"] = {"model_sha256": "1" * 64, "scene_sha256": "2" * 64,
                                         "mujoco_version": "3.12.0"}
-    roles["anchor_scene"]["identity"] = {"scene_id": "default", "seed": 0,
-                                         "cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.1}
+    roles["anchor_scene"]["identity"] = _derived_anchor_identity(supplied["anchor_scene"])
+    # the inspector points the resource role at the runtime config it derives the policy from
+    runtime_entry = roles["runtime_config"]["selected"]
+    roles["resource_thresholds"]["selected"] = dict(runtime_entry)
+    roles["resource_thresholds"]["candidates"] = [dict(runtime_entry)]
+    roles["resource_thresholds"]["identity"] = _derived_resource_identity(
+        supplied["runtime_config"], supplied["collection_config"])
     return {"kind": CANDIDATES_KIND, "schema_version": 1, "source_root": str(source_root),
             "source_commit": SOURCE_COMMIT, "evidence_root": str(tmp_path), "roles": roles}
 
@@ -538,13 +588,19 @@ def test_freeze_accepts_the_production_input_formats(tmp_path):
     """The real inputs are YAML, XML and Python; only the policy roles carry a JSON contract."""
 
     registry = _registry(tmp_path, contents={
-        "anchor_scene": b"schema_version: 1\nanchors:\n  default:\n    neck_start_rad: 0.1\n",
         "scene_model": b"<mujoco><worldbody><body name='cup'/></worldbody></mujoco>\n",
         "reset_recipe": b"def pick_place_reset_targets(model, manifest, request):\n    return None\n",
         "reference_interpolation": b"class MoveItExpertActionTap:\n    def reference(self, at_s):\n        return at_s\n",
-        "collection_config": b"recorder:\n  sample_rate_hz: 10\n",
-        "runtime_config": b"start_guard:\n  timeout_s: 2.0\n",
-        "resource_thresholds": b"start_guard:\n  timeout_s: 2.0\n",
+        "anchor_scene": (b"schema_version: 1\nmeasurement_experiment: EXP-115\nanchors:\n"
+                         b"  default:\n    cup_start_m: [0.02, -0.28, 0.165]\n    neck_start_rad: 0.1\n"),
+        "runtime_config": (b"start_guard:\n  timeout_s: 2.0\n  cpu_busy_warn_fraction: 0.9\n"
+                           b"  ram_minimum_bytes: 1073741824\n  ram_minimum_fraction: 0.05\n"
+                           b"  gpu_minimum_bytes: 1073741824\nhard_stops:\n  rtf_min: 0.5\n"
+                           b"  disk_free_min_bytes: 5368709120\n"),
+        "collection_config": (b"recorder:\n  sample_rate_hz: 10\n  queue_capacity_samples: 16\n"
+                              b"  queue_high_watermark_samples: 12\n"
+                              b"  queue_recovery_watermark_samples: 8\n"
+                              b"  queue_high_watermark_hold_s: 0.2\n  lossless: true\n"),
     })
     manifest_path = freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     manifest = read_inputs_manifest(manifest_path)
@@ -604,6 +660,89 @@ def test_freeze_copies_the_verified_bytes_not_a_second_read(tmp_path, monkeypatc
     verify_frozen_inputs(manifest_path)
 
 
+def test_freeze_refuses_an_anchor_the_bytes_do_not_describe(tmp_path):
+    """A registry may assert an anchor identity; the anchor file has to actually carry it."""
+
+    # anchor bytes that do not carry the milestone's frozen anchor are an unbound input
+    other_anchor = ANCHOR_YAML.replace(b"neck_start_rad: 0.1", b"neck_start_rad: 0.0")
+    (tmp_path / "other").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "asserted").mkdir(parents=True, exist_ok=True)
+    registry = _registry(tmp_path / "other", contents={"anchor_scene": other_anchor})
+    with pytest.raises(ValueError, match="NONHEAD_INPUT_BINDING_REQUIRED"):
+        freeze_inputs(_write_registry(tmp_path / "other", registry), tmp_path / "other-inputs")
+
+    # valid anchor bytes with an asserted identity they do not describe are an identity mismatch
+    registry = _registry(tmp_path / "asserted")
+    registry["roles"]["anchor_scene"]["identity"] = dict(
+        registry["roles"]["anchor_scene"]["identity"], scene_id="left", seed=1)
+    with pytest.raises(ValueError, match="INPUT_IDENTITY_MISMATCH"):
+        freeze_inputs(_write_registry(tmp_path / "asserted", registry), tmp_path / "asserted-inputs")
+
+
+def test_freeze_refuses_a_ready_registry_without_the_resource_policy(tmp_path):
+    """Reporting READY is not enforcement: the gate re-derives the policy from the config bytes."""
+
+    for label, runtime in (("no-stops", RUNTIME_YAML.replace(b"hard_stops:", b"unrelated:")),
+                           ("bool-stop", RUNTIME_YAML.replace(b"rtf_min: 0.5", b"rtf_min: false")),
+                           ("zero-stop", RUNTIME_YAML.replace(b"rtf_min: 0.5", b"rtf_min: 0.0"))):
+        case = tmp_path / label
+        case.mkdir(parents=True, exist_ok=True)
+        registry = _registry(case, contents={"runtime_config": runtime})
+        assert registry["roles"]["resource_thresholds"]["status"] == "READY"
+        with pytest.raises(ValueError, match="NONHEAD_INPUT_BINDING_REQUIRED"):
+            freeze_inputs(_write_registry(case, registry), case / "inputs")
+
+    for label, collection in (
+            ("not-lossless", COLLECTION_YAML.replace(b"lossless: true", b"lossless: false")),
+            ("bad-watermarks", COLLECTION_YAML.replace(b"queue_recovery_watermark_samples: 8",
+                                                       b"queue_recovery_watermark_samples: 13")),
+            ("wrong-rate", COLLECTION_YAML.replace(b"sample_rate_hz: 10", b"sample_rate_hz: 5"))):
+        case = tmp_path / label
+        case.mkdir(parents=True, exist_ok=True)
+        registry = _registry(case, contents={"collection_config": collection})
+        with pytest.raises(ValueError, match="NONHEAD_INPUT_BINDING_REQUIRED"):
+            freeze_inputs(_write_registry(case, registry), case / "inputs")
+
+
+def test_freeze_refuses_a_resource_role_that_owns_another_file(tmp_path):
+    registry = _registry(tmp_path)
+    other = registry["roles"]["collection_config"]["selected"]
+    registry["roles"]["resource_thresholds"]["selected"] = dict(other)
+    registry["roles"]["resource_thresholds"]["candidates"] = [dict(other)]
+    with pytest.raises(ValueError, match="INPUT_IDENTITY_MISMATCH"):
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
+
+
+def test_a_malformed_collection_mode_is_ineligible_not_a_raise():
+    from so101_demo.act.collection import training_eligible
+
+    record = {"status": "PASSED", "qc": "PASS", "done": True, "interventions": 0,
+              "coordinator_committed": True, "collection_mode": "formal"}
+    for malformed in ([], {}, 0, 1.0, True, object()):
+        assert training_eligible(dict(record, collection_mode=malformed)) is False
+
+
+def test_ledger_references_keep_absolute_and_relative_paths(tmp_path):
+    """An absolute reference under the registered root must resolve to itself, not to a duplicate."""
+
+    from so101_demo.act.first_episode_inputs import _ledger_referenced_json
+
+    evidence = tmp_path / "evidence"
+    (evidence / "experiments" / "run").mkdir(parents=True)
+    absolute = evidence / "experiments" / "run" / "report.json"
+    relative = evidence / "experiments" / "run" / "second.json"
+    outside = tmp_path / "elsewhere" / "outside.json"
+    outside.parent.mkdir()
+    for path in (absolute, relative, outside):
+        path.write_bytes(b"{}")
+    ledger = tmp_path / "ledger.md"
+    ledger.write_text(f"see {absolute}\nand experiments/run/second.json\nand {outside}\n")
+    found = _ledger_referenced_json(ledger, evidence)
+    assert absolute in found
+    assert relative in found
+    assert outside not in found
+
+
 def test_resource_role_refuses_missing_hard_stops(tmp_path):
     """A start guard alone is not the resource policy: the plan also requires the stop points."""
 
@@ -612,17 +751,41 @@ def test_resource_role_refuses_missing_hard_stops(tmp_path):
     root = tmp_path / "source"
     (root / "src/so101_demo_py/config/act").mkdir(parents=True)
     (root / "src/so101_demo_py/config/mujoco").mkdir(parents=True)
-    (root / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml").write_text(
-        "start_guard:\n  timeout_s: 2.0\n  cpu_busy_warn_fraction: 0.9\n"
-        "  ram_minimum_bytes: 1073741824\n  ram_minimum_fraction: 0.05\n"
-        "  gpu_minimum_bytes: 1073741824\n")
-    (root / "src/so101_demo_py/config/act/parallel_collection_v3.yaml").write_text(
-        "recorder:\n  sample_rate_hz: 10\n  queue_high_watermark_samples: 12\n"
-        "  queue_high_watermark_hold_s: 0.2\n  queue_recovery_watermark_samples: 8\n"
-        "  lossless: true\n")
-    role = _inspect_resource_thresholds(root)
-    assert role["status"] == "MISSING"
-    assert role["blocker"] == "NONHEAD_INPUT_BINDING_REQUIRED"
-    assert role["identity"]["rtf_hard_stop"] is None and role["identity"]["disk_hard_stop"] is None
-    assert role["identity"]["queue_hard_stop"]["queue_high_watermark_samples"] == 12
-    assert role["identity"]["start_guard"]["timeout_s"] == 2.0
+    (root / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml").write_bytes(RUNTIME_YAML)
+    (root / "src/so101_demo_py/config/act/parallel_collection_v3.yaml").write_bytes(COLLECTION_YAML)
+    ready = _inspect_resource_thresholds(root)
+    assert ready["status"] == "READY"
+    assert ready["identity"]["rtf_hard_stop"] == 0.5
+    assert ready["identity"]["queue_hard_stop"]["queue_high_watermark_samples"] == 12
+
+    runtime = root / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+    runtime.write_bytes(RUNTIME_YAML.replace(b"hard_stops:", b"unrelated:"))
+    missing = _inspect_resource_thresholds(root)
+    assert missing["status"] == "MISSING"
+    assert missing["blocker"] == "NONHEAD_INPUT_BINDING_REQUIRED"
+
+    for label, broken in (("bool stop", RUNTIME_YAML.replace(b"rtf_min: 0.5", b"rtf_min: false")),
+                          ("zero stop", RUNTIME_YAML.replace(b"rtf_min: 0.5", b"rtf_min: 0.0"))):
+        runtime.write_bytes(broken)
+        assert _inspect_resource_thresholds(root)["status"] == "MISSING", label
+
+    runtime.write_bytes(RUNTIME_YAML)
+    collection = root / "src/so101_demo_py/config/act/parallel_collection_v3.yaml"
+    for label, broken in (("not lossless", COLLECTION_YAML.replace(b"lossless: true",
+                                                                  b"lossless: false")),
+                          ("bad watermark order",
+                           COLLECTION_YAML.replace(b"queue_recovery_watermark_samples: 8",
+                                                   b"queue_recovery_watermark_samples: 13")),
+                          ("wrong rate", COLLECTION_YAML.replace(b"sample_rate_hz: 10",
+                                                                 b"sample_rate_hz: 5"))):
+        collection.write_bytes(broken)
+        assert _inspect_resource_thresholds(root)["status"] == "MISSING", label
+
+
+"""Task 1 of the non-head first-episode plan: explicit mode and closed scope binding.
+
+The diagnostic mode replaces only target selection and the Head prerequisite. Robot, contact,
+controller, reset, collision, holding, release, sampling and identity gates all still apply, so
+these tests assert both directions: the diagnostic mode must not clear a non-Head safety gate, and
+the formal mode must still require real Head qualification.
+"""

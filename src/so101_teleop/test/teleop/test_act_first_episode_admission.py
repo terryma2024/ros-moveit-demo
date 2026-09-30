@@ -290,3 +290,100 @@ def test_diagnostic_refuses_a_deleted_or_changed_frozen_role_file(tmp_path):
             service.start(spec)
     finally:
         store.close()
+
+
+def _rewrite_frozen(manifest_path: Path, role: str, payload: bytes) -> dict:
+    """Build the reviewer's counterexample class: a self-consistent set with invalid policy bytes.
+
+    The frozen file, the manifest entry and the manifest digest are all updated together, so every
+    byte check passes and only the semantic derivation can still refuse it.
+    """
+
+    manifest = json.loads(manifest_path.read_text())
+    target = manifest_path.parent / manifest["roles"][role]["path"]
+    target.write_bytes(payload)
+    manifest["roles"][role]["sha256"] = hashlib.sha256(payload).hexdigest()
+    manifest["roles"][role]["bytes"] = len(payload)
+    manifest["inputs_sha256"] = hashlib.sha256(_canonical(manifest["roles"])).hexdigest()
+    manifest_path.write_bytes(_canonical(manifest))
+    return manifest
+
+
+def _refresh_payload(spec, manifest_path: Path, **overrides):
+    payload = dict(spec.payload, inputs_manifest_sha256=hashlib.sha256(
+        manifest_path.read_bytes()).hexdigest(), **overrides)
+    return replace(spec, payload=payload)
+
+
+def test_diagnostic_refuses_a_frozen_resource_policy_without_stops(tmp_path):
+    """A self-consistent frozen set whose configs lack the stop points must still be refused."""
+
+    spec = _diagnostic_spec(tmp_path)
+    manifest_path = Path(spec.payload["inputs_manifest_path"])
+    runtime_path = Path(spec.payload["runtime_config_path"])
+    stripped = runtime_path.read_bytes().replace(b"hard_stops:", b"unrelated:")
+    manifest = _rewrite_frozen(manifest_path, "runtime_config", stripped)
+    # the scope pins the frozen digest too, so it is refreshed as well: the only thing left that can
+    # refuse this set is the resource policy derived from the config bytes
+    scope_path = Path(spec.payload["collection_scope_path"])
+    scope = json.loads(scope_path.read_text())
+    scope["inputs_sha256"] = manifest["inputs_sha256"]
+    scope_path.write_bytes(_canonical(scope))
+    payload = _refresh_payload(
+        spec, manifest_path, runtime_config_sha256=hashlib.sha256(stripped).hexdigest(),
+        collection_scope_sha256=hashlib.sha256(scope_path.read_bytes()).hexdigest())
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
+            service.start(payload)
+        assert service.child_registry.launches() == ()
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+def test_diagnostic_refuses_a_frozen_set_from_another_source_commit(tmp_path):
+    """The manifest's source identity must be the source identity admission is running under."""
+
+    spec = _diagnostic_spec(tmp_path)
+    manifest_path = Path(spec.payload["inputs_manifest_path"])
+    manifest = json.loads(manifest_path.read_text())
+    manifest["source_commit"] = "c" * 40
+    manifest_path.write_bytes(_canonical(manifest))
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
+            service.start(_refresh_payload(spec, manifest_path))
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+    finally:
+        store.close()
+
+
+def test_diagnostic_refuses_an_anchor_identity_the_bytes_do_not_describe(tmp_path):
+    """Recomputing every hash does not let a manifest assert a scene the anchor bytes deny."""
+
+    spec = _diagnostic_spec(tmp_path)
+    manifest_path = Path(spec.payload["inputs_manifest_path"])
+    manifest = json.loads(manifest_path.read_text())
+    manifest["roles"]["anchor_scene"]["identity"] = dict(
+        manifest["roles"]["anchor_scene"]["identity"], scene_id="left", seed=1)
+    manifest["inputs_sha256"] = hashlib.sha256(_canonical(manifest["roles"])).hexdigest()
+    manifest_path.write_bytes(_canonical(manifest))
+
+    scope_path = Path(spec.payload["collection_scope_path"])
+    scope = json.loads(scope_path.read_text())
+    scope.update(scene_id="left", seed=1, inputs_sha256=manifest["inputs_sha256"])
+    scope_path.write_bytes(_canonical(scope))
+
+    payload = _refresh_payload(spec, manifest_path,
+                               collection_scope_sha256=hashlib.sha256(
+                                   scope_path.read_bytes()).hexdigest())
+    store = IntentStore.open(tmp_path / "state")
+    try:
+        service = _service(store)
+        with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
+            service.start(payload)
+    finally:
+        store.close()

@@ -39,8 +39,11 @@ def training_eligible(record: dict) -> bool:
     # incomplete record is refused rather than raising out of a gate on training data
     if not isinstance(record, dict):
         return False
-    if "collection_mode" in record and record["collection_mode"] not in TRAINABLE_COLLECTION_MODES:
-        return False
+    if "collection_mode" in record:
+        mode = record["collection_mode"]
+        if not isinstance(mode, str) or mode not in TRAINABLE_COLLECTION_MODES:
+            # an unknown, missing or container mode is ineligible, never a raise out of a data gate
+            return False
     return (record.get("status") == "PASSED" and record.get("qc") == "PASS"
             and record.get("done") is True and record.get("interventions") == 0
             and record.get("coordinator_committed") is True)

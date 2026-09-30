@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -309,6 +310,35 @@ def _verify_roles(registry: dict) -> dict:
     payloads = {role: _read_verified(registry["roles"][role]["selected"]) for role in INPUT_ROLES}
     documents = {role: _parse_json(payloads[role]) for role in _JSON_ROLES}
 
+    # the registry's asserted source identity must be the tree it claims, when that tree is a git
+    # worktree at all; a synthetic or archived candidate root is checked for structure only
+    try:
+        current_commit = _git_commit(Path(registry["source_root"]))
+    except ValueError:
+        current_commit = None
+    if current_commit is not None and current_commit != registry["source_commit"]:
+        raise ValueError("INPUT_IDENTITY_MISMATCH")
+
+    # the identity of the anchor and of the resource policy is derived from the verified bytes and
+    # compared with what the registry asserts, so a consistent assertion cannot stand in for the
+    # bytes it claims to describe
+    derived_anchor = anchor_identity_from_bytes(payloads["anchor_scene"])
+    asserted_anchor = registry["roles"]["anchor_scene"]["identity"]
+    if not isinstance(asserted_anchor, dict) or any(
+            asserted_anchor.get(key) != value for key, value in derived_anchor.items()):
+        raise ValueError("INPUT_IDENTITY_MISMATCH")
+
+    derived_resource = resource_policy_identity(payloads["runtime_config"],
+                                                payloads["collection_config"])
+    if (registry["roles"]["resource_thresholds"]["selected"]["sha256"]
+            != derived_resource["runtime_config_sha256"]):
+        # the resource role must own the verified runtime config, not an unrelated file
+        raise ValueError("INPUT_IDENTITY_MISMATCH")
+    asserted_resource = registry["roles"]["resource_thresholds"]["identity"]
+    if not isinstance(asserted_resource, dict) or any(
+            asserted_resource.get(key) != value for key, value in derived_resource.items()):
+        raise ValueError("INPUT_IDENTITY_MISMATCH")
+
     from .contact_calibration import verify_disabled_proposal
 
     try:
@@ -481,10 +511,12 @@ def _ledger_referenced_json(ledger: Path, evidence_root: Path) -> tuple[Path, ..
         raise ValueError("INPUT_LEDGER_INVALID") from error
     found = set()
     for match in re.finditer(r"[^\s`\"'()\[\],;:]*[^\s`\"'()\[\],;:]+\.json", text):
-        token = match.group(0).lstrip("/")
+        token = match.group(0)
         path = Path(token)
+        # an absolute reference stays absolute; only a genuinely relative one is resolved against
+        # the registered root, and both must stay inside it
         resolved = path if path.is_absolute() else evidence_root / token
-        if resolved.is_absolute() and resolved.is_relative_to(evidence_root) and resolved.is_file():
+        if resolved.is_relative_to(evidence_root) and resolved.is_file():
             found.add(resolved)
     return tuple(sorted(found))
 
@@ -525,8 +557,107 @@ def _anchor_identity(root: Path) -> dict:
             "measurement_experiment": document.get("measurement_experiment")}
 
 
+# the milestone's frozen initial state. It is a contract, not metadata a caller may assert: the
+# derived identity below is recomputed from the verified anchor bytes and compared against whatever
+# the registry claims, so hashing a consistent assertion cannot substitute for describing the bytes.
+FROZEN_ANCHOR_SCENE_ID = "default"
+FROZEN_ANCHOR_SEED = 0
+FROZEN_ANCHOR_CUP_M = (0.02, -0.28, 0.165)
+FROZEN_ANCHOR_NECK_RAD = 0.1
+_RESOURCE_HARD_STOP_KEYS = ("rtf_min", "disk_free_min_bytes")
+
+
+def _positive_number(value) -> bool:
+    return (not isinstance(value, bool) and isinstance(value, (int, float))
+            and math.isfinite(value) and value > 0)
+
+
+def anchor_identity_from_bytes(payload: bytes) -> dict:
+    """Derive the frozen anchor identity from the verified bytes of the anchor file."""
+
+    import yaml
+
+    try:
+        document = yaml.safe_load(payload)
+    except yaml.YAMLError as error:
+        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED") from error
+    anchors = document.get("anchors") if isinstance(document, dict) else None
+    anchor = anchors.get(FROZEN_ANCHOR_SCENE_ID) if isinstance(anchors, dict) else None
+    if not isinstance(anchor, dict):
+        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
+    cup, neck = anchor.get("cup_start_m"), anchor.get("neck_start_rad")
+    if (not isinstance(cup, list) or len(cup) != 3
+            or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in cup)
+            or tuple(float(value) for value in cup) != FROZEN_ANCHOR_CUP_M
+            or isinstance(neck, bool) or not isinstance(neck, (int, float))
+            or float(neck) != FROZEN_ANCHOR_NECK_RAD):
+        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
+    return {"scene_id": FROZEN_ANCHOR_SCENE_ID, "seed": FROZEN_ANCHOR_SEED,
+            "cup_start_m": list(FROZEN_ANCHOR_CUP_M), "neck_start_rad": FROZEN_ANCHOR_NECK_RAD,
+            "anchor_file_sha256": hashlib.sha256(payload).hexdigest(),
+            "measurement_experiment": document.get("measurement_experiment")}
+
+
+def resource_policy_identity(runtime_bytes: bytes, collection_bytes: bytes) -> dict:
+    """Derive the resource policy from the verified runtime and collection config bytes.
+
+    Every value the plan requires must be present and of the right shape: a positive finite start
+    guard, positive finite RTF and disk stops, lossless recording at 10 Hz and watermarks that
+    actually order themselves. A missing or malformed value is a blocker, never a default.
+    """
+
+    import yaml
+
+    try:
+        runtime = yaml.safe_load(runtime_bytes)
+        collection = yaml.safe_load(collection_bytes)
+    except yaml.YAMLError as error:
+        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED") from error
+    runtime = runtime if isinstance(runtime, dict) else {}
+    collection = collection if isinstance(collection, dict) else {}
+    guard = runtime.get("start_guard")
+    guard = guard if isinstance(guard, dict) else {}
+    hard = runtime.get("hard_stops")
+    hard = hard if isinstance(hard, dict) else {}
+    recorder = collection.get("recorder")
+    recorder = recorder if isinstance(recorder, dict) else {}
+
+    guard_values = {key: guard.get(key) for key in _RESOURCE_KEYS}
+    if not all(_positive_number(value) for value in guard_values.values()):
+        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
+    stops = {key: hard.get(key) for key in _RESOURCE_HARD_STOP_KEYS}
+    if not all(_positive_number(value) for value in stops.values()):
+        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
+    capacity = recorder.get("queue_capacity_samples")
+    high = recorder.get("queue_high_watermark_samples")
+    recovery = recorder.get("queue_recovery_watermark_samples")
+    hold = recorder.get("queue_high_watermark_hold_s")
+    if (recorder.get("lossless") is not True or recorder.get("sample_rate_hz") != 10
+            or any(type(value) is not int for value in (capacity, high, recovery))
+            or not 0 < recovery < high <= capacity or not _positive_number(hold)):
+        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
+    return {"start_guard": guard_values, "rtf_hard_stop": stops["rtf_min"],
+            "disk_hard_stop": stops["disk_free_min_bytes"],
+            "queue_hard_stop": {"queue_capacity_samples": capacity,
+                                "queue_high_watermark_samples": high,
+                                "queue_recovery_watermark_samples": recovery,
+                                "queue_high_watermark_hold_s": hold, "lossless": True,
+                                "sample_rate_hz": 10, "source": "collection_config.recorder"},
+            "runtime_config_sha256": hashlib.sha256(runtime_bytes).hexdigest(),
+            "collection_config_sha256": hashlib.sha256(collection_bytes).hexdigest()}
+
+
 def _inspect_anchor_scene(root: Path) -> dict:
-    identity = _anchor_identity(root)
+    path = Path(root) / ANCHOR_FILE
+    if not path.is_file() or path.is_symlink():
+        return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED", "anchor file absent", None, [])
+    try:
+        identity = anchor_identity_from_bytes(path.read_bytes())
+    except ValueError:
+        return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED",
+                     "the anchor file does not carry the milestone's frozen default anchor",
+                     None, [])
+    identity = dict(identity, measurement_experiment=_anchor_identity(root)["measurement_experiment"])
     approval_path = Path(root) / ANCHOR_APPROVAL_FILE
     approval = None
     if approval_path.is_file() and not approval_path.is_symlink():
@@ -542,6 +673,7 @@ def _inspect_anchor_scene(root: Path) -> dict:
         return _unapproved_source_file(root, ANCHOR_FILE, "source_controlled", identity,
                                        "INPUT_NOT_APPROVED",
                                        "no approved-anchor document names this anchor digest")
+
     document = _source_file(root, ANCHOR_FILE, "anchor_scene", "source_controlled",
                             dict(identity, approved_by=str(approval.relative_to(root))))
     return _selected(document)
@@ -614,54 +746,29 @@ def _inspect_motion_config(root: Path) -> tuple[dict, dict]:
 def _inspect_resource_thresholds(root: Path) -> dict:
     """The start guard, the motion and disk hard stops and the queue backpressure stop.
 
-    The plan's value table requires an approved, hash-bound source for the RTF, disk and queue
-    hard stops as well as for the start guard. A value that exists is recorded together with the
-    digest of the file carrying it; a required value with no approved source is a blocker, never a
-    default, and the role stays MISSING so a freeze refuses instead of running without a stop point.
+    The policy is derived from the two verified config files by the same function the freeze and
+    admission gates use, so an inspector that reports READY and a gate that accepts a READY registry
+    cannot disagree about what the values are.
     """
-
-    import yaml
 
     runtime = Path(root) / RUNTIME_CONFIG_FILE
     collection = Path(root) / COLLECTION_CONFIG_FILE
+    candidates = []
+    for path in (runtime, collection):
+        if path.is_file() and not path.is_symlink():
+            candidates.append({"path": str(path), "sha256": _digest(path), "approved": True,
+                               "approval": "source_controlled"})
     if not runtime.is_file() or not collection.is_file():
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED", "runtime/collection config absent",
-                     None, [])
-    document = yaml.safe_load(runtime.read_text())
-    document = document if isinstance(document, dict) else {}
-    guard = document.get("start_guard")
-    guard = guard if isinstance(guard, dict) else {}
-    hard = document.get("hard_stops")
-    hard = hard if isinstance(hard, dict) else {}
-    recorder = (yaml.safe_load(collection.read_text()) or {})
-    recorder = recorder.get("recorder") if isinstance(recorder, dict) else {}
-    recorder = recorder if isinstance(recorder, dict) else {}
-
-    guard_values = {key: guard.get(key) for key in _RESOURCE_KEYS}
-    guard_complete = all(
-        not isinstance(value, bool) and isinstance(value, (int, float)) and value > 0
-        for value in guard_values.values())
-    queue_keys = ("queue_high_watermark_samples", "queue_high_watermark_hold_s",
-                  "queue_recovery_watermark_samples", "lossless")
-    queue_values = {key: recorder.get(key) for key in queue_keys}
-    queue_complete = all(value is not None for value in queue_values.values())
-    identity = {
-        "start_guard": guard_values if guard_complete else None,
-        "runtime_config_sha256": _digest(runtime),
-        "collection_config_sha256": _digest(collection),
-        "rtf_hard_stop": hard.get("rtf_min"),
-        "disk_hard_stop": hard.get("disk_free_min_bytes"),
-        "queue_hard_stop": (dict(queue_values, source="collection_config.recorder")
-                            if queue_complete else None),
-    }
-    missing = [name for name in ("start_guard", "rtf_hard_stop", "disk_hard_stop", "queue_hard_stop")
-               if identity[name] is None]
-    candidates = [{"path": str(runtime), "sha256": identity["runtime_config_sha256"],
-                   "approved": True, "approval": "source_controlled"}]
-    if missing:
+                     None, candidates)
+    try:
+        identity = resource_policy_identity(runtime.read_bytes(), collection.read_bytes())
+    except ValueError as error:
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED",
-                     "no approved source for " + ",".join(missing), identity, candidates)
-    return _selected(_role("READY", None, None, identity, candidates))
+                     f"no approved resource stop policy: {error}", None, candidates)
+    entry = {"path": str(runtime), "sha256": identity["runtime_config_sha256"], "approved": True,
+             "approval": "source_controlled"}
+    return _selected(_role("READY", None, None, identity, [entry]))
 
 
 def _inspect_source_role(root: Path, relative: str, role: str, identity=None) -> dict:

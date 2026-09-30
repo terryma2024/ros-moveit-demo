@@ -470,7 +470,7 @@ class UnifiedWorkloadService:
         ):
             raise ValueError("POLICY_NOT_ACTIVATED")
         if diagnostic:
-            self._require_diagnostic_scope(payload, root)
+            self._require_diagnostic_scope(payload, root, current_source=current_source)
         if spec.kind.startswith("act_collection") and not payload["qualification_mode"]:
             qualified_path = payload["qualification_receipt_path"]
             if not isinstance(qualified_path, str):
@@ -535,7 +535,7 @@ class UnifiedWorkloadService:
         "proposal": ("contact_proposal", False),
         "activation_receipt": ("contact_activation", False)}
 
-    def _require_diagnostic_scope(self, payload: dict, root: Path) -> dict:
+    def _require_diagnostic_scope(self, payload: dict, root: Path, *, current_source: str) -> dict:
         """Bind one diagnostic episode to its frozen inputs and its explicit mode record.
 
         The scope names the mode, the manifest names the frozen bytes, and every runtime artifact
@@ -547,7 +547,9 @@ class UnifiedWorkloadService:
         """
 
         from so101_demo.act.collection_scope import CollectionMode, read_collection_scope
-        from so101_demo.act.first_episode_inputs import verify_frozen_inputs
+        from so101_demo.act.first_episode_inputs import (anchor_identity_from_bytes,
+                                                         resource_policy_identity,
+                                                         verify_frozen_inputs)
 
         for name in ("collection_scope", "inputs_manifest"):
             path = Path(payload[f"{name}_path"])
@@ -569,10 +571,25 @@ class UnifiedWorkloadService:
             scope = read_collection_scope(Path(payload["collection_scope_path"]),
                                           expected_mode=CollectionMode.DIAGNOSTIC,
                                           expected_inputs_sha256=manifest["inputs_sha256"])
+            frozen = lambda role: (frozen_root / manifest["roles"][role]["path"]).read_bytes()
+            # the anchor identity is derived from the frozen anchor bytes, so neither the manifest
+            # nor the scope can assert a scene or seed the bytes do not describe
+            derived_anchor = anchor_identity_from_bytes(frozen("anchor_scene"))
             anchor = manifest["roles"]["anchor_scene"]["identity"]
-            if (not isinstance(anchor, dict) or scope["scene_id"] != anchor.get("scene_id")
-                    or scope["seed"] != anchor.get("seed")
+            if (not isinstance(anchor, dict)
+                    or any(anchor.get(key) != value for key, value in derived_anchor.items())
+                    or scope["scene_id"] != derived_anchor["scene_id"]
+                    or scope["seed"] != derived_anchor["seed"]
                     or manifest["evidence_root"] != payload["evidence_root"]):
+                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
+            # the frozen set must belong to the source identity this admission is running under,
+            # and its resource policy is re-derived from the frozen config bytes rather than
+            # trusted from the manifest's own summary
+            if manifest["source_commit"] != current_source:
+                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
+            derived_resource = resource_policy_identity(frozen("runtime_config"),
+                                                        frozen("collection_config"))
+            if manifest["roles"]["resource_thresholds"]["identity"] != derived_resource:
                 raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
         except (OSError, KeyError, TypeError, ValueError) as error:
             raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND") from error

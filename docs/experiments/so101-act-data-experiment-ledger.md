@@ -34500,3 +34500,40 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   fixes with a test each, carried for the owner's decision.
 - **State.** **Task-list item 1 in_progress, awaiting the re-review verdict; items 2-8 pending.**
   Re-review packet: `reviews/task1-rereview-packet.md`.
+
+
+## CP-1925 — Second fix pass: F3 and F5 closed at their remaining identity/policy gaps, plus F6/F7
+
+- **Verdict 2** (`reviews/task1-rereview-verdict.md`, dispatch `cfd6b537-f8ec-4cd8-b62f-d4740a862989`):
+  FAIL, 0 Critical / 2 Important / 2 Minor. F1, F2 and F4 CLOSED. F3 and F5 only partially closed:
+  the frozen source/config identity was still asserted rather than derived, and a READY resource role
+  was still trusted without validating the policy in its bytes. F6 and F7 unchanged.
+- **F3 closed.** The anchor identity and the resource policy are now *derived from the verified
+  bytes* by `anchor_identity_from_bytes()` and `resource_policy_identity()` and compared with what
+  the registry or manifest asserts, at freeze and again at admission. Freeze also requires the
+  registry's `source_commit` to be the commit of the source root it names (when that root is a git
+  worktree), and admission requires `manifest.source_commit` to equal the current probe identity
+  already used for the calibration gate. The resource role must own the verified runtime config.
+- **F5 closed.** `resource_policy_identity()` validates the whole policy from the exact verified
+  bytes: five positive finite start-guard values, positive finite `hard_stops.rtf_min` and
+  `hard_stops.disk_free_min_bytes` (booleans and zeros refused), `lossless: true`, 10 Hz, integer
+  watermarks with `0 < recovery < high <= capacity`, and a positive hold. The inspector, the freeze
+  gate and admission all call it, so a READY registry, a saved registry or a hand-repaired manifest
+  cannot smuggle a policy without stop points. The real inspection still reports
+  `resource_thresholds` MISSING with `NONHEAD_INPUT_BINDING_REQUIRED` because this repository has no
+  approved `hard_stops` source; `path_policy`, `placement_qc` and `rgb_skew` stay MISSING for the
+  same reason as before.
+- **F6/F7 fixed** (both were one-line defects in files already under review; the second verdict said
+  they do not block, but leaving a raise inside a data gate and a path-resolution bug in discovery
+  would have kept the module's claims incomplete). `training_eligible` now treats a container or
+  non-string `collection_mode` as ineligible, and `_ledger_referenced_json` keeps absolute references
+  absolute while resolving only relative ones, in both cases enforcing containment under the
+  registered root.
+- **RED/GREEN.** RED `logs/fix2-red.run` rc=1 against the reviewed revision `74ba5cbd7` through a
+  defect overlay built from those committed files: **9 behavioural failures**, one per new check
+  (anchor derivation, resource policy at freeze, resource-role ownership, malformed mode, absolute
+  reference, resource inspector, and the three admission counterexamples with fully recomputed
+  hashes). GREEN `logs/fix2-green.run` rc=0: **89 passed in 7.68 s** with a substantive tempfile
+  proof, including the previous 81.
+- **State.** **Task-list item 1 in_progress, awaiting the third verdict; items 2-8 pending.**
+  Re-review packet: `reviews/task1-rereview2-packet.md`.
