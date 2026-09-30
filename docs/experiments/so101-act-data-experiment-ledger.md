@@ -36135,3 +36135,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   gate.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9fe3816f7`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1964 — Task 3 fix pass, eighteenth instalment: the physics observation follows its source contract (T3-F1)
+
+- **The raw physics block is now typed the way the MuJoCo source actually publishes it.** The writer and
+  readback share one validator built from `backends/mujoco/qualified_phases/release_retreat.py::evidence_dict`
+  (the source contract, not an invention): `simulation_time_s` and `simulation_step`, the three
+  three-dimensional vectors (position, linear and angular velocity) and the four-dimensional
+  orientation, `left_contact_count`/`right_contact_count`, `table_contact`, `other_contact_geoms`,
+  `maximum_normal_force_n`, plus the verified `supported` boolean the runner adds for support rows. An
+  unknown key, a wrong-typed count or flag, a non-finite or negative magnitude, a vector of the wrong
+  dimension and a missing `simulation_time_s` are all refused; support rows must still carry a boolean
+  `supported`.
+- **My own fixtures had to follow the contract**, which is the point: the audit and recorder fixtures
+  previously invented minimal observations (`{"supported": True, "contacts": 2}`), and the suite refused
+  them until they carried the source-shaped blocks. A contract that only applies to new code would have
+  been worthless.
+- **Evidence.** `logs/task3-fix18.run` rc=0: **113 passed** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_release_boundary.py`, `test_act_continuous_capture.py` and
+  `test_act_supervisor.py`, with its own NVMe scratch and a non-empty tempfile proof. The control accepts
+  a contract-shaped block and refuses an extra key, a boolean count, an integer flag, a negative force, a
+  short vector, a non-finite vector element and a block without `simulation_time_s`; one of those cases
+  caught a missing dimension check in my first version.
+- **Still open.** **T3-F1**: the window schema still needs the owner's ratification of key names and
+  ordering (proposed in CP-1963, not adopted unilaterally), and the raw controller/accepted-goal history
+  with joint names and revocation boundaries plus the source/receipt clocks still need their producers
+  (the observer already holds them at `adapters/act/controller_reference_observer.py:69`). **T3-F5**:
+  the fail-closed eligibility and sealing gate on that coverage. Then a fresh checkpoint and the
+  consolidated 19-file gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `980e982a3`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

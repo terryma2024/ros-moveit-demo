@@ -59,10 +59,17 @@ def complete_audit(tmp_path):
     writer.append_source("events", {"kind": "phase_complete", "identity": identity(),
                                     "sim_time_s": 1.0, "monotonic_ns": 1000,
                                     "payload": {"phase": "SEARCH", "physics_step": 1}})
-    writer.append_source("physics", {"kind": "support", "sim_time_s": 1.1, "release_epoch": 1,
-                                     "observation": {"supported": True, "contacts": 2}})
-    writer.append_source("physics", {"kind": "retract", "sim_time_s": 1.2, "release_epoch": 1,
-                                     "observation": {"distance_m": 0.05}})
+    # the raw block follows what the MuJoCo source actually publishes, plus the verified support flag
+    writer.append_source("physics", {
+        "kind": "support", "sim_time_s": 1.1, "release_epoch": 1,
+        "observation": {"simulation_time_s": 1.1, "simulation_step": 11, "left_contact_count": 2,
+                        "right_contact_count": 2, "table_contact": True, "supported": True,
+                        "maximum_normal_force_n": 0.4, "cup_position_world_m": [0.02, -0.28, 0.165]}})
+    writer.append_source("physics", {
+        "kind": "retract", "sim_time_s": 1.2, "release_epoch": 1,
+        "observation": {"simulation_time_s": 1.2, "simulation_step": 12, "left_contact_count": 0,
+                        "right_contact_count": 0, "table_contact": True,
+                        "maximum_normal_force_n": 0.0, "cup_position_world_m": [0.02, -0.28, 0.165]}})
     writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id,
                     frames[("wrist", 1.0)].acquisition_id, 1)
     window = {"start_s": 1.0, "end_s": 1.2, "label_cutoff_s": 1.0}
@@ -155,10 +162,13 @@ def test_stale_support_across_a_release_epoch_is_refused(tmp_path):
 
     writer, _ = complete_audit(tmp_path)
     writer.append_source("physics", {"kind": "support", "sim_time_s": 1.3, "release_epoch": 2,
-                                     "observation": {"supported": True}})
+                                     "observation": {"simulation_time_s": 1.3, "simulation_step": 13,
+                                                     "table_contact": True, "supported": True}})
     with pytest.raises(ValueError, match="AUDIT_RELEASE_EPOCH_STALE"):
         writer.append_source("physics", {"kind": "support", "sim_time_s": 1.4, "release_epoch": 1,
-                                         "observation": {"supported": True}})
+                                         "observation": {"simulation_time_s": 1.4,
+                                                         "simulation_step": 14, "table_contact": True,
+                                                         "supported": True}})
 
 
 def test_a_stale_epoch_in_a_sealed_audit_is_detected_on_readback(tmp_path):
@@ -167,7 +177,9 @@ def test_a_stale_epoch_in_a_sealed_audit_is_detected_on_readback(tmp_path):
     physics = writer.files.physics
     lines = physics.read_bytes().splitlines()
     lines.insert(1, json.dumps({"sequence": 9, "kind": "support", "sim_time_s": 1.15,
-                                "release_epoch": 0, "observation": {"supported": True}},
+                                "release_epoch": 0,
+                                "observation": {"simulation_time_s": 1.15, "simulation_step": 1,
+                                                "table_contact": True, "supported": True}},
                                sort_keys=True, separators=(",", ":")).encode())
     physics.write_bytes(b"\n".join(lines) + b"\n")
     with pytest.raises(ValueError, match="AUDIT_HASH_MISMATCH"):
@@ -557,3 +569,24 @@ def test_the_required_event_kinds_are_accepted_and_refuse_a_wrong_payload(tmp_pa
         with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
             other.append_source("events", {"kind": kind, "identity": identity(), "sim_time_s": 1.0,
                                            "monotonic_ns": 1000, "payload": broken})
+
+
+def test_the_physics_observation_must_follow_the_source_contract(tmp_path):
+    """The raw block is typed against what the MuJoCo source actually publishes (T3-F1)."""
+
+    good = {"simulation_time_s": 1.1, "simulation_step": 11, "left_contact_count": 2,
+            "right_contact_count": 2, "table_contact": True, "maximum_normal_force_n": 0.5,
+            "cup_position_world_m": [0.02, -0.28, 0.165], "other_contact_geoms": ["table_collision"]}
+    writer = EpisodeAuditWriter(tmp_path / "ok", scope(), identity(), {"inputs_sha256": "a" * 64})
+    writer.append_source("physics", {"kind": "contact", "sim_time_s": 1.1, "release_epoch": 1,
+                                     "observation": good})
+    for broken in ({**good, "extra": 1}, {**good, "left_contact_count": True},
+                   {**good, "table_contact": 1}, {**good, "maximum_normal_force_n": -0.1},
+                   {**good, "cup_position_world_m": [0.0, 0.0]},
+                   {**good, "cup_position_world_m": [0.0, 0.0, float("inf")]},
+                   {key: value for key, value in good.items() if key != "simulation_time_s"}):
+        other = EpisodeAuditWriter(tmp_path / f"bad-{len(str(broken))}-{id(broken) % 97}", scope(),
+                                   identity(), {"inputs_sha256": "a" * 64})
+        with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+            other.append_source("physics", {"kind": "contact", "sim_time_s": 1.1,
+                                            "release_epoch": 1, "observation": broken})

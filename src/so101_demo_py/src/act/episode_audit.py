@@ -71,6 +71,20 @@ _EVENT_FLAGS = {"stopped_confirmed", "table_contact", "supported", "no_fingertip
 _EVENT_COUNTS = {"left_contacts", "right_contacts"}
 _PHYSICS_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "release_epoch", "observation"})
 _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
+# the MuJoCo source contract for a physics observation, taken from what the backend already publishes
+# (backends/mujoco/qualified_phases/release_retreat.py::evidence_dict) plus the verified support boolean
+# the runner adds for support rows; another source would extend this set when it exists
+_PHYSICS_OBSERVATION_FIELDS = frozenset({
+    "simulation_time_s", "simulation_step", "cup_position_world_m", "cup_orientation_world_xyzw",
+    "cup_linear_velocity_world_m_s", "cup_angular_velocity_world_rad_s", "left_contact_count",
+    "right_contact_count", "table_contact", "other_contact_geoms", "maximum_normal_force_n",
+    "supported"})
+_PHYSICS_INTEGERS = {"simulation_step", "left_contact_count", "right_contact_count"}
+_PHYSICS_BOOLEANS = {"table_contact", "supported"}
+# each vector keeps its source dimension: a position and a velocity are 3, a quaternion is 4
+_PHYSICS_VECTORS = {"cup_position_world_m": 3, "cup_orientation_world_xyzw": 4,
+                    "cup_linear_velocity_world_m_s": 3, "cup_angular_velocity_world_rad_s": 3}
+_PHYSICS_STRINGS = {"other_contact_geoms"}
 # the frozen source contract: rows sit on the 10 Hz grid, a frame is at most one grid step old and
 # the two cameras are published together
 _GRID_S = 0.1
@@ -88,6 +102,43 @@ def _canonical(value) -> bytes:
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _physics_observation_typed(observation, *, kind: str) -> bool:
+    """Type the raw physics block the way the source contract declares it."""
+
+    if (not isinstance(observation, dict) or not observation
+            or not set(observation) <= _PHYSICS_OBSERVATION_FIELDS
+            or "simulation_time_s" not in observation):
+        return False
+    for key, value in observation.items():
+        if key in _PHYSICS_INTEGERS:
+            if type(value) is not int or value < 0:
+                return False
+        elif key in _PHYSICS_BOOLEANS:
+            if type(value) is not bool:
+                return False
+        elif key in _PHYSICS_VECTORS:
+            if (not isinstance(value, list) or len(value) != _PHYSICS_VECTORS[key]
+                    or any(isinstance(item, bool) or not isinstance(item, (int, float))
+                           or not math.isfinite(item) for item in value)):
+                return False
+        elif key in _PHYSICS_STRINGS:
+            if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+                return False
+        elif key == "simulation_time_s":
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value) or value < 0):
+                return False
+        elif key == "maximum_normal_force_n":
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value) or value < 0):
+                return False
+        else:
+            return False
+    if kind == "support" and type(observation.get("supported")) is not bool:
+        return False
+    return True
 
 
 def _payload_typed(payload) -> bool:
@@ -349,6 +400,8 @@ class EpisodeAuditWriter:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             _finite(item["sim_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
             epoch = _integer(item["release_epoch"], "AUDIT_SCHEMA_INVALID")
+            if not _physics_observation_typed(item["observation"], kind=item["kind"]):
+                raise ValueError("AUDIT_SCHEMA_INVALID")
             self._apply_epoch(epoch, item["kind"], item["observation"])
             item["sequence"] = self._next("physics")
         self._append(kind, item)
@@ -606,7 +659,8 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             epoch = row["release_epoch"]
         elif row["release_epoch"] < epoch:
             raise ValueError("AUDIT_RELEASE_EPOCH_STALE")
-        if row["kind"] == "support" and type(row["observation"].get("supported")) is not bool:
+        if not _physics_observation_typed(row["observation"], kind=row["kind"]):
+            # readback applies the same source contract the writer admitted
             raise ValueError("AUDIT_PHYSICS_INVALID")
     declared = json.loads((audit / "episode.json").read_bytes())
     scope = json.loads((audit / "source.json").read_bytes())
