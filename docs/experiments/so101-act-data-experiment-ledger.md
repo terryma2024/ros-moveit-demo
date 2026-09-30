@@ -42723,3 +42723,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Reverted**; the release-boundary suite is green (14 passed).
 - **State.** **F14 closed**; F3 (a)(b)(c) landed, its positive control blocked by this third fence with the subclass
   route named; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `8c30fda8e`; eighteen gates green.
+
+
+## CP-2259 — F3's positive control: the four methods the subclass must align
+
+- **Enumerated this round** (`test_act_release_boundary.py`): the port's evidence-producing methods are `begin`
+  (line 63), `run_phase` (67), `run_retreat_segment` (82) and `set_down` (86) — that is the complete list to wrap, so
+  the fixture is a subclass overriding all four to rewrite `session_id`/`attempt_id` to the writer's own pair, used
+  with the request already carrying that attempt.
+- **Four attempts, four fences, each removed by execution rather than argument**: the identity/lease fence
+  (`AUDIT_IDENTITY_INVALID`), the begin fence (`BEGIN_EVIDENCE_INVALID`), the phase fence
+  (`PHASE_EVIDENCE_INVALID`), and now the enumeration that ends the search. The remaining write is a transcription.
+- **State.** **F14 closed**; F3 (a)(b)(c) landed; its positive control is one transcription away; F1/F5/F11/F12/F13
+  open; the goal is paused. HEAD `53c1127b1`; eighteen gates green.
