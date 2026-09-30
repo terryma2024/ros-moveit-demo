@@ -155,7 +155,7 @@ Head-camera 的静态图像主指标包括：
 - box/mask AP50、AP50-95；
 - CUDA inference latency p50、p95、p99。
 
-连续指标在 `held-out evaluation episodes` 上单独计算，包括 tracking continuity、identity switch、fragmentation、错误候选、错误锁定、重新获取和端到端时延。静态图像和连续 episode 的统计单位不能混用。
+连续感知指标在 `held-out evaluation episodes` 上单独计算，包括 tracking continuity、identity switch、fragmentation、错误候选和 CUDA inference latency。静态图像和连续 episode 的统计单位不能混用。错误锁定、闭环重新获取和端到端控制时延依赖尚未校准的 deadband、搜索、freshness 与停车参数，不参与 A/B/C 模型选择；它们只在全部 17 项和受控依赖冻结后的最终资格验证中判定。
 
 Task-camera 保留指标包括 box/mask AP50-95、precision、recall、F1、`no_cup` false-positive rate 和 `two_cups` both-cup recall。
 
@@ -166,12 +166,12 @@ Task-camera 保留指标包括 box/mask AP50-95、precision、recall、F1、`no_
 - recall、F1、AP 的绝对差不超过 0.01；
 - bbox center p95 不比最佳候选差超过 2 px；
 - C 相对 A 的 task-camera mask AP50-95 和 recall 下降不超过 0.01；
-- `no_cup` 错误候选和最终错误锁定必须为零；
+- `no_cup` 错误候选必须为零；最终错误锁定在获选模型的闭环资格验证中必须为零；
 - 推理延迟满足 `p95_inference <= 100 ms - p95_non_inference - 10 ms guard`。
 
 选择顺序如下：
 
-1. 出现错误锁定、CPU fallback、身份不完整或时延超限的候选直接淘汰。
+1. 出现错误候选、CPU fallback、身份不完整或感知时延超限的候选直接淘汰。
 2. 在剩余候选中确定与 head-camera 最佳候选等效的集合。
 3. 如果 C 位于该等效集合内，同时通过 task-camera 保留门禁，选择 C；A、B、C 全部等效时也适用这一条。
 4. 如果 C 不满足共享模型条件，而 B 明显优于 A/C，Head Search 使用 B，task-camera 继续使用 A。
@@ -420,7 +420,7 @@ frame 已过期或身份不一致时直接拒绝，不能换成更新的一帧�
 
 结果类别门禁分别是：
 
-- 合法单杯：正确 cup 的中心连续三帧位于 deadband 和 vertical bounds 内，最终状态为 `LOCKED`；
+- 合法单杯：正确 cup 的中心连续三帧位于 deadband 和 vertical bounds 内，最终状态为 `TARGET_LOCKED`；
 - 双杯：最终状态为 `TARGET_AMBIGUOUS`，全程零错误锁定，并有停车证据；
 - 无杯：完整覆盖 required search domain 后返回 `TARGET_NOT_FOUND`，全程零错误候选/错误锁定，并有停车证据；
 - frame/detection 中断：旧 attempt fail-closed 并停车，新 attempt 使用空 tracker/lock state 重新获取，不能把旧帧计入三帧锁定。
