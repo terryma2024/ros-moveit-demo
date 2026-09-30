@@ -20,17 +20,26 @@ class ActCollectionWorkload:
         ))
 
 
+# the collection modes whose episodes may enter the training manifest. The preselected-target
+# diagnostic is a real, committed, physically measured episode that is still not training evidence.
+TRAINABLE_COLLECTION_MODES = frozenset({"formal"})
+
+
 def training_eligible(record: dict) -> bool:
     """A record enters training only when it is a committed, clean, complete success.
 
     A business failure is retained as evidence but never exported, and a record whose coordinator has
-    not committed is not yet a result — it is a run in progress.
+    not committed is not yet a result — it is a run in progress. A record that names a collection
+    mode must name a trainable one, so a committed diagnostic episode is refused here as well as at
+    the export boundary.
     """
 
     # fail closed on a missing or malformed field: the plan's own boundary case passes a record that
     # carries neither `status` nor `coordinator_committed` and expects it to be ineligible, so an
     # incomplete record is refused rather than raising out of a gate on training data
     if not isinstance(record, dict):
+        return False
+    if "collection_mode" in record and record["collection_mode"] not in TRAINABLE_COLLECTION_MODES:
         return False
     return (record.get("status") == "PASSED" and record.get("qc") == "PASS"
             and record.get("done") is True and record.get("interventions") == 0

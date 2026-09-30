@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: cd688387 (code + ledger; the code commits of this batch are listed in CP-1456)
+current_commit: 83aa74a47662c380d5958a810711bc89b46413e1 (rebased target HEAD; existing 26 tracked + 13 untracked dirty paths preserved and recorded in CP-1921)
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,8 +69,8 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-1464
-next_experiment: wire the live evidence feed (plumb the captured frame out of the SEARCH segment or expose a boundary field-builder, then feed the window through CaseEvidenceDriver.observe_capture; ROS domain/GZ partition unset, no stack) - CP-1467; and NONE for the review item until the owner returns an independent GPT-6 Astra/High verdict on the P1-5 packet (handoffs/20260930-task7-onward/task8-astra-rereview-packet.md, 23306 bytes, sha256 7de92953cc5033c99d35e793729dc51752773f35ee91692fcebee79581f171fe); the alternative is the owner directing the eight unprovisioned phase implementations
+latest_checkpoint: CP-1921
+next_experiment: Task 1 of the approved non-head first-episode plan - mode isolation and input freezing RED/GREEN (`test_act_first_episode_scope.py`), then its Codex checkpoint. The old Task 12 / P1-x route stays recorded above and is not resumed by this milestone.
 ---
 
 # SO-101 ACT Data Experiment Ledger
@@ -34298,3 +34298,127 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   fix and now the real phase path are all GREEN at their boundaries; the formal run remains blocked at the
   calibration/qualification pairing (CP-1919), whose bootstrap the gate6 provenance document itself records as having no
   producer in this repository.** **Task-list statuses: P1-1 in_progress, P1-6 completed, five pending.**
+
+
+## CP-1921 — Non-head first-episode takeover: goal, frozen nine-item task list, environment and PLAN_ROOT registered
+
+- **Authority.** The user approved executing the reviewed non-head first-episode plan in this session (goal mode,
+  budget 1000, existing worktree/branch). This supersedes the old ai-station Head Search task boundary; the antzb
+  Head calibration stays a separate later task. Design sha256
+  `e74bc9f2b6fb13b90947913e2790c70d01b9052f00ccf79206af4104f33c47a9` and plan sha256
+  `1fbf978b184134436a62e30de7165e44fc0bd06a3235e9f5fcf7082b17091e96` were re-read and match the handoff; both are
+  frozen, and this approval is recorded here instead of reopening the technical plan.
+- **Goal.** `create_goal` created `goal-655e18db-24ed-44d8-a70b-f3bae3ef85e1`, objective
+  "完成已批准非Head首条MuJoCo完整抓放→Recorder无损落盘→独立QC PASS→实际Coordinator提交闭环", phase `active`,
+  `maxGoalRounds` 1000 - re-read with `get_goal`, not inferred from the prompt.
+- **Visible task list.** Nine items were established before any implementation action with the handoff's fixed
+  names and completion boundaries (item 0 takeover/environment; 1 mode isolation and input freezing; 2 acquisition
+  and continuous causal capture; 3 raw audit and physical criteria; 4 independent QC/real commit/export refusal;
+  5 default production composition and installed CLI; 6 freeze/build/integration gates; 7 one real FULL_RESTART
+  closure; 8 negative copies and delivery). Contents are frozen; only status changes. Item 0 in_progress, items 1-8
+  pending.
+- **Executor and ownership.** This `dst` session is the sole implementation writer, running directly on ai-station in
+  tmux `dst:0.0` (pane `%6`, pid 2316902, cwd the target worktree); no self-SSH, no second executor, no new
+  worktree/branch/stack. `dst-prior-20260930` (`%1`, shell only) is retained and not resumed; `codex-task8-fix`
+  stays retired.
+- **Worktree and dirty baseline (preserved).** worktree
+  `/home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a`, branch `codex/so101-act-data-0917a`,
+  HEAD `83aa74a47662c380d5958a810711bc89b46413e1`, submodule
+  `54463fce3bfa6192976e74113f5ed7152f708a3f third_party/mujoco_ros2_control`. `git status --porcelain` = 39 paths
+  (26 tracked modified, 13 untracked), sha256 `837d602e558ea18a8e836ab094303529eb6a5afc3e056a3976d5125f362ae2a7`;
+  `git diff --stat` = 26 files changed, 1078 insertions(+), 49 deletions(-), patch sha256
+  `e6d8a00f89e8952e4ae1c891eacaa53c6c3d835c921e5df3a25082ac080370ba`. Frozen readback in
+  `$PLAN_ROOT/dirty-baseline.status`, `.tracked.patch`, `.stat`, `.sha256`, `head.txt`. Nothing was reset,
+  checkout-overwritten, cleaned or stashed; the backup ref and stash object named in the handoff are retained.
+- **Interpreter, overlay, provenance.** `TEST_PYTHON = /data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/bin/python`
+  exists and is executable (Python 3.12.3, system-site-packages; `mujoco 3.12.0`, `pytest 7.4.4`, `xdist 3.8.0`,
+  `numpy 1.26.4`). ROS `/opt/ros/jazzy`; after `source install/setup.zsh`, `ros2 pkg prefix so101_demo_py` and
+  `so101_teleop` both resolve inside this worktree's `install/`, and `import so101_demo` resolves to
+  `install/so101_demo_py/lib/python3.12/site-packages/so101_demo/__init__.py`. A clean shell's inherited
+  `PYTHONPATH` carries only ROS gz-vendor paths, no stale task overlay. `/data/work/ws_moveit` does not exist on this
+  host, so the system-map's workspace path is not this task's overlay.
+- **Checkpoint review transport (reuse, verified read-only).** tmux `codex:0.0` pane `%5`, pid 2259258,
+  `pane_current_command=codex`, `pane_current_path=/home/matianyi/Projects/ros-moveit-demo` - the parent checkout,
+  **not** the target worktree, so every request must name the target path absolutely. `codex-cli 0.159.2` at
+  `/home/matianyi/.local/bin/codex`; pane status line reads `gpt-6-1-sol high`, idle at the composer. `codex queue
+  --thread <UUID|name> --message <TEXT>` is the supported non-TUI path; no blind `send-keys Enter` into the TUI.
+- **Processes and resources.** No live MuJoCo / `move_group` / RViz / `gz sim` / pick_place / recorder process on
+  the host. tmux sessions present: `codex`, `dst`, `dst-prior-20260930`. 32 logical CPUs (xdist workers =
+  min(8,32) = 8), RAM 31 GiB, `/data` 1.6 TiB free, GPU 0 `RTX 5060 Ti` UUID
+  `GPU-28221cec-9d21-7753-fd5a-da645740df19`.
+- **PLAN_ROOT.** `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/nonhead-first-episode-plan.hKhvkON3`
+  (previously nonexistent, created with `mktemp -d`; `logs/` and `reviews/` subdirs, plus `environment.md`).
+  `TASK_ROOT/scratch` and `TASK_ROOT/experiments` exist under the single durable evidence root.
+- **Scope in force.** `preselected_target_diagnostic` only, one Worker, one fixed scene/seed, one successful
+  FULL_RESTART; no Head Search / head YOLO / Grounded-SAM / ACT training; no push, no evidence deletion or move, no
+  real hardware, no global config change. Missing safety inputs, unknown process ownership or a resource stop point
+  are exact blockers, not defaults.
+- **State.** **Task-list item 0 in_progress, items 1-8 pending.** Ledger head fields updated to this checkpoint
+  (pre-edit sha256 `e838e0d3f0cae168d0be560f3ea65e61ec6da942c997b39c3e358b227eca6e0c`).
+
+
+## CP-1922 — Task 1 implemented and green; the checkpoint review is blocked by the reviewer model
+
+- **Scope.** Plan Task 1 (mode isolation and input freezing). No stack, no ROS graph, no motion, no
+  GPU compute ran; live capture and physics findings stay open until Task 7.
+- **Created.** `act/collection_scope.py` (CollectionMode, `require_scope`, closed
+  `collection-scope.json` with expected-mode/expected-inputs readback), `act/first_episode_inputs.py`
+  (`require_nonhead_gate`, closed candidate registry, `freeze_inputs`, `inspect_inputs`),
+  `test/test_act_first_episode_scope.py`, `test_teleop/test_act_first_episode_admission.py`.
+  **Modified.** `act/collection.py` (`training_eligible` refuses a non-trainable mode) and
+  `unified/admission.py` (new recognised kind `act_first_episode_diagnostic`, additive closed payload
+  schema, one-Worker/no-qualification rules, non-Head gate, `_require_diagnostic_scope`). Neither
+  modified file was one of the 39 baseline-dirty paths, so no user work is mixed in.
+- **RED, behavioural and not an import error:** scope file `-q` rc=1 with 8 failed/3 passed
+  (`DID NOT RAISE` on the intended boundary, after a baseline module existed so the failure is not a
+  missing import); input freezing rc=1 with 8 failed/14 passed; the training gate rc=1 with 1 failed.
+- **GREEN:** `test_act_first_episode_scope.py` + `test_act_first_episode_admission.py` +
+  `test_act_collection.py` + `test_act_campaign_admission.py` rc=0, **74 passed in 7.47 s**, JUnit 74
+  tests/0 errors/0 failures, with a fresh NVMe scratch whose `TMPDIR`/`TMP`/`TEMP` were proved by the
+  exact task Python first (`logs/task1-final.run`, `logs/task1-final.rc`, and one scratch tree per
+  run).
+- **Real read-only inspection (`inspect_inputs`) rc=0:** READY for `anchor_scene`, `scene_model`,
+  `collection_config`, `runtime_config`, `resource_thresholds`, `contact_proposal`,
+  `contact_activation`, `reset_recipe`, `reference_interpolation`; MISSING with
+  `NONHEAD_INPUT_BINDING_REQUIRED` for `path_policy`, `placement_qc`, `rgb_skew`, because no
+  ledger-referenced report measures `path_step_s`, `path_clearance_m`, `max_age_s`, `max_skew_s`,
+  `velocity_limit_rad_s`, `acceleration_limit_rad_s2`, `stop_velocity_rad_s`, `stop_latency_s`,
+  `support_distance_m`, `release_stable_s`, `retreat_distance_m`, `placement_stable_s` for the
+  current identity. The frozen anchor is the plan's default (`scene_id=default`, `seed=0`,
+  cup `[0.02,-0.28,0.165]` m, neck `0.1` rad, anchor file sha256 `91bbecbf…d10b`); the compiled
+  identity recomputed here is `model_sha256 3c876e7b…fdd78`, `scene_sha256 4db48e35…ed4f`,
+  `mujoco_version 3.12.0`, matching the activated EXP-213 payload, whose receipt and DISABLED
+  proposal were re-verified by `verify_disabled_proposal` + `verify_activation`. Registry:
+  `experiments/nonhead-first-episode-plan.hKhvkON3/input-candidates.json`.
+- **Environment facts for reproducibility.** Targeted tests import the live working tree
+  (`pypath/so101_demo` symlink to `src/so101_demo_py/src`, plus `src/so101_teleop`), not the stale
+  Sep-30 installed overlay; the task venv carries no pydantic 2.x, so `PLAN_ROOT/deps` symlinks only
+  `pydantic 2.13.5` + `pydantic_core` + `annotated_types` + `typing_inspection` out of the read-only
+  bootstrap overlay `/data/work/so101-evidence/ai-station-bootstrap/four-point-20260920/python-deps`,
+  leaving the venv's numpy 1.26.4 / mujoco 3.12.0 / pytest 7.4.4 untouched. The Task 6 build/provenance
+  gate re-verifies the real colcon overlay.
+- **BLOCKER at the Task 1 checkpoint (reviewer availability).** The submission transport was
+  established by inspection, not guessing: `codex queue --thread <uuid>` needs a thread that the TUI
+  creates only on its first turn, so the existing `codex:0.0` composer was bootstrapped with
+  `tmux send-keys -l` + CR and **proved accepted** by a persisted thread row
+  `01a0f116-8b02-7822-8281-ea3a499341e3` (cwd `/home/matianyi/Projects/ros-moveit-demo`, model
+  `gpt-6-1-sol`) and a submitted turn. That turn then **failed**: HTTP 400
+  `The 'gpt-6-1-sol' model is not supported when using Codex with a ChatGPT account.`
+  (`reviews/task1-reviewer-blocker.json`, turn `01a0f192-c822-7bd1-8a5f-97aeed77b405`,
+  `config.toml` sets `model = "gpt-6.1-sol"`). No model substitution and no second Codex session are
+  authorized by the task rules, so the Task 1 checkpoint is paused with the packet ready at
+  `reviews/task1-review-packet.md`; a coordinator verdict or a usable reviewer decision is the
+  minimal unblock. **Task-list item 1 stays in_progress; Task 2 has not started.**
+- **Rulings.** (1) Targeted tests run against the live source tree rather than a stale installed
+  overlay; cost if wrong: the Task 6 gate is what finally proves the installed artifact. (2)
+  `require_nonhead_gate` lives in `act/first_episode_inputs.py` because the plan's Task 1 file list
+  does not include `act/calibration.py`; cost if wrong: the gate sits one module from its siblings.
+  (3) The collection and runtime configs are two roles and their digest binding is verified in
+  `inspect_inputs`, not re-parsed in `freeze_inputs`; cost if wrong: a freeze could accept a
+  mismatched pair if `inspect` were bypassed, which Task 5 preflight re-checks. (4) Task 1's
+  `collection.py` change is limited to mode-aware `training_eligible`; the missing-mode refusal at the
+  exporter stays in Task 4. (5) Admission tests live in the teleop test tree, scope/input tests in the
+  demo tree, although the plan named only the demo file. (6) Task 1 is committed before the verdict so
+  the review target is immutable; fixes would be follow-up commits.
+- **State.** **Task-list item 0 completed; item 1 in_progress and paused at its checkpoint (reviewer
+  model unavailable); items 2-8 pending.**

@@ -235,7 +235,9 @@ class AdmissionGateway:
         return self.arbiter.prepare_child(parent_id, child_id)
 
 
-_ACT_START_KINDS = frozenset({"task8_phase", "task8_full", "act_collection_start", "act_collection_resume"})
+_ACT_START_KINDS = frozenset({"task8_phase", "task8_full", "act_collection_start",
+                              "act_collection_resume", "act_first_episode_diagnostic"})
+_DIAGNOSTIC_START_KIND = "act_first_episode_diagnostic"
 _ACT_PAYLOAD_KEYS = frozenset({
     "campaign_id", "backend", "worker_count", "source_path", "source_sha256",
     "manifest_path", "manifest_sha256", "runtime_config_path", "runtime_config_sha256",
@@ -249,6 +251,12 @@ _ACT_PAYLOAD_KEYS = frozenset({
 # (its expected set is _ACT_PAYLOAD_KEYS, so any receipt field there is a schema error)
 _TASK8_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
     "preparation_receipt_path", "preparation_receipt_sha256"})
+
+# the diagnostic payload additionally binds the frozen inputs and the explicit mode record; the
+# formal and Task 8 schemas above are unchanged, so neither can smuggle these fields in
+_DIAGNOSTIC_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
+    "collection_scope_path", "collection_scope_sha256",
+    "inputs_manifest_path", "inputs_manifest_sha256"})
 
 
 def _real_owner(pid: int, started_ticks: int) -> bool:
@@ -343,7 +351,9 @@ class UnifiedWorkloadService:
         if not isinstance(payload, dict):
             raise ValueError("CAMPAIGN_START_SCHEMA")
         task8 = spec.kind in ("task8_phase", "task8_full")
-        expected = _TASK8_PAYLOAD_KEYS if task8 else _ACT_PAYLOAD_KEYS
+        diagnostic = spec.kind == _DIAGNOSTIC_START_KIND
+        expected = (_TASK8_PAYLOAD_KEYS if task8 else
+                    _DIAGNOSTIC_PAYLOAD_KEYS if diagnostic else _ACT_PAYLOAD_KEYS)
         if set(payload) != expected:
             # a payload missing only the calibration pair is a calibration problem, not a schema one
             if set(payload) == expected - {"calibration_report_path",
@@ -365,6 +375,15 @@ class UnifiedWorkloadService:
             raise ValueError("CAMPAIGN_WORKER_COUNT_INVALID")
         if type(payload["qualification_mode"]) is not bool:
             raise ValueError("QUALIFICATION_MODE_INVALID")
+        if diagnostic:
+            # one Worker, no resume and no qualification claim: the diagnostic scope replaces the
+            # Head Search prerequisite only, so it must not borrow the qualification lane either
+            if payload["qualification_mode"] is not False:
+                raise ValueError("DIAGNOSTIC_QUALIFICATION_INVALID")
+            if payload["worker_count"] != 1:
+                raise ValueError("DIAGNOSTIC_SCOPE_INVALID")
+            if payload["qualification_receipt_path"] is not None:
+                raise ValueError("QUALIFICATION_RECEIPT_UNEXPECTED")
         if spec.kind.startswith("act_collection"):
             if payload["qualification_mode"]:
                 if payload["worker_count"] not in (1, 2, 8):
@@ -410,8 +429,10 @@ class UnifiedWorkloadService:
             calibration = json.loads(calibration_bytes)
             from so101_demo.act.calibration import installed_calibration_identity, require_gate
 
-            require_gate(calibration, "formal_collection" if spec.kind.startswith("act_collection")
-                         else "pick_place_validation")
+            if not diagnostic:
+                require_gate(calibration,
+                             "formal_collection" if spec.kind.startswith("act_collection")
+                             else "pick_place_validation")
             current_source, current_config = (
                 self.calibration_identity_probe or installed_calibration_identity)()
         except (OSError, TypeError, json.JSONDecodeError, ValueError) as error:
@@ -419,6 +440,13 @@ class UnifiedWorkloadService:
         if (calibration["source_commit"] != current_source
                 or calibration["config_sha256"] != current_config):
             raise ValueError("CALIBRATION_SOURCE_CONFIG_MISMATCH")
+        if diagnostic:
+            # the Head Search prerequisite is the only thing this scope removes: every non-Head
+            # check and its measured values must still be present for exactly this identity
+            from so101_demo.act.first_episode_inputs import require_nonhead_gate
+
+            require_nonhead_gate(calibration, source_commit=current_source,
+                                 config_sha256=current_config)
         if spec.kind in ("task8_phase", "task8_full"):
             from so101_demo.act.head_search_binding import validate_head_search_binding
             try:
@@ -441,6 +469,8 @@ class UnifiedWorkloadService:
             or receipt["evidence_root"] != str(root)
         ):
             raise ValueError("POLICY_NOT_ACTIVATED")
+        if diagnostic:
+            self._require_diagnostic_scope(payload, root)
         if spec.kind.startswith("act_collection") and not payload["qualification_mode"]:
             qualified_path = payload["qualification_receipt_path"]
             if not isinstance(qualified_path, str):
@@ -495,6 +525,31 @@ class UnifiedWorkloadService:
             raise ValueError("GPU_MAPPING_DRIFT")
         physical_uuid = resolve_physical_gpu(self.gpu_selector, current_visible)
         return payload, children, physical_uuid
+
+    def _require_diagnostic_scope(self, payload: dict, root: Path) -> dict:
+        """Bind one diagnostic episode to its frozen inputs and its explicit mode record.
+
+        The scope names the mode; the manifest names the frozen bytes; the payload pins both files.
+        The scope's `inputs_sha256` must equal the manifest's frozen digest, so neither the mode nor
+        the inputs can be swapped after the fact.
+        """
+
+        from so101_demo.act.collection_scope import CollectionMode, read_collection_scope
+        from so101_demo.act.first_episode_inputs import read_inputs_manifest
+
+        for name in ("collection_scope", "inputs_manifest"):
+            path = Path(payload[f"{name}_path"])
+            if (not path.is_absolute() or ".." in path.parts
+                    or not path.resolve().is_relative_to(root.resolve())):
+                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
+            self._verify_artifact(str(path), payload[f"{name}_sha256"])
+        try:
+            manifest = read_inputs_manifest(Path(payload["inputs_manifest_path"]))
+            return read_collection_scope(Path(payload["collection_scope_path"]),
+                                         expected_mode=CollectionMode.DIAGNOSTIC,
+                                         expected_inputs_sha256=manifest["inputs_sha256"])
+        except (OSError, KeyError, TypeError, ValueError) as error:
+            raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND") from error
 
     def start(self, spec: OperationSpec, *, allow_existing: bool = True) -> AdmittedCampaignContext:
         """Validate everything, acquire resources and persist one context atomically."""
