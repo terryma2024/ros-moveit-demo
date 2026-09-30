@@ -34798,3 +34798,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   score, both candidates' unions and the tie rule are all proven against real Ultralytics on CUDA with the
   pinned weights. What Task 11 still owes is the *installed-entry* smoke (console script, overlay
   resolution) and the ordinary package gates.
+
+## HS-014 — Evidence inventory snapshot (for the Task 13/14 classification report)
+
+- Registered root `/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m`, currently
+  **356 MB**, holding: `deps/` (the pinned A weights and the pinned task dataset, both verified by
+  digest), `handoff/`, `head-task2-overlay/` (the Task 2 symlink-install overlay), `studies/`,
+  `reviews/` (18 packets and verdicts across task1/2/3), **13 geometry runs** (only
+  `head-camera-geometry-20260930T060039Z` is current; the rest are superseded), **6 head-dataset smokes**
+  (current `head-dataset-smoke-20260930T060040Z`; `...T053447Z` failed on the xyaxes bug; the rest are
+  superseded), **2 model-campaign smokes** (both current evidence for Task 3), and **130 scratch
+  directories** from test runs.
+- **Classification intent** (nothing deleted, per the repository rule that evidence is never deleted
+  without explicit user authorization): retained = `deps/`, `handoff/`, `head-task2-overlay/`,
+  `studies/`, `reviews/`, the current seal and dataset smoke, both model smokes, and this ledger.
+  Deletion candidates = the 12 superseded geometry runs, the 4 superseded/failed dataset smokes, and the
+  130 scratch directories, which must be offered to the user at Task 13/14 rather than removed here.
+- The low-rate root `/tmp/so101-debug-head-search-antzb-LuFlHq6a` holds the reviewer probes, the shell
+  helper, the `pysrc` source alias, the cached `pytest-xdist`/`execnet` wheels and the candidate probe
+  scripts; it is scratch by definition and is reported separately.
