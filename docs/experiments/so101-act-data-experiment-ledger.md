@@ -37469,3 +37469,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `e09be4b48`;
   targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
   untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2019 — Task 3: the scene read's exact shape, and one ratified field with no source in it
+
+- **`_observe()` read in full** (`task_scene.py:275-292`): it waits for `/get_planning_scene`, requests
+  `WORLD_OBJECT_NAMES | WORLD_OBJECT_GEOMETRY | ROBOT_STATE_ATTACHED_OBJECTS | OBJECT_COLORS`, and returns the
+  response or a `SceneCommandReceipt` on failure. So the world and attached object **ids** the ratified record
+  wants are already in the response (`scene.world.collision_objects`,
+  `scene.robot_state.attached_collision_objects`) and `scene.is_diff` is on the same message, all from the one
+  call the port already makes.
+- **`scene_revision` has no source there.** MoveIt's `PlanningScene` message carries no revision field, so the
+  ratified `planning_scene_observation.scene_revision` cannot be read from `GetPlanningScene`. Two honest
+  options, for the owner or the next reviewer to settle: (a) the port maintains its **own** read counter,
+  incremented on each successful read, with `source` naming the port and the field's meaning documented as the
+  port's revision rather than MoveIt's; or (b) the field is amended. Inventing a plausible-looking revision
+  would be exactly the "manufacture it later" the reviewer refused.
+- **`sim_time_s` likewise belongs to the caller.** The port reads at wall time; the simulation instant is
+  known to the boundary's readback (which already carries `world.simulation_step`), so the record's
+  `sim_time_s` must be stamped there, at the same instant the gate is derived — which is also the rule the
+  audit enforces by requiring the record's instant to equal its parent observation's.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `434a833f3`;
+  targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
+  untouched; no push, no evidence deletion, no hardware, no second stack.
