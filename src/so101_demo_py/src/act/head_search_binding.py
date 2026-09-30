@@ -377,6 +377,9 @@ def validate_head_only_admission(admission):
     from so101_demo.act.head_search_qualification import HEAD_ONLY_OPERATIONS
 
     if not isinstance(admission, Mapping):
+        # the Task 8 measurement protocol issues its own typed admission; a caller's plain object is not one
+        if type(admission).__name__ == "CalibrationMeasurementAdmission":
+            return admission
         raise ValueError("HEAD_ONLY_OPERATION_REFUSED: the admission is not a document")
     operation = admission.get("operation")
     if operation not in HEAD_ONLY_OPERATIONS:

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import math
 
+from so101_demo.act.head_search_binding import validate_head_only_admission
+
 NECK_BOUNDS_RAD = (-2.0 * math.pi, 2.0 * math.pi)
 
 
@@ -16,7 +18,9 @@ class CalibrationSearchBinding:
     """Authorizes bounded calibration commands for one admission."""
 
     def __init__(self, *, admission, policy_state: dict, sweep_checker) -> None:
-        self.admission = admission
+        # only admission the restricted issuer created, or the measurement protocol's own typed
+        # admission, may drive this binding
+        self.admission = validate_head_only_admission(admission)
         self.policy_state = dict(policy_state)
         self.sweep_checker = sweep_checker
         self.submitted_targets: list[float] = []
