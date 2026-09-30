@@ -39165,3 +39165,36 @@ is the same kind as HS-176: the plan's Task 11 gate is load-bearing, the emitted
 `coverage_complete`), and the smaller change is for the CLI to also emit `coverage-proof.json` rather than to edit the plan's
 check. That change is not yet made; I am recording the state precisely so the next step is a two-line patch plus a rebuild
 rather than another investigation.
+
+## HS-178 — Verdict 15 satisfied end to end, machine-generated: installed smoke runs, rc=0, coverage proof present
+
+One script, one root, no value retyped by me:
+
+```
+TOOLCHAIN_RUN   = $HEAD_EVIDENCE/head-toolchain-20260930T120313Z
+source_commit   = 0f8a4e938400b963b0ad5133f7d94c37a6146a06      (HEAD; contains rename + CLI flags + coverage-proof)
+build rc=0      so101_mujoco_support 23.1s | so101_teleop 10.5s | so101_demo_py 1.61s
+prefix_demo     = <root>/install/so101_demo_py
+prefix_teleop   = <root>/install/so101_teleop
+exe_ok x7       (incl. so101_head_search_smoke)
+resolved_script = <root>/install/so101_demo_py/lib/so101_demo_py/so101_head_search_smoke
+smoke_invocation= ros2 run so101_demo_py so101_head_search_smoke --scenario no_cup --anchor default \
+                  --geometry-seal <probe11>/head-camera-geometry.json --evidence-root <root>/search-smoke
+smoke rc=0
+coverage-proof.json present
+"coverage_complete": true
+```
+
+This answers verdict 15's four requirements - exact invocation, resolved module path, exit code, coverage output - for the
+renamed installed command against the **final reviewed seal** (`7d963fdc…`, `coarse_step_candidate_rad 0.3`), inside a root
+whose declared commit provably contains every fix it installs.
+
+**The chain that had to be unwound to get here, all three invisible until the previous was fixed:** the console script was
+misnamed (HS-171), then the CLI lacked the plan's two flags (HS-175/176), then the coverage artefact was written under a
+different name (HS-177). Each was found by running the plan's *exact* command rather than checking its parts - which is
+precisely what verdict 15 said an executable inventory could not establish.
+
+**Root inventory, none deleted:** `115526Z` (vendored failure), `115541Z` (empy failure), `115624Z` (catkin_pkg failure),
+`115640Z` (first success, wrong provenance - HS-173), `115927Z` (reconciled provenance), `120204Z` (CLI flags),
+**`120313Z` (final: everything including the coverage proof)**. Two superseded-success roots are deletion candidates under
+the repo rule, pending user authorization.
