@@ -67,6 +67,31 @@ def _episode_frames(
         raise EvaluationError(
             f"EVALUATION_EPISODES_INCOMPLETE: no frame of the {split} partition was recorded"
         )
+    recorded = {int(frame.get("seed", -1)) for frame in frames}
+    missing_seeds = sorted(wanted - recorded)
+    if missing_seeds:
+        raise EvaluationError(
+            f"EVALUATION_EPISODES_INCOMPLETE: the {split} partition declares seeds {missing_seeds} that "
+            "were never recorded"
+        )
+    for frame in frames:
+        detections = frame.get("detections")
+        if not isinstance(detections, Mapping):
+            raise EvaluationError(
+                "EVALUATION_EPISODES_INCOMPLETE: a frame records no per-candidate detections"
+            )
+        absent = sorted(name for name in CANDIDATE_IDS if name not in detections)
+        if absent:
+            raise EvaluationError(
+                f"EVALUATION_EPISODES_INCOMPLETE: a frame has no measurement for candidates {absent}; "
+                "an absent measurement is not an empty detection list"
+            )
+        latency = frame.get("latency_ms")
+        if not isinstance(latency, Mapping) or any(name not in latency for name in CANDIDATE_IDS):
+            raise EvaluationError(
+                "EVALUATION_LATENCY_UNMEASURED: a frame records no per-candidate latency, so the "
+                "budget cannot be measured"
+            )
     return frames
 
 
@@ -121,11 +146,37 @@ def _measure_static(
     measured = {
         "mask_map50_95": float(metrics.get("metrics/mAP50-95(M)", float("nan"))),
     }
-    for key in ("recall", "f1"):
-        value = metrics.get(f"metrics/{key}(M)")
-        if value is None:
-            value = metrics.get(f"metrics/{key}(B)")
-        measured[key] = float(value if value is not None else float("nan"))
+    precision = metrics.get("metrics/precision(M)")
+    recall = metrics.get("metrics/recall(M)")
+    if precision is None or recall is None:
+        raise EvaluationError(
+            "EVALUATION_MEASUREMENT_UNAVAILABLE: the validator reported no mask precision and recall, "
+            "so F1 cannot be derived"
+        )
+    measured["recall"] = float(recall)
+    # Ultralytics exposes precision and recall, not F1; the gate derives it rather than trusting a
+    # missing key, which used to become NaN and quietly leave F1 out of the decision
+    measured["f1"] = (
+        2 * float(precision) * float(recall) / (float(precision) + float(recall))
+        if (float(precision) + float(recall)) > 0
+        else 0.0
+    )
+    unsupported = sorted(
+        key
+        for key in ("min_bbox_aspect", "tracker", "postprocess", "runtime")
+        if operating_point.get(key) not in (None, {}, 0)
+        and operating_point.get(key) != {"iou": operating_point.get("tracking_iou")}
+    )
+    if unsupported:
+        raise EvaluationError(
+            "EVALUATION_OPERATING_POINT_UNSUPPORTED: the sealed identity declares "
+            f"{', '.join(unsupported)}, which this measurement path does not apply"
+        )
+    if "min_area_px2" in operating_point:
+        raise EvaluationError(
+            "EVALUATION_OPERATING_POINT_UNSUPPORTED: the sealed identity declares min_area_px2, which "
+            "Ultralytics' validation does not apply"
+        )
     return measured
 
 
@@ -233,11 +284,11 @@ def main(arguments: list[str] | None = None) -> int:
                     weight_sha256=candidate.weight_sha256,
                     static_image_metrics=static,
                     held_out_episode_metrics=episodes,
-                    latency_ms_per_frame=float(
-                        candidate.document.get("latency_ms_per_frame", float("nan"))
+                    latency_ms_per_frame=_measured_latency_p95(
+                        frames, candidate.candidate_id, parsed.episode_split
                     ),
-                    no_cup_false_candidates=int(
-                        candidate.document.get("no_cup_false_candidates", 0)
+                    no_cup_false_candidates=_measured_false_candidates(
+                        frames, candidate.candidate_id, parsed.episode_split
                     ),
                 )
             )
@@ -303,6 +354,41 @@ def main(arguments: list[str] | None = None) -> int:
         )
     )
     return 0
+
+
+def _measured_latency_p95(
+    frames: Sequence[Mapping[str, object]], candidate_id: str, split: str
+) -> float:
+    """The candidate's measured per-frame latency p95 on the partition, never a document field."""
+
+    values = sorted(
+        float((frame.get("latency_ms") or {})[candidate_id])
+        for frame in frames
+        if frame.get("split") == split
+    )
+    if not values:
+        raise EvaluationError(
+            f"EVALUATION_LATENCY_UNMEASURED: no measured latency for candidate {candidate_id}"
+        )
+    index = min(len(values) - 1, int(round(0.95 * (len(values) - 1))))
+    return values[index]
+
+
+def _measured_false_candidates(
+    frames: Sequence[Mapping[str, object]], candidate_id: str, split: str
+) -> int:
+    """Count detections on frames that hold no object, from the records rather than a declaration."""
+
+    total = 0
+    for frame in frames:
+        if frame.get("split") != split:
+            continue
+        if frame.get("truth"):
+            continue
+        if frame.get("scenario") not in (None, "no_cup"):
+            continue
+        total += len((frame.get("detections") or {}).get(candidate_id) or [])
+    return total
 
 
 def _matched_fraction(frame: Mapping[str, object], candidate_id: str) -> float:
@@ -382,6 +468,8 @@ def _episode_cells(
         p95 = offsets[index]
     else:
         p95 = 0.0
+    if not offsets and any((frame.get("truth") or []) for frame in domain_frames):
+        p95 = float("inf")  # no evidence is not a perfect result
     return {"recall": recall, "f1": f1, "bbox_center_p95_px": p95}
 
 

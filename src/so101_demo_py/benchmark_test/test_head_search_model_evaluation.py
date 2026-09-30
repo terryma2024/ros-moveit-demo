@@ -435,3 +435,12 @@ def test_compare_cli_accepts_the_pinned_invocation_shape(
     printed = capsys.readouterr().out
     assert "EVALUATION_" in printed, printed
     assert "usage:" not in printed.lower()
+
+
+def test_a_candidate_with_better_measured_f1_blocks_an_undefendable_selection() -> None:
+    """The reviewer's exact counterexample: C wins AP by 0.005 but loses F1 by 0.8."""
+
+    weak_f1 = _evaluation("C", head_ap=0.80, task_ap=0.80, head_f1=0.10, task_f1=0.10)
+    strong_f1 = _evaluation("B", head_ap=0.795, task_ap=0.80, head_f1=0.90, task_f1=0.90)
+    with pytest.raises(EvaluationError, match="EVALUATION_F1_MARGIN"):
+        choose_candidate(A_EQUIVALENT, strong_f1, weak_f1)

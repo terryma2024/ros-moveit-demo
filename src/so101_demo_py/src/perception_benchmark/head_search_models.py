@@ -455,6 +455,26 @@ def choose_candidate(*candidates: CandidateEvaluation) -> SelectionVerdict:
     if static_winner != episode_winner:
         static_winner = episode_winner = "C"
     winner = static_winner
+    # a selection nobody can defend is refused rather than recorded: if another candidate is better than
+    # the winner on a measured cell by more than the margin, the frozen evidence does not support a choice
+    for name, candidate in by_id.items():
+        if name == winner:
+            continue
+        for domain in ("head", "task"):
+            rival = _cell(candidate.static_image_metrics, domain, "f1")
+            chosen = _cell(by_id[winner].static_image_metrics, domain, "f1")
+            if rival - chosen > F1_MARGIN:
+                raise EvaluationError(
+                    f"EVALUATION_F1_MARGIN: {name} beats {winner} on the static-image {domain} F1 by "
+                    f"{rival - chosen:.3f}, so neither can be selected without retuning"
+                )
+            rival_recall = _cell(candidate.static_image_metrics, domain, "recall")
+            chosen_recall = _cell(by_id[winner].static_image_metrics, domain, "recall")
+            if rival_recall - chosen_recall > RECALL_MARGIN:
+                raise EvaluationError(
+                    f"EVALUATION_RECALL_MARGIN: {name} beats {winner} on the static-image {domain} "
+                    "recall by more than the margin, so neither can be selected without retuning"
+                )
     reason = (
         f"{winner} holds the best head cells in both measurement families within the margins and keeps "
         f"the task domain within {TASK_RETENTION_MARGIN}"
