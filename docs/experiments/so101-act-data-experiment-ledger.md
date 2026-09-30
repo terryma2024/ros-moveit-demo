@@ -37904,3 +37904,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `27f8eb4b0`;
   targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2037 — Task 3: consolidated gate after the producer wiring, and where the objective stands
+
+- **Gate.** `logs/task3-gate11.run` rc=0: **415 passed in 10.36s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof. The rise from 412 is CP-2029's derived SEARCH gate, CP-2034's derived boundary gate and CP-2036's
+  three-way control.
+- **Closed in this stretch (CP-2028 … CP-2036).** The Planning Scene gate is no longer asserted anywhere:
+  `RosTaskScenePort.observe_observation()` produces the ratified record's parts, the SEARCH document carries
+  it additively, `search()` stores the verified receipt, `_gate_facts` and the port derive `planning_scene_ok`
+  from it, the runner's existing `_EVIDENCE_GATES` rule refuses a phase whose gates are not all true, and the
+  control proves the value follows the receipt (true / false / false).
+- **Still open for Task 3.** (a) The same treatment for the two controller gates
+  (`joint_feedback_ok`, `controller_reference_ok`), which needs the controller status source read and the
+  ratified `controller_feedback` fields mapped from it. (b) Letting the full
+  `planning_scene_observation` record travel once the readback fills it (the port's counter plus the caller's
+  simulation instant). (c) T3-F11's window-to-rows checks (CP-1997/CP-2001 recipes). (d) A fresh checkpoint
+  after these land.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `71ec84df0`; no push,
+  no evidence deletion, no hardware, no second stack.
