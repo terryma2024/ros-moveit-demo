@@ -459,3 +459,43 @@ def test_readback_refuses_a_resigned_scope_document(tmp_path):
     path.write_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode())
     with pytest.raises(ValueError, match="AUDIT_METADATA_INVALID"):
         verify_audit_manifest(path)
+
+
+@pytest.mark.parametrize("stream, mutate, code", [
+    ("row-bindings.jsonl", lambda row: row.update({"row_index": 7}), "AUDIT_ROW_INVALID"),
+    ("events.jsonl", lambda row: row["payload"].update({"physics_step": -1}), "AUDIT_EVENT_INVALID"),
+    ("physics.jsonl", lambda row: row.update({"release_epoch": -1}), "AUDIT_PHYSICS_INVALID"),
+])
+def test_readback_refuses_resigned_records_that_admission_would_reject(tmp_path, stream, mutate,
+                                                                      code):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    row = json.loads((path.parent / stream).read_text().splitlines()[0])
+    mutate(row)
+    payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    _resign(writer, path, stream, payload)
+    with pytest.raises(ValueError, match=code):
+        verify_audit_manifest(path)
+
+
+def test_readback_refuses_a_nonfinite_reference_position(tmp_path):
+    """`1e309` decodes to infinity in JSON, which admission rejects and readback must too."""
+
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    lines = (path.parent / "references.jsonl").read_bytes().splitlines()
+    payload = lines[0].replace(b"0.1", b"1e309", 1) + b"\n"
+    _resign(writer, path, "references.jsonl", payload)
+    with pytest.raises(ValueError, match="AUDIT_REFERENCE_INVALID"):
+        verify_audit_manifest(path)
+
+
+def test_readback_compares_the_scope_and_inputs_digests(tmp_path):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    document = json.loads((path.parent / "inputs.json").read_bytes())
+    document["inputs_sha256"] = "b" * 64
+    payload = json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
+    _resign(writer, path, "inputs.json", payload)
+    with pytest.raises(ValueError, match="AUDIT_METADATA_INVALID"):
+        verify_audit_manifest(path)

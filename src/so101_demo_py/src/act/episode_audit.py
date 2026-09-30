@@ -439,15 +439,20 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                 or type(row["sequence"]) is not int or row["sequence"] < 1
                 or type(row["reset_epoch"]) is not int or row["reset_epoch"] < 0
                 or type(row["received_monotonic_ns"]) is not int or row["received_monotonic_ns"] < 1
-                or not isinstance(row["stamp_s"], (int, float)) or isinstance(row["stamp_s"], bool)):
+                or not isinstance(row["stamp_s"], (int, float)) or isinstance(row["stamp_s"], bool)
+                or not math.isfinite(row["stamp_s"]) or row["stamp_s"] < 0
+                or not math.isfinite(row["received_monotonic_ns"])):
             raise ValueError("AUDIT_ACQUISITION_INVALID")
         if row["acquisition_id"] != canonical_acquisition_id(
                 row["session_id"], row["reset_epoch"], row["camera"], row["sequence"]):
             raise ValueError("AUDIT_ACQUISITION_INVALID")
         key = (row["camera"], row["session_id"], row["reset_epoch"])
-        if row["acquisition_id"] in acquisitions or row["sequence"] <= per_camera.get(key, 0):
+        previous_sequence, previous_stamp = per_camera.get(key, (0, -1.0))
+        if (row["acquisition_id"] in acquisitions or row["sequence"] <= previous_sequence
+                or row["stamp_s"] <= previous_stamp):
+            # a new sequence must also be a new source instant: ordering alone is not monotonic time
             raise ValueError("AUDIT_ACQUISITION_INVALID")
-        per_camera[key] = row["sequence"]
+        per_camera[key] = (row["sequence"], row["stamp_s"])
         acquisitions[row["acquisition_id"]] = row
     revoked = set()
     references = {}
@@ -456,8 +461,11 @@ def _verify_streams(audit: Path, identity: dict) -> None:
         if (row["sequence"] != sequence + 1 or row["source"] != "CONTROLLER_REFERENCE"
                 or type(row["accepted"]) is not bool
                 or not isinstance(row["positions"], list) or len(row["positions"]) != 6
+                or not isinstance(row["reference_time_s"], (int, float))
+                or isinstance(row["reference_time_s"], bool)
+                or not math.isfinite(row["reference_time_s"]) or row["reference_time_s"] < 0
                 or any(isinstance(value, bool) or not isinstance(value, (int, float))
-                       for value in row["positions"])):
+                       or not math.isfinite(value) for value in row["positions"])):
             raise ValueError("AUDIT_REFERENCE_INVALID")
         sequence = row["sequence"]
         references[row["sequence"]] = row
@@ -467,10 +475,12 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     indexes: set = set()
     last_time: float | None = None
     for row in _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID"):
-        if (row["row_index"] in indexes
+        if (type(row["row_index"]) is not int or row["row_index"] < 0
+                or row["row_index"] in indexes or row["row_index"] != len(indexes)
                 or row["head_acquisition_id"] == row["wrist_acquisition_id"]
                 or not isinstance(row["sim_time_s"], (int, float))
-                or isinstance(row["sim_time_s"], bool)):
+                or isinstance(row["sim_time_s"], bool)
+                or not math.isfinite(row["sim_time_s"]) or row["sim_time_s"] < 0):
             raise ValueError("AUDIT_ROW_INVALID")
         indexes.add(row["row_index"])
         stamps = []
@@ -508,8 +518,15 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                 or not isinstance(payload, dict)
                 or set(payload) != _EVENT_PAYLOADS[row["kind"]]):
             raise ValueError("AUDIT_EVENT_INVALID")
+        if row["sim_time_s"] is not None and (
+                isinstance(row["sim_time_s"], bool) or not isinstance(row["sim_time_s"], (int, float))
+                or not math.isfinite(row["sim_time_s"]) or row["sim_time_s"] < 0):
+            raise ValueError("AUDIT_EVENT_INVALID")
+        if (row["identity"].get("session_id") != identity.get("session_id")
+                or row["identity"].get("attempt_id") != identity.get("attempt_id")):
+            raise ValueError("AUDIT_EVENT_INVALID")
         if row["kind"] in ("phase_complete", "run_complete", "run_aborted"):
-            if type(payload["physics_step"]) is not int:
+            if type(payload["physics_step"]) is not int or payload["physics_step"] < 0:
                 raise ValueError("AUDIT_EVENT_INVALID")
         if row["kind"] == "phase_complete" and (not isinstance(payload["phase"], str)
                                                 or not payload["phase"]):
@@ -518,7 +535,12 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     epoch: int | None = None
     sequence = 0
     for row in _records(audit / "physics.jsonl", _PHYSICS_FIELDS, "AUDIT_PHYSICS_INVALID"):
-        if row["sequence"] != sequence + 1 or row["kind"] not in _PHYSICS_KINDS:
+        if (row["sequence"] != sequence + 1 or row["kind"] not in _PHYSICS_KINDS
+                or type(row["release_epoch"]) is not int or row["release_epoch"] < 0
+                or (row["sim_time_s"] is not None and (
+                    isinstance(row["sim_time_s"], bool)
+                    or not isinstance(row["sim_time_s"], (int, float))
+                    or not math.isfinite(row["sim_time_s"]) or row["sim_time_s"] < 0))):
             raise ValueError("AUDIT_PHYSICS_INVALID")
         sequence = row["sequence"]
         if epoch is None or row["release_epoch"] > epoch:
@@ -531,7 +553,8 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     scope = json.loads((audit / "source.json").read_bytes())
     inputs = json.loads((audit / "inputs.json").read_bytes())
     if (declared != identity or not _scope_ok(scope) or not _identity_ok(declared)
-            or not isinstance(inputs, dict) or not _hex64(inputs.get("inputs_sha256"))):
+            or not isinstance(inputs, dict) or not _hex64(inputs.get("inputs_sha256"))
+            or inputs["inputs_sha256"] != scope["inputs_sha256"]):
         # the manifest identity must be the identity the episode actually recorded, and the scope and
         # inputs payloads must be the closed documents they claim to be
         raise ValueError("AUDIT_METADATA_INVALID")
