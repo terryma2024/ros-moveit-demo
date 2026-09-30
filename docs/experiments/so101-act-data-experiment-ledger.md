@@ -39086,3 +39086,30 @@ patched after the build; the earlier four roots are untouched and remain the evi
 Remaining deviations, unchanged and on the record: the vendored five are `--packages-ignore`d with the underlay supplying
 them (HS-166), and `empy`/`catkin_pkg` were added to the perception venv because Step 2's own `-DPython3_EXECUTABLE`
 requires them (HS-167/169). One repository change landed: the rename `bcba722f7`.
+
+## HS-175 — Running the plan's installed smoke command exposes a real CLI surface mismatch
+
+Executed exactly as Task 11's step specifies, against the final seal and from the frozen toolchain root:
+
+```
+resolved script: <root>/install/so101_demo_py/lib/so101_demo_py/so101_head_search_smoke
+ros2 run so101_demo_py so101_head_search_smoke --scenario no_cup --anchor default \
+  --geometry-seal <probe11>/head-camera-geometry.json --evidence-root <smoke root>
+-> head_search_smoke: error: unrecognized arguments: --scenario no_cup --evidence-root ...
+-> smoke rc=2 ; coverage-proof.json MISSING
+```
+
+The installed CLI's actual surface is `--geometry-seal`, `--anchor`, `--contract`, `--perception-config`, `--output`. So
+`--anchor` matches the plan and **`--scenario` and `--evidence-root` do not exist** - the plan's Task 11 invocation cannot
+run against the CLI this task built, and the plan's `test -f "$SEARCH_SMOKE_ROOT/coverage-proof.json"` therefore cannot
+pass either.
+
+**This is the same shape as HS-171 and I am checking the second side this time before calling it a defect in either
+direction:** either the plan's Task 5/7 section defines the smoke CLI with `--scenario`/`--evidence-root` (in which case my
+Task 5 implementation is incomplete), or the plan's Task 11 line drifted from its own earlier definition (in which case the
+invocation needs a recorded reconciliation). The next step is to read the plan's own CLI definition for this executable -
+exactly the check that turned HS-171 from "missing executable" into "misnamed console script", which is a different fix.
+
+**Note the reviewer's requirement is not yet met:** verdict 15 asked for the renamed installed command's exact invocation,
+resolved module path, exit code and coverage output. I have the first three (HS-175: resolved path, invocation, rc=2) and the
+coverage output cannot exist until the argument surface matches.
