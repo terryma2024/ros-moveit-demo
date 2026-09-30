@@ -35378,6 +35378,20 @@ approved earlier). Next: Task 8, the production startup binding, with its RED te
   effective-config readback, wire it into `runtime/launch_composition.py` and `cli/act_stack_ready.py`, then
   GREEN and the scoped commit.
 
+- **Task 8 progress (rounds 247-249).** Commits `bfbfa09c5` (the promoted config plus the pair check and the
+  one immutable binding) and this one (`load_promoted_head_search`). The shipped
+  `config/mujoco/act/head_search_v2.json` declares the seventeen values with the weight/candidate/camera/
+  tracker/CUDA/controlled-dependency identities, `allow_cpu_fallback` false and no unconsumed value;
+  `validate_promoted_pair` compares every value and identity before ROS or model construction, refusing a
+  single drifted field with `HEAD_SEARCH_SAMPLE_MISMATCH` and an unconsumed value with
+  `HEAD_SEARCH_UNUSED_VALUE`; `validate_head_search_binding` dispatches the pair shape while the older
+  runtime/calibration shape keeps its validation. Gate: 50 passed across the five head-search suites.
+- **Owed for Task 8:** neither `runtime/launch_composition.py` nor `cli/act_stack_ready.py` mentions head
+  search today, so calling `load_promoted_head_search` from them is new wiring whose tests
+  (`test_act_stack_ready.py`, `test_launch_composition.py`) the stale underlay blocks; that call-site wiring
+  is deferred to Task 11 for the same reason as the adapter wiring in HS-028, so it is not shipped
+  unverified. Task 8 also still owes its review.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
