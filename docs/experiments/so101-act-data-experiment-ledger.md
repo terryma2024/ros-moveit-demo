@@ -41422,3 +41422,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   progress** with five items landed and these two specified to the line; targeted gates **430 / 201 / 201 / 201 /
   246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `8aa6a3320`; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-2199 — Correction to CP-2198: `physics_end_s` is already honest; only `collection_end_s` overclaims
+
+- **Read this round** (`test_act_episode_audit.py:719-725`): the fixture window is
+  `{schedule: {head: [1.0, 1.1], wrist: [1.0, 1.1]}, streams_required: [head, wrist], cadence_s: 0.1,
+  permitted_gaps_s: [], collection_start_s: 1.0, collection_end_s: 1.2, first_command_s: 1.0,
+  physics_end_s: 1.1, label_cutoff_s: 1.0, outcome: "complete"}`. So `physics_end_s` **already equals** the last
+  physics evidence (1.1) and `label_cutoff_s` equals the last labelled row (1.0, which F5's cutoff rule enforces) —
+  **only `collection_end_s` (1.2) claims more than any camera holds**.
+- **Therefore the rule compares each endpoint with its own evidence, not one union**: `physics_end_s` against the
+  physics rows' last instant (already satisfied), `label_cutoff_s` against `row_times` (already enforced by the
+  cutoff rule), `collection_start_s`/`collection_end_s` against the **camera** stamps. The fixture deltas shrink to
+  two: `_window()`'s schedule gains 1.2 for both streams, and `_self_consistent_formal` mints a frame at
+  `stamp=1.2` for each camera. **CP-2198's third delta (a physics row at 1.2) is wrong and is cancelled.**
+- **This is the smaller, more faithful pass**, and it keeps `physics_end_s` meaning what it says instead of forcing
+  physics evidence to chase a camera claim.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  five items landed, the endpoint pass now two fixture deltas plus two comparisons, and the frozen-policy item with
+  the plan (CP-2195); targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154
+  passed**; HEAD `7cfd2633c`; no push, no evidence deletion, no hardware, no second stack.
