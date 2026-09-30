@@ -41396,3 +41396,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   five items landed, its frozen-policy item waiting on the plan and this endpoint item one edit plus a fixture
   upgrade from done; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154
   passed**; HEAD `ec1494e01`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2198 — F11's endpoint item: the edit and its fixture deltas, as a handoff list
+
+- **The predicate edit** (in `_window_matches_observed`, which the seal and the readback already share): compare
+  `window["collection_start_s"]` with the earliest observed instant and `window["collection_end_s"]` with the
+  latest, where observed means the held acquisitions' `stamp_s` values together with `row_times`, allowing
+  `_TOLERANCE_S`. The start comparison already holds for the retained fixture (1.0 in both); the end comparison
+  fails because the window claims 1.2 while the evidence stops at 1.1.
+- **The fixture deltas that must land in the same pass**, all by line number:
+  1. `_window()`'s `source_schedule` gains **1.2** for both streams (`head` and `wrist` each `[1.0, 1.1, 1.2]`);
+  2. `_self_consistent_formal`'s minter loop gains a frame at `stamp=1.2` for each camera, so both streams hold an
+     acquisition at the instant the window names;
+  3. the formal writers gain one physics row at `sim_time_s = 1.2` (their existing `pose` row's shape with the
+     instant changed), so the physics history reaches the window's end as well;
+  4. any other fixture that seals a formal audit with `_window()` inherits the change through item 1.
+- **Why they must land together**: the rule alone is strictly more refusing and the retained fixture violates it by
+  construction — F5's own evidence — so a one-sided pass would leave the suite red, which this session's discipline
+  forbids. The deltas are mechanical and the rule is two comparisons.
+- **F11's other remaining item** stays with the plan: the frozen policy has no home in the audit module (CP-2195),
+  so `cadence_s`, `streams_required` and `permitted_gaps_s` cannot be checked against frozen inputs until the plan
+  says where those live.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan on `sim_time_s`); **F11 in
+  progress** with five items landed and these two specified to the line; targeted gates **430 / 201 / 201 / 201 /
+  246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `8aa6a3320`; no push, no evidence deletion, no
+  hardware, no second stack.
