@@ -43370,3 +43370,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, second half specified in CP-2293 and now with this
 - premise measured; goal paused.
+
+## CP-2296 - F5's hybrid: what the port's observation carries and what the next probe must name
+
+- The release-boundary suite's port builds physical_observation from flat world fields only (simulation_time_s,
+  simulation_step, contact counts, table contact, maximum normal force, other contact geoms, per line 52): it
+  carries neither planning_scene_observation nor controller_feedback, and _formal_coverage_ok needs at least one
+  physics row holding both. A formal seal is therefore impossible from this port as it stands - CP-2293's detail
+  two, now visible in the fixture itself.
+- The append-time refusal CP-2295 measured is still unnamed, and coverage is a seal gate rather than an append one,
+  so the cause is a schema rule on the row rather than the coverage predicate. The next step is the probe that has
+  settled every one of these before: run the CP-2295 probe and print the traceback's episode_audit.py line, rather
+  than reading three candidate rules and guessing between them.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, second half specified with its first obstacle named;
+- goal paused.
