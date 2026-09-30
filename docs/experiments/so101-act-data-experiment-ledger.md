@@ -38236,3 +38236,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   window-to-rows checks, then a fresh checkpoint.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2052 — Task 3: the boundary helper now asserts no gate at all
+
+- **What landed.** `execute_approach` stores the proof `PathProver(...).prove(...)` just established on the
+  boundary, and `_gate_facts` reports `planning_ok` as `bool(planning)` through a sixth parameter that both
+  call sites pass; the two acceptance fixtures supply the proof. With that, **every gate the boundary helper
+  reports is derived from an observation the search established** — the path proof, the reference verifier's
+  proof, the ratified controller records at the world's instant and the verified scene receipt — and the
+  helper contains no asserted gate value.
+- **Evidence.** `logs/task3-plan.run` rc=0: **97 passed** across the motion-phases, close-execution, task8,
+  search-port, release-boundary and supervisor suites under `pytest-xdist` with 8 workers, with its own NVMe
+  scratch and a non-empty tempfile proof.
+- **What remains, and it is now only the SEARCH document**: its `planning_ok`, `controller_reference_ok`,
+  `contact_ok`, `mujoco_ok`, `head_rgb_ok` and `wrist_rgb_ok` — each needs its own observation source read
+  first (the search result's status for planning, the reference readback for the reference gate, the contact
+  evidence the port already inspects for `contact_ok`/`mujoco_ok`, and the two RGB sources). Then the full
+  record's travel, T3-F11's window-to-rows checks and a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `ad446dbf7`;
+  consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.

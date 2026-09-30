@@ -201,6 +201,9 @@ class PickPlaceSearchBoundary:
             contact_scope_sha256=prover_identity["contact_scope_sha256"],
             checker_sha256=prover_identity["checker_sha256"],
             expected_samples=prover_identity["expected_samples"])
+        # the proof this method just established is what the phases' planning gate is derived from, so it
+        # is kept here rather than re-derived or asserted later (CP-2017's supplier pattern)
+        self._planning_proof = proof
         facts = self.sequence_facts("APPROACH", snapshot, request,
                                     support_distance_max_m=support_distance_max_m)
         return {"proof": proof, "current_snapshot": snapshot, "facts": facts}
@@ -294,7 +297,7 @@ class PickPlaceSearchBoundary:
         return None
 
     @staticmethod
-    def _gate_facts(aggregates, world, receipt=None, feedback=None, reference=None):
+    def _gate_facts(aggregates, world, receipt=None, feedback=None, reference=None, planning=None):
         """The eight gates and the holding/contact facts one validated readback establishes.
 
         Shared rather than copied: the set-down document needs the same gates the phase documents carry, and a second
@@ -304,7 +307,8 @@ class PickPlaceSearchBoundary:
         facts = {
             "physics_step": world.simulation_step,
             # the reference gate is derived from the proof the reference verifier produced for this search
-            "planning_ok": True, "controller_reference_ok": bool(reference), "joint_feedback_ok": (
+            "planning_ok": bool(planning),
+            "controller_reference_ok": bool(reference), "joint_feedback_ok": (
             isinstance(feedback, (list, tuple)) and len(feedback) > 0
             and all(isinstance(record, dict)
                     and record.get("sim_time_s") == world.simulation_time_s
@@ -342,7 +346,8 @@ class PickPlaceSearchBoundary:
         facts = self._gate_facts(
             aggregates, world, getattr(self, "_planning_scene_receipt", None),
             getattr(self, "_controller_feedback", None),
-            getattr(self, "_controller_reference", None))
+            getattr(self, "_controller_reference", None),
+            getattr(self, "_planning_proof", None))
         # the phase flags are ESTABLISHED from the same readback, never asserted: a cup that is no longer supported is
         # off the table, and a lifted cup is one the aggregates call HOLDING (held and unsupported) - which is why
         # MICRO_LIFT and everything after it agrees with the aggregate rules while CLOSE has to be modelled carefully
@@ -439,7 +444,8 @@ class PickPlaceSearchBoundary:
         gates = self._gate_facts(
             aggregates, world, getattr(self, "_planning_scene_receipt", None),
             getattr(self, "_controller_feedback", None),
-            getattr(self, "_controller_reference", None))
+            getattr(self, "_controller_reference", None),
+            getattr(self, "_planning_proof", None))
         return {"session_id": request["session_id"], "attempt_id": request["attempt_id"],
                 "reset_epoch": self.reset.receipt.new_epoch, "release_epoch": self._release_epoch,
                 "physics_step": world.simulation_step,

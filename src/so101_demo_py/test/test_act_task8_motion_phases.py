@@ -79,6 +79,8 @@ def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=Tru
     boundary._release_epoch, boundary._set_down_step = 0, None
     # the controller-reference proof these phases derive their reference gate from (CP-2017 pattern)
     boundary._controller_reference = {"accepted": True}
+    # the path proof this fixture's phases derive their planning gate from (CP-2017 pattern)
+    boundary._planning_proof = {"proved": True}
     # the SEARCH receipt this fixture's phases are derived from (CP-2017 step three): a successful
     # SceneCommandReceipt, the same shape the boundary remembers from its own validated search. A case may
     # ask for an unsuccessful one or for none, which is what the fail-closed control below drives.
