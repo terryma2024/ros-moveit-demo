@@ -88,7 +88,11 @@ def observation():
         failure_code=None, evidence={"world_ids": ["table", "pedestal", "plastic_cup"],
                                      "attached_ids": [], "mismatches": []},
     )
-    return Task8SearchObservation(search, raw, scene)
+    # the ratified controller records the joint-feedback gate is derived from, stamped with this
+    # fixture's own world instant so the instant join holds (CP-2041/CP-2043)
+    feedback = tuple({"controller": kind, "sim_time_s": raw["world"].simulation_time_s}
+                     for kind in ("arm", "gripper"))
+    return Task8SearchObservation(search, raw, scene, controller_feedback=feedback)
 
 
 def fixture(*, observed=None, contact_safe=True, sweep_safe=True):

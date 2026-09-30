@@ -38152,3 +38152,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9f4a9d20f`;
   consolidated gate `logs/task3-gate12.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2048 — Task 3: the port derives the joint-feedback gate too; four derivations now in place
+
+- **What landed.** `_search_evidence` computes `joint_feedback_ok` from the ratified records the observation
+  carries (`observed.controller_feedback`, CP-2041) against `world.simulation_time_s`, and the SEARCH
+  document's gate line now reads `"controller_reference_ok": True, "joint_feedback_ok": joint_feedback_ok`.
+  The port's fixture supplies the two records stamped with **its own** world instant
+  (`raw["world"].simulation_time_s`, which the fixture builds as the constant 1.2), so the instant join the
+  audit enforces holds by construction and the file's existing expectation at line 404 still passes.
+- **Where Task 3 stands on literals.** Four gates are now **derived from real observations** rather than
+  asserted: the boundary's `planning_scene_ok` (CP-2034) and `joint_feedback_ok` (CP-2043), and the port
+  document's `planning_scene_ok` (CP-2029) and `joint_feedback_ok` (this entry). Remaining documented
+  placeholders: `planning_ok` and `controller_reference_ok` on both documents, plus the port's `contact_ok`,
+  `mujoco_ok` and the two RGB gates, which have their own observation sources to wire.
+- **Evidence.** `logs/task3-port.run` rc=0: **97 passed** across the search-port, three task8 phase,
+  release-boundary and supervisor suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a
+  non-empty tempfile proof; the patched neighbourhood was printed and the gate line verified at 422.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9c796b55d`;
+  consolidated gate `logs/task3-gate12.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.

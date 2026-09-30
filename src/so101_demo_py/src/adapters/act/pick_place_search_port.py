@@ -407,12 +407,19 @@ class PickPlaceSearchPhasePort:
         # observed verdict; a missing or unsuccessful receipt fails the gate instead of asserting it.
         receipt = getattr(observed, "planning_scene", None)
         planning_scene_ok = getattr(receipt, "success", None) is True
+        # CP-2017 step three for the controller gates: derived from the ratified records the observation
+        # carries (CP-2040/CP-2041), at the same instant the world reports, never asserted
+        feedback = getattr(observed, "controller_feedback", None)
+        joint_feedback_ok = (isinstance(feedback, (list, tuple)) and len(feedback) > 0
+                             and all(isinstance(record, dict)
+                                     and record.get("sim_time_s") == world.simulation_time_s
+                                     for record in feedback))
         return {
             "phase": "SEARCH", "session_id": request["session_id"],
             "attempt_id": request["attempt_id"], "reset_epoch": reset_epoch,
             "release_epoch": 0, "physics_step": world.simulation_step,
             "planning_ok": True,
-            "controller_reference_ok": True, "joint_feedback_ok": True,
+            "controller_reference_ok": True, "joint_feedback_ok": joint_feedback_ok,
             "contact_ok": True, "mujoco_ok": True,
             # CP-2017 step 2, additive half: when the readback that established these gates carries the
             # ratified Planning Scene observation, it travels with the document so the gate can be derived
