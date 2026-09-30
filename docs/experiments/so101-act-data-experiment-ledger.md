@@ -34772,3 +34772,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   domain cells, and the candidate contracts now set `plots: false` with that reason (commit
   `e6fbe8cc` declares the key). A fresh preparation carries it; the retained smoke run predates it.
 - **Gate:** 103 passed, 1 skipped, plus 86 passed on the Task 2 render gate; `ruff check` clean.
+
+## HS-013 — Candidate B trains head-only and the earlier-epoch tie rule holds on CUDA (commit 86761e77a)
+
+- **A two-epoch candidate B smoke exits 0** (`model-campaign-smoke-b-20260930T064703Z/run-b`, same pinned
+  A weights, same perception venv, RTX 5080). It prepared B's union as the reviewers demanded: `train.txt`
+  holds **32 head images and 0 task images**, while both validation domains are scored.
+  `candidate-manifest.json` records candidate `B` with history `[{epoch: 0, score: 0.0}]` - epoch 1 scored
+  the same on this synthetic data, and the frozen rule **kept the earlier checkpoint**, which is precisely
+  the behaviour the reviewers found missing behind the stock `save_model`.
+- **One more real fault found and fixed:** a two-epoch run failed at the second epoch with
+  `KeyError: 'model.0.conv.bias'` inside `ModelEMA.update`, because the validator mutates the module it
+  is handed (eval/half) and thereby desynchronises the trainer's EMA. The validator now receives a deep
+  copy (commit `86761e77a`); single-epoch runs could never have exposed this, so the tie-rule smoke earned
+  its keep twice.
+- **Task 11's remaining job** is now narrower than the reviewers assumed: the sampler, the two-domain
+  score, both candidates' unions and the tie rule are all proven against real Ultralytics on CUDA with the
+  pinned weights. What Task 11 still owes is the *installed-entry* smoke (console script, overlay
+  resolution) and the ordinary package gates.
