@@ -40538,3 +40538,35 @@ The one thing still to confirm is the neck's actuation point in the MuJoCo model
 renderer's only joint write is `_set_free_joint_position` for objects), so the recorder must set the neck joint itself; on the
 auto-proceed rule I will implement it as a joint write against the prepared model and verify against the analytic
 `_camera_pose` prediction rather than assuming the joint name.
+
+## HS-235 — Actuation identifiers found; the bare-python EGL path does NOT work, so the recorder must reuse the working environment
+
+Identifiers, read from the scene and robot XML:
+
+```
+assets/mujoco/act/head_search_scene.xml   includes so101.xml; defines only object free joints
+                                          (cup_free_joint, cup_b_free_joint, bottle_free_joint)
+assets/mujoco/act/so101.xml:156           <joint name="neck_yaw_joint" type="hinge" axis="0 0 1" limited="false" …>
+                          :158            <camera name="head_camera" resolution="640 480" fovy="60" …>
+                          :169            <position name="neck_yaw_joint" joint="neck_yaw_joint" kp="8" kv="0.6" …>
+```
+
+So the neck is `neck_yaw_joint` with a **position actuator** of the same name, and the frame source is `head_camera` at 640x480 -
+everything the sweep needs, named rather than guessed.
+
+**But the direct probe failed**, and in an informative way:
+
+```
+MUJOCO_GL=egl venv/python → mujoco.MjModel.from_xml_path(scene) ok, then mujoco.Renderer(...)
+  OpenGL.raw.EGL._errors.EGLError: <exception str() failed>   (EGL context creation)
+```
+
+Meanwhile the **same scene rendered 1200 frames** successfully in Step 2 (HS-187) through the ROS toolchain path. So the recorder
+must **reproduce the environment that worked** - sourcing the toolchain's setup and letting the package's own renderer create
+its context - rather than a bare interpreter with `MUJOCO_GL=egl` and `mujoco.Renderer`. That is the lesson HS-211 and HS-230 kept
+teaching in different clothes: do not construct a parallel path when a verified one exists; drive the verified one.
+
+**Consequence for the recorder:** it should go through `MuJoCoDatasetRenderer` (which builds its own context and already rendered
+the dataset) plus the `MJCF path`/config the dataset used, and set `neck_yaw_joint` between captures - rather than opening its own
+MuJoCo renderer. The next attempt will do exactly that through the toolchain environment, and will fail loudly if the context
+still cannot be created, rather than silently producing blank frames.
