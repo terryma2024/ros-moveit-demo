@@ -41151,3 +41151,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
   its Boolean defect fixed and this extraction specified; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 /
   283 / 176 / 284 / 151 passed**; HEAD `62a526c3a`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2187 — F11's extraction now has zero unknowns
+
+- **The last field, read this round**: `self._row_times` is populated at line **704** with
+  `record["sim_time_s"]` — the **row-bindings** record's own column, stored beside `self._last_row_time_s` when a
+  row is bound — and the list is initialised at line 634. So the readback derives the same list by parsing
+  `row-bindings.jsonl` (which it already knows how to read, `_ROW_FIELDS` and `AUDIT_ROW_INVALID`) and taking each
+  row's `sim_time_s`.
+- **The complete write, therefore, with no discovery left**: (1) a module-level
+  `_window_matches_observed(window, row_times, acquisitions) -> bool` carrying the current body of
+  `_window_matches_rows` (lines 842-877) with the two `self.` reads replaced by parameters; (2) the writer's method
+  reduced to `return _window_matches_observed(window, self._row_times, self._acquisitions)` so the seal path at
+  line 818 is untouched; (3) the readback's formal gate (line 958, in the module-level verifier) calling the same
+  function with row times from `row-bindings.jsonl` and acquisitions from `acquisitions.jsonl`, keyed by
+  acquisition id as the writer keys `self._acquisitions`; (4) the negative control the verdict names — a relabelled
+  manifest whose window claims an invented in-range instant (1.05) must now be refused, where today only
+  `_window_ok`, stream validation and the coverage gate see it.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  its Boolean defect fixed (CP-2184) and this extraction fully specified (CP-2185/2186/2187); targeted gates
+  **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 passed**; HEAD `0a03c1e51`; no push, no
+  evidence deletion, no hardware, no second stack.
