@@ -34898,6 +34898,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `task4-cli-smoke-20260930T*` under the registered root. For the real Task 12 run the three candidates
   hold three distinct weights, which is exactly what the first two refusals protect.
 
+- **Task 5's exact interface, re-read from the plan (round 44):**
+  `bounded_search_stops(*, anchor_rad, required_domain_rad, safe_interval_rad, horizontal_fov_rad,
+  coarse_step_rad) -> SearchStopPlan` with `targets_rad` and `coverage_complete`, producing the three
+  exact statuses `TARGET_LOCKED`, `TARGET_NOT_FOUND` (only after complete coverage) and
+  `TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL` (reaching a bound first, which fails qualification). It visits
+  the nearer coverage endpoint first and reverses once; every target and swept segment must pass the
+  existing calibration binding *and* an independent sweep checker; coverage is established by **stable FOV
+  intervals, not accumulated angle**; and an unsafe required domain is rejected before any motion. The
+  plan's own RED test is `bounded_search_stops(anchor_rad=0.1, required_domain_rad=(-2.5, 2.5),
+  safe_interval_rad=(-2*pi+1e-5, 2*pi-1e-5), horizontal_fov_rad=1.0, coarse_step_rad=0.5)` asserting
+  `max(plan.targets_rad) <= 2*pi - 1e-5` and `plan.coverage_complete`, and its RED command spans
+  `test_act_head_search_domain.py`, `test_act_search.py` and `test_act_task8_search_binding.py`.
+
 ## HS-017 — Task 5 reconnaissance (read-only, recorded for the next task)
 
 - `src/act/search.py` (142 lines) holds one class, `HeadSearchController`, documented as "one cumulative
