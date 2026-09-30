@@ -35828,3 +35828,69 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   F7 closed and F1's structural, metadata and event-envelope slices closed; F1's window/event-kind/raw
   payloads and F5 open); items 4-8 pending.** HEAD `53dd63e26`; 39-path dirty baseline untouched; no
   push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1954 — Task 3 third-checkpoint verdict FAIL (4 Important, 1 Minor): the consolidated fix list
+
+- **Verdict** (`reviews/task3-rereview2-verdict.md`, dispatch `01e0665b-492e-4828-8339-841dda185ff9`,
+  reviewed `7c13372e2`): **FAIL, 0 Critical / 4 Important / 1 Minor**. **Closed:** T3-F2's local
+  binding/cadence/revocation counterexamples, T3-F6, and T3-F7's normal post-release/snapshot defect
+  (the earlier events stay at epoch 1, post-release events use epoch 2). **Not closed:** F1, F3, F4, F5
+  plus one new Minor.
+- **T3-F1 residual — reuse the registered lease contract instead of inventing one.** Formal scope can
+  still open an audit with no lease identity, and the reviewer names the established source:
+  `parallel_batch/contracts.py:184` defines `LeaseIdentity` with batch/coordinator, worker/generation,
+  point/attempt, lease generation and issue/deadline times. **The fix is to reuse that contract and
+  validate its relationship to the episode and event identity** — not to accept an arbitrary remainder
+  and not to write a second lease schema. **Window:** still any non-empty dict, so `{"start_s": 1.0}`
+  seals without first-command time, physical end, source schedule or label cutoff; the absence of frozen
+  key names warrants pinning and approving an explicit schema (owner decision), and until then it does
+  **not** justify accepting missing facts. Source schedule must govern coverage, and an unfinished
+  diagnostic window must be distinguishable from a complete formal one. Raw controller/accepted-goal
+  history, source/receipt clocks, full physics payloads and the broker event kinds remain open; the four
+  current payloads are not the complete event contract.
+- **T3-F3 residual — readback is still not admission-equivalent.** Concrete misses the reviewer names:
+  row indexes are only duplicate-checked (re-signing the sole index 0 → 7 passes readback but admission
+  refuses); reference positions are numeric-typed but not finite-checked (`1e309` decodes to infinity
+  and passes); reference time/sequence types and bounds are not fully validated; acquisition stamps are
+  not checked for finiteness/non-negativity or per-camera monotonic increase (sequence ordering alone
+  does not establish a monotonic source instant); event sim times are unvalidated and physics steps only
+  integer-typed, so a re-signed `-1` passes readback while `_integer()` refuses it; event identities are
+  not correlated to episode/lease/epoch and terminal reasons/phase-start values stay weakly typed;
+  physics epochs and sim times lack the writer's integer/finite/non-negative checks (a first epoch `-1`
+  passes the monotonicity comparison); and the scope and inputs digests are each checked as hex but
+  **never compared**, so a scope naming inputs A with `inputs.json` naming B passes. **Fix direction:
+  shared typed pure validators plus cross-stream/metadata checks instead of partial copies, with
+  checksum-consistent controls for the row index, non-finite position, negative step/epoch, source-stamp
+  order and mismatched inputs digest.**
+- **T3-F4 residual — one common scope payload, and real episode/row correlation.** The core defect: the
+  audit manifest's scope digest hashes `source.json`, while recorder `finish` requires that JSON to
+  contain an *embedded* digest of an **external** scope file and then seals the external file's digest —
+  two different payloads, and my positive fixtures add the extra embedded field, which masks the
+  incompatibility. A scope dictionary with exactly the approved closed fields therefore passes audit
+  admission but can never pass recorder finish, and accepting that extra field is an unapproved schema
+  amendment. `finish` also does not validate the external scope's closed schema/kind/version/inputs
+  relationship; readback does not compare the audit identity with the seal identity nor correlate scope
+  mode/scene/seed/inputs; neither compares labelled bindings/count/times/actions against the recorder
+  rows, so a checksum-consistent seal naming a valid but unrelated audit can pass independent readback
+  and a multi-row successful episode can name insufficient bindings. The flat key gate also still admits
+  a rehashed v1 document carrying v2 digest fields and then skips verifying them. **Fix direction:
+  preserve and hash one approved immutable scope payload consistently, require current
+  episode/lease/input/window and labelled-row correlation at both sealing and readback, require exact
+  version-specific fields, and represent failed/incomplete/raw-tail evidence explicitly.**
+- **T3-F5.** Still open by design and now explicitly blocking: missing raw physics produces no rows
+  without blocking formal eligibility, and sealing does not enforce broker/controller/physical coverage;
+  the reviewer accepts my intended order (define/preserve raw contracts with real producers, admit and
+  wire the required event kinds, then enforce complete formal coverage) but requires a **fail-closed /
+  non-formal boundary throughout** rather than claiming eligibility while waiting, and requires gating
+  complete sealing as well as runner eligibility while preserving set-down/detach/open evidence and both
+  retreat segments.
+- **T3-F7 residual (Minor, new).** Per-run identity is not reset before `begin()`, so a second request
+  whose `begin` raises reaches the abort handler with the previous attempt's identity in its abort
+  event. Fix: reset/establish the new request identity before task-owned activity, represent unverified
+  epochs honestly, or explicitly enforce a one-shot runner — with runner-reuse/early-begin-failure
+  coverage and no fabricated verified epoch.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (three checkpoint FAILs; T3-F2, F6 and
+  F7's normal defect closed; F1, F3, F4, F5 and F7's Minor residual open); items 4-8 pending.** HEAD
+  `7c13372e2`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second
+  stack.
