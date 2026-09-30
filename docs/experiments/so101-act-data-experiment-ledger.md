@@ -40085,3 +40085,31 @@ This is the seventh plan-versus-implementation divergence (after HS-175/188/191/
 part of Task 12 (new code, and it must write outside the worktree to keep the tree clean), or to accept that Step 5 is
 Task 13's and record Task 12 as complete through Step 4 with Step 5 deferred there. That is a contract decision of the
 HS-200/HS-204 kind, so it belongs to the user rather than to me.
+
+## HS-217 — Concrete evidence for the ordering finding: per-scene truth exists, held-out episodes do not
+
+The generated dataset carries **per-scene truth records**, which is the shape the gate wants:
+
+```
+head-dataset/{images,labels}/{train,val,test}/…    + dataset-manifest.json, dataset.yaml
+head-dataset/truth/test/004200143.json             <- one JSON per scene, per split
+```
+
+and `act/bundle.py:215` exports the same shape as `episodes/<scene_id>.json`, so "episodes" are per-scene JSON records. The gate
+looks for them at `<partitions dir>/held-out-episodes/` and the partitions file (plan line 526) holds **disjoint**
+`calibration`, `held_out_evaluation` and 40-item splits — plan line 172 requires those splits to be mutually disjoint from the
+image splits.
+
+So the held-out scenes are deliberately **not** part of the dataset, and their truth records cannot be read out of
+`head-dataset/truth/`: they have to be **recorded by a run** over the `held_out_evaluation` seeds. That run is the calibration
+runtime that refuses as Task 13's (`HEAD_SEARCH_RUNTIME_REQUIRED`), which is HS-216's conclusion now backed by the artefact
+layout rather than by a single error string.
+
+**Task 12 therefore cannot complete Step 5 on its own**: it consumes held-out detector/tracker episodes (plan line 346 says so
+explicitly) that only Task 13's runtime records. Two honest options remain, unchanged from HS-216 and still the user's call:
+
+- **(a)** implement held-out episode recording inside Task 12 (new code, writing to the campaign root rather than into
+  `src/…/config/act/held-out-episodes/`, so the worktree stays clean), then Step 5 runs here;
+- **(b)** accept the plan's dependency and treat Step 5 as belonging with Task 13, recording Task 12 complete through Step 4.
+
+Nothing further is actionable without that decision, and I am not choosing it on the user's behalf.
