@@ -38918,3 +38918,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete with its sixth checkpoint in progress; item 4 not started. HEAD
   `a783e4079`; targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2085 — Task 4's first work item, located precisely: the missing independent W8 verifier
+
+- **The refusal chain, read from the code.** `src/so101_teleop/so101_teleop/unified/admission.py` requires a W8
+  qualification document (`W8_QUALIFICATION_REQUIRED` at lines 476 and 480, `W8_QUALIFICATION_MISMATCH` at 489),
+  then imports the independent verifier at **line 495**:
+  `from so101_demo.act.w8_qualification import verify_w8_qualification` and calls it at **line 499** with the
+  qualified path and the payload. When that import fails it raises
+  `ValueError("W8_QUALIFICATION_VERIFIER_UNAVAILABLE")` (line 497) — the name my earlier rounds recorded, now with
+  its exact location.
+- **The module genuinely does not exist.** `src/so101_demo_py/src/act/` has no `w8_*` module and no source file
+  defines `verify_w8_qualification`, so every admission that reaches that line fails closed — which is why the
+  production path could not be exercised in this session.
+- **Why this is Task 4's first item.** The frozen enumeration calls item 4 "independent QC / real commit / export
+  refusal"; this is the one piece of independent QC that is **absent** rather than mis-wired: the qualification
+  producer and its tests exist (CP-2084), the commit/refusal apparatus exists and is tested, and admission already
+  demands an independent verifier. Implementing `so101_demo.act.w8_qualification.verify_w8_qualification` — the
+  document's own rules, defaulting to refusal — is therefore the first concrete Task 4 deliverable, and its
+  acceptance text should be taken from the frozen plan (sha256 `1fbf978b…`) when that document is located.
+- **State.** Item 3 implementation-complete, sixth checkpoint in progress; item 4 not started. HEAD `9ccffb2a3`;
+  targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no hardware, no second stack.
