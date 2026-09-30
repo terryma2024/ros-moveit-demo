@@ -36020,3 +36020,15 @@ So the right fix is not to raise z or shrink y by guesswork, but to **narrow the
 positions the camera genuinely sees** at the validation pose - which is exactly what the contract is for, and
 what `visible_pixel_minimum` already enforces per sample. My earlier addendum's table-footprint reasoning was a
 plausible story rather than the mechanism; this is the mechanism, read from the code.
+
+### HS-046 third addendum — the first narrowing attempt changed nothing
+
+Narrowing `workspace_y_m` to `[-0.36, -0.24]` and re-running the validator produced the **identical** refusal:
+42 samples, first `[-0.15, -0.24, 0.165]`. So the far edges are not the cause, and the first refused sample sits
+at a workspace **corner** (low x, high y, the declared z) with the table top at z = 0.12 - i.e. 0.045 m above
+the table, pointing at a spot the cups occupy.
+
+Rather than keep adjusting numbers by guesswork, the next step is to read how `embedded` is computed in
+`act/head_camera_geometry.py` (the grep shows the term used there; the loop that builds it is just above the
+refusal) so the fix targets the actual mechanism. The contract edit remains uncommitted and the tree stays
+honest about the seal being unfinished.
