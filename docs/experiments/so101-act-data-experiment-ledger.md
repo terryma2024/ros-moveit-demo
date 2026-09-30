@@ -43395,3 +43395,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - was and the suite green.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, its hybrid's obstacle now located; goal paused.
+
+## CP-2298 - F5's hybrid: line 828 is a four-way guard, and the next probe prints its parts
+
+- The block owning 828 guards the events append with four conditions: the kind must be a known string; the identity
+  must be a non-empty dict; _event_identity_ok(item identity, writer identity, release_epoch=writer's own) must
+  hold; and the payload's key set must equal the kind's schema exactly.
+- Which of the four fires is one instrumentation away: print the four sub-values inside that guard (kind, identity
+  truthiness, the identity predicate's result, and the payload key set against the schema) during a probe run, the
+  same technique that named 1235, 1196 and now 828 in single runs. Reading the four rules and reasoning about which
+  one the runner trips is exactly the guessing this ledger has recorded four times as wasteful.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, its hybrid's guard now located and its parts named;
+- goal paused.
