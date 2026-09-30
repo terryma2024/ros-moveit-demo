@@ -152,6 +152,21 @@ def paired_scene_delta_bootstrap(
     return paired_scene_bootstrap(items, delta, repetitions=repetitions, seed=seed)
 
 
+def load_dataset_sums(sums_path: Path | str) -> dict[str, str]:
+    """Read a published `SHA256SUMS` file into a path-to-digest map."""
+
+    sums: dict[str, str] = {}
+    for line in Path(sums_path).read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) != 2 or len(parts[0]) != 64:
+            continue
+        digest, name = parts
+        sums[name[2:] if name.startswith("./") else name] = digest
+    if not sums:
+        raise EvaluationError(f"EVALUATION_SEAL_UNVERIFIED: {sums_path} holds no digests")
+    return sums
+
+
 def verify_split_manifest(
     manifest: Mapping[str, object],
     split: str,
@@ -159,6 +174,7 @@ def verify_split_manifest(
     dataset_root: Path | str,
     domain: str,
     require_digests: bool = False,
+    sums: Mapping[str, str] | None = None,
 ) -> list[Mapping[str, object]]:
     """Verify one split of a sealed dataset manifest before anything is measured on it.
 
@@ -249,11 +265,15 @@ def verify_split_manifest(
                 )
             digest = sample.get(f"{key}_sha256")
             if digest is None:
-                if require_digests:
+                # a manifest that carries no per-file digest is still sealed if the dataset publishes
+                # sums for its files; without either, the gate cannot claim the file is the sealed one
+                published = None if sums is None else sums.get(f"dataset/{relative}")
+                if published is None:
                     raise EvaluationError(
-                        f"EVALUATION_MANIFEST_INVALID: {relative!r} carries no {key}_sha256"
+                        f"EVALUATION_SEAL_UNVERIFIED: {relative!r} carries no digest and no published "
+                        "sums cover it, so its seal cannot be verified"
                     )
-                continue
+                digest = published
             actual = hashlib.sha256(path.read_bytes()).hexdigest()
             if actual != digest:
                 raise EvaluationError(

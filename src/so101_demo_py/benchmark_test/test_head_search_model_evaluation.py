@@ -355,18 +355,44 @@ def test_split_manifest_verification_refuses_a_digest_that_does_not_match(tmp_pa
         "label": "labels/test/1.txt",
         "truth": "truth/test/1.json",
     }
+    digests = {
+        f"{name}_sha256": hashlib.sha256((root / relative).read_bytes()).hexdigest()
+        for name, relative in (
+            ("image", "images/test/1.png"),
+            ("label", "labels/test/1.txt"),
+            ("truth", "truth/test/1.json"),
+        )
+    }
     manifest = {
         "dataset_contract": "so101-head-search-yolo-seg-v1",
         "camera_name": "head_camera",
         "sample_count": 1,
         "split_counts": {"test": 1},
-        "samples": [{**base, "image_sha256": "0" * 64}],
+        "samples": [{**base, **digests, "image_sha256": "0" * 64}],
     }
     with pytest.raises(EvaluationError, match="EVALUATION_MANIFEST_INVALID"):
         verify_split_manifest(manifest, "test", dataset_root=root, domain="head")
-    good = hashlib.sha256((root / "images/test/1.png").read_bytes()).hexdigest()
-    manifest["samples"] = [{**base, "image_sha256": good}]
+    manifest["samples"] = [{**base, **digests}]
     assert len(verify_split_manifest(manifest, "test", dataset_root=root, domain="head")) == 1
+    # a manifest with no per-file digests is sealed only by published sums, and refused without them
+    undigested = {**base}
+    with pytest.raises(EvaluationError, match="EVALUATION_SEAL_UNVERIFIED"):
+        verify_split_manifest(
+            {**manifest, "samples": [undigested]}, "test", dataset_root=root, domain="head"
+        )
+    sums = {f"dataset/{base[key]}": digests[f"{key}_sha256"] for key in ("image", "label", "truth")}
+    assert (
+        len(
+            verify_split_manifest(
+                {**manifest, "samples": [undigested]},
+                "test",
+                dataset_root=root,
+                domain="head",
+                sums=sums,
+            )
+        )
+        == 1
+    )
 
 
 def test_compare_cli_accepts_the_pinned_invocation_shape(

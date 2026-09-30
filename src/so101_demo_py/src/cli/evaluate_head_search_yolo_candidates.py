@@ -135,6 +135,17 @@ def _unsupported_declarations(
     return unsupported
 
 
+def _dataset_sums(dataset_root: Path) -> Mapping[str, str] | None:
+    """The dataset's published sums, looked up beside its root, or None when it publishes none."""
+
+    from so101_demo.perception_benchmark.head_search_models import load_dataset_sums
+
+    for candidate in (dataset_root / "SHA256SUMS", dataset_root.parent / "SHA256SUMS"):
+        if candidate.is_file():
+            return load_dataset_sums(candidate)
+    return None
+
+
 def _resolve_tracking_iou(
     operating_point: Mapping[str, object], document: Mapping[str, object]
 ) -> float:
@@ -284,11 +295,13 @@ def main(arguments: list[str] | None = None) -> int:
         task_manifest = json.loads(parsed.task_dataset.read_text(encoding="utf-8"))
         head_root = parsed.head_dataset_root or parsed.head_dataset.resolve().parent
         task_root = parsed.task_dataset_root or parsed.task_dataset.resolve().parent
+        head_sums = _dataset_sums(Path(head_root))
+        task_sums = _dataset_sums(Path(task_root))
         head_samples = verify_split_manifest(
-            head_manifest, parsed.head_split, dataset_root=head_root, domain="head"
+            head_manifest, parsed.head_split, dataset_root=head_root, domain="head", sums=head_sums
         )
         task_samples = verify_split_manifest(
-            task_manifest, parsed.task_split, dataset_root=task_root, domain="task"
+            task_manifest, parsed.task_split, dataset_root=task_root, domain="task", sums=task_sums
         )
         partitions = json.loads(parsed.episode_partitions.read_text(encoding="utf-8"))
         frames = _episode_frames(
