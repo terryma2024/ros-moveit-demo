@@ -39166,3 +39166,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   my contract change.
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD
   `38bb7eff4`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2096 — Third fixture attempt reverted: the funnel-return hypothesis is disproved
+
+- **What was tried, by exact line this time.** The two funnels were located precisely
+  (`test_act_task8_live_qualification.py`: `run_phase` at 403 with the `REQUIRED_PHASES` call at 405 and its
+  return at 407; the second port at 502/504/506), the two returns were wrapped and a `_with_raw` helper inserted
+  in each class. The suite still failed identically — `None` artifact for the four tests — so **`run_phase`'s
+  return is not the evidence the runner inspects for its raw requirement**.
+- **Reverted and verified**: the file is restored and the suite re-runs at `4 failed, 34 passed`, so nothing
+  half-finished remains.
+- **What that rules out, and what to read next.** It rules out the phase funnel as the missing supply. The next
+  step is a **read, not another guess**: follow the runner's own check — `_verify_phase`'s
+  `if "physical_observation" in evidence and not self._raw(...)` and whatever sets
+  `live_evidence_artifact: None` (`_missing_raw`) — to see **which** evidence object it inspects on this path
+  (the SEARCH/sequence documents come from other port methods such as `search`/`sequence_facts`, which is the
+  likely supply point), and only then wrap that one.
+- **Honest score for this stretch.** Four consecutive fixture attempts have failed (CP-2088's mis-attribution,
+  CP-2091, CP-2092, this one). Each failure narrowed the search, but at this context level the loop is no longer
+  efficient, and the ledger now carries every attempt with its exact reason so a fresh session can finish it in
+  one or two reads.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the
+  verifier's three increments landed. HEAD `71cc467ff`; no push, no evidence deletion, no hardware, no second
+  stack.
