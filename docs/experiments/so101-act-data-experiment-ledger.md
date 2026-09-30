@@ -35575,6 +35575,24 @@ no second detector, with its RED tests first.
 - **Owed:** confirmation of these fixes, and the package-gate registration question (the CMake entry exists;
   establishing it from the permitted files was outside the reviewer's scope).
 
+## HS-038 — Task 9 confirmation REJECT: two more real defects, fixed (commit 608052c7a)
+
+- **Verdict** (`reviews/task9/task9-confirm-verdict.md`, static at `51775325b`): two APPROVE (the sealed
+  interval with 409 `HEAD_TARGET_INTERVAL_SEALED`; the unavailable websocket's 503 marker and 1013 close) and
+  two REJECT:
+  1. `process_start_ticks` never checked the process **state**, so a **zombie** - whose `/proc` entry and
+     start ticks survive its exit - was accepted as a live owner;
+  2. the stop proof checked finiteness but not `velocity >= 0`, so three **negative** velocities with
+     strictly increasing timestamps drove the count to `STOPPED`, despite the docstring promising a
+     non-negative velocity; the suite omitted that case.
+- **Fixes:** the state field is inspected and state `Z` refused, with a test that forks a child, lets it
+  become a zombie, proves its ticks remain readable and requires the owner check to refuse it; and the
+  velocity comparison is enforced with a test that negative samples never advance the proof. Gate:
+  head-camera suite **10 passed**; `ruff check` clean under `set -o pipefail`.
+- **Lesson recorded:** both defects were gaps between what the code said and what it did, invisible to tests
+  written from the same assumption - which is precisely what an independent static review is for.
+- **Owed:** final confirmation of these two fixes.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
