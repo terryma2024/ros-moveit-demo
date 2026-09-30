@@ -1240,3 +1240,42 @@ def test_a_registered_live_sample_reaches_the_audit_and_reads_back(tmp_path):
             "truncated": False, "diagnostic_hazard_breached": False}})
     path = writer.seal(window)
     assert verify_audit_manifest(path)["kind"] == "ACT_EPISODE_AUDIT"
+
+
+def test_the_expert_carries_the_ratified_group_into_the_audit(tmp_path):
+    """T3-F1: port -> expert -> writer -> readback with the A.1 packed group present."""
+
+    from so101_demo.act.expert import MoveItExpertActionTap
+
+    projected = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+
+    def frame(kind, when):
+        size = 5 if kind == "arm" else 1
+        evaluated = projected[:5] if kind == "arm" else projected[5:]
+        return {"joint_names": [f"{kind}-{index}" for index in range(size)],
+                "published_positions": [0.0] * size, "published_velocities": [0.0] * size,
+                "evaluated_positions": list(evaluated), "evaluated_velocities": [0.0] * size,
+                "evaluation": {"requested_sim_time_s": when, "basis": "published",
+                               "goal_id": None, "accepted_sim_s": None, "revoked_sim_s": None},
+                "sim_stamp_ns": int(when * 1e9), "received_monotonic_ns": 1, "observer_sequence": 1}
+
+    class Port:
+        def reference_state(self, at_s):
+            return {"requested_sim_time_s": at_s, "source": "CONTROLLER_REFERENCE",
+                    "positions": list(projected), "joint_names": ["1"], "sim_stamp_ns": 1,
+                    "received_monotonic_ns": 1, "velocities": [0.0]}
+
+        def reference_frames(self, kind, at_s):
+            return frame(kind, at_s)
+
+    record = MoveItExpertActionTap(Port()).reference(1.0)
+    assert record["projection_map"] == [["arm", index] for index in range(5)] + [["gripper", 0]]
+    assert list(record["positions"]) == list(record["projected_positions"])
+
+    (tmp_path / "chain").mkdir(parents=True, exist_ok=True)
+    writer, window = complete_audit(tmp_path / "chain")
+    writer.append_source("references", {
+        **{key: value for key, value in record.items() if key != "requested_sim_time_s"},
+        "reference_time_s": record["requested_sim_time_s"], "accepted": True})
+    path = writer.seal(window)
+    assert verify_audit_manifest(path)["kind"] == "ACT_EPISODE_AUDIT"

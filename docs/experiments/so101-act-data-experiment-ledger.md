@@ -41063,3 +41063,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   plus its sample fixture, the third cut's first two edits and the alternativity fix**; F11 open. Targeted gates
   **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 passed**; HEAD `c34ae8c0c`; no push, no evidence deletion,
   no hardware, no second stack.
+
+
+## CP-2183 — F1's chain test landed: the ratified A.1 group round-trips through the audit
+
+- **What landed** (`test_act_episode_audit.py`): a fake port supplying the legacy state and two frames built from
+  the canonical projection, the expert's `reference(1.0)` record asserted to carry the canonical map and
+  `positions == projected_positions`, then appended as a `references` row — with the expert's
+  `requested_sim_time_s` translated to the row's `reference_time_s` and `accepted: True` — sealed and read back.
+  The record the expert now emits is exactly what the common audit accepts.
+- **The four rules the probes found, in order**: the two raw shapes are exclusive alternatives (753, fixed in
+  `expert.py` — CP-2181); a `published` evaluation carries null `goal_id`/`accepted_sim_s` (278); the six mapped
+  values must equal the frames' evaluated positions and `positions` must equal the projection (308); and the row's
+  keys must be exactly `_REFERENCE_FIELDS` plus its raw group (760, `_REFERENCE_FIELDS` at line 53).
+- **Evidence.** `logs/task3-f1-chain.run` rc=0: **284 passed in 4.69s** across the audit, recorder, release-boundary, capture,
+  `test_act_task8`, qualification, W8-verifier, campaign-admission, expert-route and controller-reference suites
+  under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **F1's state — all three cuts done**: (1) the registered sample reaches the audit (CP-2166, CP-2173); (2) the
+  forwarding boundary admits the registered shapes (CP-2167); (3) the A.1 frames are produced by the real port, the
+  expert carries them exclusively, and the chain round-trips (CP-2177, CP-2178, CP-2180, this entry). The capture
+  leg remains untested by name, which is the one piece of F1's wording not yet exercised.
+- **Task 3's remaining list**: **F13**'s `sim_time_s` question (needs the plan's ruling) and **F11** — with **F12,
+  F3, F5 and F1** closed.
+- **State.** Targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 passed in 4.69s passed**; HEAD
+  `e032dba14`; no push, no evidence deletion, no hardware, no second stack.
