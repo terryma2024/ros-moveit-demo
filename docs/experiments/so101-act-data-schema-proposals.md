@@ -212,3 +212,51 @@ modified yet, and the fail-closed gates mean no formal audit can be sealed eithe
 The reviewer's constraint that an outer six-dimensional projected reference needs "an explicit checked
 mapping" is unaffected: the map stays at the record level and still has to resolve inside the frames and
 equal the projection.
+
+
+## Proposal C, definitions implemented under the owner's ratification — the two missing records
+
+The owner ratified Proposal C including the explicit authorisation to replace the literal
+`planning_scene_ok: True` assertions (`adapters/act/pick_place_search_port.py:412`,
+`adapters/act/pick_place_search_boundary.py:282`) with real observations and to define the two records.
+Recon shows both sites build their gate dictionaries inside helpers whose docstrings describe the eight
+gates as what "one validated readback establishes" — i.e. the booleans are **summaries of a validation
+performed elsewhere**, and what the validation actually saw is not recorded. The definitions below are
+therefore the record that has to replace the summary.
+
+**`planning_scene_observation`** (one record per validated readback):
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `scene_revision` | integer ≥ 0 | the Planning Scene revision the readback saw |
+| `attached_objects` | list of non-empty strings | object ids currently attached, in sorted order |
+| `world_object_ids` | list of non-empty strings | object ids the scene holds, in sorted order |
+| `is_diff` | boolean | whether the scene document was a diff |
+| `sim_time_s` | finite number ≥ 0 | the instant the scene was read |
+| `source` | non-empty string | which component read it (for example the search boundary) |
+
+`planning_scene_ok` stays in the gate set but must be **derived** from this record — the gate is true only
+when a record exists for the same `physics_step` and its `sim_time_s` is within the frozen source age —
+so a phase cannot claim the gate without a recorded observation.
+
+**`controller_feedback`** (one record per controller, per validated readback):
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `controller` | `arm` or `gripper` | which controller produced it |
+| `commanded_positions` | list of finite numbers | the commanded positions of that controller |
+| `measured_positions` | list of finite numbers | the measured positions, same order and length |
+| `measured_velocities` | list of finite numbers | the measured velocities, same order and length |
+| `joint_names` | list of non-empty strings | the published names, same order |
+| `status_sequence` | integer ≥ 1 | the controller status sequence this feedback came from |
+| `sim_time_s` | finite number ≥ 0 | the instant the feedback was read |
+
+`joint_feedback_ok` and `controller_reference_ok` stay in the gate set and must be derived from these
+records on the same terms: a gate cannot be true without a matching record, and the record must carry the
+same `physics_step` and a fresh `sim_time_s`.
+
+Both records travel in the physics observation of the phase that established them (Proposal C's shape), so
+the audit holds what was observed rather than the conclusion alone. Implementation order: the readback that
+already validates the scene and the controller state starts returning these records, the two helpers stop
+asserting the booleans and derive them, and the audit's physics schema requires the records for the kinds
+whose verdicts depend on them.

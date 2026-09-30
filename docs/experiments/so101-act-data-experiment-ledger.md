@@ -36789,3 +36789,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `0dfc3391b`;
   gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1988 — Task 3: the two ratified records are defined, and the sites that assert them are characterised
+
+- **Recon before defining.** Both authorised sites build their gate dictionaries inside helpers whose
+  docstrings describe the eight gates as what "one validated readback establishes"
+  (`adapters/act/pick_place_search_port.py:405-418`, `adapters/act/pick_place_search_boundary.py:272-290`),
+  so the booleans are summaries of a validation performed elsewhere and the observation itself is not kept.
+  That is the gap the ratified Proposal C authorises closing.
+- **The definitions are written** in `docs/experiments/so101-act-data-schema-proposals.md`:
+  `planning_scene_observation` (scene revision, attached object ids, world object ids, diff flag, read
+  instant, source) and `controller_feedback` per controller (commanded and measured positions, measured
+  velocities, joint names, status sequence, read instant), each with the rule that the existing gate
+  booleans must be **derived** from the records on the same physics step and within the frozen source age,
+  so a phase cannot claim a gate without a recorded observation.
+- **Implementation order recorded:** the readback that already validates the scene and controller state
+  starts returning the records, the two helpers derive their booleans from them, and the audit's physics
+  schema requires the records for the kinds whose verdicts depend on them.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `26c76a793`;
+  gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
