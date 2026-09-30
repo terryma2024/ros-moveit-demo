@@ -35216,3 +35216,41 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   those.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** 39-path dirty
   baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1938 — Task 3 remaining work grounded to exact seams (recon, no code change)
+
+- **The raw physical observations already exist; they are simply not carried through.** Recon this
+  round located the computation: `src/so101_demo_py/src/backends/mujoco/qualified_phases/release_retreat.py`
+  builds them from the observer's contact evidence in `evidence_dict(value)` (line 82) as
+  `left_contact_count` / `right_contact_count` / `maximum_fingertip_force` (line 101) /
+  `other_contact_geoms` / `has_table_contact` (line 78), and the phase predicates that consume them sit
+  in the same module (lines 301-324) and in `adapters/act/pick_place_search_port.py`. The runner's
+  evidence contract (`PickPlaceRunner._EVIDENCE_KEYS`, `pick_place_runner.py:41-48`) is a closed set of
+  **booleans only**, so those raw numbers are dropped at the port boundary and the audit can never
+  recompute a threshold offline — which is exactly the gap the plan's second bullet names.
+- **Exact implementation seam for the next pass (bounded, three edits plus tests).**
+  1. Extend `_EVIDENCE_KEYS` with one raw block, e.g. `"physical_observation"`, and validate it in
+     `_verify_phase` as a dict whose values are finite numbers or booleans (refuse anything else with
+     `PHASE_EVIDENCE_INVALID`), so the closed-schema rule stays intact.
+  2. Have the backends put `evidence_dict(value)` (already written) into that key instead of the
+     booleans alone, keeping the booleans as the fast gate.
+  3. In `PickPlaceRunner`, after a phase verifies, call
+     `audit.append_source("physics", {"kind": <phase family>, "sim_time_s": <real sim time or None>,
+     "release_epoch": <epoch>, "observation": <the raw block>})` — the writer already enforces a closed
+     physics schema with `release_epoch` monotonicity, and its `kind` set is
+     `("support", "contact", "pose", "retract")`, so map phases onto those four families rather than
+     inventing a fifth.
+  4. Tests: a phase whose raw block is malformed or non-finite must refuse; a completed run must record
+     one physics row per phase family with the verified epoch; and a test must recompute a threshold
+     (e.g. support from `has_table_contact` and the contact counts) from the recorded rows alone,
+     proving the audit is sufficient offline.
+- **Why no code changed this round.** The remaining change spans the port contract, two backends and
+  the runner, and my context budget at this point was not enough to land it with the same evidence
+  standard as the previous bullets (RED/GREEN plus regressions). Recording the grounded seams is the
+  honest alternative to a rushed, under-tested edit; the seams above are file-and-line specific so the
+  next pass does not need to re-recon.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (audit writer, release boundary, seal
+  v2 and runner events green; raw physical observations and broker/observer events outstanding);
+  items 4-8 pending.** HEAD `dcef92f99`; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
