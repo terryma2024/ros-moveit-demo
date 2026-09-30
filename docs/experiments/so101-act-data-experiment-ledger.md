@@ -38893,3 +38893,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   acceptance text is inside the frozen plan document, which I have not located); items 5-8 pending.
 - **State.** HEAD `0dd1407c5`; targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2084 — Task 4 reconnaissance: the QC and commit apparatus already exists, and one named gap is real
+
+- **Independent QC is built and tested.** `act/task8_live_qualification.py` with
+  `test/test_act_task8_live_qualification.py` (ten tests) requires a campaign summary that is passed, complete and
+  consecutive; release and retreat samples with their own gates; **all fourteen journals** present and matching the
+  bundle; a qualified report that upgrades a READY document **without touching it**; no qualified output behind a
+  failing gate; and an existing output that is never overwritten. `test_qualification_runner.py` and
+  `test_qualification_stack.py` cover the runner and process-group supervision.
+- **Real commit and its refusals are built and tested.** `act/result_store.py` with
+  `test/test_act_result_commit.py` verifies an exact-lease seal and discovers only the reserved workspace, rejects
+  self-declared late completion and identity tamper, verifies episode hash and business status independently,
+  refuses to discover or commit an unsealed directory, never turns a corrupt episode into a business-failed
+  result, and journals business-failed **only after the verifier**.
+- **The named gap is real and is Task 4-shaped**: `so101_demo.act.w8_qualification` does not exist (the grep in
+  this round's log shows no definition), so the formal admission boundary fails closed with
+  `W8_QUALIFICATION_VERIFIER_UNAVAILABLE` — an independent verifier that the qualification path needs before a
+  formal claim can be admitted.
+- **What Task 4 therefore looks like from the code**, pending the frozen plan's own acceptance text (which I still
+  have not located): supply that independent verifier, then confirm end to end that the qualification path, the
+  commit path and the export refusals are the ones the live production composition actually uses.
+- **State.** Item 3 implementation-complete with its sixth checkpoint in progress; item 4 not started. HEAD
+  `a783e4079`; targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
