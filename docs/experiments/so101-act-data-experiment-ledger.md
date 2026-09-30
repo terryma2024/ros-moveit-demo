@@ -40756,3 +40756,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
   landed**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**; HEAD `f348b5a32`; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-2168 — The registered sample's exact shape, and the fixture recipe it enables
+
+- **Read this round** (`act/contact_live.py:25-33`): a registered sample carries exactly
+  `simulation_session_id`, `reset_epoch`, **`physics_step`**, `simulation_time_s`, `model_qpos`, `model_qvel`,
+  `cup_position_m`, `cup_velocity_m_s`, `left_contacts`, `right_contacts`, `other_contacts`, `truncated`,
+  `diagnostic_hazard_breached` — thirteen keys — and each contact record carries exactly `robot_geom`,
+  `object_body`, `normal_force_n`, `signed_distance_m` (`_CONTACT_KEYS`). Every one of the thirteen is now
+  admissible in the audit (CP-2166 admitted the step name, and the rest were already listed), so a
+  registered-shaped row can be written without any further module change.
+- **The fixture recipe**: append one physics row of kind **`contact`** whose observation is that thirteen-key
+  block with `physics_step` and populated contact lists — `_PHYSICS_REQUIRED_REGISTERED["contact"]` is
+  `{left_contacts, right_contacts, other_contacts, cup_position_m, truncated, diagnostic_hazard_breached}`, all of
+  which the sample carries — and assert the writer accepts it and the readback re-accepts the sealed audit. Its
+  values must satisfy the typing loop (`_CONTACT_FIELDS` per contact, finite vectors, booleans where declared),
+  which is the only part still unread: `_PHYSICS_VECTOR_LISTS`' expected sizes are the next small read.
+- **Why this is recorded rather than written**: the values are the remaining unknown, and a guessed sample is
+  exactly the CP-2157 mistake. One read of `_PHYSICS_VECTOR_LISTS` turns it into a mechanical edit with both halves
+  known.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
+  landed** with this fixture one read away; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**;
+  HEAD `bc8a958af`; no push, no evidence deletion, no hardware, no second stack.
