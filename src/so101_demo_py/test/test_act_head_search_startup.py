@@ -176,3 +176,35 @@ def test_startup_rejects_a_drifted_motion_block() -> None:
     report["motion"]["settle_velocity_rad_s"] = 0.9
     with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
         validate_head_search_binding(config, report)
+
+
+def test_the_readiness_path_verifies_the_promoted_pair(tmp_path: Path) -> None:
+    """The Task 8 call-site wiring, exercised where it can be verified."""
+
+    from so101_demo.cli.act_stack_ready import verify_head_search_startup
+
+    config = _config()
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(config), encoding="utf-8")
+
+    assert verify_head_search_startup(environment={}) is None, "no config means no head search here"
+    verified = verify_head_search_startup(
+        environment={
+            "SO101_HEAD_SEARCH_CONFIG": str(config_path),
+            "SO101_HEAD_SEARCH_REPORT": str(report_path),
+        }
+    )
+    assert verified == config
+
+    drifted = copy.deepcopy(config)
+    drifted["values"]["min_confidence"] = 0.99
+    report_path.write_text(json.dumps(drifted), encoding="utf-8")
+    with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
+        verify_head_search_startup(
+            environment={
+                "SO101_HEAD_SEARCH_CONFIG": str(config_path),
+                "SO101_HEAD_SEARCH_REPORT": str(report_path),
+            }
+        )
