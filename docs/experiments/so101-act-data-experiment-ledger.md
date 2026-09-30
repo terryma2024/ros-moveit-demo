@@ -34769,3 +34769,50 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `resource_thresholds`) need the owner to approve actual values; no default exists and none was
   invented. The full ordinary xdist gate still runs at the Task 6 overlay build.
 - **State.** **Task-list items 0 and 1 completed; item 2 in_progress; items 3-8 pending.**
+
+
+## CP-1931 — Task 2: acquisition identity at the real producer, and continuous causal capture
+
+- **Where the identity is minted.** Recon established that the head/wrist frames are rendered and
+  published by the C++ camera plugin (`third_party/mujoco_ros2_control/.../camera_plugin.cpp`), whose
+  `sensor_msgs/Image` carries the MuJoCo sim time but no source sequence number (ROS 2 has no `seq`),
+  and that one MuJoCo world owns motion and pixels. The first Python holder is
+  `adapters/act/ros_observation.py::RosObservationAdapter._image_locked`, so that is where
+  `AcquisitionMinter` now mints identity: camera, session, reset epoch, a per-camera sequence, an id
+  derived from those, the publisher's sim stamp, the monotonic receipt, the fixed `(480, 640, 3)`
+  uint8 shape and a digest taken from the decoded bytes. Nothing downstream may mint, renumber or
+  rebuild that identity. The capture is an optional constructor argument, so the existing observation
+  path and its tests are unchanged when no episode is wired.
+- **New modules.** `act/acquisition.py` (`Acquisition`, `canonical_acquisition_id`, `pixel_digest`,
+  `AcquisitionMinter`, `AcquisitionGuard`) and `act/continuous_capture.py` (`CaptureSummary`,
+  `ContinuousEpisodeCapture`). Callbacks (`on_acquisition`, `on_reference`, `on_event`) only bookkeep;
+  `drain()` is the single IO step, so the action path never waits on a PNG write.
+- **Cadence and causality.** Rows are minted on the 10 Hz sim-time grid from `start_s`. A row takes
+  the newest *unconsumed* causal acquisition per camera (`stamp <= t`, age within the frozen 0.1 s,
+  cross-camera skew within the bound). Both sources dry ⇒ the tail ends quietly; a source that still
+  holds frames but cannot serve the instant with a new acquisition ⇒ `NO_NEW_ACQUISITION`, i.e. a hole
+  before the label cutoff fails the run instead of being skipped. Every row's two acquisitions are new
+  (the guard refuses reuse), which is exactly why identical pixels in a still scene still pass.
+- **Reference join.** The capture consumes the controller observer's accepted references and labels a
+  row only from an accepted reference at `t + 0.1 s`; a revoked reference never labels, and a row whose
+  future reference never arrives stays audit-only (`pending_rows`), so a tail frame can never be given
+  an invented action. `CaptureSummary` is the frozen three-field shape with no `committed` field, and
+  `label_cutoff_s` is the last labelled instant. The 120 s motion deadline starts once at
+  `first_command` and is never reset (`CAPTURE_DEADLINE_FIXED`), and any callback past it raises
+  `CAPTURE_DEADLINE_EXCEEDED`; a stop stops the capture.
+- **RED/GREEN.** `test_act_acquisition_identity.py` RED `logs/task2-acq-red.run` rc=1 (6 behavioural
+  failures against a shapes-only baseline; the plan's named case
+  `test_one_acquisition_cannot_fill_two_rows` fails with `DID NOT RAISE`) → GREEN
+  `logs/task2-acq-green.run` rc=0. `test_act_continuous_capture.py` RED `logs/task2-cap-red.run` rc=1
+  (5 failures through a defect overlay that reverts the hole, revocation, stop and deadline
+  enforcement) → GREEN included in `logs/task2-all.run` rc=0: **154 passed in 9.14 s** across the two
+  new files plus `test_act_synchronizer.py`, `test_act_recorder.py`, `test_act_contracts.py`,
+  `test_act_collection.py`, `test_act_first_episode_scope.py` and both admission files.
+- **Deliberately left to Task 5/7, not claimed.** Constructing the capture inside the production
+  composition (sampler, physical-audit provider, run-driven `drain`/`finish`), and the t vs t+0.1
+  reconciliation: `PickPlacePhysicalReadback.capture()` currently queries the reference at `t` while
+  the recorder audit requires `t + 0.1`; the capture uses its own accepted-reference history, so the
+  composition must stop routing the label through the readback. Nothing live ran; camera, physics and
+  queue behaviour remain Task 7 findings.
+- **State.** **Task-list items 0-1 completed; item 2 in_progress (modules and producer identity
+  green, checkpoint review pending); items 3-8 pending.**
