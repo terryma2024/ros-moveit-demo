@@ -71,3 +71,19 @@ def test_startup_refuses_an_unconsumed_value() -> None:
     config["unused_values"] = ["unused_extra"]
     with pytest.raises(ValueError, match="HEAD_SEARCH_UNUSED_VALUE"):
         validate_head_search_binding(config, copy.deepcopy(config))
+
+
+def test_the_loader_validates_the_pair_before_anything_is_constructed(tmp_path: Path) -> None:
+    from so101_demo.act.head_search_binding import load_promoted_head_search
+
+    config = _config()
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    assert load_promoted_head_search(config_path) == config
+
+    report = copy.deepcopy(config)
+    report["values"]["tracking_iou"] = 0.9
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
+        load_promoted_head_search(config_path, report_path)

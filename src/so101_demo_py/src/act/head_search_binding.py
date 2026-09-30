@@ -447,3 +447,21 @@ def validate_promoted_pair(config, report):
     if config.get("allow_cpu_fallback") is not False:
         raise ValueError("HEAD_SEARCH_CUDA_REQUIRED: startup must forbid CPU fallback")
     return config
+
+
+def load_promoted_head_search(config_path, report_path=None):
+    """Read the promoted config, and when a report is given validate the pair before construction.
+
+    Startup calls this before it builds any ROS node, camera or model: the config alone is not proof that
+    the qualified run agreed with it, so the pair is compared whenever both are present.
+    """
+
+    import json
+    from pathlib import Path as _Path
+
+    config = json.loads(_Path(config_path).read_text(encoding="utf-8"))
+    if report_path is None:
+        return config
+    report = json.loads(_Path(report_path).read_text(encoding="utf-8"))
+    validate_promoted_pair(config, report)
+    return config
