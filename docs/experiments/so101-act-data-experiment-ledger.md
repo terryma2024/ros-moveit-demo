@@ -35840,6 +35840,16 @@ env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHO
   `safe_interval_contains_required_domain` true - and Task 11's job is to re-run it with the frozen toolchain,
   which the next round will do with the corrected arguments.
 
+- **The geometry validator now runs and reports real source drift (round 338).** With the corrected
+  invocation - scene at `src/so101_demo_py/assets/mujoco/act/head_search_scene.xml`, camera presets at
+  `config/mujoco/camera_views.yaml`, `--anchors default,left,forward`, the geometry contract and a fresh output
+  root - the validator reaches its own checks and refuses with `HEAD_CAMERA_SOURCE_DRIFT: the camera source or
+  scene digest changed: scene=aea2df3b0bfb camera=d8665bb90bf8`. That is the seal protecting itself: the
+  contract was sealed against earlier scene/camera digests, and the worktree sources have moved since (Task 2/3
+  work touched the camera views and scene). The correct Task 11 action is therefore to **re-seal** with the
+  frozen toolchain and record the new seal, rather than to loosen the drift check - and to confirm first that
+  the change is the expected one by comparing against the sealed `source_digests`, which the next round does.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
