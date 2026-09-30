@@ -33,7 +33,14 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--contract", type=_path)
     parser.add_argument("--perception-config", type=_path)
     parser.add_argument("--output", type=_path)
+    # The plan's Task 11/13 invocations pass --scenario and --evidence-root. Task 11's
+    # acceptance depends on this command running, so both are accepted here and the
+    # evidence root doubles as the output root; every pre-existing flag keeps working.
+    parser.add_argument("--scenario", default="default")
+    parser.add_argument("--evidence-root", dest="evidence_root", type=_path)
     parsed = parser.parse_args(arguments)
+    if parsed.output is None and parsed.evidence_root is not None:
+        parsed.output = parsed.evidence_root
 
     try:
         seal = json.loads(parsed.geometry_seal.read_text(encoding="utf-8"))
