@@ -40803,3 +40803,27 @@ geom, it is reading 2; if they sit on empty table, it is reading 1.
 
 **Also worth recording:** all six candidate/domain cells measured before the refusal, so the expensive half of the gate is
 working - the refusal comes from the safety check over episodes, not from any missing measurement.
+
+## HS-245 — Root cause of the 48: `len(dict)` counted my four JSON keys as four detections
+
+```
+def _measured_false_candidates(frames, candidate_id, split) -> int:
+    """Count detections on frames that hold no object, from the records rather than a declaration."""
+    for frame in frames:
+        if frame.get("split") != split:            continue
+        if frame.get("truth"):                     continue
+        if frame.get("scenario") not in (None, "no_cup"): continue
+        total += len((frame.get("detections") or {}).get(candidate_id) or [])
+```
+
+`detections[candidate]` is expected to be a **LIST of detections** (empty meaning "measured, nothing found" - which the earlier
+loader explicitly permits). I wrote a **dict** (`{"n", "max_conf", "found", "centres"}`), so `len(...)` returned **4** - the number
+of keys - for every empty-scene frame: 12 no_cup frames x 4 keys = **48**, the exact figure the gate reported.
+
+Two independent confirmations that this, not the model, was the cause: reading my own recorded frames shows **A detects nothing at
+all** in the 12 no_cup frames (0 detections across head and task cameras at all three angles), and a direct probe on no_cup seed
+800010 also reports 0 detections for A. So candidate A never produced the false candidates the gate counted - my schema did.
+
+**Fix applied:** detections are now lists of `{conf, cx, cy}`. Recorded because the lesson generalises past this bug: the gate's
+contract is not "a mapping keyed by candidate" but "an ordered collection whose length is the detection count", and the earlier
+loader message ("an absent measurement is not an empty detection list") was already telling me so.
