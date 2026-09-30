@@ -12,6 +12,7 @@ from so101_demo.perception_benchmark.contracts import (
     MaskRef,
     MODEL_ID_BY_NAME,
     MODEL_NAME_BY_ID,
+    OperatingPoint,
     PhaseTimings,
     PredictionRecord,
     RawCandidate,
@@ -20,6 +21,7 @@ from so101_demo.perception_benchmark.contracts import (
     RuntimeProvenance,
     TruthSample,
     YOLO_MODEL_ID,
+    canonical_sha256,
     model_id_for_name,
     model_name_for_id,
 )
@@ -366,3 +368,53 @@ def test_prediction_record_is_frozen() -> None:
 
     with pytest.raises(FrozenInstanceError):
         record.model_id = "changed"  # type: ignore[misc]
+
+
+def operating_point(**overrides: object) -> OperatingPoint:
+    values: dict[str, object] = {
+        "min_confidence": 0.51,
+        "min_bbox_aspect": 1.15,
+        "min_area_px2": 120.0,
+        "tracking_iou": 0.3,
+    }
+    values.update(overrides)
+    return OperatingPoint(**values)  # type: ignore[arg-type]
+
+
+def test_operating_point_rejects_out_of_range_and_nonfinite_values() -> None:
+    with pytest.raises(ValueError, match="min_confidence"):
+        operating_point(min_confidence=1.5)
+    with pytest.raises(ValueError, match="tracking_iou"):
+        operating_point(tracking_iou=float("nan"))
+    with pytest.raises(ValueError, match="min_area_px2"):
+        operating_point(min_area_px2=0.0)
+    with pytest.raises(ValueError, match="min_bbox_aspect"):
+        operating_point(min_bbox_aspect=-1.0)
+
+
+def test_operating_point_document_is_closed_and_round_trips() -> None:
+    point = operating_point()
+    document = point.to_document()
+
+    assert set(document) == {
+        "min_confidence",
+        "min_bbox_aspect",
+        "min_area_px2",
+        "tracking_iou",
+    }
+    assert OperatingPoint.from_document(document) == point
+    with pytest.raises(ValueError, match="OPERATING_POINT_FIELDS_INVALID"):
+        OperatingPoint.from_document({**document, "extra": 1.0})
+    with pytest.raises(ValueError, match="OPERATING_POINT_FIELDS_INVALID"):
+        OperatingPoint.from_document(
+            {key: value for key, value in document.items() if key != "tracking_iou"}
+        )
+
+
+def test_canonical_sha256_is_key_order_independent_and_rejects_nonfinite() -> None:
+    assert canonical_sha256({"b": 1, "a": 2}) == canonical_sha256({"a": 2, "b": 1})
+    assert canonical_sha256({"a": 1}) != canonical_sha256({"a": 2})
+    with pytest.raises(ValueError, match="JSON"):
+        canonical_sha256({"a": float("nan")})
+    with pytest.raises(ValueError, match="JSON"):
+        canonical_sha256({"a": object()})
