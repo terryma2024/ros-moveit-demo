@@ -536,6 +536,7 @@ class HeadCameraGeometryResult:
     camera_source_sha256: str
     scene_sha256: str
     contract_sha256: str
+    coarse_step_candidate_rad: float
 
     def to_document(self) -> dict[str, Any]:
         document = {
@@ -555,6 +556,7 @@ class HeadCameraGeometryResult:
             "in_frame_failures": [dict(record) for record in self.in_frame_failures],
             "workspace_matrix": dict(self.workspace_matrix),
             "support_height_m": self.support_height_m,
+            "coarse_step_candidate_rad": self.coarse_step_candidate_rad,
             "required_search_domain_rad": list(self.required_search_domain_rad),
             "lock_valid_neck_rad": list(self.lock_valid_neck_rad),
             "safe_interval_contains_required_domain": self.safe_interval_contains_required_domain,
@@ -563,6 +565,7 @@ class HeadCameraGeometryResult:
                 "scene_sha256": self.scene_sha256,
                 "camera_source_sha256": self.camera_source_sha256,
                 "contract_sha256": self.contract_sha256,
+            "coarse_step_candidate_rad": self.coarse_step_candidate_rad,
             },
         }
         document["seal_sha256"] = canonical_sha256(document)
@@ -789,6 +792,7 @@ def validate_head_camera_geometry(
     )
 
     return HeadCameraGeometryResult(
+        coarse_step_candidate_rad=contract.coarse_step_candidate_rad,
         camera_name=observed.camera_name,
         image_width=observed.width,
         image_height=observed.height,
