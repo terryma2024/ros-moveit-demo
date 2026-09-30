@@ -38680,3 +38680,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `09c30c897`;
   targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2073 — Task 3: item (b) closed — every boundary gate now has a three-way control
+
+- **What landed.** `_case` gained `reference=` and `planning=` parameters (beside `receipt=`/`feedback=`) that
+  supply a present proof, an absent one, or an empty (wrong-shape) one, and a parametrised control asserts the
+  document's `controller_reference_ok` and `planning_ok` follow them across five combinations. With the scene
+  and feedback controls from CP-2036 and CP-2044, **all four boundary gates are now both derived and
+  controlled**, which is what item (b) was for after CP-2072 narrowed it.
+- **Evidence.** `logs/task3-bctl.run` rc=0: **49 passed** across the motion-phases, close-execution, task8 and
+  release-boundary suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty
+  tempfile proof.
+- **Task 3's open list is now three items**: (a) the record's producer (the readback filling
+  `planning_scene_observation` with the caller's simulation instant, then the audit's end-to-end check);
+  (c) T3-F11's window-to-rows and observed-schedule checks (CP-1997/CP-2001 recipes); (d) the fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `3793e8bd7`;
+  targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

@@ -27,7 +27,7 @@ from so101_demo.adapters.act.pick_place_search_boundary import (  # noqa: E402
 
 
 def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=True, with_template=True,
-          with_duration=True, receipt=True, feedback=True):
+          with_duration=True, receipt=True, feedback=True, reference=True, planning=True):
     screen, prefix, goals, checks, sources, _driver, _owner, _events, _qpos, _qvel = physical_inputs()
     raw = sources.capture(prefix["attempt_id"], after_step=0)
     from so101_demo.core.simulation.types import ContactEvidence
@@ -77,10 +77,21 @@ def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=Tru
         boundary.motion_target_joints = lambda target: (calls.append(("ik", target)) or (0.5,) * 5)
     # the boundary's own bookkeeping, which a release increments and a set-down records
     boundary._release_epoch, boundary._set_down_step = 0, None
-    # the controller-reference proof these phases derive their reference gate from (CP-2017 pattern)
-    boundary._controller_reference = {"accepted": True}
+    # the controller-reference proof these phases derive their reference gate from (CP-2017 pattern);
+    # the controls below drive a present, an absent and a wrong-shape proof
+    if reference is True:
+        boundary._controller_reference = {"accepted": True}
+    elif reference == "wrong":
+        boundary._controller_reference = {}
+    else:
+        boundary._controller_reference = None
     # the path proof this fixture's phases derive their planning gate from (CP-2017 pattern)
-    boundary._planning_proof = {"proved": True}
+    if planning is True:
+        boundary._planning_proof = {"proved": True}
+    elif planning == "wrong":
+        boundary._planning_proof = {}
+    else:
+        boundary._planning_proof = None
     # the SEARCH receipt this fixture's phases are derived from (CP-2017 step three): a successful
     # SceneCommandReceipt, the same shape the boundary remembers from its own validated search. A case may
     # ask for an unsuccessful one or for none, which is what the fail-closed control below drives.
@@ -284,3 +295,17 @@ def test_the_joint_feedback_gate_is_derived_from_the_records(feedback, expected)
     boundary, ticket, _capture, template, duration = _case([], feedback=feedback)
     document = _call(boundary, ticket, template, duration)
     assert document["joint_feedback_ok"] is expected
+
+
+@pytest.mark.parametrize("reference,planning,expected_reference,expected_planning", [
+    (True, True, True, True), (False, True, False, True), ("wrong", True, False, True),
+    (True, False, True, False), (True, "wrong", True, False)])
+def test_the_reference_and_planning_gates_follow_their_proofs(
+        reference, planning, expected_reference, expected_planning):
+    """CP-2072: present, absent and wrong-shape proofs decide the boundary's last two gates."""
+
+    boundary, ticket, _capture, template, duration = _case(
+        [], reference=reference, planning=planning)
+    document = _call(boundary, ticket, template, duration)
+    assert document["controller_reference_ok"] is expected_reference
+    assert document["planning_ok"] is expected_planning
