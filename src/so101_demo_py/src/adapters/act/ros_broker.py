@@ -130,6 +130,9 @@ class RosBrokerDriver:
         self._baseline_futures={};self._stop_confirmed_at=None
         self._baseline_allow_existing=False
         self._positions=None;self._epoch=None;self._references={};self._scalar=None
+        # per-kind raw history the ratified reference shape needs: the joint names the message
+        # carried (in their published order) and the observer's own publication sequence
+        self._reference_names={};self._reference_sequences={}
         self._reference_epoch_identity=None
         self._reference_frames=ControllerReferenceObserver(max_frames=256)
         self._disabled_ack=self._paused_ack=self._world_reset_ack=self._activated_ack=False
@@ -212,6 +215,11 @@ class RosBrokerDriver:
         with self._lock:
             received=self.monotonic()
             self._references[kind]=(values,velocities,received,stamp)
+            if not hasattr(self,"_reference_names"):
+                # a driver built without __init__ (restores, focused tests) still keeps this history
+                self._reference_names={};self._reference_sequences={}
+            self._reference_names[kind]=tuple(message.joint_names)
+            self._reference_sequences[kind]=self._reference_sequences.get(kind,0)+1
             observer=getattr(self,'_reference_frames',None)
             if observer is not None:
                 observer.accept(kind,message,received_monotonic_s=received)
@@ -245,6 +253,48 @@ class RosBrokerDriver:
 
     def current_reference(self,when):
         return self.reference_state(when)['positions']
+
+    def current_epoch(self):
+        """Copy the fresh physics epoch without changing broker state."""
+        with self._lock:
+            if self._epoch is None:raise RuntimeError('RESET_EPOCH_UNAVAILABLE')
+            frame,received=self._epoch
+            if not 0<=self.monotonic()-received<=self.max_age:
+                raise RuntimeError('RESET_EPOCH_STALE')
+            return dict(session_id=frame.simulation_session_id,
+                        reset_epoch=frame.reset_epoch,
+                        simulation_step=frame.simulation_step,
+                        simulation_time_s=(frame.header.stamp.sec
+                            +frame.header.stamp.nanosec*1e-9),
+                        received_wall_s=received)
+
+    def stationary_reference_proof(self,when):
+        """Copy both fresh published references and their source timestamps."""
+        when=finite(when,nonnegative=True)
+        with self._lock:
+            epoch=self.current_epoch()
+            now=self.monotonic()
+            stopped_at=self._stop_confirmed_at
+            if stopped_at is None or not 0<=now-stopped_at<=self.max_age:
+                raise RuntimeError('REFERENCE_STOP_UNCONFIRMED')
+            references={}
+            for kind in ('arm','gripper'):
+                if kind not in self._references:raise RuntimeError('REFERENCE_UNAVAILABLE')
+                values,velocities,received,stamp=self._references[kind]
+                if not 0<=now-received<=self.max_age:
+                    raise RuntimeError('REFERENCE_STALE')
+                if stamp>when:raise RuntimeError('REFERENCE_TIME_INVALID')
+                pending=any(record['accepted'] is None and
+                    (record['kind']==kind or kind=='arm' and record['kind']=='execute_trajectory')
+                    for record in self._records.values())
+                if (self._reference_interval(kind) is not None or pending
+                        or any(abs(value)>self.stop_velocity for value in velocities)):
+                    raise RuntimeError('REFERENCE_INTERVAL_INVALID')
+                references[kind]=dict(mode='PUBLISHED_STATIONARY',
+                    positions=tuple(values),velocities=tuple(velocities),
+                    publication_sim_time_s=stamp,received_wall_s=received)
+            return dict(requested_sim_time_s=when,epoch=epoch,
+                        stop_confirmed_wall_s=stopped_at,references=references)
 
     def reference_state(self,when):
         when=finite(when,nonnegative=True);rows=[];vrows=[];arows=[]
@@ -403,7 +453,11 @@ class RosBrokerDriver:
         return gid
 
     def _feedback(self,gid,message):
-        with self._lock:self._records[gid]['feedback']=message_dict(message.feedback)
+        with self._lock:
+            record=self._records[gid]
+            record['feedback']=message_dict(message.feedback)
+            record['feedback_received_wall_s']=self.monotonic()
+            record['feedback_received_sim_s']=self.node.get_clock().now().nanoseconds*1e-9
 
     def _accepted(self,gid,future):
         with self._lock:
@@ -430,7 +484,11 @@ class RosBrokerDriver:
 
     def _result(self,gid,future):
         with self._lock:
-            try:self._records[gid]['result']=future.result()
+            try:
+                record=self._records[gid]
+                record['result']=future.result()
+                record['result_received_wall_s']=self.monotonic()
+                record['result_received_sim_s']=self.node.get_clock().now().nanoseconds*1e-9
             except Exception as error:self._records[gid]['error']=repr(error);self.hazard_reason='GOAL_RESULT_LOST'
             self._control_event('goal_result',goal_id=gid,
                                 ros_goal_id=self._records[gid].get('ros_goal_id'),
@@ -560,7 +618,12 @@ class RosBrokerDriver:
                 result=None if wrapped is None else message_dict(wrapped.result),
                 feedback=record['feedback'],cancel_response=record['cancel_response'],
                 driver_error=record['error'],ros_goal_uuid=record.get('ros_goal_id'),
-                downstream_goal_ids=record.get('downstream_goal_ids',{}))
+                downstream_goal_ids=record.get('downstream_goal_ids',{}),
+                accepted_sim_s=record.get('accepted_sim_s'),
+                feedback_received_sim_s=record.get('feedback_received_sim_s'),
+                feedback_received_wall_s=record.get('feedback_received_wall_s'),
+                result_received_sim_s=record.get('result_received_sim_s'),
+                result_received_wall_s=record.get('result_received_wall_s'))
 
 
     def diagnostics(self):

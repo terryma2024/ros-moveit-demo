@@ -147,3 +147,17 @@ def test_driver_subscribes_to_all_three_reference_streams(monkeypatch):
         assert identity == ("session-a", 2)
         assert len(rows) == 1
         assert rows[0]["joint_names"] == names
+
+
+def test_the_broker_keeps_the_per_kind_names_and_sequence_it_received():
+    """Proposal A needs the broker to hold the published names and its own sequence per kind."""
+
+    import json
+    from pathlib import Path
+
+    source = Path(__file__).resolve().parents[1] / "src/adapters/act/ros_broker.py"
+    text = source.read_text()
+    assert "self._reference_names={};self._reference_sequences={}" in text
+    assert 'self._reference_names={};self._reference_sequences={}' in text
+    assert "self._reference_names[kind]=tuple(message.joint_names)" in text
+    assert "self._reference_sequences[kind]=self._reference_sequences.get(kind,0)+1" in text

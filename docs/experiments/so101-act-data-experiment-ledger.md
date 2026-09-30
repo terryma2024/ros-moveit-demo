@@ -36768,3 +36768,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `6edd7a8f3`;
   gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1987 — Task 3 convergence: the broker now keeps the per-kind names and its own sequence (Proposal A, data side)
+
+- **What landed.** `RosBrokerDriver._reference` stores, beside `self._references[kind] =
+  (values, velocities, received, stamp)`, the published `joint_names` in their original order and the
+  observer's own per-kind publication sequence, initialised in `__init__` and created lazily when a driver
+  is built without it. Both the ratified shape and amendment A.1 need exactly these two facts per frame, so
+  this step is valid under either outcome and required by both.
+- **Why it is only the data side.** `reference_state` still returns the fused four-key projection; changing
+  that return is the step that depends on A.1, and I am not writing a contract the owner has not ruled on.
+- **Evidence.** `logs/task3-fix35.run` rc=0 across `test_act_controller_reference_observer.py`,
+  `test_act_controller_reference.py`, `test_act_command_broker.py`, `test_act_broker_neck.py`,
+  `test_act_supervisor.py`, `test_act_task8.py` and `test_act_episode_audit.py`, with its own NVMe scratch
+  and a non-empty tempfile proof. The first attempt failed on two observer tests that build the driver
+  without `__init__` (`AttributeError: _reference_names`), which is why the dictionaries are created lazily;
+  the test asserting the storage is a source-level check on the three lines, since constructing a full
+  driver in this suite is out of scope.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `0dfc3391b`;
+  gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
