@@ -36097,3 +36097,19 @@ Two more refusals, both correct and both informative:
 **The correct Task 11 order is now fully pinned:** re-seal (done, `f168bfc1...`) -> re-point the perception
 configs' `accepted_seal_sha256` at the new seal -> regenerate the 32/8/8 smoke -> verify it with
 `--require-non-promotable`. Every step refuses to run out of order, which is what makes the chain worth having.
+
+## HS-050 — Both CUDA one-epoch smokes pass with exactly the exposure the plan requires (round 349)
+
+| run | result | batch size | batches | domain counts |
+| --- | --- | --- | --- | --- |
+| candidate **B** | `rc=0`, `plan_sha256 70d8e74b...` | 32 | 1 | `{head: 32}` |
+| candidate **C** | `rc=0`, `plan_sha256 8a04f9fa...` | 32 | 2 | `{head: 32, task: 32}` |
+
+Both ran one epoch on CUDA from the pinned A weights
+(`deps/so101-yolo11n-seg-plastic-cup/best.pt`) against the freshly sealed 32/8/8 head smoke and the task smoke
+dataset, and both write a run manifest under the low-rate root. C's exposure is **32 head + 32 task in two
+batches**, i.e. the balanced 1:1 sampling the plan calls for, with B as the head-only control - read from the
+runs' own manifests rather than asserted.
+
+That closes Task 11's GPU gate. Two entries ago this gate found genuine trainer defects (HS-049), so it is worth
+noting that the same gate now also *confirms* the property it was written for.
