@@ -38830,3 +38830,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `748001ed4`;
   targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2081 — T3-F11 IMPLEMENTED: the formal window must describe the audit's own rows and frames
+
+- **What landed.** `EpisodeAuditWriter` gained `_window_matches_rows(window)` and calls it from `seal()`'s
+  formal-window gate (the gate at `episode_audit.py:791-794` is a single condition since CP-2006, so the call
+  sits after that block), with `self._row_times` kept beside `self._row_indexes`. The rules: a `complete`
+  window needs at least one bound row whose instant the cutoff equals; another outcome may not accompany bound
+  rows; every `streams_required` entry must appear in `source_schedule`; every scheduled instant must be one the
+  audit actually holds for that camera; and a gap beyond 1.5 cadences must be permitted.
+- **The fixtures, built the way the two earlier attempts should have.** The self-consistent helper mints the
+  acquisitions its window declares (head and wrist at 1.0 and 1.1), adds the coverage the formal seal needs,
+  binds a row at 1.0 and returns `_window()`; the positive case seals it, and four negative cases vary exactly
+  one thing each. The coverage-only case in the existing test now declares `no_label` and holds the frames its
+  schedule names.
+- **Evidence.** `logs/task3-final.run` rc=0: **430 passed in 10.64s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof. The audit suite alone is 63 passed; the intermediate REDs are in `logs/task3-f11.run` and
+  `logs/task3-f11b.run`.
+- **Task 3 is now down to its checkpoint** (item (d)): everything the fifth verdict listed is closed, including
+  T3-F11's two reverts.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `8a1448c95`;
+  no push, no evidence deletion, no hardware, no second stack.

@@ -797,7 +797,15 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
                                        "no_fingertip_contact": True})):
         complete.append_source("events", {"kind": kind, "identity": identity(),
                                           "sim_time_s": 1.1, "monotonic_ns": 1, "payload": payload})
-    assert complete.seal(_window()).is_file()
+    # this formal audit has coverage but no bound row, so its window says exactly that (T3-F11); it must
+    # also hold the acquisitions its schedule declares, which is the rule the matcher enforces
+    minter = AcquisitionMinter()
+    for camera in ("head", "wrist"):
+        for stamp in (1.0, 1.1):
+            complete.append_acquisition(minter.mint(
+                camera, session_id="s", reset_epoch=1, stamp_s=stamp,
+                received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO))
+    assert complete.seal(_window(outcome="no_label", label_cutoff_s=None)).is_file()
     # the diagnostic mode keeps its previous behaviour, which is what the plan separates
     diagnostic = EpisodeAuditWriter(tmp_path / "diagnostic", scope(), identity(),
                                     {"inputs_sha256": "a" * 64})
@@ -978,3 +986,51 @@ def test_readback_reapplies_the_formal_coverage_gate(tmp_path):
     path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
     with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
         verify_audit_manifest(path)
+
+
+def _self_consistent_formal(tmp_path):
+    """A formal episode whose window is derived from the rows and frames it actually holds (CP-2078)."""
+
+    writer = _formal_writer(tmp_path / "formal")
+    minter = AcquisitionMinter()
+    frames = {}
+    for camera in ("head", "wrist"):
+        for stamp in (1.0, 1.1):
+            frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=stamp,
+                                received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO)
+            writer.append_acquisition(frame)
+            frames[(camera, stamp)] = frame
+    writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6], "accepted": True})
+    writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
+                                     "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
+                                                     "cup_position_world_m": [0.0, 0.0, 0.0]}})
+    for kind, payload in (("phase_complete", {"phase": "SEARCH", "physics_step": 1}),
+                          ("release", {"release_epoch": 1, "supported": True,
+                                       "no_fingertip_contact": True})):
+        writer.append_source("events", {"kind": kind, "identity": identity(), "sim_time_s": 1.1,
+                                        "monotonic_ns": 1, "payload": payload})
+    writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id,
+                    frames[("wrist", 1.0)].acquisition_id, 1)
+    return writer, _window()
+
+
+def test_a_self_consistent_formal_window_seals(tmp_path):
+    """The positive case of T3-F11: derived from the audit's own rows and frames."""
+
+    writer, window = _self_consistent_formal(tmp_path)
+    assert writer.seal(window).is_file()
+
+
+@pytest.mark.parametrize("overrides", [
+    {"label_cutoff_s": 1.1},                                          # not the bound row's instant
+    {"source_schedule": {"head": [1.0, 1.1, 1.15], "wrist": [1.0, 1.1]}},  # an instant never published
+    {"streams_required": ["head", "wrist", "neck"]},                  # a required stream with no schedule
+    {"outcome": "no_label", "label_cutoff_s": None},                  # labelled rows under a non-complete outcome
+])
+def test_the_formal_window_must_describe_the_rows_and_frames(tmp_path, overrides):
+    """T3-F11's controls: a window that does not describe this audit's rows and frames cannot be sealed."""
+
+    writer, window = _self_consistent_formal(tmp_path)
+    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
+        writer.seal({**window, **overrides})

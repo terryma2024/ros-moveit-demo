@@ -614,6 +614,7 @@ class EpisodeAuditWriter:
         self._event_kinds: set = set()
         self._reference_history: dict = {}
         self._row_indexes: set = set()
+        self._row_times: list = []
         self._release_epoch: int | None = None
         self._observed_epochs: dict = {}
         self._sealed: Path | None = None
@@ -683,6 +684,7 @@ class EpisodeAuditWriter:
             # whose acceptance still stands
             raise ValueError("AUDIT_BINDING_REFERENCE_INVALID")
         self._row_indexes.add(record["row_index"])
+        self._row_times.append(record["sim_time_s"])
         self._last_row_time_s = record["sim_time_s"]
         self._bound.update((head_id, wrist_id))
         self._bound_references.add(record["reference_sequence"])
@@ -791,6 +793,9 @@ class EpisodeAuditWriter:
                 window, mode=self.scope.get("mode")):
             # a formal audit states the ratified window; a diagnostic audit may record a legacy one
             raise ValueError("AUDIT_WINDOW_INVALID")
+        if self.scope.get("mode") == "formal" and not self._window_matches_rows(window):
+            # T3-F11: and it must describe the rows and acquisitions this audit actually holds
+            raise ValueError("AUDIT_WINDOW_INVALID")
         for name, stream in self._streams.items():
             stream.flush()
             os.fsync(stream.fileno())
@@ -811,6 +816,43 @@ class EpisodeAuditWriter:
         return target
 
     # -- helpers -----------------------------------------------------------
+
+    def _window_matches_rows(self, window: dict) -> bool:
+        """T3-F11: a formal window must describe the rows and acquisitions this audit actually holds."""
+
+        if window["outcome"] == "complete":
+            if not self._row_times or abs(window["label_cutoff_s"] - max(self._row_times)) > _TOLERANCE_S:
+                # the cutoff is the last labelled observation, not a number chosen to fit
+                return False
+        elif self._row_times:
+            # an outcome other than complete may not accompany labelled rows
+            return False
+        schedule = window["source_schedule"]
+        if set(window["streams_required"]) - set(schedule):
+            return False
+
+        def parts(entry):
+            if isinstance(entry, dict):
+                return entry.get("camera"), entry.get("stamp_s")
+            return getattr(entry, "camera", None), getattr(entry, "stamp_s", None)
+
+        held = {}
+        for entry in self._acquisitions.values():
+            camera, stamp = parts(entry)
+            held.setdefault(camera, []).append(stamp)
+        for stream, instants in schedule.items():
+            observed = sorted(value for value in held.get(stream, []) if value is not None)
+            if not all(any(abs(instant - stamp) <= _TOLERANCE_S for stamp in observed)
+                       for instant in instants):
+                # a scheduled instant no camera published is an invented schedule entry
+                return False
+            for earlier, later in zip(instants, instants[1:], strict=False):
+                if later - earlier > window["cadence_s"] * 1.5 + _TOLERANCE_S and not any(
+                        start - _TOLERANCE_S <= earlier and later <= end + _TOLERANCE_S
+                        for start, end in window["permitted_gaps_s"]):
+                    # a gap beyond the cadence must be one the frozen inputs permit
+                    return False
+        return True
 
     def _apply_epoch(self, epoch: int, kind: str, observation: dict) -> None:
         if self._release_epoch is None:
