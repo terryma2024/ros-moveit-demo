@@ -201,6 +201,10 @@ class RosBrokerDriver:
                     else:
                         observer.invalidate()
                 self._reference_epoch_identity=identity
+                # T3-F13: the joint and reference caches belong to the epoch that filled them, so leaving them
+                # untouched let a new epoch join values the previous one produced while still inside max-age
+                self._positions=None;self._velocity=None;self._received=None
+                self._references={};self._reference_names={};self._reference_sequences={}
             self._epoch=(message,self.monotonic())
 
     def _reference(self,kind,message):

@@ -43051,3 +43051,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **F14, F3 and F1 closed**; **F11's three substantive cuts landed and green**, its two negatives (shortened
   and repeated schedules) handed off with the probe above; **F5/F12/F13 open**, F13 next by dependency; the goal is
   paused. HEAD `a6b0c3b7b`; twenty-four gates green.
+
+
+## CP-2276 — F13's first cut: the caches are invalidated with the epoch
+
+- **What landed** (`adapters/act/ros_broker.py`, `_live_epoch`): when the epoch identity changes, the broker now clears
+  `_positions`, `_velocity`, `_received`, `_references`, `_reference_names` and `_reference_sequences` beside resetting
+  the reference observer. Before this, a new session could join joint and reference values the **previous** epoch
+  produced as long as they were still inside `max_age` — the verdict's exact sentence about caches that are "not
+  invalidated or identity-fenced across a reset or session change".
+- **First try, green**: **215 passed** across the controller-reference, audit, release-boundary, task8 and
+  generic-artifact suites, which is itself evidence that nothing depended on the stale values.
+- **F13's remainder**: retain the joint callback's **own** stamp beside the arrival time (`_joints` keeps only
+  `self.monotonic()` today), enforce registered per-kind names/dimensions and require **both** kinds at audit
+  admission, and produce a **fenced current** scene record instead of `_planning_scene_record()` returning `None` —
+  plus the controls: caches filled before a reset and still inside max-age, fresh physics with a stale source,
+  wrong-kind dimensions, a missing gripper and a delayed scene.
+- **Evidence.** `logs/task3-f13-caches.run` rc=0: **346 passed in 2.32s** under `pytest-xdist` with 8 workers, its own NVMe scratch
+  and a tempfile proof.
+- **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 in progress** (first
+  cut landed); F5/F12 open; the goal is paused. HEAD `070fa6a3f`; twenty-five gates green.
