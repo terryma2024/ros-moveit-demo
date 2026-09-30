@@ -42736,3 +42736,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   (`PHASE_EVIDENCE_INVALID`), and now the enumeration that ends the search. The remaining write is a transcription.
 - **State.** **F14 closed**; F3 (a)(b)(c) landed; its positive control is one transcription away; F1/F5/F11/F12/F13
   open; the goal is paused. HEAD `53c1127b1`; eighteen gates green.
+
+
+## CP-2260 — F3 closed by name: the formal writer admits a real runner and refuses a foreign identity
+
+- **What landed** (`test_act_release_boundary.py`): `test_a_formal_writer_admits_the_runners_events_and_refuses_a_foreign_identity`
+  — an `AlignedPort(FakePort)` whose `evidence`, `begin`, `release_preflight`, `run_phase`, `run_retreat_segment` and
+  `set_down` all name the writer's own `session_id`/`attempt_id`; a **formal** `EpisodeAuditWriter` built as
+  `{**identity(), "lease": _lease()}`; a run driven with the matching request; assertions that every admitted row
+  carries the lease and that the release event(s) name the epoch(s) the run entered, read back from the audit the
+  writer produced; and the one-variable negative where a plain port and request leave the writer refusing the foreign
+  identity.
+- **Six fences, each removed by execution**: `AUDIT_IDENTITY_INVALID` (identity fenced to its lease),
+  `BEGIN_EVIDENCE_INVALID` (begin fenced to the request), `PHASE_EVIDENCE_INVALID` (phase evidence likewise),
+  `RELEASE_PREFLIGHT_INVALID` (a fifth method), `AttributeError` on `writer.events` (the writer keeps no in-memory
+  list — the stream is read from disk), and the release count (this fixture's `release_phase_epoch=2` means the
+  property is "every epoch entered is named", not a particular count).
+- **Evidence.** `logs/task3-f3-positive.run` rc=0: **386 passed in 3.62s** across the release-boundary, task8, audit, recorder,
+  capture, qualification, W8, campaign-admission, store-commit, generic-artifact and supervisor suites under
+  `pytest-xdist` with 8 workers, its own NVMe scratch and a tempfile proof.
+- **F3 is closed**: (a) the first event names the episode's own initial epoch (CP-2248); (b) readback requires an
+  exact integer sequence (CP-2241); (c) the runner carries the writer's lease and emits the release event, with the
+  real-runner/formal-writer positive control and its negative now in place (CP-2250, this entry).
+- **State.** **F14 closed**; **F3 closed**; **F1 next** (CP-2240's plan: normalise the producer's tuples to lists at
+  an explicit carrier boundary, validate the registered names/order and the canonical six-dimension projection, and
+  add a positive control through the real broker port); F5/F11/F12/F13 open; the goal is paused. HEAD `26010c24a`;
+  nineteen gates green.
