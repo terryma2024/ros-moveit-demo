@@ -3,8 +3,9 @@
 Written for whoever continues `dst` execution in this worktree. The ledger
 (`docs/experiments/so101-act-data-experiment-ledger.md`, CP-1921 … CP-1997) holds the full history; this
 file is the shortest path back to working state. Everything below is verified against the worktree at HEAD
-`4b8e0485a`, gate `logs/task3-gate8.run` **414 passed** (the figure moves as controls are added; `logs/task3-gate7.run`
-was 403 at the previous checkpoint).
+`4b8e0485a`, gate `logs/task3-gate8.run` **410 passed in 26.96 s** (the figure moves as controls are added;
+`logs/task3-gate7.run` was 403 at the previous checkpoint). The commit `80146e475` that first recorded this
+gate says 414 in its message; the measured value is 410, and this line is the correction of record..
 
 ## Where Task 3 actually stands
 

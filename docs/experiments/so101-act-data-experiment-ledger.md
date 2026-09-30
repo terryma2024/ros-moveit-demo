@@ -37172,3 +37172,11 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   counter's off-by-one fix) alongside the four items that remain.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `0f7670c04`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+### CP-2004 correction
+
+- The gate is **410 passed in 26.96 s** (`logs/task3-gate8.run` rc=0 across the checkpoint's twenty files
+  plus the observer suite), not the 414 I wrote into the handoff, this ledger entry and the commit message
+  of `80146e475` before the run had finished. The documents now state 410 and name the discrepancy, since
+  the commit message cannot be corrected without rewriting history.
