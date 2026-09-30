@@ -38650,3 +38650,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `e654eb16b`;
   targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2071 — Brief corrected and the gate re-verified at HEAD `173aa3f2e`: 420 passed in 10.39s
+
+- **Brief fixed.** Its §4 accounting said "ten gates are derived"; after CP-2069/CP-2070 the accurate statement is
+  four derived on the boundary (all with genuinely variable inputs, two with three-way controls) and three
+  derived in the SEARCH document, with the remainder stated because that port's validation guarantees them. The
+  brief now says exactly that, so the next session's first read is not misleading.
+- **Gate.** `logs/task3-gate18.run` rc=0: **420 passed in 10.39s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
+  deletion, no hardware, no second stack.

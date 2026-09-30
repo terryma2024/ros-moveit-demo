@@ -71,7 +71,13 @@ ratified schemas, this brief, the gate pointer and the verdict file to write.
 - The SEARCH document's `planning_ok` is deliberately **not** derived: the port refuses a non-locking result
   first, so a derivation would be a decorated literal (CP-2061/CP-2062). Making it real means giving it a
   source (the boundary's path/approval evidence), which is an owner-level choice.
-- Ten gates are derived from observations the search establishes, and the boundary helper asserts none.
+- Gate accounting, corrected at CP-2070: the **boundary helper's four** gates are derived from things that can
+  genuinely be absent (the scene receipt, the controller records, the reference proof, the path proof) and two of
+  them have three-way controls; the **SEARCH document** derives three (`planning_scene_ok`,
+  `controller_reference_ok`, `joint_feedback_ok`) and states the rest explicitly, because the port's own
+  validation refuses a non-locking result, a truncated world, contact evidence from another step and any stamp
+  outside `skew` before the document exists (CP-2069). Nothing in either place claims a gate it did not observe
+  or cannot vary.
 
 ## 5. What the objective still needs after Task 3
 
