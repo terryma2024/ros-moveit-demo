@@ -35529,6 +35529,15 @@ no second detector, with its RED tests first.
 - **Still owed for Task 9:** the `openapi_export.py` re-export of the new endpoints (both OpenAPI files) and
   the `CMakeLists.txt` entry, then Task 9's review.
 
+- **A self-inflicted over-eager fix in `unified/app.py` (round 278), corrected and recorded.** Running
+  `ruff check --fix` on that shared file removed two imports (`inspect`, `contextlib.suppress`) that were
+  unused but **unrelated** to Task 9; commit `1ac630dbf` restores them so the change to that file is limited
+  to the head camera router import and its inclusion. Two further lessons: my lint guard was defeated by
+  piping `ruff` through `tail` without `set -o pipefail`, so a failing check did not stop the commit - the
+  repository rule about pipelines exists for exactly this; and `app.py` carries a **pre-existing** `F811`
+  redefinition of `CapabilitiesResponse` (and an unused `inspect` import) that I did not introduce and have
+  deliberately left untouched rather than widening my diff.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
