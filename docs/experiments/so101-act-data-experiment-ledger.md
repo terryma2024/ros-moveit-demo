@@ -37180,3 +37180,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   plus the observer suite), not the 414 I wrote into the handoff, this ledger entry and the commit message
   of `80146e475` before the run had finished. The documents now state 410 and name the discrepancy, since
   the commit message cannot be corrected without rewriting history.
+
+
+## CP-2005 — Task 3 fix pass: the window schedule is chronological and its gaps lie inside the window
+
+- **Two more ratified-window rules.** `source_schedule` must hold a **chronologically sorted** list per
+  stream (a schedule is a timeline, not a set in arbitrary order), and every `permitted_gaps_s` entry must
+  lie inside `[collection_start_s, collection_end_s]` — a gap outside the episode's own window is not an
+  interruption the episode could have had.
+- **Controls are two lines in the existing window test**, which is why they landed first-try again; the
+  pattern is now three consecutive landings (CP-1999, CP-2000, CP-2003, and now this) when a check rides an
+  existing parametrisation or assertion block.
+- **Evidence.** `logs/task3-fix49.run` rc=0: **84 passed in 0.74 s** across `test_act_episode_audit.py` and
+  `test_act_recorder.py`, with its own NVMe scratch and a non-empty tempfile proof.
+- **Still open.** **T3-F1**'s producer side, **T3-F11**'s window-to-rows and observed-schedule checks (the
+  part that needs a self-consistent formal fixture; two attempts reverted), and **A.1** awaiting the owner.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `fdfaaf98a`;
+  gate `logs/task3-gate8.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

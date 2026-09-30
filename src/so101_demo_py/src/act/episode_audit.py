@@ -442,7 +442,9 @@ def _window_ok(window, *, mode: str) -> bool:
     if (not isinstance(schedule, dict) or not schedule
             or any(not isinstance(name, str) or not name or not isinstance(instants, list)
                    or any(not _number(instant) for instant in instants)
+                   or instants != sorted(instants)
                    for name, instants in schedule.items())):
+        # a schedule is a chronological list per stream, not a set in arbitrary order
         return False
     if (not isinstance(window["streams_required"], list)
             or any(not isinstance(name, str) or not name for name in window["streams_required"])
@@ -459,6 +461,10 @@ def _window_ok(window, *, mode: str) -> bool:
     start, end, physics = (window["collection_start_s"], window["collection_end_s"],
                            window["physics_end_s"])
     if not start <= physics <= end:
+        return False
+    if any(not start - _TOLERANCE_S <= gap[0] and gap[1] <= end + _TOLERANCE_S
+           for gap in window["permitted_gaps_s"]):
+        # a permitted gap outside the collection window is not a gap this episode could have had
         return False
     first, cutoff = window["first_command_s"], window["label_cutoff_s"]
     if window["outcome"] == "complete":
