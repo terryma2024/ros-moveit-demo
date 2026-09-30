@@ -39061,3 +39061,28 @@ and for this finding. The frozen deliverable will be **rebuilt from scratch at `
 rename `bcba722f7`) into a new `head-toolchain-<UTC>`, with `source-commit.txt` written from that commit **before** the build and
 nothing patched afterwards, then the seven-executable and `ros2 pkg prefix` checks re-run against it. That gives one root whose
 declared commit provably contains everything it installs - which is what "frozen toolchain" has to mean.
+
+## HS-174 — The frozen toolchain deliverable is reconciled: one root, one commit, machine-generated assertions
+
+Rebuilt from scratch at the commit that contains the rename, with every assertion produced **inside the build script** and
+written to `step2-assertions.txt` rather than retyped by me:
+
+```
+TOOLCHAIN_RUN = $HEAD_EVIDENCE/head-toolchain-20260930T115927Z
+source_commit = 2f036a6fb130b00b468396aa72e6e5b0241f92ce      (= HEAD; contains bcba722f7, the rename)
+build rc=0 ; 3 packages finished [36.2s]
+  so101_mujoco_support 23.7s | so101_teleop 10.7s | so101_demo_py 1.66s
+prefix_demo   = <root>/install/so101_demo_py
+prefix_teleop = <root>/install/so101_teleop
+exe_ok = validate_head_camera_geometry | generate_yolo_seg_dataset | train_yolo_seg
+         verify_head_search_dataset | evaluate_head_search_yolo_candidates
+         so101_head_search_smoke | so101_head_search_calibration        (7/7)
+```
+
+This answers both errors the fourteenth verdict found: the declared commit is the one the build ran at (HS-173's mismatch),
+and it **contains** the console-script rename, so the root's provenance covers the executables it installs. Nothing was
+patched after the build; the earlier four roots are untouched and remain the evidence for HS-166/167/169/173.
+
+Remaining deviations, unchanged and on the record: the vendored five are `--packages-ignore`d with the underlay supplying
+them (HS-166), and `empy`/`catkin_pkg` were added to the perception venv because Step 2's own `-DPython3_EXECUTABLE`
+requires them (HS-167/169). One repository change landed: the rename `bcba722f7`.
