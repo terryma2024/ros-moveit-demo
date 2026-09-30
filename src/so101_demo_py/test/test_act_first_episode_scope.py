@@ -217,8 +217,7 @@ def _calibration_document(tmp_path, *, checks=None, status="CALIBRATION_REQUIRED
 def test_nonhead_gate_accepts_a_report_without_head_search_measurements(tmp_path):
     report = _calibration_document(tmp_path)
     assert report["checks"]["fov"] == "UNMEASURED" and report["checks"]["search"] == "UNMEASURED"
-    assert require_nonhead_gate(report, source_commit=SOURCE_COMMIT,
-                                config_sha256=CONFIG_SHA)["status"] == "CALIBRATION_REQUIRED"
+    assert require_nonhead_gate(report)["status"] == "CALIBRATION_REQUIRED"
 
 
 def test_nonhead_gate_refuses_any_unmeasured_nonhead_check(tmp_path):
@@ -239,12 +238,17 @@ def test_nonhead_gate_refuses_a_pass_without_its_measurements(tmp_path):
         require_nonhead_gate(report)
 
 
-def test_nonhead_gate_refuses_a_drifting_identity_or_missing_provenance(tmp_path):
-    report = _calibration_document(tmp_path)
-    with pytest.raises(ValueError, match="CALIBRATION_SOURCE_CONFIG_MISMATCH"):
-        require_nonhead_gate(report, source_commit="f" * 40)
-    with pytest.raises(ValueError, match="CALIBRATION_SOURCE_CONFIG_MISMATCH"):
-        require_nonhead_gate(report, config_sha256="f" * 64)
+def test_nonhead_gate_records_the_identity_but_requires_provenance_and_shape(tmp_path):
+    """CP-1928: a report measured for another revision is still usable, but must be well formed."""
+
+    for field, other in (("source_commit", "f" * 40), ("config_sha256", "f" * 64)):
+        moved = _calibration_document(tmp_path)
+        moved[field] = other
+        assert require_nonhead_gate(moved)["status"] == "CALIBRATION_REQUIRED"
+    malformed = _calibration_document(tmp_path)
+    malformed["source_commit"] = "not-a-commit"
+    with pytest.raises(ValueError, match="NONHEAD_SAFETY_NOT_READY"):
+        require_nonhead_gate(malformed)
     broken = _calibration_document(tmp_path)
     del broken["source_provenance_sha256"]
     with pytest.raises(ValueError, match="NONHEAD_SAFETY_NOT_READY"):
@@ -421,12 +425,6 @@ def _registry(tmp_path, *, contents=None):
             "evidence_root": str(tmp_path), "roles": roles}
 
 
-def _freeze(candidates, output):
-    """Freeze with a controlled identity probe: a synthetic tree is not a git worktree."""
-
-    return freeze_inputs(candidates, output, source_identity_probe=lambda root: SOURCE_COMMIT)
-
-
 def _write_registry(tmp_path, registry):
     path = tmp_path / "input-candidates.json"
     path.write_bytes(_canonical(registry))
@@ -436,7 +434,7 @@ def _write_registry(tmp_path, registry):
 def test_freeze_copies_one_verified_candidate_per_role(tmp_path):
     registry = _registry(tmp_path)
     candidates = _write_registry(tmp_path, registry)
-    manifest_path = _freeze(candidates, tmp_path / "inputs")
+    manifest_path = freeze_inputs(candidates, tmp_path / "inputs")
     assert manifest_path == tmp_path / "inputs" / "inputs-manifest.json"
     manifest = read_inputs_manifest(manifest_path)
     assert manifest["kind"] == MANIFEST_KIND
@@ -447,7 +445,7 @@ def test_freeze_copies_one_verified_candidate_per_role(tmp_path):
         assert hashlib.sha256(copied.read_bytes()).hexdigest() == item["sha256"]
     assert read_candidate_registry(candidates) == registry
     # the frozen digest covers the copied bytes, so it is stable across a second freeze
-    again = _freeze(candidates, tmp_path / "inputs-again")
+    again = freeze_inputs(candidates, tmp_path / "inputs-again")
     assert read_inputs_manifest(again)["inputs_sha256"] == manifest["inputs_sha256"]
 
 
@@ -455,15 +453,15 @@ def test_freeze_refuses_a_missing_or_unselected_role(tmp_path):
     registry = _registry(tmp_path)
     del registry["roles"]["path_policy"]
     with pytest.raises(ValueError, match="NONHEAD_INPUT_BINDING_REQUIRED"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     registry = _registry(tmp_path)
     registry["roles"]["reset_recipe"]["selected"] = None
     with pytest.raises(ValueError, match="NONHEAD_INPUT_BINDING_REQUIRED"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     registry = _registry(tmp_path)
     registry["roles"]["reset_recipe"]["status"] = "MISSING"
     with pytest.raises(ValueError, match="NONHEAD_INPUT_BINDING_REQUIRED"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
 
 
 def test_freeze_refuses_ambiguity_and_unapproved_candidates(tmp_path):
@@ -471,15 +469,15 @@ def test_freeze_refuses_ambiguity_and_unapproved_candidates(tmp_path):
     role = registry["roles"]["anchor_scene"]
     role["candidates"] = role["candidates"] + [dict(role["selected"])]
     with pytest.raises(ValueError, match="INPUT_CANDIDATE_AMBIGUOUS"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     registry = _registry(tmp_path)
     registry["roles"]["anchor_scene"]["selected"]["approved"] = False
     with pytest.raises(ValueError, match="INPUT_NOT_APPROVED"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     registry = _registry(tmp_path)
     registry["roles"]["anchor_scene"]["selected"]["approval"] = "trust-me"
     with pytest.raises(ValueError, match="INPUT_NOT_APPROVED"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
 
 
 def test_freeze_refuses_a_stale_activation_or_identity_mismatch(tmp_path):
@@ -491,11 +489,11 @@ def test_freeze_refuses_a_stale_activation_or_identity_mismatch(tmp_path):
     registry["roles"]["contact_activation"]["selected"] = _entry(stale, "user_activation")
     registry["roles"]["contact_activation"]["candidates"] = [_entry(stale, "user_activation")]
     with pytest.raises(ValueError, match="INPUT_ACTIVATION_STALE"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     registry = _registry(tmp_path)
     registry["roles"]["scene_model"]["identity"]["model_sha256"] = "9" * 64
     with pytest.raises(ValueError, match="INPUT_IDENTITY_MISMATCH"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     # a policy that is internally consistent but was activated for another model is still refused
     registry = _registry(tmp_path)
     other_proposal, other_receipt = _proposal_and_receipt(tmp_path, model_sha="9" * 64, tag="-other")
@@ -504,7 +502,7 @@ def test_freeze_refuses_a_stale_activation_or_identity_mismatch(tmp_path):
     registry["roles"]["contact_activation"]["selected"] = _entry(other_receipt, "user_activation")
     registry["roles"]["contact_activation"]["candidates"] = [_entry(other_receipt, "user_activation")]
     with pytest.raises(ValueError, match="INPUT_IDENTITY_MISMATCH"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
 
 
 def test_freeze_refuses_a_changed_source_candidate_and_an_existing_output(tmp_path):
@@ -512,16 +510,16 @@ def test_freeze_refuses_a_changed_source_candidate_and_an_existing_output(tmp_pa
     victim = Path(registry["roles"]["reset_recipe"]["selected"]["path"])
     victim.write_bytes(b"changed after inspection")
     with pytest.raises(ValueError, match="INPUT_IDENTITY_MISMATCH"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     registry = _registry(tmp_path)
     (tmp_path / "inputs").mkdir()
     with pytest.raises(ValueError, match="INPUT_OUTPUT_EXISTS"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
 
 
 def test_inputs_manifest_is_closed_and_read_back_strictly(tmp_path):
     candidates = _write_registry(tmp_path, _registry(tmp_path))
-    manifest_path = _freeze(candidates, tmp_path / "inputs")
+    manifest_path = freeze_inputs(candidates, tmp_path / "inputs")
     manifest = read_inputs_manifest(manifest_path)
     for mutation in ({"kind": "OTHER"}, {"schema_version": 2}, {"extra": 1}):
         broken = dict(manifest, **mutation)
@@ -632,7 +630,7 @@ def test_freeze_accepts_the_production_input_formats(tmp_path):
                               b"  queue_recovery_watermark_samples: 8\n"
                               b"  queue_high_watermark_hold_s: 0.2\n  lossless: true\n"),
     })
-    manifest_path = _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+    manifest_path = freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     manifest = read_inputs_manifest(manifest_path)
     frozen = manifest_path.parent / manifest["roles"]["scene_model"]["path"]
     assert frozen.read_bytes().startswith(b"<mujoco>")
@@ -643,7 +641,7 @@ def test_freeze_accepts_the_production_input_formats(tmp_path):
 def test_frozen_bytes_are_re_verified_not_just_described(tmp_path):
     """A self-consistent manifest must not satisfy admission once its files are gone or changed."""
 
-    manifest_path = _freeze(_write_registry(tmp_path, _registry(tmp_path)),
+    manifest_path = freeze_inputs(_write_registry(tmp_path, _registry(tmp_path)),
                                   tmp_path / "inputs")
     manifest = read_inputs_manifest(manifest_path)
     verify_frozen_inputs(manifest_path)
@@ -682,7 +680,7 @@ def test_freeze_copies_the_verified_bytes_not_a_second_read(tmp_path, monkeypatc
         return payloads
 
     monkeypatch.setattr(first_episode_inputs, "_verify_roles", racing_verify)
-    manifest_path = _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+    manifest_path = freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     manifest = read_inputs_manifest(manifest_path)
     frozen = manifest_path.parent / manifest["roles"]["reset_recipe"]["path"]
     assert frozen.read_bytes() == original
@@ -699,14 +697,14 @@ def test_freeze_refuses_an_anchor_the_bytes_do_not_describe(tmp_path):
     (tmp_path / "asserted").mkdir(parents=True, exist_ok=True)
     registry = _registry(tmp_path / "other", contents={"anchor_scene": other_anchor})
     with pytest.raises(ValueError, match="NONHEAD_INPUT_BINDING_REQUIRED"):
-        _freeze(_write_registry(tmp_path / "other", registry), tmp_path / "other-inputs")
+        freeze_inputs(_write_registry(tmp_path / "other", registry), tmp_path / "other-inputs")
 
     # valid anchor bytes with an asserted identity they do not describe are an identity mismatch
     registry = _registry(tmp_path / "asserted")
     registry["roles"]["anchor_scene"]["identity"] = dict(
         registry["roles"]["anchor_scene"]["identity"], scene_id="left", seed=1)
     with pytest.raises(ValueError, match="INPUT_IDENTITY_MISMATCH"):
-        _freeze(_write_registry(tmp_path / "asserted", registry), tmp_path / "asserted-inputs")
+        freeze_inputs(_write_registry(tmp_path / "asserted", registry), tmp_path / "asserted-inputs")
 
 
 def test_freeze_refuses_a_ready_registry_without_the_resource_policy(tmp_path):
@@ -720,7 +718,7 @@ def test_freeze_refuses_a_ready_registry_without_the_resource_policy(tmp_path):
         registry = _registry(case, contents={"runtime_config": runtime})
         assert registry["roles"]["resource_thresholds"]["status"] == "READY"
         with pytest.raises(ValueError, match="NONHEAD_INPUT_BINDING_REQUIRED"):
-            _freeze(_write_registry(case, registry), case / "inputs")
+            freeze_inputs(_write_registry(case, registry), case / "inputs")
 
     for label, collection in (
             ("not-lossless", COLLECTION_YAML.replace(b"lossless: true", b"lossless: false")),
@@ -731,7 +729,7 @@ def test_freeze_refuses_a_ready_registry_without_the_resource_policy(tmp_path):
         case.mkdir(parents=True, exist_ok=True)
         registry = _registry(case, contents={"collection_config": collection})
         with pytest.raises(ValueError, match="NONHEAD_INPUT_BINDING_REQUIRED"):
-            _freeze(_write_registry(case, registry), case / "inputs")
+            freeze_inputs(_write_registry(case, registry), case / "inputs")
 
 
 def test_freeze_refuses_a_resource_role_that_owns_another_file(tmp_path):
@@ -740,7 +738,7 @@ def test_freeze_refuses_a_resource_role_that_owns_another_file(tmp_path):
     registry["roles"]["resource_thresholds"]["selected"] = dict(other)
     registry["roles"]["resource_thresholds"]["candidates"] = [dict(other)]
     with pytest.raises(ValueError, match="INPUT_IDENTITY_MISMATCH"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+        freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
 
 
 def test_a_malformed_collection_mode_is_ineligible_not_a_raise():
@@ -821,22 +819,23 @@ the formal mode must still require real Head qualification.
 """
 
 
-def test_freeze_refuses_a_calibration_report_from_another_config(tmp_path):
-    """Every calibration role must belong to this tree's config identity, not just its commit."""
+def test_freeze_accepts_a_calibration_report_with_another_recorded_identity(tmp_path):
+    """CP-1928: a report measured for another revision is frozen as-is, with its identity recorded."""
 
     registry = _registry(tmp_path)
-    stale = tmp_path / "calibration-other-config.json"
-    stale.write_bytes(_canonical(_calibration_document(tmp_path, config_sha="d" * 64)))
-    entry = _entry(stale, "nonhead_calibration")
+    old_identity = tmp_path / "calibration-other-config.json"
+    old_identity.write_bytes(_canonical(_calibration_document(tmp_path, config_sha="d" * 64)))
+    entry = _entry(old_identity, "nonhead_calibration")
     registry["roles"]["placement_qc"]["selected"] = entry
     registry["roles"]["placement_qc"]["candidates"] = [entry]
-    assert stale.read_bytes() != (tmp_path / "calibration-nonhead.json").read_bytes()
-    with pytest.raises(ValueError, match="CALIBRATION_SOURCE_CONFIG_MISMATCH"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+    manifest_path = freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
+    manifest = read_inputs_manifest(manifest_path)
+    assert manifest["roles"]["placement_qc"]["sha256"] == entry["sha256"]
+    assert manifest["roles"]["placement_qc"]["path"].endswith("calibration-other-config.json")
 
 
-def test_freeze_refuses_two_different_calibration_reports(tmp_path):
-    """One approved measurement report supplies all three calibration roles."""
+def test_freeze_accepts_two_distinct_approved_calibration_reports(tmp_path):
+    """CP-1928 withdrew the one-report rule: each calibration role is validated on its own merits."""
 
     registry = _registry(tmp_path)
     other = tmp_path / "calibration-second.json"
@@ -845,27 +844,22 @@ def test_freeze_refuses_two_different_calibration_reports(tmp_path):
     entry = _entry(other, "nonhead_calibration")
     registry["roles"]["rgb_skew"]["selected"] = entry
     registry["roles"]["rgb_skew"]["candidates"] = [entry]
-    with pytest.raises(ValueError, match="INPUT_IDENTITY_MISMATCH"):
-        _freeze(_write_registry(tmp_path, registry), tmp_path / "inputs")
+    manifest_path = freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
+    manifest = read_inputs_manifest(manifest_path)
+    assert manifest["roles"]["rgb_skew"]["sha256"] == entry["sha256"]
+    assert manifest["roles"]["rgb_skew"]["sha256"] != manifest["roles"]["path_policy"]["sha256"]
 
 
-def test_freeze_fails_closed_when_source_provenance_cannot_be_established(tmp_path):
-    """A probe failure is a refusal, never a licence to freeze an unproven identity."""
+def test_freeze_accepts_an_identity_it_cannot_prove(tmp_path):
+    """CP-1928: the registry's identity is recorded provenance; it is no longer proved live."""
 
-    candidates = _write_registry(tmp_path, _registry(tmp_path))
-
-    def unavailable(root):
-        raise ValueError("INPUT_SOURCE_ROOT_INVALID")
-
-    with pytest.raises(ValueError, match="INPUT_SOURCE_PROVENANCE_UNAVAILABLE"):
-        freeze_inputs(candidates, tmp_path / "inputs-unprovable",
-                      source_identity_probe=unavailable)
-    with pytest.raises(ValueError, match="INPUT_IDENTITY_MISMATCH"):
-        freeze_inputs(candidates, tmp_path / "inputs-other-commit",
-                      source_identity_probe=lambda root: "f" * 40)
-    # and the production default probe refuses a source root that is not a git worktree at all
-    with pytest.raises(ValueError, match="INPUT_SOURCE_PROVENANCE_UNAVAILABLE"):
-        freeze_inputs(candidates, tmp_path / "inputs-no-probe")
+    registry = _registry(tmp_path)
+    registry["source_commit"] = "f" * 40
+    registry["config_sha256"] = "f" * 64
+    manifest_path = freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
+    manifest = read_inputs_manifest(manifest_path)
+    assert manifest["source_commit"] == "f" * 40
+    assert manifest["config_sha256"] == "f" * 64
 
 
 def test_ledger_references_reject_traversal_and_symlink_escapes(tmp_path):

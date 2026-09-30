@@ -34613,3 +34613,87 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list item 0 and 1 completed; items 2-8 pending.** Task 2 has not started; the next
   step is the owner's go-ahead (and the design answer above does not gate Task 2, which is the plan's
   next boundary).
+
+
+## CP-1928 — OWNER AMENDMENT: the "any controlled change invalidates the old identity" rule is withdrawn
+
+- **Owner instruction (2026-09-30, conversation).** The owner judged the rule "任何受控
+  source/config/policy 变化都使旧 bundle/live/QUALIFIED 对新身份失效" too strict and directed a design
+  change: it no longer constrains this work. The owner selected the widest scope offered and directed
+  the executor to record this amendment and implement it directly. This supersedes the corresponding
+  sentences of the frozen design (`docs/superpowers/specs/2026-09-30-so101-act-nonhead-first-episode-design.md`
+  §9 and §6.3) and plan (`...-implementation.md`, Global constraints) **for the parts listed below
+  only**; every other boundary of those documents stands.
+- **What changes (exact deltas).**
+  1. `act/first_episode_inputs.require_nonhead_gate()` no longer takes or compares `source_commit` /
+     `config_sha256`; a report is judged on its own structure, checks, measurements and sample
+     digests. Its recorded identity must still be syntactically well formed.
+  2. `_verify_roles()` no longer probes the live tree or compares the registry's
+     `source_commit`/`config_sha256` with it; those fields remain recorded provenance. The
+     `source_identity_probe` hook and `INPUT_SOURCE_PROVENANCE_UNAVAILABLE` are removed with it.
+  3. The single-calibration-report rule is withdrawn: it existed only to keep the per-identity config
+     proof unambiguous. Each calibration role is validated on its own merits.
+  4. `unified/admission._validate_start()` no longer refuses `CALIBRATION_SOURCE_CONFIG_MISMATCH`; the
+     installed-profile probe still runs so a missing ACT profile is still refused.
+  5. `unified/admission._require_diagnostic_scope()` no longer compares the frozen manifest's
+     source/config against the live probe, and no longer enforces one calibration report.
+  6. `cli/act_preflight.py` no longer refuses a measured report whose identity differs from the
+     installed profile.
+- **What deliberately does not change.** Byte verification of every frozen role
+  (`verify_frozen_inputs`); payload-artifact-to-frozen-role binding; anchor and resource identity
+  derived from the verified bytes (these say "the bytes are what they claim", not "the bytes are
+  today's"); contact proposal + activation verification; evidence-root containment; the diagnostic /
+  formal separation and "a diagnostic episode is never trainable"; and the same-run
+  `runtime/runtime_closure.py` drift check, which compares an identity built before spawning with the
+  prefix re-read immediately before spawning — removing it would allow a swap inside one run, which is
+  not the withdrawn rule.
+- **Tier 3 finding (owner scope C, reported honestly).** There is no W8/QUALIFIED binding to relax:
+  `so101_demo.act.w8_qualification` does not exist anywhere in the tree, so `admission._validate_start`
+  already fails closed with `W8_QUALIFICATION_VERIFIER_UNAVAILABLE` for formal W8 collection. The only
+  lever at that tier is deleting that fail-closed gate, which would let a self-declared receipt open
+  formal W8 collection — the exact thing the frozen plan forbids ("正式 W8 规则不变", "不伪造
+  TASK8_READY/Head qualification") and which this diagnostic milestone does not need. It was therefore
+  **not** pulled; opening it requires an explicit owner/formal-plan decision.
+- **Superseded review scope.** The Task 1 checkpoint verdicts reviewed a contract that included the
+  withdrawn rule. The parts they closed that this amendment removes are superseded; the rest of the
+  checkpoint (mode isolation, byte/truthfulness checks, admission binding, diagnostic separation)
+  stands, and the amended contract will be re-reviewed at the same checkpoint before Task 2 starts.
+- **Effect on the current blocker.** None: `path_policy`, `placement_qc`, `rgb_skew` and
+  `resource_thresholds` stay MISSING because no approved values exist for any identity, so Task 6/7
+  still require the owner's approval of those values.
+
+
+### CP-1928 implementation outcome
+
+- **Code.** `require_nonhead_gate(report)` lost its identity parameters and comparisons;
+  `_verify_roles`/`freeze_inputs` lost the live probe, its `source_identity_probe` hook and
+  `INPUT_SOURCE_PROVENANCE_UNAVAILABLE`; the one-report rule is gone from freeze, the inspector and
+  admission; `_validate_start` no longer refuses `CALIBRATION_SOURCE_CONFIG_MISMATCH` (it still probes
+  the installed ACT profile so a missing profile is refused); `_require_diagnostic_scope` no longer
+  compares the manifest with the live identity; `cli/act_preflight.py` records the measured report
+  instead of refusing a different identity. Recorded provenance (registry and manifest
+  `source_commit`/`config_sha256`, per-report identity fields) is unchanged.
+- **Kept.** Byte verification of every frozen role, payload-to-frozen-role binding, anchor/resource
+  identity derived from verified bytes, contact proposal + activation verification, evidence-root
+  containment, structural report validity (well-formed identity, non-Head checks, measurements, sample
+  digests), the diagnostic/formal separation and the same-run runtime-closure drift check.
+- **Tests changed, disclosed.** Three tests that encoded the withdrawn rule were rewritten to the new
+  contract rather than deleted: `test_task8_start_records_a_calibration_identity_that_is_not_current`
+  (moves the report and its sample together, then expects admission to reserve resources),
+  `test_nonhead_gate_records_the_identity_but_requires_provenance_and_shape`,
+  `test_freeze_accepts_a_calibration_report_with_another_recorded_identity`; two refusal tests became
+  acceptance tests (`..._accepts_two_distinct_approved_calibration_reports`,
+  `..._accepts_an_identity_it_cannot_prove`) and two admission counterexamples became acceptance tests.
+- **RED/GREEN.** Focused RED `logs/amend-red.run` rc=1: the **seven contract-flip tests** fail against
+  the pre-amendment commit through an overlay built from its committed files. GREEN `logs/amend-green.run`
+  rc=0: **94 passed in 7.82 s** across the two new test files plus `test_act_campaign_admission.py` and
+  `test_act_collection.py`, own scratch and non-empty tempfile proof.
+- **Coverage limitation, recorded rather than hidden.** The full ordinary `so101_demo_py/test` scope
+  could not run in this live-source environment: modules such as
+  `so101_demo.adapters.act.physics_clock_history` import generated rosidl messages
+  (`so101_mujoco_support.msg`, `mujoco_ros2_control_msgs`) and several tests look up the package
+  through `ament_index`, none of which exist without the overlay build. A previous task overlay under
+  `$TASK_ROOT/i` supplied the messages, but the ament-index lookups still fail against the live source
+  tree. The plan reserves the full ordinary xdist gate for Task 6, which rebuilds the whole dependency
+  closure into `PLAN_ROOT`; that remains the boundary where this amendment gets its full-scope
+  regression. Recorded attempts: `logs/amend-regression.run` (8 collection errors, environmental).

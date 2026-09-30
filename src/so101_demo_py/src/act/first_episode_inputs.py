@@ -68,25 +68,25 @@ def _canonical(value) -> bytes:
 # the non-Head safety gate
 # ---------------------------------------------------------------------------
 
-def require_nonhead_gate(report, *, source_commit: str | None = None,
-                         config_sha256: str | None = None) -> dict:
+def require_nonhead_gate(report) -> dict:
     """Require every non-Head safety measurement, without requiring the Head Search ones.
 
     A report that claims PASS for any check must carry that check's measurements, so a PASS cannot
     outrun its evidence. The two Head checks (`fov`, `search`) are not required to be anything:
-    that is the whole substitution this milestone makes.
+    that is the whole substitution this milestone makes. The report's own recorded identity is
+    checked for shape only; per the owner amendment recorded in CP-1928 it is not compared with the
+    tree that is running.
     """
 
     try:
-        return _require_nonhead_gate(report, source_commit=source_commit,
-                                     config_sha256=config_sha256)
+        return _require_nonhead_gate(report)
     except ValueError:
         raise
     except (ContractError, KeyError, TypeError, OSError) as error:
         raise ValueError("NONHEAD_SAFETY_NOT_READY") from error
 
 
-def _require_nonhead_gate(report, *, source_commit, config_sha256) -> dict:
+def _require_nonhead_gate(report) -> dict:
     base = ("schema_version", "status", "source_commit", "config_sha256",
             "source_provenance_sha256", "measurements", "checks")
     if not isinstance(report, dict) or any(key not in report for key in base):
@@ -133,10 +133,6 @@ def _require_nonhead_gate(report, *, source_commit, config_sha256) -> dict:
             raise ValueError("NONHEAD_SAFETY_NOT_READY")
         if hashlib.sha256(sample.read_bytes()).hexdigest() != digest:
             raise ValueError("NONHEAD_SAFETY_NOT_READY")
-    if source_commit is not None and report["source_commit"] != source_commit:
-        raise ValueError("CALIBRATION_SOURCE_CONFIG_MISMATCH")
-    if config_sha256 is not None and report["config_sha256"] != config_sha256:
-        raise ValueError("CALIBRATION_SOURCE_CONFIG_MISMATCH")
     return report
 
 
@@ -286,15 +282,14 @@ def _parse_json(payload: bytes) -> dict:
     return document
 
 
-def _verify_roles(registry: dict, *, source_identity_probe=None) -> dict:
+def _verify_roles(registry: dict) -> dict:
     """Resolve one approved candidate per role, run the semantic cross-checks, return the bytes.
 
     The verified bytes are handed back so a freeze copies exactly what was approved. Reading the
     candidate a second time would let a file that changed after verification be frozen instead.
 
-    Source provenance is established, not assumed: the probe must succeed and must name the
-    registry's commit. A caller with a controlled source tree may inject its own probe; a probe
-    failure is a refusal, never a licence to freeze an unproven identity.
+    Per the owner amendment recorded in CP-1928 the registry's `source_commit` and `config_sha256`
+    are recorded provenance, not a claim about the tree that happens to be running now.
     """
 
     for role in INPUT_ROLES:
@@ -318,18 +313,6 @@ def _verify_roles(registry: dict, *, source_identity_probe=None) -> dict:
     payloads = {role: _read_verified(registry["roles"][role]["selected"]) for role in INPUT_ROLES}
     documents = {role: _parse_json(payloads[role]) for role in _JSON_ROLES}
 
-    # the registry's asserted source identity must be the tree it claims
-    probe = source_identity_probe or _git_commit
-    try:
-        current_commit = probe(Path(registry["source_root"]))
-    except ValueError as error:
-        raise ValueError("INPUT_SOURCE_PROVENANCE_UNAVAILABLE") from error
-    if current_commit != registry["source_commit"]:
-        raise ValueError("INPUT_IDENTITY_MISMATCH")
-    # and the calibration policies must belong to this tree's config identity
-    current_config = profile_config_identity(Path(registry["source_root"]))
-    if registry["config_sha256"] != current_config:
-        raise ValueError("INPUT_IDENTITY_MISMATCH")
 
     # the identity of the anchor and of the resource policy is derived from the verified bytes and
     # compared with what the registry asserts, so a consistent assertion cannot stand in for the
@@ -379,20 +362,13 @@ def _verify_roles(registry: dict, *, source_identity_probe=None) -> dict:
         raise ValueError("INPUT_ACTIVATION_STALE") from error
     if documents["contact_activation"]["evidence_root"] != registry["evidence_root"]:
         raise ValueError("INPUT_ACTIVATION_STALE")
-    calibration_digests = set()
     for role in INPUT_ROLES:
         if registry["roles"][role]["selected"]["approval"] == "nonhead_calibration":
-            require_nonhead_gate(documents[role], source_commit=registry["source_commit"],
-                                 config_sha256=current_config)
-            calibration_digests.add(registry["roles"][role]["selected"]["sha256"])
-    if len(calibration_digests) > 1:
-        # one approved measurement report supplies every calibration role; two different reports
-        # would need two separate current-config proofs and are refused as ambiguous evidence
-        raise ValueError("INPUT_IDENTITY_MISMATCH")
+            require_nonhead_gate(documents[role])
     return payloads
 
 
-def freeze_inputs(candidates_path: Path, output: Path, *, source_identity_probe=None) -> Path:
+def freeze_inputs(candidates_path: Path, output: Path) -> Path:
     """Copy the uniquely verified candidates into a new directory and bind their bytes.
 
     The output directory must not exist: a freeze is a new immutable input set, never a merge into
@@ -403,7 +379,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, source_identity_probe=
     target = Path(output)
     if target.exists():
         raise ValueError("INPUT_OUTPUT_EXISTS")
-    payloads = _verify_roles(registry, source_identity_probe=source_identity_probe)
+    payloads = _verify_roles(registry)
     roles = {}
     try:
         target.mkdir(parents=True)
@@ -897,7 +873,7 @@ def _inspect_contact(evidence_root: Path, referenced: tuple[Path, ...], identity
     return proposal_role, activation_role
 
 
-def _inspect_calibration_role(role: str, referenced: tuple[Path, ...], source_commit: str) -> dict:
+def _inspect_calibration_role(role: str, referenced: tuple[Path, ...]) -> dict:
     identity = {"required_checks": list(ROLE_REQUIRED_CHECKS[role]),
                 "required_values": list(ROLE_REQUIRED_VALUES[role])}
     candidates, unapproved = [], []
@@ -911,7 +887,7 @@ def _inspect_calibration_role(role: str, referenced: tuple[Path, ...], source_co
         if not isinstance(document, dict) or "checks" not in document:
             continue
         try:
-            require_nonhead_gate(document, source_commit=source_commit)
+            require_nonhead_gate(document)
         except ValueError:
             unapproved.append(path)
             continue
@@ -959,7 +935,7 @@ def inspect_inputs(source_root: Path, ledger: Path) -> dict:
         "reference_interpolation": _inspect_reference(root),
     }
     for role in ("path_policy", "placement_qc", "rgb_skew"):
-        roles[role] = _inspect_calibration_role(role, referenced, commit)
+        roles[role] = _inspect_calibration_role(role, referenced)
     document = {"kind": CANDIDATES_KIND, "schema_version": SCHEMA_VERSION, "source_root": str(root),
                 "source_commit": commit, "config_sha256": profile_config_identity(root),
                 "evidence_root": str(evidence_root), "roles": roles}

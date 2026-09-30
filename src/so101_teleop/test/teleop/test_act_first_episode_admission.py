@@ -26,45 +26,13 @@ for _candidate in (_SRC / "so101_demo_py" / "test", Path(__file__).resolve().par
     if str(_candidate) not in sys.path:
         sys.path.insert(0, str(_candidate))
 
-from test_act_campaign_admission import launch  # noqa: E402  (shared launch fixture)
+from test_act_campaign_admission import _service, launch  # noqa: E402  (shared fixtures)
 from test_act_first_episode_scope import (  # noqa: E402  (frozen-input fixtures)
-    SOURCE_COMMIT,
     _canonical,
-    _derived_config_sha,
     _entry,
     _registry,
     _write_registry,
 )
-
-
-def _service(store, *, source_commit=SOURCE_COMMIT, config_sha256=None):
-    """The shared admission service with a controlled calibration identity probe.
-
-    A synthetic source tree has no installed ACT profile, so the test states the identity the gates
-    must compare against instead of pretending one can be discovered.
-    """
-
-    import os
-    import time
-
-    from so101_teleop.unified.admission import UnifiedWorkloadService
-    from so101_teleop.unified.arbiter import GlobalMutationArbiter
-    from so101_teleop.unified.bridge import ActChildRegistry
-    from so101_teleop.unified.gpu_workload import ActGpuWorkloadArbiter
-
-    clock = time.monotonic_ns
-    return UnifiedWorkloadService(
-        arbiter=GlobalMutationArbiter(store, clock_ns=clock),
-        gpu_arbiter=ActGpuWorkloadArbiter(store, clock_ns=clock),
-        child_registry=ActChildRegistry(),
-        service_epoch="epoch-1", runtime_id="runtime-1",
-        stable_host_id="ai-station-1", gpu_selector="INDEX:0",
-        visible_physical_uuids=("GPU-physical-a",), resource_binding_id="binding-1",
-        owner_pid=os.getpid(), owner_started_ticks=1,
-        owner_identity_valid=lambda pid, start: pid == os.getpid() and start == 1,
-        calibration_identity_probe=lambda: (source_commit, config_sha256),
-        clock_ns=clock,
-    )
 
 
 def _diagnostic_spec(tmp_path, *, tag="a", calibration_mutation=None, scope_mutation=None,
@@ -85,8 +53,7 @@ def _diagnostic_spec(tmp_path, *, tag="a", calibration_mutation=None, scope_muta
             registry["roles"][role]["selected"] = _entry(calibration, "nonhead_calibration")
             registry["roles"][role]["candidates"] = [_entry(calibration, "nonhead_calibration")]
     candidates = _write_registry(tmp_path, registry)
-    manifest_path = freeze_inputs(candidates, tmp_path / f"inputs-{tag}",
-                                   source_identity_probe=lambda root: SOURCE_COMMIT)
+    manifest_path = freeze_inputs(candidates, tmp_path / f"inputs-{tag}")
     manifest = read_inputs_manifest(manifest_path)
 
     def frozen(role: str) -> Path:
@@ -137,7 +104,7 @@ def _diagnostic_spec(tmp_path, *, tag="a", calibration_mutation=None, scope_muta
 def test_diagnostic_admits_one_worker_with_the_frozen_inputs(tmp_path):
     store = IntentStore.open(tmp_path / "state")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         context = service.start(_diagnostic_spec(tmp_path))
         assert context.workload_kind == "act_first_episode_diagnostic"
         assert context.worker_count == 1
@@ -165,7 +132,7 @@ def test_diagnostic_refuses_more_workers_or_any_qualification_claim(tmp_path):
     for name, mutate, code in cases:
         store = IntentStore.open(tmp_path / f"state-{name}")
         try:
-            service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+            service = _service(store)
             with pytest.raises(ValueError, match=code):
                 service.start(_diagnostic_spec(tmp_path, tag=name, payload_mutation=mutate))
             assert service.child_registry.launches() == ()
@@ -185,7 +152,7 @@ def test_diagnostic_refuses_a_scope_that_is_not_the_frozen_inputs(tmp_path):
     for name, mutate in (("formal", relabel), ("other-inputs", other_inputs)):
         store = IntentStore.open(tmp_path / f"state-{name}")
         try:
-            service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+            service = _service(store)
             with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
                 service.start(_diagnostic_spec(tmp_path, tag=name, scope_mutation=mutate))
             assert service.child_registry.launches() == ()
@@ -202,7 +169,7 @@ def test_diagnostic_requires_every_nonhead_check_but_no_head_search(tmp_path):
 
     store = IntentStore.open(tmp_path / "state")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="NONHEAD_SAFETY_NOT_READY"):
             service.start(_diagnostic_spec(tmp_path, calibration_mutation=unmeasure))
         assert service.arbiter.is_idle()
@@ -216,7 +183,7 @@ def test_formal_and_task8_schemas_refuse_the_diagnostic_fields(tmp_path):
     spec = _diagnostic_spec(tmp_path)
     store = IntentStore.open(tmp_path / "state")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="CAMPAIGN_START_SCHEMA"):
             service.start(replace(spec, kind="act_collection_start"))
         with pytest.raises(ValueError, match="CAMPAIGN_START_SCHEMA"):
@@ -236,7 +203,7 @@ def test_diagnostic_refuses_a_scope_file_changed_after_the_payload_pin(tmp_path)
     scope.write_bytes(_canonical(document))
     store = IntentStore.open(tmp_path / "state")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="CAMPAIGN_ARTIFACT_HASH_MISMATCH"):
             service.start(spec)
     finally:
@@ -253,7 +220,7 @@ def test_diagnostic_refuses_an_artifact_outside_the_frozen_set(tmp_path):
                    runtime_config_sha256=hashlib.sha256(decoy.read_bytes()).hexdigest())
     store = IntentStore.open(tmp_path / "state")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
             service.start(replace(spec, payload=payload))
         assert service.arbiter.is_idle()
@@ -272,7 +239,7 @@ def test_diagnostic_refuses_a_scope_outside_the_frozen_anchor(tmp_path):
     for name, mutate in (("seed", other_seed), ("scene", other_scene)):
         store = IntentStore.open(tmp_path / f"state-{name}")
         try:
-            service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+            service = _service(store)
             with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
                 service.start(_diagnostic_spec(tmp_path, tag=name, scope_mutation=mutate))
         finally:
@@ -296,7 +263,7 @@ def test_diagnostic_refuses_a_deleted_or_changed_frozen_role_file(tmp_path):
     unpinned.unlink()
     store = IntentStore.open(tmp_path / "state-deleted")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
             service.start(spec)
         assert store._query_one("SELECT * FROM gpu_workload_leases") is None
@@ -306,7 +273,7 @@ def test_diagnostic_refuses_a_deleted_or_changed_frozen_role_file(tmp_path):
     unpinned.write_bytes(original + b"# changed after the freeze\n")
     store = IntentStore.open(tmp_path / "state-changed")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
             service.start(spec)
     finally:
@@ -318,7 +285,7 @@ def test_diagnostic_refuses_a_deleted_or_changed_frozen_role_file(tmp_path):
     pinned.unlink()
     store = IntentStore.open(tmp_path / "state-pinned")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="CAMPAIGN_ARTIFACT_INVALID"):
             service.start(spec)
     finally:
@@ -367,7 +334,7 @@ def test_diagnostic_refuses_a_frozen_resource_policy_without_stops(tmp_path):
         collection_scope_sha256=hashlib.sha256(scope_path.read_bytes()).hexdigest())
     store = IntentStore.open(tmp_path / "state")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
             service.start(payload)
         assert service.child_registry.launches() == ()
@@ -376,22 +343,28 @@ def test_diagnostic_refuses_a_frozen_resource_policy_without_stops(tmp_path):
         store.close()
 
 
-def test_diagnostic_refuses_a_frozen_set_from_another_source_commit(tmp_path):
-    """The manifest's source identity must be the source identity admission is running under."""
+def test_diagnostic_accepts_a_frozen_set_whose_identity_is_not_current(tmp_path):
+    """CP-1928: the frozen manifest's source and config identity are recorded provenance.
 
-    spec = _diagnostic_spec(tmp_path)
-    manifest_path = Path(spec.payload["inputs_manifest_path"])
-    manifest = json.loads(manifest_path.read_text())
-    manifest["source_commit"] = "c" * 40
-    manifest_path.write_bytes(_canonical(manifest))
-    store = IntentStore.open(tmp_path / "state")
-    try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
-        with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
-            service.start(_refresh_payload(spec, manifest_path))
-        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
-    finally:
-        store.close()
+    The set still has to be internally sound: the same manifest with a substituted resource policy
+    is refused by the resource derivation below.
+    """
+
+    for tag, mutation in (("commit", ("source_commit", "c" * 40)),
+                          ("config", ("config_sha256", "e" * 64))):
+        spec = _diagnostic_spec(tmp_path, tag=tag)
+        manifest_path = Path(spec.payload["inputs_manifest_path"])
+        manifest = json.loads(manifest_path.read_text())
+        manifest[mutation[0]] = mutation[1]
+        manifest_path.write_bytes(_canonical(manifest))
+        store = IntentStore.open(tmp_path / f"state-{tag}")
+        try:
+            service = _service(store)
+            context = service.start(_refresh_payload(spec, manifest_path))
+            assert context.workload_kind == "act_first_episode_diagnostic"
+            assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        finally:
+            store.close()
 
 
 def test_diagnostic_refuses_an_anchor_identity_the_bytes_do_not_describe(tmp_path):
@@ -415,39 +388,71 @@ def test_diagnostic_refuses_an_anchor_identity_the_bytes_do_not_describe(tmp_pat
                                    scope_path.read_bytes()).hexdigest())
     store = IntentStore.open(tmp_path / "state")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
             service.start(payload)
     finally:
         store.close()
 
 
-def test_diagnostic_refuses_a_frozen_set_from_another_config(tmp_path):
-    """The frozen ACT profile identity must be the config this admission runs under."""
+def test_diagnostic_accepts_a_frozen_set_whose_identity_is_not_current(tmp_path):
+    """CP-1928: the frozen manifest's source and config identity are recorded provenance.
+
+    The set still has to be internally sound: the same manifest with a substituted resource policy
+    is refused by the resource derivation below.
+    """
+
+    for tag, mutation in (("commit", ("source_commit", "c" * 40)),
+                          ("config", ("config_sha256", "e" * 64))):
+        spec = _diagnostic_spec(tmp_path, tag=tag)
+        manifest_path = Path(spec.payload["inputs_manifest_path"])
+        manifest = json.loads(manifest_path.read_text())
+        manifest[mutation[0]] = mutation[1]
+        manifest_path.write_bytes(_canonical(manifest))
+        store = IntentStore.open(tmp_path / f"state-{tag}")
+        try:
+            service = _service(store)
+            context = service.start(_refresh_payload(spec, manifest_path))
+            assert context.workload_kind == "act_first_episode_diagnostic"
+            assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
+        finally:
+            store.close()
+
+
+def test_diagnostic_refuses_an_anchor_identity_the_bytes_do_not_describe(tmp_path):
+    """Recomputing every hash does not let a manifest assert a scene the anchor bytes deny."""
 
     spec = _diagnostic_spec(tmp_path)
     manifest_path = Path(spec.payload["inputs_manifest_path"])
     manifest = json.loads(manifest_path.read_text())
-    manifest["config_sha256"] = "e" * 64
+    manifest["roles"]["anchor_scene"]["identity"] = dict(
+        manifest["roles"]["anchor_scene"]["identity"], scene_id="left", seed=1)
+    manifest["inputs_sha256"] = hashlib.sha256(_canonical(manifest["roles"])).hexdigest()
     manifest_path.write_bytes(_canonical(manifest))
+
+    scope_path = Path(spec.payload["collection_scope_path"])
+    scope = json.loads(scope_path.read_text())
+    scope.update(scene_id="left", seed=1, inputs_sha256=manifest["inputs_sha256"])
+    scope_path.write_bytes(_canonical(scope))
+
+    payload = _refresh_payload(spec, manifest_path,
+                               collection_scope_sha256=hashlib.sha256(
+                                   scope_path.read_bytes()).hexdigest())
     store = IntentStore.open(tmp_path / "state")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
+        service = _service(store)
         with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
-            service.start(_refresh_payload(spec, manifest_path))
-        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+            service.start(payload)
     finally:
         store.close()
 
 
-def test_diagnostic_refuses_two_distinct_calibration_policies(tmp_path):
-    """One approved report supplies all three calibration roles; two need two proofs."""
+def test_diagnostic_accepts_two_distinct_approved_calibration_reports(tmp_path):
+    """CP-1928 withdrew the one-report rule; each frozen report is validated on its own merits."""
 
     spec = _diagnostic_spec(tmp_path)
     manifest_path = Path(spec.payload["inputs_manifest_path"])
     frozen_skew = Path(spec.payload["calibration_report_path"])
-    assert frozen_skew == Path(spec.payload["inputs_manifest_path"]).parent / \
-        json.loads(manifest_path.read_text())["roles"]["path_policy"]["path"]
     second = frozen_skew.read_bytes().replace(b"}", b', "note": "second report"}', 1)
     assert second != frozen_skew.read_bytes()
     manifest = _rewrite_frozen(manifest_path, "rgb_skew", second)
@@ -460,9 +465,9 @@ def test_diagnostic_refuses_two_distinct_calibration_policies(tmp_path):
         collection_scope_sha256=hashlib.sha256(scope_path.read_bytes()).hexdigest())
     store = IntentStore.open(tmp_path / "state")
     try:
-        service = _service(store, config_sha256=_derived_config_sha(tmp_path / "source"))
-        with pytest.raises(ValueError, match="DIAGNOSTIC_SCOPE_UNBOUND"):
-            service.start(payload)
-        assert store._query_one("SELECT * FROM gpu_workload_leases") is None
+        service = _service(store)
+        context = service.start(payload)
+        assert context.workload_kind == "act_first_episode_diagnostic"
+        assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
     finally:
         store.close()

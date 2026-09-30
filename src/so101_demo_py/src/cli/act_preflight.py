@@ -20,8 +20,8 @@ def main(arguments=None):
                   checks={key:"UNMEASURED" for key in sorted(REQUIRED_CHECKS)})
     if options.measured_report:
         measured = json.loads(options.measured_report.read_text())
-        if measured["source_commit"] != source_commit or measured["config_sha256"] != config_hash:
-            raise ValueError("CALIBRATION_SOURCE_CONFIG_MISMATCH")
+        # per the owner amendment recorded in CP-1928 the measured report's own identity is
+        # recorded, not compared with the installed profile
         if measured.get("status") == "QUALIFIED":
             require_gate(measured, "formal_collection")
         elif measured.get("status") == "TASK8_READY":

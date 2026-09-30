@@ -433,20 +433,19 @@ class UnifiedWorkloadService:
                 require_gate(calibration,
                              "formal_collection" if spec.kind.startswith("act_collection")
                              else "pick_place_validation")
-            current_source, current_config = (
-                self.calibration_identity_probe or installed_calibration_identity)()
+            # the installed ACT profile must still exist and be readable; CP-1928 removed the
+            # comparison of that identity with the report's recorded one
+            (self.calibration_identity_probe or installed_calibration_identity)()
         except (OSError, TypeError, json.JSONDecodeError, ValueError) as error:
             raise ValueError("CALIBRATION_REQUIRED") from error
-        if (calibration["source_commit"] != current_source
-                or calibration["config_sha256"] != current_config):
-            raise ValueError("CALIBRATION_SOURCE_CONFIG_MISMATCH")
+        # Per the owner amendment recorded in CP-1928 the report's own recorded identity is not
+        # compared with the tree that is running; the probe above still refuses a missing profile.
         if diagnostic:
             # the Head Search prerequisite is the only thing this scope removes: every non-Head
-            # check and its measured values must still be present for exactly this identity
+            # check and its measured values must still be present
             from so101_demo.act.first_episode_inputs import require_nonhead_gate
 
-            require_nonhead_gate(calibration, source_commit=current_source,
-                                 config_sha256=current_config)
+            require_nonhead_gate(calibration)
         if spec.kind in ("task8_phase", "task8_full"):
             from so101_demo.act.head_search_binding import validate_head_search_binding
             try:
@@ -470,8 +469,7 @@ class UnifiedWorkloadService:
         ):
             raise ValueError("POLICY_NOT_ACTIVATED")
         if diagnostic:
-            self._require_diagnostic_scope(payload, root, current_source=current_source,
-                                           current_config=current_config)
+            self._require_diagnostic_scope(payload, root)
         if spec.kind.startswith("act_collection") and not payload["qualification_mode"]:
             qualified_path = payload["qualification_receipt_path"]
             if not isinstance(qualified_path, str):
@@ -536,8 +534,7 @@ class UnifiedWorkloadService:
         "proposal": ("contact_proposal", False),
         "activation_receipt": ("contact_activation", False)}
 
-    def _require_diagnostic_scope(self, payload: dict, root: Path, *, current_source: str,
-                                  current_config: str) -> dict:
+    def _require_diagnostic_scope(self, payload: dict, root: Path) -> dict:
         """Bind one diagnostic episode to its frozen inputs and its explicit mode record.
 
         The scope names the mode, the manifest names the frozen bytes, and every runtime artifact
@@ -584,18 +581,9 @@ class UnifiedWorkloadService:
                     or scope["seed"] != derived_anchor["seed"]
                     or manifest["evidence_root"] != payload["evidence_root"]):
                 raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
-            # the frozen set must belong to the source and config identity this admission is
-            # running under, and its resource policy is re-derived from the frozen config bytes
-            # rather than trusted from the manifest's own summary
-            if (manifest["source_commit"] != current_source
-                    or manifest["config_sha256"] != current_config):
-                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
-            # one approved measurement report supplies every calibration role; two different reports
-            # would each need their own current-config proof
-            calibration_digests = {manifest["roles"][role]["sha256"] for role in
-                                   ("path_policy", "placement_qc", "rgb_skew")}
-            if len(calibration_digests) > 1:
-                raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
+            # the resource policy is re-derived from the frozen config bytes rather than trusted
+            # from the manifest's own summary. Per CP-1928 the manifest's recorded source and config
+            # identity is provenance, not a claim about the tree that is running now.
             derived_resource = resource_policy_identity(frozen("runtime_config"),
                                                         frozen("collection_config"))
             if manifest["roles"]["resource_thresholds"]["identity"] != derived_resource:
