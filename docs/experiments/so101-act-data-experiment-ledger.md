@@ -39699,3 +39699,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list F1/F3/F5/F11/F12/F13 stands with F12's scene half joined and its feedback half fully
   specified; targeted gate `logs/task3-final.run` **430 passed**; HEAD `41b9c0fb2`; no push, no evidence deletion,
   no hardware, no second stack.
+
+
+## CP-2119 — F13's dimension and identity corrections landed; its freshness half remains
+
+- **Landed** (`ros_broker.py`): `controller_feedback(kind, when)` now returns **its own kind's slice** of the
+  six-value epoch state — the arm's five, the gripper's one — with the width taken from the kind's registered
+  names, arm first and gripper last, exactly as the observer's own naming defines the split. The
+  `status_sequence` is now **per kind**, mirroring the observer's per-kind publication sequence, so one kind's
+  reads cannot advance another's identity. Both are what the ratified per-controller contract and F13 require.
+- **Evidence.** Targeted run this round: **159 passed** across the observer, audit, search-port, `test_act_task8`
+  and qualification suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile
+  proof. The control asserts the gripper's one-value slice and its own sequence of 1 after two arm reads.
+- **Still open from F13, recorded rather than glossed**: the age check must use the **stored joint/reference
+  receipt** rather than the live physics epoch (so fresh physics cannot make stale caches look current, including
+  across a reset), `sim_time_s` must be an observed source instant rather than the caller's arbitrary `when`, and
+  `_planning_scene_record` must give the scene query its **own** observed time instead of backdating it from an
+  earlier readback. The four controls F13 asks for (fresh-physics/stale-joint, per-kind dimension, reset, delayed
+  scene) belong with those.
+- **Also still open from F12**: the boundary filling `observed.controller_feedback` from
+  `broker.controller_feedback` inside its verifier callbacks (CP-2118's wiring point).
+- **State.** Item 3's list F1/F3/F5/F11/F12/F13 stands with F12's carrier fixed and F13's dimensions done; targeted
+  gate `logs/task3-final.run` **430 passed**; HEAD `a87710376`; no push, no evidence deletion, no hardware, no
+  second stack.

@@ -241,7 +241,13 @@ def test_the_broker_produces_the_ratified_controller_feedback_record():
     driver._references = {"arm": ((0.5, 0.4, 0.3, 0.2, 0.1), (0.0,) * 5, 10.0, 1.0)}
     first = driver.controller_feedback("arm", 1.1)
     assert first["controller"] == "arm" and first["status_sequence"] == 1
+    # F13: the record carries its own kind's slice of the six-value epoch state
     assert first["measured_positions"] == (0.1, 0.2, 0.3, 0.4, 0.5)
+    driver._reference_names["gripper"] = ("gripper",)
+    driver._references["gripper"] = ((0.6,), (0.0,), 10.0, 1.0)
+    gripper = driver.controller_feedback("gripper", 1.1)
+    assert gripper["measured_positions"] == (0.5,) and len(gripper["joint_names"]) == 1
+    assert gripper["status_sequence"] == 1     # per kind, so the arm's reads do not advance it
     assert first["commanded_positions"] == (0.5, 0.4, 0.3, 0.2, 0.1)
     assert first["sim_time_s"] == 1.1
     assert driver.controller_feedback("arm", 1.1)["status_sequence"] == 2

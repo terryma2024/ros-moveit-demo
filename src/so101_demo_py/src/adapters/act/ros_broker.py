@@ -246,10 +246,21 @@ class RosBrokerDriver:
                 raise RuntimeError('FEEDBACK_UNAVAILABLE')
             if not 0<=self.monotonic()-received<=self.max_age:
                 raise RuntimeError('FEEDBACK_STALE')
-            self._feedback_reads=getattr(self,'_feedback_reads',0)+1
-            sequence=self._feedback_reads
+            # F13: the sequence is per kind, mirroring the observer's own per-kind publication sequence, so
+            # one kind's reads cannot advance another's identity
+            reads=getattr(self,'_feedback_reads',None)
+            if reads is None:
+                reads={};self._feedback_reads=reads
+            reads[kind]=reads.get(kind,0)+1
+            sequence=reads[kind]
+            # F13: the epoch joint state is six ordered values (the arm's five, then the gripper's one), so a
+            # record must carry its own kind's slice rather than all six; the registered names are the source
+            # of the split, arm first and gripper last, exactly as the observer's own naming defines them.
+            width=len(names)
+            measured_positions=tuple(positions[:width]) if kind=='arm' else tuple(positions[-width:])
+            measured_velocities=tuple(velocities[:width]) if kind=='arm' else tuple(velocities[-width:])
         return {'controller':kind,'joint_names':names,'commanded_positions':commanded[0],
-                'measured_positions':positions,'measured_velocities':velocities,
+                'measured_positions':measured_positions,'measured_velocities':measured_velocities,
                 'status_sequence':sequence,'sim_time_s':when}
 
     def reference_frames(self,kind,when):
