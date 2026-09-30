@@ -30,6 +30,11 @@ class PickPlaceSearchObservation:
     local_owner_goal_proof: dict | None = None
     physics_step_fence: dict | None = None
     native_controller_ingress_proof: dict | None = None
+    # CP-2017 step three for the controller gates: the ratified `controller_feedback` records (CP-2040)
+    # travel on the observation, and a later pass derives `joint_feedback_ok`/`controller_reference_ok`
+    # from them the way the Planning Scene gate is derived today. Nothing fills or reads it yet, so the
+    # gates keep their documented values until that pass updates the fixtures in step.
+    controller_feedback: tuple | None = None
 
 
 class PickPlaceSearchSegment:

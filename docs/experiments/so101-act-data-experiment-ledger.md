@@ -37999,3 +37999,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `ae3a5c6cd`;
   consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2041 — Task 3: the observation can carry the feedback records (additive half for the last two gates)
+
+- **What landed.** `PickPlaceSearchObservation` gained `controller_feedback: tuple | None = None` at the end
+  of its field list, so the ratified records the broker now produces (CP-2040) have a place to travel on the
+  observation the port consumes. Nothing fills or reads it yet, so the six acceptance tests and the
+  surrounding suites stay green and the two controller gates keep their documented values until the pass that
+  also updates the fixtures.
+- **Why additive again.** Flipping `joint_feedback_ok`/`controller_reference_ok` to a derivation in the same
+  round would fail every fixture that does not supply records — exactly the CP-2016 failure mode — and those
+  fixtures live in two files (CP-2032). The additive half is what made the scene gate's own change a
+  single-pass edit later, so the same order is used here deliberately.
+- **Evidence.** `logs/task3-fbfield.run` rc=0 across the search-port, three task8 phase, supervisor and
+  observer suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **The exact remaining edits for the two gates** (mirroring CP-2029/CP-2034/CP-2036): (1) the readback fills
+  `controller_feedback` with the broker's records for both kinds, stamped with the readback's simulation
+  instant; (2) `_search_evidence` and `_gate_facts` derive the two gates from those records on the same
+  instant, defaulting to refusal when they are absent or off-instant; (3) the two fixture builders supply
+  them, and the three-way control (present, absent, stale) asserts the document's values.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `0d459644b`;
+  consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
