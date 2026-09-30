@@ -7,53 +7,86 @@ from pathlib import Path
 
 import pytest
 from so101_demo.cli.head_search_calibration import main
-from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 
-def _bundle(root: Path) -> str:
+def _bundle(root: Path) -> Path:
+    """Write a promoted bundle and return the file, whose bytes are what verification hashes."""
+
     root.mkdir(parents=True, exist_ok=True)
     document = {"schema_version": 1, "measurements": {"max_age_s": {"value": 0.05}}}
-    (root / "head-search-bundle.json").write_text(json.dumps(document), encoding="utf-8")
-    return canonical_sha256(document)
+    payload = (json.dumps(document, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    target = root / "head-search-bundle.json"
+    target.write_bytes(payload)
+    return target
 
 
-def test_verify_promoted_config_needs_the_approved_digest(tmp_path: Path) -> None:
-    _bundle(tmp_path)
-    assert main(["verify-promoted-config", "--run-root", str(tmp_path)]) == 2
-
-
-def test_verify_promoted_config_refuses_a_drifted_bundle(tmp_path: Path) -> None:
-    _bundle(tmp_path)
+def test_verify_promoted_config_needs_the_approved_digest_and_a_bundle(tmp_path: Path) -> None:
+    promoted = _bundle(tmp_path / "promoted")
     assert (
         main(
             [
                 "verify-promoted-config",
                 "--run-root",
-                str(tmp_path),
+                str(tmp_path / "run"),
+                "--promoted-config",
+                str(promoted),
+            ]
+        )
+        == 2
+    )
+    assert (
+        main(
+            [
+                "verify-promoted-config",
+                "--run-root",
+                str(tmp_path / "run2"),
                 "--approved-bundle-sha256",
-                "0" * 64,
+                "a" * 64,
             ]
         )
         == 2
     )
 
 
-def test_verify_promoted_config_writes_an_approval_receipt(tmp_path: Path) -> None:
-    approved = _bundle(tmp_path)
+def test_verify_promoted_config_refuses_a_drifted_bundle(tmp_path: Path) -> None:
+    promoted = _bundle(tmp_path / "promoted")
     assert (
         main(
             [
                 "verify-promoted-config",
                 "--run-root",
-                str(tmp_path),
+                str(tmp_path / "run"),
+                "--promoted-config",
+                str(promoted),
                 "--approved-bundle-sha256",
-                approved,
+                "0" * 64,
+            ]
+        )
+        == 2
+    )
+    assert not (tmp_path / "run").exists(), "a refused approval must not create its root"
+
+
+def test_verify_promoted_config_writes_an_approval_receipt(tmp_path: Path) -> None:
+    promoted = _bundle(tmp_path / "promoted")
+    run_root = tmp_path / "run"
+    assert (
+        main(
+            [
+                "verify-promoted-config",
+                "--run-root",
+                str(run_root),
+                "--promoted-config",
+                str(promoted),
+                "--approved-bundle-sha256",
+                _digest(promoted),
             ]
         )
         == 0
     )
-    receipt = json.loads((tmp_path / "approval-receipt.json").read_text(encoding="utf-8"))
-    assert receipt["approved_bundle_sha256"] == approved
+    receipt = json.loads((run_root / "approval-receipt.json").read_text(encoding="utf-8"))
+    assert receipt["approved_bundle_sha256"] == _digest(promoted)
+    assert receipt["hashed"] == "bytes"
     assert receipt["verified"] is True
 
 
@@ -103,16 +136,19 @@ def test_run_refuses_to_resume_or_start_without_the_frozen_runtime(tmp_path: Pat
 
 
 def test_the_approval_receipt_is_immutable(tmp_path: Path) -> None:
-    approved = _bundle(tmp_path)
+    promoted = _bundle(tmp_path / "promoted")
+    run_root = tmp_path / "run"
     arguments = [
         "verify-promoted-config",
         "--run-root",
-        str(tmp_path),
+        str(run_root),
+        "--promoted-config",
+        str(promoted),
         "--approved-bundle-sha256",
-        approved,
+        _digest(promoted),
     ]
     assert main(arguments) == 0
-    receipt = tmp_path / "approval-receipt.json"
+    receipt = run_root / "approval-receipt.json"
     first = receipt.read_text(encoding="utf-8")
     assert main(arguments) == 2, "an approval must not be rewritten"
     assert receipt.read_text(encoding="utf-8") == first
@@ -173,3 +209,36 @@ def test_qualification_evidence_must_be_hexadecimal(tmp_path: Path) -> None:
                 str(bad_evidence / ".."),
             ]
         )
+
+
+def _digest(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def test_a_formatting_only_change_is_caught_because_bytes_are_hashed(tmp_path: Path) -> None:
+    """Canonical JSON would hide this; hashing the bytes does not."""
+
+    promoted = _bundle(tmp_path / "promoted")
+    approved = _digest(promoted)
+    reformatted = tmp_path / "promoted" / "reformatted.json"
+    reformatted.write_text(
+        json.dumps(json.loads(promoted.read_text(encoding="utf-8")), sort_keys=False, indent=4),
+        encoding="utf-8",
+    )
+    assert _digest(reformatted) != approved
+    assert (
+        main(
+            [
+                "verify-promoted-config",
+                "--run-root",
+                str(tmp_path / "run-reformat"),
+                "--promoted-config",
+                str(reformatted),
+                "--approved-bundle-sha256",
+                approved,
+            ]
+        )
+        == 2
+    )

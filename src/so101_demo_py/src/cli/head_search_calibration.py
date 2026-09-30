@@ -5,6 +5,7 @@ Every subcommand refuses a run root that already exists, so there is no way to r
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -16,46 +17,56 @@ from so101_demo.act.head_search_qualification import (
 )
 
 
-def _verify_promoted_config(run_root: Path, approved: str | None) -> int:
-    """Compare the promoted bundle byte-for-byte against the digest the user approved."""
+def _verify_promoted_config(
+    run_root: Path, approved: str | None, promoted_config: Path | None
+) -> int:
+    """Hash the promoted bundle's bytes and record the approval once, immutably.
+
+    The bundle is hashed as bytes, so a formatting-only difference is caught rather than normalised away,
+    and the receipt is created exclusively: a second verification cannot overwrite what was approved. The
+    receipt belongs to a run root that does not exist yet, so verification obeys the same no-resume rule as
+    every other runner.
+    """
+
+    from so101_demo.act.head_search_qualification import _require_new_root, write_exclusive
 
     if not approved:
         print("HEAD_SEARCH_APPROVAL_REQUIRED: pass --approved-bundle-sha256", file=sys.stderr)
         return 2
-    receipt = run_root / "approval-receipt.json"
-    if receipt.exists():
-        print(
-            f"APPROVAL_RECEIPT_EXISTS: {receipt} was already written and an approval is immutable",
-            file=sys.stderr,
-        )
+    if promoted_config is None:
+        print("HEAD_SEARCH_BUNDLE_REQUIRED: pass --promoted-config", file=sys.stderr)
         return 2
-    promoted = run_root / "head-search-bundle.json"
+    promoted = Path(promoted_config)
     if not promoted.is_file():
         print(f"HEAD_SEARCH_BUNDLE_MISSING: {promoted} is absent", file=sys.stderr)
         return 2
-    document = json.loads(promoted.read_text(encoding="utf-8"))
-    from so101_demo.perception_benchmark.contracts import canonical_sha256
-
-    measured = canonical_sha256(document)
+    measured = hashlib.sha256(promoted.read_bytes()).hexdigest()
     if measured != approved:
         print(
             f"HEAD_SEARCH_APPROVAL_MISMATCH: promoted {measured} differs from approved {approved}",
             file=sys.stderr,
         )
         return 2
-    receipt.write_text(
-        json.dumps(
+    try:
+        root = _require_new_root(run_root)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    try:
+        write_exclusive(
+            root,
+            "approval-receipt.json",
             {
                 "approved_bundle_sha256": approved,
                 "promoted_bundle_sha256": measured,
+                "promoted_config": str(promoted),
+                "hashed": "bytes",
                 "verified": True,
             },
-            indent=2,
-            sort_keys=True,
         )
-        + "\n",
-        encoding="utf-8",
-    )
+    except FileExistsError:
+        print("APPROVAL_RECEIPT_EXISTS: an approval is immutable", file=sys.stderr)
+        return 2
     print(f"HEAD_SEARCH_APPROVED {measured}")
     return 0
 
@@ -64,7 +75,9 @@ def main(argv: list[str] | None = None) -> int:
     parsed = qualification_parser().parse_args(argv)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":
-        return _verify_promoted_config(run_root, parsed.approved_bundle_sha256)
+        return _verify_promoted_config(
+            run_root, parsed.approved_bundle_sha256, parsed.promoted_config
+        )
     if parsed.command == "qualify":
         evidence_root = (
             Path(parsed.evidence_root) if parsed.evidence_root else run_root / "evidence"

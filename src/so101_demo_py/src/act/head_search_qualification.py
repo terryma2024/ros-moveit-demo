@@ -65,6 +65,7 @@ def qualification_parser() -> argparse.ArgumentParser:
         command.add_argument("--run-root", type=Path, required=True)
         if name == "verify-promoted-config":
             command.add_argument("--approved-bundle-sha256")
+            command.add_argument("--promoted-config", type=Path)
         if name == "qualify":
             command.add_argument("--promoted-config", type=Path)
             command.add_argument("--evidence-root", type=Path)
@@ -74,9 +75,16 @@ def qualification_parser() -> argparse.ArgumentParser:
 
 
 def _require_new_root(run_root: Path) -> Path:
+    """Claim a brand-new run root exclusively, so two starts cannot both believe they won it."""
+
     root = Path(run_root)
-    if root.exists():
-        raise ValueError(f"RUN_ROOT_ALREADY_EXISTS: {root} exists and no runner may resume it")
+    root.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        root.mkdir()
+    except FileExistsError as error:
+        raise ValueError(
+            f"RUN_ROOT_ALREADY_EXISTS: {root} exists and no runner may resume it"
+        ) from error
     return root
 
 
@@ -248,3 +256,14 @@ def run_head_search(inputs: Mapping[str, object], run_root: Path) -> dict:
     _write(root, "calibration-state.json", {"state": SUCCEEDED, "completed": list(completed)})
     _write(root, "run-receipt.json", receipt)
     return receipt
+
+
+def write_exclusive(root: Path, name: str, document: Mapping[str, object]) -> Path:
+    """Create a record only if it does not exist yet, so two writers can never both succeed."""
+
+    target = root / name
+    payload = json.dumps(dict(document), indent=2, sort_keys=True) + "\n"
+    descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        handle.write(payload)
+    return target
