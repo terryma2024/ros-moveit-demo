@@ -34698,3 +34698,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Still to prove at Task 11:** the sampler and the two-domain checkpoint rule are unit-tested and wired
   into Ultralytics' trainer, but only a real one-epoch CUDA smoke can show the framework honours them;
   Task 11 remains the integration gate, exactly as the reviewers said.
+
+## HS-010 — Task 3 rework verified against the real framework (commits e4b43e18f, 668de07dd)
+
+- **Ultralytics accepts the emitted runtime config.** Running the prepared run's `training-config.yaml`
+  through the installed Ultralytics 8.4.115 `get_cfg` (perception venv,
+  `scratch/head-test-20260930T064229Z-cfgcheck2`) returns `device cuda, epochs 1, batch 32`. The check
+  also caught a key the unit tests could not: `shuffle` is **not** a valid YOLO argument, so it is gone
+  (commit `e4b43e18f`) - the balanced sampler enforces the composition, not the trainer. A test now
+  asserts the emitted config is accepted by `get_cfg` wherever Ultralytics is importable.
+- **A real staging-path bug, found by loading the union with the framework's own dataset class.**
+  `train.txt`/`val.txt` recorded the *staging* directory, so every member would have vanished the moment
+  the batch was renamed into place. The lists now record the absolute published paths (commit
+  `668de07dd`) and the test asserts each recorded path is absolute, inside the published root and on
+  disk.
+- **The balanced sampler works on the real dataset object.** With the fix in place,
+  `ultralytics.data.dataset.YOLODataset` loads **64 of 64** union images
+  (`scratch/head-test-20260930T064338Z-cfgcheck7`) and `balanced_epoch_order` over that dataset's own
+  `im_files` yields `[(16, 16), (16, 16)]` - two batches, each exactly half head and half task. This is
+  the evidence the reviewers asked for on their batch-composition finding, short of the one-epoch CUDA
+  run that Task 11 will perform.
+- **Probe script (retained):** `/tmp/so101-debug-head-search-antzb-LuFlHq6a/candidate_probe.py`; it
+  prepares a smoke candidate C from sealed manifests written on the fly, loads the union with
+  Ultralytics and prints the composition. Its earlier iterations are what exposed both bugs above.
+- **Gate after these fixes:** 103 passed (1 skipped where Ultralytics is absent) plus 86 passed on the
+  Task 2 render gate; `ruff check` clean on the changed sources.
