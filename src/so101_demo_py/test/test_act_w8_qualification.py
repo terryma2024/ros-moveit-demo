@@ -217,3 +217,8 @@ def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verif
     path.write_text(json.dumps(document))
     payload = {"preparation_receipt_path": str(receipt), "manifest_path": str(bundle.manifest)}
     assert verify_w8_qualification(path, payload) is True
+    # one variable: a journal edited after sealing is no longer the one the document cites
+    sealed = cases / f"{fulls[0]}.json"
+    sealed.write_bytes(sealed.read_bytes().replace(b'"PASSED"', b'"FAILED"'))
+    with pytest.raises(ValueError, match="W8_QUALIFICATION_EVIDENCE_MISMATCH"):
+        verify_w8_qualification(path, payload)

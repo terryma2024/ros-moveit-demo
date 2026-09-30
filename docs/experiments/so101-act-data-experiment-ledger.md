@@ -39449,3 +39449,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   uses the commit and export-refusal apparatus (`act/result_store.py`).
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 nearly complete. HEAD
   `25ac06c52`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2109 — The verifier now has its negative variant, and Task 4's QC half is complete
+
+- **What landed**: the positive test gained its one-variable step — a journal edited **after** sealing (its
+  `"PASSED"` becomes `"FAILED"`) — and the same document and payload are then refused with
+  `W8_QUALIFICATION_EVIDENCE_MISMATCH`. The verifier therefore has a positive path over a real bundle and fourteen
+  journals, and a negative path where exactly one thing changed.
+- **Evidence.** `logs/task4-positive.run` rc=0 with the suite now at **45 passed** together with the campaign
+  admission suite under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **Task 4's state**: the independent QC half is **done** — `verify_w8_qualification` exists, re-derives the
+  campaign result and every journal digest, delegates the fourteen case rows to the qualification producer's own
+  validator with the bundle's identities, and is now covered in both directions. What remains of the item is its
+  second half: confirming that the **live production composition** uses the commit and export-refusal apparatus
+  (`act/result_store.py`, whose own suite `test_act_result_commit.py` already passes).
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `eb836ea01`;
+  no push, no evidence deletion, no hardware, no second stack.
