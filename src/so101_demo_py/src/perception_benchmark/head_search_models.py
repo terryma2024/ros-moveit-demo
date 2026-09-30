@@ -115,6 +115,42 @@ def paired_scene_bootstrap(
     )
 
 
+def paired_scene_delta_bootstrap(
+    frames: Sequence[Mapping[str, object]],
+    *,
+    left_key: str,
+    right_key: str,
+    repetitions: int = DEFAULT_REPETITIONS,
+    seed: int = 20260930,
+) -> SceneBootstrapResult:
+    """The paired scene-level interval of `left - right`, which is what a comparison actually asks.
+
+    The two candidates are measured on the *same* frames, so every resample draws whole scenes once and
+    differences the two candidates inside them. Pairing removes the scene-to-scene variation that would
+    otherwise dominate the interval and hide a real difference.
+    """
+
+    items = tuple(frames)
+    if not items:
+        raise EvaluationError("EVALUATION_FRAMES_REQUIRED: the bootstrap needs frames")
+
+    def delta(drawn: Sequence[Mapping[str, object]]) -> float:
+        left = right = 0.0
+        for frame in drawn:
+            try:
+                left += float(frame[left_key])
+                right += float(frame[right_key])
+            except (KeyError, TypeError, ValueError) as error:
+                raise EvaluationError(
+                    f"EVALUATION_VALUE_REQUIRED: every frame needs finite {left_key} and {right_key}"
+                ) from error
+        if not drawn:
+            raise EvaluationError("EVALUATION_FRAMES_REQUIRED: a resample drew no frames")
+        return (left - right) / len(drawn)
+
+    return paired_scene_bootstrap(items, delta, repetitions=repetitions, seed=seed)
+
+
 @dataclass(frozen=True, slots=True)
 class FrozenCandidate:
     """One candidate identity exactly as it was sealed before test access."""
@@ -225,18 +261,20 @@ def _check_safety(candidate: CandidateEvaluation, retained: CandidateEvaluation)
             )
 
 
-def _head_cells(
-    candidate: CandidateEvaluation, family: str, key: str
-) -> float:
+def _head_cells(candidate: CandidateEvaluation, family: str, key: str) -> float:
     metrics = (
-        candidate.static_image_metrics if family == "static_image" else candidate.held_out_episode_metrics
+        candidate.static_image_metrics
+        if family == "static_image"
+        else candidate.held_out_episode_metrics
     )
     return _cell(metrics, "head", key)
 
 
 def _task_cells(candidate: CandidateEvaluation, family: str, key: str) -> float:
     metrics = (
-        candidate.static_image_metrics if family == "static_image" else candidate.held_out_episode_metrics
+        candidate.static_image_metrics
+        if family == "static_image"
+        else candidate.held_out_episode_metrics
     )
     return _cell(metrics, "task", key)
 

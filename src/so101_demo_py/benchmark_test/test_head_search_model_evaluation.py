@@ -186,7 +186,10 @@ def _write_candidate(root: Path, candidate_id: str, weight_sha: str = "a" * 64) 
             {
                 "candidate_id": candidate_id,
                 "weight_sha256": weight_sha,
-                "operating_points": {"head": {"min_confidence": 0.4}, "task": {"min_confidence": 0.4}},
+                "operating_points": {
+                    "head": {"min_confidence": 0.4},
+                    "task": {"min_confidence": 0.4},
+                },
                 "tracker": {"iou": 0.3},
                 "postprocess": {"min_area_px2": 64},
                 "runtime": {"device": "cuda"},
@@ -208,13 +211,20 @@ def test_compare_cli_refuses_an_incomplete_candidate_set(tmp_path: Path) -> None
     for path in candidates:
         arguments += ["--candidate", path]
     arguments += [
-        "--head-dataset", str(tmp_path / "head.json"),
-        "--task-dataset", str(tmp_path / "task.json"),
-        "--episode-partitions", str(tmp_path / "partitions.json"),
-        "--weights-dir", str(tmp_path),
-        "--head-dataset-root", str(tmp_path),
-        "--task-dataset-root", str(tmp_path),
-        "--output", str(tmp_path / "out"),
+        "--head-dataset",
+        str(tmp_path / "head.json"),
+        "--task-dataset",
+        str(tmp_path / "task.json"),
+        "--episode-partitions",
+        str(tmp_path / "partitions.json"),
+        "--weights-dir",
+        str(tmp_path),
+        "--head-dataset-root",
+        str(tmp_path),
+        "--task-dataset-root",
+        str(tmp_path),
+        "--output",
+        str(tmp_path / "out"),
     ]
     assert main(arguments) == 2
 
@@ -238,16 +248,63 @@ def test_compare_cli_refuses_a_drifted_weight_file(tmp_path: Path) -> None:
     )
     arguments = [
         "compare",
-        "--candidate", str(tmp_path / "frozen-a.json"),
-        "--candidate", str(tmp_path / "frozen-b.json"),
-        "--candidate", str(tmp_path / "frozen-c.json"),
-        "--head-dataset", str(tmp_path / "head.json"),
-        "--task-dataset", str(tmp_path / "task.json"),
-        "--episode-partitions", str(tmp_path / "partitions.json"),
-        "--weights-dir", str(tmp_path),
-        "--head-dataset-root", str(tmp_path),
-        "--task-dataset-root", str(tmp_path),
-        "--output", str(tmp_path / "out"),
+        "--candidate",
+        str(tmp_path / "frozen-a.json"),
+        "--candidate",
+        str(tmp_path / "frozen-b.json"),
+        "--candidate",
+        str(tmp_path / "frozen-c.json"),
+        "--head-dataset",
+        str(tmp_path / "head.json"),
+        "--task-dataset",
+        str(tmp_path / "task.json"),
+        "--episode-partitions",
+        str(tmp_path / "partitions.json"),
+        "--weights-dir",
+        str(tmp_path),
+        "--head-dataset-root",
+        str(tmp_path),
+        "--task-dataset-root",
+        str(tmp_path),
+        "--output",
+        str(tmp_path / "out"),
     ]
     # the weight files do not hash to the sealed digests, so the gate refuses before measuring
     assert main(arguments) == 2
+
+
+def test_paired_delta_bootstrap_differences_the_two_candidates_inside_each_scene() -> None:
+    from so101_demo.perception_benchmark.head_search_models import paired_scene_delta_bootstrap
+
+    frames = [
+        {"scene_group_id": "scene-a", "left": 0.60, "right": 0.40},
+        {"scene_group_id": "scene-a", "left": 0.62, "right": 0.42},
+        {"scene_group_id": "scene-b", "left": 0.50, "right": 0.30},
+        {"scene_group_id": "scene-b", "left": 0.48, "right": 0.28},
+    ]
+    result = paired_scene_delta_bootstrap(
+        frames, left_key="left", right_key="right", repetitions=2_000
+    )
+
+    assert result.independent_unit == "scene_group_id" and result.unit_count == 2
+    assert result.interval[0] > 0.0, "a systematic difference must survive scene resampling"
+    assert result.mean == pytest.approx(0.20, abs=0.01)
+
+
+def test_paired_delta_bootstrap_keeps_a_scene_level_effect_visible() -> None:
+    """Scene-level pairing must not be defeated by within-scene variation."""
+
+    from so101_demo.perception_benchmark.head_search_models import paired_scene_delta_bootstrap
+
+    frames = []
+    for scene, base in (("scene-a", 0.0), ("scene-b", 0.4), ("scene-c", 0.8)):
+        for offset in (0.0, 0.05, -0.05):
+            frames.append(
+                {"scene_group_id": scene, "left": base + offset + 0.10, "right": base + offset}
+            )
+    result = paired_scene_delta_bootstrap(
+        frames, left_key="left", right_key="right", repetitions=2_000
+    )
+
+    assert result.mean == pytest.approx(0.10, abs=1e-9)
+    assert result.interval[0] >= 0.09
