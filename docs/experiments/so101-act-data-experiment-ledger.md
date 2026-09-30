@@ -40059,3 +40059,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: F12 closed; F3's round trips, release correlation and lease closed, its last item
   located and designed; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430
   passed**; HEAD `4afaa1020`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2135 — F3's initial-epoch rule is correct; one test's expectation needs re-deriving first
+
+- **What I added** (part 1 of CP-2134's design): `_event_identity_ok` now requires the **first** event's release
+  epoch to be 0 or 1, so an episode cannot open with an epoch unrelated to its own run. The rule is inert for
+  later events, whose tie to release events belongs to the seal-time check of part 2.
+- **The one test it moves**: `test_readback_requires_exact_types_and_correlated_clocks` opened its event stream
+  with `release_epoch: 2`, which the new rule refuses — so its first append no longer succeeds. After adjusting
+  that literal to 1 the test then reports `DID NOT RAISE` on a **later** expectation: the refusal that used to
+  fire there was being produced by the sequence the old opening made possible, so the test's expectations have to
+  be re-derived rather than patched one literal at a time. That is the whole reason this round ends reverted.
+- **Reverted, tree verified green** (audit and recorder suites pass).
+- **The next pass's shape for this item**: re-derive that test's expectations from the rule (first event 0 or 1;
+  backwards refused; the lease clause inert for a lease-less episode; the tie checked at seal), then land the
+  module rule and the fixture together — the same "both sides in one pass" discipline that closed the lease item
+  in CP-2132.
+- **State.** Item 3's list: F12 closed; F3's round trips, release correlation and lease closed, its last item with
+  part 1 written and reverted pending that fixture; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `e5ee6166e`; no push, no evidence deletion, no hardware, no second
+  stack.
