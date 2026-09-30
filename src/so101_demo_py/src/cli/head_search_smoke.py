@@ -51,6 +51,13 @@ def main(arguments: list[str] | None = None) -> int:
         step_source = None
         if parsed.contract is not None:
             contract = json.loads(parsed.contract.read_text(encoding="utf-8"))
+            accepted = contract.get("accepted_seal_sha256")
+            sealed = seal.get("seal_sha256")
+            if not sealed or accepted != sealed:
+                raise HeadSearchDomainError(
+                    "HEAD_SEARCH_STEP_UNSEALED: the contract is not associated with this geometry seal, "
+                    "so its step cannot be applied"
+                )
             step_source = contract.get("coarse_step_candidate_rad") or contract.get(
                 "coarse_step_rad"
             )

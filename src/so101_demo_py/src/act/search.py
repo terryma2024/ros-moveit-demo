@@ -4,7 +4,7 @@ import math
 
 from .bearing import bearing, optical_ray_base
 from .contracts import fields, finite, identifier, integer, validate_search_result, vector
-from .head_search_domain import bounded_search_stops
+from .head_search_domain import TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL, bounded_search_stops
 
 
 class HeadSearchController:
@@ -243,12 +243,16 @@ class HeadSearchController:
             target = self.next_target()
             if target is None:
                 # a bound was reached first, so this is not a clean negative
-                return self._result(self.plan.not_found_status(reached_bound=True), feedback, stamp)
+                return self._result(
+                    self.plan.not_found_status(reached_bound=not self.plan.coverage_complete),
+                    feedback,
+                    stamp,
+                )
             self.target = target
             self.motion_source_s = stamp
             return self._command()
         if self.coarse_angle >= 2 * math.pi - 1e-9:
-            return self._result("TARGET_NOT_FOUND", feedback, stamp)
+            return self._result(TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL, feedback, stamp)
         step = min(self.config["coarse_step_rad"], 2 * math.pi - self.coarse_angle)
         self.coarse_angle += step
         self.target = self.config["search_start_rad"] + self.coarse_angle
