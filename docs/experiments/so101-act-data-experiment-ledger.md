@@ -36156,3 +36156,21 @@ rather than asserted, and it is the same property Task 9's suite covers at unit 
 
 **Task 11 remaining:** the benchmark `colcon` gate with argv and test-result readback (which needs an installed
 package build), the README pinning of the A weights revision and SHA, and the frozen provenance record.
+
+## HS-054 — Benchmark colcon gate: package built, gate needs the overlay ignored (round 354)
+
+Progress and one concrete obstacle:
+
+- **`so101_demo_py` now builds into the task overlay** (`colcon build --packages-select so101_demo_py`,
+  build base in the low-rate root, install base `$HEAD_OVERLAY/install`): `Finished <<< so101_demo_py [3.05s]`.
+  So the installed copy is current, which the benchmark gate needs.
+- **The gate run was interrupted** and its log shows why colcon was unhappy: the task overlay lives under the
+  evidence root, so colcon sees those install trees as workspace packages and asks for them to be ignored -
+  it lists `so101_mujoco_support`, `so101_demo_py` and the rest of the `third_party` packages. The next run
+  adds `--packages-ignore` for exactly those names (colcon prints the list), which is the documented fix rather
+  than a workaround, and then runs
+  `colcon test --packages-select so101_demo_py --pytest-args benchmark_test` followed by
+  `colcon test-result --test-result-base` for the argv and result readback Task 11 requires.
+
+No test result was produced, so nothing is claimed about the benchmark suite from this attempt; the build is
+verified and the next step is pinned.
