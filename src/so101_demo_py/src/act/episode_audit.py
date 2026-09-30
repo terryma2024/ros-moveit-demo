@@ -1103,6 +1103,16 @@ def _formal_coverage_ok(audit: Path) -> bool:
     # F5: a formal seal must carry the prescribed lifecycle, not one phase's event, so every entry of
     # FORMAL_PHASES needs its own phase_complete beside the release and the accepted reference
     phases = {row["payload"].get("phase") for row in events if row["kind"] == "phase_complete"}
+    # F5: a set cannot see order or repetition, so the completions must also run through the registered phases in
+    # their registered order with strictly increasing physics steps, one completion per phase
+    completions = [(row["payload"].get("phase"), row["payload"].get("physics_step"))
+                   for row in events if row["kind"] == "phase_complete"]
+    if (any(type(step) is not int for _, step in completions)
+            or [phase for phase, _ in completions] != list(FORMAL_PHASES)
+            # non-decreasing, because two phases may legitimately complete on the same step of one readback
+            or any(later < earlier for (_, earlier), (_, later) in
+                   zip(completions, completions[1:]))):
+        return False
     # F5: "full registered physics" is every registered kind being present, which is checkable without a phase
     # field the rows do not carry
     kinds = {row["kind"] for row in physics}
