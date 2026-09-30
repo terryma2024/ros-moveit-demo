@@ -129,7 +129,7 @@ class RosBrokerDriver:
         self._pending_writes=[]
         self._baseline_futures={};self._stop_confirmed_at=None
         self._baseline_allow_existing=False
-        self._positions=None;self._epoch=None;self._references={};self._scalar=None
+        self._positions=None;self._epoch=None;self._references={};self._scalar=None;self._joint_stamp=None
         # per-kind raw history the ratified reference shape needs: the joint names the message
         # carried (in their published order) and the observer's own publication sequence
         self._reference_names={};self._reference_sequences={}
@@ -183,6 +183,10 @@ class RosBrokerDriver:
         except (KeyError,ValueError):return
         with self._lock:
             self._velocity=ordered;self._positions=positions;self._received=self.monotonic()
+            # T3-F13: the callback's own stamp is the measured source time of these values, so it is kept beside
+            # the arrival time instead of being discarded; a receiver clock alone cannot say when the arm moved
+            stamp=message.header.stamp
+            self._joint_stamp=(stamp.sec+stamp.nanosec*1e-9 if stamp is not None else None)
             self._neck_velocity=neck_velocity
 
     def _scalar_joints(self,message):
@@ -203,7 +207,7 @@ class RosBrokerDriver:
                 self._reference_epoch_identity=identity
                 # T3-F13: the joint and reference caches belong to the epoch that filled them, so leaving them
                 # untouched let a new epoch join values the previous one produced while still inside max-age
-                self._positions=None;self._velocity=None;self._received=None
+                self._positions=None;self._velocity=None;self._received=None;self._joint_stamp=None
                 self._references={};self._reference_names={};self._reference_sequences={}
             self._epoch=(message,self.monotonic())
 

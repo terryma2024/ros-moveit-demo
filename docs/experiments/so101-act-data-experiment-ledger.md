@@ -43071,3 +43071,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and a tempfile proof.
 - **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 in progress** (first
   cut landed); F5/F12 open; the goal is paused. HEAD `070fa6a3f`; twenty-five gates green.
+
+
+## CP-2277 — F13's second cut: the joint callback's own stamp is retained
+
+- **What landed** (`adapters/act/ros_broker.py`): `_joints` records `self._joint_stamp` from the message's
+  `header.stamp` (seconds, or `None` when the message carries none) beside the arrival time it already kept, and both
+  the epoch transition and the constructor initialise it to `None`. The verdict's sentence is that "the joint
+  callback's own stamp is discarded", so the measured source time now survives for the feedback timing checks — kept
+  internally, because the ratified eight-key feedback record is frozen by the owner's decision and may not grow.
+- **First try, green**: **200 passed** across the controller-reference, audit, task8 and generic-artifact suites.
+- **F13's remainder**: audit admission must enforce the registered per-kind names and dimensions and require **both**
+  kinds; and the scene record must be produced from a defensible **current** query/readback fence rather than
+  `_planning_scene_record()` returning `None` — with the controls the verdict lists (caches filled before a reset and
+  still inside max-age, fresh physics with a stale source, wrong-kind dimensions, a missing gripper, a delayed scene).
+- **Evidence.** `logs/task3-f13-stamp.run` rc=0: **346 passed in 2.33s** under `pytest-xdist` with 8 workers, its own NVMe scratch
+  and a tempfile proof.
+- **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 two of four cuts**;
+  F5/F12 open; the goal is paused. HEAD `147380a79`; twenty-six gates green.
