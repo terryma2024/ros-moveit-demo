@@ -303,13 +303,16 @@ def test_a_binding_must_name_an_accepted_reference_for_that_instant(tmp_path):
     writer, frames = _staging(tmp_path)
     with pytest.raises(ValueError, match="AUDIT_BINDING_REFERENCE_INVALID"):
         writer.bind_row(0, 1.0, frames["head"], frames["wrist"], 2)      # no such sequence
+    writer.append_source("references", {"reference_time_s": 1.3, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1] * 6, "accepted": True})
     with pytest.raises(ValueError, match="AUDIT_BINDING_REFERENCE_INVALID"):
-        writer.bind_row(0, 0.9, frames["head"], frames["wrist"], 1)      # reference is at 1.0, not 1.1
+        writer.bind_row(0, 1.0, frames["head"], frames["wrist"], 2)      # that reference is for 1.3
     other, other_frames = _staging(tmp_path / "second")
-    other.append_source("references", {"reference_time_s": 1.2, "source": "CONTROLLER_REFERENCE",
+    other.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
                                        "positions": [0.1] * 6, "accepted": False})
     with pytest.raises(ValueError, match="AUDIT_BINDING_REFERENCE_INVALID"):
-        other.bind_row(0, 1.0, other_frames["head"], other_frames["wrist"], 2)
+        # the revocation voids the earlier acceptance for the same instant (T3-F2 residual)
+        other.bind_row(0, 1.0, other_frames["head"], other_frames["wrist"], 1)
 
 
 def test_rows_must_be_a_contiguous_schedule(tmp_path):
@@ -318,3 +321,58 @@ def test_rows_must_be_a_contiguous_schedule(tmp_path):
                                         "positions": [0.1] * 6, "accepted": True})
     with pytest.raises(ValueError, match="AUDIT_ROW_ORDER_INVALID"):
         writer.bind_row(1, 1.1, frames["head"], frames["wrist"], 2)
+
+
+def test_a_future_or_stale_frame_is_not_causal_for_a_row(tmp_path):
+    from so101_demo.act.acquisition import AcquisitionMinter
+
+    for stamp, code in ((2.0, "AUDIT_BINDING_CAUSALITY_INVALID"),
+                        (0.5, "AUDIT_BINDING_CAUSALITY_INVALID")):
+        base = tmp_path / f"case-{stamp}"
+        base.mkdir(parents=True)
+        writer = EpisodeAuditWriter(base / "episode", {"mode": "diagnostic"},
+                                    {"session_id": "s", "attempt_id": "a", "reset_epoch": 1},
+                                    {"inputs_sha256": "a" * 64})
+        minter = AcquisitionMinter()
+        frames = {}
+        for camera in ("head", "wrist"):
+            frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=stamp,
+                                received_monotonic_ns=1, pixels=ZERO)
+            writer.append_acquisition(frame)
+            frames[camera] = frame.acquisition_id
+        writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                            "positions": [0.1] * 6, "accepted": True})
+        with pytest.raises(ValueError, match=code):
+            writer.bind_row(0, 1.0, frames["head"], frames["wrist"], 1)
+
+
+def test_rows_must_sit_on_the_10hz_grid(tmp_path):
+    from so101_demo.act.acquisition import AcquisitionMinter
+
+    writer = EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"},
+                                {"session_id": "s", "attempt_id": "a", "reset_epoch": 1},
+                                {"inputs_sha256": "a" * 64})
+    minter = AcquisitionMinter()
+    ids = {}
+    for stamp in (1.0, 1.3):
+        for camera in ("head", "wrist"):
+            frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=stamp,
+                                received_monotonic_ns=1, pixels=ZERO)
+            writer.append_acquisition(frame)
+            ids[(camera, stamp)] = frame.acquisition_id
+    for target in (1.1, 1.4):
+        writer.append_source("references", {"reference_time_s": target,
+                                            "source": "CONTROLLER_REFERENCE",
+                                            "positions": [0.1] * 6, "accepted": True})
+    writer.bind_row(0, 1.0, ids[("head", 1.0)], ids[("wrist", 1.0)], 1)
+    with pytest.raises(ValueError, match="AUDIT_ROW_SCHEDULE_INVALID"):
+        writer.bind_row(1, 1.3, ids[("head", 1.3)], ids[("wrist", 1.3)], 2)
+
+
+def test_a_late_revocation_prevents_sealing_a_bound_row(tmp_path):
+    writer, frames = _staging(tmp_path)
+    writer.bind_row(0, 1.0, frames["head"], frames["wrist"], 1)
+    writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1] * 6, "accepted": False})
+    with pytest.raises(ValueError, match="AUDIT_BINDING_REVOKED"):
+        writer.seal({"start_s": 1.0})

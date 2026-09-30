@@ -35726,3 +35726,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL ×2; T3-F6, T3-F7 and
   T3-F4 closed, F1/F2/F3/F5 residues open); items 4-8 pending.** HEAD `993fabde9`; 39-path dirty baseline
   untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1951 — Task 3 fix pass, seventh instalment: T3-F2's causality, cadence and revocation semantics
+
+- **Causality.** `bind_row` now compares each bound frame's stamp with the row instant: a frame from the
+  future or one older than the frozen one-grid-step source age is refused with
+  `AUDIT_BINDING_CAUSALITY_INVALID`, and the two cameras' stamps must agree within the cross-camera skew
+  bound, so a valid acquisition stamped 2.0 can no longer be bound to a row at 1.0.
+- **Cadence.** Consecutive row indexes are no longer enough: each row's `sim_time_s` must be the previous
+  row's plus exactly one 10 Hz grid step (`AUDIT_ROW_SCHEDULE_INVALID` otherwise), so an irregular
+  schedule cannot pass as a contiguous one.
+- **Acceptance versus revocation history.** A recorded `accepted=False` for a target instant voids the
+  acceptance for that instant, so a row that binds the earlier accepted sequence for the same target is
+  refused with `AUDIT_BINDING_REFERENCE_INVALID`, and a revocation arriving **after** a row was bound
+  prevents sealing it at all (`AUDIT_BINDING_REVOKED`). The revocation state is tracked beside the
+  record rather than inside it, so `references.jsonl` keeps exactly the declared closed fields.
+- **Evidence.** `logs/task3-fix7.run` rc=0: **50 passed in 0.31 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py` and `test_act_release_boundary.py`, with its own NVMe scratch and a non-empty
+  tempfile proof. New controls: a future frame and a stale frame, an off-grid second row, an
+  accepted-then-revoked pair where the row names the earlier acceptance, and a late revocation that
+  blocks sealing. One of my earlier controls had to be corrected rather than kept: binding a row at 0.9
+  to frames stamped 1.0 is a causality violation, not the reference-instant mismatch it was written to
+  prove, so the mismatch case now uses a reference recorded for another instant.
+- **Still open.** **T3-F3** (readback parity with admission, with the three checksum-consistent
+  counterexamples as tests), **T3-F1** (metadata admission — collection-scope closed fields and modes,
+  full identity, window contract; the required event kinds with typed payload validators; and the raw
+  observer-reference and physics payloads, implemented together and never reconstructed from phase
+  booleans) and **T3-F5** (gate eligibility and sealing on that raw coverage, which depends on F1 being
+  real). Then a fresh checkpoint, followed by the consolidated 19-file gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL ×2; T3-F2, F4, F6, F7
+  closed; F1, F3, F5 open); items 4-8 pending.** HEAD `09732c136`; 39-path dirty baseline untouched; no
+  push, no evidence deletion, no hardware, no second stack.

@@ -44,6 +44,12 @@ _EVENT_PAYLOADS = {
 }
 _PHYSICS_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "release_epoch", "observation"})
 _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
+# the frozen source contract: rows sit on the 10 Hz grid, a frame is at most one grid step old and
+# the two cameras are published together
+_GRID_S = 0.1
+_MAX_SOURCE_AGE_S = 0.1
+_MAX_SKEW_S = 0.0
+_TOLERANCE_S = 1e-6
 _MANIFEST_FIELDS = frozenset({"kind", "schema_version", "scope_sha256", "identity", "window",
                               "files"})
 
@@ -127,6 +133,9 @@ class EpisodeAuditWriter:
         self._acquisitions: dict = {}
         self._references: dict = {}
         self._bound: set = set()
+        self._last_row_time_s: float | None = None
+        self._bound_references: set = set()
+        self._revoked_targets: set = set()
         self._row_indexes: set = set()
         self._release_epoch: int | None = None
         self._observed_epochs: dict = {}
@@ -174,13 +183,32 @@ class EpisodeAuditWriter:
         if record["row_index"] != len(self._row_indexes):
             # rows are a contiguous schedule: no gaps, no reordering
             raise ValueError("AUDIT_ROW_ORDER_INVALID")
+        stamps = []
+        for value in (head_id, wrist_id):
+            frame = self._acquisitions[value]
+            age = record["sim_time_s"] - frame["stamp_s"]
+            if age < -_TOLERANCE_S or age > _MAX_SOURCE_AGE_S + _TOLERANCE_S:
+                # a frame from the future, or one too old, is not causal for this instant
+                raise ValueError("AUDIT_BINDING_CAUSALITY_INVALID")
+            stamps.append(frame["stamp_s"])
+        if abs(stamps[0] - stamps[1]) > _MAX_SKEW_S + _TOLERANCE_S:
+            raise ValueError("AUDIT_BINDING_CAUSALITY_INVALID")
+        if self._last_row_time_s is not None and abs(
+                record["sim_time_s"] - (self._last_row_time_s + _GRID_S)) > _TOLERANCE_S:
+            # rows are a contiguous 10 Hz schedule, not merely consecutive integers
+            raise ValueError("AUDIT_ROW_SCHEDULE_INVALID")
         entry = self._references.get(record["reference_sequence"])
-        target = round(record["sim_time_s"] + 0.1, 6)
-        if entry is None or entry["reference_time_s"] != target or entry["accepted"] is not True:
-            # the binding must name a reference this episode accepted for exactly that instant
+        target = round(record["sim_time_s"] + _GRID_S, 6)
+        if (entry is None or entry["reference_time_s"] != target
+                or entry["accepted"] is not True
+                or entry["reference_time_s"] in self._revoked_targets):
+            # the binding must name a reference this episode accepted for exactly that instant and
+            # whose acceptance still stands
             raise ValueError("AUDIT_BINDING_REFERENCE_INVALID")
         self._row_indexes.add(record["row_index"])
+        self._last_row_time_s = record["sim_time_s"]
         self._bound.update((head_id, wrist_id))
+        self._bound_references.add(record["reference_sequence"])
         self._append("row-bindings", record)
 
     def append_source(self, kind, record) -> None:
@@ -218,7 +246,12 @@ class EpisodeAuditWriter:
             if item["source"] != "CONTROLLER_REFERENCE" or type(item["accepted"]) is not bool:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             item["sequence"] = self._next("references")
+            # the recorded row keeps the declared closed fields; the revocation state lives beside it
             self._references[item["sequence"]] = item
+            if item["accepted"] is not True:
+                # a revocation voids the acceptance for that target instant, so no row may keep
+                # binding an acceptance the controller has since withdrawn
+                self._revoked_targets.add(item["reference_time_s"])
         else:
             item = _closed(record, _PHYSICS_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
             if item["kind"] not in _PHYSICS_KINDS or not isinstance(item["observation"], dict):
@@ -231,6 +264,12 @@ class EpisodeAuditWriter:
 
     def seal(self, window: dict) -> Path:
         self._require_open()
+        for sequence in sorted(self._bound_references):
+            entry = self._references.get(sequence)
+            if (entry is None or entry["accepted"] is not True
+                    or entry["reference_time_s"] in self._revoked_targets):
+                # an already-bound row whose acceptance was revoked before sealing cannot be sealed
+                raise ValueError("AUDIT_BINDING_REVOKED")
         if not isinstance(window, dict) or not window:
             raise ValueError("AUDIT_WINDOW_INVALID")
         for name, stream in self._streams.items():
