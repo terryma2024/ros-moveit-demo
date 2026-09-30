@@ -35777,6 +35777,30 @@ root it passes, so that was my path error, not a suite failure.
   `pytest-xdist`, so the `-n 8` gate needs xdist installed in **that** interpreter (the cached wheels are in
   the low-rate root's `pip-probe` directory) before the parallel package gates can run as the plan specifies.
 
+## HS-044 — The `-n 8` parallel gate works, with the recipe and its trap recorded (round 332)
+
+**Verified:** 57 passed in 1.01 s across the five head-search suites using
+
+```zsh
+env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHON_VERSION \
+  PYTHONPATH="$HEAD_LOWRATE/pysrc:$HEAD_VENV_SITE:$HEAD_WORKTREE/src/so101_demo_py/src" \
+  /data/work/venvs/so101-v5-t004-perception/bin/python3 -m pytest -n 8 -q <the five files>
+```
+
+- **The trap:** sourcing ROS puts `/opt/ros/jazzy/lib/python3.12/site-packages` on `PYTHONPATH`, which makes
+  pytest auto-load the ROS `launch_testing` and `launch_testing_ros_pytest_entrypoint` plugins. Those are
+  **incompatible** with this pytest - they fail `PluginValidationError` on `pytest_pycollect_makemodule`, and
+  the resulting worker churn surfaces as a misleading `INTERNALERROR ... KeyError: WorkerController`, which
+  looks like an xdist bug rather than a plugin conflict. Two attempts (`-p no:launch_testing`, then with the
+  ROS environment present) produced that red herring.
+- **The recipe:** run the parallel gate **without** the ROS environment for the suites that do not need it, and
+  use the perception venv's matched pytest + xdist (3.8.0) rather than the system python, which is PEP-668
+  managed and refuses the install. `xdist` is also visible to the system interpreter through
+  `PYTHONPATH=$HEAD_VENV_SITE`, which is a non-invasive alternative when the ROS environment is required.
+- **What still needs ROS:** `test_act_stack_ready.py`, `test_launch_composition.py` and the ROS-dependent
+  binding suites run under the sourced environment (that is `head_test_render`), where they passed serially in
+  HS-041 and HS-043; they are not part of this parallel recipe.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
