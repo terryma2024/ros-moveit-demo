@@ -67,6 +67,42 @@ def _rgb_png(frame) -> bytes:
             + _png_chunk(b"IEND", b""))
 
 
+def _decoded_pixel_sha256(path: Path) -> str:
+    """Decode a lossless RGB PNG and hash its pixels exactly as the acquisition did.
+
+    The writer stores filter-0 rows, so decoding needs only zlib; hashing the concatenated RGB bytes
+    reproduces the digest the camera boundary minted over the (480, 640, 3) uint8 array.
+    """
+
+    payload = path.read_bytes()
+    if not payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("EPISODE_FRAME_INVALID")
+    offset, chunks, header = 8, [], None
+    while offset + 8 <= len(payload):
+        length = struct.unpack(">I", payload[offset:offset + 4])[0]
+        kind = payload[offset + 4:offset + 8]
+        body = payload[offset + 8:offset + 8 + length]
+        offset += 12 + length
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            chunks.append(body)
+        elif kind == b"IEND":
+            break
+    if header != (640, 480, 8, 2, 0, 0, 0) or not chunks:
+        raise ValueError("EPISODE_FRAME_INVALID")
+    raw = zlib.decompress(b"".join(chunks))
+    if len(raw) != 480 * (1 + 1920):
+        raise ValueError("EPISODE_FRAME_INVALID")
+    rows = []
+    for row in range(480):
+        start = row * (1 + 1920)
+        if raw[start] != 0:
+            raise ValueError("EPISODE_FRAME_INVALID")
+        rows.append(raw[start + 1:start + 1 + 1920])
+    return hashlib.sha256(b"".join(rows)).hexdigest()
+
+
 def _regular_hash(path: Path) -> tuple[str, int]:
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as stream:
@@ -403,6 +439,10 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
                           for record in (json.loads(line) for line in
                                          (audit_manifest.parent / "references.jsonl")
                                          .read_text().splitlines())}
+            acquisitions = {record["acquisition_id"]: record
+                            for record in (json.loads(line) for line in
+                                           (audit_manifest.parent / "acquisitions.jsonl")
+                                           .read_text().splitlines())}
             if document["record_count"] > 0:
                 # every recorded row must be bound to the acquisitions it consumed, at the same instant
                 # and to the reference its action actually claims
@@ -414,6 +454,13 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
                     named = references.get(binding["reference_sequence"])
                     if named is None or list(row["action"]) != list(named["positions"]):
                         raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+                    for slot, png_key in (("head_acquisition_id", "head_png"),
+                                          ("wrist_acquisition_id", "wrist_png")):
+                        acquisition = acquisitions.get(binding[slot])
+                        if acquisition is None or _decoded_pixel_sha256(
+                                root / row["observation"][png_key]) != acquisition["pixel_sha256"]:
+                            # the stored lossless frame must be the frame that acquisition identified
+                            raise ValueError("EPISODE_SEAL_PIXELS_MISMATCH")
     rows = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
     if len(rows) != document["record_count"]:
         raise ValueError("EPISODE_RECORD_COUNT_MISMATCH")

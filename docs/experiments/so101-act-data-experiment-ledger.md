@@ -36366,3 +36366,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **T3-F5**: the fail-closed eligibility and sealing gate once the producers exist.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f05b1460b`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1971 — Task 3 fix pass, twenty-fourth instalment: the stored pixels are bound to their acquisition (T3-F4)
+
+- **The lossless frame that was recorded must be the frame the bound acquisition identified.** The
+  recorder now decodes each stored RGB PNG itself — filter-0 rows, so `zlib` plus the chunk header is
+  enough and **no new dependency is needed** — and compares the decoded pixel digest with the bound
+  acquisition's `pixel_sha256`, for the head and the wrist slot separately
+  (`EPISODE_SEAL_PIXELS_MISMATCH`). This is the gap the reviewer demonstrated by decoding my own passing
+  fixture: its audit acquisitions were all-zero images while the recorder stored frames with a coloured
+  patch.
+- **My fixture had to become a real common binding**, which was the point: `_multi_row_audit` now mints
+  each acquisition from the very frame the recorder stores for that instant and camera, so the positive
+  multi-row case passes the pixel correlation honestly rather than by omission.
+- **Controls.** The positive three-row episode satisfies the correlation; the negative one mints the last
+  acquisition from deliberately altered pixels and asserts the refusal, reading both layers of the error
+  (`finish` wraps a refused self-check as `RECORDER_SEAL_FAILED` with `EPISODE_SEAL_PIXELS_MISMATCH` as
+  its cause) rather than pretending the inner code surfaces directly.
+- **Evidence.** `logs/task3-fix24.run` rc=0: **122 passed** across `test_act_recorder.py`,
+  `test_act_episode_audit.py`, `test_act_continuous_capture.py`, `test_act_release_boundary.py` and
+  `test_act_supervisor.py`, with its own NVMe scratch and a non-empty tempfile proof.
+- **Still open from the fourth verdict.** **T3-F4**: the zero-row case needs a labelled-binding rule
+  instead of skipping the loop. **T3-F1**: the physics validator must accept the registered source
+  document (`publisher_sequence`, `reset_epoch`, `paused`) and require per-kind measurements rather than
+  accepting a time-only block; the broker hop and the per-kind raw-frame shape await the reviewer's
+  ruling (the packet asked for it explicitly). **T3-F3**: event identity beyond session/attempt,
+  legitimate release transitions, physics envelope/source-clock correlation, null `sim_time_s`, and
+  integer-not-numeric sequence types. **T3-F5**: the fail-closed eligibility and sealing gate once the
+  producers exist.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `1a9d4a796`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

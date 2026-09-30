@@ -378,7 +378,7 @@ def test_a_rehashed_v1_seal_may_not_carry_v2_fields(tmp_path):
         verify_episode_seal(path)
 
 
-def _multi_row_audit(tmp_path, instants):
+def _multi_row_audit(tmp_path, instants, *, mismatched_pixels=False):
     """An audit with one binding per recorded instant, plus the scope the seal must share."""
 
     import numpy as _np
@@ -399,9 +399,13 @@ def _multi_row_audit(tmp_path, instants):
     frames = {}
     for instant in instants:
         for camera in ("head", "wrist"):
+            # the acquisition must identify the very frame the recorder stores, or it is not common
+            pixels = observation(instant)[camera]
+            if mismatched_pixels and instant == instants[-1]:
+                pixels = pixels.copy()
+                pixels[0, 0] = (255, 0, 0)
             frame = minter.mint(camera, session_id="session-1", reset_epoch=2, stamp_s=instant,
-                                received_monotonic_ns=1,
-                                pixels=_np.zeros((480, 640, 3), dtype=_np.uint8))
+                                received_monotonic_ns=1, pixels=pixels)
             writer.append_acquisition(frame)
             frames[(camera, instant)] = frame
     for index, instant in enumerate(instants):
@@ -521,3 +525,14 @@ def test_a_scope_that_is_not_the_audits_payload_is_refused_on_readback(tmp_path)
     with pytest.raises(ValueError,
                        match="EPISODE_SEAL_AUDIT_MISMATCH|EPISODE_SEAL_AUDIT_SCOPE_MISMATCH"):
         verify_episode_seal(path, audit_manifest=manifest, scope=other_scope)
+
+
+def test_an_acquisition_that_does_not_identify_the_stored_frame_is_refused(tmp_path):
+    """The stored lossless pixels must be the pixels the bound acquisition identified (T3-F4)."""
+
+    manifest, scope = _multi_row_audit(tmp_path, (1.0, 1.1, 1.2), mismatched_pixels=True)
+    recorder = _three_row_recorder(tmp_path)
+    # the seal path wraps a refused self-check as an infrastructure error, so assert both layers
+    with pytest.raises(Exception, match="RECORDER_SEAL_FAILED") as caught:
+        recorder.finish(outcome(), audit_manifest=manifest, scope=scope)
+    assert "EPISODE_SEAL_PIXELS_MISMATCH" in str(caught.value.__cause__)
