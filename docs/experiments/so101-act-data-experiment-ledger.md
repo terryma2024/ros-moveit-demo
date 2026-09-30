@@ -38035,3 +38035,17 @@ it is the reviewer's two rejections that moved it there: first refusing the file
 per-failure causal evidence. The next step is a base-swap of `task8_artifact_bundle.py` and `task8_calibration_aggregator.py`
 if they exist at base, which would either carry the failure across or clear it and localise the cause to
 `head_search_qualification` itself.
+
+### Caveat added to HS-134: the lead contains an unresolved contradiction
+
+`task8_artifact_bundle.py` and `task8_calibration_aggregator.py` have **0 commits since the branch base**, yet HS-134
+reported them as importers of `head_search_qualification`, which HS-132 established is a **new file** (absent at base).
+Both cannot be true: a base-era module cannot import a module that did not exist. So one of the two readings is wrong -
+most likely my grep matched a **string or comment** rather than an import, since it was a loose pattern over
+`$m`-name occurrences.
+
+Until that is checked, the "my new module is on the task 8 path" conclusion is **unverified**, and I am recording it as
+such rather than letting it stand as the explanation of the new failure. The next step is to read the actual import
+lines in those two files, which is a one-command check - and if the lead evaporates, the bisect returns to the
+per-config/per-module space with the candidates HS-132 left (the new modules) plus anything in the overlay's `lib/` that
+differs from the base install, which I have **not** yet diffed (I only diffed `share/`).
