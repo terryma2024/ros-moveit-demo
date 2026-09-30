@@ -39018,3 +39018,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the payload carries (`manifest_path`/`manifest_sha256`, `preparation_receipt_path`) — the next increment.
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `e91cef036`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2089 — CORRECTION: the four qualification-suite failures trace to my own fail-closed contract change
+
+- **What the traceback actually shows.** `test_real_runner_full_case_seals_evidence_through_an_evidence_port`
+  asserts `result["status"] == "PASSED"` (which holds) and then `set(result["live_evidence_artifact"])` — and
+  that value is **`None`**, so the assertion raises `TypeError: 'NoneType' object is not iterable`.
+- **Why it is None, from the code.** `grep -c physical_observation` over that suite is **0**: its fake evidence
+  port never supplies a raw `physical_observation`, and the amended fail-closed contract (this session's change,
+  the one that also forced `test_act_task8.py`'s assertion from `is True` to `is False`) makes the runner report
+  `live_evidence_artifact: None` in exactly that situation.
+- **So CP-2088's attribution was wrong, and this entry corrects it.** The stash comparison there could not see
+  this, because the contract change is **committed** rather than sitting in the working tree; "pre-existing in
+  this environment" was my inference from the stash test and it does not survive the traceback. The four failures
+  are a **follow-up to my own change**, in a suite I had not run before this round.
+- **The honest fix, recorded rather than improvised.** The right repair preserves the test's purpose ("real
+  Task8Runner → port → CaseEvidenceDriver → sealed artifact, no fakes"), which means its port must supply the raw
+  observation each phase needs so the sealing chain really runs — not relaxing the assertion to accept `None`.
+  That is a fixture of some size (a raw block with `world`, `scene`, `contact`, `observation`, `reference`,
+  `source_stamps_s` and `source_received_wall_s` per phase), and it is the next increment for Task 4.
+- **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress with this defect
+  recorded as its own item. HEAD `24ff631e0`; no push, no evidence deletion, no hardware, no second stack.
