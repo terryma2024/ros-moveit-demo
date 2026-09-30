@@ -43270,3 +43270,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   that replaces the preset-fixture shortcut.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four with the fourth blocked on
   the design contradiction (CP-2285); F12 three of four plus its carrier cut; F5 started here; goal paused.
+
+## CP-2290 - F5 first half, item one: the completions must run through the registered phases in order
+
+- _formal_coverage_ok now requires exactly one phase_complete per registered phase, in FORMAL_PHASES order, with
+  integer physics steps that never decrease. A set could see neither order nor repetition, which is the first of
+  the verdict's omissions.
+- The first attempt demanded strictly increasing steps and ten tests refused - two phases may legitimately
+  complete on the same readback step - so the relation is non-decreasing, and the comment records why.
+- GREEN 204 passed; the wider gate is recorded with the commit.
+- F5's remaining first-half items: every registered physics kind with a non-decreasing step sequence, and physics
+  release epochs that never decrease and only name epochs a release event named; then the integration control that
+  replaces the preset-fixture shortcut.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+  three of four plus its carrier cut; F5 in progress; goal paused.
