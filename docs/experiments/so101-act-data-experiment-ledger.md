@@ -34427,3 +34427,68 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the Task 1 scratch trees and the reviewer scratch under `/tmp/so101-debug-head-search-antzb-LuFlHq6a/reviewer/`.
   Nothing deleted, nothing pushed, no stack started.
 - **Next:** Task 2 boundary - production head-camera view, safe neck geometry, exact counts and camera identity.
+
+## HS-004 — Task 2 complete: the sealed production head camera and the head dataset profile (commit 3139fe23a)
+
+- **Boundary:** new `src/act/head_camera_geometry.py`, `src/cli/validate_head_camera_geometry.py`,
+  `src/cli/verify_head_search_dataset.py`, `config/act/head-camera-geometry-contract-v1.json`,
+  `config/perception/head_camera_yolo_seg.yaml`, `config/perception/head_camera_yolo_seg_smoke.yaml`,
+  `assets/mujoco/act/head_search_scene.xml`; modified `src/adapters/perception/mujoco_dataset.py`,
+  `src/cli/generate_yolo_seg_dataset.py`, `config/mujoco/camera_views.yaml`, `setup.py`,
+  `test/test_act_task8_bottom_io_geometry.py`, `test/test_yolo_seg_dataset.py`.
+- **RED:** rc 2, both intended files in one run - `ModuleNotFoundError: No module named
+  'so101_demo.act.head_camera_geometry'` and `ImportError: cannot import name 'split_scene_plan'`
+  (`scratch/head-test-20260930T050943Z-OLMwJAt0`).
+- **GREEN:** rc 0, 66 passed over the plan's three files (`scratch/head-test-20260930T051926Z-yKbSc8ja`,
+  re-run after the commit at the same content). Targeted regression rc 0, 19 passed over
+  `test_camera_presets.py` and `test_act_physics.py` (`scratch/head-test-20260930T051920Z-bymyhFK9`).
+  `test_yolo_seg_dataset_augmented.py` kept its own baseline rc 0, 9 passed
+  (`scratch/head-test-20260930T050951Z-RpaSlF4r`) and needed no modification: the head profile is
+  covered in `test_yolo_seg_dataset.py`, which the plan already lists.
+- **Host test environment, recorded because the gates need it:** a symlink-install overlay of this
+  worktree at `head-task2-overlay/` (colcon rc 0, 3.5 s) built against the pre-existing dependency
+  underlay `/data/work/ws_moveit/install`; renderer-backed gates run with the perception venv's MuJoCo
+  3.12.0 (`/data/work/venvs/so101-v5-t004-perception`), `MUJOCO_GL=egl` (GLFW has no DISPLAY here), and
+  ROS's launch-testing collection hooks disabled. The overlay's share directory resolves to this
+  worktree, which is what makes `get_package_share_directory("so101_demo_py")` describe the scene under
+  test rather than another checkout's.
+- **The seal, measured on the production scene with the production camera:** zero `in_frame` failures at
+  `default`, `left` and `forward`; `horizontal_fov_rad` 1.3121067481206794, which equals the frozen
+  `task8-phase-camera-matrix-v1.json` value 1.3121067481206794; `lock_valid_neck_rad`
+  `[-6.283175307179587, 6.282804692820415]` (the neck has no collision anywhere on the 0.002 rad closed
+  grid, bisected to 1e-5 and shrunk inward, so the whole approved envelope is safe);
+  `required_search_domain_rad` `[-0.29145679447786704, 0.540419500270584]`; FOV-union coverage proven
+  with the contract's 0.3 rad candidate step; seal SHA256
+  `ec18dab290541a0e876fb31861c9c9f832c76c2805ae1f97df5b7362713226ec`
+  (`head-camera-geometry-20260930T051811Z/head-camera-geometry.json`, re-derived identically after the
+  final segmentation fix in `head-camera-geometry-recheck-20260930T051859Z`).
+- **No production-camera correction was required, and that is measured rather than assumed.** The plan's
+  Step 3 anticipated a minimal correction to `assets/mujoco/act/so101.xml`; the measurement says the
+  production camera already sees the target-support geometry: 9/9 projected target points in frame at
+  each anchor's start and centring angle with 6216-8381 visible cup pixels, and the real 48-image smoke
+  dataset shows 4488-12389 visible cup pixels in every single-cup image and 13830-20644 in every
+  two-cup image while every `no_cup` image shows exactly 0 (`head-dataset-smoke-20260930T051817Z`). The
+  earlier `in_frame=0` observation is therefore not reproducible from this checkout's tracked documents:
+  the admitted phase matrix pins the same camera position (-0.06, 0.06, 0.4299186) and the same
+  horizontal FOV this module measures. `assets/mujoco/act/so101.xml` and the camera element are
+  unchanged; the only camera-view edit is the new owned `head_camera` fixed preset in
+  `config/mujoco/camera_views.yaml`. Arm-posed occlusion along the admitted nine-phase trajectory
+  remains a search-time property owned by Tasks 5/11/14, whose manifest rows are not in this checkout.
+- **Dataset profile:** `so101-head-search-yolo-seg-v1` requires the accepted seal digest, refuses a
+  missing seal (`HEAD_CAMERA_GEOMETRY_SEAL_REQUIRED`), a different seal (`..._SEAL_DRIFT`), a seal naming
+  another camera (`..._SEAL_CAMERA_MISMATCH`), a scene whose included robot is not the sealed camera
+  source (`HEAD_DATASET_CAMERA_SOURCE_DRIFT`) and neck sampling outside the sealed interval
+  (`HEAD_DATASET_NECK_SAMPLING_UNSAFE`); every sample carries a `scene_group_id`, a complete camera
+  identity (K, distortion, frame id, world pose, neck angle) and a raw mask digest. The 32/8/8 smoke
+  generated 48 images in 2.59 s, verified `OK` with balanced 8/8/8/8 train and 2/2/2/2 val/test scenario
+  quotas, and the production verifier refused it by name: `HEAD_DATASET_NOT_PROMOTABLE`.
+- **One pre-existing RED on this branch, aligned rather than hidden:** two assertions in
+  `test_act_task8_bottom_io_geometry.py` still expected `ModelFrameSource` to return a bare ndarray
+  while the production source returns its `DetectionFrame`; both now assert the production type. This
+  file is in Task 2's own plan list, the worktree was clean at HEAD, and no Task 8 production file was
+  touched.
+- **Evidence classification:** retained - the Task 2 scratch trees, `head-task2-overlay/`, the two
+  geometry runs (the first superseded), the 48-image smoke dataset, and the geometry study under
+  `studies/task2-head-camera-geometry/`. Deletion candidates: this task's scratch trees. Nothing
+  deleted, nothing pushed, no real SO-101 command, no ROS/MuJoCo stack started.
+- **Next:** the Task 2 independent review checkpoint, then Task 3 (B/C training plans).
