@@ -36768,3 +36768,24 @@ Calling them "environmental" is supported; calling them "resolved" is not, and I
 
 The A/B is the check that mattered: it is the same technique that convicted my contract regression, and here it
 cleared `app.py`.
+
+## HS-082 — Why the teleop failures come and go: a shared socket root (hypothesis, with evidence)
+
+Reading the bridge explains the pattern. `BridgeHost.socket_paths()` builds both endpoints from
+`Path(self.launch.socket_root)` with fixed names (`NORMAL_SOCKET_NAME`, `SAFETY_SOCKET_NAME`), and the bridge
+refuses when the resulting path exceeds the UNIX limit (`IPC_SOCKET_PATH_TOO_LONG`).
+
+So two runs that share a socket root contend for the same two socket paths, and a run whose socket root sits under
+a long scratch directory fails outright. That fits every observation:
+
+| observation | fits |
+| --- | --- |
+| 39 failures while my other background gates were running; 34 after shortening the scratch; 7 of 7 passing when run alone later | yes - contention and path length |
+| the same file failing 7/7 and then passing 7/7 in similar scratch | yes - a peer run held the sockets |
+| failures concentrated in the bridge and task 8 families rather than in head-camera tests | yes - those are the socket users |
+| the A/B against the pre-router `app.py` passing both ways | yes - the change was never involved |
+
+**Status: hypothesis, not yet verified.** The test-side `socket_root` has not been read, so I cannot yet say whether
+the tests derive it from `TMPDIR` (in which case concurrent runs should not collide) or from a fixed location (in
+which case they do). Until that is read, the teleop set stays "environmental by evidence, unexplained by cause" -
+and the fix, if the hypothesis holds, is to give each run its own short socket root rather than to change code.
