@@ -37858,3 +37858,24 @@ With that, every ordinary-suite failure family in Task 11 is accounted for:
 | missing modules at run time (`rclpy`, `ament_*`, `mujoco`) | environment, HS-111/116, now supplied by appending |
 | task 8 measurement families (`FIELDS_INVALID`, `TRUSTED_FINAL_TARGET_INVALID`, `MEASUREMENT_*`, `PHASE_CAMERA_MATRIX_INVALID`) | **pre-existing against pristine inputs** (this entry) |
 | live-stack requirements (`test_mujoco_runtime_observability`, GPU) | environment the gate cannot provide |
+
+## HS-128 — Fifth verdict: two items accepted, and it is right that HS-127 proved less than I claimed
+
+The reviewer accepted **HS-122** (the demo installed-gate availability item is closed under clause (d)) and **HS-123**
+(a PYTHONPATH cause for the reproduced module's failures), and rejected on two connected grounds:
+
+> "HS-126/127 prove unchanged files, not pre-existing behavior: changed callers or dependencies remain possible."
+> "Clause (c) still needs per-failure causal evidence."
+
+**It is right, and the error is mine.** HS-127 reasoned: the schema and contract are byte-identical to the base, the
+installed copies equal the repository copies, therefore the failures are pre-existing. That is a non-sequitur - it
+establishes that the **inputs** are pristine, not that the **behaviour** is. A caller or a dependency this work changed
+(e.g. the head-search contracts, the perception configs, the geometry module whose seal now carries a coarse step)
+could produce `PHASE_CAMERA_MATRIX_INVALID` from unchanged inputs, and my own HS-071 regression is a live demonstration
+that this exact shape of reasoning - "the neighbouring files look fine" - is how a real defect hides.
+
+So the A/B I said was needed in HS-126 and then skipped for a cheaper proxy is the required step after all, and it is
+the strongest form: **run the same module at the branch base in a separate `git worktree`** - base code, base
+contracts, base callers - and compare the failure set. If it fails there too, the family is pre-existing; if it passes,
+the cause is somewhere in this work and the bisect continues from there. Nothing in the current tree is touched by that
+run.
