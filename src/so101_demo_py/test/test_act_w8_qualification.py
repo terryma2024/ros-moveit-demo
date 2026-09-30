@@ -65,3 +65,19 @@ def test_the_verifier_refuses_what_it_cannot_re_derive(tmp_path, mutation, code)
 def test_a_missing_document_refuses(tmp_path):
     with pytest.raises(ValueError, match="W8_QUALIFICATION_EVIDENCE_INVALID"):
         verify_w8_qualification(tmp_path / "absent.json", {})
+
+
+@pytest.mark.parametrize("payload,code", [
+    ({"preparation_receipt_path": ""}, "W8_QUALIFICATION_EVIDENCE_INVALID"),
+    ({"preparation_receipt_path": "/nonexistent/receipt.json"}, "W8_QUALIFICATION_EVIDENCE_INVALID"),
+])
+def test_a_named_bundle_that_cannot_be_opened_refuses(tmp_path, payload, code):
+    """CP-2093: when the payload names a bundle it must open, and its evidence must agree.
+
+    The positive path needs a committed prepared bundle; `test_act_task8_artifact_bundle.py`'s `ValidInputs`
+    fixture (lines 34-86) is the model for it, and that test belongs with the next increment.
+    """
+
+    path, _root = _document(tmp_path)
+    with pytest.raises(ValueError, match=code):
+        verify_w8_qualification(path, payload)

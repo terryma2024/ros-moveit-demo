@@ -39119,3 +39119,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   which is the part that makes this a full increment rather than a patch.
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD
   `ecebf3a67`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2094 — Task 4: the verifier delegates the fourteen case journals to the qualification producer's validator
+
+- **What landed** (`src/so101_demo_py/src/act/w8_qualification.py`): when the admission payload names a
+  preparation receipt, `verify_w8_qualification` opens that bundle with `verify_prepared_task8_bundle`, requires
+  the receipt's digest to equal the document's `preparation_receipt_sha256` (and the payload's `manifest_path` to
+  be the bundle's own manifest when it names one), then calls `validate_case_journals(case_root, manifest,
+  identities=bundle.identities, manifest_document_sha256=manifest["manifest_document_sha256"])`. That is the
+  admission comment's "frozen contract, committed waves and actual per-Worker terminal leases" as this codebase
+  expresses them — fourteen complete rows bound to the bundle's identity, a prefix without a live-evidence
+  artifact and a full with one — and it is **re-derived**, not trusted.
+- **Deliberate limit, stated in the code and here**: a caller that names **no** bundle gets the digest binding
+  only, and the docstring says nothing weaker is claimed for it. Closing that gap means making the receipt
+  mandatory, which is admission's decision rather than this module's.
+- **Evidence.** `logs/task4-w8.run` rc=0 with the suite now at **42 passed** together with the campaign admission
+  suite under `pytest-xdist` with 8 workers, each with its own NVMe scratch and a non-empty tempfile proof.
+- **What the positive delegation test still needs**: a committed prepared bundle; the model is
+  `test_act_task8_artifact_bundle.py`'s `ValidInputs`/`_inputs`/`valid_inputs` (lines 34-86), and the two refusal
+  tests landed here cover the named-bundle-cannot-open path in the meantime.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD
+  `71b3a6606`; no push, no evidence deletion, no hardware, no second stack.

@@ -86,4 +86,33 @@ def verify_w8_qualification(qualified_path, payload) -> bool:
         if not any(_digest(path) == expected for path in case_root.glob("*/journal.json")):
             # a journal the document names is missing or has changed
             raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH")
+    # the campaign's journals must re-check on the qualification producer's own terms: fourteen complete
+    # rows bound to this bundle's identity, a prefix without a live-evidence artifact and a full with one.
+    # That needs the prepared bundle the payload names, so it is done only when the payload supplies it;
+    # a caller that names no bundle gets the digest binding above and nothing weaker is claimed for it.
+    receipt_path = payload.get("preparation_receipt_path") if isinstance(payload, dict) else None
+    if receipt_path is not None:
+        if not isinstance(receipt_path, str) or not receipt_path:
+            raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID")
+        try:
+            from .task8_artifact_bundle import verify_prepared_task8_bundle
+
+            bundle = verify_prepared_task8_bundle(Path(receipt_path))
+            manifest_path = Path(bundle.manifest)
+            manifest = json.loads(manifest_path.read_bytes())
+        except (OSError, KeyError, TypeError, ValueError, UnicodeDecodeError,
+                json.JSONDecodeError) as error:
+            raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID") from error
+        if _digest(Path(receipt_path)) != block["preparation_receipt_sha256"]:
+            # the bundle is not the one the document was qualified against
+            raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH")
+        if payload.get("manifest_path") is not None and Path(payload["manifest_path"]) != manifest_path:
+            raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH")
+        from .task8_live_qualification import validate_case_journals
+
+        try:
+            validate_case_journals(case_root, manifest, identities=bundle.identities,
+                                   manifest_document_sha256=manifest["manifest_document_sha256"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH") from error
     return True
