@@ -35758,6 +35758,15 @@ root it passes, so that was my path error, not a suite failure.
 - **Provenance note:** this overlay build is now part of the toolchain and must be recorded in the frozen
   build provenance, together with the perception venv that provides pydantic v2, fastapi, httpx and lark.
 
+- **Task 8 call-site wiring done and verified (round 330).** `verify_head_search_startup` on the readiness path
+  reads the promoted config named by `SO101_HEAD_SEARCH_CONFIG` and, when a report is named too, requires the
+  pair to agree field by field before the stack is ready - a drifted value, identity, camera, tracker or motion
+  block, or an unconsumed key, refuses startup before any ROS node, camera or model is touched; no named config
+  means the stack carries no head search. This was deferred in the Task 8 notes because
+  `test_act_stack_ready.py` and `test_launch_composition.py` were blocked; with the underlay rebuilt those two
+  files report **24 passed**, and the new check is covered by **11 passed** in the startup suite. Commit
+  `a2cf25e89` (adapter) and this one close both deferrals from HS-028 and Task 8.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
