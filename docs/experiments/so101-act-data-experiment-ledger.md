@@ -40399,3 +40399,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 four of five steps
   done**, F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD `831e91ff6`; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2151 — F5's raw-reference requirement: the predicate is ready, the formal rows are bare
+
+- **What I tried**: `_formal_coverage_ok` now also requires the accepted reference to carry **one complete raw
+  group** — the legacy flat keys or the packed frames — since `_reference_raw_ok` (line 169) permits a row with
+  neither, which is why F5 says "neither predicate requires full raw references".
+- **Result: 7 failed / 142 passed**, all `AUDIT_FORMAL_COVERAGE_INCOMPLETE` in the formal family — the fixtures'
+  reference rows are **bare accepted projections**, exactly the case F5 describes ("one bare accepted projected
+  reference" in the retained evidence). Reverted; the audit suite verified green.
+- **The remaining mechanical step, now bounded**: the reference appends live throughout the test file (grep shows
+  sites at 56, 135, 151, 292, 322, 327, 336, 359 and more); the **formal** ones are the later sites, and each
+  needs its row given one complete group — the test file already has `_ratified_reference()` for the packed shape
+  (used by F3's controls) and the legacy keys are four plain fields, so both routes are available.
+- **What this leaves in F5**: this requirement, the **registered physics** rows per phase, and the ratified
+  **scene/feedback observations** — three additions to the same shared predicate, each with its fixture upgrade,
+  and the raw-reference one is provider-ready (predicate written, fixtures identified).
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 four of six steps
+  done** (shared predicate, lifecycle named, lifecycle enforced, fixtures expanded), F1/F11 open; targeted gates
+  `logs/task3-final.run` **430 passed** and `logs/task3-f5-lifecycle.run` **201 passed**; HEAD `c1b746e0f`; no
+  push, no evidence deletion, no hardware, no second stack.
