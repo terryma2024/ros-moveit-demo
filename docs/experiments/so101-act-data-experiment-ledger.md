@@ -40162,3 +40162,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   pending with the constraint above; F13 down to `sim_time_s`; **F1/F5/F11 open**; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `494d2e211`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2140 — The readback tie fires on eight existing streams, which is a fact about the fixtures
+
+- **What I added**: the same tie as CP-2137's, restated on the readback path right after its event loop (the loop
+  ends before the physics section, both inside the same helper), with a guard for audits that carry no events file.
+- **Result: 8 failures**, unchanged by the guard — `AUDIT_EVENT_INVALID` on readbacks that previously passed
+  (`test_readback_requires_exact_types_and_correlated_clocks`, `test_readback_reapplies_the_formal_coverage_gate`,
+  the round-trip test among them), so those **fixtures' streams step to a release epoch that no `release` event in
+  them names**. That is the rule doing what CP-2137 does at seal, one layer later, and it is exactly the class of
+  coupling CP-2131/2136 recorded: the rule stands, the fixtures have to be re-derived with it.
+- **Reverted, tree verified green** (audit and recorder suites pass).
+- **The two edits for the next pass, in one go**: (1) the readback tie (this round's clause, which works — it fires
+  precisely where a stream lacks its release); (2) re-derive the eight fixtures' event streams so each epoch step
+  is named — the same "both sides in one pass" that closed the lease item (CP-2132) and the initial-epoch rule
+  (CP-2136), and the third time this ledger has recorded that lesson for this file.
+- **State.** Item 3's list: **F12 closed**; **F3** landed on the writer path with its readback tie and the
+  fixtures it moves identified exactly; F13 down to `sim_time_s`; **F1/F5/F11 open**; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `d06b9abc6`; no push, no evidence deletion, no hardware, no second
+  stack.
