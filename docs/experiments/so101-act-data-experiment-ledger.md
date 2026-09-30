@@ -41034,3 +41034,30 @@ with the retention loss as the stated reason), then re-raise so the exit status 
 Two honest notes for whoever implements it: the numbers must come from the run that just measured them - not from a hand-typed
 copy - and the verdict must say *why* A is the selection, so a reader cannot mistake "retained because nothing qualified" for
 "chosen because it won".
+
+## HS-253 — Correction: the retained model is **C**, and the refusal means "no supportable selection", not "A retained"
+
+Read `choose_candidate`'s own contract instead of assuming who is incumbent:
+
+```
+def choose_candidate(*candidates: CandidateEvaluation) -> SelectionVerdict:
+    """Apply the frozen margins and prefer the retained mixed model unless a challenger clearly wins.
+
+    A challenger replaces the retained model only when it wins the head domain in **both** measurement
+    families by the declared margins - the static-image cells and the held-out detector/tracker episodes -
+    and only when the retained model keeps the task domain in both. A candidate that wins one family and
+    loses the other is not a decision the frozen evidence can support, so the retained model stays.
+```
+
+So the **retained model is C - the head+task mixed model** - and A (pinned baseline) and B are the challengers. That makes
+HS-250's phrasing ("the pinned baseline A is retained") **wrong**, and the correction matters for the artefact I was about to
+write: a verdict naming A would have recorded the opposite of what the gate decided.
+
+The refusal itself is therefore a **comparability guard on the incumbent**: C gives up 0.011 task mask mAP against the best
+candidate, more than the 0.01 margin, so the frozen evidence cannot support keeping C *or* promoting a challenger - the gate says
+**no supportable selection** rather than naming a winner. That is a stronger and more honest outcome than either "A wins" or "C
+stays", and it is what `model-selection-verdict.json` must say: the six measured cells, the margin comparison, and the explicit
+statement that the frozen evidence supports no selection, with the incumbent's loss as the reason.
+
+Recorded as a correction to my own entry two rounds ago, before any code was written on top of it - which is the second time in
+this task that reading the consumer's docstring changed a conclusion I had already committed to the ledger.
