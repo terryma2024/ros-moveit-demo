@@ -41061,3 +41061,33 @@ statement that the frozen evidence supports no selection, with the incumbent's l
 
 Recorded as a correction to my own entry two rounds ago, before any code was written on top of it - which is the second time in
 this task that reading the consumer's docstring changed a conclusion I had already committed to the ledger.
+
+## HS-254 — Task 12's corrected outcome, and why the plan's remaining path has no candidate to promote
+
+**Outcome of record (correcting HS-250's wording per HS-253):** the Step 5 gate ran to completion and returned
+**no supportable selection**. The retained mixed model C gives up 0.011 task-domain mask mAP against the best candidate, beyond the
+0.01 margin the design fixes, so by `choose_candidate`'s own contract the frozen evidence supports neither keeping C nor promoting a
+challenger. Nothing is promoted, no margin was relaxed, and the operating point was re-selected under a rule declared in advance
+(HS-248/249) which returned the same point, so the loss is a property of the models on this data rather than of how I froze them.
+
+**Why the serial plan cannot simply continue:** Task 13's Step 1 requires
+`$MODEL_RUN/evaluation/model-selection-verdict.json` to exist *and* the plan's Task 13 consumes "Task 12's selected candidate".
+There is no selected candidate to consume - not because a step was skipped, but because the design's own retention rule declined to
+produce one. The remaining plan steps assume a happy path the evidence did not take.
+
+**The options, stated plainly for the user:**
+
+1. **Accept the outcome.** Record Task 12 as complete with "no supportable selection" and treat Task 13's promotion as
+   inapplicable: the campaign's finding is that neither challenger (A pinned baseline, B head-only) displaces the mixed model on
+   the head domain without the incumbent losing the task domain. This is a legitimate experimental result and the design provides
+   for it ("the retained model stays").
+2. **Repair the comparison.** If the intent was for the *mixed* model to be the one promoted, then the loss suggests the Task 12
+   training regime for C (mixing ratio, epochs, or the task-domain sampling) is the thing to revisit - a fresh campaign, not a
+   re-measurement.
+3. **Implement the verdict artefact anyway** (HS-251/252) so the refusal is legible on disk and Task 13's guard can pass, with the
+   verdict naming **no selection** and citing the incumbent's loss. This changes no outcome; it makes the state auditable and
+   unblocks a Task 13 that would otherwise stop at its first `test -f`.
+
+I have not chosen among these: (1) and (2) are decisions about the campaign's goal, and (3) is safe but pointless without one of
+them, since a Task 13 run would then proceed to promote... nothing. This is the point to ask rather than to proceed, which is why
+the ledger stops here.
