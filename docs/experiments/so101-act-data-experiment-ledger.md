@@ -36049,3 +36049,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   rows. **T3-F5**'s fail-closed eligibility and sealing gate follows the raw coverage.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `49ef37acc`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1961 — Task 3 fix pass: the multi-row correlation was attempted and reverted, with the exact next step
+
+- **What I tried.** Extending the seal verification so that, for an episode with recorded rows, each
+  audit binding's `sim_time_s` must equal the corresponding recorder row's observation instant in order
+  (`EPISODE_SEAL_ROWS_MISMATCH`), together with a real three-row PASSED fixture (six acquisitions, three
+  accepted references, three contiguous bindings) and a negative control.
+- **Outcome: reverted.** The positive multi-row case passed, but my negative control did not produce a
+  refusal from the code path under test. In that construction the audit's own 10 Hz schedule rule fires
+  before the seal-level comparison, and after rewrites of the stream, the audit manifest and the seal the
+  observed error was not the one asserted. Rather than loosen the expectation into something that would
+  pass for the wrong reason, I restored both files to the last green revision (`010188772`) and kept the
+  ledger honest about it: `logs/task3-fix15.run` rc=0 confirms the restored state is green.
+- **Exact next step for this item.** Tamper the **recorder** side, not the audit: shift the recorded
+  row's observation instant in `records.jsonl`, re-sign that file's entry inside the seal's `files` map
+  and recompute the seal's `manifest_sha256`. That leaves the audit fully legal, so the seal-level row
+  correlation is the only rule that can catch it. The verifier change itself is small and was already
+  written; it is recorded here so the next pass does not have to rediscover it.
+- **Still open.** **T3-F1**: the window schema needs an owner-approved key list before strict enforcement,
+  and the raw controller/accepted-goal history, source/receipt clocks, full physics payloads and broker
+  event kinds with typed validators wait on their producers. **T3-F4**: the multi-row correlation above
+  and the version-specific field gate are the remaining pieces (the version gate landed in CP-1959).
+  **T3-F5**: the fail-closed eligibility and sealing gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `010188772`
+  (tree clean apart from the pre-existing 39-path baseline); no push, no evidence deletion, no hardware.
