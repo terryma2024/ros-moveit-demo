@@ -36894,3 +36894,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `96b9bca99`;
   gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1992 — Task 3 fix pass: the packed validator's provenance checks, which do not wait on A.1
+
+- **The fifth verdict's A.1-independent provenance list is now enforced** in `_reference_frames_ok`, at
+  admission and on readback: the frames must hold exactly the ratified five ordered arm joints and one
+  gripper joint; the evaluation's `requested_sim_time_s` must equal the record's `reference_time_s` (the
+  instant the label uses); `accepted_sim_s` may not lie after the target and a `revoked_sim_s` before it
+  voids the record; the six-entry projection map may not reuse a source dimension; and each kind's raw
+  history must keep its own ordering across the stream — strictly increasing `sim_stamp_ns`, non-decreasing
+  `received_monotonic_ns` and increasing `observer_sequence` — tracked per kind by the writer and re-checked
+  on readback.
+- **Evidence.** `logs/task3-fix39.run` rc=0: **134 passed in 1.10 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_continuous_capture.py` and `test_act_release_boundary.py`, with its own
+  NVMe scratch and a non-empty tempfile proof. Controls: a target that disagrees with the reference instant,
+  an acceptance after the target, a revocation before it, six copies of one mapping pair, a four-joint arm
+  frame, a two-joint gripper frame, and a second reference that rewinds its kind's stamp.
+- **Still open from the fifth verdict.** **T3-F1**: the registered physics document still cannot pass the
+  real boundaries (the readback/port side), and the two new records need a parent-`physics_step` join field,
+  which the reviewer asked to define or ratify rather than manufacture. **T3-F3**: exclusive raw reference
+  groups broken on readback plus remaining semantic parity. **T3-F5**: nonempty streams are not complete
+  evidence and the new gate is absent from readback. **T3-F9**: the dedicated counter control (more than
+  `max_frames + 1` publications plus an epoch reset) is still to be written. **T3-F11**: window validation
+  does not yet check the observed schedule, the frozen policy or labelled coverage. **A.1** still awaits the
+  owner with the reviewer's clarification (distinguish evaluated from published positions and say which the
+  map selects).
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4faa498b6`;
+  gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

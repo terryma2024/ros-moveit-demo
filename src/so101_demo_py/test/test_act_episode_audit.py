@@ -819,7 +819,19 @@ def test_the_ratified_reference_frames_are_accepted_and_validated(tmp_path):
              broken(projected_positions=[0.9, 0.2, 0.3, 0.4, 0.5, 0.6]),
              broken(frames={**frames, "arm": {**frames["arm"], "velocities": [0.0] * 4}}),
              broken(frames={"arm": frames["arm"]}),
-             broken(frames={**frames, "base": frames["gripper"]})]
+             broken(frames={**frames, "base": frames["gripper"]}),
+             # the provenance checks the fifth verdict named as independent of A.1
+             broken(evaluation={**_ratified_reference()["evaluation"],
+                                "requested_sim_time_s": 1.3}),
+             broken(evaluation={**_ratified_reference()["evaluation"], "accepted_sim_s": 1.2}),
+             broken(evaluation={**_ratified_reference()["evaluation"], "revoked_sim_s": 1.0}),
+             broken(projection_map=[["arm", 0]] * 6),
+             broken(frames={**frames, "arm": {**frames["arm"], "joint_names": ["a"] * 4,
+                                              "positions": [0.1] * 4, "velocities": [0.0] * 4}}),
+             broken(frames={**frames, "gripper": {**frames["gripper"],
+                                                  "joint_names": ["g", "h"],
+                                                  "positions": [0.6, 0.7],
+                                                  "velocities": [0.0, 0.0]}})]
     for index, document in enumerate(cases):
         other = EpisodeAuditWriter(tmp_path / f"bad-{index}", scope(), identity(),
                                    {"inputs_sha256": "a" * 64})
@@ -869,3 +881,25 @@ def test_the_planning_scene_and_feedback_records_are_validated(tmp_path):
             other.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                             "observation": {**pose,
                                                             "controller_feedback": broken_feedback}})
+
+
+def test_the_per_kind_history_must_keep_its_ordering_across_the_stream(tmp_path):
+    """A second packed reference may not rewind its kind's stamps, receipts or sequence (T3-F1)."""
+
+    base = {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+            "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6], "accepted": True}
+    writer = EpisodeAuditWriter(tmp_path / "ordered", scope(), identity(), {"inputs_sha256": "a" * 64})
+    writer.append_source("references", {**base, **_ratified_reference()})
+    later = json.loads(json.dumps(_ratified_reference()))
+    later["evaluation"]["requested_sim_time_s"] = 1.2
+    later["frames"]["arm"]["sim_stamp_ns"] = 1200000000
+    later["frames"]["arm"]["received_monotonic_ns"] = 901000
+    later["frames"]["arm"]["observer_sequence"] = 8
+    later["frames"]["gripper"] = {**later["frames"]["gripper"], "sim_stamp_ns": 1200000000,
+                                  "received_monotonic_ns": 901100, "observer_sequence": 8}
+    writer.append_source("references", {**base, "reference_time_s": 1.2, **later})
+    rewind = json.loads(json.dumps(later))
+    rewind["evaluation"]["requested_sim_time_s"] = 1.3
+    rewind["frames"]["arm"]["sim_stamp_ns"] = 1100000000
+    with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+        writer.append_source("references", {**base, "reference_time_s": 1.3, **rewind})
