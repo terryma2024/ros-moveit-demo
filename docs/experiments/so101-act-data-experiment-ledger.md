@@ -41749,3 +41749,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven** (its seventh needs an owner decision),
   **F13 residual**; item 4's QC increments wait behind Task 3 by the plan's rule; items 5+ wait on the four blocked
   input bindings. HEAD `36626a040`; twelve gates green.
+
+
+## CP-2212 — The admission path's gate order, with line numbers
+
+- **Read this round** (`so101_teleop/so101_teleop/unified/admission.py`):
+  1. **the safety-calibration gate** — the module imports and calls `require_nonhead_gate(calibration)` at lines
+     446-448, so a non-Head admission first has to satisfy the report shape and the evidence-to-claim rule of
+     CP-2211;
+  2. **the W8 qualification gate** — lines 476-503: a missing qualified path raises `W8_QUALIFICATION_REQUIRED`
+     (476), an unreadable one the same with a cause (480), a mismatch `W8_QUALIFICATION_MISMATCH` (489), a missing
+     verifier `W8_QUALIFICATION_VERIFIER_UNAVAILABLE` (497), and the verifier this stretch built is called at 499
+     with its refusals mapped to `W8_QUALIFICATION_EVIDENCE_INVALID` (501/503);
+  3. **the per-role frozen-input gate** — `require_nonhead_gate(json.loads(frozen(role)))` at 550/580, i.e. the same
+     gate is applied to **each frozen input role's document**, which is where the four blocked bindings of CP-2209
+     would surface during a production run.
+- **What this confirms**: CP-2211's statement that the admission path consults both gates is literally true, and the
+  order is calibration → qualification → per-role inputs. It also shows the W8 verifier sits **inside** the
+  admission's second step rather than beside it, so a run that cannot qualify never reaches the input bindings.
+- **Why it matters for the objective's item 4**: the item asks for the real Coordinator commit to follow independent
+  QC, and this ordering is the mechanism — the qualification evidence must verify before the episode's inputs are
+  even consulted. What the stretch did not do is wire the ACT result store into the coordinator's commit path
+  (CP-2110/CP-2111), which remains item 4's other half.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4's QC increments
+  wait behind Task 3 by the plan's rule and its commit half is located but not wired; items 5+ wait on the four
+  blocked bindings. HEAD `960bf9a76`; twelve gates green.
