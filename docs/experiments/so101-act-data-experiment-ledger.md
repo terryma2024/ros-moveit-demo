@@ -41468,3 +41468,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   five items landed, the endpoint rule proven to fire and four expectations left to align; targeted gates **430 /
   201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `3af738ea9`; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-2201 — The windows that must survive F11's endpoint rule, listed
+
+- **Read this round** (`test_act_episode_audit.py`): the `_window(...)` call sites split into refusals and
+  successes. The **refusal** family is 773 (an extra field), 775 (`label_cutoff_s` beyond the physics window), 777
+  (`first_command_s` after the physics end), 779 (an unsorted schedule), 781 (a gap outside the window), 783 (a
+  scheduled instant before the collection start), 785 (nothing required and nothing seen), 787/789 (outcomes that
+  must null their instants), 798 (a diagnostic with a cutoff) and 817/825 (the empty and partial formal writers).
+  The **success** family is 794 (`interrupted_diagnostic` with a null cutoff sealing fine) and the
+  `_self_consistent_formal` fixtures that seal and read back.
+- **Why that matters for the endpoint rule**: every success case must hold evidence at the window's own endpoints —
+  the acquisitions the fixture mints and the window `_window()` returns have to agree on both extremes. The four
+  failures CP-2200 saw are consistent with the deltas reaching the schedule and the minter loop but not every
+  fixture that builds its window differently (the parametrised window test's cases each pass their own overrides).
+- **The pass that lands it, in order**: apply the rule and the two deltas, run, then align — (a) the two controls I
+  wrote assert `AUDIT_WINDOW_INVALID` (the shared predicate now fires before the earlier gate, which is more
+  precise, CP-2200); (b) whichever success case still disagrees gets its window or its evidence reconciled in the
+  same list this entry names; (c) re-run the four suites.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  five items landed, its endpoint rule proven and its expectations enumerated; targeted gates **430 / 201 / 201 /
+  201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `2b996f7f2`; no push, no evidence
+  deletion, no hardware, no second stack.
