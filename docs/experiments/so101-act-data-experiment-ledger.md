@@ -35538,6 +35538,23 @@ no second detector, with its RED tests first.
   redefinition of `CapabilitiesResponse` (and an unused `inspect` import) that I did not introduce and have
   deliberately left untouched rather than widening my diff.
 
+## HS-036 — Task 9 implemented: the Teleop head camera without a second detector
+
+- **Code.** `src/so101_teleop/so101_teleop/head_camera.py` (standard-library only): `HeadCameraBackend`
+  carries the descriptor's owner, simulation session, execution generation and model identity and publishes
+  `FrameEnvelope`s bound to that identity; it constructs no detector, reporting the injected factory count.
+  `load_descriptor` reads the closed `SO101_HEAD_CAMERA_CONNECTION`, `compose_head_camera` refuses any
+  socket/runtime/owner drift, `head_camera_router(services)` serves the five endpoints with 503
+  `HEAD_CAMERA_UNAVAILABLE` when the domain is unavailable and 409 `HEAD_TARGET_OUT_OF_RANGE` before submit.
+  `so101_teleop/unified/compose.py` gained `compose_head_camera_service`, and `unified/app.py` mounts the
+  router; `CMakeLists.txt` registers the suite with the package gates.
+- **Gates.** Head-camera suite **8 passed** with the recorded interpreter (see HS-035); both OpenAPI views
+  carry the four HTTP endpoints, with the websocket deliberately absent because OpenAPI documents HTTP only.
+- **Commits.** `b390e521a` (boundary), `25b11df00` (composition), `9dd1e537d` (endpoints), `ef6cce332` +
+  `982ad3dd9` + `1ac630dbf` (app inclusion and the corrected diff), `a92c0ab85` (package gate).
+- **Owed:** Task 9's review verdict. The websocket's live framing remains for Task 11's installed smoke and
+  Task 14's end-to-end run.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
