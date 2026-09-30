@@ -40296,3 +40296,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 reduced to these
   two edits plus fixture upgrades**, F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD
   `37fedaac3`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2146 — F5's shared predicate: the writer's seal gate now calls the readback's own function
+
+- **What landed** (`episode_audit.py`): the formal seal gate no longer carries its own inline coverage condition;
+  it calls `_formal_coverage_ok(self.root / "audit")` — the very function the readback uses at line 958 — and
+  keeps CP-2137's release tie beside it. The two sides can therefore no longer drift, which is F5's literal
+  instruction ("use one shared formal-coverage predicate"); the effect already visible is that the writer now
+  requires an **accepted** reference rather than a merely nonempty dictionary, the divergence F5 named first.
+- **Why this half first**: it changes the writer's requirement to be **equal** to the readback's, not stricter
+  than it, so it can land alone and be checked against existing suites — and it did, with **148 passed** and no
+  fixture moved. Tightening the predicate to F5's fuller list (nine phases, a complete raw reference group, the
+  ratified physics kinds and observations) is the second half and will move formal fixtures, which is why it waits
+  for its own pass with those upgrades.
+- **Evidence.** Targeted run this round: **148 passed** across the audit, recorder, release-boundary and capture
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 half-landed**
+  (shared predicate ✓, tightening pending), F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**;
+  HEAD `9bb74c688`; no push, no evidence deletion, no hardware, no second stack.

@@ -791,11 +791,10 @@ class EpisodeAuditWriter:
     def seal(self, window: dict) -> Path:
         self._require_open()
         if self.scope.get("mode") == "formal":
-            # a formal episode must actually carry the raw source coverage it claims; until the
-            # producers exist this refuses rather than sealing an empty audit
-            if (not self._sequence["physics"] or not self._sequence["references"]
-                    or not self._sequence["events"] or not self._references
-                    or "release" not in self._event_kinds
+            # F5: one shared predicate governs both sides - the writer's coverage is the same requirement the
+            # readback re-checks (which also names the accepted reference an inline check used to miss) - and
+            # the F3 tie stays beside it
+            if (not _formal_coverage_ok(self.root / "audit")
                     # F3: every release step the stream takes must be named by a release event, not just one
                     or any(epoch > 0 and not named for epoch, named in self._release_named.items())):
                 raise ValueError("AUDIT_FORMAL_COVERAGE_INCOMPLETE")
