@@ -40276,3 +40276,29 @@ implicit dependency the plan's ordering does not acknowledge, and it is worth de
 current 12.0 s and re-record if the approved value differs, or settle that one value early.
 
 Recorded for the decision; implementation still not started pending the user's steer on this point.
+
+## HS-225 — Concrete cost: 40 seed-episodes, and the recording is minutes not hours
+
+Partition sizes, read from the tracked file itself:
+
+```
+calibration: 20 seeds      held_out_evaluation: 20 seeds      qualification: 40 seeds
+condition_classes: 10      anchors: 3      schema_version + document + description
+```
+
+Combined with HS-224's bound (`search_timeout_s 12.0` at 10 Hz -> up to 120 frames), the recording workload is:
+
+| quantity | worst case |
+| --- | --- |
+| seed-episodes to record | 20 calibration + 20 held-out = **40** |
+| frames | 40 x 120 = **4,800** (fewer where a target is found and the scan stops early) |
+| detections | 4,800 x 3 candidates = **14,400** |
+| GPU inference | at the measured ~1.2 ms/frame -> **~20 s** |
+| MuJoCo simulation | 40 x 12 s = 480 s of simulated time, so minutes of wall-clock at any plausible real-time factor |
+
+So the whole recording is **minutes of wall-clock**, dominated by rendering rather than inference - which settles HS-224's
+choice in favour of recording now at the current 12.0 s and re-recording if the approved value differs: re-recording costs
+minutes, while settling the value early would pull a Task 13 approval forward for no material saving.
+
+Also worth noting for Task 13: `qualification`'s 40 seeds are the ones design line 391 says are sealed before calibration and
+distributed over ten condition classes across three anchors - they are **not** part of Task 12's recording.
