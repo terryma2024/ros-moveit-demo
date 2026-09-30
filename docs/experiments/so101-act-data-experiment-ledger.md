@@ -40981,3 +40981,30 @@ implemented, or the bundle comes from the config's existing values with the prov
 
 Recorded here rather than discovered during the approval pause, because asking someone to approve seventeen numbers that no run
 produced would be the worst possible moment to mention it.
+
+## HS-251 — Task 13 Step 1 gates on `model-selection-verdict.json`, which the retention path never produces
+
+Read the plan's own guard rather than assuming what Task 13 needs:
+
+```zsh
+test -f "$MODEL_RUN/evaluation/model-selection-verdict.json" || exit 1
+```
+
+So Task 13 begins only if the Step 5 gate **wrote a selection verdict**. My run refused with an exception, so no such file exists - and
+Task 13 Step 1 cannot start. The plan has no branch for "no permissible selection", which is exactly the state the design's
+retention rule produced.
+
+**But the plan's Step 5 acceptance hints at the right shape:** "Read back all six candidate/domain cells, scene-level confidence
+intervals, zero false candidates, latency, **retention verdict and final choice**." A *retention verdict* and a *final choice* are
+artefacts, not exceptions - i.e. the gate is expected to **record** that retention was lost and that the retained model is the
+final choice, rather than to raise and leave nothing behind.
+
+**Recommended resolution, and the reason it is faithful rather than a workaround:** implement the verdict artefact on the
+retention path - `model-comparison.json` with the measured cells and the retention margin comparison, and
+`model-selection-verdict.json` naming **A as the retained selection** with the retention refusal as its stated reason. Nothing is
+promoted (the design's rule still binds, and the margin stays 0.01); the difference is that the refusal becomes a **recorded
+decision with evidence** instead of a missing file, which is also what lets Task 13 proceed to the approval pause with a truthful
+provenance chain. Implementing it does not make a challenger win; it makes the loss legible.
+
+This is the tenth contract item in this chain that the consumer's code defined rather than the plan's prose, and the first where
+the artefact's *absence* is what blocks a later task.
