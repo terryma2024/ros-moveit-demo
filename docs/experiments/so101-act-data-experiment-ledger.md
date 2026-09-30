@@ -35486,6 +35486,23 @@ no second detector, with its RED tests first.
   compose, app, arbiter and OpenAPI wiring plus `CMakeLists.txt`) wait on the same environment, because their
   tests cannot run either.
 
+## HS-035 — The pydantic-v2 gap is closed: Task 9's gates run
+
+- **What was missing:** `src/so101_teleop` is a ROS package needing pydantic v2; the host had only the system
+  pydantic 1.10.14, so `so101_teleop.unified.compose` failed to import and no Task 9 gate could be counted.
+- **What was done:** `pydantic>=2` was installed into the existing perception venv
+  (`/data/work/venvs/so101-v5-t004-perception`), which now reports **pydantic 2.13.5** and already carried
+  pytest. This is a local virtualenv change only - no system package, no ROS stack, no hardware.
+- **The head-camera boundary now runs and passes.** With
+  `PYTHONPATH=src/so101_teleop /data/work/venvs/so101-v5-t004-perception/bin/python3 -m pytest
+  src/so101_teleop/test/teleop/test_head_camera_api.py -q`, the suite reports **6 passed**: the composed
+  identity with zero detector construction, the out-of-range target refusal, the socket/runtime/owner drift
+  refusals and the unavailable domain, the exact runtime authority from the descriptor, the three-sample
+  stop proof, and the atomic capture refusing missing, stale and mismatched frames. The module imports only
+  the standard library, so no ROS environment is needed for it.
+- **Note for Task 11:** this venv is now part of the toolchain for the Teleop tests and must be recorded in
+  the frozen build provenance; the `so101_mujoco_support` underlay rebuild remains outstanding.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
