@@ -35452,6 +35452,16 @@ no second detector, with its RED tests first.
   likely the one the installed overlay records during Task 11's build. Until it is, a Task 9 RED gate would
   fail at import for the wrong reason and must not be counted as RED.
 
+- **Task 9 blocker confirmed host-wide (round 271).** No interpreter on this host provides pydantic v2: both
+  venvs under `/data/work/venvs` lack pydantic entirely, the installed overlay trees carry no pydantic
+  package, and a `site-packages` search found none; the system python has pydantic **v1**, which is what
+  makes `so101_teleop.unified.compose` fail with `cannot import name 'field_validator'`. `so101_teleop`
+  therefore cannot be imported - let alone tested - until a pydantic-v2 environment exists, so Task 9's RED
+  and GREEN gates are **blocked on the toolchain** rather than on source work. This joins the Task 11 build
+  items (the stale `so101_mujoco_support` underlay that blocks the binding test files is the other), and no
+  Task 9 test may be counted as RED until the import succeeds for the right reason. Source work that does not
+  require importing the teleop package can still proceed.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
