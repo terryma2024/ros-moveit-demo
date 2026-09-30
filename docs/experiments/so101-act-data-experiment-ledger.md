@@ -38607,3 +38607,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `3908c7b9d`;
   targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2069 — Task 3: the port's four remaining "derivations" are upstream-guaranteed; the cleanup is specified, not applied
+
+- **What the code says** (`pick_place_search_port.py`, the scope check at lines 335-358): before this document
+  exists the port refuses `result["found"] is not True` (line 336), `world.truncated is not False` (line 341),
+  contact evidence whose `physics_step` differs from the world's (line 356), and any source stamp outside
+  `skew` (lines 350, 357). So **every gate in the SEARCH document is guaranteed by that validation**, and the
+  derivations I added for `mujoco_ok` (CP-2056), `contact_ok` (CP-2055) and the two camera gates (CP-2059)
+  report constants — the same weakness CP-2062 already fixed for `planning_ok`.
+- **Correction to my own reports.** CP-2061 told the owner that a truncated world "makes the gate false"; the
+  truth is the port refuses it first (CP-2068), and this read shows why. The genuinely observational gates are
+  the **boundary's four** — the scene receipt, the controller records, the reference proof and the path proof
+  can each be absent, which the three-way controls demonstrate (CP-2036, CP-2044).
+- **The cleanup, specified but not applied.** One reason block beside the gate dictionary, and those four
+  gates stated as explicit values (the same treatment CP-2062 gave `planning_ok`), keeping
+  `planning_scene_ok`/`controller_reference_ok`/`joint_feedback_ok` as the document's only derived gates. My
+  patch aborted on an anchor mismatch before writing anything — the file is untouched and the suites are green
+  (`98 passed`), so the next session should open the file rather than trust my remembered anchor text.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9877c1b71`;
+  targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
