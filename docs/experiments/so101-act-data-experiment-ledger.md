@@ -34967,6 +34967,19 @@ build stops at `mujoco_vendor`. The verdict rightly says Task 4 cannot be called
 plan puts the full gate at Task 11, so the fix plan includes either repairing the environment (an
 interpreter that owns torch and the pinned rasterizer) or recording a formal, reviewed quarantine.
 
+- **Real-artifact verification of the rework (round 39).** Two checks that unit tests could not make.
+  First, the plan's own `compare` argument shape (candidates, manifests, partitions, repetitions, device,
+  output - no weights directory, no dataset roots, no episode records) was run against the real pinned
+  task manifest and reached evaluation, refusing with a named `EVALUATION_CANDIDATE_SET_INVALID` rather
+  than an argparse exit, which is exactly finding 1's remedy on the real CLI path. Second,
+  `verify_split_manifest` was run on the real pinned task dataset and initially **failed on real data
+  twice**, both times because the check was stricter than the artifact: that manifest carries a
+  `schema_version` instead of a `dataset_contract` marker, and it identifies its episodes by `seed`
+  rather than by `scene_group_id` (the scene-group convention postdates it). Both are fixed: either marker
+  is accepted, a seed is always required, and scene groups are checked where they exist. The real test
+  split now verifies - **200 samples, 200 seeds** - while traversal, digest mismatches and cross-split
+  leakage remain refused.
+
 ## HS-019 — Task 4 rework: all six rejection findings addressed (commits a964f4a96, 6cf3a4ddb, 6e5ff25df)
 
 - **Finding 1, the pinned invocation.** `compare` no longer requires locations the plan's own call does
