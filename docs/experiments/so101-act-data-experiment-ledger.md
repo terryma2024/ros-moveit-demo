@@ -39722,3 +39722,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list F1/F3/F5/F11/F12/F13 stands with F12's carrier fixed and F13's dimensions done; targeted
   gate `logs/task3-final.run` **430 passed**; HEAD `a87710376`; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2120 — F12 closed: the boundary joins the broker's feedback records to the observation
+
+- **What landed** (`pick_place_search_boundary.py`): `_remember_controller_feedback(observed)` reads the
+  readback's own `world.simulation_time_s`, asks `self.reset.broker.controller_feedback(kind, instant)` for both
+  kinds, and sets `observed.controller_feedback` — the field the port's `physical_observation` block and the audit
+  already accept. It sits in the same `or` chain as the scene receipt (CP-2031's pattern), returns `None` so the
+  chain still yields the verifier's verdict, and leaves the field unset when the broker cannot answer, which the
+  port reports as its documented value rather than a false positive.
+- **F12 is therefore closed**: the carrier is the runner's own nested block (CP-2116/CP-2117), the scene record's
+  producer→carrier→document join was verified end to end (CP-2118), and the feedback records now have a production
+  caller that joins them to the observation the port reads (this entry).
+- **Evidence.** Targeted run this round: **127 passed** across `test_act_task8`, the search-port,
+  motion-phase, close-execution, qualification and supervisor suites under `pytest-xdist` with 8 workers, its own
+  NVMe scratch and a non-empty tempfile proof.
+- **What Task 3 still lists**: **F1**, **F3**, **F5**, **F11**, and **F13's freshness half** — the feedback's age
+  must come from the stored joint/reference receipt rather than the live physics epoch (with reset/session
+  fences), `sim_time_s` must be an observed source instant, and `_planning_scene_record` must give the scene query
+  its own observed time instead of backdating it; F13's four controls belong with those.
+- **State.** Item 3's list stands at F1/F3/F5/F11 + F13-freshness with F12 closed; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `88d580c33`; no push, no evidence deletion, no hardware, no second
+  stack.

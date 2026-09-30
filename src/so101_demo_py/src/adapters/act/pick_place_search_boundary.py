@@ -283,6 +283,30 @@ class PickPlaceSearchBoundary:
             self._controller_reference = physical_proof
         return None
 
+    def _remember_controller_feedback(self, observed):
+        """Fill the observation's feedback records from the broker, at the readback's own instant.
+
+        The broker produces the ratified per-kind records (CP-2040/CP-2119); nothing else joins them to the
+        observation the port reads. A broker that cannot answer leaves the field unset, which the port's gate
+        reports as its documented placeholder rather than a false positive. Returns None so it can sit in the
+        verifier's `or` chain.
+        """
+
+        raw = getattr(observed, "physical_readback", None)
+        world = raw.get("world") if isinstance(raw, dict) else None
+        instant = getattr(world, "simulation_time_s", None)
+        broker = getattr(self.reset, "broker", None)
+        if instant is None or broker is None or not hasattr(broker, "controller_feedback"):
+            return None
+        records = []
+        for kind in ("arm", "gripper"):
+            try:
+                records.append(broker.controller_feedback(kind, instant))
+            except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
+                return None
+        observed.controller_feedback = tuple(records)
+        return None
+
     def _remember_planning_scene_receipt(self, observed):
         """Remember the validated SEARCH receipt for the gates that later phases report.
 
@@ -813,6 +837,9 @@ class PickPlaceSearchBoundary:
                     # so the gates the later phases report are derived from an observation, not asserted.
                     # The helper returns None, which is falsy, so `or` still yields the verifier's verdict.
                     self._remember_planning_scene_receipt(observed) or
+                    # F12's feedback half: the broker produces the ratified records, and this is the one place
+                    # that holds `observed` before the port reads it, so the join happens here (CP-2118)
+                    self._remember_controller_feedback(observed) or
                     verify_search_stationary_physics(
                         self.reset.sources, observed, model=self.reset.model,
                         stopped_wall_s=stopped_wall_s,
