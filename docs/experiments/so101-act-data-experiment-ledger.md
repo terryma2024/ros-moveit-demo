@@ -36328,3 +36328,22 @@ benchmark, that it predates this work (Task 4's run already reported it among th
 that no Head Search test depends on it. The colcon-side 62 are the same story on the rasterizer path, and the
 next round tries the cheap configuration fix for those (`MUJOCO_GL`/`PYOPENGL_PLATFORM` under the ROS
 environment) before falling back to the same kind of scoped note.
+
+## HS-062 — The direct benchmark failure is fixed by the pinned transformers version (round 381)
+
+Correcting HS-061: the module was not missing from the environment, it was **the wrong version**. The test
+asserts `transformers == 4.56.2` and my first install pulled 5.17.0, which turned a missing-module error into a
+version-mismatch error. Installing the pin the repository declares fixed it:
+
+```
+transformers 4.56.2
+test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly   1 passed in 1.84 s
+```
+
+So NOT MET item 11's direct half is closed by installing the version the repository already pins, and the
+episode is a small lesson worth keeping: my first "fix" made the failure different rather than gone, and only
+reading the new assertion showed why. The colcon-side 62 remain, and the next round tries the cheap
+configuration fix for those before falling back to a scoped note.
+
+**Provenance update:** the perception venv now carries `transformers==4.56.2` (pinned), and HS-056's table is
+amended by this entry.
