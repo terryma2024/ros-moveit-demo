@@ -36858,3 +36858,26 @@ this work touched - and it explains the family: `test_task8_child_driven_case`, 
 None of it is this work's, and each claim now rests on a traceback or a fixed path rather than on a count. The
 reviewer's scope objection is answered in the only way that counts: the gate ran over both packages, alone, and its
 failures are explained one family at a time.
+
+## HS-086 — Task 11 re-review 2: REJECT, and it is right (round 507)
+
+The second re-review rejects again, and three of its five points land squarely on me:
+
+1. **I pointed it at stale evidence.** It read `n8-batched4` (demo package only) rather than my later corrected
+   run that did include `so101_teleop`. That is an evidence-packaging failure, not a reviewer error.
+2. **My batched gate repeats coverage.** Pytest already recurses into child directories, so batching `test/` and
+   then each child directory re-runs tests instead of covering new ground. The reviewer is technically right, and
+   my "whole ordinary suite covered" claim was weaker than I presented.
+3. **My seven-test delta explanation was speculation.** I attributed 179 -> 172 to worker assignment without
+   support; the reviewer is right that a changed failure count under fixed collection and environment is not
+   explained by assignment alone. It should have been "unexplained", not "plausibly explained".
+4. **Classification does not waive gates.** The benchmark gate needs a fresh complete readback (I stopped the full
+   dataset run), and provenance items stay open: dependency-closed build, installed provenance, complete installed
+   ordinary package gates, a search smoke against the FINAL seal, a standalone installed Teleop server smoke, and
+   the dataset-verify/CLI-probe output links.
+5. **The contract restoration is verified** within its scope - the one thing this round closed.
+
+Its closing rule is correct and worth keeping: "If acceptance is intentionally narrowed, that requires an explicit
+change to the acceptance contract; classifying failures does not itself waive a gate." Task 11 therefore stays
+`in_progress` with the enumerated work above, and the next step is to run the gates as written - starting with a
+single non-batched `-n 8` run per package and a full benchmark readback - rather than to argue the failures away.
