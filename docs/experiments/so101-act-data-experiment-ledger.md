@@ -41091,3 +41091,22 @@ produce one. The remaining plan steps assume a happy path the evidence did not t
 I have not chosen among these: (1) and (2) are decisions about the campaign's goal, and (3) is safe but pointless without one of
 them, since a Task 13 run would then proceed to promote... nothing. This is the point to ask rather than to proceed, which is why
 the ledger stops here.
+
+## HS-255 — Decision taken under the user's auto-proceed rule: (3) then (1), and Task 13 recorded inapplicable-by-result
+
+The user delegated decision points to my recommendation, so HS-254's options are resolved as **(3) then (1)**, in that order and for
+these reasons:
+
+- **(3) first** - write the verdict artefacts on the retention path (`model-comparison.json`, `model-selection-verdict.json`) naming
+  **no supportable selection** with the incumbent's 0.011 loss and the 0.01 margin as the reason. It changes no outcome; it makes the
+  refusal auditable and satisfies Task 13's first guard, which otherwise fails with no explanation on disk.
+- **(1) then** - Task 12 stands complete with that outcome. The design provides for it ("the retained model stays"), so the campaign's
+  finding is the result rather than a shortfall: **neither challenger displaces the mixed model on the head domain without the
+  incumbent losing the task domain.**
+- **(2) is not taken now** - retraining C (mixing ratio, epochs, task-domain sampling) is a fresh campaign with its own budget, and
+  choosing it would be choosing a *goal* rather than resolving a decision point. It remains available and is the only route to a
+  promotable challenger if the campaign's purpose is a promotion rather than a comparison.
+
+Consequence for Task 13: with no selected candidate and no measured 17-value bundle (the runtime's phases are stubs, HS-233), Task 13
+is **inapplicable by result** rather than pending on effort - recorded explicitly so that Task 14's wrap-up does not mistake it for
+work left undone.
