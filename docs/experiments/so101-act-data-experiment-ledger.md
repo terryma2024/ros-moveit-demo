@@ -35721,6 +35721,25 @@ Nothing regressed across Tasks 5-10. Note for accuracy: a first attempt at the t
 ran" because the working directory was `src/` after a `cd ../..` rather than the worktree root; re-run from the
 root it passes, so that was my path error, not a suite failure.
 
+## HS-042 — Task 10 APPROVED, and the stale underlay diagnosed for Task 11 (round 327)
+
+- **Task 10 confirmation** (`reviews/task10/task10-mask-verdict.md`): **APPROVE** on all five points - the
+  overlay draws an SVG polygon from the detection's frame-pixel outline, the empty-data-URI image is gone,
+  a missing or empty outline falls back to a rect positioned and sized from `xyxy`, both carry
+  `data-mask-sha256`, and the test asserts the points and the digest. One honest note: the new Execute case
+  started at 0, already inside the interval, so it did not exercise out-of-range clamping - now fixed by
+  driving the control to 99 and -99 and requiring the value handed to `onExecute` to stay inside the sealed
+  interval both times (panel suite 10 passed).
+- **Task 10 complete.** Commit trail: `324839620` (panel), `b1e759c07` (client), `e0b27bef2` (tab),
+  `9ab6fb73f` (styles and schema), `d10411e31` + `c619fa82b` (the review fixes), plus this test. Gates: 16 web
+  tests passed, the web build succeeds, and the RED log is retained at
+  `<evidence>/head-teleop-web-red-20260930T083827Z/`.
+- **Task 11 prerequisite diagnosed (read-only).** The blocked binding tests fail because the **installed**
+  `so101_mujoco_support` message package does not export `ScalarJointEvidence`, while the worktree package
+  **declares** it (`CMakeLists.txt` line 38 lists `msg/ScalarJointEvidence.msg` and
+  `src/simulation_evidence_plugin.cpp` builds it). So the fix is a rebuild of that package into the overlay,
+  which is Task 11's build work - not a source defect in the binding tests.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
