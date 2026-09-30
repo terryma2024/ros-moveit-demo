@@ -34735,3 +34735,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   tempfile proof.
 - **State.** **Task-list item 1 in_progress, awaiting verdict 6; items 2-8 pending.** Packet:
   `reviews/task1-amendment2-packet.md`.
+
+
+## CP-1930 — Task 1 checkpoint PASSED under the amended contract (verdict 6: PASS, no findings)
+
+- **Verdict 6** (`reviews/task1-amendment2-verdict.md`, dispatch `a6ebe1f8-d14f-4530-9d61-57a2d03dfaa8`)
+  on `748fcff4589d670b1c17b3e1dcd027ca56009fb3`: **PASS, 0 Critical / 0 Important / 0 Minor.** F11
+  closed (every frozen calibration report is independently validated before resources; the repaired
+  positive case genuinely covers permitted distinct reports; the three negative cases refresh every
+  outer hash and leave only the report-level defect), F12 closed (no duplicate test names), F13 closed
+  (documentation matches the amendment).
+- **Independent readback by the reviewer.** Patch hash and both production hashes match; RED pointer
+  `scratch/nonhead-tests.DmL0yF4k` rc=1 (3 failures, 0 errors) and GREEN pointer
+  `scratch/nonhead-tests.OeAQPn2M` rc=0 (97 tests, 0 failures/errors); the valid distinct-report
+  fixture carries one GPU lease and one campaign context while each defective-report fixture carries
+  zero of both (read-only immutable SQLite readback); the 39-path dirty baseline is unchanged
+  (`837d602e…ae2a7`).
+- **Correction to my own packet (recorded, not hidden).** I wrote "13 uniquely collected test
+  functions" for the admission test file; the reviewer counted **14 functions / 16 cases** with the
+  three-way parameterization. The collected count re-read here matches the reviewer: 16 cases. The
+  discrepancy was in my packet's wording, not in the tests or the RED/GREEN numbers.
+- **Checkpoint state.** The Task 1 checkpoint is satisfied under CP-1928's amended contract, including
+  the owner's withdrawal of the identity-invalidation rule. **Task-list item 1 is completed.**
+- **Superseded, not reinstated.** F3's live-identity matching and single-report portions, F8's live
+  freeze-provenance proof and F10's inspector/live-config mismatch remain superseded by the owner
+  decision; everything else in the earlier verdicts stays closed. Formal W8's never-implemented
+  verifier gate, the same-run runtime-closure drift check and the diagnostic/formal separation are
+  untouched.
+- **Carried to the coordinator (process, not code).** The Codex session cannot certify its own model
+  id/effort from runtime metadata; dispatch evidence is `codex queue -m gpt-6.1-sol` plus a
+  `GPT-6.1-Sol high` pane banner. No model or global configuration was changed.
+- **Still open for Task 6/7.** The four real MISSING roles (`path_policy`, `placement_qc`, `rgb_skew`,
+  `resource_thresholds`) need the owner to approve actual values; no default exists and none was
+  invented. The full ordinary xdist gate still runs at the Task 6 overlay build.
+- **State.** **Task-list items 0 and 1 completed; item 2 in_progress; items 3-8 pending.**
