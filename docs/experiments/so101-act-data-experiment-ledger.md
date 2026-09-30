@@ -39548,3 +39548,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   keeps them behind Task 3's convergence.
 - **State.** HEAD `17a77694d`; targeted gate `logs/task3-final.run` **430 passed** (as the verdict itself re-read);
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2113 — F12's carrier contract, decided from both ends of the code
+
+- **Both ends read** (`pick_place_runner.py:181-186`): a phase document's key set must be exactly
+  `_EVIDENCE_KEYS`, or those plus **`physical_observation`** — and that one nested block must pass `_raw`, which
+  accepts a flat mapping of finite numbers and booleans. The port (`pick_place_search_port.py:459`) instead adds
+  `planning_scene_observation` as a **top-level sibling**, so any real scene observation makes the document
+  `PHASE_EVIDENCE_INVALID`. F12's claim is therefore confirmed exactly as written.
+- **The contract that satisfies both**: the typed records travel **inside `physical_observation`**, under their
+  ratified names — the one nested carrier the runner already permits — which is also where the common audit's own
+  physics schema expects `planning_scene_observation` and `controller_feedback` (it validates them strictly when
+  present). So the carrier is agreed by construction rather than newly invented, and the audit needs no change.
+- **The three edits it implies, and nothing else**: (1) the port stops adding the top-level key and merges the
+  record into the `physical_observation` block it already builds; (2) the runner's `_raw` accepts the ratified
+  typed records as named sub-mappings while keeping its flat numeric rule for everything else, so the strictness
+  that protects the raw numbers is not lost; (3) the boundary's and runner's gate derivations read the record from
+  that nested block. F12's second half — a production caller filling feedback, and gates derived from the joined
+  **current** records rather than cached proofs — follows the same carrier.
+- **Why the decision is recorded rather than implemented this round**: it is a three-file coordinated change with
+  a runner-side validation relaxation, which is precisely the class of edit this session has been failing at; the
+  contract above is what the next pass needs, and F13's dimension/freshness corrections belong to the same pass
+  because they change what the carrier holds.
+- **State.** HEAD `52987e41d`; item 3's findings F1/F3/F5/F11/F12/F13 are the next pass's list with F12's contract
+  now fixed in writing; targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no
+  hardware, no second stack.
