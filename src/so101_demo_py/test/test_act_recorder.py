@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import numpy as np
@@ -202,3 +203,104 @@ def test_fsync_failure_is_infrastructure_not_a_business_failed_seal(tmp_path, mo
     with pytest.raises(RecorderInfraError, match="RECORDER_SEAL_FAILED"):
         recorder.finish(outcome("FAILED"))
     assert not (tmp_path / "episode/seal.json").exists()
+
+
+def _audit_and_scope(tmp_path):
+    from so101_demo.act.episode_audit import EpisodeAuditWriter
+
+    writer = EpisodeAuditWriter(tmp_path / "audit-episode", {"mode": "preselected_target_diagnostic"},
+                                {"session_id": "session-1", "attempt_id": "attempt-1",
+                                 "reset_epoch": 2, "scene_id": "default", "seed": 0},
+                                {"inputs_sha256": "c" * 64})
+    import numpy as _np
+
+    from so101_demo.act.acquisition import AcquisitionMinter
+
+    minter = AcquisitionMinter()
+    frames = [minter.mint(camera, session_id="session-1", reset_epoch=2, stamp_s=1.0,
+                          received_monotonic_ns=1,
+                          pixels=_np.zeros((480, 640, 3), dtype=_np.uint8))
+              for camera in ("head", "wrist")]
+    for frame in frames:
+        writer.append_acquisition(frame)
+    writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+                                        "accepted": True})
+    writer.bind_row(0, 1.0, frames[0].acquisition_id, frames[1].acquisition_id, 1)
+    manifest = writer.seal({"start_s": 1.0, "end_s": 1.2})
+    scope = tmp_path / "collection-scope.json"
+    scope.write_bytes(b'{"collection_mode":"preselected_target_diagnostic","schema_version":1}\n')
+    return manifest, scope
+
+
+def test_a_v2_seal_names_the_raw_audit_and_the_collection_scope(tmp_path):
+    manifest, scope = _audit_and_scope(tmp_path)
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    path = recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
+    document = verify_episode_seal(path)
+    assert document["schema_version"] == 2
+    assert document["audit"]["manifest_sha256"] == hashlib.sha256(manifest.read_bytes()).hexdigest()
+    assert document["audit"]["scope_sha256"] == hashlib.sha256(scope.read_bytes()).hexdigest()
+
+
+def test_a_seal_without_the_audit_stays_v1_and_readable(tmp_path):
+    """The old schema stays readable for audit; only the new closure is v2."""
+
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    document = verify_episode_seal(recorder.finish(outcome("FAILED")))
+    assert document["schema_version"] == 1 and "audit" not in document
+
+
+def test_a_half_referenced_audit_is_refused(tmp_path):
+    manifest, _ = _audit_and_scope(tmp_path)
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    with pytest.raises(ValueError, match="EPISODE_SEAL_AUDIT_INCOMPLETE"):
+        recorder.finish(outcome("FAILED"), audit_manifest=manifest)
+
+
+def test_a_tampered_audit_cannot_be_sealed(tmp_path):
+    manifest, scope = _audit_and_scope(tmp_path)
+    references = manifest.parent / "references.jsonl"
+    original = references.read_bytes()
+    tampered = original.replace(b"0.1", b"0.9", 1)
+    assert tampered != original, "the fixture must actually change a raw reference"
+    references.write_bytes(tampered)
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    with pytest.raises(ValueError, match="AUDIT_HASH_MISMATCH"):
+        recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
+
+
+def test_a_v2_seal_refuses_an_audit_that_changed_after_sealing(tmp_path):
+    manifest, scope = _audit_and_scope(tmp_path)
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    path = recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
+    (manifest.parent / "events.jsonl").write_bytes(b'{"sequence":1}\n')
+    with pytest.raises(ValueError, match="AUDIT_HASH_MISMATCH"):
+        verify_episode_seal(path)
+
+
+def test_a_v2_seal_fsyncs_the_referenced_files_and_the_parent_directory(tmp_path, monkeypatch):
+    import os as os_module
+    import stat
+
+    manifest, scope = _audit_and_scope(tmp_path)
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    synced = []
+    real_fsync = os_module.fsync
+
+    def recording_fsync(fd):
+        info = os_module.fstat(fd)
+        synced.append((info.st_ino, stat.S_ISDIR(info.st_mode)))
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os_module, "fsync", recording_fsync)
+    recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
+    inodes = {inode for inode, _ in synced}
+    assert manifest.stat().st_ino in inodes and scope.stat().st_ino in inodes
+    assert (recorder.root.parent.stat().st_ino, True) in synced

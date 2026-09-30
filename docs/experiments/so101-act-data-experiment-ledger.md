@@ -35149,3 +35149,40 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (audit writer and release boundary
   green; review pending); items 4-8 pending.** 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1936 — Task 3 fourth bullet: the Recorder seal v2 that names the raw audit
+
+- **`EpisodeRecorder.finish(outcome, *, audit_manifest=None, scope=None)`.** Given both, the seal is
+  **v2**: it carries an `audit` block with the sha256 of the sealed audit manifest and of the
+  collection scope, plus both absolute paths. Given neither, the seal stays **v1 byte-for-byte**, so
+  the old schema remains readable for audit while the new closure is v2; given exactly one, the call
+  refuses with `EPISODE_SEAL_AUDIT_INCOMPLETE`. Before the seal is written, v2 verifies the audit with
+  `verify_audit_manifest` (so a tampered audit can never be referenced into a seal), fsyncs both
+  referenced files and the **parent directory** of the episode root, and only then writes the seal —
+  which itself is still staged, fsynced and hard-linked, with the root fsynced afterwards.
+- **The verifier keeps both schemas honest.** `verify_episode_seal` accepts `schema_version` 1 or 2,
+  allows the `audit` key only for v2 and requires it there, and for v2 re-reads both referenced files
+  and refuses if either digest no longer matches (`EPISODE_SEAL_AUDIT_MISMATCH`) or if the audit's own
+  manifest no longer verifies (`AUDIT_HASH_MISMATCH`). An `audit` block on a v1 seal is refused
+  outright, so a v1 seal cannot smuggle a v2-shaped claim.
+- **Evidence.** `logs/task3-sealv2.run` rc=0: **113 passed in 1.38 s** across
+  `test_act_recorder.py`, `test_act_episode_audit.py`, `test_act_release_boundary.py`,
+  `test_act_controller_reference.py`, `test_act_physics.py`, `test_act_acquisition_identity.py` and
+  `test_act_continuous_capture.py`, with its own NVMe scratch and a non-empty tempfile proof. New
+  cases: a v2 seal names the audit and the scope; a seal without the audit stays v1 and readable; a
+  half-referenced audit is refused; a tampered audit cannot be sealed (the fixture asserts it really
+  changed a raw reference); an audit changed after sealing makes the seal fail read-back; and a v2 seal
+  fsyncs both referenced files and the parent directory (asserted through a recording `os.fsync`
+  wrapper, by inode and directory mode, not by counting calls).
+- **Two of my own test-fixture mistakes were caught by the suite and fixed, not worked around:** the
+  tamper fixture first rewrote a byte sequence that did not exist (`0.1,` in canonical JSON), and the
+  audit fixture sealed an empty audit so there was nothing to tamper. Both are now real: the reference
+  row exists and the fixture asserts the tamper changed the bytes.
+- **Still open in Task 3 (not claimed).** Wiring the broker's real
+  claim/dispatch/accept/revoke/stop events and the controller observer's raw history into
+  `EpisodeAuditWriter`, and recording the raw observations needed to recompute the physical criteria
+  offline instead of consuming phase booleans. The Task 3 Codex checkpoint is next.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (audit writer, release boundary and
+  seal v2 green); items 4-8 pending.** 39-path dirty baseline untouched; no push, no evidence deletion,
+  no hardware, no second stack.

@@ -25,6 +25,8 @@ _AUDIT_KEYS = frozenset({
     "phase", "reference_time_s", "reference_source", "reference_positions", "source_stamps",
     "mujoco_truth", "contacts", "planning_scene", "controller_state",
 })
+from .episode_audit import verify_audit_manifest
+
 _PROVENANCE_KEYS = frozenset({
     "source_sha256", "scene_sha256", "config_sha256", "policy_fingerprint", "seed",
 })
@@ -202,7 +204,23 @@ class EpisodeRecorder:
         if audit["release_event"]:
             self._release_time_s = audit["release_time_s"]
 
-    def finish(self, outcome: dict) -> Path:
+    def finish(self, outcome: dict, *, audit_manifest: Path | None = None,
+               scope: Path | None = None) -> Path:
+        if (audit_manifest is None) != (scope is None):
+            # a v2 seal names both the raw audit and the scope it was collected under, or neither
+            raise ValueError("EPISODE_SEAL_AUDIT_INCOMPLETE")
+        audit_block = None
+        if audit_manifest is not None:
+            audit_manifest, scope = Path(audit_manifest), Path(scope)
+            for target in (audit_manifest, scope):
+                if not target.is_absolute() or ".." in target.parts:
+                    raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+            verify_audit_manifest(audit_manifest)
+            if not scope.is_file() or scope.is_symlink():
+                raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+            audit_block = {"manifest_sha256": _hash(audit_manifest.read_bytes()),
+                           "scope_sha256": _hash(scope.read_bytes()),
+                           "manifest_path": str(audit_manifest), "scope_path": str(scope)}
         if self._failed or self._closed:
             raise RecorderInfraError("RECORDER_NOT_SEALABLE")
         if not isinstance(outcome, dict) or set(outcome) != _OUTCOME_KEYS:
@@ -233,8 +251,22 @@ class EpisodeRecorder:
                 os.fsync(frames_fd)
             finally:
                 os.close(frames_fd)
+            if audit_block is not None:
+                # every referenced file and the parent directory are durable before the seal exists
+                for target in (audit_manifest, scope):
+                    fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+                    try:
+                        os.fsync(fd)
+                    finally:
+                        os.close(fd)
+                parent_fd = os.open(self.root.parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(parent_fd)
+                finally:
+                    os.close(parent_fd)
             seal = {
-                "schema_version": 1, "kind": "ACT_EPISODE_SEAL",
+                "schema_version": 2 if audit_block is not None else 1,
+                "kind": "ACT_EPISODE_SEAL",
                 "status": outcome["status"], "reason": outcome["reason"],
                 "task8_success": outcome["task8_success"],
                 "stopped_confirmed": True, "qc_passed": outcome["status"] == "PASSED",
@@ -243,6 +275,8 @@ class EpisodeRecorder:
                 "record_count": len(self._times), "provenance": self.provenance,
                 "files": dict(sorted(self._files.items())),
             }
+            if audit_block is not None:
+                seal["audit"] = audit_block
             seal["manifest_sha256"] = _hash(_canonical(seal))
             data = _canonical(seal) + b"\n"
             fd, staging = tempfile.mkstemp(prefix=".seal.", dir=self.root)
@@ -276,7 +310,7 @@ def verify_episode_seal(path: Path) -> dict:
             "stopped_confirmed", "qc_passed", "committed", "session_id",
             "attempt_id", "reset_epoch", "record_count", "provenance", "files",
             "manifest_sha256"}
-    if not isinstance(document, dict) or set(document) != keys:
+    if not isinstance(document, dict) or set(document) not in (keys, keys | {"audit"}):
         raise ValueError("EPISODE_SEAL_SCHEMA")
     if source_bytes != _canonical(document) + b"\n":
         raise ValueError("EPISODE_SEAL_NONCANONICAL")
@@ -285,7 +319,7 @@ def verify_episode_seal(path: Path) -> dict:
     if digest != _hash(_canonical({key: value for key, value in document.items()
                                    if key != "manifest_sha256"})):
         raise ValueError("EPISODE_SEAL_HASH_MISMATCH")
-    if (document["schema_version"] != 1 or document["kind"] != "ACT_EPISODE_SEAL"
+    if (document["schema_version"] not in (1, 2) or document["kind"] != "ACT_EPISODE_SEAL"
             or document["status"] not in ("PASSED", "FAILED")
             or document["committed"] is not False
             or document["stopped_confirmed"] is not True
@@ -309,6 +343,25 @@ def verify_episode_seal(path: Path) -> dict:
         actual_hash, actual_size = _regular_hash(root / rel)
         if expected != {"sha256": actual_hash, "size": actual_size}:
             raise ValueError("EPISODE_FILE_HASH_MISMATCH")
+    if document["schema_version"] == 2:
+        # a v2 seal is only meaningful while the audit it names still verifies
+        audit = document["audit"]
+        if (not isinstance(audit, dict) or set(audit) != {"manifest_sha256", "scope_sha256",
+                                                          "manifest_path", "scope_path"}):
+            raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+        sha256(audit["manifest_sha256"])
+        sha256(audit["scope_sha256"])
+        for path_key, digest_key in (("manifest_path", "manifest_sha256"),
+                                     ("scope_path", "scope_sha256")):
+            target = Path(audit[path_key])
+            if (not target.is_absolute() or ".." in target.parts or not target.is_file()
+                    or target.is_symlink()):
+                raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+            if _hash(target.read_bytes()) != audit[digest_key]:
+                raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
+        verify_audit_manifest(Path(audit["manifest_path"]))
+    elif "audit" in document:
+        raise ValueError("EPISODE_SEAL_SCHEMA")
     rows = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
     if len(rows) != document["record_count"]:
         raise ValueError("EPISODE_RECORD_COUNT_MISMATCH")
