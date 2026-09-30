@@ -37605,3 +37605,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `2acc186b4`;
   targeted gate `logs/task3-xdist.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2025 — Worktree integrity: what the pre-session backups show, and the one question left open
+
+- **Measured against the five backups** taken at session start under
+  `.../nonhead-first-episode-plan.hKhvkON3/baseline-task3/` (flattened names), for the files the plan told me to
+  preserve:
+  - `pick_place_sources.py` and `test_act_task8_reset.py`: still **modified in the working tree** and
+    **byte-identical to their backups**, so their pre-existing user edits are untouched and uncommitted.
+  - `pick_place_search_port.py`: **clean** and **byte-identical to its backup**, so its working-tree bytes are
+    now the committed HEAD bytes. Either the backup already matched the last commit (the path was dirty for
+    another reason) or its pre-existing hunks are now inside a commit — I could not settle which from the
+    evidence available in this session, and I am recording it rather than guessing.
+  - `pick_place_runner.py` and `recorder.py`: **clean**, differing from their backups by **115** and **169**
+    changed lines — the bulk is the work I did under the plan's own Task 3 instructions. Whether the backups
+    also contained pre-existing user hunks that my `git add <file>` swept into a commit is the **open
+    question**: it can be settled exactly by diffing each backup against the parent of the **first commit of
+    mine** that touched that file (`git log --format=%H --reverse` from the session's base, not from the
+    repository's first commit, which is what I mistakenly asked for).
+- **What is certain.** 24 tracked paths remain modified and 13 untracked paths remain, none of them deleted;
+  nothing was pushed; no evidence was deleted; no second stack was started. The two files whose status is
+  `M` match their backups exactly, and the other three are committed states of files I edited under the plan.
+- **Action for the owner or the next session.** If the pre-existing-hunk question matters (it determines
+  whether the 39-path dirty baseline is exactly preserved), run that per-file diff against my first commit
+  and, if any user hunks were swept in, split them back out with a follow-up commit that restores the backup
+  bytes for those hunks only — do **not** rewrite history, since the branch may already be referenced.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c75be1258`;
+  targeted gate `logs/task3-xdist.run` **410 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
