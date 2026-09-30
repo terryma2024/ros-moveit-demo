@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import type { HeadCameraClient } from "@/api/head-camera-client";
 
 export interface HeadCameraDetection {
   class_id: number;
@@ -130,4 +132,31 @@ export function HeadCameraPanel({
       </button>
     </section>
   );
+}
+
+/**
+ * The tab body: it owns the status it shows, reads it from the Head Camera API, and renders the panel. A
+ * failed read is shown as an unavailable domain rather than as a stale frame.
+ */
+export function HeadCameraTab({ client }: { client: Pick<HeadCameraClient, "status"> }) {
+  const [status, setStatus] = useState<HeadCameraStatus | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    client
+      .status()
+      .then((next) => {
+        if (live) setStatus(next);
+      })
+      .catch(() => {
+        if (live) setFailed(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [client]);
+
+  if (failed) return <HeadCameraPanel status={null} />;
+  return <HeadCameraPanel status={status} />;
 }
