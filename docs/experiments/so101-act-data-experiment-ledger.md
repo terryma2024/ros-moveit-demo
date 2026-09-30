@@ -36578,3 +36578,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (T3-F1's producer wiring blocked on
   schema ratification); items 4-8 pending.** HEAD `20d5bd609`; 39-path dirty baseline untouched; no push,
   no evidence deletion, no hardware, no second stack.
+
+
+## CP-1978 — Task 3: the registered physics contract located and added to the proposals
+
+- **The plan's "full robot contact pairs" already has a registered contract**, so the physics proposal no
+  longer rests on the MuJoCo summary fields. `act/contact_live.py:25-32` defines the closed live sample
+  (`simulation_session_id`, `reset_epoch`, `physics_step`, `simulation_time_s`, `model_qpos`,
+  `model_qvel`, `cup_position_m`, `cup_velocity_m_s`, `left_contacts`, `right_contacts`, `other_contacts`,
+  `truncated`, `diagnostic_hazard_breached`) and `act/contact_live.py:33-35` the closed contact record
+  (`robot_geom`, `object_body`, `normal_force_n`, `signed_distance_m`). Proposal C in
+  `docs/experiments/so101-act-data-schema-proposals.md` adopts them verbatim, states the required members
+  per kind, and requires `truncated`/`diagnostic_hazard_breached` on `contact` rows so a truncated
+  observation cannot be read as a complete one.
+- **Two of the three remaining source records still need locating and ratification, and I say which.**
+  `planning_attached` is exposed per request by the port/boundary adapters
+  (`adapters/act/pick_place_search_boundary.py:409`, `:526`) rather than recorded as an observation, and
+  no gripper/controller feedback record has been identified. Both are named in Proposal C as belonging
+  there before the boundary changes together; the formal-seal gate stays in place until they exist.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (T3-F1 waits on locating the Planning
+  Scene and feedback records plus owner ratification of Proposals A/B/C); items 4-8 pending.** HEAD
+  `87b7cc5d5`; gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no
+  evidence deletion, no hardware.

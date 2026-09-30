@@ -108,3 +108,47 @@ Current state: `seal()` accepts any non-empty window dictionary, because no key 
 
 Any amendment is applied by editing this file and the ledger entry that references it, so the ratified
 text and the code that implements it stay traceable to one another.
+
+
+## Proposal C — physics source records (`physics.jsonl`)
+
+Derived from the **registered** contract rather than invented: `act/contact_live.py` already defines the
+live contact sample and its per-contact record, and both are closed there.
+
+Registered sample keys (`act/contact_live.py:25-32`): `simulation_session_id`, `reset_epoch`,
+`physics_step`, `simulation_time_s`, `model_qpos`, `model_qvel`, `cup_position_m`, `cup_velocity_m_s`,
+`left_contacts`, `right_contacts`, `other_contacts`, `truncated`, `diagnostic_hazard_breached`.
+Registered contact keys (`act/contact_live.py:33-35`): `robot_geom`, `object_body`, `normal_force_n`,
+`signed_distance_m` — one record per contact, in the three lists.
+
+Proposed shape for a physics row's `observation`: the registered sample verbatim, with its own
+`simulation_time_s` equal to the row's envelope clock (already enforced) and every contact entry closed to
+the four registered keys.
+
+Required members per kind (the measurements the verdict is made of):
+
+| Kind | Required members beyond `simulation_time_s` and `physics_step` |
+| --- | --- |
+| `contact` | `left_contacts`, `right_contacts`, `other_contacts`, `cup_position_m` |
+| `support` | `left_contacts`, `right_contacts`, `cup_position_m`, plus the runner's verified `supported` flag |
+| `pose` | `cup_position_m`, `model_qpos` |
+| `retract` | `cup_position_m`, `cup_velocity_m_s` |
+
+Ordering and integrity rules: `reset_epoch` and `physics_step` are non-negative integers, the contact
+lists contain only closed contact records, `truncated` and `diagnostic_hazard_breached` are booleans, and
+`contact` rows require both `truncated` and `diagnostic_hazard_breached` to be present so a truncated
+observation cannot be read as a complete one.
+
+**What this replaces, and what it waits on.** Today the physics observation accepts the MuJoCo
+`evidence_dict` fields (counts, one maximum force, a geometry-name list) which are **summaries**; the
+reviewer's requirement is the full robot contact pairs plus an independent Planning Scene record and
+gripper/controller feedback. This proposal supplies the first of those three from the registered contract.
+The remaining two still need their source located and ratified: `planning_attached` is exposed per request
+by the port/boundary adapters (`adapters/act/pick_place_search_boundary.py:409`, `:526`) rather than as a
+recorded observation, and no gripper/controller feedback record has been identified yet. Both belong in
+this proposal before the boundary changes together, and the formal-seal gate stays in place until then.
+
+Boundaries that change together when ratified: the port/backend that produces each phase's
+`physical_observation` (currently `backends/mujoco/qualified_phases/release_retreat.py`), the runner's
+`_raw()` and `_physics()`, `act/episode_audit.py` (closed physics observation schema, required members per
+kind, readback parity) and any test fixtures that stand in for a real port.
