@@ -268,6 +268,18 @@ class PickPlaceSearchBoundary:
         return aggregates, world
 
 
+    def _remember_controller_reference(self, observed, physical_proof):
+        """Remember what the reference verifier proved about the accepted controller reference.
+
+        The proof is the verifier's own argument, so nothing is re-derived here; a phase may only report
+        `controller_reference_ok` from a proof this search actually established. Returns None so it can be
+        used in the `or` short-circuit of the verifier lambda.
+        """
+
+        if isinstance(physical_proof, dict) and physical_proof:
+            self._controller_reference = physical_proof
+        return None
+
     def _remember_planning_scene_receipt(self, observed):
         """Remember the validated SEARCH receipt for the gates that later phases report.
 
@@ -282,7 +294,7 @@ class PickPlaceSearchBoundary:
         return None
 
     @staticmethod
-    def _gate_facts(aggregates, world, receipt=None, feedback=None):
+    def _gate_facts(aggregates, world, receipt=None, feedback=None, reference=None):
         """The eight gates and the holding/contact facts one validated readback establishes.
 
         Shared rather than copied: the set-down document needs the same gates the phase documents carry, and a second
@@ -291,7 +303,8 @@ class PickPlaceSearchBoundary:
 
         facts = {
             "physics_step": world.simulation_step,
-            "planning_ok": True, "controller_reference_ok": True, "joint_feedback_ok": (
+            # the reference gate is derived from the proof the reference verifier produced for this search
+            "planning_ok": True, "controller_reference_ok": bool(reference), "joint_feedback_ok": (
             isinstance(feedback, (list, tuple)) and len(feedback) > 0
             and all(isinstance(record, dict)
                     and record.get("sim_time_s") == world.simulation_time_s
@@ -328,7 +341,8 @@ class PickPlaceSearchBoundary:
         # set-down document the runner asks for (which needs the same eight gates and used to omit them entirely)
         facts = self._gate_facts(
             aggregates, world, getattr(self, "_planning_scene_receipt", None),
-            getattr(self, "_controller_feedback", None))
+            getattr(self, "_controller_feedback", None),
+            getattr(self, "_controller_reference", None))
         # the phase flags are ESTABLISHED from the same readback, never asserted: a cup that is no longer supported is
         # off the table, and a lifted cup is one the aggregates call HOLDING (held and unsupported) - which is why
         # MICRO_LIFT and everything after it agrees with the aggregate rules while CLOSE has to be modelled carefully
@@ -424,7 +438,8 @@ class PickPlaceSearchBoundary:
         self._set_down_step = world.simulation_step
         gates = self._gate_facts(
             aggregates, world, getattr(self, "_planning_scene_receipt", None),
-            getattr(self, "_controller_feedback", None))
+            getattr(self, "_controller_feedback", None),
+            getattr(self, "_controller_reference", None))
         return {"session_id": request["session_id"], "attempt_id": request["attempt_id"],
                 "reset_epoch": self.reset.receipt.new_epoch, "release_epoch": self._release_epoch,
                 "physics_step": world.simulation_step,
@@ -797,6 +812,10 @@ class PickPlaceSearchBoundary:
                         stopped_wall_s=stopped_wall_s,
                     ),
                 reference_verifier=lambda observed, physical_proof, stopped_wall_s:
+                    # the same supplier pattern as the Planning Scene receipt: keep what the reference
+                    # verifier proved, so the gates that later phases report are derived rather than
+                    # asserted (the helper returns None, which is falsy, so `or` yields the verdict)
+                    self._remember_controller_reference(observed, physical_proof) or
                     verify_search_stationary_references(
                         self.reset.sources, observed, physical_proof,
                         stopped_wall_s=stopped_wall_s,

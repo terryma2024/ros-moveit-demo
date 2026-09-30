@@ -38196,3 +38196,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   remaining item is recorded down to the line to read and the assertion to add.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2050 — Task 3: the controller-reference gate is derived from the verifier's own proof
+
+- **What landed.** `search()`'s reference verifier now calls `_remember_controller_reference(observed,
+  physical_proof)` before delegating, keeping the proof the verifier established (a non-empty mapping) and
+  returning `None` so the `or` still yields the verdict; `_gate_facts` takes a fifth parameter and reports
+  `controller_reference_ok` as `bool(reference)`, with both call sites passing the stored proof. Both
+  acceptance fixtures supply it. On the boundary helper, **`planning_ok` is now the only remaining
+  placeholder**.
+- **A no-op replace, checked rather than assumed.** My patch script also attempted a fixture-line insertion
+  against an anchor that exists only in the test file; because that replacement carried no assertion it simply
+  did nothing to the module, and I verified afterwards that the module contains **zero** `boundary._controller_reference =`
+  lines while each fixture contains exactly one — the failure mode CP-2042 taught me to check for.
+- **Evidence.** `logs/task3-ref.run` rc=0: **97 passed** across the motion-phases, close-execution, task8,
+  search-port, release-boundary and supervisor suites under `pytest-xdist` with 8 workers, with its own NVMe
+  scratch and a non-empty tempfile proof; the module parses clean.
+- **Remaining derivations**: `planning_ok` on both documents, the port's `controller_reference_ok`, and the
+  port's `contact_ok`/`mujoco_ok`/two RGB gates, each needing its own observation source read first; plus the
+  full record's travel, T3-F11's window-to-rows checks and a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `89a7486fa`;
+  consolidated gate `logs/task3-gate13.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
