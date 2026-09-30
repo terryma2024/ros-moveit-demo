@@ -40820,3 +40820,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
   landed**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**; HEAD `b5c58b990`; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-2171 — The sample's violator is in the per-key loop; the sets are all satisfied
+
+- **Probe results, all from the runtime module the tests import** (`.../pypath/so101_demo/act/episode_audit.py`,
+  which carries my CP-2166 change — its `physics_step` count matches the worktree's twelve):
+  1. the observation is refused **as given**, and **none** of six single-change variants fixes it (non-empty
+     `other_contacts`, six-length vectors, without `physics_step`, with `simulation_step`, without `reset_epoch`,
+     without `simulation_session_id`) — so the violator is not among the values I varied;
+  2. the key-set diff is empty (`unknown keys: []`), `_PHYSICS_REQUIRED_REGISTERED["contact"]` is fully present
+     (`missing: []`), and the registered branch's own condition evaluates **True** — yet
+     `_physics_observation_typed` still returns **False**.
+- **Conclusion**: the refusal comes from the **per-key value loop** that follows those checks, in a branch my
+  reading did not print — most plausibly the `elif key in ("truncated", "diagnostic_hazard_breached")` branch
+  (around line 358), whose body I have never read and which may require a companion field or a stricter value than
+  a plain bool.
+- **The one read that settles it**: print lines 358-372 of `episode_audit.py`. Then the sample fixture is a
+  mechanical edit and F1's fixture lands.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
+  landed**, its fixture one 15-line read away; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221
+  passed**; HEAD `b7bdab32d`; no push, no evidence deletion, no hardware, no second stack.
