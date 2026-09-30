@@ -5,7 +5,7 @@ success_contract: Nine Task 8 phase-prefixes, five consecutive FULL_RESTART full
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 83aa74a47662c380d5958a810711bc89b46413e1 (rebased target HEAD; existing 26 tracked + 13 untracked dirty paths preserved and recorded in CP-1921)
+current_commit: 973acb565 (Task 1 scoped commit; parent rebased target HEAD 83aa74a47662c380d5958a810711bc89b46413e1)
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,7 +69,7 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-1921
+latest_checkpoint: CP-1922
 next_experiment: Task 1 of the approved non-head first-episode plan - mode isolation and input freezing RED/GREEN (`test_act_first_episode_scope.py`), then its Codex checkpoint. The old Task 12 / P1-x route stays recorded above and is not resumed by this milestone.
 ---
 
@@ -34422,3 +34422,5 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the review target is immutable; fixes would be follow-up commits.
 - **State.** **Task-list item 0 completed; item 1 in_progress and paused at its checkpoint (reviewer
   model unavailable); items 2-8 pending.**
+
+- **CP-1922 addendum (recorded after the commit).** The Task 1 work is committed as `973acb565` on `codex/so101-act-data-0917a` (7 files: the two new modules, the two new test files, `act/collection.py`, `unified/admission.py`, this ledger). The 39 baseline-dirty paths were left unstaged and unmodified by that commit, and the review packet's HEAD placeholder now names `973acb565`.
