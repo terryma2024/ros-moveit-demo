@@ -42823,3 +42823,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   wrong-name, wrong-order, wrong-map and frame-refusal negatives. The three source cuts the verdict asked for are in.
 - **State.** **F14 closed**; **F3 closed**; **F1 three of four cuts**; F5/F11/F12/F13 open; the goal is paused. HEAD
   `af652027e`; twenty-one gates green.
+
+
+## CP-2264 — F1 closed: the real broker's frame reaches the common writer, and its mutations are refused
+
+- **What landed** (`test_act_controller_reference_observer.py`): `test_the_real_brokers_frame_reaches_the_common_writer`
+  — a real `RosBrokerDriver` (stub node, patched `ActionClient`) fed a live epoch and two `_reference` frames, wrapped
+  by `RosControllerReferencePort`, whose `reference_frames` are asserted to be **lists** carrying the **registered
+  names** (`1..5` and `6`); the two frames then form a reference record with the canonical map and are **appended to
+  a real audit writer**, which admits them as they stand. Two one-variable negatives follow — a permuted
+  `joint_names` and a permuted `projection_map` — each refused with `AUDIT_SCHEMA_INVALID`.
+- **Why it is the control the verdict demanded**: "another list-valued test port is insufficient" — this one goes
+  through the producer's own methods, the adapter CP-2177 created, and the common writer, with no hand-seeded proof
+  dictionaries anywhere.
+- **Three fixture walls on the way, each named by its error**: the stub node needed `default_callback_group` and the
+  patched `ActionClient` the existing test uses; `complete_audit` needs its parent directory to exist.
+- **Evidence.** `logs/task3-f1-real.run` rc=0: **397 passed in 4.12s** across the controller-reference, audit, release-boundary,
+  task8, recorder, capture, qualification, W8, generic-artifact, store-commit, supervisor and campaign-admission
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a tempfile proof.
+- **F1 is closed**, and with it the seventh verdict's F14, F3 and F1. **Next per the dependency order: F11** — the
+  shared predicate must reconstruct distinct per-stream schedules, counts and ranges, and validate command and physics
+  endpoints against their actual histories (CP-2240).
+- **State.** **F14 closed**, **F3 closed**, **F1 closed**; F5/F11/F12/F13 open; the goal is paused. HEAD `ce00a3856`;
+  twenty-two gates green.

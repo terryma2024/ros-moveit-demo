@@ -269,3 +269,63 @@ def test_the_broker_produces_the_ratified_controller_feedback_record():
     driver._received = 9.0
     with pytest.raises(RuntimeError, match="FEEDBACK_STALE"):
         driver.controller_feedback("arm", 1.1)
+
+
+def test_the_real_brokers_frame_reaches_the_common_writer(tmp_path, monkeypatch):
+    """T3-F1: a frame the real driver produced, normalised at the port, admitted by the common writer."""
+
+    import json
+    import sys
+    from pathlib import Path
+
+    from so101_demo.adapters.act.ros_expert import RosControllerReferencePort
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_act_episode_audit import complete_audit
+
+    class Node:
+        default_callback_group = None
+
+        def create_client(self, *_args):
+            return object()
+
+        def create_subscription(self, *_args, **_kwargs):
+            return object()
+
+    import so101_demo.adapters.act.ros_broker as _broker
+    monkeypatch.setattr(_broker, "ActionClient", lambda *_args: object())
+    driver = RosBrokerDriver(Node(), stop_velocity_rad_s=.002, max_age_s=.2, monotonic=lambda: 10.1)
+    epoch = SimulationEvidence()
+    epoch.simulation_session_id = "session-a"
+    epoch.reset_epoch = 2
+    epoch.header.stamp.sec = 1
+    driver._live_epoch(epoch)
+    driver._reference("arm", frame(1_100_000_000))
+    driver._reference("gripper", frame(1_100_000_000, names=("6",)))
+
+    port = RosControllerReferencePort(driver)
+    arm, gripper = port.reference_frames("arm", 1.1), port.reference_frames("gripper", 1.1)
+    # the carrier boundary turned the driver's tuples into lists and the names are the registered ones
+    assert isinstance(arm["joint_names"], list) and isinstance(arm["evaluated_positions"], list)
+    assert arm["joint_names"] == ["1", "2", "3", "4", "5"] and gripper["joint_names"] == ["6"]
+
+    projected = [*arm["evaluated_positions"], *gripper["evaluated_positions"]]
+    record = {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE", "accepted": True,
+              "positions": projected, "frames": {"arm": arm, "gripper": gripper},
+              "projected_positions": projected,
+              "projection_map": [["arm", index] for index in range(5)] + [["gripper", 0]]}
+
+    (tmp_path / "real").mkdir(parents=True, exist_ok=True)
+    writer, _window = complete_audit(tmp_path / "real")
+    writer.append_source("references", dict(record))       # the real frame is admitted as it stands
+
+    # one variable each: a permuted name list and a permuted map are refused
+    broken_names = json.loads(json.dumps(record))
+    broken_names["frames"]["arm"]["joint_names"] = ["2", "1", "3", "4", "5"]
+    with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+        writer.append_source("references", broken_names)
+    broken_map = json.loads(json.dumps(record))
+    broken_map["projection_map"] = ([["arm", 1], ["arm", 0]]
+                                    + [["arm", index] for index in range(2, 5)] + [["gripper", 0]])
+    with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+        writer.append_source("references", broken_map)
