@@ -34549,3 +34549,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `...T053308Z`, `...T053423Z`, `...T053437Z`, `...T054411Z`, `...T054420Z`, `...T054428Z` and smoke runs
   `...T053447Z`, `...T053455Z`, `...T054736Z`.
 - **Next:** the third review (`gpt-6.1-sol`/high) of commit 87e2bf15a, then Task 3.
+
+## HS-006 — Task 2 review closed: APPROVE WITH FINDINGS, then the finding fixed (commit 0361cc802)
+
+- **Fourth verdict, reviewer `gpt-6.1-sol`/high, HEAD `5a5dffedd`: APPROVE WITH FINDINGS.** It supersedes
+  the third verdict and states that the previously reported major findings are fixed: the 30-degree FOV
+  drift and the incorrect distortion no longer pass, the impossible world pose, zero K, zero quaternion,
+  NaN fields, wild neck, replaced or reshaped masks, canonical symlink escape, internal symlink reuse,
+  hardlink reuse, contradictory task groups and sixth-joint arm drift are all refused; actual simulator
+  neck positions at both exact sealed endpoints generate and verify; and independent values agree with
+  the pose prediction within 2.23e-16. It accepted the named arm-pose replacement and the narrower
+  `[0.165, 0.166]` height band, and confirmed the requested gate: **85 passed, exit 0, 17.77 s**.
+- **The one minor finding, fixed here:** generation checked a rendered neck for finiteness and pose but
+  not for its allowed range, so a renderer prepared at 0.5 rad or at 6.283275307179586 rad still
+  produced a batch (the verifier then refused it, which limited the impact). `_sample_camera_document`
+  now checks each rendered neck against the profile's declared `neck_yaw_rad` **and** the seal's
+  `lock_valid_neck_rad` before any sample is written (`HEAD_DATASET_CAMERA_NECK_UNSAFE`), with a test for
+  both reproductions.
+- **Final Task 2 state:** seal `head-camera-geometry-20260930T060039Z`, digest
+  `b0941fb3edfdc66a4297076e914d9001aa53b867f5585e12550b5c12772187f1`; smoke dataset
+  `head-dataset-smoke-20260930T060040Z` (48 images, 32/8/8, balanced scenarios, non-promotable);
+  gate **86 passed** over the plan's three files after the last test was added; `ruff check` and
+  `git diff --check` clean. Commits: `3139fe23a` (feature), `eb8d893f7`, `87e2bf15a`, `5001d60b7`,
+  `5a5dffedd`, `0361cc802` (review fixes), plus ledger commits `8a18c906b`, `1bdd79f40` and this one.
+- **Retained evidence:** every geometry and smoke run listed in HS-004/HS-005, the three review packets
+  and four verdicts under `reviews/task2/`, the geometry study under `studies/`, the overlay
+  `head-task2-overlay/`, and the reviewer's own probes under
+  `/tmp/so101-debug-head-search-antzb-LuFlHq6a/reviewer/`. Nothing archived, nothing deleted.
+- **Carry-over into Task 3:** verification stays mandatory (the reviewer's explicit instruction);
+  training must inherit the same fail-closed habits - exact digests, existing output roots refused,
+  CUDA only with no CPU fallback, and smoke candidates permanently non-promotable.
