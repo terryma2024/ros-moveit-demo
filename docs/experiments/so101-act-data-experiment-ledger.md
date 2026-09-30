@@ -40325,3 +40325,31 @@ renders a single settled sample per scenario, in which case the recorder wraps i
 (`RawRender`/scene setup) in a step loop.
 
 No implementation started; this is the last piece of interface work before writing the recorder.
+
+## HS-227 — The render entry point is one settled render per `(seed, scenario)`, with no step or pose control
+
+```
+mujoco_dataset.py:1540  def generate_dataset(config, output_root, renderer: DatasetRenderer | None = None, ...)
+                 1552    owned_renderer = renderer is None
+                 1553    active_renderer = renderer or MuJoCoDatasetRenderer(config)
+                 1562      render = active_renderer.render(seed, scenario)
+```
+
+So the reusable primitive is **`DatasetRenderer.render(seed, scenario) -> RawRender`** - one settled render per call, keyed by
+seed and scenario, with **no step index and no head pose**. That is exactly right for generating the 1200 dataset images (one
+sample per scene, HS-187) and exactly insufficient for a 10 Hz episode, whose frames must show the head camera at successive
+yaw positions as the search proceeds.
+
+Two ways forward, and this is now a code-shape decision rather than a fact to look up:
+
+- **extend the renderer protocol** with a pose/step argument (`render(seed, scenario, neck_rad=...)` or a step index), keeping
+  one implementation and one scene setup path; or
+- **write a sibling harness** that drives the same MuJoCo scene directly (reusing its config/seal handling) and renders per
+  step, leaving `MuJoCoDatasetRenderer` untouched.
+
+The second is smaller in blast radius - it cannot regress dataset generation, which Task 12 Step 2 has already verified twice -
+while the first keeps a single rendering path. The seal already declares per-anchor neck angles and the in-frame matrix
+(HS-115/117), so a harness has the pose information it needs without inventing any.
+
+Recorded as the decision point before writing the recorder; the contract (HS-222), workload (HS-225) and frame source (HS-226)
+are all pinned, so this is the last choice before implementation.
