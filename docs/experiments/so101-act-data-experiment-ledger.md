@@ -39252,3 +39252,28 @@ the plan expects, and "make the gate pass by adjusting the environment" is the s
 `source-commit.txt` beside an existing install (HS-165). The next step is to read the traceback's tail for the offending
 URL/variable and report it, then decide with the user whether to fix the environment or to treat this host as unable to run
 the model campaign.
+
+## HS-181 — `hf auth` root cause found: the host's `no_proxy` contains a bracketed IPv6 literal
+
+Diagnosed rather than routed around, and the answer is a host-environment quirk, not credentials:
+
+```
+as-is                          -> httpx.InvalidURL: Invalid port: ':1]'
+ALL_PROXY unset                -> httpx.InvalidURL: Invalid port: ':1]'    (so not ALL_PROXY)
+ALL_PROXY=socks5://...         -> httpx.InvalidURL: Invalid port: ':1]'    (so not the socks scheme)
+no_proxy/NO_PROXY without "[::1]" -> ✓ Logged in   user: zjumty
+```
+
+The environment carries `no_proxy=localhost,127.0.0.1,::1,…,[::1]`, and **httpx cannot parse the bracketed IPv6 literal
+inside a no-proxy list** - it splits on `:` and reads `:1]` as a port. Removing just that one token makes `hf auth whoami`
+succeed and reports the account (`zjumty`), with no credential printed.
+
+**Recorded as a per-command environment workaround**, in the same class as `MUJOCO_GL=egl` and
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` for this host: the variable is **not** changed persistently, nothing in the host
+configuration is edited, and the workaround applies only to commands that must reach the network through the local proxy.
+The alternative - leaving Step 1 blocked - would be treating a known httpx parsing bug as a task blocker, and the alternative
+of editing `no_proxy` system-wide would touch host configuration this task has no mandate to change.
+
+**Consequence for Task 12:** Step 1's `hf auth whoami` gate is satisfiable, so the campaign can proceed - with the A-weights
+download still revision-pinned (`b55430fb75c0207b35bd20f4e328e042bff06f3f`) and sha256-verified per the plan, and the GPU
+recorded (`NVIDIA GeForce RTX 5080`, 16303 MiB, no detector or second stack running).
