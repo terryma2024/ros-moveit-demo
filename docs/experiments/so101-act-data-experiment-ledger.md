@@ -37855,3 +37855,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `10e7de0b0`;
   targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2035 — Task 3: the fail-closed control found that the derived gate is not yet enforced
+
+- **What the control did.** `_case` gained a `receipt` parameter (successful by default, unsuccessful on
+  request, absent when `None`) and a parametrised control drove a MICRO_LIFT phase in both failing cases,
+  expecting the refusal to name `PHASE_EVIDENCE_INVALID`.
+- **What it found: `DID NOT RAISE`.** With **no** receipt and with an **unsuccessful** one, the phase
+  **succeeded** — so `_gate_facts` now derives `planning_scene_ok` from the receipt (CP-2034), but nothing on
+  that path **enforces** the gate, which means the derivation is currently invisible to the phase evidence.
+  That is a real gap in the producer wiring, found exactly where step four was supposed to look, and it is
+  recorded rather than papered over: the reviewer would be right to call an unenforced derivation decorative.
+- **What I reverted and why.** My first control also had a wrong fixture tuple order; after fixing that the
+  `DID NOT RAISE` result stood, so I restored the test file to the committed CP-2034 state rather than land a
+  red suite, and verified the three affected suites are green (`24 passed`, `logs/task3-step4.run` holds the
+  RED evidence).
+- **What step four therefore needs.** Find the place where a phase's gates are checked — the runner's phase
+  validation, `sequence_facts`/`sequence_phase`, or the evidence validator that consumes the document — and
+  require `planning_scene_ok` (and later the controller gates) there, then re-run this control expecting the
+  refusal. The derivation and its inputs are already in place, so this is a targeted enforcement change plus
+  its fixtures, not another schema change.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `8160707f8`.
+  Targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
