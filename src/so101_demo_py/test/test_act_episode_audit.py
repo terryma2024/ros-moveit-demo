@@ -731,7 +731,13 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
     # the writer carries full source coverage first, so each attempt below fails on the window alone
     writer = _formal_writer(tmp_path / "window")
     writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
-                                        "positions": [0.1] * 6, "accepted": True})
+                                        "positions": [0.1] * 6, "accepted": True,
+                                        # F5: coverage needs one complete raw group, not a bare
+                                        # projection, so the legacy flat group travels with it
+                                        "joint_names": list(ARM_JOINTS),
+                                        "sim_stamp_ns": 1_100_000_000,
+                                        "received_monotonic_ns": 1_100_000_001,
+                                        "velocities": [0.0] * 6})
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                      "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
                                                      "cup_position_world_m": [0.0, 0.0, 0.0]}})
@@ -798,7 +804,13 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
 
     complete = _formal_writer(tmp_path / "complete")
     complete.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
-                                          "positions": [0.1] * 6, "accepted": True})
+                                          "positions": [0.1] * 6, "accepted": True,
+                                        # F5: coverage needs one complete raw group, not a bare
+                                        # projection, so the legacy flat group travels with it
+                                        "joint_names": list(ARM_JOINTS),
+                                        "sim_stamp_ns": 1_100_000_000,
+                                        "received_monotonic_ns": 1_100_000_001,
+                                        "velocities": [0.0] * 6})
     complete.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                        "observation": {"simulation_time_s": 1.1,
                                                        "simulation_step": 1,
@@ -1062,7 +1074,13 @@ def _self_consistent_formal(tmp_path):
             writer.append_acquisition(frame)
             frames[(camera, stamp)] = frame
     writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
-                                        "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6], "accepted": True})
+                                        "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6], "accepted": True,
+                                        # F5: coverage needs one complete raw group, not a bare
+                                        # projection, so the legacy flat group travels with it
+                                        "joint_names": list(ARM_JOINTS),
+                                        "sim_stamp_ns": 1_100_000_000,
+                                        "received_monotonic_ns": 1_100_000_001,
+                                        "velocities": [0.0] * 6})
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                      "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
                                                      "cup_position_world_m": [0.0, 0.0, 0.0]}})
@@ -1135,3 +1153,6 @@ def test_the_audit_names_the_runner_s_phases():
 
 
 from so101_demo.act.episode_audit import FORMAL_PHASES   # F5: the prescribed lifecycle
+
+
+from so101_demo.act.joints import ARM_JOINTS   # F5: the ratified joint order

@@ -40464,3 +40464,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 four of six steps
   done**, F1/F11 open; targeted gates `logs/task3-final.run` **430 passed** and `logs/task3-f5-lifecycle.run`
   **201 passed**; HEAD `763b466df`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2154 — F5's raw-reference requirement landed: a bare projected reference is no longer coverage
+
+- **What landed**: `_formal_coverage_ok` now requires the accepted reference to carry **one complete raw group** —
+  `_REFERENCE_RAW_FIELDS` (the four legacy flat keys, line 56) or `_REFERENCE_FRAME_FIELDS` (the packed three,
+  line 60) — and the **three formal fixtures** (test lines 733, 800, 1064, patched by line number so the three
+  diagnostic sites of the same shape stay untouched) supply the legacy group. `ARM_JOINTS` comes from its real home,
+  `src/so101_demo_py/src/act/joints.py:5` — the six names are the strings `"1"`…`"6"`, which is why importing it
+  from the audit module failed (CP-2153).
+- **The cost of getting there, recorded**: one shape-matched patch aborted on the site whose positions are spelled
+  out, one line-numbered patch hit the wrong import home, and the working combination is the line-numbered patch
+  plus the correct import — three rounds for a change whose design was right the first time (CP-2151).
+- **Evidence.** `logs/task3-f5-rawref.run` rc=0: **201 passed in 1.30s** across the audit, recorder, release-boundary, capture,
+  `test_act_task8` and qualification suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a
+  non-empty tempfile proof.
+- **What F5 still lists**: the **registered physics** rows each phase must carry, and the ratified
+  **scene/feedback observations** — two more additions to the same shared predicate, each with its fixtures.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 five of seven steps
+  done**, F1/F11 open; targeted gates `logs/task3-final.run` **430 passed**, `logs/task3-f5-lifecycle.run`
+  **201 passed**, `logs/task3-f5-rawref.run` **201 passed in 1.30s**; HEAD `ade232510`; no push, no evidence deletion, no
+  hardware, no second stack.
