@@ -38150,3 +38150,25 @@ Consequences, stated precisely:
 That closes the last open question in Task 11's clause (c) on the merits: the families are pre-existing or
 environment-driven, and the one candidate regression was eliminated by holding the environment fixed and varying only
 the code.
+
+## HS-139 — Sixth verdict: retraction accepted; per-test attribution and fresh closure still required
+
+The reviewer accepted HS-138 as support for retracting HS-130's regression claim, and rejected on two grounds that are
+both fair:
+
+1. "It does not establish causes for every residual failure; clause (c) requires per-test attribution. Link each
+   remaining failing ID to its traceback and causal evidence; one controlled comparison cannot clear whole families."
+2. "Fresh dependency closure also remains open after HS-108's failed build; installed digests do not close it."
+
+**Ground 1, progress made:** extracted the failing IDs and reason lines from the two completed runs into
+`scratch/attribution-per-id.tsv` (579 rows). The reasons present in the appended-configuration demo run are:
+
+`     69 FIELDS_INVALID;     47 TRUSTED_FINAL_TARGET_INVALID;     16 MEASUREMENT_CONTRACT_VN_INVALID;     14 PickPlaceRunner._verify_phase() takes N positional arguments but N were given;      9 PHASE_CAMERA_MATRIX_INVALID;      6 SOURCE_PROVENANCE_EXTERNAL_MISSING;`
+
+Pairing each id to *its* traceback needs order-aware parsing rather than the set-based extraction I used, which is the
+next mechanical step; the histogram above is per-reason, not yet per-id, and I am labelling it that way rather than
+presenting it as per-test attribution.
+
+**Ground 2:** a genuinely fresh closure build fails on the vendored MuJoCo stack (HS-108), and the installed digests I
+recorded are not a substitute - the reviewer is right. The options are a build that ignores the vendored packages and
+records the closure boundary explicitly, or asking the user to narrow this gate as with HS-103/HS-107.
