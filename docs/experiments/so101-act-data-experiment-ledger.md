@@ -34886,6 +34886,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   that a systematic 0.20 difference survives resampling and that within-scene noise cannot hide a real 0.10
   effect (`0778233de`). Benchmark suite now 14 passed.
 
+- **Task 4 CLI smoke on the real pinned inputs (round 30).** With the pinned A weights copied once per
+  candidate, the **real** task manifest
+  (`deps/so101-task-dataset/dataset/dataset-manifest.json`, 800/200/200) and a two-seed held-out
+  partition, the installed `evaluate_head_search_yolo_candidates compare` entry point refused three ways,
+  each with `rc=2` and a named reason: no `--episode-records` ->
+  `EVALUATION_EPISODES_UNAVAILABLE` (the gate will not invent the episodes the calibration run records);
+  a frozen B whose digest was set to A's -> `EVALUATION_CANDIDATE_SET_INVALID: two candidates share one
+  frozen weight`; and a B whose digest was zeroed -> refused before any measurement. The smoke ran
+  against the worktree overlay with `PYTHONPATH` from the low-rate helper, and its scratch is
+  `task4-cli-smoke-20260930T*` under the registered root. For the real Task 12 run the three candidates
+  hold three distinct weights, which is exactly what the first two refusals protect.
+
 ## HS-017 — Task 5 reconnaissance (read-only, recorded for the next task)
 
 - `src/act/search.py` (142 lines) holds one class, `HeadSearchController`, documented as "one cumulative
