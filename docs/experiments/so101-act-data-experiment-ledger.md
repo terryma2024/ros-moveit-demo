@@ -38529,3 +38529,30 @@ Three measurement bugs in this one thread now - replaced PYTHONPATH, count-as-ca
 caught by a reviewer reading the artefact rather than the summary. The lesson is not subtle and it is not about
 diligence: **the artefact has to be checked as an artefact**, by parsing it back and seeing whether the parse agrees with
 what the writer meant.
+
+## HS-155 — Artefact-first classification: 192 of 193 comparable ids fail with the SAME cause under base code
+
+Third design of the per-id comparison, built so the verdict is re-derivable from the artefacts rather than assembled in the
+writer (HS-154's lesson): one directory per id holding `id.txt`, `base.log`, `over.log`, `base.rc`, `over.rc`, with
+`PYTHONPATH` **appended** (HS-123) and exit codes as files. Classifying that tree by parsing the logs:
+
+```
+192  BOTH_SAME_CAUSE      same traceback line in base and overlay
+ 38  NO_BASE_INSTALL      teleop ids (the base build contained only so101_demo_py)
+  1  BOTH_FAIL_DIFF_TB    same failure, different message - to inspect
+  0  CODE_DEPENDENT
+  0  BOTH_PASS
+```
+
+**192 of the 193 comparable ids fail identically under the base code**, with the same traceback line - which is the
+"reaching the same failure" standard the tenth verdict set, not merely equal counts. The 38 teleop ids are marked
+`NO_BASE_INSTALL` honestly rather than compared against an install that lacks them, and the single differentiated case is:
+
+```
+src/so101_demo_py/test/test_act_task8_calibration_aggregator.py::test_offline_report_cli_publishes_the_v2_documents_and_refuses_any_override | base='/tmp/so101-debug-head-search-antzb-LuFlHq6a/base-ab-install/so101_demo_py/lib/python3.12/site-packages/config/act/task8-calibration-measurement-contract-v2.json' | over='/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-task2-overlay/install/so101_demo_py/lib/python3.12/site-packages/config/act/task8-calibration-measurement-contract-v2.json'
+src/so101_demo_py/test/test_parallel_batch_cli.py::test_cli_never_unlinks_or_replaces_an_existing_aggregate | base='/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/scratch/perid-ab3-20260930T114243Z/tmp/pytest-of-lenovo/pytest-266/test_cli_never_unlinks_or_repl0/owned-aggregate/aggregate_results.json' | over='/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/scratch/perid-ab3-20260930T114243Z/tmp/pytest-of-lenovo/pytest-267/test_cli_never_unlinks_or_repl0/owned-aggregate/aggregate_results.json'
+```
+
+That one is recorded as needing inspection rather than folded into the 192 or waved off - it is the only id where the two
+installs disagree in their *message*, and after three measurement bugs in this thread the correct posture toward a single
+anomalous row is to read it, not to classify it.
