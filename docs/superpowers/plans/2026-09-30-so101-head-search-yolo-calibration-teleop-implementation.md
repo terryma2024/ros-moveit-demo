@@ -1387,7 +1387,7 @@ Read back `head-search-qualification.json` and `head-search-qualified-report.jso
 
 - [ ] **Step 6: Start one separately owned Teleop-acceptance stack, run the installed acceptance, and inspect fresh screenshots.**
 
-The qualifier tears down its final `forward` restart before returning; do not depend on a leaked child process. Start one new `TELEOP_ACCEPTANCE` stack from the same frozen install, selected model, promoted config, approval receipt and closed head-only report. This startup is a separate functional-acceptance fixture, not a fourth qualification `FULL_RESTART`, and it cannot mutate the qualification report. Run the installed unified app against that one stack and detector. Verify Raw/Overlay correlation, bounded absolute and step movement, conflicting owner refusal, stale-frame refusal, stop proof and atomic capture.
+The qualifier tears down its final `forward` restart before returning; do not depend on a leaked child process. Start one new `TELEOP_ACCEPTANCE` stack from the same frozen install, selected model, promoted config, approval receipt and closed head-only report. This startup is a separate functional-acceptance fixture, not a fourth qualification `FULL_RESTART`, and it cannot mutate the qualification report. Run the installed unified app against that one stack and detector. Verify Raw/Overlay correlation, bounded absolute and step movement, conflicting owner refusal, stale-frame refusal, stop proof and atomic capture. Allocate the bridge under the registered root's short `ipc/` namespace, validate both complete AF_UNIX endpoint paths at 103 bytes or fewer before launch, and retain that exact root in the connection descriptor, bridge cleanup receipt and ledger.
 
 ```zsh
 TELEOP_ACCEPT_ROOT="$HEAD_EVIDENCE/teleop-head-camera-acceptance-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -1395,11 +1395,14 @@ test ! -e "$TELEOP_ACCEPT_ROOT" || exit 1
 mkdir "$TELEOP_ACCEPT_ROOT" || exit 1
 HEAD_CALIBRATION_EXE="$FINAL_RUN/install/so101_demo_py/lib/so101_demo_py/so101_head_search_calibration"
 TELEOP_CONNECTION="$TELEOP_ACCEPT_ROOT/runtime-connection.json"
-TELEOP_SOCKET_DIR="$TELEOP_ACCEPT_ROOT/bridge"
+mkdir -p "$HEAD_EVIDENCE/ipc" || exit 1
+TELEOP_SOCKET_DIR="$HEAD_EVIDENCE/ipc/t-$(date -u +%Y%m%dT%H%M%SZ)"
 TELEOP_RUNTIME_ID="head-teleop-$(<"$FINAL_RUN/source-commit.txt")"
 test -x "$HEAD_CALIBRATION_EXE" || exit 1
 test ! -e "$TELEOP_CONNECTION" || exit 1
 test ! -e "$TELEOP_SOCKET_DIR" || exit 1
+"$HEAD_PYTHON" -c 'import os,sys; paths=sys.argv[1:]; assert paths and all(len(os.fsencode(path)) <= 103 for path in paths)' \
+  "$TELEOP_SOCKET_DIR/normal.sock" "$TELEOP_SOCKET_DIR/safety.sock" || exit 1
 "$HEAD_CALIBRATION_EXE" serve-teleop \
   --run-root "$TELEOP_ACCEPT_ROOT/runtime" \
   --qualification-report "$QUAL_RUN/head-search-qualified-report.json" \
