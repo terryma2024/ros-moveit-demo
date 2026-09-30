@@ -27,6 +27,11 @@ from ..parallel_batch.contracts import ContractError, LeaseIdentity
 
 MANIFEST_KIND = "ACT_EPISODE_AUDIT"
 _METADATA_FILES = ("source.json", "inputs.json", "episode.json")
+# the ratified collection-window contract (Proposal B): every field, with per-outcome ordering
+_WINDOW_FIELDS = frozenset({"source_schedule", "streams_required", "cadence_s", "permitted_gaps_s",
+                            "collection_start_s", "collection_end_s", "first_command_s",
+                            "physics_end_s", "label_cutoff_s", "outcome"})
+_WINDOW_OUTCOMES = ("complete", "no_command", "no_label", "interrupted_diagnostic")
 # the frozen collection-scope contract, field for field
 _SCOPE_FIELDS = frozenset({"kind", "schema_version", "mode", "scene_id", "seed", "inputs_sha256"})
 _SCOPE_MODES = ("formal", "preselected_target_diagnostic")
@@ -269,6 +274,62 @@ def _payload_typed(payload) -> bool:
             if not isinstance(value, str) or not value:
                 return False
         else:
+            return False
+    return True
+
+
+def _number(value) -> bool:
+    return (not isinstance(value, bool) and isinstance(value, (int, float))
+            and math.isfinite(value) and value >= 0)
+
+
+def _window_ok(window, *, mode: str) -> bool:
+    """The ratified window contract, including its per-outcome ordering rules."""
+
+    if not isinstance(window, dict) or set(window) != _WINDOW_FIELDS:
+        return False
+    schedule = window["source_schedule"]
+    if (not isinstance(schedule, dict) or not schedule
+            or any(not isinstance(name, str) or not name or not isinstance(instants, list)
+                   or any(not _number(instant) for instant in instants)
+                   for name, instants in schedule.items())):
+        return False
+    if (not isinstance(window["streams_required"], list)
+            or any(not isinstance(name, str) or not name for name in window["streams_required"])
+            or not _number(window["cadence_s"]) or window["cadence_s"] <= 0
+            or not isinstance(window["permitted_gaps_s"], list)
+            or any(not isinstance(gap, list) or len(gap) != 2 or not all(_number(v) for v in gap)
+                   or gap[0] > gap[1] for gap in window["permitted_gaps_s"])):
+        return False
+    if window["outcome"] not in _WINDOW_OUTCOMES:
+        return False
+    for key in ("collection_start_s", "collection_end_s", "physics_end_s"):
+        if not _number(window[key]):
+            return False
+    start, end, physics = (window["collection_start_s"], window["collection_end_s"],
+                           window["physics_end_s"])
+    if not start <= physics <= end:
+        return False
+    first, cutoff = window["first_command_s"], window["label_cutoff_s"]
+    if window["outcome"] == "complete":
+        if not _number(first) or not _number(cutoff):
+            return False
+        if not start <= first <= physics or not start <= cutoff <= physics:
+            return False
+        if cutoff + 0.1 > physics + _TOLERANCE_S:
+            # the labelled instant's t + 0.1 reference target must be physically covered
+            return False
+    elif window["outcome"] == "no_command":
+        if first is not None or cutoff is not None:
+            return False
+    elif window["outcome"] == "no_label":
+        if not _number(first) or cutoff is not None:
+            return False
+    else:
+        if mode != "preselected_target_diagnostic":
+            # an interrupted window is diagnostic evidence, never a formal one
+            return False
+        if (first is not None and not _number(first)) or (cutoff is not None and not _number(cutoff)):
             return False
     return True
 
@@ -550,6 +611,9 @@ class EpisodeAuditWriter:
                 raise ValueError("AUDIT_BINDING_REVOKED")
         if not isinstance(window, dict) or not window:
             raise ValueError("AUDIT_WINDOW_INVALID")
+        if self.scope.get("mode") == "formal" and not _window_ok(window, mode="formal"):
+            # a formal audit states the ratified window; a diagnostic audit may record a legacy one
+            raise ValueError("AUDIT_WINDOW_INVALID")
         for name, stream in self._streams.items():
             stream.flush()
             os.fsync(stream.fileno())
@@ -647,7 +711,9 @@ def verify_audit_manifest(path: Path) -> dict:
         if len(payload) != entry["size"] or _sha256(target) != entry["sha256"]:
             # a changed raw reference, a rewritten stream or a deleted file lands here
             raise ValueError("AUDIT_HASH_MISMATCH")
+    formal_window = json.loads((audit / "source.json").read_bytes()).get("mode") == "formal"
     if (not isinstance(manifest["identity"], dict) or not isinstance(manifest["window"], dict)
+            or (formal_window and not _window_ok(manifest["window"], mode="formal"))
             or manifest["scope_sha256"] != _sha256(audit / "source.json")):
         # the manifest names the scope it was collected under, and the payload must agree with it
         raise ValueError("AUDIT_MANIFEST_INVALID")
