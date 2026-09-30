@@ -34383,3 +34383,47 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   Deletion candidates: the eight `scratch/head-test-*` trees from Task 1. Nothing deleted, nothing pushed, no real
   SO-101 command, no ROS/MuJoCo stack started, `ROS_DOMAIN_ID`/`GZ_PARTITION` still unset.
 - **Next:** Task 2 Step 1 RED tests for the production head-camera view, safe geometry, exact counts and camera identity.
+
+## HS-003 — Task 1 independent review: REJECT, fix, then APPROVE (commit d0fb7332f)
+
+- **Checkpoint:** the plan requires an independent code review after each Task 1-10 commit and before the next task
+  boundary. Task 1's review is closed with an explicit APPROVE.
+- **Reviewer availability, reported rather than substituted:** requesting `gpt-6-astra` from inside this session
+  failed for every target tried (`model` alone, `provider: openai`, `provider: anthropic`; each child resolved to
+  null) while a default-target control probe answered `PING`, so that model is unavailable in this runtime and no
+  other model was silently substituted. The user then supplied a local `codex` tmux session (`codex-download`); it
+  was set to **GPT-6-Astra with reasoning effort high** and confirmed by the session's own `/status`
+  (Model: GPT-6-Astra, reasoning high, provider openai, session 01a0f0a8-66a3-72c1-98b4-dad9f8d2e72a).
+- **Review artifacts retained under the durable root (`reviews/task1/`):**
+  - request `task1-review-request.md`, SHA256
+    `e02aa6135eccd9e905f21c0c3b2eedabe5d99dc9ad2f5fbaa48d1dc8cfe89d8e`
+  - verdict `task1-review-verdict.md`, SHA256
+    `36a2a10dddeea84bfdb905509195a80056b8ba2d69f264b7726fd3522605eb1b`
+  - re-review `task1-rereview-verdict.md`, SHA256
+    `d0407e694553eb58688719fcd990e72f346382bb8401d46602de8ae526e0e99e`
+- **First verdict: REJECT**, two major findings in the split seal, both reproduced by the reviewer:
+  1. a mapping (or any iterable) passed as a scenario list lost its values, so a document carrying a nested
+     Grounded-SAM field sealed with the *same* digest as the clean document, and a nested NaN was dropped silently;
+  2. positive image counts could be sealed with empty or oversized scene-group inventories (`counts=1` with two
+     train groups), leaving the cross-domain validator nothing to inspect.
+- **Fix, RED before GREEN:** new tests reproduce both findings. RED `scratch/head-test-20260930T050033Z-DiKcYLMO`
+  (rc 1, 5 failed / 24 passed); GREEN `scratch/head-test-20260930T050043Z-43uL0hKV` (rc 0, 62 passed); targeted
+  regression `scratch/head-test-20260930T050044Z-auFMoa9V` (rc 0, 9 passed); `ruff check` and `ruff format --check`
+  clean on both files. Commit `d0fb7332f53ee1d798d63071031da46c1110cddd`
+  ("fix: close the head search split seal document boundary"): each split must now be a list or tuple of
+  `scene_group_id`s and must list between one and `counts[split]` scene groups.
+- **Re-review verdict: APPROVE.** The reviewer reran the requested gate (rc 0, 62 passed), reran its own probes and
+  a new shape suite (2,667 assertions) over production 800/200/200 with four scenarios at 200/50/50, smoke 32/8/8
+  with four scenarios at 8/2/2, one world per image and many images per world, every permitted group cardinality
+  and both out-of-range sizes per split, profile and container type, malformed collections, duplicates,
+  within-domain and cross-domain leakage. It confirmed the fix diff touches only the contract and its test file,
+  HEAD matches the reviewed commit, the worktree stayed clean, and that no guarded path ran the full benchmark
+  suite.
+- **Residual items the reviewer handed to Task 2, now binding:** reconcile each seal with actual manifest members
+  and digests, enforce exact production/smoke counts and scenario quotas, freeze cross-domain scene and seed
+  assignments, and make sure no smoke manifest can be promoted. Accepting both profiles in the generic seal is
+  intentional.
+- **Evidence classification:** retained - handoff, Task 1 scratch trees and review artifacts. Deletion candidates:
+  the Task 1 scratch trees and the reviewer scratch under `/tmp/so101-debug-head-search-antzb-LuFlHq6a/reviewer/`.
+  Nothing deleted, nothing pushed, no stack started.
+- **Next:** Task 2 boundary - production head-camera view, safe neck geometry, exact counts and camera identity.
