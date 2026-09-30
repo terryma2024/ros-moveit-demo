@@ -36684,3 +36684,27 @@ stale code is not a safer run, just a differently wrong one.
 
 The `characterization` and `contracts` batches pass cleanly under eight workers, and the `so101_teleop` batches are
 still to come - that package's coverage was the reviewer's second objection.
+
+## HS-078 — The 39 teleop failures are my scratch path, not the code (round 437)
+
+Ran one failing teleop bridge test alone under the pinned environment and read its traceback:
+
+```
+MutationError: IPC_SOCKET_PATH_TOO_LONG:
+/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/scratch...
+```
+
+The unified bridge creates a **UNIX domain socket** under `TMPDIR`, and UNIX sockets are limited to about 108
+bytes of path. The repository rule to put fsync-heavy scratch under the durable evidence root therefore collides
+with these tests, whose socket path then exceeds the limit and makes the bridge child exit
+(`BRIDGE_CHILD_EXITED: 1`). None of the 39 failures is a head-camera or head-search test, and my own
+`test_head_camera_api.py` passes in the same batch.
+
+So the corrected gate's teleop numbers are an artefact of scratch placement, not of the code:
+`so101_teleop:test rc=1 39 failed 1239 passed`, `backends rc=0 32 passed`, and `e2e`/`fixtures` return rc=5
+because those directories need the installed stack rather than a source-tree run.
+
+**Fix for the next run:** give the teleop batches a short-path scratch directory in the low-rate root
+(`/tmp/so101-debug-head-search-antzb-LuFlHq6a/tmp/...`) while keeping the `/data` evidence-root scratch for the
+fsync-heavy `so101_demo_py` suites, and record both paths with the evidence. That satisfies both rules instead of
+trading one for the other.
