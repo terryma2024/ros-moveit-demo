@@ -80,7 +80,7 @@ export function HeadCameraPanel({
 
   return (
     <section aria-label="Head camera">
-      <header>
+      <header className="head-camera-readout">
         <h2>Head Camera</h2>
         {controllable ? null : <span>View only</span>}
         <span data-testid="head-camera-state">{stateLabel(status.state)}</span>
@@ -90,7 +90,7 @@ export function HeadCameraPanel({
       </header>
 
       {frame ? (
-        <figure aria-label="Head camera frame">
+        <figure className="head-camera-frame" aria-label="Head camera frame">
           <div data-testid="overlay-mask" />
           <div data-testid="overlay-bbox" />
           <div data-testid="optical-axis" />
