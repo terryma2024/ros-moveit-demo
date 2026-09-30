@@ -40713,3 +40713,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan's ruling on `sim_time_s`);
   **F1 planned here**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 passed**; HEAD `6d2220159`; no push,
   no evidence deletion, no hardware, no second stack.
+
+
+## CP-2166 — F1's first cut landed: the registered step name is admitted
+
+- **What landed** (`episode_audit.py`): `physics_step` joins `_PHYSICS_OBSERVATION_FIELDS` (line 101's set), and
+  the **registered branch** (line 322) now requires `_PHYSICS_REQUIRED_REGISTERED[kind]` plus `simulation_time_s`
+  and **either** step name, instead of demanding the summary source's `simulation_step`. A complete registered
+  sample — the shape `act/contact_live.py` publishes — is therefore no longer refused at admission for naming the
+  step the way its own contract does, which is F1's literal complaint.
+- **Why this half first**: the change is **strictly more permissive** (it admits a key and relaxes one conjunct), so
+  it can land alone and be checked against existing suites — it did, with **149 passed** and no fixture moved.
+- **What the cut still owes** (next steps, in order): a **registered-shaped fixture** proving a full sample is
+  admitted end to end (the shape lives in `act/contact_live.py:25`); typing `physics_step` the way
+  `simulation_step` is typed, if the loop does not already cover it; then F1's **second cut**, widening the
+  runner's `_raw()` (line 84) for the registered session string, contact-dictionary lists and the ratified records
+  — the forwarding boundary F12's carriers travel through.
+- **Evidence.** Targeted run this round: **149 passed** across the audit, recorder, release-boundary and capture
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 in progress** (first cut
+  landed); F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 passed**; HEAD `64ff97ace`; no push, no evidence
+  deletion, no hardware, no second stack.

@@ -103,8 +103,9 @@ _PHYSICS_OBSERVATION_FIELDS = frozenset({
     "simulation_session_id", "model_qpos", "model_qvel", "cup_position_m", "cup_velocity_m_s",
     "left_contacts", "right_contacts", "other_contacts", "truncated",
     "diagnostic_hazard_breached",
-    # the MuJoCo summary fields stay admissible for sources that only publish them
-    "publisher_sequence", "simulation_time_s", "simulation_step", "reset_epoch", "paused",
+    # the MuJoCo summary fields stay admissible for sources that only publish them; `physics_step` is the name
+    # the registered step contract uses (F1), so it is admitted beside `simulation_step`
+    "publisher_sequence", "simulation_time_s", "simulation_step", "physics_step", "reset_epoch", "paused",
     "cup_position_world_m", "cup_orientation_world_xyzw",
     "cup_linear_velocity_world_m_s", "cup_angular_velocity_world_rad_s", "left_contact_count",
     "right_contact_count", "table_contact", "other_contact_geoms", "maximum_normal_force_n",
@@ -319,8 +320,10 @@ def _physics_observation_typed(observation, *, kind: str) -> bool:
                                      "cup_velocity_m_s"}
     if registered:
         # a registered live sample must carry the measurements its kind is judged on
-        if not (_PHYSICS_REQUIRED_REGISTERED[kind] | {"simulation_time_s", "simulation_step"}
-                <= set(observation)):
+        if not (_PHYSICS_REQUIRED_REGISTERED[kind] | {"simulation_time_s"} <= set(observation)
+                and ({"simulation_step", "physics_step"} & set(observation))):
+            # F1: the registered step contract names the step `physics_step`, so a complete registered sample
+            # must not be refused for lacking the summary source's name for the same quantity
             return False
     elif not _PHYSICS_REQUIRED[kind] <= set(observation):
         # the summary shape must still carry its own measurements, so a timestamp alone is never enough
