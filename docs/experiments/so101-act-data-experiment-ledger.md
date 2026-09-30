@@ -37010,3 +37010,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `6dcf82c72`;
   gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1997 — Task 3: the window-to-rows and observed-schedule checks were attempted and reverted
+
+- **What I tried.** Three checks the fifth verdict's T3-F11 names: for a `complete` window require at least
+  one bound row with `label_cutoff_s` equal to the last bound row instant; forbid a non-`complete` outcome
+  alongside bound rows; and require `source_schedule` to name only instants the audit actually holds as
+  acquisitions for that camera, with gaps beyond one and a half cadences permitted only inside
+  `permitted_gaps_s`.
+- **Outcome: reverted.** The implementation was written, but my own formal-window fixtures declare a
+  schedule of `head`/`wrist` instants at 1.0 and 1.1 while those fixtures bind no such acquisitions, so the
+  observed-schedule rule refused them — and my two attempts to realign the fixtures (pairing the
+  coverage-only writer with a `no_label` window, then adjusting the violation cases) did not converge inside
+  the round's budget. I restored both files to the last green revision (`83a6b271e`) and verified:
+  `logs/task3-fix44.run` rc=0, 133 passed in the audit and recorder suites.
+- **Exact next step, so the next pass starts closer.** Build the fixtures **from the audit's own contents**:
+  mint acquisitions for the camera instants the window will declare (for example head/wrist at 1.0 and 1.1),
+  bind a row at 1.0, and then derive `label_cutoff_s`, `collection_start_s`, `collection_end_s` and
+  `physics_end_s` from those values rather than writing them by hand. A helper that seals a *self-consistent*
+  formal episode once would let every window check be a one-line variant of it, which is the shape the
+  earlier successful controls (the multi-row recorder ones) already use.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `83a6b271e`;
+  gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
