@@ -35931,3 +35931,36 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   wired. Then a fresh checkpoint.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD
   `29434de9f`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1956 — Task 3 fix pass, eleventh instalment: the remaining readback misses (T3-F3)
+
+- **Every specific miss the third verdict named is now checked on readback**, and each is covered by a
+  control that re-signs the stream so only semantics can catch it:
+  - row indexes must be integers, non-negative and contiguous (a re-signed index of 7 is refused);
+  - reference times and positions must be finite (a position written as the JSON token `1e309`, which
+    decodes to infinity, is refused);
+  - acquisition stamps must be finite and non-negative and must **increase per camera**, because a
+    rising sequence number does not by itself establish a new source instant;
+  - event simulation times must be finite and non-negative when present, event identities must match the
+    episode's session and attempt, and payload physics steps must be non-negative integers (a re-signed
+    `-1` is refused although it is an integer);
+  - physics rows must carry an integer non-negative `release_epoch` and a finite non-negative sim time,
+    so a first epoch of `-1` can no longer slip through the monotonicity comparison;
+  - the scope's `inputs_sha256` and `inputs.json`'s declared digest must be **equal**, so a scope naming
+    inputs A with inputs B declared is refused.
+- **Evidence.** `logs/task3-fix11.run` rc=0: **100 passed** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_release_boundary.py` and `test_act_continuous_capture.py`, with its
+  own NVMe scratch and a non-empty tempfile proof. New controls: the re-signed row index, the `1e309`
+  position, the negative physics step, the negative release epoch and the mismatched inputs digest, plus
+  the earlier re-signed swapped binding, unresolvable reference sequence and unknown-kind event.
+- **Still open (unchanged from CP-1954/CP-1955).** **T3-F1**: formal admission must reuse the registered
+  `LeaseIdentity` contract (`parallel_batch/contracts.py:184`) and tie it to the episode and event
+  identity; the window schema (source schedule, first command, physical end, label cutoff) must be
+  pinned and owner-decided while missing facts stay refused; then the raw controller/accepted-goal
+  history, source/receipt clocks, full physics payloads and the broker event kinds with typed
+  validators. **T3-F4's remaining correlation**: readback must compare the audit identity against the
+  seal identity and correlate labelled bindings, count, times and actions against the recorder rows.
+  **T3-F5**: the fail-closed/non-formal eligibility and sealing gate once the raw producers are wired.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `388c13ddb`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
