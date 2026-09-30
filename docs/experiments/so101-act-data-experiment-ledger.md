@@ -35324,6 +35324,27 @@ Gate: 37 passed across `test_act_head_search_qualification.py`, `test_head_searc
 `test_act_task8_calibration_admission.py`; `ruff check` clean. A confirmation review of these six items is
 requested; Task 7 stays `in_progress` until it reports.
 
+## HS-031 — Task 7 APPROVED
+
+Confirmation verdict at `reviews/task7/task7-confirm-verdict.md` (GPT-6.1-Sol high, static confirmation at HEAD
+`6805ebf45`, no tests run): **APPROVE**, with all six items approved individually - verification takes
+`--promoted-config` and writes its receipt into a newly claimed root; publication exceptions record `FAILED`
+after `RUNNING`, probes record `PROBED`, and `_require_new_root` claims ownership with an exclusive `mkdir`;
+approvals hash `read_bytes()` with SHA-256 and `write_exclusive` uses `O_CREAT | O_EXCL | O_WRONLY`;
+`serve-teleop` reads `--report` before claiming its root, publishes `/proc/self/stat` field 22 as
+`started_ticks`, and records `not-attempted` with both teardown flags false without a callback; the
+formatting-drift test reformats the same JSON and expects rejection against the original approval digest; and
+in the reviewed files affirmative `controller_stopped`/`graph_clear` values come only from a teardown
+callback's observations.
+
+**Task 7 complete.** Commit trail: `b7bbd98e2` (bridge), `06310e0ad` (CLI), `fd28f09a1` (admission),
+`f20f26207` (teardown test), `c9e38404c` (three findings), `b324807d2` (bytes + exclusive), `16afe8e0d`
+(observed teardown). Gate: 37 passed. Deferred to Task 11 with its reason in HS-028: the adapter wiring in
+`adapters/act/task8_calibration_search_binding.py`, whose tests the stale underlay blocks.
+
+**Task 6 remains `in_progress`:** its third verdict's finding (the unvalidated coarse step) is fixed in
+`e89986c7c` and its suite passes 14 tests, but no confirmation verdict has been recorded for that fix yet.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
