@@ -648,7 +648,11 @@ def test_formal_w8_rejects_a_self_declared_passed_json_without_independent_verif
     store = IntentStore.open(tmp_path / "state")
     try:
         service = _service(store)
-        with pytest.raises(ValueError, match="W8_QUALIFICATION_VERIFIER_UNAVAILABLE"):
+        # the refusal now comes from the independent verifier itself (so101_demo.act.w8_qualification):
+        # the self-declared document cites no re-derivable evidence, so it is refused as invalid evidence
+        # rather than as a missing verifier. The test's point is unchanged: the document is rejected and
+        # nothing is launched.
+        with pytest.raises(ValueError, match="W8_QUALIFICATION_EVIDENCE_INVALID"):
             service.start(formal)
         assert service.child_registry.launches() == ()
         assert service.arbiter.is_idle()

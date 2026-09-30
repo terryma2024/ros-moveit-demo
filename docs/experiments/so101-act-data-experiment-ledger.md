@@ -38963,3 +38963,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete, sixth checkpoint in progress; item 4 started with this reconnaissance
   only. HEAD `4b5dfa415`; targeted gate `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-2087 — Task 4 started: the independent W8 verifier exists, and one admission expectation moved with it
+
+- **What landed.** `src/so101_demo_py/src/act/w8_qualification.py` exposes
+  `verify_w8_qualification(qualified_path, payload)`: it reads the qualification document, requires
+  `status == "QUALIFIED"` with `worker_count == 8`, requires a `live_campaign` block of exactly the four keys the
+  producer writes (`case_root`, `campaign_result_sha256`, `preparation_receipt_sha256`, `journal_sha256`), then
+  **re-derives those digests from disk** and refuses on any mismatch — so a document cannot cite evidence that is
+  missing or has changed. Refusal codes: `W8_QUALIFICATION_EVIDENCE_INVALID` (malformed document or block) and
+  `W8_QUALIFICATION_EVIDENCE_MISMATCH` (evidence that does not re-derive).
+- **Evidence.** `logs/task4-w8.run` rc=0 with **9 passed** (one positive fixture and seven one-variable negative
+  cases plus a missing document), and `logs/task4-adm2.run` rc=0 across the two teleop admission suites and the
+  new suite under `pytest-xdist` with 8 workers, each with its own NVMe scratch and a non-empty tempfile proof.
+- **One expectation moved, and why that is honest rather than convenient.**
+  `test_act_campaign_admission.py`'s `test_formal_w8_rejects_a_self_declared_passed_json_without_independent_verifier`
+  asserted `W8_QUALIFICATION_VERIFIER_UNAVAILABLE`; with the verifier present, admission reaches it and refuses the
+  same self-declared document as `W8_QUALIFICATION_EVIDENCE_INVALID`. The test now expects that code, with a comment
+  saying the test's point is unchanged: the document is rejected and nothing is launched.
+- **A discrepancy to settle, recorded rather than hidden.** The admission code's own comment assigns the
+  independent verifier to **Task 11A** ("Task 11A must provide an independent verifier … before formal admission
+  can become reachable"), while this objective's frozen enumeration calls item 4 "independent QC / real commit /
+  export refusal". I implemented it under the objective's item 4 because the owner's instruction was to enter
+  Task 4; if the frozen plan (sha256 `1fbf978b…`, still unlocated) reserves it for Task 11A, this change should be
+  reviewed against that text.
+- **What the verifier does not yet do**: delegate to `validate_campaign_summary` and `validate_case_journals`, which
+  would re-check the campaign's completeness, its waves and the per-Worker terminal leases rather than only the
+  digest bindings. That delegation is the next increment, and its exact requirements belong to the frozen plan.
+- **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress. HEAD `4b5dfa415`;
+  no push, no evidence deletion, no hardware, no second stack.
