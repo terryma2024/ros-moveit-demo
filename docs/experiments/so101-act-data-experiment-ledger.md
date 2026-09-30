@@ -39602,3 +39602,27 @@ HS-173's shape a second time: a commit stamp written once at creation and truste
 stamp or a rebuilt-from-scratch replacement before it is cited as the frozen toolchain for Task 12's later steps. I will do
 the latter at the next natural boundary rather than re-stamping in place, since re-stamping is exactly the shortcut HS-165 and
 HS-173 were about.
+
+## HS-197 — Step 4's subcommands do not exist; the capability is in a different executable
+
+Ran both CLIs rather than reading their help lists:
+
+```
+evaluate_head_search_yolo_candidates --help   -> positional: {compare}          (no register, no calibrate)
+  compare --candidate --head-dataset --head-split --task-dataset --task-split
+          --episode-partitions --episode-split --episode-records --bootstrap-repetitions
+  module docstring: "Evaluate the three frozen Head Search candidates and decide which one to
+                     calibrate. This is the gate the plan runs before the formal calibration..."
+so101_head_search_calibration --help          -> positional: {run, verify-promoted-config, qualify, serve-teleop}
+```
+
+So the plan puts **register A** and **calibrate A/B/C** under `evaluate_head_search_yolo_candidates`, while this work
+implemented them as `so101_head_search_calibration run` and made `evaluate_head_search_yolo_candidates compare` the
+**downstream gate** that *consumes* the frozen candidates (`load_frozen_candidate`). Same capability, different executable -
+the fourth variant of the plan-versus-CLI structure mismatch in this task (HS-175/188/191/197), and the first one where the
+fix is **not** to change flags but to call the right tool.
+
+**Reconciliation, following HS-176's precedent (the plan's semantics, the implementation's spelling, recorded not silent):**
+Step 4 will be driven through `so101_head_search_calibration run` for registration and calibration, and Step 5 through
+`evaluate_head_search_yolo_candidates compare`, with that mapping written down here. Adding `register`/`calibrate`
+subcommands to satisfy one invocation's spelling would duplicate an existing, tested code path.
