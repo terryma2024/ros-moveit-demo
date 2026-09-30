@@ -34978,3 +34978,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   persistence and every live camera/physics/queue gate remain Tasks 3/5/7.
 - **State.** **Task-list items 0-1 completed; item 2 in_progress (fourth rework green, re-review
   pending); items 3-8 pending.**
+
+
+### CP-1932 fifth rework outcome (verdict `a3b2e86a-82ac-4499-8642-08ad24421420`)
+
+- **Verdict 5 on Task 2** (`reviews/task2-rereview4-verdict.md`) on `19e3e0760`: FAIL, 0 Critical /
+  1 Important. The selected-image latch was confirmed closed; the remaining finding was the same T2-F4
+  criterion at the other service calls.
+- **Fixed.** A terminal boundary now covers every dependency call the capture makes:
+  `sampler.sample_with_audit()` (the production synchronizer refuses with `INPUT_STALE`/`INPUT_SKEW`),
+  `physical_audit()`, `recorder.append()` and the `audit_writer` in the tail handoff. A rejection keeps
+  the first reason and makes later callbacks, `drain()` and `finish()` refuse. Crucially the head row is
+  no longer removed before a successful append: a refused row stays in pending work as failed evidence
+  instead of silently vanishing, so `finish()` can never return a normal summary after a lost row.
+- **Evidence.** `logs/task2-all.run` rc=0: **179 passed in 9.77 s** across the two Task 2 files and the
+  seven neighbouring suites, own NVMe scratch and non-empty tempfile proof. New regressions: sampler
+  `INPUT_STALE` and `INPUT_SKEW`, recorder `EPISODE_SCOPE_INVALID` and `RECORDER_WRITE_FAILED`, each
+  asserting the original reason through later acquisition/reference callbacks, `drain()` and `finish()`
+  and that no row is lost.
+- **State.** **Task-list items 0-1 completed; item 2 in_progress (fifth rework green, re-review
+  pending); items 3-8 pending.**

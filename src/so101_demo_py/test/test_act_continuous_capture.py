@@ -493,3 +493,57 @@ def test_a_wrong_shaped_selected_image_is_terminal():
         frames_at(capture, minter, [1.2])
     with pytest.raises(ValueError, match="ACQUISITION_PIXELS_INVALID"):
         capture.finish(1.3)
+
+
+class RaisingSampler(FakeSampler):
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def sample_with_audit(self, *args, **kwargs):
+        raise self.error
+
+
+class RejectingRecorder(FakeRecorder):
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def append(self, *args, **kwargs):
+        raise self.error
+
+
+@pytest.mark.parametrize("code", ("INPUT_STALE", "INPUT_SKEW"))
+def test_a_sampler_refusal_is_terminal_and_keeps_its_reason(code):
+    """The production synchronizer refuses with INPUT_STALE/INPUT_SKEW; that must latch."""
+
+    capture, minter = build()
+    capture.sampler = RaisingSampler(ValueError(code))
+    start(capture)
+    frames_at(capture, minter, [1.0])
+    with pytest.raises(ValueError, match=code):
+        capture.drain()
+    with pytest.raises(ValueError, match=code):
+        capture.on_reference(reference(1.1))
+    with pytest.raises(ValueError, match=code):
+        frames_at(capture, minter, [1.1])
+    with pytest.raises(ValueError, match=code):
+        capture.finish(1.2)
+
+
+@pytest.mark.parametrize("code", ("EPISODE_SCOPE_INVALID", "RECORDER_WRITE_FAILED"))
+def test_a_recorder_refusal_is_terminal_and_loses_no_row(code):
+    """A rejected row must not vanish from pending work, and the reason must survive."""
+
+    capture, minter = build()
+    capture.recorder = RejectingRecorder(ValueError(code))
+    start(capture)
+    frames_at(capture, minter, [1.0, 1.1, 1.2])     # the camera reaches past the 1.1 instant
+    capture.on_reference(reference(1.1))
+    with pytest.raises(ValueError, match=code):
+        capture.drain()
+    assert capture.pending_rows >= 1 and capture.recorder.rows == []
+    with pytest.raises(ValueError, match=code):
+        capture.drain()
+    with pytest.raises(ValueError, match=code):
+        capture.finish(1.3)

@@ -218,6 +218,10 @@ class ContinuousEpisodeCapture:
         if self._stopped:
             raise ValueError("CAPTURE_STOPPED")
 
+    def _reason(self, error, default: str) -> str:
+        text = str(error)
+        return text if text else default
+
     def _reject(self, code: str):
         """A capture integrity failure is terminal: the first reason is kept and re-raised."""
 
@@ -313,8 +317,12 @@ class ContinuousEpisodeCapture:
             self._reject(str(error))
         if abs(head.stamp_s - wrist.stamp_s) > self.max_skew_s + _TOLERANCE_S:
             self._fail("CAPTURE_SOURCE_SKEW")
-        observation, source_audit = self.sampler.sample_with_audit(
-            self._session_id, self._attempt_id, at_s)
+        try:
+            observation, source_audit = self.sampler.sample_with_audit(
+                self._session_id, self._attempt_id, at_s)
+        except Exception as error:  # noqa: BLE001 - a refusing dependency is terminal
+            # the production synchronizer refuses with INPUT_STALE / INPUT_SKEW here
+            self._reject(self._reason(error, "CAPTURE_SAMPLE_INVALID"))
         selected = source_audit.get("source_stamps", {})
         if (abs(selected.get("head", -1) - head.stamp_s) > _TOLERANCE_S
                 or abs(selected.get("wrist", -1) - wrist.stamp_s) > _TOLERANCE_S):
@@ -330,7 +338,11 @@ class ContinuousEpisodeCapture:
                 self._reject("ACQUISITION_PIXEL_MISMATCH")
         if len(self._pending) >= self._pending_capacity:
             self._fail("CAPTURE_PENDING_OVERFLOW")
-        audit = dict(self.physical_audit(at_s))
+        try:
+            physical = self.physical_audit(at_s)
+        except Exception as error:  # noqa: BLE001
+            self._reject(self._reason(error, "CAPTURE_PHYSICAL_AUDIT_INVALID"))
+        audit = dict(physical)
         audit.update(source_audit)
         audit.update({"head_acquisition_id": head.acquisition_id,
                       "wrist_acquisition_id": wrist.acquisition_id})
@@ -362,15 +374,21 @@ class ContinuousEpisodeCapture:
     def _service_pending(self) -> int:
         written = 0
         while self._pending and self._reference_state(self._pending[0]) == "ready":
-            row = self._pending.popleft()
+            row = self._pending[0]
             entry = self._references[row["target_s"]]
             audit = dict(row["audit"], reference_time_s=row["target_s"],
                          reference_source=_REFERENCE_SOURCE,
                          reference_positions=list(entry["positions"]))
+            try:
+                # the row leaves pending work only once the recorder accepted it, so a refusal
+                # cannot silently drop evidence
+                self.recorder.append(row["observation"], entry["positions"], audit)
+            except Exception as error:  # noqa: BLE001 - a refusing writer is terminal
+                self._reject(self._reason(error, "CAPTURE_RECORD_FAILED"))
             row["audit"] = audit
             row["reference"] = entry
-            self.recorder.append(row["observation"], entry["positions"], audit)
             row["labelled"] = True
+            self._pending.popleft()
             self._completed.append(row)
             self._written += 1
             self._last_labelled_target_s = row["target_s"]
@@ -392,5 +410,8 @@ class ContinuousEpisodeCapture:
         for row in self._pending:
             if self.audit_writer is None:
                 continue
-            paths.append(self.audit_writer(row["observation"], row["audit"]))
+            try:
+                paths.append(self.audit_writer(row["observation"], row["audit"]))
+            except Exception as error:  # noqa: BLE001
+                self._reject(self._reason(error, "CAPTURE_AUDIT_WRITE_FAILED"))
         return paths
