@@ -39969,3 +39969,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: F12 closed; F3's round trips and release correlation fixed, the lease item fully
   located; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD
   `860215009`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2131 — The lease rule with its fixtures reached one remaining test, whose re-sign needs three files
+
+- **What the pass achieved before reverting**: the lease clause in `_event_identity_ok` plus the **four formal
+  append sites** (lines 695, 733, 800 and 1013 — the grep printed all ten sites, and only those four lie above the
+  diagnostic ones at 59/146/206/427/570/584) took the failure count from **8 to 1**, so the coupling CP-2129
+  described is exactly those four fixtures.
+- **The one that remains** is `test_readback_reapplies_the_formal_coverage_gate`, which **relabels** a diagnostic
+  audit as formal by re-signing: with the lease rule in force its events must carry the lease too, and once they do
+  the chain reaches `AUDIT_HASH_MISMATCH` — because that tamper path now needs **three** coupled re-signs (the
+  events file, the manifest's `scope_sha256`/entry, and the recorder's seal over the manifest) rather than the two
+  it does today.
+- **Reverted, tree verified green.** The module and test file are restored; the audit and recorder suites pass.
+- **The next pass's two edits, with the third now known**: the clause, the four formal sites, **and** that test's
+  tamper path extended to re-sign the manifest and the seal so that the coverage gate is once again the refusal
+  that fires. §Re-signing three coupled files is a mechanical but multi-step fixture change, which is why it is
+  recorded rather than half-done.
+- **State.** Item 3's list: F12 closed; F3's round trips and release correlation fixed with the lease item one
+  coupled fixture away; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430
+  passed**; HEAD `64cc6cd54`; no push, no evidence deletion, no hardware, no second stack.
