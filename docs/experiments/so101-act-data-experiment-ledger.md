@@ -34492,3 +34492,60 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `studies/task2-head-camera-geometry/`. Deletion candidates: this task's scratch trees. Nothing
   deleted, nothing pushed, no real SO-101 command, no ROS/MuJoCo stack started.
 - **Next:** the Task 2 independent review checkpoint, then Task 3 (B/C training plans).
+
+## HS-005 — Task 2 review trail: two REJECTs, two fix rounds, current commit 87e2bf15a
+
+- **Reviewer:** the user moved Head Search reviews to `gpt-6.1-sol` at high effort; the local `codex`
+  tmux session was switched from GPT-6-Astra/high to **GPT-6.1-Sol/high** and confirmed through its own
+  footer. Task 1's review had used GPT-6-Astra/high.
+- **Round 1 (commit 3139fe23a) — REJECT, six findings, all fixed in eb8d893f7:** the head profile
+  inherited the ordinary +/-15 mm camera-position jitter and so did not render the sealed camera; the
+  verifier checked file existence but not contents, unique paths or a complete finite camera identity;
+  cross-domain leakage was compared only between same-named splits and the scene-group ids were
+  camera-namespaced; the seal reduced the workspace to horizontal bearings instead of evaluating the
+  declared heights and the required-domain endpoints; the mandated half-FOV step limit was unenforced;
+  and the closed neck grid omitted its upper endpoint. Fixes: declared `camera_jitter_m: [0.0, 0.0]`
+  with a refusal for undeclared/nonzero values; per-sample image/label/truth digests and sizes, unique
+  path, finite-complete camera and truth-identity verification; camera-independent `scene-<seed>` world
+  identities with seed comparison across all partitions; a 405-sample workspace matrix at three declared
+  heights with a support-intersection rule and endpoint evaluation; `HEAD_CAMERA_STEP_EXCEEDS_HALF_FOV`
+  plus a public `coverage_intervals_cover` proof; and a grid closed at both endpoints.
+- **Round 2 (commit eb8d893f7) — REJECT, five findings, all fixed in 87e2bf15a:** the camera identity was
+  still unbound to the sealed geometry (a wrapped renderer could report an impossible world pose and a
+  manifest could carry `k=[0]*9`, a zero quaternion or `neck_rad=100` and still verify; NaN local fields
+  slipped through the `abs(diff) > tol` comparisons); mask verification hashed the *claim* rather than
+  decoding the stored RLE; a `images/train/../train/<name>` path aliased another sample past the reuse
+  check; contradictory task scene-group assignments were erased by dictionary insertion; and the
+  endpoint exemption certified a target the camera could not render at all.
+- **What round 2's fixes are, and the one design decision they forced:**
+  - The seal now freezes the **arm configuration** its geometry was validated at
+    (`validation_arm_rad`) and the **mount model** (`camera_mount_origin_m`, `camera_mount_xyaxes`), so
+    `camera_pose_from_seal(seal, neck)` predicts the camera's world position and orientation from the
+    seal alone. Generation refuses a render whose pose, intrinsics, local pose or arm configuration the
+    seal cannot produce; the verifier repeats the same checks on the manifest and the truth file, with
+    finiteness tested before every comparison.
+  - The arm pose itself is a measurement, not a preference: the scene's default hanging pose leaves the
+    +x required-domain endpoint `(0.12, -0.24, 0.165)` completely invisible (0 rendered cup pixels, first
+    ray hit `upper_arm`). The reviewer rejected an exemption for that, so the contract now declares
+    `validation_arm_rad = [-0.25, 0.0, 0.6, 0.8, 0.0, 0.8]` - the collision-free pose EXP-016/017 had
+    measured - measured again here at 698 rendered cup pixels for that endpoint and 8097/8340/6216 for
+    the three anchors, with the other endpoint at 9264. Both endpoints are now required to render at
+    least the contract's 64 pixels, exactly like the anchors.
+  - Mask verification decodes `visible_mask_rle_counts` and recomputes both the digest and the pixel
+    count; file paths must be canonical relative paths before the reuse check, so `..` cannot alias; and
+    a task manifest that gives one world identity two splits is refused before the partition merge.
+- **Current seal:** `head-camera-geometry-20260930T054458Z/head-camera-geometry.json`, digest
+  `e281b3f05966d3da7fb817db8123f0b45822e06807bef8a5bfd258fb0aab2f57` (both profiles updated), zero
+  `in_frame` failures, FOV 1.3121067481206794, required domain `[-0.29145679447786704,
+  0.540419500270584]`, safe interval symmetric at `+/-6.283175307179587`, 405/405 workspace samples in
+  frame, five key samples rendered (endpoints 9264 / 698 pixels).
+- **Current smoke dataset:** `head-dataset-smoke-20260930T054814Z` (48 images, generation rc 0,
+  `verify-smoke` rc 0, production verifier refuses by name). Reviewer exploit re-runs on private copies
+  in `/tmp/so101-debug-head-search-antzb-LuFlHq6a/probe/`: corrupted file, `..`-aliased path, NaN local
+  pose, zero intrinsics, wild neck, replaced mask RLE and contradictory task groups are all refused by
+  name.
+- **Gate:** 80 passed over the plan's three files; 19 passed in the camera-preset/physics regression;
+  `ruff check` clean. Superseded runs are retained, not deleted: geometry runs `...T053111Z`,
+  `...T053308Z`, `...T053423Z`, `...T053437Z`, `...T054411Z`, `...T054420Z`, `...T054428Z` and smoke runs
+  `...T053447Z`, `...T053455Z`, `...T054736Z`.
+- **Next:** the third review (`gpt-6.1-sol`/high) of commit 87e2bf15a, then Task 3.
