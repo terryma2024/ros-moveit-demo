@@ -34618,3 +34618,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   interpreter record.
 
 - **Next:** the Task 3 review (`gpt-6.1-sol`/high), then Task 4.
+
+## HS-008 — Task 12 inputs de-risked early (weights and task dataset fetched and verified)
+
+- **Why now:** Task 3's review is still running, so nothing in the Task 4 boundary may start. These are
+  read-only verifications of *pinned inputs* that Tasks 11, 12 and the Task 4 comparison all depend on,
+  and they cost nothing to do early.
+- **Candidate A weights:** `hf download zjumty/so101-yolo11n-seg-plastic-cup best.pt --revision
+  b55430fb75c0207b35bd20f4e328e042bff06f3f` into
+  `<root>/deps/so101-yolo11n-seg-plastic-cup/best.pt` (6,001,316 bytes). SHA256
+  `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` **matches the plan's pin exactly**.
+- **Task-camera dataset:** the same repository carries `dataset/` at that revision. Its manifest is now
+  at `<root>/deps/so101-task-dataset/dataset/dataset-manifest.json` (SHA256 prefix `694e5fa577ed0f42`)
+  and reports `sample_count: 1200`, `split_counts: {train: 800, val: 200, test: 200}`,
+  `camera_name: task_camera`, four scenario counts and per-sample `image`/`label`/`truth` records - the
+  exact arithmetic Task 3's C plan assumes (800 head + 800 task train, 200 + 200 val).
+- **Host recipe (recorded so nobody rediscovers it):** the `hf` CLI works here only with the local proxy
+  and a *cleaned* `NO_PROXY`: the inherited `NO_PROXY` contains the bracketed IPv6 entry `[::1]`, which
+  httpx parses as `Invalid port: ':1]'` and aborts before any request. Use
+  `NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 hf download ...`.
+- **Task 11 dependency unblocked:** `pytest_xdist-3.8.0-py3-none-any.whl` and
+  `execnet-2.1.2-py3-none-any.whl` (the exact versions `setup.py`'s test extra pins) are cached at
+  `/tmp/so101-debug-head-search-antzb-LuFlHq6a/pip-probe/`, so the `-n 8` package gate can be satisfied
+  at Task 11 with recorded provenance instead of failing on a missing plugin.
+- **Reviewer sessions:** the original `codex-download` session (GPT-6.1-Sol/high) stalled after 14:23 on
+  the Task 3 packet with its context nearly exhausted, so a second clean session `codex-review2` was
+  started on the same model and given the same packet; the first complete verdict is the Task 3
+  checkpoint verdict and the second is corroboration. No model was substituted silently: the user
+  directed the switch from GPT-6-Astra/high to GPT-6.1-Sol/high for reviews, and the repo's model table
+  would otherwise have required Astra.
+- **Evidence classification:** both downloads are retained artifacts under the registered root
+  (`deps/`), not experiments; nothing was installed, no stack started, nothing pushed.
