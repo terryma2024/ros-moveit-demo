@@ -38219,3 +38219,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `89a7486fa`;
   consolidated gate `logs/task3-gate13.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2051 — Gate at HEAD `cf6ab45ba` after the fifth derivation: 419 passed in 12.17s
+
+- **Gate.** `logs/task3-gate14.run` rc=0: **419 passed in 12.17s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **Five gates derived on the live path**: the boundary helper's `planning_scene_ok`, `joint_feedback_ok` and
+  `controller_reference_ok`, and the SEARCH document's `planning_scene_ok` and `joint_feedback_ok` — each from
+  an observation the search itself established (a verified scene receipt, the ratified controller records at
+  the world's instant, and the reference verifier's own proof), with three-way controls on the first two and
+  the runner's `_EVIDENCE_GATES` refusal behind all of them.
+- **Remaining**: both documents' `planning_ok`, the port's `controller_reference_ok`, the port's `contact_ok`,
+  `mujoco_ok` and two RGB gates (each needs its source read first), the full record's travel, T3-F11's
+  window-to-rows checks, then a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
+  deletion, no hardware, no second stack.
