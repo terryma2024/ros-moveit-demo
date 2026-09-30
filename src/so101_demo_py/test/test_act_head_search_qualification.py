@@ -134,8 +134,14 @@ def test_serve_teleop_owns_teardown_and_cannot_resume(tmp_path: Path) -> None:
 
     run_root = tmp_path / "fresh-run"
     report = _qualified_report(run_root)
+
+    def observed_teardown() -> dict:
+        return {"controller_stopped": True, "graph_clear": True, "teardown": "clean"}
+
     context = multiprocessing.get_context("fork")
-    process = context.Process(target=_serve, args=(report, run_root))
+    process = context.Process(
+        target=_serve, args=(report, run_root), kwargs={"teardown": observed_teardown}
+    )
     process.start()
     try:
         descriptor = run_root / "head-camera-connection.json"
@@ -155,3 +161,52 @@ def test_serve_teleop_owns_teardown_and_cannot_resume(tmp_path: Path) -> None:
     assert receipt["graph_clear"] is True
     with pytest.raises(ValueError, match="RUN_ROOT_ALREADY_EXISTS"):
         _serve(report, run_root, probe_only=True)
+
+
+def test_teardown_is_reported_as_observed_not_assumed(tmp_path: Path) -> None:
+    """Without a teardown that actually observed anything, the receipt must not claim success."""
+
+    from so101_demo.act.head_search_qualification import serve_teleop as _serve
+
+    run_root = tmp_path / "probe"
+    report = _qualified_report(run_root)
+    _serve(report, run_root, probe_only=True)
+    state = json.loads((run_root / "calibration-state.json").read_text(encoding="utf-8"))
+    assert state["state"] == "PROBED", "a probe must not be left looking like a running owner"
+
+    other = tmp_path / "blocking"
+    other_report = _qualified_report(other)
+    import multiprocessing
+    import os
+    import signal
+    import time
+
+    process = multiprocessing.get_context("fork").Process(target=_serve, args=(other_report, other))
+    process.start()
+    try:
+        descriptor = other / "head-camera-connection.json"
+        deadline = time.monotonic() + 20.0
+        while not descriptor.is_file() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        os.kill(process.pid, signal.SIGTERM)
+        process.join(timeout=20.0)
+    finally:
+        if process.is_alive():  # pragma: no cover - defensive teardown
+            process.terminate()
+            process.join(timeout=5.0)
+    receipt = json.loads((other / "teardown-receipt.json").read_text(encoding="utf-8"))
+    assert receipt["controller_stopped"] is False
+    assert receipt["graph_clear"] is False
+    assert receipt["teardown"] == "not-attempted"
+
+
+def test_the_owner_records_the_kernel_start_ticks_and_the_probe_reports_them(
+    tmp_path: Path,
+) -> None:
+    from so101_demo.act.head_search_qualification import process_start_ticks, serve_teleop
+
+    assert process_start_ticks() > 0
+    run_root = tmp_path / "probe"
+    connection = serve_teleop(_qualified_report(run_root), run_root, probe_only=True)
+    assert connection["owner"]["started_ticks"] == process_start_ticks()
+    assert connection["owner"]["pid"] > 0

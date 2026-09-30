@@ -71,6 +71,7 @@ def qualification_parser() -> argparse.ArgumentParser:
             command.add_argument("--evidence-root", type=Path)
         if name == "serve-teleop":
             command.add_argument("--bridge-socket-root", type=Path)
+            command.add_argument("--report", type=Path)
     return parser
 
 
@@ -158,6 +159,16 @@ def qualify_head_search(inputs: Mapping[str, object], run_root: Path) -> dict:
             )
         digests[str(name)] = text
     _write(root, "calibration-state.json", {"state": RUNNING, "phase": "qualify"})
+    try:
+        return _publish_qualification(inputs, root, digests)
+    except Exception:
+        _write(root, "calibration-state.json", {"state": FAILED, "phase": "qualify"})
+        raise
+
+
+def _publish_qualification(
+    inputs: Mapping[str, object], root: Path, digests: Mapping[str, str]
+) -> dict:
     report = {
         "status": HEAD_SEARCH_QUALIFIED,
         "operation": "QUALIFICATION_RUN",
@@ -180,6 +191,7 @@ def serve_teleop(
     *,
     bridge_socket_root: Path | None = None,
     probe_only: bool = False,
+    teardown: object = None,
 ) -> dict:
     """Own one fresh Teleop stack: publish a closed descriptor, block, then tear down."""
 
@@ -197,18 +209,30 @@ def serve_teleop(
         "bundle_sha256": str(report.get("bundle_sha256", "")),
         "owner": {
             "pid": os.getpid(),
-            "started_ticks": int(time.clock_gettime(time.CLOCK_MONOTONIC) * 1e6),
+            # the kernel's own start time for this process, in clock ticks since boot, not a monotonic
+            # timestamp measured after the fact
+            "started_ticks": process_start_ticks(),
             "argv_sha256": hashlib.sha256(" ".join(os.sys.argv).encode("utf-8")).hexdigest(),
         },
         "bridge_socket_root": str(socket_root),
     }
     _write(root, "head-camera-connection.json", connection)
     if probe_only:
+        _write(root, "calibration-state.json", {"state": "PROBED", "phase": "serve-teleop"})
         return connection
     with _SignalWatch() as watch:
         while not watch.seen:
             time.sleep(0.05)
-    receipt = {"controller_stopped": True, "graph_clear": True, "teardown": "clean"}
+    # the receipt records what teardown actually observed; nothing is asserted on its behalf
+    if teardown is None:
+        receipt = {"controller_stopped": False, "graph_clear": False, "teardown": "not-attempted"}
+    else:
+        observed = dict(teardown())
+        receipt = {
+            "controller_stopped": bool(observed.get("controller_stopped", False)),
+            "graph_clear": bool(observed.get("graph_clear", False)),
+            "teardown": str(observed.get("teardown", "observed")),
+        }
     _write(root, "teardown-receipt.json", receipt)
     _write(root, "calibration-state.json", {"state": SUCCEEDED, "phase": "serve-teleop"})
     return {**connection, **receipt}
@@ -267,3 +291,11 @@ def write_exclusive(root: Path, name: str, document: Mapping[str, object]) -> Pa
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         handle.write(payload)
     return target
+
+
+def process_start_ticks() -> int:
+    """This process's start time in clock ticks since boot, as the kernel reports it."""
+
+    fields = Path("/proc/self/stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()
+    # field 22 of the whole line is starttime; after the comm field it is index 19
+    return int(fields[19])

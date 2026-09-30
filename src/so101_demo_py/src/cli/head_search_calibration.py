@@ -125,7 +125,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"RUN_SUCCEEDED {receipt['runtime_id']}")
         return 0
     if parsed.command == "serve-teleop":
-        report = json.loads((run_root / "head-search-qualified-report.json").read_text("utf-8"))
+        # the closed report is read from where it was written, never from the root this owner will claim
+        if parsed.report is None or not Path(parsed.report).is_file():
+            print("HEAD_SEARCH_QUALIFIED_REQUIRED: pass --report", file=sys.stderr)
+            return 2
+        report = json.loads(Path(parsed.report).read_text(encoding="utf-8"))
         connection = serve_teleop(report, run_root, bridge_socket_root=parsed.bridge_socket_root)
         print(f"TELEOP_ACCEPTANCE {connection['owner']['pid']}")
         return 0
