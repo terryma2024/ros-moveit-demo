@@ -37154,3 +37154,22 @@ the object the CLI writes (`type(result).__module__` and `__qualname__`) rather 
 
 The edits stay uncommitted until the seal demonstrably carries the field: a hash change without the field would look
 like progress in the log while leaving the smoke refusing exactly as before.
+
+## HS-099 — The seal now carries the coarse step, verified end to end
+
+```
+validator: rc=0, in_frame_failures 0, fov union covers the required domain
+seal:      coarse_step_candidate_rad = 0.3
+seal_sha256: 7d963fdcabfa132e77ccf961c0f99e10b4c6d2ed56920b41d36a7558814d1eb4   (was f168bfc1...)
+tests:     test_act_head_search_domain.py 12 passed; ruff clean
+```
+
+The root cause was the one HS-098 left open, and it was subtler than "the write path is elsewhere": my **first** edit
+added the key to `HeadCameraGeometryContract.to_document` - the contract document - instead of
+`HeadCameraGeometryResult.to_document`, the one the CLI seals. That changed the document hash while leaving the field
+absent, which is exactly the misleading signal HS-098 flagged. The fix now sits in the result class, taken from the
+contract the validator already validates against.
+
+**Ripple, next:** the seal hash changed from `f168bfc1...` to `7d963fdc...`, so the two perception configs and the
+dataset verify chain must be re-pointed exactly as in HS-046/HS-047 before the final-seal smoke can pass - and only
+then does the reviewer's item 4 close.
