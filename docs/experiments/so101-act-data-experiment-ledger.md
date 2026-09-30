@@ -38797,3 +38797,33 @@ it lives somewhere I have not looked, or Task 11's provenance record (HS-105 dig
 `so101_demo_py`) needs to be materialised as a proper toolchain root with `source-commit.txt` before Task 12 can consume
 it. Establishing which is the next step, and I am not going to synthesise a `source-commit.txt` to make a gate pass - that
 would destroy the provenance guarantee the check exists to provide.
+
+## HS-165 — A real missing Task 11 deliverable: the frozen toolchain root was never created
+
+Reading Task 11's own plan text against what is on disk:
+
+```zsh
+# Task 11, Step 2 (verbatim)
+TOOLCHAIN_RUN="$HEAD_EVIDENCE/head-toolchain-$(date -u +%Y%m%dT%H%M%SZ)"
+test ! -e "$TOOLCHAIN_RUN" || exit 1
+mkdir "$TOOLCHAIN_RUN" || exit 1
+git rev-parse HEAD >"$TOOLCHAIN_RUN/source-commit.txt" || exit 1
+... colcon build --build-base "$TOOLCHAIN_RUN/build" --install-base "$TOOLCHAIN_RUN/install" ...
+test -f "$TOOLCHAIN_RUN/install/setup.zsh" || exit 1
+```
+
+**No `head-toolchain-*` directory exists under the evidence root**, and no `source-commit.txt` exists anywhere in it. So the
+deliverable Task 11 calls *"freeze the data/model toolchain"* - the frozen, commit-stamped, dependency-closed install that
+Task 12 consumes - **was never produced**, and Task 12's Step 1 correctly refuses to start without it. The reviewer's
+approval covered the clauses I put in front of it; this deliverable was not among them, and its absence is my error, not a
+gap in the plan.
+
+**Do not paper over it.** The tempting shortcut - writing a `source-commit.txt` next to an existing install and calling it
+the toolchain root - would satisfy the gate while destroying exactly the provenance the gate exists to guarantee (HS-105's
+digests are evidence *about* an install, not a substitute for a build from a named commit). The correct fix is Step 2 as
+written: a fresh `colcon build` into `head-toolchain-<UTC>/{build,install}` with `source-commit.txt` holding
+`git rev-parse HEAD`, then the entry-point provenance proof, then Task 12's Step 1 re-run.
+
+**Consequence for the visible list:** Task 11 is approved, and it is also **missing one of its own deliverables**. Both
+statements are true, and the honest status is that Task 11 needs this step completed before Task 12 can proceed - so I am
+putting Task 11 back to `in_progress` rather than letting an approval stand in for a deliverable that is not on disk.
