@@ -39874,3 +39874,26 @@ recorded rather than silently resolved.
 **Fifth framing of this same gap**, and the first where the inconsistency is inside the plan rather than between plan and
 implementation. Each previous framing came from reading code; this one came from reading the plan's own acceptance line
 against its own consumer - which is the check I should have run at HS-198 instead of concluding "missing capability".
+
+## HS-208 — Operating-point selection policy: design fixed before the measurement runs
+
+Step 4 needs `min_confidence` and `tracking_iou` **chosen**, and the plan does not state a rule - it only says "calibrate and
+freeze each candidate operating point on val/calibration episodes". So the policy is mine to define, and defining it in the
+ledger before running it is the difference between a calibration and a number that happens to work:
+
+1. **Measure on val only.** `--head-split val`, `--task-split val`, `--episode-split calibration` - the plan's own flags.
+   Test manifests stay unopened, which Step 4's expectation states explicitly and which protects Step 5's gate from being
+   tuned against.
+2. **Grid, not gradient.** Sweep `min_confidence` over a fixed ladder (0.25/0.35/0.45/0.51/0.60/0.70) and `tracking_iou`
+   over (0.5/0.6/0.7), measuring the same val episodes for each cell. A 18-cell grid over a val split is minutes of GPU,
+   reproducible, and reportable as a table rather than as a single chosen number.
+3. **Criterion: head mask-map first, no-cup false candidates as a hard gate.** Among cells with **zero** no-cup false
+   candidates, take the highest head mask-map; tie-break on the task mask-map, then on the lower confidence (fewer missed
+   detections at equal quality). Refusing every cell if none has zero false candidates - a candidate that cannot be frozen
+   safely is a finding, not a reason to relax the gate.
+4. **Record the whole grid**, the winning cell, and the runner-up margin, so the choice is auditable and a reviewer can see
+   whether the winner is robust or a knife-edge.
+5. **Same policy for A, B and C**, differing only in weights - which is what makes the Step 5 comparison meaningful.
+
+Still to implement: the grid runner over the val splits, then `register` A, `freeze` A/B/C, and Step 5's `compare`. My context
+is exhausted for this round, so the policy is written down rather than half-coded.
