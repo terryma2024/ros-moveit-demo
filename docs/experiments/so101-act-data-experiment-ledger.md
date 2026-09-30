@@ -35067,3 +35067,46 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0, 1 and 2 completed; item 3 in_progress (not started); items 4-8
   pending.** HEAD `e6f7e4787`; 39-path dirty baseline untouched (`837d602e…ae2a7`); no push, no
   evidence deletion, no hardware.
+
+
+## CP-1934 — Task 3 first bullet: the common raw episode audit
+
+- **New `src/so101_demo_py/src/act/episode_audit.py`.** `EpisodeAuditWriter(root, scope, identity,
+  inputs)` is the episode's only writer: it creates an exclusive root (an existing one raises
+  `FileExistsError`, so two writers cannot share an episode), writes `audit/source.json`,
+  `audit/inputs.json` and `audit/episode.json` with canonical JSON, and appends to the closed streams
+  `acquisitions.jsonl`, `rows.jsonl`, `events.jsonl`, `references.jsonl`, `physics.jsonl`. There is no
+  update path; every append is a new line. The three source kinds are exactly
+  `("events", "references", "physics")` and each has a closed schema, so an unknown field is refused
+  (`AUDIT_SCHEMA_INVALID`) instead of being silently retained, and an unknown kind is refused with
+  `AUDIT_SOURCE_KIND_INVALID`. The manifest is written **last** by `seal(window)`, which fsyncs every
+  stream and the directory before returning, and a second `seal()` or any append after sealing raises
+  `AUDIT_ALREADY_SEALED`.
+- **The refusals the plan named for this bullet.** A row may not bind an acquisition the audit never
+  saw (`AUDIT_BINDING_UNKNOWN`), one acquisition may not fill two rows (`AUDIT_BINDING_REUSED`, the
+  same rule the capture enforces), a duplicate acquisition id is refused
+  (`AUDIT_ACQUISITION_DUPLICATE`), a physics observation from an older release epoch is refused
+  (`AUDIT_RELEASE_EPOCH_STALE`), and the manifest always names the frozen inputs it belongs to
+  (`AUDIT_INPUTS_INVALID` if the declared `inputs_sha256` is missing or malformed).
+- **Verification is recomputation, not trust.** `verify_audit_manifest(path)` re-reads the sealed
+  manifest, recomputes the sha256 of every listed file (`AUDIT_HASH_MISMATCH` on any change, deletion
+  or added line), re-checks that every row binding names an appended acquisition and re-checks release
+  epoch monotonicity across the physics stream. The test that edits a raw reference's position after
+  sealing and the one that splices a stale-epoch physics row into a sealed audit both fail closed.
+- **RED/GREEN.** RED `logs/task3-audit-red.run` rc=1: 5 failures through a defect overlay that reopens
+  the seal, the binding check, the closed schema and the epoch rule. GREEN `logs/task3-audit.run` rc=0:
+  **46 passed in 0.84 s** for the plan's directed command (`test_act_episode_audit.py` plus the existing
+  `test_act_controller_reference.py` and `test_act_physics.py`), with its own NVMe scratch and a
+  non-empty tempfile proof. The RED/GREEN pair is recorded with the scratch path in the run pointers.
+- **Still open in Task 3 (not claimed).** Wiring the broker's real
+  claim/dispatch/accept/revoke/stop events and the controller observer's raw history into this writer;
+  capturing the raw observations needed to recompute the physical criteria offline (desktop initial
+  state, bilateral contact, micro-lift height and off-table, hold/collision, placement support,
+  detach/open order, the current release epoch's finger-contact-free window, final pose/velocity
+  stability, retreat); verifying the actual release order at `PickPlaceRunner`/its port with
+  detach-failure-zero-open, unsupported stop/hold, release-epoch change and stale-observation RED/GREEN;
+  and the Recorder seal v2 that references the audit/scope digest with fsync of every file and the
+  parent directory, keeping the old schema readable for audit only.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (first bullet green, review pending);
+  items 4-8 pending.** HEAD before this commit `06d841fb3`; 39-path dirty baseline untouched; no push,
+  no evidence deletion, no hardware, no second stack.
