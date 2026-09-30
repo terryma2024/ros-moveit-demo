@@ -38489,3 +38489,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `36df61a74`;
   targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2065 — The handoff brief's anchors verified against the code
+
+- **Checked every line number the brief asks a reader to trust**, because a stale anchor costs the next
+  session a round (CP-2042's lesson): `test_act_task8_search_port.py` has `observation()` at **36**,
+  `fixture(...)` at **98** and the `Task8SearchObservation` import at **18**; `test_act_task8_motion_phases.py`
+  has `_case` at **29** with the `receipt=`/`feedback=` parameters the brief mentions;
+  `task_scene.py` has `observe_observation` at **295**; `pick_place_search_boundary.py` has `_gate_facts` at
+  **300** with its five parameters. All match what the brief states, so no correction was needed.
+- **What this round therefore is**: a verification of the handoff rather than another incremental change,
+  which is the honest use of an exhausted context — the artefact the owner asked for (a brief for the session
+  that finishes Task 3) is now both written and checked.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `188536bb8`;
+  targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
