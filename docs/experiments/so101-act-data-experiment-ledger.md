@@ -39942,3 +39942,29 @@ So each grid cell is one call with a distinct scratch directory, and the head-cr
 (`mask_map50_95` first, zero no-cup false candidates as a hard gate) can be evaluated on the same code path the final gate
 uses - which keeps calibration and evaluation measuring the same thing, the property the gate's own docstring insists on.
 Next: the runner over that function, then the three `freeze` calls, then Step 5's `compare`.
+
+## HS-211 — One grid cell measured through the gate's own code path: B at (0.51, 0.7) -> mask_map50_95 0.9836
+
+First calibration measurement, run by calling the gate's own `_measure_static` rather than a reimplementation:
+
+```
+python3 cell.py <toolchain site-packages> <MODEL_RUN> <out> 0.51 0.7      # candidate B, head val split
+val_samples: 200   cells: 3
+metrics: {"f1": 1.0, "mask_map50_95": 0.9835816198998764, "recall": 1.0}
+```
+
+Two findings, one fixed and one that changes HS-208's policy:
+
+1. **Ultralytics writes into the current working directory** - it created `runs/segment/val` inside the **worktree**, which
+   would have broken the clean-tree property. Moved (not deleted) into `$MODEL_RUN/grid/ultralytics-runs/`, and the grid runner
+   must pass `project=<scratch>` so the tool never writes into the repository tree again. Fixed here by relocation; the fix
+   belongs in the runner.
+2. **The static path returns only `f1`, `mask_map50_95`, `recall`** - there is **no no-cup false-candidate count** in it. HS-208
+   made "zero no-cup false candidates" a hard gate, and that quantity lives on the episode path
+   (`CandidateEvaluation.no_cup_false_candidates`), not in static validation. So the policy as written cannot be applied to a
+   static grid: either the grid gains the episode measurement, or the hard gate is applied at Step 5 where the gate already
+   computes it. **I am not silently dropping the gate** - recording that the criterion needs the episode path is the honest
+   state, and the decision belongs to the next round with the runner in hand.
+
+`cell.py` lives in the campaign root (`$MODEL_RUN/grid/cell.py`) and takes the toolchain site-packages, the campaign root, an
+output dir, and the two operating-point values, so every cell is reproducible from the artefact.
