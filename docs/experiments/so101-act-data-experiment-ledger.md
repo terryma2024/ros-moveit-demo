@@ -42692,3 +42692,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Reverted**; the release-boundary suite is green (14 passed).
 - **State.** **F14 closed**; F3 (a)(b)(c) landed, its positive control now blocked only by the two fences above with
   the wrapper named as the route; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `90f65cad5`; eighteen gates green.
+
+
+## CP-2257 — F3's positive control, pinned to the lease's own values
+
+- **`_lease()`'s body, read**: `{"batch_id": "batch-1", "coordinator_epoch": 1, "worker_id": "worker-1",
+  "worker_generation": 1, "point_id": "point-1", "attempt_id": "attempt-1", "lease_generation": 1,
+  "lease_issued_monotonic_s": 100.0, "lease_deadline_monotonic_s": 200.0}` — so the formal identity's attempt is
+  fenced to **`attempt-1`**, exactly as CP-2256 concluded from the two refusals.
+- **The control, now pinned to values**: writer `{**identity(), "lease": _lease()}` unchanged; the request
+  overridden to `{**request(), "attempt_id": "attempt-1"}`; **and** `FakePort.begin` wrapped so its evidence carries
+  the same `session_id`/`attempt_id`, because the runner fences begin evidence against the request while the writer
+  fences events against the identity — the three must agree on `"s"`/`"attempt-1"`. The negative then changes only
+  the request's attempt, and the writer refuses the foreign identity, which is the one-variable control the verdict
+  asked for.
+- **State.** **F14 closed**; F3 (a)(b)(c) landed; its positive control is a three-part fixture whose every value is
+  now named; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `7dbd23cfd`; eighteen gates green.
