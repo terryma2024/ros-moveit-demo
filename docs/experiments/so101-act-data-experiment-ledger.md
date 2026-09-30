@@ -41008,3 +41008,29 @@ provenance chain. Implementing it does not make a challenger win; it makes the l
 
 This is the tenth contract item in this chain that the consumer's code defined rather than the plan's prose, and the first where
 the artefact's *absence* is what blocks a later task.
+
+## HS-252 — The refused run leaves nothing behind, so the verdict must be written by code, not recovered
+
+Checked before planning any recovery:
+
+```
+$MODEL_RUN/evaluation/measure-C-task/   -> val.txt, val.yaml    (Ultralytics scratch only)
+find $MODEL_RUN/evaluation -name '*.json'   -> nothing
+find $MODEL_RUN -maxdepth 1 -name '*selection*' -o -name '*comparison*'   -> nothing
+```
+
+So the gate computed its metrics **in memory** and raised before writing any artefact: there is no partial comparison to re-serialise,
+and no measured cell values on disk to assemble a verdict from. The verdict has to be **produced by code**, which also settles a
+tension in the plan itself:
+
+- Step 5's command ends `|| exit 1`, i.e. the plan expects a refusal to **abort**;
+- Task 13 Step 1 gates on `model-selection-verdict.json` existing, i.e. the plan expects an artefact **despite** the refusal.
+
+Both can hold at once only if the gate **writes the verdict and still exits non-zero**: the refusal keeps its force, the artefact
+exists for Task 13, and nothing is promoted. That is the implementation to write next, in the compare CLI's retention path:
+`model-comparison.json` (the six cells plus the margin comparison) and `model-selection-verdict.json` (candidate_id `A`, retained,
+with the retention loss as the stated reason), then re-raise so the exit status is unchanged.
+
+Two honest notes for whoever implements it: the numbers must come from the run that just measured them - not from a hand-typed
+copy - and the verdict must say *why* A is the selection, so a reader cannot mistake "retained because nothing qualified" for
+"chosen because it won".
