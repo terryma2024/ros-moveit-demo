@@ -41258,3 +41258,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   four of its items landed (Boolean defect, shared predicate, reader check, vacuous schedules); targeted gates
   **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 passed**; HEAD `8682eeb9d`; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-2192 — The empty-schedule control: its seal half works, its readback half tampers the wrong file
+
+- **What I wrote**: one test with both boundaries — build `_self_consistent_formal`, empty one stream's schedule and
+  expect `writer.seal(emptied)` to refuse; then seal another such fixture, set the manifest's
+  `window["source_schedule"]["head"] = []` and expect `verify_audit_manifest` to refuse. Result: **1 failed**, and
+  the failure is the **second** half, refusing with `AUDIT_MANIFEST_INVALID` from the manifest **parse** path rather
+  than the window rule — so the file that half rewrote is not the document `verify_audit_manifest` reads as its
+  manifest, even though CP-2190's identical-looking rewrite worked.
+- **What that establishes**: CP-2191's rule does fire **at seal** (the first half passed), which is the half that
+  needed proving; the readback half needs the tamper target confirmed first.
+- **The one read for the next pass**: print what `_self_consistent_formal`'s `seal()` returns for that fixture and
+  the first line of that file, then apply the same readback tamper CP-2190 used. The difference between the two
+  fixture families is the likely cause (CP-2190 sealed a relabelled diagnostic audit, this one a self-consistent
+  formal one).
+- **Reverted**; the audit suite re-runs green (69 passed).
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  four items landed and this control half-proven; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 /
+  176 / 284 / 151 / 152 passed**; HEAD `316043e4d`; no push, no evidence deletion, no hardware, no second stack.
