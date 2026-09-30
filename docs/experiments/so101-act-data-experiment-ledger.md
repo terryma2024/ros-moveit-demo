@@ -35241,6 +35241,25 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   `cli/head_search_calibration.py`, the restricted admission and the `setup.py` entry point, then GREEN and
   commit. Task 6's confirmation verdict is still pending while its fixes are complete.
 
+- **Task 7 progress (rounds 215-218).** `src/act/head_search_qualification.py` implements the no-resume rule
+  (`_require_new_root` refuses any existing run root, `RUNNING` then `SUCCEEDED` written atomically),
+  operation-bound head-only admission over exactly `GEOMETRY_SMOKE`, `CALIBRATION_RUN`,
+  `QUALIFICATION_RUN` and `TELEOP_ACCEPTANCE` (the last also requiring the closed report),
+  `require_gate(...)` refusing `task8_live`, `task8_ready`, `release`, `recorder`, `retreat` and `pick`
+  while naming TASK8, `qualify_head_search(...)` publishing the closed report only after every evidence
+  digest is a real sha256, and `serve_teleop(...)` publishing a closed connection descriptor (operation,
+  runtime and bundle ids, owner pid, start ticks, argv digest, bridge socket root), blocking until
+  SIGINT/SIGTERM and recording controller stop and graph clear. `src/cli/head_search_calibration.py` plus the
+  `so101_head_search_calibration` entry point implement `run`, `verify-promoted-config` (byte-for-byte
+  approval with an immutable receipt), `qualify` (promoted bundle and evidence read from their own paths,
+  never from the new run root) and `serve-teleop`. The plan's full Step 2 gate now passes: 29 tests across
+  `test_act_head_search_qualification.py`, `test_head_search_calibration_cli.py` and
+  `test_act_task8_calibration_admission.py`. Commits: `b7bbd98e2`, `06310e0ad`.
+- **Still owed for Task 7:** the restricted-issuer wiring into `act/head_search_binding.py`,
+  `act/task8_calibration_admission.py` and `adapters/act/task8_calibration_search_binding.py`, a
+  signal-driven `serve-teleop` teardown test, and Task 7's review. Task 6's confirmation verdict is still
+  pending; its fixes are complete and green.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
