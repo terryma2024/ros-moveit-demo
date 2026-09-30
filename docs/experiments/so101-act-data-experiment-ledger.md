@@ -43324,3 +43324,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   observations for the coverage check, and the fixture must keep using _formal_writer for the lease.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, second half specified here; goal paused.
+
+## CP-2294 - Handoff: the seventh verdict's seven findings, where each stands
+
+- Closed with their required corrections and controls: T3-F14 (the ACT gate is scoped to ACT execution commits and
+  runs after the duplicate branch, CP-2239, with the verdict's own control going red to green); T3-F3 (a: the first
+  event names the episode's own initial epoch, CP-2248; b: an exact integer reference sequence, CP-2241; c: the
+  runner carries the writer's lease and emits the release event, CP-2250, plus the real-runner/formal-writer
+  positive control and its negative, CP-2260); T3-F1 (the carrier boundary normalises the producer's tuples,
+  CP-2261; the registered joint names and order, CP-2262; the canonical projection map, CP-2263; and a real-broker
+  frame driven through the port to the common writer with two one-variable negatives, CP-2264).
+- Landed, with a named remainder: T3-F11 (strictly increasing schedules CP-2265, endpoints against the physics
+  history CP-2268, every claimed instant being one the episode acquired CP-2272; the shortened/repeated negatives
+  are handed off in CP-2275 with the probe that settles them). T3-F12 (the reader reached through the broker's
+  driver CP-2286, the records kept on the boundary with a frozen carrier tolerated CP-2287, the records carried in
+  the nested physical observation CP-2288, and the gates already deriving from those records; the verdict's
+  remaining nuance is the pose kind's cup/model evidence and a production-class integration control). T3-F13
+  (caches invalidated with the epoch CP-2276, the joint callback's own stamp retained CP-2277, the registered
+  per-kind names and dimensions enforced CP-2282; the fourth item - a fenced current scene record - is blocked on
+  the contradiction between the port's docstring and the segment's comment, recorded in CP-2285 for the plan's
+  owner to rule on). T3-F5 (ordered completions with non-decreasing steps CP-2290, every registered kind's
+  non-decreasing history CP-2291, the physics epochs named by the release events CP-2292; the second half - a
+  runner-backed formal fixture replacing the preset phase names - is specified in CP-2293 and is the next write).
+- The next write in one line: a new _runner_backed_formal(tmp_path) fixture beside the existing ones - _formal_writer
+  for the lease, AcquisitionMinter for the camera frames and the accepted reference, a real PickPlaceRunner(
+  FakePort(), audit=writer) for the events and physics, and a window derived from the rows the audit actually
+  holds - then one new test that seals it and verifies it, without touching the existing fixtures.
+- Gates: twenty-seven green runs recorded, the widest at 251 passed with xdist, eight workers, NVMe scratch and a
+  tempfile proof; each landed item names its own run under the plan root's logs/.
+- Open beyond Task 3: the owner's nine input values (CP-2232/2234/2235/2236), items 5-8 of the approved plan
+  (production composition and installed CLI, freeze/build/integration gates, one real FULL_RESTART closure,
+  negative copies and delivery), and the eighth review once F5's second half lands. The goal remains paused.
