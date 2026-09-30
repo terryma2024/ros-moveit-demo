@@ -43177,3 +43177,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   comment names - before emitting the record. The port's current signature is printed alongside this entry.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four cuts with this fourth
   specified; F5/F12 open; goal paused.
+
+## CP-2284 - F13's fourth item: the observation port is task_scene.py:295
+
+- Located by name across the source: observe_observation(self, *, source="ros_task_scene_port") -> dict lives in
+  control/planning_scene/task_scene.py:295 - not in the act adapters - and its dict carries scene_revision (the test
+  at test_act_task8_search_port.py:632-641 shows an accepted read and a refusal path). Its body, printed alongside
+  this entry, is where an observed simulation instant would have to come from.
+- That makes the fourth item's first half concrete: the scene port must report the instant it observed, and only
+  then can pick_place_search_segment._planning_scene_record compare it with the readback it is about - the fence its
+  own comment names - before emitting a record.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four cuts, the fourth located;
+  F5/F12 open; goal paused.
