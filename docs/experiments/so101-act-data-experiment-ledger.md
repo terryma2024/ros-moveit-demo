@@ -35828,6 +35828,18 @@ env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHO
   because a refusal observed for the wrong reason is exactly the false confidence this session's reviews kept
   catching in tests.
 
+- **Task 11 geometry-seal smoke: the invocation contract, learned by running it (round 337).** Two of my
+  attempts failed for argument reasons, not code reasons, and both are worth recording so the gate is
+  reproducible: `--anchors` takes a **single comma-separated** list (`default,left,forward`), not
+  space-separated values; and `--camera-config` expects the **camera presets** document (root fields exactly
+  `presets` and `schema_version`), not `config/perception/head_camera_yolo_seg.yaml`, which is the perception
+  config and is refused with `CAMERA_PRESET_INVALID`. The correct invocation is therefore the geometry scene
+  plus `config/mujoco/camera_views.yaml` plus the geometry contract and a fresh output root. The Task 2 seal's
+  own console log already records the substance of this gate - `status: OK`, `in_frame_failures: 0` across
+  `default`, `left` and `forward`, with `fov_union_covers_required_domain` and
+  `safe_interval_contains_required_domain` true - and Task 11's job is to re-run it with the frozen toolchain,
+  which the next round will do with the corrected arguments.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
