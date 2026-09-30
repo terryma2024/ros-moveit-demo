@@ -34875,6 +34875,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   that Task 11's gate must run the benchmark suite in an interpreter that owns the benchmark
   dependencies, and it is recorded as such rather than as a Task 4 defect.
 
+- **Two preemptive Task 4 fixes while its review runs (commits b9bf2bccd, 0778233de).** The reviewer's own
+  working note ("episode recall/F1 do not affect selection") was correct: the first cut consulted the
+  held-out episode cells only for the bbox-p95 safety check. A challenger now has to win the head domain in
+  **both** measurement families by the declared margins, the retained model must keep the task domain in
+  both, and a candidate that wins one family and loses the other leaves the retained model in place rather
+  than being resolved by preference (`b9bf2bccd`). Separately, the plan asks for *paired* scene bootstrap
+  repetitions, so `paired_scene_delta_bootstrap` now differences the two candidates inside each drawn
+  scene - pairing cancels scene-to-scene variation instead of letting it dominate the interval - with tests
+  that a systematic 0.20 difference survives resampling and that within-scene noise cannot hide a real 0.10
+  effect (`0778233de`). Benchmark suite now 14 passed.
+
 ## HS-017 — Task 5 reconnaissance (read-only, recorded for the next task)
 
 - `src/act/search.py` (142 lines) holds one class, `HeadSearchController`, documented as "one cumulative
