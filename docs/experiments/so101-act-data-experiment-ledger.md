@@ -35260,6 +35260,19 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   signal-driven `serve-teleop` teardown test, and Task 7's review. Task 6's confirmation verdict is still
   pending; its fixes are complete and green.
 
+- **Task 7: one planned change attempted and deliberately reverted (round 221).** Wiring
+  `validate_head_only_admission(...)` into `CalibrationSearchBinding.__init__`
+  (`adapters/act/task8_calibration_search_binding.py`) immediately refused the existing callers' admissions
+  ("the admission is not a document"), and that file's tests are among the two blocked by the stale underlay,
+  so the change could not be verified either way. Reverted rather than guessed: the same guarantee is
+  enforced where it *is* verifiable - `validate_head_only_admission` in `act/head_search_binding.py`, the
+  operation-bound issuer, and the `run`/`qualify` CLI paths, all covered by the 31 passing tests. The adapter
+  wiring is deferred to Task 11, when rebuilding `so101_mujoco_support` makes
+  `test_act_task8_search_binding.py` and `test_act_head_search_binding.py` runnable. Task 7's gate:
+  31 passed across `test_act_head_search_qualification.py`, `test_head_search_calibration_cli.py` and
+  `test_act_task8_calibration_admission.py`; `ruff check` clean. Commits: `b7bbd98e2`, `06310e0ad`,
+  `fd28f09a1`, `f20f26207`.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
