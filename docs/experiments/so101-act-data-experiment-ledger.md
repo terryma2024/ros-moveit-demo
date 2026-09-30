@@ -34578,3 +34578,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   pointer, and the packet quotes the numbers read back from that pointer's own log.
 - **State.** **Task-list item 1 in_progress, awaiting verdict 4; items 2-8 pending.**
   Packet: `reviews/task1-rereview3-packet.md`.
+
+
+## CP-1927 — Task 1 checkpoint PASSED (PASS WITH FINDINGS, 0 Critical / 0 Important / 1 Minor)
+
+- **Verdict 4** (`reviews/task1-rereview3-verdict.md`, dispatch `e32a8737-b75b-4fbe-a250-75cfcc9a57c4`)
+  on HEAD `e32da382c5ece55e5772c9ca7a1168fb47b56b37`: **PASS WITH FINDINGS**. CLOSED by this verdict:
+  F3 (freeze and admission both derive and compare the current source+config identity and require one
+  calibration report), F8 (the provenance probe must succeed and match), F9 (canonical containment),
+  and F1/F2/F4/F5/F6/F7 remain closed. The reviewer independently re-read the patch hash, both module
+  hashes, both run pointers with their own JUnit (RED 6 failures/46 passed rc=1; GREEN 95 passed
+  rc=0), the inspection log (8 READY / 4 MISSING), and the untouched 39-path dirty baseline
+  (`837d602e…ae2a7`).
+- **Checkpoint state.** The Task 1 checkpoint is satisfied: the remaining finding is Minor and the
+  reviewer states it does not block the checkpoint. **Task-list item 1 is completed.**
+- **Deferred minor (F10, not fixed by design).** `_inspect_calibration_role()` classifies a report
+  against the current source commit but not the current profile config, so a sole report with the
+  right commit and another valid `config_sha256` can be labelled READY while freeze then correctly
+  refuses it with `CALIBRATION_SOURCE_CONFIG_MISMATCH`. It is a readiness-classification
+  inconsistency, not an admission bypass. Per the executing-plans rule minors do not enter the fix
+  pass; the fix (derive `profile_config_identity(root)` before calibration discovery, pass it to each
+  role's gate, add one stale-config and one matching-config inspector case) is recorded here for the
+  owner's decision.
+- **Open design question for the owner (raised by the owner, not by the reviewer).** Whether the
+  freeze-time git-commit check should stay a staleness guard with the dirty-worktree gap left to the
+  Task 6 source/install/process provenance, or whether this milestone should additionally bind the
+  uncommitted worktree content (a tree/diff digest in the registry and manifest). Analysis and the
+  option table are in the conversation; A (keep, document, Task 6 proves provenance) is the
+  recommendation, B/C would bind content at the cost of re-freezing on every edit. No change is made
+  until the owner decides.
+- **Reviewer-identity caveat (carried).** The Codex session cannot certify its own model id from
+  runtime metadata; the dispatch evidence is `codex queue -m gpt-6.1-sol` plus a
+  `GPT-6.1-Sol high` pane banner, and the coordinator must confirm that routing separately.
+- **State.** **Task-list item 0 and 1 completed; items 2-8 pending.** Task 2 has not started; the next
+  step is the owner's go-ahead (and the design answer above does not gate Task 2, which is the plan's
+  next boundary).
