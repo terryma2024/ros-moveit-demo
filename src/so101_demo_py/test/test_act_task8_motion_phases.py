@@ -82,6 +82,9 @@ def _case(calls, *, lifted=True, with_dispatch=True, with_wait=True, with_ik=Tru
     # ask for an unsuccessful one or for none, which is what the fail-closed control below drives.
     if receipt is not None:
         boundary._planning_scene_receipt = SimpleNamespace(success=receipt, failure_code=None)
+    # the ratified controller records for this instant (CP-2040), which the joint-feedback gate is derived from
+    boundary._controller_feedback = tuple(
+        {"controller": kind, "sim_time_s": world.simulation_time_s} for kind in ("arm", "gripper"))
     boundary._gate_facts = PickPlaceSearchBoundary._gate_facts   # a staticmethod: assigned, not bound
     for name in ("sequence_phase", "sequence_facts", "_checked_aggregates", "_motion_facts", "_release_facts",
                  "_gripper_open_rad",

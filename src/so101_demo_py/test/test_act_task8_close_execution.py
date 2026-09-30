@@ -83,6 +83,9 @@ def _case(calls, *, bilateral=True, with_dispatch=True, with_wait=True):
     boundary._gate_facts = PickPlaceSearchBoundary._gate_facts      # staticmethod: assigned
     # the SEARCH receipt these phases derive their Planning Scene gate from (CP-2017 step three)
     boundary._planning_scene_receipt = SimpleNamespace(success=True, failure_code=None)
+    # the ratified controller records for this instant (CP-2040), which the joint-feedback gate is derived from
+    boundary._controller_feedback = tuple(
+        {"controller": kind, "sim_time_s": world.simulation_time_s} for kind in ("arm", "gripper"))
     boundary._checked_aggregates = MethodType(PickPlaceSearchBoundary._checked_aggregates, boundary)
     boundary.sequence_facts = MethodType(PickPlaceSearchBoundary.sequence_facts, boundary)
     return boundary, ticket, capture

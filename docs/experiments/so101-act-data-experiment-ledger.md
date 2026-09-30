@@ -38023,3 +38023,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `0d459644b`;
   consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2042 — Task 3: the fixtures now supply the feedback records; the derivation edit did not land
+
+- **What landed.** Both acceptance fixtures set `boundary._controller_feedback` to the two ratified records
+  stamped with the fixture's own `world.simulation_time_s`, so the instant join the audit enforces is
+  satisfiable by construction. The suites are green: **94 passed** across the motion-phases,
+  close-execution, task8, search-port, release-boundary and supervisor suites under `pytest-xdist` with 8
+  workers (`logs/task3-jf.run` rc=0).
+- **What did not land, and why.** The module half — `_gate_facts` taking a `feedback` parameter and deriving
+  `joint_feedback_ok` — aborted on my anchor assertion for the placeholder text, and because the script writes
+  only after every assertion passes, **the module file was left untouched** rather than half-patched. That is
+  the safe failure mode, and the fixtures' new attribute is simply unread until the derivative lands.
+- **The one read the next pass needs**: the exact placeholder line inside `_gate_facts`
+  (`pick_place_search_boundary.py`, around the `contact_ok`/`mujoco_ok`/`planning_scene_ok` block) — my
+  anchor assumed `"controller_reference_ok": True, "joint_feedback_ok": True,` on one line, which is the
+  **port's** document shape, not the boundary helper's. Read those four lines, then apply: a fifth parameter
+  `feedback=None`, derive `joint_feedback_ok` from records whose `sim_time_s` equals
+  `world.simulation_time_s`, and pass `getattr(self, "_controller_feedback", None)` from the two call sites
+  (which now already pass the scene receipt).
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `722d11747`;
+  consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
