@@ -40905,3 +40905,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
   plus its sample fixture**, third cut planned here; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 247
   passed**; HEAD `eabac94c0`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2175 — F1's third cut: the assembly rule is clear, one semantic read remains
+
+- **Both shapes, read this round.**
+  - **Broker** (`ros_broker.reference_frames(kind, when)`): returns **one** kind's ratified A.1 frame evaluated for
+    `when`, exposing only the publication basis — the original message stays immutable beside the evaluated value,
+    and a kind whose reference arrived through an accepted interval refuses rather than presenting interpolation.
+  - **Audit** (`episode_audit.py:60-66`, `:232-238`, `:287-297`): the packed group is exactly
+    `{frames, projected_positions, projection_map}`; `frames` carries **exactly** the two kinds `arm` and `gripper`;
+    each frame's keys are exactly `_FRAME_FIELDS` and its `joint_names` must have `_FRAME_SIZES[kind]` entries
+    (five for the arm, one for the gripper); the projection is validated at 287-297, where `projection_map` is a
+    list of `[kind, index]` pairs whose kinds must be registered.
+- **So the expert's assembly is**: two `reference_frames` calls — one per kind, at the requested instant — placed
+  under `frames`, plus the projection pair built from the frames' **evaluated** positions in the canonical order the
+  map declares (the A.1 rule: the map selects the evaluated values). The port only needs a two-kind delegating
+  method, and the record then carries the ratified group that `_reference_frames_ok` accepts.
+- **The one read left**: `episode_audit.py:287-300` — the exact `projected_positions`/`projection_map` rules — after
+  which the edit is mechanical and the chain test writes itself.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
+  plus its sample fixture**, third cut one read from writing; F11 open. Targeted gates **430 / 201 / 201 / 201 /
+  246 / 247 passed**; HEAD `eae53282a`; no push, no evidence deletion, no hardware, no second stack.
