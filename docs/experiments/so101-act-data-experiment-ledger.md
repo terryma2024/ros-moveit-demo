@@ -38604,3 +38604,26 @@ dominant message, or family**.
 This is the third design of this comparison. The first was confounded (replaced `PYTHONPATH`, HS-153), the second was
 unreadable (tab-colliding format, HS-154), and this one was built so the verdict is re-derivable from artefacts - which is
 the property that made the answer checkable at all.
+
+## HS-158 — Eleventh verdict: the per-id runs reach a DIFFERENT failure, so HS-157's claim is retracted too
+
+It credited the artefacts ("retain paired logs and exit codes, fixing the earlier recording defects") and then found two
+things I had missed, both by measuring rather than reading my summary:
+
+1. **"47 CLI comparisons reach `RUNTIME_POLICY_ROOT_INVALID` instead of the original `TRUSTED_FINAL_TARGET_INVALID`."** -
+   so for those ids the per-id invocation does **not** reproduce the suite's failure at all. My classification compared
+   base-vs-overlay and found them equal, and equal-but-different-from-the-original is precisely what "same cause" was not
+   supposed to mean. This is the exact standard the tenth verdict set ("demonstrate ... reaching the original failure") and
+   I checked the wrong equality: base vs overlay, instead of each against the run that produced the id.
+2. **"Both Teleop logs also execute the current worktree's `ros_child.py`"** - because the runs source the worktree's ROS
+   environment, so the teleop "base" side was not purely base code. The comparison was therefore not the controlled one I
+   claimed for that package.
+
+**HS-157's "231/231 same cause, complete" is retracted.** What the artefacts actually support is narrower: **base and
+overlay behave identically when each id is run alone** - which is evidence about the invocation, not about the suite
+failure. The distinction is the whole point of the exercise, and I collapsed it by choosing the wrong baseline.
+
+**What the next design has to do**, in the terms this verdict sets: compare each id against **its own original failure**
+(the traceback recorded in `attribution-final.tsv` from the suite run), not against the other install; and for the teleop
+package, ensure both sides resolve the same `ros_child.py` or state explicitly which code each side executes. Until a run
+does that, no count in this thread should be called complete.
