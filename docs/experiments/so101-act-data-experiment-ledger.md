@@ -41900,3 +41900,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision** (CP-2217), **F13's `sim_time_s`
   amendment landed here**; item 4's QC half is green and **③a — the wiring — is next**; items 5+ wait on the four
   blocked bindings. HEAD `74fd59541`; thirteen gates green.
+
+
+## CP-2219 — ③a's wiring point: verify where the lease is known, not where the result is terminal
+
+- **Read this round**: `AdaptiveRunner._apply_result` (line 177) is where a `CommittedPointResult` becomes
+  terminal — it checks the point is known, refuses a conflicting terminal result, and records it — and it has **no
+  lease**, because `CommittedPointResult` carries only `point_id`, `status`, `evidence_root` and `infra_attempts`
+  (CP-2214). Leases, meanwhile, are built in `coordinator.py` at lines 229 and 344
+  (`LeaseIdentity(**worker['lease'])` and from a worker response), so the coordinator is where a lease and a result
+  are simultaneously in hand.
+- **The choice, and why the second is better**: putting the lease into `CommittedPointResult` would change the
+  journalled document's shape and every replay path; verifying in the **coordinator**, before it hands the result on,
+  achieves the same guarantee — an episode cannot become terminal before it verifies — without touching the journal
+  schema. It also matches what `act/result_store.py`'s own docstring promises ("the coordinator journals only after
+  the verifier"), which is the guarantee the store was built to provide.
+- **The edit, therefore**: in `coordinator.py`, where a worker's result is accepted (the 229/344 region), construct
+  `ActCollectionResultVerifier(worker_roots)` and call
+  `verify(lease, str(result.evidence_root), RunMode.EXECUTE)`; on any of its refusals do **not** hand the result on,
+  so the point stays non-terminal. `worker_roots` is the one input the coordinator must be given, and it is the same
+  mapping the store's tests build (`{"w00": worker_root}`).
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision** (CP-2217), **F13's amendment landed**
+  (CP-2218); item 4's QC half is green and its commit half now has a chosen wiring point; items 5+ wait on the four
+  blocked bindings. HEAD `8e2f01cd9`; thirteen gates green.
