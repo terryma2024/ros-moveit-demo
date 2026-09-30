@@ -37667,3 +37667,30 @@ PYTHONPATH="$HEAD_VENV_SITE:$HEAD_WORKTREE/src/so101_demo_py/test:$PYTHONPATH" \
 The chain of causes for this one gate, each found only by reading a line: plugin autoload (HS-118) -> collection
 (HS-119) -> bare sibling imports (this entry). That is the whole story of why the demo package's installed gate was
 "unavailable": four separate invocation details, none of them the code.
+
+## HS-121 — Third invocation fix did not move the installed gate; stopping the thread with the state recorded
+
+```
+colcon test --packages-select so101_demo_py
+  PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+  PYTHONPATH="$HEAD_WORKTREE/src/so101_demo_py/test:$HEAD_VENV_SITE:$PYTHONPATH"
+-> build/so101_demo_py/pytest.xml: 11 tests, 11 errors, 0 failures, 0 skipped    (unchanged)
+```
+
+The same eleven modules still fail to import, so putting the test directory on `PYTHONPATH` did not reach colcon's
+test invocation - it evidently constructs or resets that environment itself, which is the fourth distinct mechanism in
+this one gate (plugin autoload, venv absence, sibling imports, and now environment construction).
+
+**Decision: stop here.** Eight rounds have gone into this single gate. Everything it can tell me is recorded:
+
+- `so101_teleop`'s installed gate passes (`rc=0`, HS-089) - and its overlay digest (`9cf8f1fc...`) has not changed
+  since, so it is current;
+- `so101_demo_py`'s installed gate does not run its suite here, for four named reasons in sequence, all of them
+  invocation-level rather than code or environment defects;
+- the demo suite's content is measured by direct runs whose numbers and per-reason categories are in HS-077/084/110/
+  111/113/114/116, with 114 rows (`FIELDS_INVALID`, `TRUSTED_FINAL_TARGET_INVALID`) left explicitly unexplained.
+
+Clause (d) of the narrowed contract (HS-103) already covers this: the installed demo gate is reported as unavailable
+rather than as passing. If the reviewer judges that insufficient, the honest next move is to ask what evidence would
+suffice rather than to keep trying invocation variants - the returns here are clearly diminishing, and Task 11's
+substance is not in this gate.
