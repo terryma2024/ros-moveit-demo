@@ -42238,3 +42238,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   changed documentation only.
 - **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
   green, commit half landed; items 5+ wait on CP-2232's list. HEAD `8ea94376d`; fourteen gates green.
+
+
+## CP-2235 — A second evidence-backed value: `support_distance_m = 0.02`
+
+- **Found by searching the role keys across the source**: `support_distance_max_m` is an **IPC contract field**
+  (`so101_teleop/unified/ipc.py:76`, `Field(gt=0)`), carried through the bridge and the child
+  (`bridge.py:272/293`, `ros_child.py:541`), and the teleop suites use **`0.02`** consistently, annotating it as "the
+  admitted support distance (P1-3)". So the held-cup criterion this repository already admits is **0.02 m**, which is
+  what `placement_qc.support_distance_m` should carry rather than a number invented here.
+- **What the same search did not find**: nothing in the source names `path_step_s`, `path_clearance_m`,
+  `grasp_occlusion_window_s`, `release_stable_s`, `retreat_distance_m` or `placement_stable_s` — so those six remain
+  the owner's engineering judgement, and CP-2234's caution stands for them. Two of CP-2232's nine numbers now have a
+  proposal that comes from the codebase itself (`rgb_skew`'s pair and this one).
+- **Review status**: the seventh review is still running (pid 2700637, 1:47 elapsed, no verdict file yet); this round
+  changed documentation only.
+- **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
+  green, commit half landed; items 5+ wait on CP-2232's list. HEAD `bf6627569`; fourteen gates green.
