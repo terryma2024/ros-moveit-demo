@@ -38289,3 +38289,30 @@ pre-existing) rather than a message-based label.
 **Limit stated:** one id demonstrates the method, not the whole group. The remaining ten `_verify_phase` entries plus the
 two attribute errors need the same two-line run each - the method is now known to work and the ids are in
 `attribution-paired.tsv`, so this is repetition rather than discovery.
+
+## HS-145 — Deduplicated attribution table built, with its coverage arithmetic stated
+
+`scratch/attribution-final.tsv` now carries **one row per unique failing test id** (206 rows) with each id's own final
+error line, rebuilt from the `--tb=short` run so duplicates across the two logs collapse:
+
+```
+     61 soN_demo.act.contracts.ContractError: FIELDS_INVALID
+     30 soN_demo.cli.mujoco_parallel_batch.CliError: TRUSTED_FINAL_TARGET_INVALID
+     15 ValueError: MEASUREMENT_CONTRACT_VN_INVALID
+     14 soN_teleop.unified.contracts.MutationError: BRIDGE_CHILD_EXITED: N
+     11 TypeError: PickPlaceRunner._verify_phase() takes N positional arguments but N were given
+```
+
+**Coverage arithmetic, stated rather than implied:**
+
+| bucket | count | how attributed |
+| --- | --- | --- |
+| unique failing tests with a paired traceback line | 206 | per-id cause in the table |
+| collection-level failures | 11 modules | module granularity, HS-122's XML |
+| **short-summary entries not paired** | 193 FAILED lines minus the 206 unique | **not yet attributed** - visible here rather than hidden |
+
+That last row is the honest gap the reviewer flagged: the run's short summary lists more failing entries than the
+traceback section pairs (a consequence of `-n 8` worker output and of collection errors sharing the summary), so the
+table is **complete for what it pairs and explicit about what it does not**. Closing the remainder needs either a serial
+run (one worker, so every failure gets a header) or parsing the summary's `FAILED id - reason` lines where pytest emits
+them.
