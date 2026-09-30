@@ -38217,3 +38217,32 @@ The families now have per-id evidence behind them: `FIELDS_INVALID` (61), `TRUST
 `MEASUREMENT_CONTRACT_V2_INVALID` (22 - the task 8 family cleared by HS-138's controlled run),
 `BRIDGE_CHILD_EXITED` (14 - the socket/child-exit family from HS-083/085), the `_verify_phase` signature drift (11),
 and `PHASE_CAMERA_MATRIX_INVALID` (8).
+
+## HS-142 — Fresh dependency closure, built from empty bases, with the underlay boundary named
+
+Second of the sixth verdict's two requirements. The build HS-108 showed cannot work from nothing, done in the form that
+can be honest about what it proves:
+
+```zsh
+colcon build --packages-up-to so101_demo_py \
+  --packages-ignore mujoco_vendor mujoco_ros2_control mujoco_ros2_control_msgs \
+                    mujoco_ros2_control_plugins mujoco_3d_lidar \
+  --build-base <fresh> --install-base <fresh>
+```
+
+**Result: `rc=0`, 3 packages finished, 0 failed** - from **empty** build and install bases:
+
+| built fresh | time |
+| --- | --- |
+| `so101_mujoco_support` | 25.8 s |
+| `so101_teleop` | 27.2 s |
+| `so101_demo_py` | 3.09 s |
+
+with the boundary recorded in `closure.txt`: underlay `/data/work/ws_moveit/install` (the vendored MuJoCo stack) plus
+`/opt/ros/jazzy`, and the five ignored vendored packages named explicitly. `--packages-up-to` also shows the closure
+is a real dependency set - it pulled in the sibling packages rather than building one in isolation.
+
+**What this proves and what it does not,** stated in the record rather than left to inference: the packages this work
+owns resolve and build from empty bases; the vendored third-party stack is an **input from the underlay**, not something
+rebuilt here, because HS-108 demonstrated it cannot be built from nothing on this host. That is the honest reading of
+"fresh dependency-closed build" available here, and it is checkable line by line from `closure.txt` and `build.log`.
