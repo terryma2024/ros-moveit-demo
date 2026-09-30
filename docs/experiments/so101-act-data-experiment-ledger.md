@@ -41990,3 +41990,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   commit half is one reconciled location away, with its control already present in the store's suite; items 5+ wait on
   the four blocked bindings. HEAD `585c658c0`; thirteen gates green.
+
+
+## CP-2223 — ③a's mismatch: the store normalises the expected path, the coordinator's string does not
+
+- **Read this round**: the existing test builds the coordinator with **the verifier itself as its `result_port`**
+  (`ActCollectionResultVerifier({"w00": root})`), which is why `getattr(self.result_port, 'worker_roots')` and its
+  `run_mode` both resolve and the production branch is entered. And `_workspace(worker_root, lease)` is
+  `_safe(_safe(worker_root) / "attempts" / lease.point_id / lease.attempt_id)` — note the **`_safe`** wrapping —
+  while the coordinator computes the same layout by plain `Path` joining.
+- **The likely cause of `LEASE_LOCATION_MISMATCH`**: `verify` compares the caller's `location` with its own
+  `_expected(lease)`, and `_safe` (result_store.py:37) normalises — resolving the path and forbidding escape — so a
+  plain `str(workspace)` can differ from the normalised form even when both name the same directory. On this host the
+  evidence root lives under `/data/...`, where such normalisation is exactly the kind of thing that differs.
+- **The two honest fixes, either of which settles it**: (a) make `verify` compare **normalised** paths — resolve the
+  caller's `location` the same way `_expected` resolves its own — which is a robustness fix in the store and keeps
+  the coordinator's code free of a private helper; or (b) have the coordinator pass the store's canonical path,
+  which would mean importing a private `_workspace`. (a) is the right one: the location check should be about *which
+  directory*, not about *which spelling*.
+- **Why I did not apply it blind**: `_safe`'s exact behaviour (line 37) is the one thing to read before changing the
+  comparison — if it also forbids paths outside the root, then (a) must keep that check while relaxing the spelling.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  commit half is this one comparison away, with its control already in the store's suite; items 5+ wait on the four
+  blocked bindings. HEAD `786af0c95`; thirteen gates green.
