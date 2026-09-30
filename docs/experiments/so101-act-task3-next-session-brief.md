@@ -51,6 +51,22 @@ the other time. Build them the other way round: mint the acquisitions the window
 then **derive** `label_cutoff_s`, `collection_start_s`, `collection_end_s` and `physics_end_s` from those
 values behind one self-consistent formal-episode helper, and make every check a one-line variant of it.
 
+**(c) T3-F11 — one pass, four edits that must land together.** Do not try the module alone: the existing
+formal fixtures (`_formal_writer` + `_window(...)`) do not yet describe the rows and acquisitions they hold, so
+the matcher alone turns them red — that is exactly how CP-1997/CP-2001 reverted.
+1. In `episode_audit.py`, add `_window_matches_rows` (the body is in CP-1997; the rules are: a `complete`
+   outcome needs at least one bound row whose instant the cutoff equals, another outcome may not accompany rows,
+   every `streams_required` entry must appear in `source_schedule`, every scheduled instant must be one the
+   audit actually holds for that camera, and a gap beyond 1.5 cadences must be a permitted one).
+2. Call it from `seal()`'s formal-window gate — **line 789** is where that gate raises `AUDIT_WINDOW_INVALID`;
+   insert after the enclosing `if` block (the gate is a single condition since CP-2006), not after the raise.
+3. Track the bound row instants (`self._row_times`) beside `self._row_indexes`.
+4. Extend the formal fixtures in `test_act_episode_audit.py` **from the audit's own contents** with the
+   acquisition/row/source sequence of CP-2078, deriving the window from those values, and make each check a
+   one-line variant — including the negative cases: cutoff not the row's instant, a scheduled instant with no
+   acquisition, an unpemitted gap beyond 1.5 cadences, a required stream missing, an instant outside the window.
+Then run the audit suite plus the twenty-file gate.
+
 **(d) A fresh checkpoint after (a)-(c).** The plan's checkpoint reviewers are GPT-6.1 Sol / High via a Codex
 session in tmux; the fifth verdict is `reviews/task3-rereview4-verdict.md` (FAIL, 6 Important, all since
 closed except the items above). Prepare a packet like `reviews/task3-review5-packet.md`, including the

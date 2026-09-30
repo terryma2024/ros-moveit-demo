@@ -38816,3 +38816,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `eb406305b`;
   targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2080 — Task 3: T3-F11's one-pass plan written into the brief
+
+- **Why it is written as one pass with four edits.** Trying the matcher alone turns the existing formal fixtures
+  red, because they do not yet describe the rows and acquisitions they hold — which is precisely how CP-1997 and
+  CP-2001 reverted. The brief's item (c) now lists the four edits together: the matcher, its call from the
+  formal-window gate (**line 789** is where that gate raises; insert after the enclosing block, since the gate is
+  a single condition as of CP-2006), the row-instant bookkeeping, and the fixture rework from the audit's own
+  contents per the CP-2078 sketch — with the five negative cases named.
+- **Open list unchanged**: (c) this item; (d) the fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `748001ed4`;
+  targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
