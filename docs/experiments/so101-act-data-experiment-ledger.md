@@ -34839,3 +34839,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and demonstrated; the plan binds its recipe, its verified datasets and A's weights; the toolchain
   refuses drift, aliasing, escapes, traversal and re-runs. Task 4 (the two benchmark gates and the A/B/C
   verdict) is next, with its interface already pinned in HS-011.
+
+## HS-016 — Task 4 implemented; the fresh-closure build hit an environment limit (commits 8bd48649d, 17dbaff1d)
+
+- **Boundary:** new `src/perception_benchmark/head_search_models.py`,
+  `src/cli/evaluate_head_search_yolo_candidates.py` (console script registered in `setup.py`) and
+  `benchmark_test/test_head_search_model_evaluation.py`. `reporting.py`, `calibration.py` and
+  `cli/perception_benchmark.py` are **not** modified: the comparison reports belong to this gate's own
+  output root and the benchmark CLI needs no new subcommand, so nothing there required a change. The
+  deviation is recorded here for the reviewer to judge rather than papered over with speculative edits.
+- **Implemented:** scene-level bootstrap (`paired_scene_bootstrap` resamples whole `scene_group_id` units,
+  10,000 repetitions by default, `independent_unit == "scene_group_id"`); the two measurement families
+  written to separate sections; the frozen margins (mask mAP / F1 / recall 0.01, bbox-centre p95 2 px,
+  zero empty-scene false candidates, task retention 0.01, latency budget) with the all-equivalent rule
+  preferring the retained mixed model; and a fail-closed CLI that re-hashes every weight file against its
+  sealed digest, refuses an incomplete candidate set, refuses missing held-out episodes by name, and
+  refuses non-CUDA measurement.
+- **RED then GREEN:** the plan's Step 1 gate failed first with `rc=2` (module absent,
+  `scratch/head-test-20260930T065230Z-qDa0hPFx`) and the suite is now **12 passed**.
+- **The fresh dependency-closed build is impossible on this host, and that is an environment fact, not a
+  source regression.** `colcon build --packages-up-to so101_demo_py --symlink-install` into a fresh
+  `--build-base`/`--install-base` fails at `mujoco_vendor` with
+  `MUJOCO_STAGE_ROOT must contain include/mujoco/mujoco.h`; no `mujoco.h` exists anywhere under
+  `/data/work` (`find` over the workspace and the fork checkout). The gate therefore ran the way this
+  host can run it (the same adaptation Task 2 used for its overlay): a fresh `--build-base`/`--install-base`
+  build of `--packages-select so101_demo_py` with the existing `/data/work/ws_moveit/install` underlay
+  providing the C++ closure. Evidence:
+  `head-benchmark-code-gate-20260930T065404Z/{build.console.log,build-select.console.log,test-select.console.log,test-result-select.txt}`.
+- **The explicit benchmark gate ran and its failures are pre-existing environment conditions.** `colcon
+  test --packages-select so101_demo_py --pytest-args benchmark_test --return-code-on-test-failure`
+  executed **601 tests**: the **12 Head Search cases passed with zero failures**, and the 62 failures are
+  **60 in `test_perception_benchmark_dataset` (RASTERIZER_VERSION_MISMATCH)** plus **2 in
+  `test_perception_benchmark_adapters` (`No module named 'torch'`, `SYNCHRONIZER_UNAVAILABLE`)** - files
+  untouched by this task, in a system interpreter that has no torch. This is the first concrete evidence
+  that Task 11's gate must run the benchmark suite in an interpreter that owns the benchmark
+  dependencies, and it is recorded as such rather than as a Task 4 defect.
