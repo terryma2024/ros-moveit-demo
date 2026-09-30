@@ -34998,3 +34998,49 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and that no row is lost.
 - **State.** **Task-list items 0-1 completed; item 2 in_progress (fifth rework green, re-review
   pending); items 3-8 pending.**
+
+
+## CP-1933 — Task 2 checkpoint PASSED (PASS WITH FINDINGS, 0 Critical / 0 Important / 1 Minor)
+
+- **Verdict 6 on Task 2** (`reviews/task2-rereview5-verdict.md`, dispatch
+  `87dac448-f890-4adb-a3d0-c81e9ed9c184`) on `e6f7e4787b980352073236bbdfef45f29600873e`:
+  **PASS WITH FINDINGS**, 0 Critical / 0 Important / 1 Minor. Closed: T2-F1 (join capacity; constant
+  memory explicitly uncertified because `_completed` keeps whole observations), T2-F2 (future horizons,
+  late revocation and stop boundaries invalidating written labels), T2-F3, T2-F4's blocking portion
+  (sampler/recorder/audit-writer refusals latch, a rejected row is no longer lost), T2-F5, T2-F6.
+- **Deferred Minor (not fixed, per the executing-plans rule that minors never enter the fix pass).**
+  T2-F4 diagnostic residual: `finish()` sets `_finished = True` before `_tail_paths()` runs, so a
+  refusing tail writer is reported once and then masked by `CAPTURE_FINISHED`; and after a latched
+  failure a later `on_event()` checks the deadline before `_failure`, so an expired budget replaces the
+  original reason (`_fail()` overwrites rather than preserving the first reason). The reviewer graded it
+  Minor because it neither revives collection nor yields a successful summary after failure. **Exact
+  recipe if the owner wants it closed:** compute tail paths before marking finalization complete; give
+  an existing `_failure` priority over the finished/deadline checks when re-reporting; make `_fail()`
+  preserve the first reason like `_reject()`; add a failing-tail-writer test and a
+  failure-then-expired-event test, both asserting the original reason through later APIs.
+- **Evidence.** `logs/task2-all.run` rc=0: **179 passed in 9.77 s** (both Task 2 files plus
+  `test_act_synchronizer.py`, `test_act_recorder.py`, `test_act_contracts.py`, `test_act_collection.py`,
+  `test_act_first_episode_scope.py`, `test_act_first_episode_admission.py`,
+  `test_act_campaign_admission.py`). RED evidence per round: `logs/task2-acq-red.run` (6 behavioural
+  failures against a shapes-only baseline, including the plan's named reuse case),
+  `logs/task2-cap-red.run` (5 failures through a defect overlay), and the retained intermediate runs
+  `logs/task2-r2.run` (1 failure) and `logs/task2-all.rc` history. Every run has its own NVMe scratch
+  and a non-empty tempfile proof.
+- **Carried to the coordinator.** The Codex session still cannot certify its own model id/effort;
+  dispatch evidence is `codex queue -m gpt-6.1-sol` plus the `GPT-6.1-Sol high` banner.
+- **Task 3 start point (next boundary, not started).** Plan Task 3, "共同不可变 audit/seal 与物理安全
+  判据/停止语义": create `act/audit_manifest.py` (canonical manifest v1; `source.json`/`inputs.json`/
+  `episode.json`; `audit/samples.jsonl` with the 40-field audit row including acquisition ids, source
+  schedules and reference interpolation; monotone event log) and extend `act/recorder.py` /
+  `act/result_store.py` so one audit writer feeds both the recorder and row bindings, the seal carries
+  the common audit manifest hash and the scope, `verify_episode_seal` recomputes it, and seal 2 is
+  refused once v1 exists. Physical criteria: supported release, gripper real open, stable placement
+  before retreat, no unsupported held cup — and on failure/stop/revoke the capture only stops/holds,
+  never opens the gripper or auto-resets. The plan's RED uses
+  `test_act_task8_reset.py::test_unsupported_held_cup_is_held_not_released` plus new cases in
+  `test_act_episode_audit.py`, `test_act_episode_seal.py`, `test_act_recorder.py`. The two
+  `test_act_task8_reset.py` tests named by the plan must be backed up externally (hash + single
+  read-back) **before** any edit, because that file is one of the 39 baseline-dirty paths.
+- **State.** **Task-list items 0, 1 and 2 completed; item 3 in_progress (not started); items 4-8
+  pending.** HEAD `e6f7e4787`; 39-path dirty baseline untouched (`837d602e…ae2a7`); no push, no
+  evidence deletion, no hardware.
