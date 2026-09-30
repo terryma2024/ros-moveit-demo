@@ -22,6 +22,13 @@ def _verify_promoted_config(run_root: Path, approved: str | None) -> int:
     if not approved:
         print("HEAD_SEARCH_APPROVAL_REQUIRED: pass --approved-bundle-sha256", file=sys.stderr)
         return 2
+    receipt = run_root / "approval-receipt.json"
+    if receipt.exists():
+        print(
+            f"APPROVAL_RECEIPT_EXISTS: {receipt} was already written and an approval is immutable",
+            file=sys.stderr,
+        )
+        return 2
     promoted = run_root / "head-search-bundle.json"
     if not promoted.is_file():
         print(f"HEAD_SEARCH_BUNDLE_MISSING: {promoted} is absent", file=sys.stderr)
@@ -36,7 +43,7 @@ def _verify_promoted_config(run_root: Path, approved: str | None) -> int:
             file=sys.stderr,
         )
         return 2
-    run_root.joinpath("approval-receipt.json").write_text(
+    receipt.write_text(
         json.dumps(
             {
                 "approved_bundle_sha256": approved,
@@ -82,6 +89,27 @@ def main(argv: list[str] | None = None) -> int:
             run_root,
         )
         print(f"{report['status']} {report['evidence_sha256_set']}")
+        return 0
+    if parsed.command == "run":
+        from so101_demo.act.head_search_qualification import run_head_search
+
+        runtime_path = run_root.parent / "frozen-runtime.json"
+        if not runtime_path.is_file():
+            print(
+                "HEAD_SEARCH_RUNTIME_REQUIRED: the frozen runtime belongs to Task 13",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            receipt = run_head_search(
+                {"runtime": json.loads(runtime_path.read_text(encoding="utf-8"))}, run_root
+            )
+        except ValueError as error:
+            if "RUN_ROOT_ALREADY_EXISTS" not in str(error):
+                raise
+            print(str(error), file=sys.stderr)
+            return 2
+        print(f"RUN_SUCCEEDED {receipt['runtime_id']}")
         return 0
     if parsed.command == "serve-teleop":
         report = json.loads((run_root / "head-search-qualified-report.json").read_text("utf-8"))

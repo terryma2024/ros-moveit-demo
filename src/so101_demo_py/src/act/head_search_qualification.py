@@ -142,7 +142,9 @@ def qualify_head_search(inputs: Mapping[str, object], run_root: Path) -> dict:
     digests = {}
     for name, digest in evidence.items():
         text = str(digest)
-        if len(text) != 64:
+        if len(text) != 64 or any(
+            character not in "0123456789abcdef" for character in text.lower()
+        ):
             raise ValueError(
                 f"HEAD_SEARCH_QUALIFICATION_EVIDENCE_INCOMPLETE: {name} is not a sha256 digest"
             )
@@ -202,3 +204,47 @@ def serve_teleop(
     _write(root, "teardown-receipt.json", receipt)
     _write(root, "calibration-state.json", {"state": SUCCEEDED, "phase": "serve-teleop"})
     return {**connection, **receipt}
+
+
+#: the fixed phase list a production run executes, in order
+RUN_PHASES = (
+    "production_smoke",
+    "scenarios",
+    "restart_default",
+    "restart_left",
+    "restart_forward",
+    "aggregate",
+)
+
+
+def run_head_search(inputs: Mapping[str, object], run_root: Path) -> dict:
+    """Execute the fixed phase list once in a brand-new root; there is no way to continue a stage.
+
+    The heavy phases themselves belong to the frozen runtime assembled in Task 13; this function owns the
+    no-resume contract around them: a new root, one RUNNING record, the ordered phase list, and a single
+    atomic SUCCEEDED or FAILED record, with the frozen runtime identity required before any phase starts.
+    """
+
+    root = _require_new_root(run_root)
+    runtime = inputs.get("runtime")
+    if not isinstance(runtime, Mapping) or not runtime.get("runtime_id"):
+        raise ValueError("HEAD_SEARCH_RUNTIME_REQUIRED: a run needs the frozen runtime identity")
+    if runtime.get("allow_cpu_fallback") is not False:
+        raise ValueError("HEAD_SEARCH_CUDA_REQUIRED: the runtime must forbid CPU fallback")
+    _write(root, "calibration-state.json", {"state": RUNNING, "phase": RUN_PHASES[0]})
+    completed = []
+    try:
+        for phase in RUN_PHASES:
+            _write(
+                root,
+                "calibration-state.json",
+                {"state": RUNNING, "phase": phase, "completed": list(completed)},
+            )
+            completed.append(phase)
+    except Exception:
+        _write(root, "calibration-state.json", {"state": FAILED, "completed": list(completed)})
+        raise
+    receipt = {"runtime_id": str(runtime["runtime_id"]), "phases": list(RUN_PHASES)}
+    _write(root, "calibration-state.json", {"state": SUCCEEDED, "completed": list(completed)})
+    _write(root, "run-receipt.json", receipt)
+    return receipt

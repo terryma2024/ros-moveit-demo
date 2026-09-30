@@ -100,3 +100,76 @@ def test_qualify_publishes_the_closed_report_with_evidence(tmp_path: Path) -> No
 
 def test_run_refuses_to_resume_or_start_without_the_frozen_runtime(tmp_path: Path) -> None:
     assert main(["run", "--run-root", str(tmp_path / "run")]) == 2
+
+
+def test_the_approval_receipt_is_immutable(tmp_path: Path) -> None:
+    approved = _bundle(tmp_path)
+    arguments = [
+        "verify-promoted-config",
+        "--run-root",
+        str(tmp_path),
+        "--approved-bundle-sha256",
+        approved,
+    ]
+    assert main(arguments) == 0
+    receipt = tmp_path / "approval-receipt.json"
+    first = receipt.read_text(encoding="utf-8")
+    assert main(arguments) == 2, "an approval must not be rewritten"
+    assert receipt.read_text(encoding="utf-8") == first
+
+
+def test_a_run_needs_the_frozen_runtime_and_then_runs_every_phase_once(tmp_path: Path) -> None:
+    from so101_demo.act.head_search_qualification import RUN_PHASES
+
+    run_root = tmp_path / "run"
+    assert main(["run", "--run-root", str(run_root)]) == 2
+    assert not run_root.exists(), "a refused run must not create its root"
+
+    (tmp_path / "frozen-runtime.json").write_text(
+        json.dumps({"runtime_id": "runtime-0001", "allow_cpu_fallback": False}), encoding="utf-8"
+    )
+    assert main(["run", "--run-root", str(run_root)]) == 0
+    receipt = json.loads((run_root / "run-receipt.json").read_text(encoding="utf-8"))
+    assert tuple(receipt["phases"]) == RUN_PHASES
+    state = json.loads((run_root / "calibration-state.json").read_text(encoding="utf-8"))
+    assert state["state"] == "SUCCEEDED"
+    assert main(["run", "--run-root", str(run_root)]) == 2, "a finished run cannot be resumed"
+
+
+def test_qualification_evidence_must_be_hexadecimal(tmp_path: Path) -> None:
+    run_root = tmp_path / "run"
+    promoted = tmp_path / "promoted"
+    _bundle(promoted)
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    (evidence / "production_smoke.json").write_text(json.dumps({"x": 1}), encoding="utf-8")
+    good = main(
+        [
+            "qualify",
+            "--run-root",
+            str(run_root),
+            "--promoted-config",
+            str(promoted / "head-search-bundle.json"),
+            "--evidence-root",
+            str(evidence),
+        ]
+    )
+    assert good == 0
+
+    other = tmp_path / "other"
+    bad_evidence = tmp_path / "bad-evidence"
+    bad_evidence.mkdir()
+    (bad_evidence / "production_smoke.json").write_text("z" * 8, encoding="utf-8")
+    (bad_evidence / "scenarios.json").write_text(json.dumps({"y": 2}), encoding="utf-8")
+    with pytest.raises(ValueError, match="HEAD_SEARCH_QUALIFICATION_EVIDENCE_INCOMPLETE"):
+        main(
+            [
+                "qualify",
+                "--run-root",
+                str(other),
+                "--promoted-config",
+                str(promoted / "head-search-bundle.json"),
+                "--evidence-root",
+                str(bad_evidence / ".."),
+            ]
+        )
