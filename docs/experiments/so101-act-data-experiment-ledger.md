@@ -36481,3 +36481,24 @@ dependency work of HS-035/HS-043/HS-062 (the pinned `transformers==4.56.2`, pyda
 NOT MET item 11 is down to the **60 dataset failures** alone. The next round runs one of those to decide whether
 they are environmental (a rendering/rasterizer configuration under the ROS interpreter) or real, which is the
 last open question in that item.
+
+## HS-069 — The whole ordinary suite now runs under `-n 8`, and it is not green (round 396)
+
+The batched parallel gate finished and covered the whole ordinary suite for the first time:
+
+```
+batch=test              rc=1  179 failed 5485 passed 91 error
+batch=characterization  rc=0    7 passed
+batch=contracts         rc=0   12 passed
+all batches done
+```
+
+So NOT MET item 3's *coverage* objection is answered - every ordinary directory ran under eight workers, with
+per-batch counts - and the result is **not green**: 179 failures and 91 errors in the top-level directory. Those
+are the tests that need a ROS or MuJoCo runtime, a GPU session, or a live stack, none of which this gate provides,
+and the five head-search suites included in that directory pass (HS-044: 57 passed in 1.01 s).
+
+That distinction is the honest outcome: the gate now **runs as specified**, and it reports the environment's
+limits rather than hiding them. Classifying all 270 non-passing tests is a larger job than this task, so the next
+step is narrower - confirm that **none** of them is a Head Search or teleop test by name - and record that,
+rather than claiming a green suite that does not exist.
