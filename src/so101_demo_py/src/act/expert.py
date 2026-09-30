@@ -11,6 +11,8 @@ from .contracts import finite, validate_action
 _RAW_REFERENCE_KEYS = ("joint_names", "sim_stamp_ns", "received_monotonic_ns", "velocities")
 #: the ratified per-frame kinds, in the canonical order the projection map declares (CP-2176)
 _FRAME_ORDER = ("arm", "gripper")
+#: the ratified packed reference group's keys (Proposal A.1), the alternative to the legacy flat four
+_PACKED_REFERENCE_KEYS = ("frames", "projected_positions", "projection_map")
 
 
 class MoveItExpertActionTap:
@@ -90,6 +92,11 @@ class CausalEpisodeCapture:
             raise ValueError("EXPERT_REFERENCE_RAW_INCOMPLETE")
         # the observer's raw frame belongs to the common audit's reference stream, never to the
         # recorder's closed row audit; publishing it here would make a valid capture fail admission
-        self.raw_reference = raw or None
+        # F1: the tap may supply the ratified packed group instead of the legacy flat keys, and the capture
+        # must preserve whichever shape it was given rather than dropping the packed one
+        packed = {key: reference[key] for key in _PACKED_REFERENCE_KEYS if key in reference}
+        if packed and set(packed) != set(_PACKED_REFERENCE_KEYS):
+            raise ValueError("EXPERT_REFERENCE_RAW_INCOMPLETE")
+        self.raw_reference = packed or raw or None
         self.recorder.append(observation, positions, audit)
         return positions

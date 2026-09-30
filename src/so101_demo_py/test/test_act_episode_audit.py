@@ -1318,3 +1318,45 @@ def test_a_sealed_schedule_naming_no_instant_is_refused_on_readback(tmp_path):
     # an emptied schedule fails _window_ok, which the manifest gate runs before the shared predicate
     with pytest.raises(ValueError, match="AUDIT_MANIFEST_INVALID"):
         verify_audit_manifest(path)
+
+
+def test_the_capture_preserves_the_packed_reference_the_tap_supplies(tmp_path):
+    """T3-F1: the adapter/tap/capture path by name — the capture keeps the shape its tap produced."""
+
+    from so101_demo.act.expert import CausalEpisodeCapture, MoveItExpertActionTap
+
+    projected = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+
+    def frame(kind, when):
+        size = 5 if kind == "arm" else 1
+        evaluated = projected[:5] if kind == "arm" else projected[5:]
+        return {"joint_names": [f"{kind}-{index}" for index in range(size)],
+                "published_positions": [0.0] * size, "published_velocities": [0.0] * size,
+                "evaluated_positions": list(evaluated), "evaluated_velocities": [0.0] * size,
+                "evaluation": {"requested_sim_time_s": when, "basis": "published",
+                               "goal_id": None, "accepted_sim_s": None, "revoked_sim_s": None},
+                "sim_stamp_ns": int(when * 1e9), "received_monotonic_ns": 1, "observer_sequence": 1}
+
+    class Port:
+        def reference_state(self, at_s):
+            return {"requested_sim_time_s": at_s, "source": "CONTROLLER_REFERENCE",
+                    "positions": list(projected), "joint_names": ["1"], "sim_stamp_ns": 1,
+                    "received_monotonic_ns": 1, "velocities": [0.0]}
+
+        def reference_frames(self, kind, at_s):
+            return frame(kind, at_s)
+
+    class Recorder:
+        def __init__(self):
+            self.calls = []
+
+        def append(self, observation, positions, audit):
+            self.calls.append((observation, positions, audit))
+
+    recorder = Recorder()
+    capture = CausalEpisodeCapture(recorder, MoveItExpertActionTap(Port()))
+    label = capture.append({"sim_time_s": 1.0}, {"phase": "SEARCH"})
+    assert list(label) == projected
+    assert recorder.calls and recorder.calls[0][1] == tuple(label)
+    assert set(capture.raw_reference) == {"frames", "projected_positions", "projection_map"}
+    assert capture.raw_reference["projected_positions"] == projected

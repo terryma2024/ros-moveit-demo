@@ -41590,3 +41590,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3, F5 and F1 closed** (F1's capture leg not yet named in a test), **F11 six of
   seven** with its frozen policy awaiting the plan, F13 residual awaiting the plan; targeted gates all green, the
   table in CP-2204; HEAD `0984abf4d`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2206 — F1's capture leg landed: the capture keeps the shape its tap produced
+
+- **What the capture did, read in full** (`expert.py:80-100`): `CausalEpisodeCapture.append(observation,
+  physical_audit)` refuses an audit that collides with its reference keys, asks the tap for the reference at
+  `observation["sim_time_s"]`, builds the row audit from the given audit plus `reference_time_s`,
+  `reference_source` and `reference_positions`, keeps the **legacy four** raw keys in `self.raw_reference` (with a
+  completeness guard), and hands `(observation, positions, audit)` to the recorder.
+- **The gap that reading exposed**: with a frames-capable port — the tap CP-2178 gave the packed group — `raw` was
+  empty, so `raw_reference` became **None** and the packed group was dropped. That is precisely F1's "the tap and
+  causal capture still preserve only the four legacy raw keys", one layer further along than the tap.
+- **What landed**: `_PACKED_REFERENCE_KEYS` and a packed branch with its own completeness guard, so
+  `raw_reference` is the packed group when the tap produced one, the legacy four when it produced those, and None
+  when it produced neither; plus `test_the_capture_preserves_the_packed_reference_the_tap_supplies`, which names
+  the adapter/tap/capture path and asserts the recorder receives the projected label — the piece of F1's wording no
+  test had exercised.
+- **Evidence.** `logs/task3-f1-capture.run` rc=0: **288 passed in 4.72s** across the same ten suites as CP-2204 plus the capture
+  and expert-route files, under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **F1's state: all three cuts and the capture leg are done**, so every element of the verdict's required correction
+  for F1 — preserve and validate the registered source shape through the forwarding boundaries, wire the real
+  per-kind frames into the common reference record, and exercise the adapter/tap/capture/writer/readback chain — has
+  landed code and a test.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; **F11 six of seven** (frozen policy awaits the plan);
+  F13 residual (awaits the plan); targeted gates all green, the tables in CP-2204 and here; HEAD `d196d3b32`; no
+  push, no evidence deletion, no hardware, no second stack.
