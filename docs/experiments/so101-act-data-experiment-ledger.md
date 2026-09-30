@@ -43142,3 +43142,11 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   readback check that both kinds appear.
 - **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 two of four cuts**,
   the third staged to this recipe; F5/F12 open; the goal is paused. HEAD `92bedca9a`; twenty-six gates green.
+
+## CP-2281 - F13's third cut, half one: three fixtures upgraded, suite still green
+
+- The three identical arm feedback blocks now carry joint_names 1..5 and five-element commanded, measured and measured_velocity vectors; only those blocks' lines changed, so gripper-shaped records kept their lengths.
+- The suite stayed green (72 passed, 189 with the wider gate), which is the point of doing fixtures first: no assertion depended on the old one-element shape, so the rule can be re-applied on its own.
+- Side effect: each rewritten block gained a line, so the two inline records (commanded_positions [0.1, 0.2] at 972 and [0.6] at 975 in the pre-edit numbering) must be located by field from now on.
+- Half two: re-apply the registered-name rule in the feedback check, then require both kinds on readback.
+- HEAD was e2533d83e before this commit; F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 two of four cuts plus this half; F5/F12 open; goal paused.
