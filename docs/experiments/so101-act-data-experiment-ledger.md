@@ -37118,3 +37118,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `b070c4982`;
   gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2002 — Task 6 prerequisite verified: the full ordinary test scope cannot be collected in this environment
+
+- **Measured, not assumed.** `pytest src/so101_demo_py/test --co` fails during collection in the
+  live-source environment: `test_copied_installed_entrypoint.py:52` calls
+  `ament_index_python.get_package_prefix("so101_demo_py")`, and the index the environment sees is only
+  `/opt/ros/jazzy`, so collection stops with
+  `PackageNotFoundError: "package 'so101_demo_py' not found, searching: ['/opt/ros/jazzy']"` —
+  `no tests collected, 1 error in 1.12 s` (`logs/task6-collect.run` rc=2).
+- **What that means for the plan.** The ordinary full-suite gate belongs to Task 6 and requires a
+  **built install overlay** with a complete dependency closure, not the live-source `PYTHONPATH` this
+  session uses deliberately (it exists to avoid the stale `install/` overlay that once hid new modules).
+  So Task 6's first step in this worktree is a fresh `colcon build --install-base <new>` for
+  `so101_demo_py` (and whichever packages the closure needs), after which the xdist gate can run and its
+  numbers will be comparable to `logs/task3-gate7.run`'s focused 403.
+- **Recorded for the handoff.** This is the concrete reason the earlier "full xdist gate deferred to
+  Task 6" note holds, now with the file, the line, the exception and the run pointer instead of a summary.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `90ee85dbc`;
+  gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
