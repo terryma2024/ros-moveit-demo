@@ -35703,6 +35703,24 @@ visual evidence, starting with the named component tests that must fail for the 
   interval so the value handed to the caller is checked rather than only the slider's attributes. Verified:
   **16 passed** and the web build succeeds.
 
+## HS-041 — Consolidated regression gate across the head-search work (round 326)
+
+Run from the worktree root with the recorded environments, all green together:
+
+- **Head-search suites** (`head_test`): `test_act_head_search_domain.py`, `test_act_head_search_calibration.py`,
+  `test_act_head_search_qualification.py`, `test_head_search_calibration_cli.py`,
+  `test_act_head_search_startup.py` -> **56 passed**.
+- **ROS-dependent suites** (`head_test_render`): `test_act_search.py`,
+  `test_act_task8_calibration_admission.py`, `test_act_calibration.py` -> **52 passed**.
+- **Web suites** (`NODE_ENV=test bun run test`): `head-camera-client.test.ts`,
+  `head-camera-panel.test.tsx` -> **16 passed**, and the web build succeeds.
+- **Teleop head camera** (`--noconftest` with the pydantic-v2 interpreter and only `src/so101_teleop` on the
+  path): `test_head_camera_api.py` -> **10 passed**.
+
+Nothing regressed across Tasks 5-10. Note for accuracy: a first attempt at the teleop suite reported "no tests
+ran" because the working directory was `src/` after a `cd ../..` rather than the worktree root; re-run from the
+root it passes, so that was my path error, not a suite failure.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
