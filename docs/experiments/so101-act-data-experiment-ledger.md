@@ -38246,3 +38246,26 @@ is a real dependency set - it pulled in the sibling packages rather than buildin
 owns resolve and build from empty bases; the vendored third-party stack is an **input from the underlay**, not something
 rebuilt here, because HS-108 demonstrated it cannot be built from nothing on this host. That is the honest reading of
 "fresh dependency-closed build" available here, and it is checkable line by line from `closure.txt` and `build.log`.
+
+## HS-143 — Seventh verdict: closure ACCEPTED; attribution needs dedup, full coverage, and causes for the TypeErrors
+
+Progress: **fresh dependency closure is accepted** against the named underlays (HS-142) - the second of the two
+requirements from the sixth verdict is closed.
+
+Remaining, all about the attribution table (HS-141), and all fair:
+
+1. "attribution rows include duplicates and collection failures, with missing coverage" - the 213 rows span two logs and
+   repeat ids (a failing test appears in both the demo and teleop runs where they overlap), and 214 of ~348 entries are
+   paired at all. A table clause (c) can be judged against needs **unique ids**, the collection-level failures attributed
+   at module level **in the same table**, and an explicit total so missing coverage is visible rather than implied.
+2. "TypeError and AttributeError entries lack demonstrated environmental causes" - the 11 `_verify_phase()` TypeErrors (and
+   the 2 attribute errors) are attributed by *signature* only, not by a demonstrated cause. HS-115 traced one such
+   signature to a stale overlay and HS-134/135 then showed the task 8 link was a document key rather than an import, so
+   the honest state is: **cause not yet demonstrated**, and it needs the same controlled treatment HS-138 used - vary the
+   code with the environment held fixed and see whether the TypeError survives.
+3. "Every remaining failing ID needs causal evidence under the narrowed contract" - i.e. the table must be
+   **complete and deduplicated**, with each id carrying a cause and any id lacking one left visibly uncaused.
+
+So the shape of the final piece is clear: rebuild the table as one deduplicated row per failing id, fold in the
+collection-level failures at module granularity, add a coverage line (paired + module-level + uncaused = total), then run
+the controlled code/environment comparison for the TypeError/AttributeError group specifically.
