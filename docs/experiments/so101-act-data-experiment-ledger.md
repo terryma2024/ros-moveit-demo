@@ -40508,3 +40508,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 five of seven steps
   done**, F1/F11 open; targeted gates **430 / 201 / 201 passed**; HEAD `1e0b878cb`; no push, no evidence deletion,
   no hardware, no second stack.
+
+
+## CP-2156 — F5's physics step: four tail matches, and the receiver must come from each site
+
+- **What I tried**: the predicate clause requiring all four registered physics kinds, plus three extra rows per
+  formal site, anchored on the physics row's closing tail (`"cup_position_world_m": [0.0, 0.0, 0.0]}})`). The tail
+  matched **four** sites above line 700 (743, 801, 817, 1086) rather than the three formal ones, and my inserted
+  block named a single receiver (`_target`) while each site's writer is called something else — so the patch could
+  not have run even at three sites. **Both files are restored to HEAD and the audit suite re-runs green.**
+- **The template the next attempt has, read this round**: `PickPlaceRunner._physics` (lines 117-140) appends
+  `{"kind": <kind>, "sim_time_s": <finite or None>, "release_epoch": <int>, "observation": <raw block>}`, adding
+  `raw["supported"]` for the `support` kind; the raw block is the MuJoCo source contract the fixtures' `pose` row
+  already uses. So the three rows per site are mechanical: copy the pose row, change `kind` to `contact` and
+  `retract`, and for `support` add `"supported": True` to the observation.
+- **The one thing to get right next time**: parse each site's receiver from its own append line (the text before
+  `.append_source(`) instead of naming one, and confirm the site list is the **three** formal ones — 817 belongs to
+  a different test.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 five of seven steps
+  done** with this one fully specified, F1/F11 open; targeted gates **430 / 201 / 201 passed**; HEAD `1a49d3451`;
+  no push, no evidence deletion, no hardware, no second stack.
