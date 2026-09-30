@@ -41024,3 +41024,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
   plus its sample fixture and the third cut's first two edits**; F11 open. Targeted gates **430 / 201 / 201 / 201 /
   246 / 247 / 200 / 283 passed**; HEAD `cc743914b`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2181 — The chain probe walks the reference rules one at a time: 753 → 278 → 308
+
+- **Three rules satisfied, each by fixing the payload rather than the code**:
+  1. `episode_audit.py:753` — "the ratified per-frame shape and the legacy flat group are alternatives" — my expert
+     had emitted **both**, so `expert.py` now carries `**(packed or raw)`. That is a real fix to F1's third edit and
+     it landed green (**CP-2179's note** had the shape right but the exclusivity is what the audit enforces).
+  2. `:278` — the evaluation rules: with `basis: "published"` a row must carry `goal_id` and `accepted_sim_s` as
+     **None**, since a non-None pair is reserved for an interval evaluation. My fixture had them set.
+  3. `:308` — the projection region now refuses, so one rule among the map's order/values remains.
+- **The probe is the technique that works here**: build the expert's record with a fake port, append it, and read
+  the traceback's `episode_audit.py:NNN` — three rounds of rules in three probes, each naming itself.
+- **Next**: read `episode_audit.py:301-315` (printed alongside this entry) and satisfy it in the fixture; the frames'
+  nine keys, the evaluation's five, the two bases and the map's six-pair shape are all known.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
+  plus its sample fixture and the third cut's first two edits plus the exclusivity fix**; F11 open. Targeted gates
+  **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 passed**; HEAD `cc743914b`; no push, no evidence deletion,
+  no hardware, no second stack.
