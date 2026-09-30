@@ -38121,3 +38121,32 @@ new modules, and the environment-level candidates not yet controlled for.
 That is where I stop this thread for the session. What it leaves for the next one is specific: control the environment
 (same interpreter, same paths, only the code install varying) and re-run the single test id, which separates the code
 hypothesis from the environment one in a single comparison.
+
+## HS-138 — Controlled comparison: the target test fails with BASE code too, so it is not this work's regression
+
+The experiment HS-137 said was needed, run with everything held fixed except the code install on `PYTHONPATH`:
+
+```
+same interpreter, same test id, same TMPDIR, same ROS environment
+  PYTHONPATH=<base install>:<venv>    -> 1 failed
+  PYTHONPATH=<overlay>:<venv>         -> 1 failed
+```
+
+**Both fail.** So `test_the_shipped_matrix_is_frozen_and_a_scaffold_is_refused` fails with the **base** code as well, and
+the extra failure I attributed to this work in HS-130 is **not** a regression of mine: it was an artefact of the
+**environment** differing between that A/B's two runs (the base run used a separate install base under `/tmp` with no
+overlay sourced; the current run uses the overlay).
+
+Consequences, stated precisely:
+
+1. **HS-130's "regression-shaped" conclusion is retracted** - the one-variable comparison contradicts it, and HS-137 had
+   already flagged the confound.
+2. **HS-127's conclusion (pre-existing) survives, but not its reasoning.** The reviewer was right that "unchanged files"
+   proved nothing about behaviour (HS-128); the correct demonstration is this controlled run, which varies the code and
+   finds the same failure either way.
+3. The task 8 measurement families are therefore **not attributable to this work**, and now they are not attributed by
+   inference but by a controlled experiment - which is what "per-failure causal evidence" asked for.
+
+That closes the last open question in Task 11's clause (c) on the merits: the families are pre-existing or
+environment-driven, and the one candidate regression was eliminated by holding the environment fixed and varying only
+the code.
