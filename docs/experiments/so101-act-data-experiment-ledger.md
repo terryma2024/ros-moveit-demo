@@ -37962,3 +37962,29 @@ artifact that differs between the two installs.
 turn - six one-file A/Bs of ~1 s each, no commits - which identifies the culprit directly instead of bisecting commits. I
 recorded the plan rather than starting it because the runs need the same environment each time and my remaining context
 this session cannot complete the set.
+
+## HS-132 — The six one-file A/Bs clear the three modified modules and leave the three NEW ones
+
+Ran the target test with each of my `src/act` modules swapped to its base version in turn (install rebuilt per swap, tree
+restored at the end - 0 modified files, so no half-state was left):
+
+```
+baseline (all my code)          -> 1 failed
+base head_camera_geometry       -> 1 failed
+base head_search_binding        -> 1 failed
+base search                     -> 1 failed
+(later three skipped: they do not exist at base)
+restored                        -> 0 modified files
+```
+
+Two things follow:
+
+1. **The three modules that exist at base and were modified - `head_camera_geometry`, `head_search_binding`, `search` -
+   are cleared.** Reverting each to its base version leaves the failure intact.
+2. **Three of the six are NEW files** (`head_search_calibration.py`, `head_search_domain.py`,
+   `head_search_qualification.py`): they cannot be swapped to base because they did not exist, so they cannot be cleared
+   this way. If the cause is inside `src/act`, it is among them - and if it is not, it is outside `src/act` entirely
+   (a config, the installed share, or a dependency).
+
+Note this also corrects HS-131's phrasing: it listed six "changed" modules, but three are new rather than changed, which
+matters because "revert it to base" is not available for them.
