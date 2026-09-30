@@ -34603,4 +34603,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   docker runner `scripts/yolo-seg-training-container.sh`, which is not part of this host's flow; the
   installed training entry point is exercised at Task 11's integration boundary. The Task 3 review packet
   asks the reviewer to judge this explicitly.
+- **Exact entries for this checkpoint (so a reader can rerun them verbatim):** every gate in Tasks 1-3 ran
+  through the same shell helper, `source /tmp/so101-debug-head-search-antzb-LuFlHq6a/head-test-shell.sh`
+  (its own comments record the host adaptations: the `pysrc` source alias, the worktree symlink-install
+  overlay `head-task2-overlay/`, the perception venv site-packages, the dependency underlay
+  `/data/work/ws_moveit/install`, `MUJOCO_GL=egl`, and the disabled ROS launch-testing collection hooks).
+  Task 3's entries were:
+  `expect_head_red 'head_search_training|build_candidate_plan|load_training_contract|CandidatePlanError' src/so101_demo_py/test/test_yolo_training.py -q`
+  (rc 2, missing module) and
+  `head_test src/so101_demo_py/test/test_yolo_training.py src/so101_demo_py/test/test_yolo_training_container.py src/so101_demo_py/test/test_act_head_search_training.py src/so101_demo_py/test/test_yolo_seg_dataset.py -q`
+  (rc 0, 98 passed), with the Task 2 render gate re-run as
+  `head_test_render src/so101_demo_py/test/test_act_task8_bottom_io_geometry.py src/so101_demo_py/test/test_yolo_seg_dataset.py src/so101_demo_py/test/test_yolo_seg_dataset_augmented.py -q`
+  (rc 0, 86 passed). Each run's scratch holds its own console log, JUnit XML, exit code and
+  interpreter record.
+
 - **Next:** the Task 3 review (`gpt-6.1-sol`/high), then Task 4.
