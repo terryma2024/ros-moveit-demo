@@ -41945,3 +41945,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   QC half is green and its commit half is this one call plus its control; items 5+ wait on the four blocked bindings.
   HEAD `11ebd0240`; thirteen gates green.
+
+
+## CP-2221 — ③a's one constraint: verify inside the production branch only
+
+- **Read in full** (`coordinator.py:671-682`): the coordinator takes `roots = getattr(self.result_port,
+  'worker_roots', None)` **and** `result_mode = getattr(self.result_port, 'run_mode', None)`, and resolves a
+  workspace only when `isinstance(roots, dict) and worker_id in roots and result_mode is self.request.run_mode`;
+  the `else` branch is documented as "Compatibility for abstract result ports used outside the production
+  composition. Production always supplies the exact WorkerRoot map."
+- **So the verifier call belongs inside that production branch**, where both the roots and the mode are known to be
+  the batch's own: construct `ActCollectionResultVerifier(roots)` and call
+  `verify(lease, str(workspace), self.request.run_mode)` there, leaving the point non-terminal on refusal. Putting it
+  in the compatibility branch would either verify nothing (no roots) or invent an input, which is why the guard
+  matters.
+- **What that means for the control**: a fake result port that supplies `worker_roots` and `run_mode` — the shape the
+  production composition uses — with a workspace holding no sealed episode must keep the point non-terminal; the
+  abstract-port tests must stay untouched, which is exactly what the guard guarantees.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  commit half is this guarded call plus its control; items 5+ wait on the four blocked bindings. HEAD `82fa4ef0b`;
+  thirteen gates green.
