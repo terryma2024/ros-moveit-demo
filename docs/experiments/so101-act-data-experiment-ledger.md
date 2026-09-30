@@ -42078,3 +42078,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   commit half is this one comparison away; items 5+ wait on the four blocked bindings. HEAD `3498c13a6`; thirteen
   gates green.
+
+
+## CP-2227 — ③a: the probe proves the wiring was in the wrong function
+
+- **The probe's traceback ends the question**: with the verifier call inserted in
+  `_grant_lease_outcome_locked` (coordinator.py, the function that contains the workspace computation), the refusal
+  is raised **inside `grant_lease`** — `grant_lease → _grant_lease_outcome_locked → verify → LEASE_LOCATION_MISMATCH`
+  — i.e. at the moment a lease is handed out, **before any result exists**. My reading of the surrounding code took
+  "the place where a workspace is computed" for "the place where a result is accepted"; they are different
+  functions, and the workspace computed there is the one the worker is *being given*, not the one a result claims.
+- **That also explains every failed hypothesis**: nothing was wrong with the identities (CP-2225), the spelling, the
+  root normalisation or the collection directory — the location simply described a directory no result had written
+  to yet. The store was right to refuse.
+- **What the correction is**: the guard belongs where the coordinator **imports or accepts a result** — the
+  coordinator's own result-import path (the grep for its `*result*` methods is printed alongside this entry), or, if
+  that path is the runner's (`adaptive_runner._import_result`, line 189), wherever the lease and the result are
+  simultaneously in hand. The store's mode-aware `_expected` I also reverted with this change was unproven rather
+  than wrong; if the result-import path shows the same collection asymmetry, it should be re-landed with the guard.
+- **Reverted**; the store's suite re-runs green (28 passed).
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  commit half needs one relocation, now with the wrong place proven wrong by execution rather than by reading;
+  items 5+ wait on the four blocked bindings. HEAD `e49863918`; thirteen gates green.
