@@ -34579,3 +34579,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Carry-over into Task 3:** verification stays mandatory (the reviewer's explicit instruction);
   training must inherit the same fail-closed habits - exact digests, existing output roots refused,
   CUDA only with no CPU fallback, and smoke candidates permanently non-promotable.
+
+## HS-007 — Task 3 complete: B/C candidate plans and union materialization (commit 214bdfa63)
+
+- **Boundary:** new `config/perception/head_search_yolo_training.yaml` and `_smoke.yaml`; modified
+  `src/act/head_search_training.py` (training contract + candidate plan), `src/adapters/perception/yolo_training.py`
+  (`prepare_candidate_run`), `src/cli/train_yolo_seg.py` (candidate arguments), `test/test_yolo_training.py`.
+- **RED:** the new tests failed on `ModuleNotFoundError: No module named 'so101_demo.act.head_search_training'`'s
+  new symbols before the library existed (`scratch/head-test-20260930T061209Z-44h8WplN`, rc 2).
+- **GREEN:** 98 passed over `test_yolo_training.py`, `test_yolo_training_container.py`,
+  `test_act_head_search_training.py` and `test_yolo_seg_dataset.py`; the Task 2 render gate 86 passed;
+  `ruff check` clean on the changed sources (`train_yolo_seg.py` keeps its one pre-existing import-order
+  finding). Nothing pushed, no stack started.
+- **What is frozen:** B trains on the sealed head train split alone; C on the undownsampled union
+  (1600 train / 400 val for production, 32/32 train and 8/8 val for smoke) with every batch's head and
+  task counts equal, materialized in that exact order in `train.txt`/`val.txt` with `shuffle: false` (the
+  contract states why); both candidates share `0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95`,
+  one `hyperparameters` mapping, `device: cuda` with `allow_cpu_fallback: false`, an even batch and a
+  canonical plan digest; a smoke head manifest can only train a non-promotable plan
+  (`CANDIDATE_HEAD_NOT_SEALED`); `prepare_candidate_run` refuses an existing output root and writes a
+  per-file digest manifest.
+- **Documented deviation:** `test/test_yolo_training_container.py` was left unchanged. It drives the
+  docker runner `scripts/yolo-seg-training-container.sh`, which is not part of this host's flow; the
+  installed training entry point is exercised at Task 11's integration boundary. The Task 3 review packet
+  asks the reviewer to judge this explicitly.
+- **Next:** the Task 3 review (`gpt-6.1-sol`/high), then Task 4.
