@@ -135,6 +135,37 @@ def _unsupported_declarations(
     return unsupported
 
 
+def _resolve_tracking_iou(
+    operating_point: Mapping[str, object], document: Mapping[str, object]
+) -> float:
+    """The IoU threshold the validator must use, resolved from both declaration sources.
+
+    An accepted tracker declaration that the measurement then ignores would let a frozen condition look
+    sealed while a different value is measured, so the value is either applied or the gate refuses.
+    """
+
+    declarations = []
+    for source_name, source in (
+        ("the operating point", operating_point),
+        ("the candidate document", document),
+    ):
+        tracker = source.get("tracker")
+        if isinstance(tracker, Mapping) and set(tracker) == {"iou"}:
+            declarations.append((source_name, float(tracker["iou"])))
+        scalar = source.get("tracking_iou")
+        if isinstance(scalar, (int, float)) and not isinstance(scalar, bool):
+            declarations.append((source_name, float(scalar)))
+    if not declarations:
+        return 0.5
+    values = {value for _, value in declarations}
+    if len(values) > 1:
+        raise EvaluationError(
+            "EVALUATION_OPERATING_POINT_CONFLICT: the sealed identity declares different tracking IoU "
+            f"thresholds ({sorted(values)}), so the measurement cannot honour both"
+        )
+    return values.pop()
+
+
 def _measure_static(
     weights: Path,
     dataset_root: Path,
@@ -176,7 +207,7 @@ def _measure_static(
         split="val",
         device=device,
         conf=float(operating_point.get("min_confidence", 0.25)),
-        iou=float(operating_point.get("tracking_iou", 0.5)),
+        iou=_resolve_tracking_iou(operating_point, document or {}),
         verbose=False,
     )
     metrics = getattr(results, "results_dict", None)

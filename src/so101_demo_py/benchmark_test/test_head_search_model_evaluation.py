@@ -494,3 +494,16 @@ def test_the_top_level_identity_cannot_hide_behind_a_neutral_operating_point() -
     assert _unsupported_declarations({"tracker": {"iou": 0.3}}, {}) == []
     assert _unsupported_declarations({}, {"runtime": {"device": "mps"}})
     assert _unsupported_declarations({}, {"min_area_px2": 64})
+
+
+def test_a_supported_tracker_declaration_is_applied_or_refused() -> None:
+    """The fourth review's finding: an accepted declaration must not be ignored by the measurement."""
+
+    from so101_demo.cli.evaluate_head_search_yolo_candidates import _resolve_tracking_iou
+
+    assert _resolve_tracking_iou({"tracker": {"iou": 0.3}}, {}) == 0.3
+    assert _resolve_tracking_iou({}, {"tracker": {"iou": 0.42}}) == 0.42
+    assert _resolve_tracking_iou({}, {}) == 0.5
+    assert _resolve_tracking_iou({"tracking_iou": 0.25}, {"tracker": {"iou": 0.25}}) == 0.25
+    with pytest.raises(EvaluationError, match="EVALUATION_OPERATING_POINT_CONFLICT"):
+        _resolve_tracking_iou({"tracker": {"iou": 0.3}}, {"tracker": {"iou": 0.7}})
