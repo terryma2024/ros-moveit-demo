@@ -42255,3 +42255,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   changed documentation only.
 - **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
   green, commit half landed; items 5+ wait on CP-2232's list. HEAD `bf6627569`; fourteen gates green.
+
+
+## CP-2236 — Correction to CP-2235: the contract says this value belongs to the case, not to a default
+
+- **The comment above the field, read this round** (`ipc.py:74-75`): "the support distance the case admits for 'the
+  cup is supported': **part of the case definition**, because the evidence that says so is derived from it and **an
+  invented default would be a measurement nobody admitted**". So `0.02` is what the teleop **suites** admit for their
+  fixtures, not a policy the repository sanctions — and the contract's own words are that inventing one is precisely
+  what must not happen.
+- **What that means for the owner's list**: `placement_qc.support_distance_m` is a **case-definition** value; the
+  owner is the only source for it, and `0.02` is a starting point with a citation rather than a proposal with
+  standing. The same reading presumably covers the rest of `placement_qc` and `path_policy` — they are acceptance
+  criteria for the case, which is exactly why `first_episode_inputs.py` labels them `NONHEAD_INPUT_BINDING_REQUIRED`
+  instead of defaulting them.
+- **Review status**: the seventh review is still running (pid 2700637, about two minutes elapsed, no verdict file
+  yet).
+- **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
+  green, commit half landed; items 5+ wait on CP-2232's list, with `rgb_skew`'s pair the only one the code itself
+  implies. HEAD `881e5c8e5`; fourteen gates green.
