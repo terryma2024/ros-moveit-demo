@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -441,13 +442,13 @@ def _geometry_seal(*, mjcf_path: Path, camera_name: str = "head_camera") -> dict
         "validation_arm_rad": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
         "camera_mount_origin_m": [-0.06, 0.06, 0.43],
         "camera_mount_xyaxes": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
-        "image_width": 640,
-        "image_height": 480,
+        "image_width": 10,
+        "image_height": 8,
         "horizontal_fov_rad": 1.312,
         "camera": {
             "camera_name": camera_name,
-            "width": 640,
-            "height": 480,
+            "width": 10,
+            "height": 8,
             "fovy_rad": 1.0471975511965976,
             "distortion_model": "plumb_bob",
             "distortion": [0.0, 0.0, 0.0, 0.0, 0.0],
@@ -478,6 +479,8 @@ def _head_config(
         split_counts=counts or {"train": 4, "val": 4, "test": 4},
         generator_commit="head-commit",
         camera_name=camera_name,
+        image_width=10,
+        image_height=8,
         seed_starts={"train": 400000, "val": 500000, "test": 600000},
         dataset_contract="so101-head-search-yolo-seg-v1",
         geometry_seal=GeometrySealRequirement(
@@ -834,4 +837,137 @@ def test_verify_head_search_manifest_refuses_a_truth_that_belongs_to_another_gro
             expected_train=4,
             expected_val=4,
             expected_test=4,
+        )
+
+
+def test_verify_head_search_manifest_refuses_a_symlink_escape(tmp_path: Path) -> None:
+    import shutil
+
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
+    manifest = generate_dataset(
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
+    )
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    foreign = outside / "foreign.png"
+    shutil.copy(tmp_path / "head" / manifest["samples"][1]["image"], foreign)
+    (tmp_path / "head" / "nested").symlink_to(outside, target_is_directory=True)
+    broken = json.loads(json.dumps(manifest))
+    broken["samples"][1]["image"] = "nested/foreign.png"
+    broken["samples"][1]["image_sha256"] = hashlib.sha256(foreign.read_bytes()).hexdigest()
+    broken["samples"][1]["image_bytes"] = len(foreign.read_bytes())
+
+    with pytest.raises(ValueError, match="HEAD_DATASET_FILE_PATH_INVALID"):
+        verify_head_search_manifest(
+            broken,
+            dataset_root=tmp_path / "head",
+            geometry_seal=seal,
+            expected_train=4,
+            expected_val=4,
+            expected_test=4,
+        )
+
+
+def test_verify_head_search_manifest_refuses_a_symlink_alias(tmp_path: Path) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
+    manifest = generate_dataset(
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
+    )
+    target = tmp_path / "head" / manifest["samples"][0]["image"]
+    (tmp_path / "head" / "alias.png").symlink_to(target)
+    broken = json.loads(json.dumps(manifest))
+    broken["samples"][1]["image"] = "alias.png"
+    broken["samples"][1]["image_sha256"] = broken["samples"][0]["image_sha256"]
+    broken["samples"][1]["image_bytes"] = broken["samples"][0]["image_bytes"]
+
+    with pytest.raises(ValueError, match="HEAD_DATASET_FILE_REUSED"):
+        verify_head_search_manifest(
+            broken,
+            dataset_root=tmp_path / "head",
+            geometry_seal=seal,
+            expected_train=4,
+            expected_val=4,
+            expected_test=4,
+        )
+
+
+def test_verify_head_search_manifest_refuses_a_mask_shaped_like_another_image(
+    tmp_path: Path,
+) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
+    manifest = generate_dataset(
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
+    )
+    index = next(
+        position
+        for position, item in enumerate(manifest["samples"])
+        if item["scenario"] != "no_cup"
+    )
+    sample = manifest["samples"][index]
+    truth_path = tmp_path / "head" / sample["truth"]
+    truth = json.loads(truth_path.read_text())
+    assert truth["instances"], "a cup scenario has instances"
+    height, width = truth["instances"][0]["mask_shape_hw"]
+    truth["instances"][0]["mask_shape_hw"] = [width * 2, height // 2]
+    truth_path.write_text(json.dumps(truth, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    manifest["samples"][index]["truth_sha256"] = hashlib.sha256(truth_path.read_bytes()).hexdigest()
+    manifest["samples"][index]["truth_bytes"] = len(truth_path.read_bytes())
+
+    with pytest.raises(ValueError, match="HEAD_DATASET_TRUTH_IDENTITY_MISMATCH"):
+        verify_head_search_manifest(
+            manifest,
+            dataset_root=tmp_path / "head",
+            geometry_seal=seal,
+            expected_train=4,
+            expected_val=4,
+            expected_test=4,
+        )
+
+
+def test_verify_head_search_manifest_refuses_a_sample_aggregate_the_truth_does_not_have(
+    tmp_path: Path,
+) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
+    manifest = generate_dataset(
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer(seal)
+    )
+    broken = json.loads(json.dumps(manifest))
+    broken["samples"][0]["raw_mask_sha256"] = "f" * 64
+
+    with pytest.raises(ValueError, match="HEAD_DATASET_TRUTH_IDENTITY_MISMATCH"):
+        verify_head_search_manifest(
+            broken,
+            dataset_root=tmp_path / "head",
+            geometry_seal=seal,
+            expected_train=4,
+            expected_val=4,
+            expected_test=4,
+        )
+
+
+def test_head_camera_generation_refuses_a_non_finite_orientation(tmp_path: Path) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
+
+    class _NanOrientation:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def render(self, seed, scenario):
+            render = self.inner.render(seed, scenario)
+            return replace(render, camera_quaternion_wxyz=(float("nan"),) * 4)
+
+        def close(self):
+            self.inner.close()
+
+    with pytest.raises(ValueError, match="HEAD_DATASET_CAMERA_IDENTITY_INVALID"):
+        generate_dataset(
+            config,
+            tmp_path / "nan",
+            geometry_seal=seal,
+            renderer=_NanOrientation(_HeadFakeRenderer(seal)),
         )

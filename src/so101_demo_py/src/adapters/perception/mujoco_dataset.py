@@ -1454,6 +1454,30 @@ def _sample_camera_document(
             f"({observed_local} vs the sealed {sealed_local}); the sealed geometry no longer describes "
             "these images"
         )
+    for name, values in (
+        ("camera_position_m", render.camera_position_m),
+        ("camera_quaternion_wxyz", render.camera_quaternion_wxyz),
+        ("camera_local_position_m", render.camera_local_position_m),
+        ("camera_local_xyaxes", render.camera_local_xyaxes),
+        ("arm_pose_rad", render.arm_pose_rad),
+    ):
+        numbers = [float(value) for value in values]
+        if any(not math.isfinite(value) for value in numbers):
+            raise ValueError(
+                f"HEAD_DATASET_CAMERA_IDENTITY_INVALID: the render reports a non-finite {name}"
+            )
+    if not math.isfinite(float(render.neck_rad)):
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_IDENTITY_INVALID: the render reports a non-finite neck angle"
+        )
+    quaternion_norm = math.sqrt(
+        sum(float(value) * float(value) for value in render.camera_quaternion_wxyz)
+    )
+    if not abs(quaternion_norm - 1.0) <= 1e-6:
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_IDENTITY_INVALID: the render reports a non-unit orientation "
+            f"(norm {quaternion_norm})"
+        )
     predicted_position, predicted_axes = camera_pose_from_seal(
         context["seal"], float(render.neck_rad)
     )
@@ -2069,7 +2093,9 @@ def verify_head_search_manifest(
     groups: dict[str, str] = {}
     scenario_counts: dict[str, Counter[str]] = {split: Counter() for split in expected}
     seen_paths: set[str] = set()
+    seen_identities: set[tuple[int, int]] = set()
     root = Path(dataset_root)
+    root_resolved = root.resolve()
     for sample in samples:
         split = str(sample.get("split"))
         if split not in expected:
@@ -2106,16 +2132,31 @@ def verify_head_search_manifest(
                 raise ValueError(
                     f"HEAD_DATASET_FILE_PATH_INVALID: {relative!r} is not a canonical relative path"
                 )
-            if not (root / relative).is_file():
+            candidate = root / relative
+            if not candidate.is_file():
                 raise ValueError(
                     f"HEAD_DATASET_FILE_MISSING: {key} {relative!r} of seed {sample.get('seed')} "
                     "is not on disk"
+                )
+            resolved = candidate.resolve()
+            if not resolved.is_relative_to(root_resolved):
+                raise ValueError(
+                    f"HEAD_DATASET_FILE_PATH_INVALID: {relative!r} resolves outside the dataset root "
+                    "through a symlink"
                 )
             if str(relative) in seen_paths:
                 raise ValueError(
                     f"HEAD_DATASET_FILE_REUSED: {relative!r} is claimed by more than one sample"
                 )
             seen_paths.add(str(relative))
+            identity = resolved.stat()
+            file_identity = (int(identity.st_dev), int(identity.st_ino))
+            if file_identity in seen_identities:
+                raise ValueError(
+                    f"HEAD_DATASET_FILE_REUSED: {relative!r} is another sample's file under a "
+                    "different path"
+                )
+            seen_identities.add(file_identity)
             digest = sample.get(f"{key}_sha256")
             if (
                 not isinstance(digest, str)
@@ -2139,6 +2180,7 @@ def verify_head_search_manifest(
             camera,
             group,
             split,
+            image_shape_hw=(int(geometry_seal["image_height"]), int(geometry_seal["image_width"])),
         )
     for split, quota in head_scenario_quotas(expected).items():
         observed = dict(scenario_counts[split])
@@ -2331,6 +2373,8 @@ def _verify_sample_truth(
     camera: Mapping[str, Any],
     group: str,
     split: str,
+    *,
+    image_shape_hw: tuple[int, int],
 ) -> None:
     """The truth file must be about this sample, with the mask digests it claims."""
 
@@ -2391,16 +2435,27 @@ def _verify_sample_truth(
                 f"HEAD_DATASET_TRUTH_IDENTITY_MISMATCH: the stored mask of seed {sample.get('seed')} "
                 "is not the mask its digest claims"
             )
+        if tuple(instance.get("mask_shape_hw") or ()) != image_shape_hw:
+            raise ValueError(
+                f"HEAD_DATASET_TRUTH_IDENTITY_MISMATCH: the stored mask of seed {sample.get('seed')} "
+                "is not shaped like the sealed image"
+            )
         if instance.get("visible_pixel_count") != int(mask.sum()):
             raise ValueError(
                 f"HEAD_DATASET_TRUTH_IDENTITY_MISMATCH: the stored mask of seed {sample.get('seed')} "
                 "does not hold the pixel count it claims"
             )
         digests.append(digest)
-    if truth.get("raw_mask_sha256") != canonical_sha256(digests):
+    aggregate = canonical_sha256(digests)
+    if truth.get("raw_mask_sha256") != aggregate:
         raise ValueError(
             f"HEAD_DATASET_TRUTH_IDENTITY_MISMATCH: the raw mask digest of seed {sample.get('seed')} "
             "does not describe its own instances"
+        )
+    if sample.get("raw_mask_sha256") != aggregate:
+        raise ValueError(
+            f"HEAD_DATASET_TRUTH_IDENTITY_MISMATCH: seed {sample.get('seed')} records an aggregate "
+            "mask digest its truth does not"
         )
 
 
