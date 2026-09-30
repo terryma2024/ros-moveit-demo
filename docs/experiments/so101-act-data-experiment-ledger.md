@@ -35968,3 +35968,23 @@ env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHO
   this section (approval). Commits: 8bd48649d, 17dbaff1d, a964f4a96, 6cf3a4ddb, 6e5ff25df, d924a5cb5,
   297ffc39c, b64aeba38, cad8a5426, cc07e5424, 9a8fe355e, bcda8550a.
 - **Next: Task 5**, specified in HS-017.
+
+## HS-046 — Geometry re-seal: three corrections, then a real contract finding (round 339)
+
+Re-sealing the head-camera geometry for Task 11 needed three corrections in a row, each worth recording:
+
+1. **The contract's digest had to be updated deliberately.** The validator has no reseal flag on purpose ("instead
+   of silently resealing"), and it pins `accepted_scene_sha256` / `accepted_camera_source_sha256`. The scene
+   moved from the sealed `4db48e35df9e...` to `aea2df3b0bfb...` while the camera source is unchanged
+   (`d8665bb90bf8...` on both sides), so `accepted_scene_sha256` was updated to the current scene.
+2. **`MUJOCO_GL=egl` is required.** My first attempt omitted it and MuJoCo failed with "an OpenGL platform
+   library has not been loaded"; the task helper already exports it, which I should have read first.
+3. **The validator then ran its semantic checks and refused with a real finding:**
+   `HEAD_CAMERA_WORKSPACE_EMBEDDED: 42 declared workspace samples put the target inside the support; first is
+   [-0.15, -0.24, 0.165]`. The contract declares `workspace_y_m: [-0.4, -0.24]` and `workspace_z_m:
+   [0.165, 0.166]`, and those samples fall inside the support geometry of the current scene. So the contract and
+   the current scene disagree about where a target may stand.
+
+**Status and honesty note:** the `accepted_scene_sha256` edit is deliberately **left uncommitted** until the
+workspace question is settled, because committing half a re-seal would leave the tree claiming a seal that the
+validator still refuses. The camera work itself is unaffected - the drift was the scene alone.
