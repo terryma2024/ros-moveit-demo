@@ -40338,3 +40338,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   (CP-2146) with this decision standing between it and its second half, F1/F11 open; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `8ff9ccf97`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2148 — F5's second half, step one: the audit names the lifecycle, and a test keeps the two equal
+
+- **What landed**: `FORMAL_PHASES` in `episode_audit.py` — the nine-phase lifecycle in order, declared rather
+  than imported so the audit stays readable without the runner (CP-2147's choice (a)) — and
+  `test_the_audit_names_the_runner_s_phases`, which asserts the tuple equals `PickPlaceRunner.PHASES` so the
+  duplication cannot drift silently.
+- **Why this step is separate**: it changes no behaviour (the predicate is untouched), so it lands and verifies
+  alone — **106 passed** across the audit, recorder and release-boundary suites. The next step is the tightening
+  itself: require one `phase_complete` event per entry of `FORMAL_PHASES`, then a complete raw reference group,
+  then the ratified physics kinds and observations, each with whatever fixtures it moves.
+- **Evidence.** Targeted run this round: **106 passed** under `pytest-xdist` with 8 workers, its own NVMe scratch
+  and a non-empty tempfile proof.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 two of its steps
+  done** (shared predicate CP-2146, lifecycle named CP-2148) with the tightening next, F1/F11 open; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `2161cb139`; no push, no evidence deletion, no hardware, no second
+  stack.

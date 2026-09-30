@@ -1120,3 +1120,12 @@ def test_each_complete_raw_reference_alternative_round_trips(tmp_path):
     payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
     _resign(writer, path, "references.jsonl", payload)
     assert verify_audit_manifest(path)["kind"] == "ACT_EPISODE_AUDIT"
+
+
+def test_the_audit_names_the_runner_s_phases():
+    """F5/CP-2147: the audit's declared lifecycle is the runner's, and the test is what keeps it so."""
+
+    from so101_demo.act.episode_audit import FORMAL_PHASES
+    from so101_demo.act.pick_place_runner import PickPlaceRunner
+
+    assert tuple(FORMAL_PHASES) == tuple(PickPlaceRunner.PHASES)

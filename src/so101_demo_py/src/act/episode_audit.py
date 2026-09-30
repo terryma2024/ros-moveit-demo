@@ -991,6 +991,15 @@ def _hex64(value) -> bool:
             and all(character in "0123456789abcdef" for character in value))
 
 
+#: the prescribed lifecycle a formal audit must cover, in order. Declared here rather than imported from the
+#: runner so the audit stays readable without it; `test_the_audit_names_the_runner_s_phases` asserts equality, so
+#: the two cannot drift apart silently (F5/CP-2147).
+FORMAL_PHASES = (
+    "SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT",
+    "ALIGN", "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK",
+)
+
+
 def _formal_coverage_ok(audit: Path) -> bool:
     """The coverage a formal seal requires, re-checked when the audit is read back."""
 
