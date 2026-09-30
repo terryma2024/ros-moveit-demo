@@ -35136,6 +35136,16 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
 - **Owed:** the two binding test files (`test_act_task8_search_binding.py`, `test_act_head_search_binding.py`)
   cannot run until the underlay is rebuilt (Task 11), and the installed smoke belongs to Task 11.
 
+- **Task 5 review status (round 165).** Two review attempts were made; both did real work and then hung in a
+  final long step without writing their verdict file. The first (log
+  `/tmp/so101-debug-head-search-antzb-LuFlHq6a/codex-exec-task5.log`) ran the suites, reported "The corrected
+  diagnostic run passed all 21 search tests", surfaced the two source issues now fixed in `4e0448b42` and
+  `5a5a7f452`, and stated it would base its verdict on `4331f3fea`. The second, a minimal no-tests pass (log
+  `codex-exec-task5-final.log`), accepted the same brief and stalled as well. Neither wrote
+  `reviews/task5/task5-verdict.md`. The affected verdict is therefore **pending**, and Task 5 stays
+  `in_progress`; nothing is claimed as approved. Both hangs are recorded as a host/tooling limitation of the
+  reviewer session, not as a Task 5 outcome.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
