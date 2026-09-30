@@ -40435,3 +40435,39 @@ all. HS-229's recommendation is withdrawn along with HS-227's.
 
 Next read, deliberately not assumed: whether `ros_neck` + the search port can be driven headlessly per seed outside Task 13's
 runtime, or whether that runtime is the only driver - which is what `HEAD_SEARCH_RUNTIME_REQUIRED` refuses.
+
+## HS-231 — The plan contains a circular dependency, and the runtime gate is precisely where it shows
+
+Read the actual gate rather than the message:
+
+```
+cli/head_search_calibration.py:113-121
+  runtime_path = run_root.parent / "frozen-runtime.json"
+  if not runtime_path.is_file():
+      HEAD_SEARCH_RUNTIME_REQUIRED: the frozen runtime belongs to Task 13      -> rc=2
+act/head_search_qualification.py:255-266
+  "The heavy phases themselves belong to the frozen runtime assembled in Task 13; this function owns the
+   no-resume contract around them ... with the frozen runtime identity required before any phase starts."
+  requires inputs["runtime"]["runtime_id"], and allow_cpu_fallback is False (HEAD_SEARCH_CUDA_REQUIRED)
+```
+
+So the **heavy phases** - the closed-loop episodes - require a `frozen-runtime.json` identity that the docstring assigns
+to **Task 13**. But:
+
+- Task 12's Step 5 needs the held-out episodes (HS-216/217/222);
+- Task 13's header says it **"Consumes Task 12's selected candidate"** (HS-220);
+- and Task 13 assembles the frozen runtime in its **Step 5**, after its Step 1 run.
+
+That is a **circular dependency in the plan**: Task 12 Step 5 → episodes → Task 13's frozen runtime → Task 13 → Task 12's
+selected candidate. Something has to give, and there are only two honest readings:
+
+1. **`frozen-runtime.json` is not exclusive to Task 13's promotion** - it is a runtime *identity* (id, `allow_cpu_fallback:
+   false`, detector/config identity). On this reading Task 12 creates its **own** pre-selection runtime identity for recording
+   the episodes, clearly labelled as such, and Task 13 later assembles the promoted one. Nothing is fabricated: it is a
+   distinct identity with a distinct id, and the recordings say which identity produced them.
+2. **The plan's ordering is simply wrong**, and Step 5 belongs with Task 13 - which HS-220 ruled out, because Task 13 consumes
+   Step 5's output.
+
+Reading 1 is the only one that keeps both tasks' stated contracts intact, and it is a decision about *identity semantics* rather
+than a code change - so it is the user's call, not mine. No implementation started; recorded because a circular dependency
+should be surfaced where it is found, not worked around by quietly minting an artefact whose name says "Task 13".
