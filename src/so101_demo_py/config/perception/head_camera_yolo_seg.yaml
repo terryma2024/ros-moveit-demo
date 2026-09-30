@@ -22,7 +22,7 @@ neck_yaw_rad:
   max_rad: 0.35
 geometry_seal:
   required: true
-  accepted_seal_sha256: f168bfc180c215fb29b5f5df9f2ce0756b20e89a67d888e447d40a814d36e515
+  accepted_seal_sha256: 7d963fdcabfa132e77ccf961c0f99e10b4c6d2ed56920b41d36a7558814d1eb4
 # The head profile renders the sealed camera where the seal freezes it: the ordinary view's
 # +/-15 mm camera-position jitter would move the production camera these images are collected
 # from, so it is declared as exactly zero and the renderer is checked against the seal.
