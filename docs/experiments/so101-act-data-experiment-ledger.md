@@ -38853,3 +38853,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   T3-F11's two reverts.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `8a1448c95`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2082 — Task 3 implementation complete; the sixth checkpoint is out; Task 4's plan text is not where I looked
+
+- **T3-F11 landed** (`14c397541`, recorded in CP-2081): the formal window must describe the audit's own rows and
+  frames, with a self-consistent fixture, one positive case and four one-variable negative cases. The
+  twenty-file xdist gate is **430 passed** (`logs/task3-final.run`, HEAD `14c397541`).
+- **Sixth checkpoint dispatched**: `reviews/task3-review6-packet.md` (with `task3-fixpass5.patch`, 3821 lines,
+  and the five reviewed files' sha256), Codex/GPT-6.1 Sol · High, dispatch id
+  **`32c54563-a7b4-438d-bfc1-620b13d28b6e`**; its verdict goes to `reviews/task3-rereview5-verdict.md`. Task 3
+  is implementation-complete pending that verdict.
+- **Task 4 could not be started from the plan text.** I searched the two places I can reach — the evidence plan
+  root (`.../nonhead-first-episode-plan.hKhvkON3/`, which holds `environment.md` and the reviews but no plan
+  document) and `docs/superpowers/plans/` (whose `2026-09-27-pick-place-physical-execution.md` is a 21-line stub
+  with no task headings, and the other file I opened is a `panda_gazebo_demo` plan whose Task 4 is unrelated) —
+  and found no nine-task plan naming Task 4. Rather than invent its contents, the ledger records the gap: the
+  plan document's path (or its Task 4 text) is what I need next.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint pending); items 4-8 pending.**
+  HEAD `14c397541`; no push, no evidence deletion, no hardware, no second stack.
