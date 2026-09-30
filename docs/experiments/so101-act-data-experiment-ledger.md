@@ -39523,3 +39523,15 @@ a plan digest and a run manifest recorded in the campaign root. C is training no
 So the chain of failures was entirely **argument and contract validation before any GPU work**: the four failed attempts cost
 wall-clock and rounds, not training time, and the first actual training run succeeded. The remaining Step 3 checks are C's
 `rc=0` and the sampling read-back showing 800 head and 800 task images per epoch at 1:1.
+
+## HS-194 — Task 12 Step 3 COMPLETE: B and C both trained, rc=0, serially
+
+```
+train-b rc=0   {"plan_sha256": "9f54107f760d754e9941d13ed31672f332894dea90a7c053b801c2f954055763", ...}
+train-c rc=0   {"plan_sha256": "ad0d157f5048ead37bf941f08702cc56a709677d959cd82a02911c5cacf9d809", ...}
+produced: candidate-b/ (23 MB), candidate-c/
+```
+
+Both candidates trained to completion with distinct plan digests, **B fully before C** - so the plan's "never concurrently"
+requirement holds by construction, and no detector or second stack was running throughout. That closes the step the campaign
+spent seven attempts on, where every earlier attempt died in validation (HS-188/190/191/192) before the GPU was touched.
