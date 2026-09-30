@@ -37829,3 +37829,32 @@ What that leaves, in order of likelihood:
 The next step is a run of that module at the branch base (a `git worktree` at `<base>` rather than a stash, so the
 current tree is untouched), which decides between (1) and (2) in one shot. It is bounded, and it is the last
 unexplained item of any size in Task 11.
+
+## HS-127 — Closed: the task 8 measurement families are pre-existing, not this work's
+
+The decisive comparison, needing no base-tree run after all:
+
+```
+installed share vs repository, byte comparison
+  SAME  task8-phase-camera-matrix-v1.json
+  SAME  task8-calibration-measurement-contract-v2.json
+  SAME  task8-calibration-measurement-contract-schema.json
+```
+
+Chain of facts, each already established: the installed share copies **equal** the repository copies; the repository
+copies are **byte-identical to the branch base** (HS-072 zero-line diff; HS-126: the schema untouched, the contract
+diff empty). Therefore the inputs those tests read are **pristine, pre-work, and current** - and
+`PHASE_CAMERA_MATRIX_INVALID` / `MEASUREMENT_CONTRACT_V2_INVALID` still fire against them.
+
+**Conclusion: those failures are pre-existing**, not caused by this work and not caused by staleness. That answers
+HS-125/126's question - option (1), pre-existing - and does so with a byte comparison rather than a base-tree run,
+which is cheaper and stronger evidence than the A/B I had planned.
+
+With that, every ordinary-suite failure family in Task 11 is accounted for:
+
+| family | cause |
+| --- | --- |
+| invocation artefacts (bare sibling imports, plugin autoload, replaced `PYTHONPATH`) | fixed by the invocation, HS-118-123 |
+| missing modules at run time (`rclpy`, `ament_*`, `mujoco`) | environment, HS-111/116, now supplied by appending |
+| task 8 measurement families (`FIELDS_INVALID`, `TRUSTED_FINAL_TARGET_INVALID`, `MEASUREMENT_*`, `PHASE_CAMERA_MATRIX_INVALID`) | **pre-existing against pristine inputs** (this entry) |
+| live-stack requirements (`test_mujoco_runtime_observability`, GPU) | environment the gate cannot provide |
