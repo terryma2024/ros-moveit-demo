@@ -40053,3 +40053,35 @@ Two divergences, both informative:
 
 Both are recorded rather than papered over; the next step is to determine which side is right about the episodes, which means
 reading how the gate resolves them and what the partitions file's `held_out_evaluation` split is meant to point at.
+
+## HS-216 — The episodes gap is a plan ORDERING problem: Step 5 needs an artefact Task 13 produces
+
+Read the gate's resolution logic instead of guessing (evaluate…:47-63):
+
+```
+seeds = partitions.get(split)
+  if not a non-empty list -> EVALUATION_PARTITION_MISSING: the partitions declare no <split> seeds
+if records is None:                                  # the pinned invocation passes none
+    default = Path(partitions_path).resolve().parent / "held-out-episodes"
+    records = default if default.is_dir() else None
+if records is None -> EVALUATION_EPISODES_UNAVAILABLE
+```
+
+Three consequences, all checkable:
+
+1. **The partitions file already declares `held_out_evaluation`** - otherwise the refusal would have been
+   `EVALUATION_PARTITION_MISSING`, which it was not.
+2. **The default location is `<partitions dir>/held-out-episodes`**, i.e. *inside the repository* at
+   `src/so101_demo_py/config/act/held-out-episodes/`. So satisfying the plan's exact command means writing run artefacts into
+   the worktree - which would break the clean-tree property I have kept all session, and is the second time this
+   measurement chain has tried to write into the repository (HS-211's Ultralytics `runs/` was the first).
+3. **The records are "recorded by the calibration run"**, and the only calibration runtime here is
+   `so101_head_search_calibration run`, which refuses with `HEAD_SEARCH_RUNTIME_REQUIRED: the frozen runtime belongs to
+   **Task 13**` (HS-198). So **Task 12's Step 5 depends on an artefact that Task 13 produces** - the plan's own task order is
+   inconsistent, since Step 5 sits in Task 12 and the seed material for it in Task 13.
+
+This is the seventh plan-versus-implementation divergence (after HS-175/188/191/197/198/215) and the first that is a
+**scheduling** problem rather than a naming or capability one. The two honest resolutions are to record held-out episodes as
+part of Task 12 (new code, and it must write outside the worktree to keep the tree clean), or to accept that Step 5 is
+Task 13's and record Task 12 as complete through Step 4 with Step 5 deferred there. That is a contract decision of the
+HS-200/HS-204 kind, so it belongs to the user rather than to me.
