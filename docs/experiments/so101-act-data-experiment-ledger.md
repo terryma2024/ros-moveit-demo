@@ -40122,3 +40122,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed but for that one control**; F13 down to `sim_time_s`
   (needs the plan's ruling); **F1/F5/F11 open**; targeted gate `logs/task3-final.run` **430 passed**; HEAD
   `d0c8331ba`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2138 — F3's negative control, reduced to a recipe with its helpers named
+
+- **The helpers, read this round** (`test_act_episode_audit.py`): `_formal_writer(tmp_path)` (line 777) returns a
+  writer whose scope is formal and whose identity carries the lease; `_self_consistent_formal(tmp_path)`
+  (line 1011) builds the complete formal episode — minted acquisitions through `AcquisitionMinter`, physics,
+  references, events and a window derived from what it holds; and
+  `test_a_formal_audit_may_not_seal_without_source_coverage` (line 783) shows an **empty** formal writer being
+  refused with `AUDIT_FORMAL_COVERAGE_INCOMPLETE`.
+- **The control, therefore**: build coverage the way `_self_consistent_formal` does, but emit the events as
+  `release` at epoch **0** followed by `phase_complete` at epoch **1** — the coverage gate is satisfied (rows,
+  frames and a `release` are present) while the stream takes a step to epoch 1 that **no release names**, which is
+  exactly what CP-2137's tie must refuse. The first event at epoch 0 also respects CP-2136's initial rule, and
+  epoch 0 → 1 is the one-step advance the identity predicate allows, so the tie is the only gate that can fire.
+- **Why this is written rather than coded**: it needs the formal fixture's coverage pieces, which are a dozen
+  lines in `_self_consistent_formal`, and this session's remaining context has been failing at exactly that size
+  (CP-2125/2126/2129/2131/2135 all reverted for it, and the two successes in that stretch were single-anchor edits
+  made after printing absolute lines).
+- **State.** Item 3's list: **F12 closed**; **F3 closed but for this one control**; F13 down to `sim_time_s`;
+  **F1/F5/F11 open**; targeted gate `logs/task3-final.run` **430 passed**; HEAD `1c806f610`; no push, no evidence
+  deletion, no hardware, no second stack.
