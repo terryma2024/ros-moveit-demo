@@ -480,3 +480,17 @@ def test_the_episode_winner_is_the_best_challenger_not_the_last_one() -> None:
     assert verdict.candidate_id == "A", (
         "the strongest qualifying challenger wins, not the last seen"
     )
+
+
+def test_the_top_level_identity_cannot_hide_behind_a_neutral_operating_point() -> None:
+    """The third reviewer's P1: an empty per-domain value must not mask a top-level declaration."""
+
+    from so101_demo.cli.evaluate_head_search_yolo_candidates import _unsupported_declarations
+
+    hidden = _unsupported_declarations(
+        {"tracker": {}}, {"tracker": {"type": "unsupported-tracker"}}
+    )
+    assert hidden, "an unsupported top-level tracker must not be masked by an empty local mapping"
+    assert _unsupported_declarations({"tracker": {"iou": 0.3}}, {}) == []
+    assert _unsupported_declarations({}, {"runtime": {"device": "mps"}})
+    assert _unsupported_declarations({}, {"min_area_px2": 64})

@@ -100,6 +100,41 @@ def _episode_frames(
     return frames
 
 
+def _unsupported_declarations(
+    operating_point: Mapping[str, object], document: Mapping[str, object]
+) -> list[str]:
+    """The sealed conditions this measurement path cannot apply, from both declaration sources."""
+
+    unsupported: list[str] = []
+    for source_name, source in (
+        ("the operating point", dict(operating_point)),
+        (
+            "the candidate document",
+            {
+                key: document.get(key)
+                for key in ("tracker", "postprocess", "runtime", "min_area_px2", "min_bbox_aspect")
+            },
+        ),
+    ):
+        for key in ("min_bbox_aspect", "postprocess", "runtime", "min_area_px2"):
+            value = source.get(key)
+            if value in (None, {}, 0):
+                continue
+            unsupported.append(f"{source_name}:{key}")
+        tracker = source.get("tracker")
+        if tracker in (None, {}, 0):
+            continue
+        # the one tracker form this path applies is the IoU NMS threshold; anything else is refused
+        if (
+            isinstance(tracker, Mapping)
+            and set(tracker) == {"iou"}
+            and isinstance(tracker["iou"], (int, float))
+        ):
+            continue
+        unsupported.append(f"{source_name}:tracker")
+    return unsupported
+
+
 def _measure_static(
     weights: Path,
     dataset_root: Path,
@@ -167,28 +202,12 @@ def _measure_static(
         if (float(precision) + float(recall)) > 0
         else 0.0
     )
-    # a sealed identity declares conditions per domain and, in the document itself, at the top level;
-    # both are inspected, because a condition this path does not apply must never be silently ignored
-    document = document or {}
-    declared = dict(operating_point)
-    for key in ("tracker", "postprocess", "runtime"):
-        if key in document and key not in declared:
-            declared[key] = document[key]
-    unsupported = sorted(
-        key
-        for key in ("min_bbox_aspect", "tracker", "postprocess", "runtime")
-        if declared.get(key) not in (None, {}, 0)
-        and declared.get(key) != {"iou": operating_point.get("tracking_iou")}
-    )
+    unsupported = _unsupported_declarations(operating_point, document or {})
     if unsupported:
         raise EvaluationError(
             "EVALUATION_OPERATING_POINT_UNSUPPORTED: the sealed identity declares "
-            f"{', '.join(unsupported)}, which this measurement path does not apply"
-        )
-    if "min_area_px2" in operating_point:
-        raise EvaluationError(
-            "EVALUATION_OPERATING_POINT_UNSUPPORTED: the sealed identity declares min_area_px2, which "
-            "Ultralytics' validation does not apply"
+            + ", ".join(sorted(unsupported))
+            + ", which this measurement path does not apply"
         )
     return measured
 
