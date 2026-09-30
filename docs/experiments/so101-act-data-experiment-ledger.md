@@ -40161,3 +40161,30 @@ capability, and the cheapest faithful action is to close Task 12 through Step 4 
 Task 13's runtime produce the episodes Step 5 consumes.
 
 Recorded for the discussion; still no implementation started, per the user's "stop and discuss".
+
+## HS-220 — Correction: Task 13 CONSUMES Task 12's selected candidate, so Step 5 cannot be deferred to it
+
+Read Task 13's own header and steps rather than reasoning about the refusal message:
+
+```
+### Task 13: Run the formal calibration, approve values, promote, and freeze runtime
+Interfaces: Consumes Task 12's selected candidate. Produces an approved promoted config,
+            exact code/config/runtime identity, and a successful verify-promoted-config ...
+Steps: 1 brand-new no-resume run | 2 stop for exact parameter approval | 3 promote and verify
+       byte-for-byte | 4 commit promotion and rerun gates | 5 build the frozen runtime, run installed gates
+```
+
+**Task 13 begins by consuming "Task 12's selected candidate"** - i.e. the winner of Step 5's A/B/C gate. So Step 5 must produce
+that selection **before** Task 13 can start, and HS-219's recommendation (option (b), defer Step 5 to Task 13) is **wrong**:
+deferring it would leave Task 13 with nothing to consume. The `HEAD_SEARCH_RUNTIME_REQUIRED` refusal from
+`so101_head_search_calibration run` refers to Task 13's *formal calibration runtime*, not to a service that will later record
+Step 5's episodes - the two are different runs, and Task 13's comes second.
+
+**Corrected conclusion:** Step 5 belongs to Task 12 and requires **option (a)/(d)** - held-out episode records must be produced
+inside Task 12 by driving the existing collection tooling (`act_collect`, `act_collect_parallel`, `act_sample`, per HS-219),
+with the records written under the campaign root and passed via `--episode-records`, so nothing is written into
+`src/.../config/act/held-out-episodes/`. The `calibration`-split episodes are additionally what design line 220 wants included in
+the operating-point search, so one collection over both splits would settle both open items.
+
+This is the fifth time in this task that reading the artefact changed the answer, and the second where the correction was to my
+own recommendation rather than to the plan.
