@@ -40692,3 +40692,31 @@ has survived its own contract checks long enough to measure and bootstrap, which
 weights location, absolute partitions path, episodes present, latency key, ultralytics importable, head domain, task domain)
 were each blocking. Its wait became background job `bash-2423`; the verdict will be read from `$MODEL_RUN/evaluation` and
 `compare3.log` when it lands, not polled for.
+
+## HS-241 — The false-candidate refusal is my recorder's fault: every seed was rendered with one cup
+
+```
+{"failure": "EVALUATION_FALSE_CANDIDATE: A reports 480 false candidates on empty scenes"}
+```
+
+The gate is right and my recorder is wrong. The arithmetic points straight at the cause: 20 seeds x 3 angles x 2 domains = **120
+frames**, and 480 = 120 x 4 - i.e. A reports detections on essentially every frame of scenes the gate treats as **empty**. The
+recorder renders every seed with
+
+```python
+sc = DatasetScenario.for_cup_count(1)
+```
+
+a **hardcoded scenario**. So the held-out seeds whose declared condition is `no_cup` were rendered **with a cup present**, A
+correctly detects it, and the gate - which knows from the partitions/seed metadata which scenes are meant to be empty - counts
+every one of those detections as a false candidate. The design's zero-false-candidate rule then refuses the selection, exactly
+as it should.
+
+**So the defect is input, not the detector**: the scenario must be derived per seed from the same source the generator uses
+(the config's scenario quotas and seed ranges, whose per-image `scenario` / `configured_cup_count` fields appear in the dataset
+manifests), not from a constant. That is the ninth contract requirement this gate has surfaced, and the first where the fault is
+in a value I chose rather than in a key or a path.
+
+**This is a good outcome disguised as a failure:** the gate refused an evaluation whose inputs would have made the comparison
+meaningless - and had it not, the candidate ranking would have been computed against scenes that contradict their own declared
+conditions.
