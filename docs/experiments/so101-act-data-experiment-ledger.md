@@ -35323,3 +35323,40 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD
   `c92748ed2`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-1941 — Task 3 second bullet: the port seam located, its backup taken, no edit made
+
+- **Required pre-edit backup taken and verified.** `adapters/act/pick_place_search_port.py` is one of
+  the 39 baseline-dirty paths, and CP-1940 flagged that the earlier `baseline-task3/` set did not cover
+  it. A byte copy was therefore taken first into
+  `baseline-task3/src_so101_demo_py_src_adapters_act_pick_place_search_port.py` with sha256 read-back
+  OK (`05ec513fa1b98784019e38a3fd7ec437c35fa8fd296fc516b3ee8dae8d1056de`), recorded in
+  `baseline-task3/backup.sha256`.
+- **The exact place the raw block would be attached.** The port returns the runner-facing evidence
+  through two builders: `_search_evidence` (its dict literal starts at
+  `adapters/act/pick_place_search_port.py:417`, the SEARCH phase) and `_sequence_evidence` (the eight
+  sequence phases, reached from `run_phase` at line 641 via `_SEQUENCE_PHASES`). Both already hold
+  everything the raw block needs: a `fields` mapping with `sim_time_s`, `physics_step`,
+  `holding_state`, `bilateral_contact`, `no_fingertip_contact`, `cup_supported`,
+  `cup_support_distance_m`, `end_effector_position_m`, `cup_position_m` and `cup_orientation_xyzw`,
+  plus the phase `evidence` booleans, plus `raw_records` — per-capture raw source documents that
+  `_write_raw_records` already persists under the recorder root with digests and an exclusive,
+  capture-named open. In other words the raw evidence for offline recomputation already exists at this
+  layer and is already durable; what is missing is only the carry-through into the runner's
+  `physical_observation` and from there into the audit, which the previous round implemented and tested
+  on the runner side.
+- **Why no edit was made this round.** Attaching it means editing both builders inside an 899-line file
+  that carries the live MuJoCo port, and doing that correctly requires reading each builder in full.
+  My remaining context this round was not enough to land it with the same evidence standard as the
+  previous bullets (RED/GREEN plus the task8, supervisor and recorder regressions), so I recorded the
+  seam and the backup instead of risking a half-verified change in the live path. This is a budget
+  limitation, not a blocker: nothing is missing that needs an owner decision, and the next pass can
+  start directly at the two builders named above.
+- **Remaining Task 3 work, complete list.** (1) attach the raw block in `_search_evidence` and
+  `_sequence_evidence` and test that a real port's phase evidence carries it; (2) wire the broker's
+  real claim/dispatch/accept/revoke/stop events into `EpisodeAuditWriter` (only the runner's phase
+  events and the observer's reference history are wired today); (3) then the Task 3 Codex checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD
+  `38943305d`; 39-path dirty baseline untouched (only an out-of-tree backup was added); no push, no
+  evidence deletion, no hardware, no second stack.
