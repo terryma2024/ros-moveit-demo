@@ -43293,3 +43293,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   event named - the relation between the physics stream and the events stream that the audit has never checked.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
   three of four plus its carrier cut; F5 first half two of three items; goal paused.
+
+## CP-2292 - F5's first half complete: ordered completions, per-kind histories and the epoch relation
+
+- Third item landed: every physics row's release_epoch must be an epoch a release event named, and the epochs must
+  never decrease. This relates the two streams the audit had never compared. First try, green: 204 passed.
+- The half now stands at three relations, each added and verified on its own: one completion per registered phase
+  in order with non-decreasing steps (CP-2290), every registered kind with a non-decreasing history (CP-2291), and
+  this epoch relation.
+- F5's remaining half: replace the preset-formal-phase fixture shortcut with a producer/runner/writer/readback
+  integration control - the verdict's demand that coverage be shown by an episode that produced the history rather
+  than by a fixture that names it.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete; goal paused.
