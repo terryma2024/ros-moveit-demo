@@ -41107,3 +41107,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan's ruling on `sim_time_s`);
   **F11 in progress** with its Boolean defect fixed; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 /
   283 / 176 / 284 / 151 passed**; HEAD `510357974`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2185 — F11's reader-side check: the predicate is writer-bound, so it must be extracted
+
+- **Read this round**: `_window_matches_rows(window)` is defined at line **842** as a **method of the writer** —
+  it consults `self._row_times` — and is called only at seal (line **818**, inside the `mode == "formal"` branch).
+  The readback's own formal gate is `_formal_coverage_ok` called at line 958, in a **module-level** function that
+  has no writer state, which is exactly why F11 says readback never repeats the predicate: an invented in-range
+  instant (1.05 in the verdict's example) satisfies `_window_ok`, stream validation and the coverage gate.
+- **The fix F11 asks for, and its shape**: "share window-to-observed-history validation between seal and readback"
+  means extracting the body into a **module-level** function taking the window plus the observed row times (and,
+  for the schedule half, the acquisitions the readback has already parsed), then calling it from **both** sites.
+  The writer would pass `self._row_times`; the readback would pass the times it re-derived from `row-bindings`
+  and `physics` rows — the same data, one predicate.
+- **The second half of F11's first item, worth recording with it**: the **manifest window itself is not covered by
+  the stream hashes**, so even a correct reader predicate must be bound to a window that cannot be edited after
+  sealing — either by hashing the window document or by re-deriving it from the rows, which is the stronger,
+  Proposal-B-consistent option.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  its Boolean defect fixed (CP-2184) and this extraction next; targeted gates **430 / 201 / 201 / 201 / 246 / 247 /
+  200 / 283 / 176 / 284 / 151 passed**; HEAD `f9e05f895`; no push, no evidence deletion, no hardware, no second
+  stack.
