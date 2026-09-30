@@ -42292,3 +42292,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
   green, commit half landed; items 5+ wait on CP-2232's list (nine values, `rgb_skew`'s pair the only one the code
   implies). HEAD `aaa80315f`; fifteen gates green.
+
+
+## CP-2238 — The seventh verdict arrived: FAIL, seven Important, and one of them is mine
+
+- **The verdict**: `reviews/task3-rereview6-verdict.md`, copied this round from
+  `/tmp/so101-debug-task3-review7-8c8bb548c/task3-rereview6-verdict.md` (27817 bytes, sha256 `2a6c116142af9c70…`).
+  **FAIL — 0 Critical / 7 Important / 0 Minor**; reviewed checkpoint `8c8bb548c`; it read the sixth verdict, the
+  plan's common schemas, the ledger's closures and owner decisions, the `src/` patch (sha256 `aad8c567…`) and all
+  18 changed files, and it verified the 37-entry dirty status was preserved and that it modified nothing.
+- **Why the file was in `/tmp`**: my dispatch gave the reviewer a `workspace-write [workdir, /tmp, $TMPDIR]` sandbox,
+  so `/data/.../reviews/` was outside its writable set — its own note says the requested write failed because that
+  filesystem is read-only for it. The dispatch instruction was therefore wrong about the target, not the review; the
+  file is now published to the canonical path.
+- **The seven findings**: T3-F1 (the real A.1 producer still does not compose with audit admission), T3-F3 (initial
+  event identity and binding types still differ from their stated contract), T3-F5 (shared coverage counts names
+  instead of retaining the required source/lifecycle history), T3-F11 (subset/duplicate schedules and unobserved
+  physics endpoints still pass), T3-F12 (feedback wiring targets the wrong object, mutates a frozen carrier, is not
+  retained), T3-F13 (receipt ages do not fence feedback across resets; scene production was disabled) and
+  **T3-F14 (new): Item 4's commit guard applies the ACT verifier to unrelated production result formats** — the
+  regression my ③a increment introduced.
+- **What it credits**: F11's frozen-policy demand is **closed by the owner's CP-2217 decision**; F1's
+  `physics_step` admission and carrier acceptance, F3's exclusive raw-group readback and release-payload
+  correlation, F5's shared seal/readback predicate, F12's nested carrier and F13's slices, per-kind sequence,
+  receipt ages and the ratified eighth key are all recorded as **local closures**; T3-F9/F10 stay closed.
+- **State.** Task 3 remains **unconverged**; the goal is **paused** by the owner (revision 7), so the triage and any
+  fix await their word. HEAD `640fffaed`; fifteen gates green.
