@@ -1101,6 +1101,11 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                 isinstance(row["sim_time_s"], bool) or not isinstance(row["sim_time_s"], (int, float))
                 or not math.isfinite(row["sim_time_s"]) or row["sim_time_s"] < 0):
             raise ValueError("AUDIT_EVENT_INVALID")
+        if row["kind"] == "release" and (
+                payload.get("release_epoch") != (row["identity"].get("release_epoch"))):
+            # F3: the writer correlates a release payload's epoch with its identity, so the readback does
+            # too; a re-signed event may not claim one epoch in its payload and another in its identity
+            raise ValueError("AUDIT_EVENT_INVALID")
         if not _event_identity_ok(row["identity"], identity, release_epoch=event_epoch):
             raise ValueError("AUDIT_EVENT_INVALID")
         event_epoch = row["identity"]["release_epoch"]

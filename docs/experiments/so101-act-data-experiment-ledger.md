@@ -39908,3 +39908,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, F13 down to `sim_time_s`, **F3's round trips fixed** with its identity
   residuals open, F1/F5/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD `241e6bbb3`; no push,
   no evidence deletion, no hardware, no second stack.
+
+
+## CP-2128 — F3's release-payload correlation now holds on readback too
+
+- **Read first**: the readback already calls the writer's own `_event_identity_ok` (line 1104) and
+  `_payload_typed` (line 1113) for every event row, so F3's "readback does not repeat the writer's
+  release-payload/identity epoch equality" could only mean the **correlation** between the two — a payload's
+  `release_epoch` against the identity's own — which the typed check alone does not make.
+- **What landed**: before the identity predicate, the readback now refuses a `release` event whose payload epoch
+  differs from its identity's epoch, with a comment naming the writer's matching rule. A re-signed event can
+  therefore no longer claim one epoch in its payload and another in its identity.
+- **Evidence.** Targeted run this round: **104 passed** across the audit, recorder and release-boundary suites
+  under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **What F3 still lists**: the event identity check omits the **lease identity**, and it permits an initial
+  release epoch unrelated to the episode's own, with later increments not tied to release events — the next F3
+  step, and the one place where "share admission/readback predicates" becomes a design question rather than a
+  call-site fix, since the writer's own check is where the lease belongs.
+- **State.** Item 3's list: F12 closed; F3's round trips fixed and its correlation added, its identity residuals
+  open; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD
+  `631f4f3ef`; no push, no evidence deletion, no hardware, no second stack.
