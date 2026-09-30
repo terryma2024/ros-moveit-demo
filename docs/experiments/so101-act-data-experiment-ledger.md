@@ -38505,3 +38505,48 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `188536bb8`;
   targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## OPEN ITEMS as of CP-2065 — read this list first if you are picking the work up
+
+**Task 3's four remaining items** (details, anchors and recipes in
+`docs/experiments/so101-act-task3-next-session-brief.md`, verified at CP-2065):
+
+1. **The full `planning_scene_observation` record's travel.** The port produces it
+   (`task_scene.py:295`), the document carries it additively when supplied (CP-2028) and the observation has the
+   field (CP-2041); the readback must fill it with the caller's simulation instant, then the audit verifies it
+   end to end.
+2. **Three-way controls for the port's gates.** The boundary's two have them (CP-2036, CP-2044). CP-2061
+   records what an experiment already proved for the port (a `truncated` world makes `mujoco_ok` false; a
+   stale camera stamp is refused with `RGB source skew`) and that two control attempts did not converge —
+   start from `test_act_task8_search_port.py`'s own helpers (`observation()` at 36, `fixture(...)` at 98,
+   `replace(...)` already in use).
+3. **T3-F11's window-to-rows and observed-schedule checks.** Two attempts reverted; recipes in CP-1997 and
+   CP-2001 — build the fixtures from the audit's own contents behind one self-consistent formal-episode helper.
+4. **A fresh checkpoint after 1-3**, with the packet pattern of `reviews/task3-review5-packet.md` and GPT-6.1
+   Sol / High in tmux; the fifth verdict is `reviews/task3-rereview4-verdict.md`.
+
+**Decisions the owner has not made yet**
+
+- The SEARCH document's `planning_ok` semantics (CP-2061/CP-2062): keep the stated, upstream-guaranteed value
+  (implemented) or give it a real source from the boundary's path/approval evidence.
+- The three documented choices are revisitable: `scene_revision` (CP-2020), `status_sequence` (CP-2040), the
+  camera gates' freshness (CP-2059).
+- The 46 lines of pre-existing work swept into `dcef92f99` were left as they are, per the owner (CP-2026).
+
+**Before Tasks 6/7 can run**
+
+- The four real input roles still need approved values: `path_policy`, `placement_qc`, `rgb_skew`,
+  `resource_thresholds` (`NONHEAD_INPUT_BINDING_REQUIRED`).
+- A fresh `colcon build --install-base` is required before the ordinary module gate can even be collected
+  (CP-2002); the measured live-source baseline is 5654 passed / 321 failed / 155 skipped / 10 errors, dominated
+  by that missing overlay (CP-2022, classified in CP-2023).
+- `so101_demo.act.w8_qualification` does not exist, so the production `_validate_start` fails closed with
+  `W8_QUALIFICATION_VERIFIER_UNAVAILABLE` (recorded earlier in this ledger).
+
+**Verified baselines**
+
+- Targeted parallel gate: `logs/task3-gate17.run` **419 passed** (xdist, 8 workers on 32 CPUs) at HEAD
+  `188536bb8`; the same scope measured 337 when this session's Task 3 work began.
+- Dirty baseline: 24 tracked and 13 untracked paths preserved; the staging rule with its backup diff is in the
+  brief and CP-2026.
