@@ -37056,3 +37056,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (the four items above); items 4-8 pending.**
   HEAD `4b8e0485a`; gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-1999 — Task 3 fix pass: readback refuses both raw reference groups, control included (T3-F3)
+
+- **The check and its control landed on the first attempt**, because I finally followed the recipe CP-1993
+  recorded: readback now refuses a reference record carrying keys from both the packed and the legacy raw
+  groups (admission already did), and the control is **one entry in the existing parametrised re-signed-record
+  test**, which already builds a fresh sealed audit per case and re-signs it. Three earlier rounds failed by
+  writing a standalone test with hand-built fixtures; extending the parametrisation took two lines.
+- **Evidence.** `logs/task3-fix45.run` rc=0: **78 passed in 0.71 s** across `test_act_episode_audit.py` and
+  `test_act_recorder.py`, with its own NVMe scratch and a non-empty tempfile proof.
+- **Still open from the fifth verdict.** **T3-F5's readback half**: the formal coverage gate is enforced at
+  `seal()` but not when an audit is read back. The reachable control is a tamper path — seal a diagnostic
+  audit, rewrite `source.json` to `formal`, re-sign that entry and update the manifest's `scope_sha256` and
+  self-hash — which is the step my previous attempt did not get right; it is recorded here rather than
+  attempted again in a round with little budget left. Also open: **T3-F1**'s producer side, **T3-F11**'s
+  window-to-rows checks (CP-1997 recipe), and **A.1** awaiting the owner.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `5c2d88221`;
+  gate `logs/task3-gate7.run` **403 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

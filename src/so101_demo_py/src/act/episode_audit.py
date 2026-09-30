@@ -949,9 +949,14 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                        or not math.isfinite(value) for value in row["positions"])):
             raise ValueError("AUDIT_REFERENCE_INVALID")
         sequence = row["sequence"]
-        if _REFERENCE_FRAME_FIELDS & set(row):
+        packed_keys = _REFERENCE_FRAME_FIELDS & set(row)
+        raw_keys = _REFERENCE_RAW_FIELDS & set(row)
+        if packed_keys and raw_keys:
+            # the two groups are alternatives at admission, so readback refuses them together too
+            raise ValueError("AUDIT_REFERENCE_INVALID")
+        if packed_keys:
             _reference_frames_ok(row, history=frame_history)
-        elif _REFERENCE_RAW_FIELDS & set(row):
+        elif raw_keys:
             _reference_raw_ok(row, "AUDIT_REFERENCE_INVALID")
         references[row["sequence"]] = row
         if row["accepted"] is not True:
