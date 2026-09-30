@@ -32,7 +32,16 @@ _ACQUISITION_FIELDS = frozenset({"camera", "session_id", "reset_epoch", "sequenc
 _ROW_FIELDS = frozenset({"row_index", "sim_time_s", "head_acquisition_id",
                          "wrist_acquisition_id", "reference_sequence"})
 _REFERENCE_FIELDS = frozenset({"sequence", "reference_time_s", "source", "positions", "accepted"})
-_EVENT_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "physics_step", "detail"})
+_EVENT_FIELDS = frozenset({"sequence", "kind", "identity", "sim_time_s", "monotonic_ns",
+                           "payload"})
+# the frozen contract delegates the per-kind payload schema here; each entry is the exact key set a
+# kind may carry, so a success boolean can never stand in for a physical fact
+_EVENT_PAYLOADS = {
+    "phase_complete": frozenset({"phase", "physics_step"}),
+    "phase_start": frozenset({"phase"}),
+    "run_complete": frozenset({"reason", "physics_step"}),
+    "run_aborted": frozenset({"reason", "physics_step"}),
+}
 _PHYSICS_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "release_epoch", "observation"})
 _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
 _MANIFEST_FIELDS = frozenset({"kind", "schema_version", "scope_sha256", "identity", "window",
@@ -161,14 +170,22 @@ class EpisodeAuditWriter:
             raise ValueError("AUDIT_SOURCE_KIND_INVALID")
         if kind == "events":
             item = _closed(record, _EVENT_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
-            # a runner knows the verified physics step at the boundary; a sim time is recorded only
-            # when the source actually supplies one, never invented from the step
-            _integer(item["physics_step"], "AUDIT_SCHEMA_INVALID")
+            if (not isinstance(item["kind"], str) or item["kind"] not in _EVENT_PAYLOADS
+                    or not isinstance(item["identity"], dict) or not item["identity"]
+                    or not isinstance(item["payload"], dict)
+                    or set(item["payload"]) != _EVENT_PAYLOADS[item["kind"]]):
+                # an unknown kind, an empty identity or a payload outside its kind's schema is refused
+                raise ValueError("AUDIT_SCHEMA_INVALID")
+            _integer(item["monotonic_ns"], "AUDIT_SCHEMA_INVALID", minimum=1)
+            # a sim time is recorded only when the source actually supplies one, never invented
             if item["sim_time_s"] is not None:
                 _finite(item["sim_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
-            if (not isinstance(item["kind"], str) or not item["kind"]
-                    or not isinstance(item["detail"], str)):
-                raise ValueError("AUDIT_SCHEMA_INVALID")
+            if item["kind"] in ("run_complete", "run_aborted"):
+                _integer(item["payload"]["physics_step"], "AUDIT_SCHEMA_INVALID")
+            if item["kind"] == "phase_complete":
+                _integer(item["payload"]["physics_step"], "AUDIT_SCHEMA_INVALID")
+                if not isinstance(item["payload"]["phase"], str) or not item["payload"]["phase"]:
+                    raise ValueError("AUDIT_SCHEMA_INVALID")
             item["sequence"] = self._next("events")
         elif kind == "references":
             item = _closed(record, _REFERENCE_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()

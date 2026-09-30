@@ -76,6 +76,7 @@ class PickPlaceRunner:
         self.clock_ns = clock_ns
         # the audit receives the events this run actually produced, in the order it produced them
         self.audit = audit
+        self._event_identity: dict = {}
 
     @staticmethod
     def _raw(observation) -> bool:
@@ -119,8 +120,14 @@ class PickPlaceRunner:
     def _event(self, kind: str, detail: str, physics_step: int) -> None:
         if self.audit is None:
             return
-        self.audit.append_source("events", {"kind": kind, "sim_time_s": None,
-                                            "physics_step": physics_step, "detail": detail})
+        # the event names the identity it belongs to and the monotonic instant it happened at; the
+        # verified physics step lives in the kind's own payload instead of a generic detail string
+        self.audit.append_source("events", {
+            "kind": kind, "identity": self._event_identity, "sim_time_s": None,
+            "monotonic_ns": int(self.clock_ns()) or 1,
+            "payload": {"reason": detail, "physics_step": physics_step}
+            if kind in ("run_complete", "run_aborted")
+            else {"phase": detail, "physics_step": physics_step}})
 
     def _validate_request(self, request: dict) -> None:
         if not isinstance(request, dict) or set(request) != self._REQUEST_KEYS:
@@ -265,6 +272,9 @@ class PickPlaceRunner:
                 raise PickPlaceError("FULL_RESTART_NOT_PROVED")
             reset_epoch = beginning["reset_epoch"]
             release_epoch = beginning["release_epoch"]
+            self._event_identity = {"session_id": request["session_id"],
+                                    "attempt_id": request["attempt_id"],
+                                    "reset_epoch": reset_epoch, "release_epoch": release_epoch}
             completed: list[str] = []
             for phase in self.PHASES:
                 if request["deadline_ns"] <= self.clock_ns():

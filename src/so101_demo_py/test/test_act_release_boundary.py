@@ -173,12 +173,15 @@ def test_the_audit_receives_the_events_the_run_actually_produced():
     audit = RecordingAudit()
     port = FakePort()
     PickPlaceRunner(port, audit=audit).run(request())
-    assert [(event["kind"], event["detail"]) for event in audit.events] == (
+    assert [(event["kind"], event["payload"].get("phase") or event["payload"].get("reason"))
+            for event in audit.events] == (
         [("phase_complete", phase) for phase in PickPlaceRunner.PHASES]
         + [("run_complete", "FULL_COMPLETE")])
-    assert [event["physics_step"] for event in audit.events] == sorted(
-        event["physics_step"] for event in audit.events)
+    assert [event["payload"]["physics_step"] for event in audit.events] == sorted(
+        event["payload"]["physics_step"] for event in audit.events)
     assert all(event["sim_time_s"] is None for event in audit.events)
+    assert all(event["identity"]["session_id"] == "s" for event in audit.events)
+    assert all(event["monotonic_ns"] >= 1 for event in audit.events)
 
 
 def test_an_aborted_run_records_its_abort_and_no_phase_it_did_not_verify():
@@ -188,7 +191,7 @@ def test_an_aborted_run_records_its_abort_and_no_phase_it_did_not_verify():
         PickPlaceRunner(port, audit=audit).run(request())
     kinds = [event["kind"] for event in audit.events]
     assert kinds.count("run_aborted") == 1
-    assert "RELEASE" not in [event["detail"] for event in audit.events]
+    assert "RELEASE" not in [event["payload"].get("phase") for event in audit.events]
     assert "run_complete" not in kinds
 
 

@@ -35563,3 +35563,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (fix pass: F3, F4, F6 closed; F1 partly
   closed; F2, F5 and F1's payload dimensions outstanding); items 4-8 pending.** HEAD `2a5e42033`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1947 — Task 3 fix pass, fourth instalment: events now use the frozen schema
+
+- **The event record is `sequence, kind, identity, sim_time_s, monotonic_ns, payload`.** `identity` is
+  the episode identity the event belongs to (session, attempt, reset and release epoch at that moment),
+  `monotonic_ns` is the real monotonic instant the runner observed at the boundary, and the verified
+  physics step lives inside the kind's own `payload` instead of a generic detail string, so a success
+  boolean can never stand in for a physical fact. `sim_time_s` stays null unless a source supplies one.
+- **Payload schemas are closed per kind.** The frozen contract delegates the per-kind schema to the
+  implementation, so the writer declares `_EVENT_PAYLOADS`: `phase_complete` carries exactly
+  `{phase, physics_step}`, `phase_start` exactly `{phase}`, and `run_complete`/`run_aborted` exactly
+  `{reason, physics_step}`. An unknown kind, an empty identity, a payload outside its kind's key set, a
+  missing or non-integer physics step and a non-positive monotonic instant are all refused with
+  `AUDIT_SCHEMA_INVALID`.
+- **The runner emits that shape** (`_event()` now binds the identity captured from `begin()` and the
+  monotonic clock, and puts the phase or reason plus the verified step in the payload), so the audit
+  records what the run actually produced rather than a projected string.
+- **Evidence.** `logs/task3-fix4.run` rc=0: **78 passed in 1.47 s** across `test_act_episode_audit.py`,
+  `test_act_release_boundary.py`, `test_act_recorder.py`, `test_act_supervisor.py`,
+  `test_act_task8.py` and `test_act_task8_close_execution.py`, with its own NVMe scratch and a
+  non-empty tempfile proof. The release-boundary event tests now assert the payload's phase/reason, the
+  non-decreasing verified steps, the bound identity and a positive monotonic instant.
+- **Still open from the verdict.** **T3-F1**'s last two dimensions: `references` must preserve the
+  observer's raw message, joint names, source/receipt timing and revocation boundaries (the observer
+  already holds them at `adapters/act/controller_reference_observer.py:69`), and `physics` must carry
+  pose, velocity, full contact pairs, support, Planning Scene and gripper/controller feedback per the
+  source contracts rather than an arbitrary raw block. **T3-F2** (semantic row binding plus
+  wrong-camera, same-id-in-both-slots, cross-reset, unresolvable-reference and out-of-order-row
+  controls, with the camera-first fixture corrected). **T3-F5** (gate full-run eligibility on the
+  required raw physics and broker events). Then a fresh checkpoint review.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (fix pass: F3, F4, F6 closed; F1's
+  manifest/acquisition/row-binding/seal/event dimensions closed; F1's reference/physics payloads, F2 and
+  F5 outstanding); items 4-8 pending.** HEAD `0166a25fd`; 39-path dirty baseline untouched; no push, no
+  evidence deletion, no hardware, no second stack.
