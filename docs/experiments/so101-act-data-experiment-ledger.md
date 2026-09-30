@@ -40225,3 +40225,30 @@ Three consequences that shape the recorder:
 3. **Latency is part of the contract**, per frame per candidate, not an afterthought - the gate refuses a recording that omits it.
 
 So the recorder's shape is fixed by the consumer: render/step the head-search scenes for a seed, capture per-frame head-camera frames, run each candidate's frozen operating point over them, and emit `{seed, frames:[{seed, detections:{A,B,C}, latency:{A,B,C}, ...}]}`. What remains to decide - and what I will read next rather than assume - is which existing runtime produces the frames (the smoke's MuJoCo path, or the collection stack) and whether frames are captured to disk once and re-scored per candidate (cheapest, and keeps detector seriality trivially true).
+
+## HS-223 — The generator renders one sample per scene, so it is not yet the episode recorder
+
+Checked the obvious reuse candidate for producing held-out frames:
+
+```
+ros2 run so101_demo_py generate_yolo_seg_dataset --help
+  --config  --output-root  --generator-commit  --geometry-seal  [--sample-limit]
+```
+
+It exposes **no seed selection and no frame/step control**: the scene set and split counts come from the config
+(`head_camera_yolo_seg.yaml`), and it produces the sealed dataset's images - one sample per scene - which is exactly what Step 2
+consumed (HS-187). So it gives the right **rendering machinery** (MuJoCo, head camera, geometry seal, per-scene seeds) but not
+the **frame sequences** an episode needs.
+
+Consequence for the recorder, stated as the open design question rather than a guess:
+
+- the gate's contract is satisfied by any set of frames covering the partition's seeds (HS-222), so a one-frame-per-seed
+  recording would *parse* - but the continuous metrics the design wants on held-out episodes (tracking continuity, identity
+  switch, fragmentation; design line 158) would be degenerate on single frames, so a real recorder must step each scene and
+  record a **sequence**;
+- that means either driving the generator's scene setup in a loop over steps, or writing a small MuJoCo stepping harness that
+  reuses the same seal and seed machinery - and the design's notion of episode length (how many frames constitute one episode)
+  is the piece I have not yet read.
+
+Still interface work, no implementation started; recorded so the decision between "loop the generator" and "write a stepping
+harness" is made on evidence.
