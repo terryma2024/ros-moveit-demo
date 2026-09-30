@@ -43223,3 +43223,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - GREEN 120 passed across the search-port, audit and task8 suites. F14, F3 and F1 closed; F11 three cuts with two
 - negatives handed off; F13 three of four with the fourth blocked on the design contradiction (CP-2285); F12 in
   progress; F5 open; goal paused.
+
+## CP-2287 - F12's second cut: the records live on the boundary, and a frozen carrier is tolerated
+
+- The helper now sets self._controller_feedback before attempting the carrier assignment, and the assignment is
+  wrapped so a frozen observation no longer aborts the verifier chain that calls it (FrozenInstanceError is an
+  AttributeError subclass, so the catch covers it without importing dataclasses).
+- That also advances F12's fourth item: the two gate constructions (lines 388 and 486) already read
+  self._controller_feedback, so the gates now derive from the records this readback produced rather than from
+  nothing at all.
+- Still open from F12: carrying a normalised typed record into the writer's physical observation, so the SEARCH
+  document's physical_observation holds controller_feedback and the pose kind carries its cup/model evidence.
+- GREEN 120 passed; F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four with the
+  fourth blocked on the design contradiction (CP-2285); F12 two of four; F5 open; goal paused.
