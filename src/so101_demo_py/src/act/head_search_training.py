@@ -12,7 +12,7 @@ one.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -291,6 +291,8 @@ TRAINING_CONTRACT_KEYS = (
     "validation_domains",
     "dataset_domains",
     "promotable",
+    "domain_train",
+    "domain_val",
 )
 #: everything that must be identical between B and C, in the order it is hashed
 HYPERPARAMETER_KEYS = (
@@ -307,6 +309,12 @@ HYPERPARAMETER_KEYS = (
 )
 CHECKPOINT_SCORE = "0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95"
 _CANDIDATE_IDS = ("A", "B", "C")
+
+
+def _positive_count(name: str, value: object) -> int:
+    if type(value) is not int or value <= 0:
+        raise CandidatePlanError(f"CANDIDATE_CONTRACT_INVALID: {name} must be a positive integer")
+    return value
 
 
 class CandidatePlanError(ValueError):
@@ -326,9 +334,15 @@ class TrainingContract:
     epochs: int
     promotable: bool
     hyperparameters: Mapping[str, object]
+    recipe: Mapping[str, object]
+    domain_train: int
+    domain_val: int
 
     def to_document(self) -> dict[str, object]:
         return {
+            "recipe": dict(self.recipe),
+            "domain_train": self.domain_train,
+            "domain_val": self.domain_val,
             "device": self.device,
             "allow_cpu_fallback": self.allow_cpu_fallback,
             "checkpoint_score": self.checkpoint_score,
@@ -408,6 +422,9 @@ def load_training_contract(path: Path | str) -> TrainingContract:
         epochs=epochs,
         promotable=bool(document["promotable"]),
         hyperparameters=MappingProxyType({key: document[key] for key in HYPERPARAMETER_KEYS}),
+        recipe=MappingProxyType(dict(document)),
+        domain_train=_positive_count("domain_train", document.get("domain_train")),
+        domain_val=_positive_count("domain_val", document.get("domain_val")),
     )
 
 
@@ -436,9 +453,21 @@ class CandidatePlan:
     dataset_digests: Mapping[str, str]
     hyperparameters: Mapping[str, object]
     promotable: bool
+    base_model_sha256: str
+    recipe: Mapping[str, object]
+    task_subset: tuple[int, ...]
+    head_train_seeds: tuple[int, ...]
+    head_val_seeds: tuple[int, ...]
+    task_val_seeds: tuple[int, ...]
 
     def to_document(self) -> dict[str, object]:
         return {
+            "base_model_sha256": self.base_model_sha256,
+            "recipe": dict(self.recipe),
+            "task_subset": list(self.task_subset),
+            "head_train_seeds": list(self.head_train_seeds),
+            "head_val_seeds": list(self.head_val_seeds),
+            "task_val_seeds": list(self.task_val_seeds),
             "candidate_id": self.candidate_id,
             "train_count": self.train_count,
             "val_count": self.val_count,
@@ -464,28 +493,73 @@ class CandidatePlan:
         return canonical_sha256(self.to_document())
 
 
-def _manifest_counts(name: str, manifest: Mapping[str, object]) -> dict[str, int]:
+def _manifest_splits(
+    name: str, manifest: Mapping[str, object]
+) -> dict[str, list[Mapping[str, object]]]:
+    """Read a sealed dataset manifest, refusing anything that is not one."""
+
     if not isinstance(manifest, Mapping):
         raise CandidatePlanError(f"CANDIDATE_MANIFEST_INVALID: {name} must be a manifest mapping")
-    raw = manifest.get("split_counts")
-    if not isinstance(raw, Mapping):
+    missing = {
+        "dataset_contract",
+        "camera_name",
+        "split_counts",
+        "samples",
+        "promotable",
+    } - set(manifest)
+    if missing:
+        raise CandidatePlanError(
+            f"CANDIDATE_MANIFEST_INVALID: {name} is missing " + ", ".join(sorted(missing))
+        )
+    samples = manifest["samples"]
+    if not isinstance(samples, (list, tuple)) or not samples:
+        raise CandidatePlanError(f"CANDIDATE_MANIFEST_INVALID: {name} declares no samples")
+    raw_counts = manifest["split_counts"]
+    if not isinstance(raw_counts, Mapping):
         raise CandidatePlanError(f"CANDIDATE_MANIFEST_INVALID: {name} declares no split_counts")
-    counts = {}
+    by_split: dict[str, list[Mapping[str, object]]] = {"train": [], "val": []}
     for split in ("train", "val"):
-        value = raw.get(split)
-        if type(value) is not int or value <= 0:
+        declared = raw_counts.get(split)
+        if type(declared) is not int or declared <= 0:
             raise CandidatePlanError(
                 f"CANDIDATE_MANIFEST_INVALID: {name} needs a positive {split} count"
             )
-        counts[split] = value
-    return counts
+    seeds: dict[object, str] = {}
+    groups: dict[object, str] = {}
+    for sample in samples:
+        if not isinstance(sample, Mapping):
+            raise CandidatePlanError(f"CANDIDATE_MANIFEST_INVALID: {name} has a non-mapping sample")
+        split = sample.get("split")
+        if split not in by_split:
+            continue
+        for key, seen, label in (
+            ("seed", seeds, "seed"),
+            ("scene_group_id", groups, "scene group"),
+        ):
+            value = sample.get(key)
+            if value is None:
+                raise CandidatePlanError(
+                    f"CANDIDATE_MANIFEST_INVALID: {name} has a {split} sample without a {label}"
+                )
+            previous = seen.get(value)
+            if previous is not None and previous != split:
+                raise CandidatePlanError(
+                    f"CANDIDATE_SPLIT_LEAK: {name} puts the same {label} {value!r} in both {previous} "
+                    f"and {split}"
+                )
+            seen[value] = split
+        by_split[split].append(sample)
+    for split in ("train", "val"):
+        if len(by_split[split]) != int(raw_counts[split]):
+            raise CandidatePlanError(
+                f"CANDIDATE_MANIFEST_INVALID: {name} declares {raw_counts[split]} {split} samples but "
+                f"lists {len(by_split[split])}"
+            )
+    return by_split
 
 
-def _manifest_digest(manifest: Mapping[str, object]) -> str:
-    declared = manifest.get("dataset_sha256")
-    if isinstance(declared, str) and len(declared) == 64:
-        return declared
-    return canonical_sha256(manifest)
+def _ordered_seeds(samples: Sequence[Mapping[str, object]]) -> tuple[int, ...]:
+    return tuple(sorted(int(sample["seed"]) for sample in samples))
 
 
 def build_candidate_plan(
@@ -494,8 +568,9 @@ def build_candidate_plan(
     head: Mapping[str, object],
     task: Mapping[str, object],
     contract: TrainingContract | Path | str,
+    base_model_sha256: str,
 ) -> CandidatePlan:
-    """Freeze one candidate's data union, batch composition and inherited hyperparameters."""
+    """Freeze one candidate's data union, batch composition and every effective input."""
 
     if candidate_id not in _CANDIDATE_IDS:
         raise CandidatePlanError(
@@ -505,47 +580,75 @@ def build_candidate_plan(
         raise CandidatePlanError(
             "CANDIDATE_ID_INVALID: candidate A is the pinned task-camera baseline and is not rebuilt here"
         )
+    if not isinstance(base_model_sha256, str) or len(base_model_sha256) != 64:
+        raise CandidatePlanError(
+            "CANDIDATE_BASE_MODEL_INVALID: the frozen base weights need their sha256 digest"
+        )
     trained = (
         contract if isinstance(contract, TrainingContract) else load_training_contract(contract)
     )
-    head_counts = _manifest_counts("head manifest", head)
-    task_counts = _manifest_counts("task manifest", task)
+    head_splits = _manifest_splits("head manifest", head)
+    task_splits = _manifest_splits("task manifest", task)
+    head_digest = canonical_sha256(head)
+    task_digest = canonical_sha256(task)
     if head.get("promotable") is False and trained.promotable:
         raise CandidatePlanError(
             "CANDIDATE_HEAD_NOT_SEALED: this is a smoke head dataset, so it can only train a "
             "non-promotable smoke plan"
         )
+    if head_digest == task_digest:
+        raise CandidatePlanError(
+            "CANDIDATE_DOMAINS_ALIASED: the head and task domains are the same dataset"
+        )
+    for name, manifest in (("head", head), ("task", task)):
+        camera = str(manifest.get("camera_name", ""))
+        if not camera:
+            raise CandidatePlanError(f"CANDIDATE_MANIFEST_INVALID: {name} manifest names no camera")
+    if str(head.get("camera_name")) == str(task.get("camera_name")):
+        raise CandidatePlanError(
+            "CANDIDATE_DOMAINS_ALIASED: both candidates must come from different camera domains"
+        )
+    head_train = _ordered_seeds(head_splits["train"])
+    task_train = _ordered_seeds(task_splits["train"])
+    head_val = _ordered_seeds(head_splits["val"])
+    task_val = _ordered_seeds(task_splits["val"])
+    if len(head_train) < trained.domain_train or len(head_val) < trained.domain_val:
+        raise CandidatePlanError(
+            "CANDIDATE_DOMAIN_SHORT: the head domain is smaller than the contract's frozen targets"
+        )
+    if len(task_train) < trained.domain_train or len(task_val) < trained.domain_val:
+        raise CandidatePlanError(
+            "CANDIDATE_DOMAIN_SHORT: the task domain is smaller than the contract's frozen targets"
+        )
+    task_train_subset = task_train[: trained.domain_train]
+    task_val_subset = task_val[: trained.domain_val]
+    validation_counts = {"head": trained.domain_val, "task": trained.domain_val}
     if candidate_id == "C":
-        domain_counts = {"head": head_counts["train"], "task": task_counts["train"]}
-        validation_counts = {"head": head_counts["val"], "task": task_counts["val"]}
-        train_count = head_counts["train"] + task_counts["train"]
-        val_count = head_counts["val"] + task_counts["val"]
+        domain_counts = {"head": trained.domain_train, "task": trained.domain_train}
+        train_count = 2 * trained.domain_train
+        val_count = 2 * trained.domain_val
         half = trained.batch_size // 2
-        batches = []
-        remaining_head, remaining_task = head_counts["train"], task_counts["train"]
-        while remaining_head or remaining_task:
-            take_head = min(half, remaining_head)
-            take_task = min(half, remaining_task)
-            if take_head != take_task:
-                raise CandidatePlanError(
-                    "CANDIDATE_DOMAINS_UNBALANCED: the two camera domains must contribute the same "
-                    "number of training images"
-                )
-            batches.append(CandidateBatch(head_count=take_head, task_count=take_task))
-            remaining_head -= take_head
-            remaining_task -= take_task
+        batches = [
+            CandidateBatch(
+                head_count=min(half, trained.domain_train - offset),
+                task_count=min(half, trained.domain_train - offset),
+            )
+            for offset in range(0, trained.domain_train, half)
+        ]
+        task_subset = task_train_subset
     else:
-        domain_counts = {"head": head_counts["train"]}
-        validation_counts = {"head": head_counts["val"], "task": task_counts["val"]}
-        train_count = head_counts["train"]
-        val_count = head_counts["val"]
-        half = trained.batch_size // 2
-        batches = []
-        remaining = train_count
-        while remaining:
-            take = min(trained.batch_size, remaining)
-            batches.append(CandidateBatch(head_count=take, task_count=0))
-            remaining -= take
+        domain_counts = {"head": trained.domain_train}
+        train_count = trained.domain_val * 0 + trained.domain_train
+        # B trains on the head domain alone but is still scored on both validation domains, so its
+        # validation union holds both cells and `val_count` counts them
+        val_count = 2 * trained.domain_val
+        batches = [
+            CandidateBatch(
+                head_count=min(trained.batch_size, trained.domain_train - offset), task_count=0
+            )
+            for offset in range(0, trained.domain_train, trained.batch_size)
+        ]
+        task_subset = ()
     promotable = bool(trained.promotable and head.get("promotable") is not False)
     return CandidatePlan(
         candidate_id=candidate_id,
@@ -560,9 +663,13 @@ def build_candidate_plan(
         allow_cpu_fallback=trained.allow_cpu_fallback,
         checkpoint_score=trained.checkpoint_score,
         validation_domains=trained.validation_domains,
-        dataset_digests=MappingProxyType(
-            {"head": _manifest_digest(head), "task": _manifest_digest(task)}
-        ),
+        dataset_digests=MappingProxyType({"head": head_digest, "task": task_digest}),
         hyperparameters=trained.hyperparameters,
         promotable=promotable,
+        base_model_sha256=base_model_sha256,
+        recipe=trained.recipe,
+        task_subset=task_subset,
+        head_train_seeds=head_train[: trained.domain_train],
+        head_val_seeds=head_val[: trained.domain_val],
+        task_val_seeds=task_val_subset,
     )

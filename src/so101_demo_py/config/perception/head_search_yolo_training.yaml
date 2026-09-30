@@ -26,3 +26,7 @@ checkpoint_score: 0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95
 validation_domains: [head, task]
 dataset_domains: [head, task]
 promotable: true
+# per-domain training and validation targets: candidate C takes this many images from each camera domain, and
+# candidate B takes the same number from the head domain alone, so the two candidates see identical head exposure
+domain_train: 800
+domain_val: 200

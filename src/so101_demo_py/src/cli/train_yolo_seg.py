@@ -52,6 +52,13 @@ def main(arguments: list[str] | None = None) -> int:
     parsed = parser.parse_args(arguments)
 
     if parsed.candidate is not None:
+        if parsed.epochs is not None or parsed.fraction is not None:
+            print(
+                "training input error: --epochs and --fraction cannot be combined with --candidate; "
+                "the candidate's epoch count and data union are frozen in its contract and plan",
+                file=sys.stderr,
+            )
+            return 2
         missing = [
             name
             for name, value in (
@@ -98,11 +105,25 @@ def main(arguments: list[str] | None = None) -> int:
         )
         environment = os.environ.copy()
         environment["YOLO_OFFLINE"] = "true"
-        return subprocess.run(
-            ["yolo", "segment", "train", f"cfg={prepared.training_config}"],
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(prepared.trainer_script),
+                "--run-root",
+                str(prepared.output_root),
+                "--training-config",
+                str(prepared.training_config),
+            ],
             check=False,
             env=environment,
-        ).returncode
+        )
+        if result.returncode != 0:
+            print(
+                f"candidate training failed with exit code {result.returncode}; no candidate manifest "
+                "was written",
+                file=sys.stderr,
+            )
+        return result.returncode
 
     if parsed.contract is None or parsed.dataset is None:
         print(
