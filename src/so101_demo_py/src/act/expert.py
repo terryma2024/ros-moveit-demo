@@ -9,6 +9,8 @@ from .contracts import finite, validate_action
 
 # the observer's raw frame fields; the tap preserves them when its port supplies them, all four or none
 _RAW_REFERENCE_KEYS = ("joint_names", "sim_stamp_ns", "received_monotonic_ns", "velocities")
+#: the ratified per-frame kinds, in the canonical order the projection map declares (CP-2176)
+_FRAME_ORDER = ("arm", "gripper")
 
 
 class MoveItExpertActionTap:
@@ -34,8 +36,25 @@ class MoveItExpertActionTap:
         if raw and set(raw) != set(_RAW_REFERENCE_KEYS):
             # a partial raw frame may not be presented as the observer's history
             raise ValueError("EXPERT_REFERENCE_RAW_INCOMPLETE")
+        packed = {}
+        frames_probe = getattr(self.reference_port, "reference_frames", None)
+        if callable(frames_probe):
+            # F1: the ratified A.1 group travels with the record when the port can supply the frames; a port
+            # that cannot (or a broker that refuses a kind) leaves the legacy record exactly as it was
+            try:
+                frames = {kind: frames_probe(kind, target) for kind in _FRAME_ORDER}
+            except Exception:
+                frames = {}
+            if frames:
+                # the map selects the evaluated values, the publication stays untouched (CP-2176)
+                projected = [value for kind in _FRAME_ORDER
+                             for value in frames[kind]["evaluated_positions"]]
+                mapping = [[kind, index] for kind in _FRAME_ORDER
+                           for index in range(len(frames[kind]["evaluated_positions"]))]
+                packed = {"frames": frames, "projected_positions": projected,
+                          "projection_map": mapping}
         return {"requested_sim_time_s": target, "source": "CONTROLLER_REFERENCE",
-                "positions": validate_action(reference.get("positions")), **raw}
+                "positions": validate_action(reference.get("positions")), **raw, **packed}
 
     def label(self, at_s: float) -> tuple[float, ...]:
         return self.reference(at_s)["positions"]

@@ -40965,3 +40965,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
   plus its sample fixture and the third cut's first edit**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 /
   247 / 160 passed**; HEAD `7d90186f4`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2178 — F1's third cut, edit 2: the expert carries the ratified A.1 group
+
+- **What landed** (`act/expert.py`): `_FRAME_ORDER = ("arm", "gripper")` — the canonical order CP-2176's map
+  declares — and, in `reference()`, a guarded block that asks the port for both kinds' frames at the requested
+  instant and, when it has them, adds `frames`, `projected_positions` and `projection_map` to the record: the
+  projection is the **evaluated** positions of the arm's five and the gripper's one, and the map names each source
+  dimension, which is A.1's "the map selects the evaluated value, the publication stays untouched". A port without
+  `reference_frames`, or a broker that refuses a kind, leaves the legacy record exactly as it was — so nothing that
+  worked before changes behaviour.
+- **Evidence.** `logs/task3-f1-expert.run` rc=0: **283 passed in 4.73s** across the audit, recorder, release-boundary, capture,
+  `test_act_task8`, qualification, W8-verifier, campaign-admission, expert-route and controller-reference suites
+  under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **What F1 still owes**: only its **third edit** — the chain test port → expert → capture → writer → readback with
+  the packed group present, the control the verdict asks for by name.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed,
+  its sample fixture and the third cut's first two edits done**; F11 open. Targeted gates **430 / 201 / 201 / 201 /
+  246 / 247 / 200 / 283 passed in 4.73s passed**; HEAD `4ff06fc15`; no push, no evidence deletion, no hardware, no second stack.
