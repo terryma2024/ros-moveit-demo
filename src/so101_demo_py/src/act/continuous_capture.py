@@ -1,14 +1,14 @@
 """Continuous, causal capture at the 10 Hz sim-time grid.
 
 One simulator owns motion and pixels; this module owns the cadence that turns those frames into
-training rows. It selects, for each grid instant `t`, only inputs that were already causal for that
-instant (`stamp <= t` and within the frozen source age), binds each row to the *new* acquisition of
-each camera, and joins the row to the controller reference the run actually accepted at `t + 0.1 s`.
-A row whose future reference never materialised stays in the audit; it is never given an invented
-action.
+training rows. For each grid instant `t` it selects only inputs that were already causal for that
+instant, binds the row to the *new* acquisition of each camera, verifies the recorded pixels against
+those acquisitions' digests, and labels the row only from a controller reference that was accepted at
+`t + 0.1 s` and whose acceptance is still valid once that instant has provably passed.
 
-Callbacks never perform IO: `on_acquisition`, `on_reference` and `on_event` only record. `drain()` is
-the single place that mints and writes rows, so the action path never waits on a PNG write.
+Rows keep their order. A row that cannot be labelled while a later row could be is a hole and fails the
+run; only a genuinely terminal row, whose instant never received a legal reference, stays in the audit.
+Callbacks never perform IO: `drain()` and the finalization step are the only places that write.
 """
 
 from __future__ import annotations
@@ -18,11 +18,12 @@ from dataclasses import dataclass
 import math
 import time
 
-from .acquisition import Acquisition, AcquisitionGuard
+from .acquisition import Acquisition, AcquisitionGuard, pixel_digest
 from .deadline import ACT_TIMEOUT_S
 
 _TOLERANCE_S = 1e-6
 _REFERENCE_SOURCE = "CONTROLLER_REFERENCE"
+_STREAMS = ("head", "wrist")
 
 
 @dataclass(frozen=True)
@@ -35,41 +36,51 @@ class CaptureSummary:
 
 
 class ContinuousEpisodeCapture:
-    def __init__(self, *, recorder, sampler, physical_audit, guard=None, dt_s: float = 0.1,
-                 max_source_age_s: float = 0.1, max_skew_s: float = 0.0,
+    def __init__(self, *, recorder, sampler, physical_audit, guard=None, audit_writer=None,
+                 dt_s: float = 0.1, max_source_age_s: float = 0.1, max_skew_s: float = 0.0,
                  deadline_s: float = ACT_TIMEOUT_S, monotonic=time.monotonic,
-                 frame_capacity: int = 8, reference_capacity: int = 128) -> None:
+                 frame_capacity: int = 8, reference_capacity: int = 128,
+                 pending_capacity: int = 32) -> None:
         if dt_s != 0.1 or max_source_age_s != 0.1:
             raise ValueError("CAPTURE_GRID_INVALID")
+        if isinstance(deadline_s, bool) or not isinstance(deadline_s, (int, float)) \
+                or not math.isfinite(deadline_s) or not 0 < deadline_s <= ACT_TIMEOUT_S:
+            # the motion budget is frozen at 120 s: no configuration may lengthen it
+            raise ValueError("CAPTURE_DEADLINE_INVALID")
         if isinstance(max_skew_s, bool) or not isinstance(max_skew_s, (int, float)) \
                 or not math.isfinite(max_skew_s) or max_skew_s < 0:
             raise ValueError("CAPTURE_GRID_INVALID")
         if not callable(monotonic):
             raise ValueError("CAPTURE_CLOCK_INVALID")
+        if type(pending_capacity) is not int or pending_capacity < 1:
+            raise ValueError("CAPTURE_GRID_INVALID")
         self.recorder = recorder
         self.sampler = sampler
         self.physical_audit = physical_audit
+        self.audit_writer = audit_writer
         self.guard = guard if guard is not None else AcquisitionGuard()
         self.dt_s = dt_s
         self.max_source_age_s = max_source_age_s
         self.max_skew_s = float(max_skew_s)
         self.deadline_s = float(deadline_s)
         self._monotonic = monotonic
-        self._frame_capacity = frame_capacity
+        self._pending_capacity = pending_capacity
         self._reference_capacity = reference_capacity
-        self._frames: dict = {camera: deque(maxlen=frame_capacity) for camera in ("head", "wrist")}
-        self._references: deque = deque(maxlen=reference_capacity)
+        self._frames: dict = {camera: deque(maxlen=frame_capacity) for camera in _STREAMS}
+        self._references: dict = {}
+        self._pending: deque = deque()
         self._events: list = []
-        self._minted: list = []
         self._session_id = None
         self._attempt_id = None
         self._reset_epoch = None
         self._next_grid_s = None
         self._physical_end_s = None
+        self._observed_sim_s = None
+        self._stopped_at_s = None
         self._deadline_started = None
         self._stopped = False
         self._finished = False
-        self._failed = False
+        self._failure = None
         self._written = 0
 
     # -- lifecycle ---------------------------------------------------------
@@ -99,25 +110,16 @@ class ContinuousEpisodeCapture:
             raise ValueError("ACQUISITION_SESSION_MISMATCH")
         if frame.reset_epoch != self._reset_epoch:
             raise ValueError("ACQUISITION_RESET_MISMATCH")
-        if frame.camera not in self._frames:
-            raise ValueError("ACQUISITION_CAMERA_INVALID")
+        # the pixels are checked against the identity they claim, at receipt, not at selection
+        if pixel_digest(pixels) != frame.pixel_sha256:
+            raise ValueError("ACQUISITION_PIXEL_MISMATCH")
         self._frames[frame.camera].append(frame)
+        self._observe(frame.stamp_s)
 
     def on_reference(self, message) -> None:
         self._require_running()
         self._check_deadline()
-        if not isinstance(message, dict) or message.get("source") != _REFERENCE_SOURCE:
-            raise ValueError("CAPTURE_REFERENCE_INVALID")
-        at_s = message.get("requested_sim_time_s")
-        if isinstance(at_s, bool) or not isinstance(at_s, (int, float)) or not math.isfinite(at_s):
-            raise ValueError("CAPTURE_REFERENCE_INVALID")
-        positions = message.get("positions")
-        if not isinstance(positions, (list, tuple)) or len(positions) != 6:
-            raise ValueError("CAPTURE_REFERENCE_INVALID")
-        self._references.append({"requested_sim_time_s": float(at_s),
-                                 "positions": [float(value) for value in positions],
-                                 "accepted": message.get("accepted") is True,
-                                 "received_monotonic_ns": int(self._monotonic() * 1e9)})
+        self._record_reference(message)
 
     def on_event(self, event) -> None:
         if self._session_id is None:
@@ -130,49 +132,69 @@ class ContinuousEpisodeCapture:
                 # the motion deadline starts once and is never reset
                 raise ValueError("CAPTURE_DEADLINE_FIXED")
             self._deadline_started = self._monotonic()
-        # the budget is checked before the stopped flag: a run past its deadline stops either way
         self._check_deadline()
+        if self._failure is not None:
+            raise ValueError(self._failure)
         if self._stopped:
             raise ValueError("CAPTURE_STOPPED")
+        sim_time_s = event.get("sim_time_s") if isinstance(event, dict) else None
+        if isinstance(sim_time_s, (int, float)) and not isinstance(sim_time_s, bool):
+            self._observe(float(sim_time_s))
         if kind == "stop":
             self._stopped = True
+            self._stopped_at_s = float(sim_time_s) if isinstance(sim_time_s, (int, float)) \
+                else self._observed_sim_s
         self._events.append({"sequence": len(self._events) + 1, "kind": kind,
-                             "sim_time_s": event.get("sim_time_s") if isinstance(event, dict) else None})
+                             "sim_time_s": sim_time_s})
 
-    # -- the single IO step -------------------------------------------------
+    # -- the only IO steps -------------------------------------------------
 
     def drain(self) -> int:
         self._require_running()
         self._check_deadline()
-        return self._drain(strict=True)
+        if self._failure is not None:
+            raise ValueError(self._failure)
+        return self._service()
 
     def finish(self, physical_end_s) -> CaptureSummary:
+        if self._session_id is None:
+            raise ValueError("CAPTURE_NOT_STARTED")
         if self._finished:
             raise ValueError("CAPTURE_FINISHED")
         if isinstance(physical_end_s, bool) or not isinstance(physical_end_s, (int, float)) \
                 or not math.isfinite(physical_end_s):
             raise ValueError("CAPTURE_IDENTITY_INVALID")
-        self._physical_end_s = float(physical_end_s)
+        if self._failure is not None:
+            # a latched failure is never turned into a normal-looking summary
+            raise ValueError(self._failure)
         if not self._stopped:
-            self._drain(strict=False)
+            # an on-time stop may finalize later; continued motion may not outlive its budget
+            self._check_deadline()
+        self._physical_end_s = float(physical_end_s)
+        self._observe(self._physical_end_s)
+        self._service()
         self._finished = True
-        return CaptureSummary(sample_count=self._written,
-                              label_cutoff_s=self.label_cutoff_s,
-                              audit_files=tuple(self._audit_files()))
+        return CaptureSummary(sample_count=self._written, label_cutoff_s=self.label_cutoff_s,
+                              audit_files=tuple(self._tail_paths()))
 
-    # -- internals ---------------------------------------------------------
+    # -- views -------------------------------------------------------------
 
     @property
     def pending_rows(self) -> int:
-        return sum(1 for row in self._minted if row["reference"] is None)
+        return sum(1 for row in self._pending if not row["labelled"])
+
+    @property
+    def unlabelled_rows(self) -> tuple:
+        """The audit-only tail: rows whose instant never received a legal reference."""
+
+        return tuple(dict(row["audit"]) for row in self._pending if not row["labelled"])
 
     @property
     def label_cutoff_s(self) -> float:
-        return max((row["observation"]["sim_time_s"] for row in self._minted
-                    if row["reference"] is not None), default=0.0)
+        return max((row["observation"]["sim_time_s"] for row in self._pending
+                    if row["labelled"]), default=0.0)
 
-    def _audit_files(self) -> list:
-        return [row["audit"] for row in self._minted if row["reference"] is not None]
+    # -- internals ---------------------------------------------------------
 
     def _require_running(self) -> None:
         if self._session_id is None:
@@ -182,12 +204,42 @@ class ContinuousEpisodeCapture:
         if self._stopped:
             raise ValueError("CAPTURE_STOPPED")
 
+    def _observe(self, sim_time_s: float) -> None:
+        if self._observed_sim_s is None or sim_time_s > self._observed_sim_s:
+            self._observed_sim_s = float(sim_time_s)
+
     def _check_deadline(self) -> None:
         if self._deadline_started is None:
             return
         if self._monotonic() - self._deadline_started > self.deadline_s:
-            self._failed = True
-            raise ValueError("CAPTURE_DEADLINE_EXCEEDED")
+            self._fail("CAPTURE_DEADLINE_EXCEEDED")
+
+    def _fail(self, code: str):
+        self._failure = code
+        raise ValueError(code)
+
+    def _record_reference(self, message) -> None:
+        if not isinstance(message, dict) or message.get("source") != _REFERENCE_SOURCE:
+            raise ValueError("CAPTURE_REFERENCE_INVALID")
+        at_s = message.get("requested_sim_time_s")
+        if isinstance(at_s, bool) or not isinstance(at_s, (int, float)) or not math.isfinite(at_s):
+            raise ValueError("CAPTURE_REFERENCE_INVALID")
+        positions = message.get("positions")
+        if not isinstance(positions, (list, tuple)) or len(positions) != 6:
+            raise ValueError("CAPTURE_REFERENCE_INVALID")
+        key = round(float(at_s), 6)
+        accepted = message.get("accepted") is True
+        existing = self._references.get(key)
+        if existing is not None and existing["accepted"] and not accepted:
+            # accepted then revoked before its instant: the label it would have given is void
+            existing["accepted"] = False
+            existing["revoked"] = True
+        elif existing is None:
+            if len(self._references) >= self._reference_capacity:
+                self._fail("CAPTURE_REFERENCE_OVERFLOW")
+            self._references[key] = {"positions": [float(value) for value in positions],
+                                     "accepted": accepted, "revoked": not accepted}
+        self._observe(key)
 
     def _causal(self, camera: str, at_s: float):
         for frame in reversed(self._frames[camera]):
@@ -198,8 +250,11 @@ class ContinuousEpisodeCapture:
             return frame
         return None
 
-    def _drain(self, *, strict: bool) -> int:
-        written = 0
+    def _service(self) -> int:
+        self._mint_rows()
+        return self._service_pending()
+
+    def _mint_rows(self) -> None:
         while True:
             at_s = round(self._next_grid_s, 6)
             if self._physical_end_s is not None and at_s > self._physical_end_s + _TOLERANCE_S:
@@ -208,57 +263,92 @@ class ContinuousEpisodeCapture:
             wrist = self._causal("wrist", at_s)
             if head is None or wrist is None:
                 if not self._frames["head"] and not self._frames["wrist"]:
-                    # both sources have run dry: this is the tail, not a hole
+                    # both sources have run dry: a genuine terminal tail
                     break
-                if strict:
-                    # a source still holds something but cannot serve this instant with a new
-                    # acquisition, so the 10 Hz grid would have a hole before the label cutoff
-                    self._failed = True
-                    raise ValueError("NO_NEW_ACQUISITION")
-                break
+                # a source still holds frames but cannot serve this instant with a new acquisition,
+                # so the 10 Hz grid would have a hole before the label cutoff
+                self._fail("NO_NEW_ACQUISITION")
             self._mint(at_s, head, wrist)
-            written += self._complete(at_s)
             self._frames["head"].remove(head)
             self._frames["wrist"].remove(wrist)
             self._next_grid_s = at_s + self.dt_s
-        return written
 
     def _mint(self, at_s: float, head: Acquisition, wrist: Acquisition) -> None:
         self.guard.accept(head)
         self.guard.accept(wrist)
         if abs(head.stamp_s - wrist.stamp_s) > self.max_skew_s + _TOLERANCE_S:
-            raise ValueError("CAPTURE_SOURCE_SKEW")
+            self._fail("CAPTURE_SOURCE_SKEW")
         observation, source_audit = self.sampler.sample_with_audit(
             self._session_id, self._attempt_id, at_s)
         selected = source_audit.get("source_stamps", {})
         if (abs(selected.get("head", -1) - head.stamp_s) > _TOLERANCE_S
                 or abs(selected.get("wrist", -1) - wrist.stamp_s) > _TOLERANCE_S):
-            # the synchronizer must have selected exactly the acquisitions this row is bound to
-            raise ValueError("ACQUISITION_SELECTION_MISMATCH")
+            self._fail("ACQUISITION_SELECTION_MISMATCH")
+        # the images the row will store must be the ones whose identity it carries
+        for camera, frame in (("head", head), ("wrist", wrist)):
+            if pixel_digest(observation[camera]) != frame.pixel_sha256:
+                self._fail("ACQUISITION_PIXEL_MISMATCH")
+        if len(self._pending) >= self._pending_capacity:
+            self._fail("CAPTURE_PENDING_OVERFLOW")
         audit = dict(self.physical_audit(at_s))
         audit.update(source_audit)
         audit.update({"head_acquisition_id": head.acquisition_id,
                       "wrist_acquisition_id": wrist.acquisition_id})
-        self._minted.append({"observation": observation, "audit": audit, "reference": None,
-                             "acquisitions": (head, wrist)})
+        self._pending.append({"observation": observation, "audit": audit,
+                              "acquisitions": (head, wrist), "target_s": round(at_s + self.dt_s, 6),
+                              "labelled": False, "reference": None})
 
-    def _complete(self, at_s: float) -> int:
-        row = self._minted[-1]
-        if row["observation"]["sim_time_s"] != at_s:
-            return 0
-        for message in reversed(self._references):
-            if abs(message["requested_sim_time_s"] - (at_s + self.dt_s)) <= _TOLERANCE_S:
-                if not message["accepted"]:
-                    # the controller revoked this trajectory: it may not label the row
-                    return 0
-                row["reference"] = message
-                break
-        if row["reference"] is None:
-            return 0
-        audit = dict(row["audit"], reference_time_s=at_s + self.dt_s,
-                     reference_source=_REFERENCE_SOURCE,
-                     reference_positions=list(row["reference"]["positions"]))
-        row["audit"] = audit
-        self.recorder.append(row["observation"], row["reference"]["positions"], audit)
-        self._written += 1
-        return 1
+    def _reference_state(self, row) -> str:
+        """ready, waiting or void for one row's target instant.
+
+        Absence is not proof: the observer's delivery can lag the sim clock, so a reference that has
+        simply not arrived yet leaves the row waiting. Only an explicit revocation (or a stop before
+        the instant) is void, and either way the row is a hole only once a later row can be labelled.
+        """
+
+        target = row["target_s"]
+        if self._stopped_at_s is not None and self._stopped_at_s <= target + _TOLERANCE_S:
+            return "void"
+        entry = self._references.get(target)
+        if entry is None:
+            return "waiting"
+        if not entry["accepted"]:
+            return "void"
+        if self._observed_sim_s is None or self._observed_sim_s <= target + _TOLERANCE_S:
+            # accepted, but the instant has not passed: its acceptance could still be revoked
+            return "waiting"
+        return "ready"
+
+    def _service_pending(self) -> int:
+        written = 0
+        pending = list(self._pending)
+        for index, row in enumerate(pending):
+            if row["labelled"]:
+                continue
+            if self._reference_state(row) == "ready":
+                entry = self._references[row["target_s"]]
+                audit = dict(row["audit"], reference_time_s=row["target_s"],
+                             reference_source=_REFERENCE_SOURCE,
+                             reference_positions=list(entry["positions"]))
+                row["audit"] = audit
+                row["reference"] = entry
+                self.recorder.append(row["observation"], entry["positions"], audit)
+                row["labelled"] = True
+                self._written += 1
+                written += 1
+                continue
+            # this row cannot be labelled; if a later one could, the grid would have a hole before
+            # the label cutoff, which fails the run instead of being skipped
+            if any(self._reference_state(later) == "ready"
+                   for later in pending[index + 1:] if not later["labelled"]):
+                self._fail("CAPTURE_LABEL_GAP")
+            break
+        return written
+
+    def _tail_paths(self) -> list:
+        paths = []
+        for row in self._pending:
+            if row["labelled"] or self.audit_writer is None:
+                continue
+            paths.append(self.audit_writer(row["observation"], row["audit"]))
+        return paths

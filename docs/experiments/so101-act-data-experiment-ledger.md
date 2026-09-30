@@ -34864,3 +34864,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
      finish-at-expiry, finish-after-failure, invalid/extended budget, and the finish-time hole.
 - **State.** **Task-list items 0-1 completed; item 2 in_progress (rework outstanding); items 3-8
   pending.** No push, no evidence deletion, baseline untouched.
+
+
+### CP-1932 rework outcome
+
+- **All five Important findings and the minor are addressed in `act/continuous_capture.py`.**
+  - T2-F1: the pending queue is an ordered, bounded deque serviced by **both** `drain()` and `finish()`;
+    a reference arriving after its row was minted still completes that row, and an unlabelled row with
+    a later labelable row fails with `CAPTURE_LABEL_GAP` instead of disappearing before the cutoff.
+    Overflow fails with `CAPTURE_PENDING_OVERFLOW`. A missing reference is no longer treated as a hole
+    just because the sim clock moved on, because the observer's delivery can lag the clock; only an
+    explicit revocation, a stop, or a later labelable row establishes a gap.
+  - T2-F2: references are kept per target instant with their acceptance state, so an accepted-then-
+    revoked trajectory is void, and a stop before the instant voids it too. A row is only labelled once
+    its instant has provably passed, which is what makes the revocation window meaningful.
+  - T2-F3: pixels are bound to identity twice — at receipt (`ACQUISITION_PIXEL_MISMATCH` if the array
+    does not match the acquisition digest) and at selection (the recorded head/wrist images must match
+    the bound acquisitions' digests).
+  - T2-F4: `deadline_s` must be finite and `0 < deadline_s <= ACT_TIMEOUT_S` (`CAPTURE_DEADLINE_INVALID`
+    otherwise); failures latch and are re-raised; `finish()` refuses after a latched failure and refuses
+    once the motion budget is spent, while an on-time stop may finalize later because finalization is
+    not motion.
+  - T2-F5: `finish()` enforces the same continuity as `drain()`; only a genuine terminal tail (both
+    frame buffers dry) is trimmed.
+  - T2-F6: `CaptureSummary.audit_files` is a tuple of `Path`s produced by the injected `audit_writer`
+    (Task 3's writer, empty when none is wired) and the unlabelled tail is exposed through
+    `unlabelled_rows` as records, not mislabelled as files.
+- **Evidence.** `logs/task2-rework-green.run` rc=0: **31 passed** across the two Task 2 test files;
+  `logs/task2-all.run` rc=0: **154 passed** across them plus `test_act_synchronizer.py`,
+  `test_act_recorder.py`, `test_act_contracts.py`, `test_act_collection.py`,
+  `test_act_first_episode_scope.py` and both admission files — same count as before the rework, so the
+  neighbouring contracts are unaffected.
+- **New cases covered:** delayed reference completing an earlier row, missing interior reference,
+  pending overflow, accepted-then-revoked, accepted-then-stopped, revocation explicit before minting,
+  pixel substitution at receipt and at selection, finish at/after expiry, finish after a latched
+  failure, an over-long/unbounded/invalid budget, and a finish-time interior hole.
