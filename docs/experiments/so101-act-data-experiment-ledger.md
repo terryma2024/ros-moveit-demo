@@ -42997,3 +42997,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   means more than coverage.
 - **State.** **F14, F3 and F1 closed**; **F11 three of four cuts**; F5/F12/F13 open; the goal is paused. HEAD
   `f4a60d708`; twenty-four gates green.
+
+
+## CP-2273 — F11's close-out findings: the window checks live on the readback side
+
+- **What two attempts proved**: `writer.seal({**window, "source_schedule": …})` does **not** refuse either a repeated
+  instant (`head: [1.0, 1.0, 1.2]`) or a shortened schedule (`head: [1.0, 1.1]`) — `DID NOT RAISE` both times. The
+  window predicates run against `manifest["window"]` inside `verify_audit_manifest`, while the seal validates the
+  window it is about to write through the writer's own state, so the observed-data comparisons belong to the
+  **readback**. That matches the existing negatives CP-2201 added ("an empty schedule is refused at the seal **and**
+  on readback"), which use the readback path for the second half.
+- **So the two controls land with `_resign(writer, manifest_path, name, payload)`** (line 214) — the helper the
+  readback negatives already use to rewrite a sealed document and re-verify — rather than with a `seal` call.
+- **Withdrawn cleanly**: the test file is clean, the audit suite is green (72 passed), and nothing else moved.
+- **State.** **F14, F3 and F1 closed**; **F11 three cuts landed** (strictly increasing, endpoints versus history,
+  reverse relation) with these two readback controls outstanding; F5/F12/F13 open; the goal is paused. HEAD
+  `0cc24ff7e`; twenty-four gates green.
