@@ -269,6 +269,19 @@ class PickPlaceSearchBoundary:
 
 
     @staticmethod
+    def _remember_planning_scene_receipt(self, observed):
+        """Remember the validated SEARCH receipt for the gates that later phases report.
+
+        Only a successful receipt is kept: a failed one aborts the search rather than licensing a gate, and
+        storing it unconditionally would let a later phase derive a verdict from a scene read that did not
+        verify. Nothing reads the stored receipt yet — the derivation is step three's remaining half.
+        """
+
+        receipt = getattr(observed, "planning_scene", None)
+        if getattr(receipt, "success", None) is True:
+            self._planning_scene_receipt = receipt
+        return None
+
     def _gate_facts(aggregates, world):
         """The eight gates and the holding/contact facts one validated readback establishes.
 
@@ -763,6 +776,10 @@ class PickPlaceSearchBoundary:
                 self.reset.sources, adapter, scene_port, self.geometry,
                 operation_guard=operation_guard,
                 history_verifier=lambda observed, stopped_wall_s:
+                    # CP-2017 step three's supplier: keep the SEARCH observation's Planning Scene receipt
+                    # so the gates the later phases report are derived from an observation, not asserted.
+                    # The helper returns None, which is falsy, so `or` still yields the verifier's verdict.
+                    self._remember_planning_scene_receipt(observed) or
                     verify_search_stationary_physics(
                         self.reset.sources, observed, model=self.reset.model,
                         stopped_wall_s=stopped_wall_s,
