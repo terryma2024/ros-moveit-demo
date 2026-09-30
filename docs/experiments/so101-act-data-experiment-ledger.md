@@ -35273,6 +35273,32 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   `test_act_task8_calibration_admission.py`; `ruff check` clean. Commits: `b7bbd98e2`, `06310e0ad`,
   `fd28f09a1`, `f20f26207`.
 
+## HS-029 — Task 7 confirmation verdict REJECT: the rework list, in the reviewer's own terms
+
+Verdict at `reviews/task7/task7-rereview-verdict.md` (commit reviewed `c9e38404c`; static review of the four
+files; no tests run; the reviewer also reports that the required GPT-6 Sol / High was unavailable in its
+session, and that an independent GPT-6 Astra / High re-review agreed with REJECT and all five claim
+verdicts). Claims 2 is MET; 1, 3, 4 and 5 are NOT MET. Actionable items, to fix before Task 7 is called
+complete:
+
+1. `verify-promoted-config` still succeeds in a pre-existing run root when no approval receipt exists, which
+   contradicts the "every runner refuses an existing root" claim.
+2. `qualify`/`serve-teleop` have no FAILED handling, `probe_only` leaves the state at RUNNING, and `run`
+   writes SUCCEEDED before `run-receipt.json` outside its exception handler; root creation is
+   check-then-create with `exist_ok=True` rather than exclusive.
+3. Verification hashes parsed/canonical JSON rather than the bundle **bytes**, so formatting-only drift goes
+   undetected; receipt existence is checked and then written non-exclusively, so a concurrent writer can
+   overwrite it (the fix is an exclusive create, e.g. `O_EXCL`).
+4. Teleop reads its CLI input report from the very root its runner refuses, accepts qualified status without
+   fully validating the binding, records monotonic microseconds rather than process start ticks, and
+   hard-codes `controller_stopped`/`graph_clear` without stopping or checking either.
+5. The hexadecimal test's negative branch scans a directory with no JSON evidence, so it exercises empty
+   evidence rather than a non-hexadecimal digest.
+
+Also recorded: the reviewer could not verify the 34-passed gate itself. Task 7 therefore stays `in_progress`
+with these items open; the adapter wiring remains deferred to Task 11 with the stale-underlay reason in
+HS-028.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
