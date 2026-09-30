@@ -41834,3 +41834,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4's commit half
   specified to the call with this caveat attached; items 5+ wait on the four blocked bindings. HEAD `101036f09`;
   twelve gates green.
+
+
+## CP-2216 — The wiring spec closes: the store and the coordinator share one set of types
+
+- **Read this round** (`act/result_store.py:20, 310, 318-319`): the store imports `AttemptStatus`, `LeaseIdentity`
+  and `RunMode` **from `so101_demo.parallel_batch.contracts`** — the coordinator's own module family — defaults its
+  run mode to `RunMode.EXECUTE`, and `verify` refuses anything that is not `RunMode.EXECUTE`. So the caveat CP-2215
+  raised resolves in the wiring's favour: passing the coordinator's own `LeaseIdentity` and `RunMode` into
+  `verify(...)` is type-correct by construction, because both sides import the same classes.
+- **The complete sequence for item 4's commit half, therefore**: at the coordinator's commit point
+  (`parallel_batch/adaptive_runner.py`, `_apply_result` at line 177), build
+  `ActCollectionResultVerifier(worker_roots)`, call
+  `verify(lease, str(result.evidence_root), RunMode.EXECUTE)`, and treat any refusal — `WRONG_RUN_MODE`,
+  `LEASE_IDENTITY_MISMATCH`, `LEASE_LOCATION_MISMATCH`, `RESULT_MISSING`, `RESULT_SCHEMA_INVALID` — as a
+  **non-terminal** outcome so the episode stays uncommitted. The result already carries `evidence_root`
+  (`CommittedPointResult`, CP-2214); the **lease** is the one thing the coordinator must be given, and it is the
+  same `LeaseIdentity` the worker ran under, so it is available wherever the pool hands a point to a worker.
+- **What remains a decision**: whether to wire it at all, or to argue the coordinator's journal suffices — the
+  store's own tests argue the former, and CP-2110/2111 recorded the gap. The spec above is complete: no unknown
+  shapes, no cross-module type risk, one input to plumb.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4: QC half green,
+  commit half specified to the call and its one missing input named; items 5+ wait on the four blocked bindings.
+  HEAD `c97f8b04f`; twelve gates green.
