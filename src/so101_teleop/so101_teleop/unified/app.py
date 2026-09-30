@@ -10,9 +10,8 @@ JSON 404 instead of an HTML page.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
