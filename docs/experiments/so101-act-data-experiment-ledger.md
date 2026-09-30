@@ -42917,3 +42917,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   verbatim text with a write after each edit.
 - **State.** **F14, F3 and F1 closed**; **F11 first cut landed, second cut's check in and its supply one read away**;
   F5/F12/F13 open; the goal is paused. HEAD `ea12605c4`; twenty-three gates green.
+
+
+## CP-2269 — Correction: the seal's supply was never missing, so F11's second cut is complete
+
+- **The grep at the end of CP-2268's own entry proves it**: `verify_audit_manifest` calls
+  `_window_matches_observed(manifest["window"], [row["sim_time_s"] for row in _bound_rows],
+  {row["acquisition_id"]: row for row in _acquisition_rows}, [row["sim_time_s"] for row in _records(
+  audit / "physics.jsonl", _PHYSICS_FIELDS, "AUDIT_PHYSICS_INVALID")])` — my first attempt wrote that supply, and the
+  revert that followed removed only the check block, not the call. So the check landed active, not inert, and the
+  green **204 passed** includes the relabelled-coverage control passing **with** the endpoint comparison in force:
+  the fixture's 1.2 is what makes it agree with its own history.
+- **Two lessons, both about my own tooling**: a script that asserts twice and writes once leaves nothing behind when
+  the second assert fails (twice this round), and a revert by string replacement removes only the string it names —
+  I recorded "the supply is one read away" from the failure of a patch that had already succeeded earlier.
+- **F11 status**: the strictly increasing schedule (CP-2265) and the endpoint-versus-history comparison are in. What
+  remains is the cross-stream distinctness/coverage relation and the shortening/duplication/missing-stream negatives,
+  with the fabricated-endpoint negative already present at line 777 as `_window(first_command_s=1.5)`.
+- **State.** **F14, F3 and F1 closed**; **F11 two of four cuts**; F5/F12/F13 open; the goal is paused. HEAD
+  `03a8768c7`; twenty-three gates green.
