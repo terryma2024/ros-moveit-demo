@@ -116,6 +116,11 @@ describe("HeadCameraPanel overlays and bounds", () => {
         track_id: "cup-9",
         xyxy: [100, 120, 200, 320] as [number, number, number, number],
         mask_sha256: "e".repeat(64),
+        mask_polygon: [
+          [100, 120],
+          [200, 120],
+          [200, 320],
+        ] as Array<[number, number]>,
       },
     ],
     model_id: "head-search-v2",
@@ -128,7 +133,10 @@ describe("HeadCameraPanel overlays and bounds", () => {
     const box = screen.getByTestId("overlay-bbox");
     expect(box.getAttribute("x")).toBe("100");
     expect(box.getAttribute("width")).toBe("100");
-    expect(screen.getByTestId("overlay-mask").getAttribute("x")).toBe("100");
+    const mask = screen.getByTestId("overlay-mask");
+    expect(mask.getAttribute("points")).toBe("100,120 200,120 200,320");
+    expect(mask.getAttribute("data-mask-sha256")).toBe("e".repeat(64));
+    expect(mask.getAttribute("points")).not.toBe("");
     expect(screen.getByTestId("candidate-center").getAttribute("cx")).toBe("150");
     expect(screen.getByTestId("optical-axis").getAttribute("x1")).toBe("320");
     expect(screen.getByTestId("deadband")).toBeTruthy();
@@ -143,5 +151,26 @@ describe("HeadCameraPanel overlays and bounds", () => {
     expect(Number(slider.max)).toBe(1);
     expect(Number(slider.value)).toBeLessThanOrEqual(1);
     expect(Number(slider.value)).toBeGreaterThanOrEqual(-1);
+  });
+});
+
+
+describe("HeadCameraPanel execute bound", () => {
+  it("hands onExecute a clamped angle even when the interval is narrow", () => {
+    const executed: number[] = [];
+    render(
+      <HeadCameraPanel
+        status={status({ qualified: true, authority: true, safe_interval_rad: [-0.2, 0.2] })}
+        onExecute={(target) => executed.push(target)}
+      />,
+    );
+
+    const slider = screen.getByLabelText("Target angle") as HTMLInputElement;
+    expect(Number(slider.min)).toBeCloseTo(-0.2);
+    expect(Number(slider.max)).toBeCloseTo(0.2);
+    screen.getByRole("button", { name: "Execute" }).click();
+    expect(executed).toHaveLength(1);
+    expect(executed[0]).toBeGreaterThanOrEqual(-0.2);
+    expect(executed[0]).toBeLessThanOrEqual(0.2);
   });
 });

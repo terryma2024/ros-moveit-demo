@@ -9,6 +9,8 @@ export interface HeadCameraDetection {
   track_id: string;
   xyxy: [number, number, number, number];
   mask_sha256: string;
+  /** The mask outline in frame pixels, so the overlay draws the mask itself rather than a placeholder. */
+  mask_polygon?: Array<[number, number]>;
 }
 
 export interface HeadCameraFrame {
@@ -105,7 +107,22 @@ export function HeadCameraPanel({
             {detection ? (
               <>
                 <rect data-testid="overlay-bbox" x={detection.xyxy[0]} y={detection.xyxy[1]} width={detection.xyxy[2] - detection.xyxy[0]} height={detection.xyxy[3] - detection.xyxy[1]} />
-                <image data-testid="overlay-mask" href={`data:image/png;base64,${detection.mask_sha256.slice(0, 0)}`} x={detection.xyxy[0]} y={detection.xyxy[1]} width={detection.xyxy[2] - detection.xyxy[0]} height={detection.xyxy[3] - detection.xyxy[1]} />
+                {detection.mask_polygon?.length ? (
+                  <polygon
+                    data-testid="overlay-mask"
+                    points={detection.mask_polygon.map(([x, y]) => `${x},${y}`).join(" ")}
+                    data-mask-sha256={detection.mask_sha256}
+                  />
+                ) : (
+                  <rect
+                    data-testid="overlay-mask"
+                    x={detection.xyxy[0]}
+                    y={detection.xyxy[1]}
+                    width={detection.xyxy[2] - detection.xyxy[0]}
+                    height={detection.xyxy[3] - detection.xyxy[1]}
+                    data-mask-sha256={detection.mask_sha256}
+                  />
+                )}
                 <circle data-testid="candidate-center" cx={(detection.xyxy[0] + detection.xyxy[2]) / 2} cy={(detection.xyxy[1] + detection.xyxy[3]) / 2} r="4" />
               </>
             ) : null}
