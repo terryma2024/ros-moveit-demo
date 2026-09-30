@@ -225,8 +225,10 @@ def test_a_completed_run_records_offline_recomputable_physics_rows():
     audit = PhysicsAudit()
     port = FakePort()
     PickPlaceRunner(port, audit=audit).run(request())
+    # both retreat segments are recorded, which is why `retract` appears twice (T3-F5)
     assert [row["kind"] for row in audit.physics] == [
-        "pose", "pose", "contact", "support", "support", "pose", "contact", "retract", "pose"]
+        "pose", "pose", "contact", "support", "support", "pose", "contact", "retract", "retract",
+        "pose"]
     assert all(row["release_epoch"] in (1, 2) for row in audit.physics)
     assert all(row["sim_time_s"] is not None for row in audit.physics)
     # the recorded rows alone must be enough to recompute the release-epoch physical criteria
@@ -291,3 +293,15 @@ def test_a_runner_is_one_shot_so_an_early_failure_cannot_inherit_an_identity():
     with pytest.raises(PickPlaceError, match="TASK8_RUNNER_REUSED"):
         runner.run(request())
     assert len(audit.events) == recorded
+
+
+def test_both_retreat_segments_record_the_raw_observation():
+    """The plan requires both retreat segments' evidence, not only the last (T3-F5)."""
+
+    audit = PhysicsAudit()
+    port = FakePort()
+    PickPlaceRunner(port, audit=audit).run(request())
+    retreats = [row for row in audit.physics if row["kind"] == "retract"]
+    assert len(retreats) == 2
+    assert [row["observation"]["simulation_step"] for row in retreats] == sorted(
+        row["observation"]["simulation_step"] for row in retreats)

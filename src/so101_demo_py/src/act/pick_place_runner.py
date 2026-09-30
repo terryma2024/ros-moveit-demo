@@ -309,6 +309,9 @@ class PickPlaceRunner:
                         latest_step = self._verify_phase(
                             phase, evidence, request, reset_epoch, release_epoch, latest_step,
                         )
+                        # every segment's raw observation is evidence the plan requires, so record
+                        # each one rather than only the last segment the loop happened to leave behind
+                        self._physics(phase, evidence)
                 else:
                     evidence = self.port.run_phase(phase, request)
                     if phase == "RELEASE":
@@ -323,7 +326,10 @@ class PickPlaceRunner:
                     raise PickPlaceError("TASK8_DEADLINE_EXPIRED")
                 completed.append(phase)
                 self._event("phase_complete", phase, latest_step)
-                self._physics(phase, evidence)
+                if phase != "RADIAL_RETREAT":
+                    # the retreat loop already recorded each of its segments; recording again here
+                    # would duplicate the last one under the same phase
+                    self._physics(phase, evidence)
                 if request["mode"] == "phase_prefix" and phase == request["stop_after"]:
                     self._stop("PHASE_PREFIX_COMPLETE", request)
                     # a prefix is never an episode: it must carry no live evidence artifact

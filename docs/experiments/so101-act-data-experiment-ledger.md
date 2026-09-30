@@ -36834,3 +36834,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Still awaiting the owner:** amendment **A.1** (`evaluation` per frame, since the broker evaluates
   `arm` and `gripper` independently and possibly differently in one call), or an instruction to take the
   single-controller-kind alternative.
+
+
+## CP-1990 — Task 3 fix pass: both retreat segments are recorded, exactly once (T3-F5)
+
+- **The plan requires both retreat segments' raw observations**, and the runner used to record only the
+  last one, because `_physics()` ran after the segment loop left its final `evidence` behind. Each segment
+  is now recorded inside the loop, and the shared post-phase call skips `RADIAL_RETREAT` so the last
+  segment is not recorded twice under the same phase — the control asserts exactly two `retract` rows with
+  increasing simulation steps, and the run's kind sequence is the documented ten rows.
+- **Evidence.** `logs/task3-fix37.run` rc=0 across `test_act_release_boundary.py`,
+  `test_act_supervisor.py`, three `test_act_task8*.py` suites and `test_act_episode_audit.py`, with its own
+  NVMe scratch and a non-empty tempfile proof. Two of my own expectations had to be corrected as the
+  behaviour became correct: the kind sequence in the earlier control (one `retract` → two) and the
+  duplicate-recording case, which the first version of the fix introduced and the suite caught.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f05eb0e29`;
+  gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
