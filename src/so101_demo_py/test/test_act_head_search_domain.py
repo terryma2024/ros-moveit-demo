@@ -184,3 +184,43 @@ def test_the_controller_walks_the_bounded_plan_instead_of_a_full_revolution() ->
     assert controller.plan.not_found_status(reached_bound=True) == (
         TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL
     )
+
+
+def test_the_independent_sweep_checker_agrees_only_with_a_real_coverage_proof() -> None:
+    from so101_demo.act.head_search_domain import independent_sweep_check
+
+    plan = bounded_search_stops(
+        anchor_rad=0.1,
+        required_domain_rad=(-2.5, 2.5),
+        safe_interval_rad=SAFE,
+        horizontal_fov_rad=1.0,
+        coarse_step_rad=0.5,
+    )
+    ok, reason = independent_sweep_check(plan, required_domain_rad=(-2.5, 2.5))
+    assert ok, reason
+
+    # a plan that stops short of an endpoint does not cover the domain
+    short = type(plan)(
+        targets_rad=tuple(target for target in plan.targets_rad if target > -2.0),
+        coverage_complete=True,
+        required_domain_rad=(-2.5, 2.5),
+        safe_interval_rad=SAFE,
+        horizontal_fov_rad=1.0,
+        coarse_step_rad=0.5,
+        anchor_rad=0.1,
+    )
+    ok, reason = independent_sweep_check(short, required_domain_rad=(-2.5, 2.5))
+    assert not ok and "not covered" in reason
+
+    # a stop outside the safe interval is refused even if the geometry would cover the domain
+    unsafe = type(plan)(
+        targets_rad=(*plan.targets_rad, SAFE[1] + 0.5),
+        coverage_complete=True,
+        required_domain_rad=(-2.5, 2.5),
+        safe_interval_rad=SAFE,
+        horizontal_fov_rad=1.0,
+        coarse_step_rad=0.5,
+        anchor_rad=0.1,
+    )
+    ok, reason = independent_sweep_check(unsafe, required_domain_rad=(-2.5, 2.5))
+    assert not ok and "safe interval" in reason

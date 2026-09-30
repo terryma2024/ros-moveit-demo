@@ -83,6 +83,45 @@ def coverage_is_complete(plan: SearchStopPlan, *, required_domain_rad: Sequence[
     return reach >= high - 1e-9
 
 
+def independent_sweep_check(
+    plan: SearchStopPlan,
+    *,
+    required_domain_rad: Sequence[float],
+    samples: int = 4_001,
+) -> tuple[bool, str]:
+    """A second, deliberately different derivation of the plan's coverage claim.
+
+    `coverage_is_complete` merges field-of-view intervals; this checker instead walks the required domain
+    point by point and also inspects the legs between consecutive stops, so the two agree only when the
+    plan really covers what it claims. It returns the reason for any disagreement.
+    """
+
+    low, high = _interval("required_domain_rad", required_domain_rad)
+    safe_low, safe_high = plan.safe_interval_rad
+    half = plan.horizontal_fov_rad / 2.0
+    if not plan.targets_rad:
+        return False, "the plan commands no stop at all"
+    for target in plan.targets_rad:
+        if not safe_low - 1e-9 <= target <= safe_high + 1e-9:
+            return False, f"stop {target} leaves the safe interval"
+    step = (high - low) / (samples - 1)
+    for index in range(samples):
+        point = low + index * step
+        if not any(abs(point - target) <= half + 1e-9 for target in plan.targets_rad):
+            return False, f"the required domain is not covered at {point}"
+    moves = [plan.anchor_rad, *plan.targets_rad]
+    for first, second in zip(moves, moves[1:]):
+        if abs(second - first) > plan.horizontal_fov_rad + 1e-9:
+            return False, f"the leg from {first} to {second} is longer than a field of view"
+    directions = [1 if second > first else -1 for first, second in zip(moves, moves[1:])]
+    reversals = sum(1 for first, second in zip(directions, directions[1:]) if first != second)
+    if reversals > 1:
+        return False, f"the sweep reverses {reversals} times"
+    if plan.coarse_step_rad > half + 1e-12:
+        return False, "the coarse step exceeds half a field of view"
+    return True, "covered"
+
+
 def bounded_search_stops(
     *,
     anchor_rad: float,
