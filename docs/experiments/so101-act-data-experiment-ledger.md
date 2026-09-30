@@ -35213,6 +35213,22 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   commit attempt before anything was staged.
 - **Owed:** Task 6's review verdict, then Task 7.
 
+- **Task 6 review rounds (rounds 187-214).** Round 1 verdict **REJECT** (saved at
+  `reviews/task6/task6-verdict.md`): three NOT MET claims - scalar validation trusted its inputs (a NaN
+  field of view, negative timeout, 1e12-rad fine allowance and fractional count were accepted); the four
+  perception values were copied rather than verified against the frozen identity; the partition loader was
+  loose; and all seventeen contract formula ids disagreed with the emitted ones. Round 2 verdict **REJECT**
+  (saved at `reviews/task6/task6-rereview-verdict.md`): the first round's probes now fail and the identity
+  and partition claims are MET, but NaN or disordered interval endpoints still passed - a NaN lock bound
+  slipped through the reachability test because a NaN comparison is false, which also let an uncovered
+  [-100, 100] domain through - negative `submit_lead_s` and NaN `center_deadband_px` were accepted, and the
+  schema could not be certified. Fixes: `df7a25108`, `902d0cb82`, `ac079dd8d`. Every probe from both rounds
+  is now covered by a test, `test_act_head_search_calibration.py` holds 13 passing tests, `ruff check` is
+  clean, and the schema's structure is pinned (seventeen parameters required, `additionalProperties` false,
+  five provenance fields each). A third confirmation verdict is **pending**: the reviewer session stalls in
+  long steps and has not written `reviews/task6/task6-final-verdict.md` yet. Task 6 therefore stays
+  `in_progress`, and Task 7's RED work may proceed because it consumes the finished bundle.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
