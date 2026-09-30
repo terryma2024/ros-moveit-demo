@@ -42420,3 +42420,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   both rules; then run the audit, recorder, task8 and qualification suites.
 - **State.** **F14 closed**; F3(b) landed; F3(a) one specified edit away; F1/F5/F11/F12/F13 open; the goal is
   paused. HEAD `704c31023`; sixteen gates green.
+
+
+## CP-2243 — F3(a)'s second attempt, and the diagnostic the third one must take first
+
+- **What I tried**: the rule (compare the first event's epoch with the episode's declared `release_epoch`) **and**
+  the fixture change the previous entry specified — a `release` event appended at epoch 1 beside the
+  `phase_complete`, with every event rewritten to the identity's epoch. Result: the same
+  `AUDIT_EVENT_INVALID` in the relabelled-coverage control, so the appendix was necessary but not sufficient, and
+  the refusing rule is still unproven.
+- **What the next attempt must do first, without exception**: capture the **traceback line** for that refusal —
+  `episode_audit.py:NNN` — the way CP-2227's probe ended four rounds of hypothesis. Every guess about which of
+  {the initial-epoch rule, the seal tie, the release-payload correlation, the lease clause} fires first costs a
+  round, and the traceback names it in one run.
+- **Reverted**; the audit suite is green (72 passed) and no file of mine is dirty. HEAD `cdfd53058`, with F3(b)
+  committed at `704c31023`.
+- **Noted for the record**: the worktree carries two **pre-existing** stashes (`nonhead-first-episode-pre-rebase-20260930`
+  and `backup-stale-pytest-plan-20260924`) that are not mine and must not be dropped or applied.
+- **State.** **F14 closed**; F3(b) landed, F3(a) two attempts reverted with the diagnostic named; F1/F5/F11/F12/F13
+  open; the goal is paused. Sixteen gates green.
