@@ -43355,3 +43355,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Open beyond Task 3: the owner's nine input values (CP-2232/2234/2235/2236), items 5-8 of the approved plan
   (production composition and installed CLI, freeze/build/integration gates, one real FULL_RESTART closure,
   negative copies and delivery), and the eighth review once F5's second half lands. The goal remains paused.
+
+## CP-2295 - F5's premise checked by execution: a formal writer needs the port's observations ratified
+
+- I ran a real PickPlaceRunner against a formal writer (the CP-2260 builder plus FakePort and request()) and asked
+- whether its stream already meets F5's three relations. It does not get that far: the formal writer refuses with
+  AUDIT_SCHEMA_INVALID while the runner appends, which is CP-2293's detail two confirmed by execution - the port's
+  rat  ified observations, not only its gates, have to satisfy the audit before a formal seal can exist.
+- The diagnostic writer accepts the same run (the release-boundary suite's own event-list control proves that), so
+  the gap is precisely the difference between the two writers' admission rules - the port's feedback and physics
+  observations must carry the registered shapes the audit now enforces (the F13 rule among them).
+- The probe was withdrawn and the suite is green (15 passed); the finding is recorded so the hybrid fixture's write
+  starts from it rather than rediscovering it.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, second half specified in CP-2293 and now with this
+- premise measured; goal paused.
