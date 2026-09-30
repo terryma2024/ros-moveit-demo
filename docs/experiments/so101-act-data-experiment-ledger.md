@@ -38269,3 +38269,23 @@ Remaining, all about the attribution table (HS-141), and all fair:
 So the shape of the final piece is clear: rebuild the table as one deduplicated row per failing id, fold in the
 collection-level failures at module granularity, add a coverage line (paired + module-level + uncaused = total), then run
 the controlled code/environment comparison for the TypeError/AttributeError group specifically.
+
+## HS-144 — Controlled comparison for the TypeError group: base code fails identically
+
+The seventh verdict asked for demonstrated causes for the `TypeError`/`AttributeError` entries, not attribution by message.
+Ran the controlled comparison (environment held fixed - same interpreter, same test id, same `TMPDIR`, same ROS env -
+only the code install on `PYTHONPATH` varying) for one of the 11 `_verify_phase()` cases:
+
+```
+src/so101_demo_py/test/test_act_task8_search_port.py::test_unbound_begin_cannot_reset_and_one_proved_search_can_pass
+  base install : 1 failed
+  overlay      : 1 failed
+```
+
+**Both fail**, so this TypeError does **not** depend on this work's code: it reproduces against the base install with
+everything else identical. That is the same shape as HS-138 and gives the group a demonstrated cause (environment or
+pre-existing) rather than a message-based label.
+
+**Limit stated:** one id demonstrates the method, not the whole group. The remaining ten `_verify_phase` entries plus the
+two attribute errors need the same two-line run each - the method is now known to work and the ids are in
+`attribution-paired.tsv`, so this is repetition rather than discovery.
