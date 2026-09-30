@@ -40905,3 +40905,18 @@ training needs `--training-contract --head-dataset-root --head-manifest --task-d
 **Deletion candidates (pending user authorization):** empty roots `head-toolchain-20260930T125637Z`/`…T125856Z`; superseded
 success roots `…T115640Z`/`…T115927Z`/`…T120204Z`; episode generations `episodes`, `episodes2`, `episodes3`, `episodes4` (each
 superseded by `episodes5`); `probe-calibration-*`; ~130 scratch dirs under the evidence root.
+
+## HS-248 — Re-selection rule for C, declared before measuring
+
+The retention check that refused C reads the **static image** mask mAP on the task domain, computed with the candidate's own
+operating point - so C's frozen point genuinely influences the number it lost by 0.011. That makes re-selecting it the design's
+own remedy (line 220: the operating-point parameters are searched jointly on val and calibration episodes), not a knob turned
+against the gate. **The rule is declared here, before the measurement, so it cannot be chosen to fit the verdict:**
+
+> among the 18 (min_confidence, tracker.iou) cells, choose the one with the **highest task-domain mask mAP on the task val
+> split**; tie-break on **head-domain mask mAP on the head val split**; tie-break on the **lower min_confidence**.
+
+Task first because the retention rule is what C failed and task retention is the property the design protects; head second because
+the whole point of the campaign is head-domain capability; lower confidence last because, at equal quality, it detects more.
+This is stricter than HS-208's original (head-first) rule and it is recorded as a **change of criterion with its reason**, not as
+the same rule applied twice.
