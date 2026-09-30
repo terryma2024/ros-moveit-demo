@@ -34899,3 +34899,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   pending overflow, accepted-then-revoked, accepted-then-stopped, revocation explicit before minting,
   pixel substitution at receipt and at selection, finish at/after expiry, finish after a latched
   failure, an over-long/unbounded/invalid budget, and a finish-time interior hole.
+
+
+### CP-1932 second rework outcome (verdict `d26d67b4-8e6c-4d04-85da-67c6d0cc0588`)
+
+- **Verdict 2 on Task 2** (`reviews/task2-rereview-verdict.md`) on `bae932897`: FAIL, 0 Critical /
+  3 Important / 0 Minor. T2-F3, T2-F5 and T2-F6 closed; three residuals remained.
+- **T2-F1 residual fixed.** Labelled rows and their references are now retired from the bounded join
+  (`self._completed` keeps the bookkeeping, `label_cutoff_s` reads it), so capacity counts genuinely
+  unresolved work instead of total episode length — the previous version would have failed a perfectly
+  valid episode on its 33rd observation. A 60-row continuous run with prompt references now completes
+  within the default capacities, and unresolved-work overflow still fails.
+- **T2-F2 residual fixed.** Requested reference horizons no longer advance the observed clock: only
+  camera receipts and run events do, so a future action query cannot prove that physics reached an
+  earlier instant. A revocation that applies to a row already labelled now fails the capture with
+  `CAPTURE_LABEL_REVOKED` instead of being silently ignored.
+- **T2-F4 residual fixed.** Every capture integrity error (pixel mismatch, session/reset mismatch,
+  invalid acquisition or reference) latches the first reason through `_reject()`, and
+  `_require_running()` consults the latch, so acquisition/reference callbacks refuse after a failure
+  and `finish()` can never turn a corrupted episode into a normal-looking summary. New cases cover
+  receipt-mismatch-then-valid-data-then-finish, invalid-reference-then-finish, and
+  future-reference-without-clock-progress.
+- **Bookkeeping correction.** My commit message and the earlier CP-1932 text quoted 154 passed for the
+  combined run; the retained pointers now record **170 passed in 9.53 s** (`logs/task2-all.run` rc=0)
+  after the added cases, and the intermediate one-failure run is retained at `logs/task2-r2.run`.
+- **State.** **Task-list items 0-1 completed; item 2 in_progress (second rework green, re-review
+  pending); items 3-8 pending.** Packet: `reviews/task2-rereview2-packet.md`.

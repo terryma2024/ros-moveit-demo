@@ -106,10 +106,10 @@ def test_one_acquisition_cannot_fill_two_rows():
 def test_a_slow_phase_joins_each_row_to_its_accepted_future_reference():
     capture, minter = build()
     start(capture)
-    frames_at(capture, minter, [1.0, 1.1, 1.2])
+    frames_at(capture, minter, [1.0, 1.1, 1.2, 1.3])
     for target in (1.1, 1.2, 1.3):
         capture.on_reference(reference(target))
-    # 1.3 is observed, so rows whose targets are 1.1 and 1.2 are established; 1.3 is still pending
+    # the camera reached 1.3, so rows targeting 1.1 and 1.2 are established; 1.3 is still pending
     assert capture.drain() == 2
     rows = capture.recorder.rows
     assert [row["observation"]["sim_time_s"] for row in rows] == [1.0, 1.1]
@@ -118,7 +118,7 @@ def test_a_slow_phase_joins_each_row_to_its_accepted_future_reference():
     assert len(ids) == 2
     assert all(row["audit"]["reference_time_s"]
                == round(row["observation"]["sim_time_s"] + 0.1, 6) for row in rows)
-    assert capture.pending_rows == 1
+    assert capture.pending_rows == 2
 
 
 def test_a_late_reference_completes_an_earlier_pending_row():
@@ -132,7 +132,7 @@ def test_a_late_reference_completes_an_earlier_pending_row():
     assert capture.drain() == 1                      # the delayed label completes row 1.0
     assert capture.recorder.rows[0]["observation"]["sim_time_s"] == 1.0
     capture.on_reference(reference(1.2))
-    capture.on_reference(reference(1.3))             # proves the 1.2 instant has passed
+    frames_at(capture, minter, [1.3])                # the camera proves 1.2 has passed
     assert capture.drain() == 1
     assert capture.recorder.rows[1]["observation"]["sim_time_s"] == 1.1
 
@@ -144,6 +144,7 @@ def test_identical_pixels_with_new_identity_are_the_positive_control():
     feed(capture, minter, camera="wrist", stamp_s=1.0)
     second = feed(capture, minter, camera="head", stamp_s=1.1)
     feed(capture, minter, camera="wrist", stamp_s=1.1)
+    frames_at(capture, minter, [1.2])                # the camera reaches past 1.1
     assert first.pixel_sha256 == second.pixel_sha256
     assert first.acquisition_id != second.acquisition_id
     capture.on_reference(reference(1.1))
@@ -200,13 +201,13 @@ def test_a_cross_reset_acquisition_is_refused():
 def test_a_grid_hole_is_a_failure_not_a_silent_skip():
     capture, minter = build()
     start(capture)
-    frames_at(capture, minter, [1.0])
+    frames_at(capture, minter, [1.0, 1.1, 1.2])
     capture.on_reference(reference(1.1))
     capture.on_reference(reference(1.2))
     assert capture.drain() == 1
-    feed(capture, minter, camera="head", stamp_s=1.2)      # the head jumps a whole step
-    feed(capture, minter, camera="wrist", stamp_s=1.1)
-    capture.on_reference(reference(1.3))
+    feed(capture, minter, camera="head", stamp_s=1.4)      # the head jumps a whole step
+    feed(capture, minter, camera="wrist", stamp_s=1.3)
+    capture.on_reference(reference(1.4))
     with pytest.raises(ValueError, match="NO_NEW_ACQUISITION"):
         capture.drain()
 
@@ -226,10 +227,9 @@ def test_finish_does_not_hide_an_interior_hole():
 def test_a_revoked_reference_cannot_label_a_row():
     capture, minter = build()
     start(capture)
-    frames_at(capture, minter, [1.0, 1.1])
+    frames_at(capture, minter, [1.0, 1.1, 1.2, 1.3])
     capture.on_reference(reference(1.1, accepted=False))   # the 1.1 trajectory was revoked
-    capture.on_reference(reference(1.2))                   # the next row is labelable
-    capture.on_reference(reference(1.3))                   # and its instant has provably passed
+    capture.on_reference(reference(1.2))                   # the next row is labelable, and 1.3 passed
     with pytest.raises(ValueError, match="CAPTURE_LABEL_GAP"):
         capture.drain()
     assert capture.recorder.rows == []
@@ -240,12 +240,11 @@ def test_an_accepted_reference_revoked_before_its_instant_is_void():
 
     capture, minter = build()
     start(capture)
-    frames_at(capture, minter, [1.0, 1.1])
+    frames_at(capture, minter, [1.0, 1.1, 1.2, 1.3])
     capture.on_reference(reference(1.1))
     capture.on_reference(reference(1.1, accepted=False))
-    assert capture.drain() == 0                       # 1.1 has not provably passed yet
-    capture.on_reference(reference(1.2))               # the next row is labelable
-    capture.on_reference(reference(1.3))
+    assert capture.drain() == 0                       # the void head row is not a gap yet
+    capture.on_reference(reference(1.2))               # the next row becomes labelable
     with pytest.raises(ValueError, match="CAPTURE_LABEL_GAP"):
         capture.drain()
     assert capture.recorder.rows == []
@@ -319,10 +318,9 @@ def test_an_on_time_stop_may_finalize_later():
 def test_finish_refuses_after_a_latched_failure():
     capture, minter = build()
     start(capture)
-    frames_at(capture, minter, [1.0, 1.1])
+    frames_at(capture, minter, [1.0, 1.1, 1.2, 1.3])
     capture.on_reference(reference(1.1, accepted=False))
     capture.on_reference(reference(1.2))
-    capture.on_reference(reference(1.3))
     with pytest.raises(ValueError, match="CAPTURE_LABEL_GAP"):
         capture.drain()
     with pytest.raises(ValueError, match="CAPTURE_LABEL_GAP"):
@@ -356,3 +354,73 @@ def test_the_summary_is_the_frozen_three_field_shape():
     summary = capture.finish(1.0)
     assert (summary.sample_count, summary.label_cutoff_s) == (0, 0.0)
     assert isinstance(summary.audit_files, tuple)
+
+
+def test_a_long_run_retires_completed_rows_and_references():
+    """A continuous episode must not be bounded by the pending join (T2-F1 residual)."""
+
+    capture, minter = build()                        # default capacities: 32 pending, 128 references
+    start(capture)
+    for index in range(60):
+        stamp = round(1.0 + index * 0.1, 6)
+        frames_at(capture, minter, [stamp])
+        capture.on_reference(reference(round(stamp + 0.1, 6)))
+        capture.drain()
+    summary = capture.finish(round(1.0 + 60 * 0.1, 6))
+    assert summary.sample_count >= 59                # every row whose instant provably passed
+    assert capture.pending_rows <= 2
+    assert len(capture._references) <= 2
+
+
+def test_a_future_reference_horizon_is_not_clock_progress():
+    """A requested future action instant is not evidence that physics reached it (T2-F2 residual)."""
+
+    capture, minter = build()
+    start(capture)
+    frames_at(capture, minter, [1.0])
+    capture.on_reference(reference(1.1))
+    capture.on_reference(reference(1.2))             # a far future query, not clock progress
+    assert capture.drain() == 0
+    summary = capture.finish(1.05)
+    assert summary.sample_count == 0                 # the 1.1 instant never happened
+    assert summary.label_cutoff_s == 0.0
+
+
+def test_a_revocation_after_a_row_was_labelled_fails_the_capture():
+    capture, minter = build()
+    start(capture)
+    frames_at(capture, minter, [1.0, 1.1, 1.2])      # the camera reaches past 1.1
+    capture.on_reference(reference(1.1))
+    assert capture.drain() == 1
+    with pytest.raises(ValueError, match="CAPTURE_LABEL_REVOKED"):
+        capture.on_reference(reference(1.1, accepted=False))
+    with pytest.raises(ValueError, match="CAPTURE_LABEL_REVOKED"):
+        capture.finish(1.3)
+
+
+def test_a_receipt_integrity_failure_is_terminal():
+    capture, minter = build()
+    start(capture)
+    frame = minter.mint("head", session_id="s", reset_epoch=1, stamp_s=1.0,
+                        received_monotonic_ns=1, pixels=ZERO)
+    with pytest.raises(ValueError, match="ACQUISITION_PIXEL_MISMATCH"):
+        capture.on_acquisition(frame, np.ones((480, 640, 3), dtype=np.uint8))
+    # valid data afterwards must not resurrect a corrupted episode
+    with pytest.raises(ValueError, match="ACQUISITION_PIXEL_MISMATCH"):
+        frames_at(capture, minter, [1.1])
+    with pytest.raises(ValueError, match="ACQUISITION_PIXEL_MISMATCH"):
+        capture.drain()
+    with pytest.raises(ValueError, match="ACQUISITION_PIXEL_MISMATCH"):
+        capture.finish(1.2)
+
+
+def test_an_invalid_reference_is_terminal_too():
+    capture, minter = build()
+    start(capture)
+    with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
+        capture.on_reference({"source": "CONTROLLER_REFERENCE", "requested_sim_time_s": 1.1,
+                              "positions": [0.0] * 5, "accepted": True})
+    with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
+        capture.on_reference(reference(1.1))
+    with pytest.raises(ValueError, match="CAPTURE_REFERENCE_INVALID"):
+        capture.finish(1.2)

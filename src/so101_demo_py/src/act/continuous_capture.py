@@ -69,6 +69,7 @@ class ContinuousEpisodeCapture:
         self._frames: dict = {camera: deque(maxlen=frame_capacity) for camera in _STREAMS}
         self._references: dict = {}
         self._pending: deque = deque()
+        self._completed: list = []
         self._events: list = []
         self._session_id = None
         self._attempt_id = None
@@ -76,6 +77,8 @@ class ContinuousEpisodeCapture:
         self._next_grid_s = None
         self._physical_end_s = None
         self._observed_sim_s = None
+        self._reference_horizon_s = None
+        self._last_labelled_target_s = None
         self._stopped_at_s = None
         self._deadline_started = None
         self._stopped = False
@@ -105,14 +108,14 @@ class ContinuousEpisodeCapture:
         self._require_running()
         self._check_deadline()
         if not isinstance(frame, Acquisition):
-            raise ValueError("ACQUISITION_INVALID")
+            self._reject("ACQUISITION_INVALID")
         if frame.session_id != self._session_id:
-            raise ValueError("ACQUISITION_SESSION_MISMATCH")
+            self._reject("ACQUISITION_SESSION_MISMATCH")
         if frame.reset_epoch != self._reset_epoch:
-            raise ValueError("ACQUISITION_RESET_MISMATCH")
+            self._reject("ACQUISITION_RESET_MISMATCH")
         # the pixels are checked against the identity they claim, at receipt, not at selection
         if pixel_digest(pixels) != frame.pixel_sha256:
-            raise ValueError("ACQUISITION_PIXEL_MISMATCH")
+            self._reject("ACQUISITION_PIXEL_MISMATCH")
         self._frames[frame.camera].append(frame)
         self._observe(frame.stamp_s)
 
@@ -181,18 +184,17 @@ class ContinuousEpisodeCapture:
 
     @property
     def pending_rows(self) -> int:
-        return sum(1 for row in self._pending if not row["labelled"])
+        return len(self._pending)
 
     @property
     def unlabelled_rows(self) -> tuple:
         """The audit-only tail: rows whose instant never received a legal reference."""
 
-        return tuple(dict(row["audit"]) for row in self._pending if not row["labelled"])
+        return tuple(dict(row["audit"]) for row in self._pending)
 
     @property
     def label_cutoff_s(self) -> float:
-        return max((row["observation"]["sim_time_s"] for row in self._pending
-                    if row["labelled"]), default=0.0)
+        return max((row["observation"]["sim_time_s"] for row in self._completed), default=0.0)
 
     # -- internals ---------------------------------------------------------
 
@@ -201,8 +203,16 @@ class ContinuousEpisodeCapture:
             raise ValueError("CAPTURE_NOT_STARTED")
         if self._finished:
             raise ValueError("CAPTURE_FINISHED")
+        if self._failure is not None:
+            raise ValueError(self._failure)
         if self._stopped:
             raise ValueError("CAPTURE_STOPPED")
+
+    def _reject(self, code: str):
+        """A capture integrity failure is terminal: the first reason is kept and re-raised."""
+
+        self._failure = code if self._failure is None else self._failure
+        raise ValueError(self._failure)
 
     def _observe(self, sim_time_s: float) -> None:
         if self._observed_sim_s is None or sim_time_s > self._observed_sim_s:
@@ -220,15 +230,20 @@ class ContinuousEpisodeCapture:
 
     def _record_reference(self, message) -> None:
         if not isinstance(message, dict) or message.get("source") != _REFERENCE_SOURCE:
-            raise ValueError("CAPTURE_REFERENCE_INVALID")
+            self._reject("CAPTURE_REFERENCE_INVALID")
         at_s = message.get("requested_sim_time_s")
         if isinstance(at_s, bool) or not isinstance(at_s, (int, float)) or not math.isfinite(at_s):
-            raise ValueError("CAPTURE_REFERENCE_INVALID")
+            self._reject("CAPTURE_REFERENCE_INVALID")
         positions = message.get("positions")
         if not isinstance(positions, (list, tuple)) or len(positions) != 6:
-            raise ValueError("CAPTURE_REFERENCE_INVALID")
+            self._reject("CAPTURE_REFERENCE_INVALID")
         key = round(float(at_s), 6)
         accepted = message.get("accepted") is True
+        if (not accepted and self._last_labelled_target_s is not None
+                and key <= self._last_labelled_target_s + _TOLERANCE_S):
+            # a trajectory revoked after its instant was labelled voids that label: an irreversible
+            # recorder row may not be silently kept
+            self._fail("CAPTURE_LABEL_REVOKED")
         existing = self._references.get(key)
         if existing is not None and existing["accepted"] and not accepted:
             # accepted then revoked before its instant: the label it would have given is void
@@ -239,7 +254,7 @@ class ContinuousEpisodeCapture:
                 self._fail("CAPTURE_REFERENCE_OVERFLOW")
             self._references[key] = {"positions": [float(value) for value in positions],
                                      "accepted": accepted, "revoked": not accepted}
-        self._observe(key)
+        self._reference_horizon_s = max(self._reference_horizon_s or 0.0, key)
 
     def _causal(self, camera: str, at_s: float):
         for frame in reversed(self._frames[camera]):
@@ -321,34 +336,36 @@ class ContinuousEpisodeCapture:
 
     def _service_pending(self) -> int:
         written = 0
-        pending = list(self._pending)
-        for index, row in enumerate(pending):
-            if row["labelled"]:
-                continue
-            if self._reference_state(row) == "ready":
-                entry = self._references[row["target_s"]]
-                audit = dict(row["audit"], reference_time_s=row["target_s"],
-                             reference_source=_REFERENCE_SOURCE,
-                             reference_positions=list(entry["positions"]))
-                row["audit"] = audit
-                row["reference"] = entry
-                self.recorder.append(row["observation"], entry["positions"], audit)
-                row["labelled"] = True
-                self._written += 1
-                written += 1
-                continue
-            # this row cannot be labelled; if a later one could, the grid would have a hole before
-            # the label cutoff, which fails the run instead of being skipped
-            if any(self._reference_state(later) == "ready"
-                   for later in pending[index + 1:] if not later["labelled"]):
+        while self._pending and self._reference_state(self._pending[0]) == "ready":
+            row = self._pending.popleft()
+            entry = self._references[row["target_s"]]
+            audit = dict(row["audit"], reference_time_s=row["target_s"],
+                         reference_source=_REFERENCE_SOURCE,
+                         reference_positions=list(entry["positions"]))
+            row["audit"] = audit
+            row["reference"] = entry
+            self.recorder.append(row["observation"], entry["positions"], audit)
+            row["labelled"] = True
+            self._completed.append(row)
+            self._written += 1
+            self._last_labelled_target_s = row["target_s"]
+            written += 1
+        if self._pending:
+            # an unresolved head is fine while its evidence may still arrive, but if a later row can
+            # already be labelled the grid would have a hole before the label cutoff
+            if any(self._reference_state(later) == "ready" for later in list(self._pending)[1:]):
                 self._fail("CAPTURE_LABEL_GAP")
-            break
+        # references that belong to rows already written are retired; a revocation for one of them
+        # is still caught explicitly below rather than being dropped silently
+        if self._last_labelled_target_s is not None:
+            self._references = {key: value for key, value in self._references.items()
+                                if key > self._last_labelled_target_s + _TOLERANCE_S}
         return written
 
     def _tail_paths(self) -> list:
         paths = []
         for row in self._pending:
-            if row["labelled"] or self.audit_writer is None:
+            if self.audit_writer is None:
                 continue
             paths.append(self.audit_writer(row["observation"], row["audit"]))
         return paths
