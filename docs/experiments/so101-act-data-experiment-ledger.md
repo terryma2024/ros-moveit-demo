@@ -39650,3 +39650,27 @@ chain: HS-175/188/191/196 were spelling differences, HS-197 was a wrong-tool gue
 honest next step is to say so rather than to keep probing for a subcommand that does not exist, and to decide with the user
 whether Task 12's Step 4 is implemented now or whether the campaign stops at the point where the plan's own toolchain no
 longer suffices.
+
+## HS-199 — HS-198 was too strong: the calibration capability EXISTS; only the CLI surface is missing
+
+HS-198 concluded "code that has not been written". That was wrong, and checking before escalating to the user is what
+caught it:
+
+```
+src/so101_demo_py/src/act/head_search_calibration.py:155   def calibrate_head_search(inputs) -> Head...
+src/so101_demo_py/src/adapters/perception/candidate_trainer.py   references frozen- / candidate-manifest
+src/so101_demo_py/src/cli/evaluate_head_search_yolo_candidates.py   imports load_frozen_candidate
+```
+
+So the machinery to register a candidate and to calibrate/freeze one **exists in the library** - the evaluator already
+*consumes* frozen candidates via `load_frozen_candidate`, and `calibrate_head_search` is the producer side. What is missing is
+only the **CLI wiring**: `evaluate_head_search_yolo_candidates` exposes `compare` and nothing else.
+
+**Consequence for Step 4, much smaller than HS-198 claimed:** the fix is to expose `register` and `calibrate` subcommands that
+call the existing functions, rather than to write a calibration pipeline from scratch. That is a surface change over tested
+code, which is the same shape as the smoke-CLI reconciliation (HS-176) - and, per that precedent, wiring the plan's spelling
+around existing behaviour is the faithful move rather than editing the plan.
+
+**Recorded as a correction in place**, because HS-198's overstatement would otherwise stand as the reason Task 12 stopped: a
+missing CLI subcommand and a missing capability look identical from the command line, and only reading the library
+distinguishes them.
