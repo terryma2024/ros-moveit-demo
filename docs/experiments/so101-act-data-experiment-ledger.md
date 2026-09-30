@@ -39813,3 +39813,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list stands at F1/F3/F5/F11 plus this F13 residual and the `sim_time_s` schema tension;
   targeted gate `logs/task3-final.run` **430 passed**; HEAD `7edd95717`; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-2124 — F13's last implementable item: the measured arrays are aged by their own receipt
+
+- **Read first**: the `/joint_states` callback (`ros_broker.py:175-185`) stores its own receipt —
+  `self._received = self.monotonic()` — beside the measured `_positions`/`_velocity` it writes, so the age of the
+  measured half has a real source rather than an inference.
+- **What landed**: `controller_feedback` now bounds the record by that receipt too, after the epoch's (CP-2049's
+  original) and the reference's (CP-2121). With that, **all three inputs the record reports — measurements,
+  commands and the epoch it is fenced to — are aged by their own receipts**, and none can mask another's
+  staleness.
+- **Its control**: with a fresh epoch and a fresh reference, setting only the measurements' receipt ten seconds
+  back makes the call refuse with `FEEDBACK_STALE` — one variable changed, the refusal asserted.
+- **Evidence.** Targeted run this round: **58 passed** across the observer, `test_act_task8` and the search-port
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **F13 is now down to the one item I cannot settle alone**: `sim_time_s` is the requested instant the audit's
+  same-instant join needs, the ratified record is closed at seven keys, and F13 asks for an *observed* source
+  instant — the two cannot both hold without amending the record. My reading (the receipts carry the observed
+  bound; the field stays the join's instant) is recorded in CP-2121/CP-2124 and should be confirmed by the plan
+  rather than decided here.
+- **State.** Item 3's list is now **F1, F3, F5, F11** plus that F13 schema question, with **F12 closed** and
+  F13's four controls' spirit satisfied for dimensions, reference age and measurements; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `6099637ad`; no push, no evidence deletion, no hardware, no second
+  stack.

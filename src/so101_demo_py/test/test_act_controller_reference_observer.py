@@ -234,6 +234,7 @@ def test_the_broker_produces_the_ratified_controller_feedback_record():
     driver.max_age = 0.2
     driver.monotonic = lambda: 10.05
     driver._epoch = (SimpleNamespace(reset_epoch=2), 10.0)
+    driver._received = 10.0          # the `/joint_states` callback's own receipt (F13/CP-2123)
     driver._positions = (0.1, 0.2, 0.3, 0.4, 0.5)
     driver._velocity = (0.0,) * 5
     driver._reference_names = {"arm": ("shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex",
@@ -258,5 +259,10 @@ def test_the_broker_produces_the_ratified_controller_feedback_record():
     driver._positions = (0.1, 0.2, 0.3, 0.4, 0.5)
     driver._references["arm"] = ((0.5, 0.4, 0.3, 0.2, 0.1), (0.0,) * 5, 9.0, 1.0)
     driver.monotonic = lambda: 10.05
+    with pytest.raises(RuntimeError, match="FEEDBACK_STALE"):
+        driver.controller_feedback("arm", 1.1)
+    # F13: fresh epoch and reference, but the measurements' own receipt is old
+    driver._references["arm"] = ((0.5, 0.4, 0.3, 0.2, 0.1), (0.0,) * 5, 10.0, 1.0)
+    driver._received = 9.0
     with pytest.raises(RuntimeError, match="FEEDBACK_STALE"):
         driver.controller_feedback("arm", 1.1)

@@ -251,6 +251,12 @@ class RosBrokerDriver:
             # reference, and a caller naming no reference has nothing to age against.
             if not 0<=self.monotonic()-commanded[2]<=self.max_age:
                 raise RuntimeError('FEEDBACK_STALE')
+            # F13 (CP-2123): the measured arrays come from the `/joint_states` callback, which keeps its own
+            # receipt in `self._received`; a fresh epoch or reference must not make stale measurements look
+            # current either.
+            joints_received=getattr(self,'_received',None)
+            if joints_received is None or not 0<=self.monotonic()-joints_received<=self.max_age:
+                raise RuntimeError('FEEDBACK_STALE')
             # F13: the sequence is per kind, mirroring the observer's own per-kind publication sequence, so
             # one kind's reads cannot advance another's identity
             reads=getattr(self,'_feedback_reads',None)
