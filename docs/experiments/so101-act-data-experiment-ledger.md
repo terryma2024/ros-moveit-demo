@@ -37780,3 +37780,27 @@ roots) rather than of the invocation.
 
 The reason histogram for the residual is recorded with this entry rather than summarised, and the teleop half of the
 same run is still executing.
+
+## HS-125 — The persistent families all land on `task8_measurement_schema.py:116`
+
+Reading one of the two failures in `test_act_task8_phase_camera_measurement.py` in the **corrected** environment
+(appended overlay + venv, ROS paths intact):
+
+```
+<overlay>/so101_demo/act/task8_measurement_schema.py:116: ValueError: PHASE_CAMERA_MATRIX_INVALID
+```
+
+That is the **same file and line** HS-076 traced `MEASUREMENT_CONTRACT_V2_INVALID` to, and the same module that held
+my one real regression (HS-071: the additive key in `config/act/task8-calibration-measurement-contract-v2.json`, since
+reverted byte-exactly with a zero-line diff). So the families that survive every environment correction -
+`FIELDS_INVALID` (69), `TRUSTED_FINAL_TARGET_INVALID` (47), `MEASUREMENT_CONTRACT_V2_INVALID` (16),
+`PHASE_CAMERA_MATRIX_INVALID` (9), `_verify_phase` (14) - are concentrated in the **task 8 measurement contract**
+subsystem: the same area where the one confirmed regression of this task lived.
+
+**Priority and method:** this is the highest-value unexplained item in Task 11, and it gets the method that found the
+last regression rather than a label: an A/B against the commit before this work touched the task 8 measurement
+contract and schema, checking whether these failures exist there too. If they do, they are pre-existing; if they do
+not, they are mine a second time - and given HS-071, that possibility is not remote enough to wave away.
+
+I am recording the location and the method rather than starting the A/B, because a bisect across that subsystem needs
+a clean run per candidate commit and my remaining context this session cannot finish one.
