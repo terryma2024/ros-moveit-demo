@@ -37370,3 +37370,30 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   switch from the fused projection to the per-kind frames.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f583ba984`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2015 — Task 3: the broker evaluates the interval basis for the ratified frames, so A.1's broker hop is complete on the data side
+
+- **Both bases now produce a ratified frame.** For a kind whose reference arrived through an accepted
+  interval, `reference_frames(kind, when)` takes the goal id from the interval, builds the record the same
+  way `reference_state` does (including a deep copy of the submitted goal), and evaluates it with
+  `direct_goal_reference(record, kind, when)`: those values become `evaluated_positions` /
+  `evaluated_velocities`, the per-kind `evaluation` names `basis: "interval"`, the `goal_id` and the record's
+  `accepted_sim_s`, and the **publication stays untouched** beside them. A kind with more than one live
+  interval refuses (`REFERENCE_INTERVAL_INVALID`), as does a missing record.
+- **Why this is the shape the reviewer demanded.** The fused projection is never presented as a publication:
+  the original message keeps its own names, positions, velocities, stamp and sequence, and the evaluated
+  value is labelled with the goal it was evaluated against, which is what makes an offline reconstruction
+  possible without pretending the controller published the interpolated value.
+- **Evidence.** `logs/task3-fix56.run` rc=0: **68 passed in 1.42 s** across the observer, controller
+  reference, command-broker and neck suites under `pytest-xdist` with 8 workers, with its own NVMe scratch
+  and a non-empty tempfile proof. The control stubs `direct_goal_reference` in the module namespace and
+  asserts that published and evaluated values differ (0.1…0.5 versus 0.5…), that the evaluation names the
+  goal and its acceptance, and that a two-goal interval refuses.
+- **What is left on the A.1 path.** Callers still read `reference_state`'s fused projection; switching them
+  to the per-kind frames is a consumer change (the tap and capture already forward the packed group once a
+  producer supplies it), and `reference_state` stays as the compatibility path until that switch. The two
+  ratified records (`planning_scene_observation`, `controller_feedback`) still have no producer, which is the
+  remaining half of T3-F1.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `8415e4586`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.

@@ -202,6 +202,23 @@ def test_the_broker_exposes_a_ratified_frame_for_the_publication_basis():
     assert frame["evaluation"] == {"requested_sim_time_s": 1.1, "basis": "published",
                                    "goal_id": None, "accepted_sim_s": None, "revoked_sim_s": None}
     assert frame["observer_sequence"] == 4 and frame["sim_stamp_ns"] == 1_000_000_000
+    # an accepted interval yields the evaluated value for the target while the publication stays
+    driver._records = {"goal-1": {"kind": "arm", "accepted": True, "result": None,
+                                  "cancel_requested": False, "accepted_sim_s": 1.0,
+                                  "submitted_goal": None}}
     driver._reference_interval = lambda kind: [("goal-1", 1.0)]
-    with pytest.raises(RuntimeError, match="REFERENCE_EVALUATION_UNAVAILABLE"):
+    original = ros_broker.direct_goal_reference
+    ros_broker.direct_goal_reference = lambda record, kind, at: {
+        "positions": [0.5] * 5, "velocities": [0.25] * 5, "accelerations": [0.0] * 5}
+    try:
+        interval_frame = driver.reference_frames("arm", 1.1)
+    finally:
+        ros_broker.direct_goal_reference = original
+    assert interval_frame["published_positions"] == (0.1, 0.2, 0.3, 0.4, 0.5)
+    assert interval_frame["evaluated_positions"] == (0.5,) * 5
+    assert interval_frame["evaluation"] == {"requested_sim_time_s": 1.1, "basis": "interval",
+                                            "goal_id": "goal-1", "accepted_sim_s": 1.0,
+                                            "revoked_sim_s": None}
+    driver._reference_interval = lambda kind: [("goal-1", 1.0), ("goal-2", 1.0)]
+    with pytest.raises(RuntimeError, match="REFERENCE_INTERVAL_INVALID"):
         driver.reference_frames("arm", 1.1)

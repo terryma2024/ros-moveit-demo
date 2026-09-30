@@ -246,13 +246,32 @@ class RosBrokerDriver:
             if not 0<=stamp<=when:
                 # a publication after the requested instant cannot be evaluated for it
                 raise RuntimeError('REFERENCE_TIME_INVALID')
-            if self._reference_interval(kind) is not None:
-                raise RuntimeError('REFERENCE_EVALUATION_UNAVAILABLE')
+            interval=self._reference_interval(kind)
+            if interval is None:
+                # the publication is itself the value for `when`
+                evaluated,evaluated_velocities=values,velocities
+                evaluation={'requested_sim_time_s':when,'basis':'published','goal_id':None,
+                            'accepted_sim_s':None,'revoked_sim_s':None}
+            else:
+                if len(interval)!=1:
+                    raise RuntimeError('REFERENCE_INTERVAL_INVALID')
+                goal_id=interval[0][0]
+                live=self._records.get(goal_id)
+                if live is None:
+                    raise RuntimeError('REFERENCE_INTERVAL_INVALID')
+                # the accepted goal's own trajectory is what the target instant is evaluated
+                # against; the publication above stays untouched beside it
+                record={key:live.get(key) for key in ('kind','accepted','result','cancel_requested',
+                                                      'accepted_sim_s')}
+                record['submitted_goal']=copy.deepcopy(live.get('submitted_goal'))
+                result=direct_goal_reference(record,kind,when)
+                evaluated,evaluated_velocities=(tuple(result['positions']),
+                                                tuple(result['velocities']))
+                evaluation={'requested_sim_time_s':when,'basis':'interval','goal_id':goal_id,
+                            'accepted_sim_s':live.get('accepted_sim_s'),'revoked_sim_s':None}
         return {'joint_names':names,'published_positions':values,
-                'published_velocities':velocities,'evaluated_positions':values,
-                'evaluated_velocities':velocities,
-                'evaluation':{'requested_sim_time_s':when,'basis':'published','goal_id':None,
-                              'accepted_sim_s':None,'revoked_sim_s':None},
+                'published_velocities':velocities,'evaluated_positions':evaluated,
+                'evaluated_velocities':evaluated_velocities,'evaluation':evaluation,
                 'sim_stamp_ns':int(round(stamp*1e9)),'received_monotonic_ns':int(round(received*1e9)),
                 'observer_sequence':sequence}
 
