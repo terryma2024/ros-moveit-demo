@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 
 from so101_demo.perception_benchmark.contracts import OperatingPoint, canonical_sha256
@@ -262,3 +263,306 @@ def validate_episode_seed_partitions(
             seen[seed] = name
         result[name] = tuple(values)
     return MappingProxyType(result)
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Candidate training plans: B learns from the head camera domain alone, C from the union of both camera domains with a
+# frozen 1:1 batch composition, and both inherit candidate A's frozen hyperparameters.
+# ----------------------------------------------------------------------------------------------------------------------
+
+TRAINING_CONTRACT_KEYS = (
+    "task",
+    "model",
+    "class_names",
+    "classes",
+    "imgsz",
+    "epochs",
+    "batch",
+    "workers",
+    "seed",
+    "deterministic",
+    "device",
+    "allow_cpu_fallback",
+    "amp",
+    "optimizer",
+    "patience",
+    "shuffle",
+    "checkpoint_score",
+    "validation_domains",
+    "dataset_domains",
+    "promotable",
+)
+#: everything that must be identical between B and C, in the order it is hashed
+HYPERPARAMETER_KEYS = (
+    "task",
+    "imgsz",
+    "batch",
+    "workers",
+    "seed",
+    "deterministic",
+    "amp",
+    "optimizer",
+    "patience",
+    "shuffle",
+)
+CHECKPOINT_SCORE = "0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95"
+_CANDIDATE_IDS = ("A", "B", "C")
+
+
+class CandidatePlanError(ValueError):
+    """A candidate plan the toolchain must refuse, named so a caller can refuse by name."""
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingContract:
+    """The frozen training inputs one or more candidates inherit."""
+
+    device: str
+    allow_cpu_fallback: bool
+    checkpoint_score: str
+    validation_domains: tuple[str, ...]
+    dataset_domains: tuple[str, ...]
+    batch_size: int
+    epochs: int
+    promotable: bool
+    hyperparameters: Mapping[str, object]
+
+    def to_document(self) -> dict[str, object]:
+        return {
+            "device": self.device,
+            "allow_cpu_fallback": self.allow_cpu_fallback,
+            "checkpoint_score": self.checkpoint_score,
+            "validation_domains": list(self.validation_domains),
+            "dataset_domains": list(self.dataset_domains),
+            "batch": self.batch_size,
+            "epochs": self.epochs,
+            "promotable": self.promotable,
+            "hyperparameters": dict(self.hyperparameters),
+        }
+
+
+def load_training_contract(path: Path | str) -> TrainingContract:
+    """Read one tracked candidate-training contract, refusing anything the device policy forbids."""
+
+    contract_path = Path(path)
+    if contract_path.is_symlink() or not contract_path.is_file():
+        raise CandidatePlanError(
+            f"CANDIDATE_CONTRACT_INVALID: contract must be a regular file: {contract_path}"
+        )
+    try:
+        import yaml
+    except ImportError as error:  # pragma: no cover - PyYAML is a package dependency
+        raise CandidatePlanError("CANDIDATE_CONTRACT_INVALID: PyYAML is required") from error
+    document = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
+    if not isinstance(document, Mapping):
+        raise CandidatePlanError("CANDIDATE_CONTRACT_INVALID: contract must be a mapping")
+    missing = set(TRAINING_CONTRACT_KEYS) - set(document)
+    if missing:
+        raise CandidatePlanError(
+            "CANDIDATE_CONTRACT_INVALID: contract is missing " + ", ".join(sorted(missing))
+        )
+    unknown = set(document) - set(TRAINING_CONTRACT_KEYS)
+    if unknown:
+        raise CandidatePlanError(
+            "CANDIDATE_CONTRACT_INVALID: contract carries unknown keys "
+            + ", ".join(sorted(unknown))
+        )
+    device = str(document["device"])
+    fallback = document["allow_cpu_fallback"]
+    if device != "cuda":
+        raise CandidatePlanError(
+            f"CANDIDATE_DEVICE_INVALID: Head Search trains on cuda only, not {device!r}"
+        )
+    if type(fallback) is not bool or fallback:
+        raise CandidatePlanError(
+            "CANDIDATE_CPU_FALLBACK_FORBIDDEN: Head Search never falls back to the CPU"
+        )
+    score = str(document["checkpoint_score"])
+    if score != CHECKPOINT_SCORE:
+        raise CandidatePlanError(
+            "CANDIDATE_CHECKPOINT_SCORE_INVALID: B and C share the two-domain score "
+            f"{CHECKPOINT_SCORE!r}"
+        )
+    domains = tuple(str(value) for value in document["validation_domains"])
+    if domains != ("head", "task"):
+        raise CandidatePlanError(
+            "CANDIDATE_VALIDATION_DOMAINS_INVALID: both camera domains must be scored"
+        )
+    batch = document["batch"]
+    if type(batch) is not int or batch <= 0 or batch % 2 != 0:
+        raise CandidatePlanError(
+            "CANDIDATE_BATCH_INVALID: an even batch is required for a 1:1 domain composition"
+        )
+    epochs = document["epochs"]
+    if type(epochs) is not int or epochs <= 0:
+        raise CandidatePlanError("CANDIDATE_EPOCHS_INVALID: epochs must be a positive integer")
+    if type(document["promotable"]) is not bool:
+        raise CandidatePlanError("CANDIDATE_PROMOTABLE_INVALID: promotable must be boolean")
+    return TrainingContract(
+        device=device,
+        allow_cpu_fallback=False,
+        checkpoint_score=score,
+        validation_domains=domains,
+        dataset_domains=tuple(str(value) for value in document["dataset_domains"]),
+        batch_size=batch,
+        epochs=epochs,
+        promotable=bool(document["promotable"]),
+        hyperparameters=MappingProxyType({key: document[key] for key in HYPERPARAMETER_KEYS}),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateBatch:
+    """One training batch's frozen composition."""
+
+    head_count: int
+    task_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class CandidatePlan:
+    candidate_id: str
+    train_count: int
+    val_count: int
+    domain_counts: Mapping[str, int]
+    validation_counts: Mapping[str, int]
+    batches: tuple[CandidateBatch, ...]
+    batch_size: int
+    epochs: int
+    device: str
+    allow_cpu_fallback: bool
+    checkpoint_score: str
+    validation_domains: tuple[str, ...]
+    dataset_digests: Mapping[str, str]
+    hyperparameters: Mapping[str, object]
+    promotable: bool
+
+    def to_document(self) -> dict[str, object]:
+        return {
+            "candidate_id": self.candidate_id,
+            "train_count": self.train_count,
+            "val_count": self.val_count,
+            "domain_counts": dict(self.domain_counts),
+            "validation_counts": dict(self.validation_counts),
+            "batches": [
+                {"head_count": batch.head_count, "task_count": batch.task_count}
+                for batch in self.batches
+            ],
+            "batch_size": self.batch_size,
+            "epochs": self.epochs,
+            "device": self.device,
+            "allow_cpu_fallback": self.allow_cpu_fallback,
+            "checkpoint_score": self.checkpoint_score,
+            "validation_domains": list(self.validation_domains),
+            "dataset_digests": dict(self.dataset_digests),
+            "hyperparameters": dict(self.hyperparameters),
+            "promotable": self.promotable,
+        }
+
+    @property
+    def sha256(self) -> str:
+        return canonical_sha256(self.to_document())
+
+
+def _manifest_counts(name: str, manifest: Mapping[str, object]) -> dict[str, int]:
+    if not isinstance(manifest, Mapping):
+        raise CandidatePlanError(f"CANDIDATE_MANIFEST_INVALID: {name} must be a manifest mapping")
+    raw = manifest.get("split_counts")
+    if not isinstance(raw, Mapping):
+        raise CandidatePlanError(f"CANDIDATE_MANIFEST_INVALID: {name} declares no split_counts")
+    counts = {}
+    for split in ("train", "val"):
+        value = raw.get(split)
+        if type(value) is not int or value <= 0:
+            raise CandidatePlanError(
+                f"CANDIDATE_MANIFEST_INVALID: {name} needs a positive {split} count"
+            )
+        counts[split] = value
+    return counts
+
+
+def _manifest_digest(manifest: Mapping[str, object]) -> str:
+    declared = manifest.get("dataset_sha256")
+    if isinstance(declared, str) and len(declared) == 64:
+        return declared
+    return canonical_sha256(manifest)
+
+
+def build_candidate_plan(
+    candidate_id: str,
+    *,
+    head: Mapping[str, object],
+    task: Mapping[str, object],
+    contract: TrainingContract | Path | str,
+) -> CandidatePlan:
+    """Freeze one candidate's data union, batch composition and inherited hyperparameters."""
+
+    if candidate_id not in _CANDIDATE_IDS:
+        raise CandidatePlanError(
+            f"CANDIDATE_ID_INVALID: {candidate_id!r} is not one of {_CANDIDATE_IDS}"
+        )
+    if candidate_id == "A":
+        raise CandidatePlanError(
+            "CANDIDATE_ID_INVALID: candidate A is the pinned task-camera baseline and is not rebuilt here"
+        )
+    trained = (
+        contract if isinstance(contract, TrainingContract) else load_training_contract(contract)
+    )
+    head_counts = _manifest_counts("head manifest", head)
+    task_counts = _manifest_counts("task manifest", task)
+    if head.get("promotable") is False and trained.promotable:
+        raise CandidatePlanError(
+            "CANDIDATE_HEAD_NOT_SEALED: this is a smoke head dataset, so it can only train a "
+            "non-promotable smoke plan"
+        )
+    if candidate_id == "C":
+        domain_counts = {"head": head_counts["train"], "task": task_counts["train"]}
+        validation_counts = {"head": head_counts["val"], "task": task_counts["val"]}
+        train_count = head_counts["train"] + task_counts["train"]
+        val_count = head_counts["val"] + task_counts["val"]
+        half = trained.batch_size // 2
+        batches = []
+        remaining_head, remaining_task = head_counts["train"], task_counts["train"]
+        while remaining_head or remaining_task:
+            take_head = min(half, remaining_head)
+            take_task = min(half, remaining_task)
+            if take_head != take_task:
+                raise CandidatePlanError(
+                    "CANDIDATE_DOMAINS_UNBALANCED: the two camera domains must contribute the same "
+                    "number of training images"
+                )
+            batches.append(CandidateBatch(head_count=take_head, task_count=take_task))
+            remaining_head -= take_head
+            remaining_task -= take_task
+    else:
+        domain_counts = {"head": head_counts["train"]}
+        validation_counts = {"head": head_counts["val"], "task": task_counts["val"]}
+        train_count = head_counts["train"]
+        val_count = head_counts["val"]
+        half = trained.batch_size // 2
+        batches = []
+        remaining = train_count
+        while remaining:
+            take = min(trained.batch_size, remaining)
+            batches.append(CandidateBatch(head_count=take, task_count=0))
+            remaining -= take
+    promotable = bool(trained.promotable and head.get("promotable") is not False)
+    return CandidatePlan(
+        candidate_id=candidate_id,
+        train_count=train_count,
+        val_count=val_count,
+        domain_counts=MappingProxyType(domain_counts),
+        validation_counts=MappingProxyType(validation_counts),
+        batches=tuple(batches),
+        batch_size=trained.batch_size,
+        epochs=trained.epochs,
+        device=trained.device,
+        allow_cpu_fallback=trained.allow_cpu_fallback,
+        checkpoint_score=trained.checkpoint_score,
+        validation_domains=trained.validation_domains,
+        dataset_digests=MappingProxyType(
+            {"head": _manifest_digest(head), "task": _manifest_digest(task)}
+        ),
+        hyperparameters=trained.hyperparameters,
+        promotable=promotable,
+    )
