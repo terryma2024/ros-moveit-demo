@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from collections import Counter
 from collections.abc import Callable
@@ -14,13 +15,25 @@ from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 
 import numpy as np
+from so101_demo.act.head_camera_geometry import scene_source_digests
 from so101_demo.adapters.perception.mujoco_scene_geometry import (
     ScenePenetrationError,
     TaskSceneGeometry,
     measure_task_scene_geometry,
 )
+from so101_demo.perception_benchmark.contracts import canonical_sha256
 from so101_demo.runtime.point_cloud_preview import write_png_rgb8
 from so101_demo.runtime.task_artifacts import atomic_json
+
+HEAD_SEARCH_DATASET_CONTRACT = "so101-head-search-yolo-seg-v1"
+HEAD_SEARCH_SCENARIOS = (
+    "no_cup",
+    "one_cup_distractors",
+    "two_cups",
+    "cup_near_bottle",
+)
+_GEOMETRY_SEAL_KEYS = ("required", "accepted_seal_sha256")
+_NECK_KEYS = ("min_rad", "max_rad")
 
 
 class DatasetScenario(str, Enum):
@@ -123,6 +136,10 @@ class RawRender:
     occluder_body_name: str | None = None
     occlusion_reference: str | None = None
     geometry_receipt: TaskSceneGeometry | None = None
+    camera_name: str | None = None
+    neck_rad: float | None = None
+    camera_position_m: tuple[float, float, float] | None = None
+    camera_quaternion_wxyz: tuple[float, float, float, float] | None = None
 
     def __post_init__(self) -> None:
         rgb = np.array(self.rgb8, dtype=np.uint8, copy=True)
@@ -145,6 +162,24 @@ class RawRender:
             raise ValueError("amodal truth and occluder body name must be provided together")
         if (amodal_geom_ids is None) != (self.occlusion_reference is None):
             raise ValueError("amodal truth and occlusion reference must be provided together")
+        if self.camera_name is not None and (
+            not isinstance(self.camera_name, str) or not self.camera_name
+        ):
+            raise ValueError("camera_name must be a non-empty string when it is recorded")
+        if self.camera_position_m is not None:
+            object.__setattr__(
+                self,
+                "camera_position_m",
+                tuple(float(value) for value in self.camera_position_m),
+            )
+        if self.camera_quaternion_wxyz is not None:
+            object.__setattr__(
+                self,
+                "camera_quaternion_wxyz",
+                tuple(float(value) for value in self.camera_quaternion_wxyz),
+            )
+        if self.neck_rad is not None:
+            object.__setattr__(self, "neck_rad", float(self.neck_rad))
         normalized_names: dict[int, str] = {}
         for body_id, name in self.body_names.items():
             if int(body_id) < 0 or not isinstance(name, str) or not name:
@@ -324,6 +359,7 @@ class RendererSettings:
     image_height: int = 480
     geometry: SceneGeometry = SceneGeometry()
     require_nonpenetrating_scene: bool = False
+    neck_yaw_rad: tuple[float, float] | None = None
 
     def __post_init__(self) -> None:
         path = Path(self.mjcf_path)
@@ -337,6 +373,11 @@ class RendererSettings:
             raise ValueError("geometry must be scene geometry")
         if type(self.require_nonpenetrating_scene) is not bool:
             raise ValueError("require_nonpenetrating_scene must be boolean")
+        if self.neck_yaw_rad is not None:
+            low, high = (float(value) for value in self.neck_yaw_rad)
+            if not low < high:
+                raise ValueError("neck_yaw_rad must be an increasing two-value range")
+            object.__setattr__(self, "neck_yaw_rad", (low, high))
         object.__setattr__(self, "mjcf_path", path)
 
 
@@ -354,6 +395,9 @@ class DatasetConfig:
     require_nonpenetrating_scene: bool = False
     dataset_contract: str | None = None
     schema_version: int = 2
+    geometry_seal: GeometrySealRequirement | None = None
+    neck_yaw_rad: tuple[float, float] | None = None
+    promotable: bool = True
 
     def __post_init__(self) -> None:
         if type(self.require_nonpenetrating_scene) is not bool:
@@ -386,6 +430,29 @@ class DatasetConfig:
             raise ValueError("seed_starts must exactly match the dataset contract")
         starts = {split: raw_starts[split] for split in splits}
         split_seed_plan(counts, starts)
+        if type(self.promotable) is not bool:
+            raise ValueError("promotable must be boolean")
+        if self.geometry_seal is not None and not isinstance(
+            self.geometry_seal, GeometrySealRequirement
+        ):
+            raise ValueError("geometry_seal must be a geometry seal requirement")
+        if self.neck_yaw_rad is not None:
+            low, high = (float(value) for value in self.neck_yaw_rad)
+            if not low < high:
+                raise ValueError("neck_yaw_rad must be an increasing two-value range")
+            object.__setattr__(self, "neck_yaw_rad", (low, high))
+        if self.dataset_contract == HEAD_SEARCH_DATASET_CONTRACT:
+            if self.geometry_seal is None or self.geometry_seal.required is not True:
+                raise ValueError(
+                    "HEAD_CAMERA_GEOMETRY_SEAL_REQUIRED: the head search dataset contract requires "
+                    "its frozen production-camera seal"
+                )
+            if self.neck_yaw_rad is None:
+                raise ValueError(
+                    "HEAD_DATASET_NECK_SAMPLING_REQUIRED: the head search dataset contract freezes "
+                    "its neck-yaw sampling range"
+                )
+            head_scenario_quotas(counts)
         quotas = _validated_scenario_quotas(counts, self.scenario_quotas)
         if self.dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
             _validate_official_train_val_population(counts, starts, quotas)
@@ -412,6 +479,7 @@ class DatasetConfig:
             image_height=self.image_height,
             geometry=self.geometry,
             require_nonpenetrating_scene=self.require_nonpenetrating_scene,
+            neck_yaw_rad=self.neck_yaw_rad,
         )
 
 
@@ -439,7 +507,7 @@ _TEST_SCENARIO_QUOTAS = {
 
 
 def _dataset_splits(dataset_contract: str | None) -> tuple[str, ...]:
-    if dataset_contract is None:
+    if dataset_contract is None or dataset_contract == HEAD_SEARCH_DATASET_CONTRACT:
         return _LEGACY_SPLITS
     if dataset_contract == _TRAIN_VAL_DATASET_CONTRACT:
         return _TRAIN_VAL_SPLITS
@@ -586,6 +654,149 @@ def limited_split_counts(
     return result
 
 
+@dataclass(frozen=True, slots=True)
+class GeometrySealRequirement:
+    """One dataset profile's frozen acceptance for the production-camera seal."""
+
+    required: bool
+    accepted_seal_sha256: str
+
+    def __post_init__(self) -> None:
+        if type(self.required) is not bool:
+            raise ValueError("geometry_seal required must be boolean")
+        digest = self.accepted_seal_sha256
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise ValueError("geometry_seal accepted_seal_sha256 must be a lowercase SHA256 digest")
+
+    @classmethod
+    def from_mapping(cls, document: object) -> "GeometrySealRequirement":
+        if not isinstance(document, Mapping) or set(document) != set(_GEOMETRY_SEAL_KEYS):
+            raise ValueError(
+                "geometry_seal must contain exactly " + ", ".join(_GEOMETRY_SEAL_KEYS)
+            )
+        return cls(
+            required=document["required"],
+            accepted_seal_sha256=document["accepted_seal_sha256"],
+        )
+
+    def to_document(self) -> dict[str, object]:
+        return {"required": self.required, "accepted_seal_sha256": self.accepted_seal_sha256}
+
+
+def geometry_seal_sha256(seal: Mapping[str, Any]) -> str:
+    """The seal's own digest: everything but the digest field, canonically encoded."""
+
+    if not isinstance(seal, Mapping):
+        raise ValueError("geometry seal must be a mapping")
+    return canonical_sha256({key: value for key, value in seal.items() if key != "seal_sha256"})
+
+
+@dataclass(frozen=True, slots=True)
+class HeadCameraSceneSample:
+    seed: int
+    split: str
+    scenario: str
+    camera_name: str
+    scene_group_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class HeadCameraScenePlan:
+    camera_name: str
+    counts_by_split: Mapping[str, Mapping[str, int]]
+    samples: tuple[HeadCameraSceneSample, ...]
+    promotable: bool = True
+
+    def counts(self, split: str) -> dict[str, int]:
+        return dict(self.counts_by_split[split])
+
+    def scenario_quotas(self) -> dict[str, dict[str, int]]:
+        return {split: dict(values) for split, values in self.counts_by_split.items()}
+
+
+def head_scenario_quotas(counts: Mapping[str, int]) -> dict[str, dict[str, int]]:
+    """The four-scenario quotas one split count implies, or a refusal by name."""
+
+    quotas: dict[str, dict[str, int]] = {}
+    for split, value in dict(counts).items():
+        if type(value) is not int or value <= 0 or value % len(HEAD_SEARCH_SCENARIOS) != 0:
+            raise ValueError(
+                "HEAD_SCENE_PLAN_COUNTS_INVALID: every split count must be a positive multiple of "
+                f"{len(HEAD_SEARCH_SCENARIOS)}"
+            )
+        quotas[split] = {
+            scenario: value // len(HEAD_SEARCH_SCENARIOS) for scenario in HEAD_SEARCH_SCENARIOS
+        }
+    return quotas
+
+
+def _quota_schedule(quotas: Mapping[str, int]) -> tuple[str, ...]:
+    remaining = {scenario: int(count) for scenario, count in quotas.items() if int(count) > 0}
+    scheduled: list[str] = []
+    while remaining:
+        for scenario in HEAD_SEARCH_SCENARIOS:
+            count = remaining.get(scenario, 0)
+            if count <= 0:
+                continue
+            scheduled.append(scenario)
+            if count == 1:
+                del remaining[scenario]
+            else:
+                remaining[scenario] = count - 1
+    return tuple(scheduled)
+
+
+def split_scene_plan(
+    *,
+    camera_name: str,
+    counts: Mapping[str, int],
+    seed_starts: Mapping[str, int] | None = None,
+    promotable: bool = True,
+) -> HeadCameraScenePlan:
+    """The head-camera plan: one image per world state, balanced across the four scenarios."""
+
+    if not isinstance(camera_name, str) or not camera_name:
+        raise ValueError("HEAD_SCENE_PLAN_CAMERA_INVALID: camera_name must be a non-empty string")
+    if type(promotable) is not bool:
+        raise ValueError("HEAD_SCENE_PLAN_PROMOTABLE_INVALID: promotable must be boolean")
+    raw_counts = dict(counts)
+    quotas = head_scenario_quotas(raw_counts)
+    seeds = split_seed_plan(raw_counts, seed_starts)
+    samples: list[HeadCameraSceneSample] = []
+    for split, split_seeds in seeds.items():
+        schedule = _quota_schedule(quotas[split])
+        for seed, scenario in zip(split_seeds, schedule, strict=True):
+            samples.append(
+                HeadCameraSceneSample(
+                    seed=seed,
+                    split=split,
+                    scenario=scenario,
+                    camera_name=camera_name,
+                    scene_group_id=f"{camera_name}-scene-{seed:09d}",
+                )
+            )
+    return HeadCameraScenePlan(
+        camera_name=camera_name,
+        counts_by_split=MappingProxyType(
+            {split: MappingProxyType(dict(values)) for split, values in quotas.items()}
+        ),
+        samples=tuple(samples),
+        promotable=promotable,
+    )
+
+
+def _neck_range_from_document(document: object) -> tuple[float, float] | None:
+    if document is None:
+        return None
+    if not isinstance(document, Mapping) or set(document) != set(_NECK_KEYS):
+        raise ValueError("neck_yaw_rad must contain exactly " + ", ".join(_NECK_KEYS))
+    return (float(document["min_rad"]), float(document["max_rad"]))
+
+
 def load_dataset_config(
     path: Path,
     *,
@@ -638,6 +849,8 @@ def load_dataset_config(
     if sample_limit is not None and raw_scenario_quotas is not None:
         raise ValueError("sample_limit cannot alter preregistered scenario quotas")
     counts = limited_split_counts(raw_counts, sample_limit)
+    if dataset_contract == HEAD_SEARCH_DATASET_CONTRACT and raw_scenario_quotas is None:
+        raw_scenario_quotas = head_scenario_quotas(counts)
     schema_version = document.get("schema_version")
     if dataset_contract in _NONPENETRATING_DATASET_CONTRACTS and (
         type(schema_version) is not int or schema_version != 2
@@ -656,6 +869,13 @@ def load_dataset_config(
         require_nonpenetrating_scene=document.get("require_nonpenetrating_scene", False),
         dataset_contract=dataset_contract,
         schema_version=2 if dataset_contract is None else schema_version,
+        geometry_seal=(
+            None
+            if document.get("geometry_seal") is None
+            else GeometrySealRequirement.from_mapping(document["geometry_seal"])
+        ),
+        neck_yaw_rad=_neck_range_from_document(document.get("neck_yaw_rad")),
+        promotable=document.get("promotable", True),
     )
 
 
@@ -1008,15 +1228,97 @@ def _scene_geometry_document(geometry: SceneGeometry) -> dict[str, Any]:
     }
 
 
+def _head_profile_context(
+    config: DatasetConfig, geometry_seal: Mapping[str, Any] | None
+) -> dict[str, Any] | None:
+    """Refuse to render head-camera data unless the sealed production camera is the one in use."""
+
+    if config.dataset_contract != HEAD_SEARCH_DATASET_CONTRACT:
+        return None
+    if geometry_seal is None:
+        raise ValueError(
+            "HEAD_CAMERA_GEOMETRY_SEAL_REQUIRED: refusing to render head-camera data without the "
+            "production-camera seal"
+        )
+    if config.geometry_seal is None or geometry_seal_sha256(geometry_seal) != (
+        config.geometry_seal.accepted_seal_sha256
+    ):
+        raise ValueError(
+            "HEAD_CAMERA_GEOMETRY_SEAL_DRIFT: the supplied seal is not the accepted production-camera "
+            "seal"
+        )
+    seal_camera = str(geometry_seal.get("camera_name", ""))
+    if seal_camera != config.camera_name:
+        raise ValueError(
+            "HEAD_CAMERA_GEOMETRY_SEAL_CAMERA_MISMATCH: the seal names camera "
+            f"{seal_camera!r} but this dataset renders {config.camera_name!r}"
+        )
+    seal_sources = geometry_seal.get("source_digests") or {}
+    scene_sources = scene_source_digests(config.mjcf_path)
+    if seal_sources.get("camera_source_sha256") != scene_sources["camera_source_sha256"]:
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_SOURCE_DRIFT: this dataset's scene includes a different camera "
+            "source than the sealed production camera"
+        )
+    lock = [float(value) for value in geometry_seal.get("lock_valid_neck_rad") or []]
+    if len(lock) != 2 or config.neck_yaw_rad is None:
+        raise ValueError(
+            "HEAD_DATASET_NECK_SAMPLING_REQUIRED: the head dataset needs both a sealed safe interval "
+            "and a frozen neck-yaw sampling range"
+        )
+    low, high = config.neck_yaw_rad
+    if low < lock[0] or high > lock[1]:
+        raise ValueError(
+            "HEAD_DATASET_NECK_SAMPLING_UNSAFE: the neck-yaw sampling range "
+            f"[{low}, {high}] leaves the sealed safe interval {lock}"
+        )
+    focal_px = (config.image_width / 2.0) / math.tan(float(geometry_seal["horizontal_fov_rad"]) / 2.0)
+    return {
+        "seal_sha256": geometry_seal_sha256(geometry_seal),
+        "focal_px": focal_px,
+        "principal_point_px": (config.image_width / 2.0, config.image_height / 2.0),
+    }
+
+
+def _sample_camera_document(
+    config: DatasetConfig, context: Mapping[str, Any], render: RawRender, scene_group_id: str
+) -> dict[str, Any]:
+    if render.camera_name != config.camera_name:
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_IDENTITY_MISSING: the render did not report the profile's camera "
+            f"({render.camera_name!r} != {config.camera_name!r})"
+        )
+    if render.camera_position_m is None or render.camera_quaternion_wxyz is None:
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_IDENTITY_MISSING: the render did not report the camera's world pose"
+        )
+    focal = float(context["focal_px"])
+    cx, cy = (float(value) for value in context["principal_point_px"])
+    return {
+        "frame_id": render.camera_name,
+        "width": config.image_width,
+        "height": config.image_height,
+        "k": [focal, 0.0, cx, 0.0, focal, cy, 0.0, 0.0, 1.0],
+        "distortion": [0.0, 0.0, 0.0, 0.0, 0.0],
+        "distortion_model": "plumb_bob",
+        "position_m": list(render.camera_position_m),
+        "quaternion_wxyz": list(render.camera_quaternion_wxyz),
+        "neck_rad": render.neck_rad,
+        "scene_group_id": scene_group_id,
+    }
+
+
 def generate_dataset(
     config: DatasetConfig,
     output_root: Path,
     *,
     renderer: DatasetRenderer | None = None,
+    geometry_seal: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     root = Path(output_root)
     if root.exists() or root.is_symlink():
         raise FileExistsError(f"output root already exists: {root}")
+    head_context = _head_profile_context(config, geometry_seal)
     root.mkdir(parents=True, mode=0o700)
     owned_renderer = renderer is None
     active_renderer = renderer or MuJoCoDatasetRenderer(config)
@@ -1045,6 +1347,20 @@ def generate_dataset(
                     seed=seed,
                     scenario=scenario,
                 )
+                scene_group_id = None
+                camera_document: dict[str, Any] | None = None
+                raw_mask_sha256 = None
+                if head_context is not None:
+                    scene_group_id = f"{config.camera_name}-scene-{seed:09d}"
+                    camera_document = _sample_camera_document(
+                        config, head_context, render, scene_group_id
+                    )
+                    raw_mask_sha256 = canonical_sha256(
+                        [
+                            _mask_sha256(instance.mask)
+                            for instance in sample.instances
+                        ]
+                    )
                 stem = f"{seed:09d}"
                 image_relative = Path("images") / split / f"{stem}.png"
                 label_relative = Path("labels") / split / f"{stem}.txt"
@@ -1053,33 +1369,38 @@ def generate_dataset(
                 image_path.parent.mkdir(parents=True, exist_ok=True)
                 write_png_rgb8(sample.rgb8, image_path)
                 _exclusive_text(root / label_relative, _label_text(sample))
-                atomic_json(
-                    root / truth_relative,
-                    {
-                        "seed": seed,
-                        "split": split,
-                        "scenario": scenario.value,
-                        "configured_cup_count": scenario.cup_count,
-                        "visible_instance_count": len(sample.instances),
-                        "instances": [_truth_instance_document(item) for item in sample.instances],
-                        **extra_truth,
-                    },
-                )
+                truth_document: dict[str, Any] = {
+                    "seed": seed,
+                    "split": split,
+                    "scenario": scenario.value,
+                    "configured_cup_count": scenario.cup_count,
+                    "visible_instance_count": len(sample.instances),
+                    "instances": [_truth_instance_document(item) for item in sample.instances],
+                    **extra_truth,
+                }
+                if scene_group_id is not None:
+                    truth_document["scene_group_id"] = scene_group_id
+                    truth_document["camera"] = camera_document
+                    truth_document["raw_mask_sha256"] = raw_mask_sha256
+                atomic_json(root / truth_relative, truth_document)
                 relative_paths = (image_relative, label_relative, truth_relative)
                 artifacts.extend(path.as_posix() for path in relative_paths)
                 class_instance_total += len(sample.instances)
-                samples.append(
-                    {
-                        "seed": seed,
-                        "split": split,
-                        "scenario": scenario.value,
-                        "configured_cup_count": scenario.cup_count,
-                        "visible_instance_count": len(sample.instances),
-                        "image": image_relative.as_posix(),
-                        "label": label_relative.as_posix(),
-                        "truth": truth_relative.as_posix(),
-                    }
-                )
+                sample_record: dict[str, Any] = {
+                    "seed": seed,
+                    "split": split,
+                    "scenario": scenario.value,
+                    "configured_cup_count": scenario.cup_count,
+                    "visible_instance_count": len(sample.instances),
+                    "image": image_relative.as_posix(),
+                    "label": label_relative.as_posix(),
+                    "truth": truth_relative.as_posix(),
+                }
+                if scene_group_id is not None:
+                    sample_record["scene_group_id"] = scene_group_id
+                    sample_record["camera"] = camera_document
+                    sample_record["raw_mask_sha256"] = raw_mask_sha256
+                samples.append(sample_record)
         dataset_yaml = "path: .\n"
         for split in config.split_counts:
             dataset_yaml += f"{split}: images/{split}\n"
@@ -1119,6 +1440,23 @@ def generate_dataset(
         if config.dataset_contract is not None:
             manifest["dataset_contract"] = config.dataset_contract
             manifest["member_splits"] = list(_dataset_splits(config.dataset_contract))
+        manifest["promotable"] = config.promotable
+        if head_context is not None:
+            manifest["geometry_seal_sha256"] = head_context["seal_sha256"]
+            manifest["camera_identity"] = {
+                "frame_id": config.camera_name,
+                "width": config.image_width,
+                "height": config.image_height,
+                "focal_px": head_context["focal_px"],
+                "distortion_model": "plumb_bob",
+            }
+            manifest["neck_yaw_rad"] = list(config.neck_yaw_rad or ())
+            group_ids = [item["scene_group_id"] for item in samples]
+            if len(set(group_ids)) != len(group_ids):
+                raise ValueError(
+                    "HEAD_DATASET_SCENE_GROUP_DUPLICATE: a scene_group_id appears twice in one dataset"
+                )
+            manifest["scene_group_ids"] = group_ids
         atomic_json(root / "dataset-manifest.json", manifest)
         return manifest
     finally:
@@ -1162,6 +1500,7 @@ class MuJoCoDatasetRenderer:
         except Exception:
             self.close()
             raise
+        self._neck_rad: float | None = None
         self._base_camera_position = np.array(self._model.cam_pos[self._camera_id()], copy=True)
         camera_rotation = np.asarray(self._model.cam_mat0[self._camera_id()]).reshape(3, 3)
         self._camera_local_positive_z = np.array(camera_rotation[:, 2], copy=True)
@@ -1232,6 +1571,16 @@ class MuJoCoDatasetRenderer:
             "cup_b_free_joint", cup_b if scenario.cup_count == 2 else hidden
         )
         self._set_free_joint_position("bottle_free_joint", bottle)
+        self._neck_rad = None
+        if self._config.neck_yaw_rad is not None:
+            low, high = self._config.neck_yaw_rad
+            neck_id = self._mujoco.mj_name2id(
+                self._model, self._mujoco.mjtObj.mjOBJ_JOINT, "neck_yaw_joint"
+            )
+            if neck_id < 0:
+                raise RuntimeError("neck joint not found: neck_yaw_joint")
+            self._neck_rad = float(random.uniform(low, high))
+            self._data.qpos[int(self._model.jnt_qposadr[neck_id])] = self._neck_rad
         self._model.cam_pos[camera_id] = camera_position
         for material_name in ("cup_a_material", "cup_b_material", "bottle_material"):
             material_id = self._mujoco.mj_name2id(
@@ -1376,6 +1725,9 @@ class MuJoCoDatasetRenderer:
             )
             is not None
         }
+        camera_id = self._camera_id()
+        camera_quaternion = np.zeros(4, dtype=np.float64)
+        self._mujoco.mju_mat2Quat(camera_quaternion, self._data.cam_xmat[camera_id])
         return RawRender(
             rgb8=rgb,
             geom_ids=visible_geom_ids,
@@ -1385,6 +1737,10 @@ class MuJoCoDatasetRenderer:
             occluder_body_name=occluder_body_name,
             occlusion_reference=occlusion_reference,
             geometry_receipt=geometry_receipt,
+            camera_name=self._config.camera_name,
+            neck_rad=self._neck_rad,
+            camera_position_m=tuple(float(value) for value in self._data.cam_xpos[camera_id]),
+            camera_quaternion_wxyz=tuple(float(value) for value in camera_quaternion),
         )
 
     def render(
@@ -1422,3 +1778,127 @@ class MuJoCoDatasetRenderer:
                 self._segmentation_renderer.close()
         finally:
             self._renderer.close()
+
+
+def verify_head_search_manifest(
+    manifest: Mapping[str, Any],
+    *,
+    dataset_root: Path,
+    geometry_seal: Mapping[str, Any],
+    expected_train: int,
+    expected_val: int,
+    expected_test: int,
+    require_non_promotable: bool = False,
+) -> dict[str, Any]:
+    """Read one head-camera manifest back against its own files and the accepted seal.
+
+    A manifest is a claim; this is the check that the claim is about the dataset on disk: exact
+    counts, four balanced scenarios, one image per `scene_group_id`, a camera identity on every
+    sample, every declared file present, and a promotion state that matches the profile it names.
+    """
+
+    if not isinstance(manifest, Mapping):
+        raise ValueError("HEAD_DATASET_MANIFEST_INVALID: manifest must be a mapping")
+    expected = {"train": expected_train, "val": expected_val, "test": expected_test}
+    for value in expected.values():
+        if type(value) is not int or value <= 0:
+            raise ValueError(
+                "HEAD_DATASET_EXPECTATION_INVALID: expected counts must be positive integers"
+            )
+    if manifest.get("dataset_contract") != HEAD_SEARCH_DATASET_CONTRACT:
+        raise ValueError(
+            "HEAD_DATASET_CONTRACT_INVALID: this is not a head search dataset manifest"
+        )
+    if manifest.get("camera_name") != geometry_seal.get("camera_name"):
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_MISMATCH: the manifest names camera "
+            f"{manifest.get('camera_name')!r} but the seal names {geometry_seal.get('camera_name')!r}"
+        )
+    if manifest.get("geometry_seal_sha256") != geometry_seal_sha256(geometry_seal):
+        raise ValueError(
+            "HEAD_DATASET_GEOMETRY_SEAL_DRIFT: the manifest was not produced under this seal"
+        )
+    raw_counts = manifest.get("split_counts") or {}
+    split_counts = {split: int(raw_counts.get(split, 0)) for split in expected}
+    if split_counts != expected:
+        raise ValueError(
+            f"HEAD_DATASET_COUNT_MISMATCH: the manifest holds {split_counts}, expected {expected}"
+        )
+    samples = list(manifest.get("samples") or [])
+    if len(samples) != sum(expected.values()):
+        raise ValueError(
+            f"HEAD_DATASET_COUNT_MISMATCH: the manifest holds {len(samples)} samples, expected "
+            f"{sum(expected.values())}"
+        )
+    groups: dict[str, str] = {}
+    scenario_counts: dict[str, Counter[str]] = {split: Counter() for split in expected}
+    root = Path(dataset_root)
+    for sample in samples:
+        split = str(sample.get("split"))
+        if split not in expected:
+            raise ValueError(f"HEAD_DATASET_SPLIT_INVALID: unknown split {split!r}")
+        scenario = str(sample.get("scenario"))
+        if scenario not in HEAD_SEARCH_SCENARIOS:
+            raise ValueError(f"HEAD_DATASET_SCENARIO_INVALID: unknown scenario {scenario!r}")
+        group = str(sample.get("scene_group_id") or "")
+        if not group:
+            raise ValueError(
+                f"HEAD_DATASET_SCENE_GROUP_MISSING: seed {sample.get('seed')} declares no scene group"
+            )
+        camera = sample.get("camera") or {}
+        if (
+            camera.get("frame_id") != geometry_seal.get("camera_name")
+            or len(camera.get("k") or []) != 9
+            or len(camera.get("distortion") or []) != 5
+        ):
+            raise ValueError(
+                "HEAD_DATASET_CAMERA_IDENTITY_MISSING: seed "
+                f"{sample.get('seed')} carries no complete camera identity"
+            )
+        if group in groups:
+            raise ValueError(
+                f"HEAD_DATASET_SCENE_GROUP_DUPLICATE: {group} is claimed by more than one sample"
+            )
+        groups[group] = split
+        scenario_counts[split][scenario] += 1
+        for key in ("image", "label", "truth"):
+            relative = sample.get(key)
+            if not relative or not (root / str(relative)).is_file():
+                raise ValueError(
+                    f"HEAD_DATASET_FILE_MISSING: {key} {relative!r} of seed {sample.get('seed')} "
+                    "is not on disk"
+                )
+    for split, quota in head_scenario_quotas(expected).items():
+        observed = dict(scenario_counts[split])
+        if observed != quota:
+            raise ValueError(
+                f"HEAD_DATASET_SCENARIO_QUOTA_MISMATCH: {split} holds {observed}, expected {quota}"
+            )
+    for split, count in expected.items():
+        images = sorted((root / "images" / split).glob("*.png"))
+        labels = sorted((root / "labels" / split).glob("*.txt"))
+        truths = sorted((root / "truth" / split).glob("*.json"))
+        if not len(images) == len(labels) == len(truths) == count:
+            raise ValueError(
+                f"HEAD_DATASET_COUNT_MISMATCH: {split} holds {len(images)} images, {len(labels)} "
+                f"labels and {len(truths)} truth files, expected {count} of each"
+            )
+    promotable = bool(manifest.get("promotable", False))
+    if require_non_promotable and promotable:
+        raise ValueError(
+            "HEAD_DATASET_PROMOTABLE_FORBIDDEN: a smoke dataset must stay non-promotable"
+        )
+    if not require_non_promotable and not promotable:
+        raise ValueError(
+            "HEAD_DATASET_NOT_PROMOTABLE: this manifest is a smoke dataset and cannot satisfy the "
+            "production contract"
+        )
+    return {
+        "status": "OK",
+        "sample_count": len(samples),
+        "scene_group_count": len(groups),
+        "split_counts": dict(split_counts),
+        "scenario_counts": {split: dict(values) for split, values in scenario_counts.items()},
+        "promotable": promotable,
+        "geometry_seal_sha256": str(manifest.get("geometry_seal_sha256")),
+    }

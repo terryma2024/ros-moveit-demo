@@ -268,8 +268,8 @@ def test_dataset_manifest_and_labels_are_reproducible(tmp_path: Path) -> None:
         split_counts={"train": 4, "val": 4, "test": 4},
         generator_commit="a2c5e03",
     )
-    first = generate_dataset(config, tmp_path / "first", renderer=_FakeRenderer())
-    second = generate_dataset(config, tmp_path / "second", renderer=_FakeRenderer())
+    first = generate_dataset(config, tmp_path / "first", renderer=_HeadFakeRenderer())
+    second = generate_dataset(config, tmp_path / "second", renderer=_HeadFakeRenderer())
 
     assert first == second
     assert first["sample_count"] == 12
@@ -292,7 +292,7 @@ def test_dataset_manifest_records_explicit_seed_ranges(tmp_path: Path) -> None:
         seed_starts={"train": 400000, "val": 500000, "test": 600000},
     )
 
-    manifest = generate_dataset(config, tmp_path / "fresh", renderer=_FakeRenderer())
+    manifest = generate_dataset(config, tmp_path / "fresh", renderer=_HeadFakeRenderer())
 
     assert manifest["seed_ranges"] == {
         "train": [400000, 400003],
@@ -313,7 +313,7 @@ def test_generate_dataset_refuses_existing_output_root(tmp_path: Path) -> None:
     output.mkdir()
 
     with pytest.raises(FileExistsError, match="output root"):
-        generate_dataset(config, output, renderer=_FakeRenderer())
+        generate_dataset(config, output, renderer=_HeadFakeRenderer())
 
 
 def test_repository_fixture_exposes_camera_targets_distractors_and_scenarios() -> None:
@@ -363,3 +363,292 @@ def test_fresh_benchmark_dataset_config_uses_preregistered_seed_namespace() -> N
         "val": 800000,
         "test": 900000,
     }
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# the head-camera profile: the same four scenarios, one camera domain, and a frozen production-camera seal that the
+# generation program refuses to run without.
+# ----------------------------------------------------------------------------------------------------------------------
+
+from so101_demo.act.head_camera_geometry import scene_source_digests  # noqa: E402
+from so101_demo.adapters.perception.mujoco_dataset import (  # noqa: E402
+    GeometrySealRequirement,
+    split_scene_plan,
+    verify_head_search_manifest,
+)
+from so101_demo.perception_benchmark.contracts import canonical_sha256  # noqa: E402
+
+HEAD_CONFIG_PATH = Path(__file__).parents[1] / "config/perception/head_camera_yolo_seg.yaml"
+HEAD_SMOKE_CONFIG_PATH = (
+    Path(__file__).parents[1] / "config/perception/head_camera_yolo_seg_smoke.yaml"
+)
+
+
+class _HeadFakeRenderer:
+    """A head-profile render that reports the camera identity the manifest must carry."""
+
+    def __init__(self, camera_name: str = "head_camera") -> None:
+        self.camera_name = camera_name
+
+    def render(self, seed: int, scenario: DatasetScenario) -> RawRender:
+        base = _raw_render(cup_count=scenario.cup_count, cup_rgba=(1.0, 0.4, 0.3, 1.0))
+        return RawRender(
+            rgb8=base.rgb8,
+            geom_ids=base.geom_ids,
+            geom_body_ids=base.geom_body_ids,
+            body_names=base.body_names,
+            camera_name=self.camera_name,
+            neck_rad=0.05,
+            camera_position_m=(-0.06, 0.06, 0.43),
+            camera_quaternion_wxyz=(0.9, 0.0, 0.0, 0.44),
+        )
+
+    def close(self) -> None:
+        pass
+
+
+def _write_head_scene(tmp_path: Path) -> Path:
+    fixture = tmp_path / "head_scene.xml"
+    fixture.write_text("<mujoco/>", encoding="utf-8")
+    return fixture
+
+
+def _geometry_seal(*, mjcf_path: Path, camera_name: str = "head_camera") -> dict:
+    document = {
+        "schema_version": 1,
+        "camera_name": camera_name,
+        "image_width": 640,
+        "image_height": 480,
+        "horizontal_fov_rad": 1.312,
+        "lock_valid_neck_rad": [-3.14159, 3.14159],
+        "required_search_domain_rad": [-0.3, 0.3],
+        "safe_interval_contains_required_domain": True,
+        "source_digests": dict(scene_source_digests(mjcf_path)),
+    }
+    document["seal_sha256"] = canonical_sha256(document)
+    return document
+
+
+def _head_config(tmp_path: Path, *, accepted_seal_sha256: str, counts: dict[str, int] | None = None,
+                 camera_name: str = "head_camera", promotable: bool = True) -> DatasetConfig:
+    fixture = _write_head_scene(tmp_path)
+    return DatasetConfig(
+        mjcf_path=fixture,
+        split_counts=counts or {"train": 4, "val": 4, "test": 4},
+        generator_commit="head-commit",
+        camera_name=camera_name,
+        seed_starts={"train": 400000, "val": 500000, "test": 600000},
+        dataset_contract="so101-head-search-yolo-seg-v1",
+        geometry_seal=GeometrySealRequirement(
+            required=True, accepted_seal_sha256=accepted_seal_sha256
+        ),
+        neck_yaw_rad=(-0.35, 0.35),
+        promotable=promotable,
+    )
+
+
+def test_head_camera_plan_has_four_balanced_scenarios() -> None:
+    plan = split_scene_plan(
+        camera_name="head_camera", counts={"train": 800, "val": 200, "test": 200}
+    )
+
+    assert plan.counts("train") == {
+        "no_cup": 200,
+        "one_cup_distractors": 200,
+        "two_cups": 200,
+        "cup_near_bottle": 200,
+    }
+    assert plan.counts("val") == {
+        "no_cup": 50,
+        "one_cup_distractors": 50,
+        "two_cups": 50,
+        "cup_near_bottle": 50,
+    }
+    assert plan.counts("test") == plan.counts("val")
+    assert len(plan.samples) == 1200
+    assert all(item.camera_name == "head_camera" for item in plan.samples)
+    assert plan.promotable is True
+
+
+def test_head_camera_plan_groups_are_unique_and_split_disjoint() -> None:
+    plan = split_scene_plan(
+        camera_name="head_camera", counts={"train": 4, "val": 4, "test": 4}
+    )
+
+    groups = [item.scene_group_id for item in plan.samples]
+    assert len(set(groups)) == len(groups)
+    assert {item.split for item in plan.samples} == {"train", "val", "test"}
+    assert plan.counts("train") == {
+        "no_cup": 1,
+        "one_cup_distractors": 1,
+        "two_cups": 1,
+        "cup_near_bottle": 1,
+    }
+    assert plan.samples[0].scene_group_id.startswith("head_camera-scene-")
+
+
+def test_head_camera_plan_rejects_counts_that_cannot_be_split_four_ways() -> None:
+    with pytest.raises(ValueError, match="HEAD_SCENE_PLAN_COUNTS_INVALID"):
+        split_scene_plan(camera_name="head_camera", counts={"train": 10, "val": 4, "test": 4})
+
+
+def test_smoke_head_camera_plan_is_balanced_but_never_promotable() -> None:
+    plan = split_scene_plan(
+        camera_name="head_camera",
+        counts={"train": 32, "val": 8, "test": 8},
+        promotable=False,
+    )
+
+    assert plan.promotable is False
+    assert plan.counts("val") == {
+        "no_cup": 2,
+        "one_cup_distractors": 2,
+        "two_cups": 2,
+        "cup_near_bottle": 2,
+    }
+
+
+def test_head_camera_configs_freeze_the_production_camera_counts_and_seal() -> None:
+    production = load_dataset_config(HEAD_CONFIG_PATH, generator_commit="head-commit")
+    smoke = load_dataset_config(HEAD_SMOKE_CONFIG_PATH, generator_commit="head-commit")
+
+    assert production.camera_name == "head_camera"
+    assert dict(production.split_counts) == {"train": 800, "val": 200, "test": 200}
+    assert production.geometry_seal is not None
+    assert production.geometry_seal.required is True
+    assert len(production.geometry_seal.accepted_seal_sha256) == 64
+    assert production.promotable is True
+    assert smoke.camera_name == "head_camera"
+    assert dict(smoke.split_counts) == {"train": 32, "val": 8, "test": 8}
+    assert smoke.promotable is False
+    assert smoke.geometry_seal is not None
+    assert smoke.geometry_seal.accepted_seal_sha256 == production.geometry_seal.accepted_seal_sha256
+
+
+def test_head_camera_generation_requires_the_geometry_seal(tmp_path: Path) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256="f" * 64)
+
+    with pytest.raises(ValueError, match="HEAD_CAMERA_GEOMETRY_SEAL_REQUIRED"):
+        generate_dataset(config, tmp_path / "no-seal", renderer=_HeadFakeRenderer())
+
+    with pytest.raises(ValueError, match="HEAD_CAMERA_GEOMETRY_SEAL_DRIFT"):
+        generate_dataset(
+            config, tmp_path / "drifted", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        )
+
+
+def test_head_camera_generation_records_groups_camera_and_mask_digests(tmp_path: Path) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
+
+    manifest = generate_dataset(
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+    )
+
+    assert manifest["camera_name"] == "head_camera"
+    assert manifest["dataset_contract"] == "so101-head-search-yolo-seg-v1"
+    assert manifest["geometry_seal_sha256"] == seal["seal_sha256"]
+    sample = manifest["samples"][0]
+    assert sample["scene_group_id"].startswith("head_camera-scene-")
+    assert sample["camera"]["frame_id"] == "head_camera"
+    assert len(sample["camera"]["k"]) == 9
+    assert sample["camera"]["distortion"] == [0.0, 0.0, 0.0, 0.0, 0.0]
+    truth = json.loads((tmp_path / "head" / sample["truth"]).read_text())
+    assert len(truth["raw_mask_sha256"]) == 64
+    assert len({item["scene_group_id"] for item in manifest["samples"]}) == len(manifest["samples"])
+
+
+def test_head_camera_generation_refuses_a_non_head_camera_render(tmp_path: Path) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(
+        tmp_path, accepted_seal_sha256=seal["seal_sha256"], camera_name="task_camera"
+    )
+
+    with pytest.raises(ValueError, match="HEAD_CAMERA_GEOMETRY_SEAL_CAMERA_MISMATCH"):
+        generate_dataset(
+            config, tmp_path / "wrong-camera", geometry_seal=seal, renderer=_HeadFakeRenderer()
+        )
+
+
+def test_verify_head_search_manifest_accepts_a_sealed_head_dataset(tmp_path: Path) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
+    manifest = generate_dataset(
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+    )
+
+    report = verify_head_search_manifest(
+        manifest,
+        dataset_root=tmp_path / "head",
+        geometry_seal=seal,
+        expected_train=4,
+        expected_val=4,
+        expected_test=4,
+    )
+
+    assert report["status"] == "OK"
+    assert report["scene_group_count"] == 12
+    assert report["promotable"] is True
+
+
+def test_verify_head_search_manifest_refuses_a_smoke_manifest_as_production(tmp_path: Path) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(
+        tmp_path, accepted_seal_sha256=seal["seal_sha256"], promotable=False
+    )
+    manifest = generate_dataset(
+        config, tmp_path / "smoke", geometry_seal=seal, renderer=_HeadFakeRenderer()
+    )
+
+    with pytest.raises(ValueError, match="HEAD_DATASET_NOT_PROMOTABLE"):
+        verify_head_search_manifest(
+            manifest,
+            dataset_root=tmp_path / "smoke",
+            geometry_seal=seal,
+            expected_train=4,
+            expected_val=4,
+            expected_test=4,
+        )
+    assert (
+        verify_head_search_manifest(
+            manifest,
+            dataset_root=tmp_path / "smoke",
+            geometry_seal=seal,
+            expected_train=4,
+            expected_val=4,
+            expected_test=4,
+            require_non_promotable=True,
+        )["promotable"]
+        is False
+    )
+
+
+def test_verify_head_search_manifest_refuses_count_drift_and_group_leakage(tmp_path: Path) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
+    manifest = generate_dataset(
+        config, tmp_path / "head", geometry_seal=seal, renderer=_HeadFakeRenderer()
+    )
+
+    with pytest.raises(ValueError, match="HEAD_DATASET_COUNT_MISMATCH"):
+        verify_head_search_manifest(
+            manifest,
+            dataset_root=tmp_path / "head",
+            geometry_seal=seal,
+            expected_train=8,
+            expected_val=4,
+            expected_test=4,
+        )
+
+    leaked = json.loads(json.dumps(manifest))
+    leaked["samples"][1]["scene_group_id"] = leaked["samples"][0]["scene_group_id"]
+    with pytest.raises(ValueError, match="HEAD_DATASET_SCENE_GROUP_DUPLICATE"):
+        verify_head_search_manifest(
+            leaked,
+            dataset_root=tmp_path / "head",
+            geometry_seal=seal,
+            expected_train=4,
+            expected_val=4,
+            expected_test=4,
+        )

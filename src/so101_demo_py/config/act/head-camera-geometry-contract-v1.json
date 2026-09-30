@@ -1,0 +1,78 @@
+{
+  "scene_path": "../../assets/mujoco/act/scene.xml",
+  "camera": {
+    "camera_name": "head_camera",
+    "width": 640,
+    "height": 480,
+    "fovy_rad": 1.0471975511965976,
+    "parent_body": "head_mount",
+    "local_position_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "local_xyaxes": [
+      -1.0,
+      0.0,
+      0.0,
+      0.0,
+      -0.6,
+      0.8
+    ]
+  },
+  "neck_joint": "neck_yaw_joint",
+  "anchors": [
+    {
+      "name": "default",
+      "cup_start_m": [
+        0.02,
+        -0.28,
+        0.165
+      ],
+      "neck_start_rad": 0.1
+    },
+    {
+      "name": "left",
+      "cup_start_m": [
+        -0.08,
+        -0.28,
+        0.165
+      ],
+      "neck_start_rad": 0.0
+    },
+    {
+      "name": "forward",
+      "cup_start_m": [
+        0.02,
+        -0.36,
+        0.165
+      ],
+      "neck_start_rad": 0.0
+    }
+  ],
+  "workspace_x_m": [
+    -0.15,
+    0.12
+  ],
+  "workspace_y_m": [
+    -0.4,
+    -0.24
+  ],
+  "workspace_z_m": [
+    0.163,
+    0.167
+  ],
+  "workspace_step_m": 0.02,
+  "neck_grid_rad": [
+    -6.283185307179586,
+    6.283185307179586,
+    0.002
+  ],
+  "coarse_step_candidate_rad": 0.3,
+  "safe_interval_margin_rad": 1e-05,
+  "safe_bisection_tolerance_rad": 1e-05,
+  "fov_tolerance_rad": 1e-06,
+  "visible_pixel_minimum": 64,
+  "accepted_scene_sha256": "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f",
+  "accepted_camera_source_sha256": "d8665bb90bf8d4b47f2a75dbf8147094464b82a69a7e57da30a77c5858c7903c"
+}

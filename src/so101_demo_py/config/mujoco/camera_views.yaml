@@ -35,3 +35,9 @@ presets:
     azimuth_deg: 90.0
     elevation_deg: -89.999
     orthographic: true
+  # The production head camera's owned view: the viewer follows the camera the Head Search task
+  # seals in config/act/head-camera-geometry-contract-v1.json, rather than a free view that would
+  # render a camera the dataset was not collected from.
+  head_camera:
+    mode: fixed
+    fixed_camera_name: head_camera

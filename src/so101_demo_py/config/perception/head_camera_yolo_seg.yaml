@@ -1,0 +1,26 @@
+# Head Search head-camera dataset: the production profile.
+#
+# The scene includes assets/mujoco/act/so101.xml, so it carries the SAME production head camera the
+# geometry seal was measured from; only the multi-object table layout is dataset-specific. The seal
+# digest below is the accepted production-camera seal: generation refuses to render without it, and
+# refuses any seal other than this one.
+mjcf_path: ../../assets/mujoco/act/head_search_scene.xml
+camera_name: head_camera
+image_width: 640
+image_height: 480
+dataset_contract: so101-head-search-yolo-seg-v1
+split_counts:
+  train: 800
+  val: 200
+  test: 200
+seed_starts:
+  train: 4000000
+  val: 4100000
+  test: 4200000
+neck_yaw_rad:
+  min_rad: -0.35
+  max_rad: 0.35
+geometry_seal:
+  required: true
+  accepted_seal_sha256: ec18dab290541a0e876fb31861c9c9f832c76c2805ae1f97df5b7362713226ec
+promotable: true
