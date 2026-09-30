@@ -36515,3 +36515,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `first_command <= label_cutoff` does not hold for early-failure captures.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `cfbfe80a3`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1976 — Task 3 fix pass, twenty-ninth instalment: a formal audit may not seal without coverage (T3-F5, second half)
+
+- **Presence of source coverage is now a precondition of a formal seal.** `seal()` refuses when the
+  scope mode is `formal` and any of the raw streams is empty — physics, references or events — or when no
+  **accepted** reference exists, or when no `release` event was recorded
+  (`AUDIT_FORMAL_COVERAGE_INCOMPLETE`). This is the reviewer's "a formal writer with a valid lease can
+  also seal empty source streams" case. Because the broker is not wired yet, this deliberately makes a
+  formal seal impossible today: that is what fail-closed means here, and Task 7's live run is what makes
+  it reachable.
+- **The diagnostic mode is untouched**, which is the separation the plan requires; the control asserts
+  that a diagnostic audit still seals while the formal one refuses, and that a formal audit seals once it
+  carries a reference, a physics row, a phase event and a release event.
+- **Evidence.** `logs/task3-fix29.run` rc=0 across `test_act_episode_audit.py`, `test_act_recorder.py`,
+  `test_act_release_boundary.py`, `test_act_continuous_capture.py` and `test_act_supervisor.py`, with its
+  own NVMe scratch and a non-empty tempfile proof. One of my own helper mistakes (a missing parent
+  directory) was caught by the suite and fixed.
+- **What remains in Task 3, and what it waits on.** **T3-F1** is now the only substantive item: the
+  reviewer's ruling requires the exact source-derived raw-frame schema (per arm/gripper frame with
+  ordered `joint_names`, positions **and** velocities, source and receipt stamps, observer
+  identity/sequence, and an explicit 5+1 → 6 mapping, distinguishing original publications from
+  references evaluated at a requested future instant) to be **ratified by the owner before the
+  boundaries change together**; the same applies to the window schema, with the correction that
+  `first_command <= label_cutoff` does not hold for early-failure captures. Full robot contact pairs, an
+  independent Planning Scene record and gripper/controller feedback likewise remain summaries rather than
+  source records.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `591804615`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

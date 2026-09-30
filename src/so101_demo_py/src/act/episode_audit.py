@@ -328,6 +328,7 @@ class EpisodeAuditWriter:
         self._bound_references: set = set()
         self._revoked_targets: set = set()
         self._event_release_epoch: int | None = None
+        self._event_kinds: set = set()
         self._row_indexes: set = set()
         self._release_epoch: int | None = None
         self._observed_epochs: dict = {}
@@ -434,6 +435,7 @@ class EpisodeAuditWriter:
                 if item["payload"]["release_epoch"] != item["identity"]["release_epoch"]:
                     raise ValueError("AUDIT_SCHEMA_INVALID")
             self._event_release_epoch = item["identity"]["release_epoch"]
+            self._event_kinds.add(item["kind"])
             item["sequence"] = self._next("events")
         elif kind == "references":
             raw_present = _REFERENCE_RAW_FIELDS & set(record) if isinstance(record, dict) else set()
@@ -477,6 +479,13 @@ class EpisodeAuditWriter:
 
     def seal(self, window: dict) -> Path:
         self._require_open()
+        if self.scope.get("mode") == "formal":
+            # a formal episode must actually carry the raw source coverage it claims; until the
+            # producers exist this refuses rather than sealing an empty audit
+            if (not self._sequence["physics"] or not self._sequence["references"]
+                    or not self._sequence["events"] or not self._references
+                    or "release" not in self._event_kinds):
+                raise ValueError("AUDIT_FORMAL_COVERAGE_INCOMPLETE")
         for sequence in sorted(self._bound_references):
             entry = self._references.get(sequence)
             if (entry is None or entry["accepted"] is not True

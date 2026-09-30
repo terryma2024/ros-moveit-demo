@@ -694,3 +694,43 @@ def test_readback_requires_exact_types_and_correlated_clocks(tmp_path):
     _resign(sealed, path, "physics.jsonl", payload)
     with pytest.raises(ValueError, match="AUDIT_PHYSICS_INVALID"):
         verify_audit_manifest(path)
+
+
+def _formal_writer(tmp_path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    return EpisodeAuditWriter(tmp_path / "formal", dict(scope(), mode="formal"),
+                               {**identity(), "lease": _lease()}, {"inputs_sha256": "a" * 64})
+
+
+def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
+    """A formal seal must carry physics, references, events and a release (T3-F5)."""
+
+    empty = _formal_writer(tmp_path / "empty")
+    with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
+        empty.seal({"start_s": 1.0})
+
+    partial = _formal_writer(tmp_path / "partial")
+    partial.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
+                                      "observation": {"simulation_time_s": 1.1,
+                                                      "simulation_step": 1,
+                                                      "cup_position_world_m": [0.0, 0.0, 0.0]}})
+    with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
+        partial.seal({"start_s": 1.0})
+
+    complete = _formal_writer(tmp_path / "complete")
+    complete.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                          "positions": [0.1] * 6, "accepted": True})
+    complete.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
+                                       "observation": {"simulation_time_s": 1.1,
+                                                       "simulation_step": 1,
+                                                       "cup_position_world_m": [0.0, 0.0, 0.0]}})
+    for kind, payload in (("phase_complete", {"phase": "SEARCH", "physics_step": 1}),
+                          ("release", {"release_epoch": 1, "supported": True,
+                                       "no_fingertip_contact": True})):
+        complete.append_source("events", {"kind": kind, "identity": identity(),
+                                          "sim_time_s": 1.1, "monotonic_ns": 1, "payload": payload})
+    assert complete.seal({"start_s": 1.0}).is_file()
+    # the diagnostic mode keeps its previous behaviour, which is what the plan separates
+    diagnostic = EpisodeAuditWriter(tmp_path / "diagnostic", scope(), identity(),
+                                    {"inputs_sha256": "a" * 64})
+    assert diagnostic.seal({"start_s": 1.0}).is_file()
