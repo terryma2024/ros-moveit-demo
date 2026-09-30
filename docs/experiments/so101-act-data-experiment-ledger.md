@@ -39293,3 +39293,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the
   verifier's three increments landed. HEAD `7223aa746`; targeted gate `logs/task3-final.run` **430 passed**; no
   push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2102 — The evidence-port repair LANDED: the qualification suite is green again
+
+- **The fix, written after printing absolute line numbers rather than carrying a grep window's offsets**
+  (`test_act_task8.py`: `run_phase`'s return at **65**, `run_retreat_segment`'s at **100**, helper inserted before
+  **58**; `set_down` untouched because its document refuses the key): `FakePort` now supplies the minimal
+  `physical_observation` block the runner's `_raw` rule accepts, so `_missing_raw` stays empty, the run seals its
+  artifact and the **four qualification failures disappear** — exactly the oracle CP-2100 predicted.
+- **One expectation moved with it, correctly.** `test_release_detaches_before_opening_and_retreat_has_two_ordered_segments`
+  asserted `formal_episode_eligible is False` and `live_evidence_artifact is None` from the days when that fixture
+  carried no raw evidence; with the block supplied, the run **is** formally eligible and **does** seal, so both
+  expectations now read `True` / `is not None` with a comment saying why. The test's subject — the detach-before-open
+  order and the two ordered retreat segments — is unchanged.
+- **Evidence.** `logs/task4-fix.run` rc=0: **115 passed** across `test_act_task8.py`,
+  `test_act_task8_live_qualification.py`, `test_act_w8_qualification.py`, the campaign admission suite, and the two
+  motion-phase suites, under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **What this unblocks in Task 4**: the qualification chain's own suites are green again, which is the prerequisite
+  for the verifier's positive delegation test (CP-2095 — its fourteen journals come from this suite) and for re-running
+  the Task 4 gate cleanly.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the verifier's
+  three increments landed and this repair done. HEAD `ea5ee9871`; no push, no evidence deletion, no hardware, no
+  second stack.

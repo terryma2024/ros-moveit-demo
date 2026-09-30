@@ -55,6 +55,19 @@ class FakePort:
             "no_fingertip_contact": True, "placement_stable": True, "retreat_stable": True,
         }
 
+    def _with_raw(self, evidence):
+        """The raw block the amended contract requires (CP-2089/CP-2100).
+
+        The runner records a phase in `_missing_raw` when its evidence lacks `physical_observation`, and that
+        list is what makes `live_evidence_artifact` None. The phase documents carry the block; the set-down
+        document refuses the key (CP-2091), so it is deliberately not applied there.
+        """
+
+        return dict(evidence, physical_observation={
+            "simulation_time_s": float(evidence.get("sim_time_s", 1.0)),
+            "simulation_step": int(evidence.get("physics_step", 1)),
+        })
+
     def run_phase(self, phase, req):
         self.calls.append(("phase", phase))
         if phase == "RELEASE":
@@ -62,7 +75,7 @@ class FakePort:
         result = self.evidence(phase, req)
         if phase == self.fail_phase:
             result["contact_ok"] = False
-        return result
+        return self._with_raw(result)
 
     def release_preflight(self, req):
         self.calls.append(("release_preflight", None))
@@ -97,7 +110,7 @@ class FakePort:
 
     def run_retreat_segment(self, direction, distance_m, req):
         self.calls.append(("retreat", direction, distance_m))
-        return self.evidence("RADIAL_RETREAT", req)
+        return self._with_raw(self.evidence("RADIAL_RETREAT", req))
 
     def seal_live_evidence(self, req):
         self.sealed += 1
@@ -151,9 +164,10 @@ def test_release_detaches_before_opening_and_retreat_has_two_ordered_segments():
     result = PickPlaceRunner(port).run(request("full", None))
     assert result["completed_phases"] == list(PickPlaceRunner.PHASES)
     # Task 3: a formal episode now requires the raw observation of every phase; this fake port supplies
-    # none, so the run still completes and stops, but it is not a formal episode and seals no artifact
-    assert result["formal_episode_eligible"] is False
-    assert result["live_evidence_artifact"] is None
+    # the port now supplies the raw observation the amended contract requires (CP-2100), so this run is a
+    # formal episode and seals an artifact; the phases and their order below are what this test is about
+    assert result["formal_episode_eligible"] is True
+    assert result["live_evidence_artifact"] is not None
     assert port.calls.index(("detach_moveit", None)) < port.calls.index(("phase", "RELEASE"))
     assert port.calls.index(("planning_attached", None)) < port.calls.index(("phase", "RELEASE"))
     assert [call for call in port.calls if call[0] == "retreat"] == [
