@@ -37829,3 +37829,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `2ded8eb3d`;
   targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2034 — Task 3: the boundary's Planning Scene gate is derived from the remembered receipt, acceptance set green
+
+- **What landed.** `_gate_facts` keeps its static signature and gains a third parameter, `receipt=None`, so
+  every other caller keeps working unchanged; the gate is
+  `getattr(receipt, "success", None) is True`, and the two call sites pass
+  `getattr(self, "_planning_scene_receipt", None)` — the receipt `search()` stores (CP-2031). A missing or
+  unsuccessful receipt now **fails** the gate instead of asserting it, which is the owner-authorised
+  replacement of the second literal.
+- **Fixtures updated in the same pass, and the inference checked.** `test_act_task8_motion_phases.py`'s `_case`
+  supplies a successful receipt; the first run then failed exactly one test — the **dispatch** case in
+  `test_act_task8_close_execution.py` — confirming CP-2032's inference that this file has its **own** fixture
+  (`:83` assigns `_gate_facts`), which now supplies the same receipt. That is precisely the failure CP-2016
+  measured when the placeholder became fail-closed, and it is now fixed at its source rather than by
+  loosening a gate.
+- **Evidence.** `logs/task3-step3d.run` rc=0 across the motion-phases, close-execution, task8, search-port,
+  release-boundary, supervisor and audit suites under `pytest-xdist` with 8 workers, with its own NVMe scratch
+  and a non-empty tempfile proof. The intermediate RED is kept in `logs/task3-step3c.run`.
+- **What remains for step four.** Fail-closed controls: a case whose receipt is missing and a case whose
+  receipt is unsuccessful must both report `planning_scene_ok` false, and the record itself
+  (`planning_scene_observation`, from the port's `observe_observation()` plus the caller's simulation instant)
+  should travel with the same document once a producer fills it.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `10e7de0b0`;
+  targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

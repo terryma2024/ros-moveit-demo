@@ -81,6 +81,8 @@ def _case(calls, *, bilateral=True, with_dispatch=True, with_wait=True):
     # production code rather than by a double that agrees with the test
     boundary._close_facts = MethodType(PickPlaceSearchBoundary._close_facts, boundary)
     boundary._gate_facts = PickPlaceSearchBoundary._gate_facts      # staticmethod: assigned
+    # the SEARCH receipt these phases derive their Planning Scene gate from (CP-2017 step three)
+    boundary._planning_scene_receipt = SimpleNamespace(success=True, failure_code=None)
     boundary._checked_aggregates = MethodType(PickPlaceSearchBoundary._checked_aggregates, boundary)
     boundary.sequence_facts = MethodType(PickPlaceSearchBoundary.sequence_facts, boundary)
     return boundary, ticket, capture
