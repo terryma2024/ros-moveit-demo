@@ -38092,3 +38092,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `5e5d65580`;
   consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2045 — Task 3 gate after the three derived gates: 419 passed in 10.70s
+
+- **Gate.** `logs/task3-gate12.run` rc=0: **419 passed in 10.70s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof. The rise from 415 is CP-2043's derived feedback gate and CP-2044's three-way control.
+- **Where the three derived gates stand.** `planning_scene_ok` (boundary and SEARCH document),
+  `joint_feedback_ok` (boundary) are derived from real observations with three-way controls; the runner's
+  `_EVIDENCE_GATES` rule refuses a phase whose gates are not all true. The port document's two controller gates
+  and the boundary's `controller_reference_ok`/`planning_ok` are the remaining documented placeholders.
+- **The port half needs one read before it can be attempted**: the port test file's observation builder, so
+  the fixtures can stamp the ratified record at their own instant the way CP-2042 did for the boundary. Its
+  gate lines are already known (`"controller_reference_ok": True, "joint_feedback_ok": True,` beside
+  `"planning_ok": True`).
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4deb692ab`;
+  no push, no evidence deletion, no hardware, no second stack.
