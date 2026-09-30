@@ -42274,3 +42274,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
   green, commit half landed; items 5+ wait on CP-2232's list, with `rgb_skew`'s pair the only one the code itself
   implies. HEAD `881e5c8e5`; fourteen gates green.
+
+
+## CP-2237 — A current baseline at HEAD: the widest gate passes on the tree the reviewer is reading
+
+- **Run**: the fourteen suites of this stretch — audit, recorder, release-boundary, capture, `test_act_task8`,
+  qualification, W8 verifier, campaign admission, expert route, controller reference, the store's commit suite and
+  three parallel-collection suites — under `pytest-xdist` with eight workers, at HEAD `aaa80315f`:
+  **320 passed in 4.86 s**, rc=0, with its own NVMe scratch and a non-empty tempfile proof
+  (`logs/task3-head-check.run`, rc in `logs/task3-head-check.rc`).
+- **Why it matters**: the earlier gates were recorded at earlier commits, so this is the first run that covers
+  **everything this stretch landed at once** — the F12/F3/F5/F1 closes, F11's six items, F13's amendment and ③a's
+  commit gate — on the exact tree the seventh review is reading. A reviewer who wants a single command's worth of
+  evidence for "nothing in the stretch regressed its neighbours" can cite this run.
+- **Review status**: the seventh review is still running (pid 2700637, 2:28 elapsed, no verdict file yet); it was
+  reading `collection.py`'s seal path when last checked.
+- **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
+  green, commit half landed; items 5+ wait on CP-2232's list (nine values, `rgb_skew`'s pair the only one the code
+  implies). HEAD `aaa80315f`; fifteen gates green.
