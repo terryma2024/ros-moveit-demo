@@ -37735,3 +37735,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `83333ecc0`;
   targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2030 — Task 3: the exact shape of step 3's edit, and why it needs its own round
+
+- **`_gate_facts` is a `@staticmethod`** (`pick_place_search_boundary.py:271-272`: `def _gate_facts(aggregates,
+  world)` with no `self`), while **both call sites are instance methods that already use the `self.` form**
+  (`self._gate_facts(aggregates, world)` at `:308` and `:402`). So converting it to an instance method is
+  transparent at the call sites: the edit is dropping the decorator, adding `self`, and deriving the three
+  gates from a stored receipt.
+- **`search()` produces the receipt but does not keep it.** It builds the scene node and port
+  (`scene_port = self.scene_port_factory(service_node)`), constructs the segment with its verifiers, and the
+  observation the segment yields carries `planning_scene: SceneCommandReceipt`
+  (`pick_place_search_segment.py:27`) — which is what CP-2029 now derives the SEARCH document's gate from. The
+  supplier for `_gate_facts` is therefore one line in `search()`: store the validated observation's receipt
+  (and the simulation instant it was read at, taken from the same readback that carries
+  `world.simulation_step`) on the boundary.
+- **Why I did not land it in this round.** Flipping the gate to a derivation makes the six CP-2016 tests fail
+  unless their fixtures supply that receipt, because they drive `sequence_facts`/`set_down` without running a
+  SEARCH that stores one — the same failure CP-2016 measured when the default became fail-closed. Landing it
+  therefore means editing the six fixtures in the same pass, which is the multi-iteration work this session
+  cannot finish; making the change without them would leave a red acceptance set, which is worse than a
+  recorded, exact plan.
+- **Order for the next pass**: (1) `search()` stores `(receipt, sim_instant)`; (2) `_gate_facts` becomes an
+  instance method and derives `planning_scene_ok` from that receipt, keeping the two controller gates on the
+  same pattern once their records exist; (3) the six fixtures supply the receipt, or the tests drive a real
+  SEARCH; (4) add the fail-closed controls (missing receipt, off-instant receipt). The additive halves already
+  in place (CP-2028's unpack, CP-2030's observation field) mean the record travels as soon as a producer fills
+  it.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `26802ccad`;
+  targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
