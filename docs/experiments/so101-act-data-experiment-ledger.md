@@ -41087,3 +41087,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   F3, F5 and F1** closed.
 - **State.** Targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 passed in 4.69s passed**; HEAD
   `e032dba14`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2184 — F11's Boolean defect fixed: the permitted-gap negation covers the whole conjunction
+
+- **What F11 said, confirmed in the source**: the predicate read
+  `if any(not start - _TOLERANCE_S <= gap[0] and gap[1] <= end + _TOLERANCE_S ...)` — Python parses that as
+  `(not A) and B`, so a gap **beginning inside** the collection window and **ending after** it satisfied the
+  condition and was **accepted**, exactly as the verdict describes. The parentheses now wrap the conjunction, so
+  such a gap — and one spanning both boundaries — is refused.
+- **Why this piece first among F11's four**: it is a one-line, semantically unambiguous fix, and it is **strictly
+  more refusing**, so it lands alone and is checked against the existing suites — it did, with **151 passed** across
+  the audit, recorder, release-boundary and capture suites.
+- **What F11 still lists, in the order I would take it**: (1) the **reader-side** window-to-rows predicate, since
+  readback never repeats `_window_matches_rows()` and an invented in-range instant (1.05 in the verdict's example)
+  passes today, with the manifest window itself outside the stream hashes; (2) **non-vacuous schedules** — empty or
+  shortened `source_schedule` lists satisfy membership and gap tests vacuously at seal; (3) **frozen policy** and
+  reconstructed counts/ranges/endpoints, plus the controls the verdict asks for at both boundaries.
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan's ruling on `sim_time_s`);
+  **F11 in progress** with its Boolean defect fixed; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 /
+  283 / 176 / 284 / 151 passed**; HEAD `510357974`; no push, no evidence deletion, no hardware, no second stack.

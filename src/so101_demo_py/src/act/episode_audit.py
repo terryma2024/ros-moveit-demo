@@ -484,8 +484,10 @@ def _window_ok(window, *, mode: str) -> bool:
            for instants in schedule.values() for instant in instants):
         # a scheduled instant outside the collection window is not part of this episode
         return False
-    if any(not start - _TOLERANCE_S <= gap[0] and gap[1] <= end + _TOLERANCE_S
+    if any(not (start - _TOLERANCE_S <= gap[0] and gap[1] <= end + _TOLERANCE_S)
            for gap in window["permitted_gaps_s"]):
+        # T3-F11: the negation must cover the whole conjunction; without the parentheses a gap that begins
+        # inside the window and ends outside it satisfied `not A and B` and was accepted
         # a permitted gap outside the collection window is not a gap this episode could have had
         return False
     first, cutoff = window["first_command_s"], window["label_cutoff_s"]
