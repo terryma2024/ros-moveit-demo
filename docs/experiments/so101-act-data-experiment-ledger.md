@@ -36210,3 +36210,20 @@ Recorded so later tasks and later readers can reproduce every gate; all paths ar
 | head smoke dataset | `$HEAD_EVIDENCE/head-dataset-smoke-task11c-20260930T090103Z` (32/8/8, non-promotable, under the seal above; verified) |
 | pinned A weights | `$HEAD_EVIDENCE/deps/so101-yolo11n-seg-plastic-cup/best.pt`, sha256 `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` (re-verified this session) |
 | CUDA smokes | B `plan_sha256 70d8e74b...` (head 32 only), C `plan_sha256 8a04f9fa...` (head 32 + task 32, two batches), both `rc=0`, both `promotable: false` |
+
+## HS-057 — The head-search benchmark file passes on its own (round 371)
+
+While the full `colcon test` benchmark gate is still running, the file that carries this work's benchmark
+coverage was run directly with the HS-044 recipe (clean environment, perception venv, no ROS plugins):
+
+```zsh
+env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHON_VERSION \
+  PYTHONPATH="$HEAD_LOWRATE/pysrc:$HEAD_VENV_SITE:$HEAD_WORKTREE/src/so101_demo_py/src" \
+  /data/work/venvs/so101-v5-t004-perception/bin/python3 -m pytest \
+  src/so101_demo_py/benchmark_test/test_head_search_model_evaluation.py -q
+```
+
+Result: **24 passed in 0.26 s** - the 23 Task 4 cases plus the non-promotable refusal added this round. So the
+benchmark coverage that belongs to this work is green independently of the long full-suite gate, and the first
+attempt failing with the ROS `launch_testing` plugin error is the same trap HS-044 recorded rather than a new
+problem.
