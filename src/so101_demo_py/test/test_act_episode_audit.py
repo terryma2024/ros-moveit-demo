@@ -741,6 +741,16 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                      "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
                                                      "cup_position_world_m": [0.0, 0.0, 0.0]}})
+    writer.append_source("physics", {"kind": "support", "sim_time_s": 1.1,
+                                              "release_epoch": 1,
+                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "table_contact": True, "supported": True}})
+    writer.append_source("physics", {"kind": "contact", "sim_time_s": 1.1,
+                                              "release_epoch": 1,
+                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "left_contact_count": 0,
+                                                     "right_contact_count": 0, "table_contact": True}})
+    writer.append_source("physics", {"kind": "retract", "sim_time_s": 1.1,
+                                              "release_epoch": 1,
+                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "cup_position_world_m": [0.0, 0.0, 0.0]}})
     for kind, payload in ([*[("phase_complete", {"phase": phase, "physics_step": 1})
                              for phase in FORMAL_PHASES],
                             ("release", {"release_epoch": 1, "supported": True,
@@ -815,6 +825,16 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
                                        "observation": {"simulation_time_s": 1.1,
                                                        "simulation_step": 1,
                                                        "cup_position_world_m": [0.0, 0.0, 0.0]}})
+    complete.append_source("physics", {"kind": "support", "sim_time_s": 1.1,
+                                              "release_epoch": 1,
+                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "table_contact": True, "supported": True}})
+    complete.append_source("physics", {"kind": "contact", "sim_time_s": 1.1,
+                                              "release_epoch": 1,
+                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "left_contact_count": 0,
+                                                     "right_contact_count": 0, "table_contact": True}})
+    complete.append_source("physics", {"kind": "retract", "sim_time_s": 1.1,
+                                              "release_epoch": 1,
+                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "cup_position_world_m": [0.0, 0.0, 0.0]}})
     for kind, payload in ([*[("phase_complete", {"phase": phase, "physics_step": 1})
                              for phase in FORMAL_PHASES],
                             ("release", {"release_epoch": 1, "supported": True,
@@ -1084,6 +1104,16 @@ def _self_consistent_formal(tmp_path):
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                      "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
                                                      "cup_position_world_m": [0.0, 0.0, 0.0]}})
+    writer.append_source("physics", {"kind": "support", "sim_time_s": 1.1,
+                                              "release_epoch": 1,
+                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "table_contact": True, "supported": True}})
+    writer.append_source("physics", {"kind": "contact", "sim_time_s": 1.1,
+                                              "release_epoch": 1,
+                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "left_contact_count": 0,
+                                                     "right_contact_count": 0, "table_contact": True}})
+    writer.append_source("physics", {"kind": "retract", "sim_time_s": 1.1,
+                                              "release_epoch": 1,
+                                              "observation": {"simulation_time_s": 1.1, "simulation_step": 1, "cup_position_world_m": [0.0, 0.0, 0.0]}})
     for kind, payload in ([*[("phase_complete", {"phase": phase, "physics_step": 1})
                              for phase in FORMAL_PHASES],
                             ("release", {"release_epoch": 1, "supported": True,

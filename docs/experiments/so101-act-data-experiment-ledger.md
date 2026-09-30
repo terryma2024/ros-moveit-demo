@@ -40571,3 +40571,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 five of seven steps
   done** with this one's contract now fully read, F1/F11 open; targeted gates **430 / 201 / 201 passed**; HEAD
   `ddad91683`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2159 — F5's physics requirement landed: every registered kind must be present
+
+- **What landed**: `_formal_coverage_ok` now requires all four `_PHYSICS_KINDS` (`support`, `contact`, `pose`,
+  `retract`) to appear in `physics.jsonl`, and the three **complete** formal writers supply the missing three rows
+  per kind's own summary contract (CP-2158: `table_contact`/`supported`, the two contact counts, and the retract
+  pair) — read from `_physics_observation_typed` (line 310) rather than assumed.
+- **The site set was the whole difficulty, and it inverted my earlier guess**: the row is *not* needed at the
+  `partial` writer (the test's negative control, which must stay incomplete) but **is** needed at the `complete`
+  writer inside the very same test. The three sites are therefore 743 (`writer`), **817 (`complete`)** and 1086
+  (`writer`), with the receiver parsed from each site's own append line.
+- **Evidence.** `logs/task3-f5-physics.run` rc=0: **201 passed in 1.37s** across the audit, recorder, release-boundary, capture,
+  `test_act_task8` and qualification suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a
+  non-empty tempfile proof.
+- **What F5 still lists**: the ratified **scene/feedback observations**, the last of its requirements.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 six of seven steps
+  done**, F1/F11 open; targeted gates **430 / 201 / 201 / 201 passed in 1.37s passed**; HEAD `5c0b564c2`; no push, no evidence
+  deletion, no hardware, no second stack.
