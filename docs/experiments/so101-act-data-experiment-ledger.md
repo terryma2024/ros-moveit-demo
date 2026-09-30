@@ -35095,7 +35095,12 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   `/tmp/so101-debug-head-search-antzb-LuFlHq6a` (shell helper `head-test-shell.sh`).
 - **Tasks 1-3: completed and review-approved** (Task 2 with findings, all fixed; Task 3 with findings, all
   fixed). Ledger HS-001 to HS-015.
-- **Task 4: implemented, all findings from three reviews fixed, awaiting a fourth (execute-first) verdict.**
+- **Task 4: implemented; five reviews have been returned and every finding fixed.** The fifth verdict's
+  two blockers are fixed (`cad8a5426` task-domain sealed document, `cc07e5424` mandatory seals with the
+  pinned 200-sample test split verified against 3,623 published sums) along with two of its residuals
+  (`9a8fe355e` weights verified before datasets/episodes and every latency validated; `bcda8550a` import
+  fix). A sixth verdict is requested at `reviews/task4/task4-sixth-review-request.md` with the output
+  expected at `reviews/task4/task4-sixth-verdict.md`.
   Code: `src/perception_benchmark/head_search_models.py`, `src/cli/evaluate_head_search_yolo_candidates.py`,
   `benchmark_test/test_head_search_model_evaluation.py`, `setup.py`. Findings and fixes: HS-018 (rejection
   and plan), HS-019 (rework and real-artifact verification), HS-020 (second verdict, fixes, host items),
