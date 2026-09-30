@@ -38,12 +38,19 @@ def main(arguments: list[str] | None = None) -> int:
         seal = json.loads(parsed.geometry_seal.read_text(encoding="utf-8"))
         if not isinstance(seal, dict):
             raise HeadSearchDomainError("HEAD_SEARCH_DOMAIN_INVALID: the seal must be a mapping")
+        # the sealed geometry lists anchor names and carries each anchor's start angle in the
+        # in-frame matrix; a bare mapping is accepted too so an older seal still reads
         anchors = seal.get("anchors") or {}
+        matrix = seal.get("in_frame_matrix") or {}
         if parsed.anchor not in anchors:
             raise HeadSearchDomainError(
                 f"HEAD_SEARCH_DOMAIN_INVALID: the seal declares no anchor {parsed.anchor!r}"
             )
-        anchor = float(anchors[parsed.anchor]["neck_rad"])
+        if isinstance(anchors, dict):
+            anchor = float(anchors[parsed.anchor]["neck_rad"])
+        else:
+            entry = matrix[parsed.anchor]
+            anchor = float(entry.get("neck_start_rad", entry.get("neck_rad")))
         required = seal["required_search_domain_rad"]
         safe = seal["lock_valid_neck_rad"]
         fov = float(seal["horizontal_fov_rad"])
