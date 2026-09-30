@@ -415,6 +415,9 @@ class PickPlaceSearchPhasePort:
         # the contact gate is a content property, not a presence check: the contact evidence must belong to
         # the same physics step as the world it is joined with, which is the relationship the audit enforces
         # for every other record (a presence-based derivation would be a tautology, CP-2054)
+        # the physics gate is a content property too: a truncated MuJoCo sample is not a sample the phase
+        # may claim, which is the rule the registered live sample's own `truncated` flag exists for
+        mujoco_ok = getattr(world, "truncated", None) is False
         contact_ok = (isinstance(raw["contact"], dict)
                       and raw["contact"].get("physics_step") == world.simulation_step)
         reference_readback = raw["reference"]
@@ -430,7 +433,7 @@ class PickPlaceSearchPhasePort:
             "release_epoch": 0, "physics_step": world.simulation_step,
             "planning_ok": True,
             "controller_reference_ok": controller_reference_ok, "joint_feedback_ok": joint_feedback_ok,
-            "contact_ok": contact_ok, "mujoco_ok": True,
+            "contact_ok": contact_ok, "mujoco_ok": mujoco_ok,
             # CP-2017 step 2, additive half: when the readback that established these gates carries the
             # ratified Planning Scene observation, it travels with the document so the gate can be derived
             # from it. Nothing supplies it yet, so the gate below keeps its documented interim value and

@@ -38321,3 +38321,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c7b39f361`;
   consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2056 — Task 3: mujoco_ok derived from the world sample, leaving three asserted gates
+
+- **What landed.** `_search_evidence` reports `mujoco_ok` as "the world evidence's `truncated` flag is
+  `False`" — the content rule the registered live sample's own flag exists for (CP-2054's candidate), rather
+  than a presence check. Nine gates are now derived across the live path: the boundary helper's four (none
+  asserted) and the SEARCH document's `planning_scene_ok`, `joint_feedback_ok`, `controller_reference_ok`,
+  `contact_ok` and `mujoco_ok`.
+- **Evidence.** `logs/task3-mj.run` rc=0 across the search-port, three task8 phase, release-boundary and
+  supervisor suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **What remains asserted in that document**: `planning_ok` (source: `validate_search_result`'s verdict, which
+  the port already consumes — the derivation is a small edit once its semantics are fixed), and
+  `head_rgb_ok`/`wrist_rgb_ok`, which need a frame property (shape, stamp freshness, or the recorder's
+  lossless digest). After those: the full `planning_scene_observation` record's travel, T3-F11's
+  window-to-rows checks and a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `32528faef`;
+  consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
