@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -81,3 +83,22 @@ def test_a_named_bundle_that_cannot_be_opened_refuses(tmp_path, payload, code):
     path, _root = _document(tmp_path)
     with pytest.raises(ValueError, match=code):
         verify_w8_qualification(path, payload)
+
+
+def test_a_prepared_bundle_yields_the_identities_and_manifest_the_verifier_consumes(tmp_path):
+    """CP-2103's first half: the bundle route the verifier's journal delegation depends on."""
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_act_task8_artifact_bundle import _inputs
+
+    from so101_demo.act.task8_artifact_bundle import (
+        prepare_task8_bundle, verify_prepared_task8_bundle,
+    )
+
+    receipt = prepare_task8_bundle(_inputs(tmp_path), tmp_path / "bundle")
+    assert receipt.is_file()
+    bundle = verify_prepared_task8_bundle(receipt)
+    assert Path(bundle.manifest).is_file()
+    assert set(bundle.identities) == {"source_provenance_sha256", "runtime_config_sha256",
+                                      "anchors_sha256", "contact_policy_fingerprint",
+                                      "act_profile_sha256"}

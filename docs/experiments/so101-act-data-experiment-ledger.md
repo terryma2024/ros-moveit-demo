@@ -39341,3 +39341,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress: the verifier's
   three increments and the evidence-port repair are landed and green (CP-2102, `logs/task4-fix.run` 115 passed).
   HEAD `142f2259c`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2104 — The verifier's positive test, first half landed: the bundle route verifies
+
+- **What landed** (`test_act_w8_qualification.py`): a test that prepares a bundle through the sibling suite's own
+  `_inputs` fixture (`test_act_task8_artifact_bundle.py`, imported the way this worktree's tests already import
+  across files), asserts the receipt exists, verifies it back with `verify_prepared_task8_bundle`, and checks that
+  the result carries exactly the five identities and a readable manifest — **precisely the inputs my verifier's
+  journal delegation consumes**. That route was assumed since CP-2094; it is now proved.
+- **API read, not guessed**: `prepare_task8_bundle(inputs, bundle_root) -> Path` (the receipt) and
+  `verify_prepared_task8_bundle(receipt_path) -> PreparedTask8Bundle` with `.identities` and `.manifest`
+  (`task8_artifact_bundle.py:152` and `:198`).
+- **Evidence.** `logs/task4-w8.run` rc=0 with the suite now at **12 passed** under `pytest-xdist` with 8 workers,
+  its own NVMe scratch and a non-empty tempfile proof.
+- **What the second half still needs** (CP-2103): fourteen journal rows for that bundle's identities, built with
+  `case_row_to_journal_row` (used at `test_act_task8_live_qualification.py:594`, `:727`) and driven by
+  `CaseEvidenceDriver`, written under one case root together with a campaign result whose digests the document
+  cites; then `verify_w8_qualification` must return `True`, and a one-variable mutation must refuse with
+  `W8_QUALIFICATION_EVIDENCE_MISMATCH`.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the verifier's
+  three increments and the evidence-port repair landed. HEAD `4ea2b8e30`; no push, no evidence deletion, no
+  hardware, no second stack.
