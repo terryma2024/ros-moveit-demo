@@ -246,6 +246,11 @@ class RosBrokerDriver:
                 raise RuntimeError('FEEDBACK_UNAVAILABLE')
             if not 0<=self.monotonic()-received<=self.max_age:
                 raise RuntimeError('FEEDBACK_STALE')
+            # F13: fresh physics must not make a stale reference look current, so the record's age is bounded
+            # by the reference's own receipt as well as the epoch's; the commanded values come from that
+            # reference, and a caller naming no reference has nothing to age against.
+            if not 0<=self.monotonic()-commanded[2]<=self.max_age:
+                raise RuntimeError('FEEDBACK_STALE')
             # F13: the sequence is per kind, mirroring the observer's own per-kind publication sequence, so
             # one kind's reads cannot advance another's identity
             reads=getattr(self,'_feedback_reads',None)

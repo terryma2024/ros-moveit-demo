@@ -39745,3 +39745,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list stands at F1/F3/F5/F11 + F13-freshness with F12 closed; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `88d580c33`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2121 — F13's freshness tightening: a stale reference can no longer be masked by fresh physics
+
+- **What landed** (`ros_broker.py`): `controller_feedback` now bounds the record's age by the **reference's own
+  receipt** (`self._references[kind][2]`) as well as the epoch's, so the exact situation F13 named — fresh physics
+  making a stale commanded cache look current, including across a reset — now refuses with `FEEDBACK_STALE`
+  instead of producing a record. The commanded values come from that reference, and a caller naming none has
+  nothing to age against (it already refuses with `FEEDBACK_UNAVAILABLE`).
+- **Its control** (`test_act_controller_reference_observer.py`): with the epoch fresh and the reference's receipt
+  ten seconds old, the call refuses — one variable changed, the refusal asserted.
+- **Evidence.** Targeted run this round: **58 passed** across the observer, `test_act_task8` and the search-port
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **What of F13 remains, and one schema tension to settle with the plan**:
+  1. the **joint** state's own receipt should bound the record too; whether the joint callback stores its own
+     receipt (as `_epoch` does for the epoch) is not yet read, and it is the next step;
+  2. `sim_time_s`: F13 asks for an *observed* source instant, but the ratified `controller_feedback` schema is
+     **closed at seven keys** and the audit requires that instant to equal its parent observation's — so the
+     record cannot carry both without an amendment. The honest reading is that `sim_time_s` stays the requested
+     instant the join needs, and any observed source time is bounded by the receipts instead; that reading should
+     be confirmed by the plan rather than decided by me;
+  3. `_planning_scene_record` still stamps a fresh scene query with an earlier readback's time
+     (`pick_place_search_segment.py`, around line 46) — the remaining, clearly-correct fix.
+- **State.** Item 3's list stands at F1/F3/F5/F11 plus these F13 residuals, with F12 closed; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `c98b41d4c`; no push, no evidence deletion, no hardware, no second
+  stack.
