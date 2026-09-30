@@ -40378,3 +40378,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 three of four
   steps done** with this fixture expansion left, F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**;
   HEAD `9139ecbb2`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2150 — F5's lifecycle requirement landed: a formal seal must carry all nine phases
+
+- **What landed**: `_formal_coverage_ok` now requires a `phase_complete` for **every** entry of `FORMAL_PHASES`
+  beside the accepted reference and the release event, and the **three formal fixture sites** (lines 738, 805 and
+  1067 — each a `for kind, payload in (...)` tuple) emit one per phase through a starred list comprehension, so the
+  retained evidence F5 quoted can no longer seal as complete. The predicate is the single shared one (CP-2146),
+  so the writer and the readback moved together.
+- **The two errors on the way, both fixed here**: the first expansion wrote `*(((...)))`, which is not valid in a
+  tuple literal (pytest reported it as a collection error at line 738), and the `FORMAL_PHASES` import had to be
+  present at module level for the fixture sites — it is, with a comment naming F5.
+- **Evidence.** `logs/task3-f5-lifecycle.run` rc=0: **201 passed in 1.25s** across the audit, recorder, release-boundary,
+  capture, `test_act_task8` and qualification suites under `pytest-xdist` with 8 workers, its own NVMe scratch and
+  a non-empty tempfile proof.
+- **What F5 still lists beyond the lifecycle**: not that some reference was accepted but that the raw half is one
+  **complete** exclusive group; the **registered physics** rows per phase; and the ratified
+  **scene/feedback observations** — each to be added to the same predicate with the fixtures it moves.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 four of five steps
+  done**, F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD `831e91ff6`; no push, no evidence
+  deletion, no hardware, no second stack.

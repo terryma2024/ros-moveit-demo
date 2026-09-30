@@ -735,9 +735,10 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                      "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
                                                      "cup_position_world_m": [0.0, 0.0, 0.0]}})
-    for kind, payload in (("phase_complete", {"phase": "SEARCH", "physics_step": 1}),
-                          ("release", {"release_epoch": 1, "supported": True,
-                                       "no_fingertip_contact": True})):
+    for kind, payload in ([*[("phase_complete", {"phase": phase, "physics_step": 1})
+                             for phase in FORMAL_PHASES],
+                            ("release", {"release_epoch": 1, "supported": True,
+                                         "no_fingertip_contact": True})]):
         writer.append_source("events", {"kind": kind, "identity": {**identity(), "lease": _lease()}, "sim_time_s": 1.1,
                                         "monotonic_ns": 1, "payload": payload})
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
@@ -802,9 +803,10 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
                                        "observation": {"simulation_time_s": 1.1,
                                                        "simulation_step": 1,
                                                        "cup_position_world_m": [0.0, 0.0, 0.0]}})
-    for kind, payload in (("phase_complete", {"phase": "SEARCH", "physics_step": 1}),
-                          ("release", {"release_epoch": 1, "supported": True,
-                                       "no_fingertip_contact": True})):
+    for kind, payload in ([*[("phase_complete", {"phase": phase, "physics_step": 1})
+                             for phase in FORMAL_PHASES],
+                            ("release", {"release_epoch": 1, "supported": True,
+                                         "no_fingertip_contact": True})]):
         complete.append_source("events", {"kind": kind, "identity": {**identity(), "lease": _lease()},
                                           "sim_time_s": 1.1, "monotonic_ns": 1, "payload": payload})
     # this formal audit has coverage but no bound row, so its window says exactly that (T3-F11); it must
@@ -1064,9 +1066,10 @@ def _self_consistent_formal(tmp_path):
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                      "observation": {"simulation_time_s": 1.1, "simulation_step": 1,
                                                      "cup_position_world_m": [0.0, 0.0, 0.0]}})
-    for kind, payload in (("phase_complete", {"phase": "SEARCH", "physics_step": 1}),
-                          ("release", {"release_epoch": 1, "supported": True,
-                                       "no_fingertip_contact": True})):
+    for kind, payload in ([*[("phase_complete", {"phase": phase, "physics_step": 1})
+                             for phase in FORMAL_PHASES],
+                            ("release", {"release_epoch": 1, "supported": True,
+                                         "no_fingertip_contact": True})]):
         writer.append_source("events", {"kind": kind, "identity": {**identity(), "lease": _lease()}, "sim_time_s": 1.1,
                                         "monotonic_ns": 1, "payload": payload})
     writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id,
@@ -1129,3 +1132,6 @@ def test_the_audit_names_the_runner_s_phases():
     from so101_demo.act.pick_place_runner import PickPlaceRunner
 
     assert tuple(FORMAL_PHASES) == tuple(PickPlaceRunner.PHASES)
+
+
+from so101_demo.act.episode_audit import FORMAL_PHASES   # F5: the prescribed lifecycle

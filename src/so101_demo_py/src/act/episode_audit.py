@@ -1011,9 +1011,13 @@ def _formal_coverage_ok(audit: Path) -> bool:
                                        rows("references.jsonl"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return False
+    # F5: a formal seal must carry the prescribed lifecycle, not one phase's event, so every entry of
+    # FORMAL_PHASES needs its own phase_complete beside the release and the accepted reference
+    phases = {row["payload"].get("phase") for row in events if row["kind"] == "phase_complete"}
     return bool(physics and events and references
                 and any(row["accepted"] is True for row in references)
-                and any(row["kind"] == "release" for row in events))
+                and any(row["kind"] == "release" for row in events)
+                and all(phase in phases for phase in FORMAL_PHASES))
 
 
 def _verify_streams(audit: Path, identity: dict) -> None:
