@@ -42598,3 +42598,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   same keys before the positive control can seal.
 - **State.** **F14 closed**; F3 (a)(b)(c) landed with this control outstanding; F1/F5/F11/F12/F13 open; the goal is
   paused. HEAD `502d2632d`; eighteen gates green.
+
+
+## CP-2252 — The diagnostic writer's construction, verbatim, and the one read the positive control needs
+
+- **Read at `test_act_release_boundary.py:326`** (the control CP-2250 updated drives a real runner against this):
+  ```python
+  audit = EpisodeAuditWriter(tmp_path / "episode",
+                             {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
+                              "mode": "preselected_target_diagnostic", "scene_id": "default",
+                              "seed": 0, "inputs_sha256": "c" * 64},
+                             {"session_id": "s", "attempt_id": "a", "reset_epoch": 1,
+                              "release_epoch": 1},
+                             {"inputs_sha256": "c" * 64})
+  ```
+  Its scope is **diagnostic** and its identity carries **no lease** — which is exactly the verdict's sentence that
+  "the diagnostic real-writer control does not exercise a formal lease". The positive control is this construction
+  with `"mode": "formal"` and a lease added, plus a window that its own evidence satisfies.
+- **The one read left before writing it**: that test's body from line 326 onward — how it builds the port, the
+  request and the window — so the formal variant can reuse them instead of inventing a runner setup. With it the
+  control is a copy with three changes (scope mode, identity lease, seal + `verify_audit_manifest`) plus the two
+  one-variable negatives CP-2251 names.
+- **State.** **F14 closed**; F3 (a)(b)(c) landed, positive control outstanding and now one read away;
+  F1/F5/F11/F12/F13 open; the goal is paused. HEAD `aedc6b6f9`; eighteen gates green.
