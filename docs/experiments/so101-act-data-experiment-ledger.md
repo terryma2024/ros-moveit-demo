@@ -40841,3 +40841,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
   landed**, its fixture one 15-line read away; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221
   passed**; HEAD `b7bdab32d`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2172 — The sample's violator is in the loop's tail, and one call prints it
+
+- **Probe results** (runtime module, so these are the rules the tests meet): `_PHYSICS_VECTORS` is
+  `{cup_position_world_m: 3, cup_orientation_world_xyzw: 4, cup_linear_velocity_world_m_s: 3,
+  cup_angular_velocity_world_rad_s: 3}` — none of which my sample carries; `_PHYSICS_INTEGERS` is
+  `{left_contact_count, publisher_sequence, simulation_step, right_contact_count, reset_epoch}` — note
+  **`physics_step` is absent**, so that key is untyped and cannot be the violator; `_PHYSICS_BOOLEANS` is
+  `{supported, paused, table_contact}`. Six more variants (six-length model vectors; each vector key added at its
+  exact length) all still return **False**.
+- **Conclusion**: every branch I have read is satisfied, so the refusal comes from the part of the loop I have
+  **not** read — its tail from line 376 onward, which may end in a catch-all that rejects a key no group claims
+  (`simulation_session_id` is a candidate, but dropping it alone did not help, so more than one key is involved).
+- **The one call that settles it next round**: `inspect.getsource(ea._physics_observation_typed)` — the whole
+  function, in the runtime module, in one print — then the sample fixture becomes mechanical.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
+  landed**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**; HEAD `be954ae42`; no push, no
+  evidence deletion, no hardware, no second stack.
