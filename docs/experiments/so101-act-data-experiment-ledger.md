@@ -35593,6 +35593,21 @@ no second detector, with its RED tests first.
   written from the same assumption - which is precisely what an independent static review is for.
 - **Owed:** final confirmation of these two fixes.
 
+## HS-039 — Task 9 final confirmation REJECT on the test's honesty, fixed (commit 7ba09f15c)
+
+- **Verdict** (`reviews/task9/task9-final-verdict.md`, static at `608052c7a`): the **velocity** fix is APPROVE
+  (finite and non-negative, negative samples reset the count and leave `STOPPING`), and the runtime correctly
+  rejects state `Z` - but the **zombie test was racy**: the child exited immediately, so the first live read
+  could already return `None` and fail the assertion meant to establish liveness, and the test never read
+  `/proc` directly to confirm the zombie state it claimed to exercise.
+- **Fix:** the child sleeps until killed, so the test first proves it is a valid owner while alive; it waits
+  for the kernel's own `Z` state read directly from `/proc` rather than through the helper under test; then it
+  asserts the zombie keeps its recorded start ticks while `process_start_ticks` returns `None` and
+  `verify_owner` refuses it, skipping only if an external reaper wins the race. Three consecutive runs:
+  **10 passed** each.
+- **Why this mattered:** the earlier version would have gone green most of the time while proving nothing on
+  the runs that did not race - worse than a failing test, because it manufactures confidence.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
