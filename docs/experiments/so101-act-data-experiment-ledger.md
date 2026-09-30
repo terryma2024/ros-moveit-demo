@@ -42100,3 +42100,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
   commit half needs one relocation, now with the wrong place proven wrong by execution rather than by reading;
   items 5+ wait on the four blocked bindings. HEAD `e49863918`; thirteen gates green.
+
+
+## CP-2228 — ③a's correct home: `BatchCoordinator.commit_result`
+
+- **The grep printed it plainly**: `commit_result(self, lease, sealed_location, *, request_key)` at
+  `coordinator.py:832` — a method whose parameters are exactly the verifier's inputs, and whose second parameter
+  even uses the store's own vocabulary ("sealed location"). CP-2227's misplacement is therefore corrected by
+  **relocating, not redesigning**: the guard belongs at the start of `commit_result`, where a lease and the sealed
+  location of a finished result are simultaneously in hand, and a refusal there means the result is not committed.
+- **The lesson this stretch keeps re-learning, now with the sharpest example**: I read "the function that computes a
+  workspace" and wired there, while the correct function is the one named after the act being gated. The traceback
+  settled it in one run after four rounds of reading — the probe was cheaper than the reasoning.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  commit half is one relocation into this method; items 5+ wait on the four blocked bindings. HEAD `b0e8dae69`;
+  thirteen gates green.
