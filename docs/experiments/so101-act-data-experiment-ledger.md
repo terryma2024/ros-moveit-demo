@@ -36464,3 +36464,20 @@ So NOT MET item 11 is really two questions, not one:
 
 That is a much better position than "62 failures": one of the two modules has a known fix in place, and the other
 is a single question with a cheap test.
+
+## HS-068 — The adapter half of the benchmark failures is gone (round 394)
+
+Re-running the module that held 2 of the 62 colcon failures, under the pinned environment:
+
+```zsh
+env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHON_VERSION \
+  PYTHONPATH="$HEAD_LOWRATE/pysrc:$HEAD_VENV_SITE:$HEAD_WORKTREE/src/so101_demo_py/src" \
+  /data/work/venvs/so101-v5-t004-perception/bin/python3 -m pytest \
+  src/so101_demo_py/benchmark_test/test_perception_benchmark_adapters.py -q
+```
+
+**77 passed in 2.52 s** - no failures. So the two adapter failures recorded in the colcon XML are resolved by the
+dependency work of HS-035/HS-043/HS-062 (the pinned `transformers==4.56.2`, pydantic, fastapi, httpx, lark), and
+NOT MET item 11 is down to the **60 dataset failures** alone. The next round runs one of those to decide whether
+they are environmental (a rendering/rasterizer configuration under the ROS interpreter) or real, which is the
+last open question in that item.
