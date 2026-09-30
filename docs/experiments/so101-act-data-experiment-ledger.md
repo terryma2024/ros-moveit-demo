@@ -37909,3 +37909,30 @@ PYTHONPATH=<base-ab-install>/so101_demo_py/lib/python3.12/site-packages:<venv>:$
 If the module passes at base and fails in the current tree, the cause is inside this work and the bisect continues; if
 it fails at base as well, the family is pre-existing - which is what HS-127 claimed and did **not** prove (HS-128).
 The distinction the reviewer drew stands: unchanged inputs are not unchanged behaviour.
+
+## HS-130 — The base A/B finds ONE new failure: the reviewer was right and HS-127 was wrong
+
+The A/B HS-129 specified, finally run against a **built base install** (base worktree at `6d2983396`, built over the
+existing underlay since a from-scratch build cannot supply the vendored stack):
+
+```
+base tree      test_act_task8_phase_camera_measurement.py -> 1 failed, 8 passed
+current tree   same module                               -> 2 failed, 7 passed      (HS-125)
+```
+
+The failing id at base is `test_the_formal_entrys_replay_rows_carry_a_measured_observation`; the **extra** failure in the
+current tree is `test_the_shipped_matrix_is_frozen_and_a_scaffold_is_refused`, which fails with
+`PHASE_CAMERA_MATRIX_INVALID` from `task8_measurement_schema.py:116`.
+
+Two conclusions, and the first one is on me:
+
+1. **HS-127 was wrong.** Byte-identical inputs did not mean unchanged behaviour - exactly the distinction the reviewer
+   drew in HS-128 - and this A/B shows a **new failure introduced by something in this work**. One of the task 8
+   measurement failures is therefore regression-shaped and must be bisected; the other is pre-existing.
+2. **The bisect now has a precise target**: the single test `test_the_shipped_matrix_is_frozen_and_a_scaffold_is_refused`
+   and the matrix it validates (`config/act/task8-phase-camera-matrix-v1.json`, which HS-127 compared as SAME between
+   installed and repository - so the difference is in a **caller or a dependency**, not that file).
+
+This is the first time in Task 11 that an A/B has convicted this work rather than clearing it, and it happened because a
+reviewer refused to accept a proof of the wrong proposition. The next step is to run that one test id against the
+intermediate commits touching the task 8 path, which is now a bounded bisect rather than a search.
