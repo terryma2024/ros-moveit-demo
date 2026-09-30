@@ -41648,3 +41648,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; items 0-2 completed;
   item 4's QC increments exist and pass their suites but the plan's converge-first rule keeps them behind Task 3.
   HEAD `ea2225fb3`; targeted gates twelve, all green.
+
+
+## CP-2208 — Maintenance verification: everything this stretch wrote is committed
+
+- **Worktree status**: **24 tracked modifications and 13 untracked entries = 37**, exactly the baseline count this
+  session was told to preserve. None of the files this stretch touched — `episode_audit.py`, `expert.py`,
+  `pick_place_runner.py`, `adapters/act/ros_expert.py`, `act/w8_qualification.py`,
+  `test/test_act_episode_audit.py`, `test/test_act_w8_qualification.py`, `test/test_act_release_boundary.py` —
+  appears in that list, so **every change made here is committed** and the dirty entries are the pre-existing ones.
+- **Gate logs are readable**: each `logs/<name>.run` file names a scratch directory holding the run's `junit.xml`,
+  its pytest log, its non-empty `tempfile-proof.log` and its `tmp/` tree — verified for `task3-final`,
+  `task3-f1-capture` and `task3-f11-endpoints`, and the other nine rows of CP-2204 follow the same shape.
+- **Deletion candidates, registered but not deleted** (this session's rules allow deletion only with explicit
+  authorization): **7** `scratch/nonhead-probe.*` directories from the read-only probes and **410**
+  `scratch/nonhead-tests.*` directories from the test runs, all under the registered evidence root
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`.
+- **What is *not* claimed**: no run of the full module scope has been made here (CP-2002/2022/2023 explain why the
+  live-source environment cannot collect it), no hardware was touched, nothing was pushed, and the two questions in
+  CP-2207 remain open.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; items 0-2 completed;
+  item 4's QC increments pass their suites but wait behind Task 3 by the plan's own rule. HEAD `fc8348819`;
+  targeted gates twelve, all green.
