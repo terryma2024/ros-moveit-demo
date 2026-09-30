@@ -39079,3 +39079,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   handling alone.
 - **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress. HEAD `0791d243f`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2092 — Second fixture attempt reverted: the "first bare return" is not the phase funnel
+
+- **What happened.** Wrapping the first bare `return evidence` in each nested `_EvidencePort` class wrapped a
+  return roughly fifty lines into the class body, not the funnel that builds the phase documents, and the suite
+  failed exactly as before (`None` artifact). The file was restored and the suite verified at `4 failed,
+  34 passed`, so no half-finished fixture is left behind.
+- **The lesson, which this session keeps re-learning**: the classes are long and their bare returns are not
+  adjacent to their headers, so locating the funnel by position is guesswork — the next attempt must **read the
+  two class bodies** (353-455 and 456-…) and wrap the return that follows the
+  `if phase in LiveEvidenceWindow.REQUIRED_PHASES: self._observe(phase, evidence)` call, and only that one.
+- **Why I am not attempting that here.** Each of the last three rounds has been one failed fixture edit; an
+  exhausted context should hand the work over with the exact instruction rather than spend another round on a
+  blind patch. CP-2091's bound was right in spirit and wrong in mechanism: it should read, not count.
+- **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress. HEAD `e5c9dc56a`;
+  no push, no evidence deletion, no hardware, no second stack.
