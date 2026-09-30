@@ -39317,3 +39317,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the verifier's
   three increments landed and this repair done. HEAD `ea5ee9871`; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2103 — The verifier's positive test, reduced to a recipe with its exact anchors
+
+- **The helpers that make it small** (found by grep, not guessed): `case_row_to_journal_row(row,
+  identities=..., ...)` is imported and used by the qualification suite at lines **594** and **727** of
+  `test_act_task8_live_qualification.py`, and `require_case_row_matches_bundle` beside it. So fourteen valid
+  journals do not have to be hand-written: drive `CaseEvidenceDriver` for the cases (the suite already does), turn
+  each published row into a journal row with that helper, and write them under one case root.
+- **The bundle side** is the `ValidInputs`/`_inputs` pattern from `test_act_task8_artifact_bundle.py:34-86`
+  (nine closed-set artifacts plus a manifest and the five identities), prepared with `prepare_task8_bundle` and
+  read back with `verify_prepared_task8_bundle` — the very calls my verifier makes.
+- **The positive test then reads**: a `QUALIFIED` document whose `live_campaign` block names that case root, whose
+  `campaign_result_sha256`/`journal_sha256` are the digests on disk, and whose `preparation_receipt_sha256` is the
+  receipt's; `validate_campaign_summary` must accept the campaign result and `validate_case_journals` the fourteen
+  rows; and `verify_w8_qualification(path, {"preparation_receipt_path": str(receipt), "manifest_path": ...})`
+  returns `True`. A one-variable variant (a journal altered after sealing, or a foreign identity) must then refuse
+  with `W8_QUALIFICATION_EVIDENCE_MISMATCH`.
+- **Why I am recording rather than writing it now**: it is a sixty-line test that needs the driver, the bundle
+  preparation and the fourteen rows together, and this session's remaining context is one small edit per round at
+  best. The recipe above removes the design work; what it needs is an executioner with room to run it once.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress: the verifier's
+  three increments and the evidence-port repair are landed and green (CP-2102, `logs/task4-fix.run` 115 passed).
+  HEAD `142f2259c`; no push, no evidence deletion, no hardware, no second stack.
