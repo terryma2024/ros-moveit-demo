@@ -42936,3 +42936,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   with the fabricated-endpoint negative already present at line 777 as `_window(first_command_s=1.5)`.
 - **State.** **F14, F3 and F1 closed**; **F11 two of four cuts**; F5/F12/F13 open; the goal is paused. HEAD
   `03a8768c7`; twenty-three gates green.
+
+
+## CP-2270 — F11's third cut: distinctness was the wrong reading, and the failure said why
+
+- **What I wrote and withdrew**: `_window_ok` requiring the schedule's streams to be **exactly** the required ones and
+  their instant lists to be **pairwise distinct**. Five tests refused immediately, including
+  `test_a_self_consistent_formal_window_seals` — the fixture that is by construction valid — so the rule contradicted
+  the audit's own definition of a good window.
+- **Why, on reflection, the reading was wrong**: two cameras on the same 10 Hz grid legitimately share their instants
+  — that is what synchronisation means — so "distinct per-stream schedules" cannot mean "unequal instant lists". The
+  verdict's sentence is about **coverage**, not inequality: what a shortened or duplicated schedule hides is that the
+  claimed instants are not the ones the episode observed.
+- **The corrected third cut, which the fixtures already suggest**: enforce the **reverse relation** in the shared
+  predicate — every instant a stream claims must be an instant the episode actually acquired for that stream — instead
+  of comparing the streams with each other. That catches a subset or duplicate claim without forbidding two cameras
+  from agreeing, and it belongs in `_window_matches_observed`, where the acquisitions are already in hand.
+- **Withdrawn cleanly**; the audit suite is green (72 passed).
+- **State.** **F14, F3 and F1 closed**; **F11 two of four cuts**, the third now specified as the reverse relation;
+  F5/F12/F13 open; the goal is paused. HEAD `98796b842`; twenty-three gates green.
