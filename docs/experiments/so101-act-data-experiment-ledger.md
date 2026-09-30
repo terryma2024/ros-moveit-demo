@@ -39363,3 +39363,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the verifier's
   three increments and the evidence-port repair landed. HEAD `4ea2b8e30`; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-2105 — The journal rows for a prepared bundle can be built, and two vocabularies were read rather than guessed
+
+- **What landed** (`test_act_w8_qualification.py`): a test that prepares a bundle, then builds **one prefix row and
+  one full row** for that bundle's identities with `case_row_to_journal_row` and asserts both pass
+  `require_case_row_matches_bundle` — the aggregator's own acceptance check.
+- **Two refusals that taught the vocabulary, each fixed by reading the validator**: `TASK8_JOURNAL_MODE_INVALID`
+  showed the modes are `("phase_prefix", "full")` (`task8_live_evidence.py:350`) rather than `prefix`/`full`, and
+  `TASK8_JOURNAL_CASE_ID_INVALID` showed case ids must follow the suite's own shape (`prefix-01`, `full-01`) rather
+  than my `case-…` invention.
+- **Evidence.** `logs/task4-w8.run` rc=0: **44 passed** across the verifier suite and the campaign admission suite
+  under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **What remains of the positive test, now mechanical**: build fourteen rows (nine `phase_prefix-0N` and five
+  `full-0N`), write each as `case-*/journal.json` under one case root, write a campaign result whose
+  `case_journal_sha256` are those files' digests and whose `status`/counts satisfy `validate_campaign_summary`,
+  point a `QUALIFIED` document at them with a `live_campaign` block, and assert `verify_w8_qualification` returns
+  `True`; then one mutation (a journal edited after sealing) must refuse with
+  `W8_QUALIFICATION_EVIDENCE_MISMATCH`.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `8fedaa12f`;
+  no push, no evidence deletion, no hardware, no second stack.
