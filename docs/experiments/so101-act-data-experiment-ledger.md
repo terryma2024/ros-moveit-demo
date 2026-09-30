@@ -39582,3 +39582,23 @@ stronger guarantee than it carries.
 
 **Deletion candidates:** `125637Z` and `125856Z` contain no build and no install (a `source-commit.txt` and a script each),
 so they are pure clutter from the copying bug. Recorded here rather than deleted, per the standing rule.
+
+### HS-196 addendum — the content proves the fix was present; the commit stamp is simply stale
+
+Checked rather than assumed, because a regular file (not a symlink) meant the installed copy could have been the older code:
+
+```
+<root>/install/.../head_search_training.py:547
+    value = (sample.get("scenario"), sample.get("seed"))      <- the HS-192 fix IS present
+file mtime 20:58:55   build.console.log mtime 20:58:58       <- the root was rebuilt then
+source-commit.txt: d903e2c9a6a6                              <- written at root creation, never updated
+```
+
+So the root was rebuilt after the HS-192 fix, the code that trained the candidates contains it, and the **only** defect is
+that `source-commit.txt` was not refreshed by the later rebuilds - it lags the content rather than misdescribing it. That is
+HS-173's shape a second time: a commit stamp written once at creation and trusted through subsequent rebuilds.
+
+**Consequence, stated narrowly:** the candidates are valid artefacts of the fixed code, and the root needs either a refreshed
+stamp or a rebuilt-from-scratch replacement before it is cited as the frozen toolchain for Task 12's later steps. I will do
+the latter at the next natural boundary rather than re-stamping in place, since re-stamping is exactly the shortcut HS-165 and
+HS-173 were about.
