@@ -41110,3 +41110,32 @@ these reasons:
 Consequence for Task 13: with no selected candidate and no measured 17-value bundle (the runtime's phases are stubs, HS-233), Task 13
 is **inapplicable by result** rather than pending on effort - recorded explicitly so that Task 14's wrap-up does not mistake it for
 work left undone.
+
+## HS-256 — Task 14 has the same dependency, so both remaining tasks turn on the same decision
+
+Read Task 14's own boundary rather than assuming it was independent:
+
+> "### Task 14: Run production smoke, 40 serial scenarios, three restarts, and Teleop acceptance
+> Files: No controlled source/config edits are allowed. Only ledger/evidence appends may occur. Any source/config change
+> invalidates Task 13 and returns to it
+> **Interfaces: Consumes the frozen installed runtime and approved calibration bundle.**"
+
+So Task 14 consumes the **approved calibration bundle** and the **frozen installed runtime** - both products of Task 13, which is
+inapplicable by result (HS-255). Task 14 is therefore **inapplicable by result too**, and the two remaining tasks are not
+independent work waiting to be done: they are one decision about the campaign's purpose.
+
+**Where the plan's execution stands, honestly:**
+
+| task | state |
+| --- | --- |
+| 1-11 | completed (Task 11 approved with findings, 16 verdicts) |
+| 12 | completed - steps 1-6 executed; Step 5 returned **no supportable selection** |
+| 13 | inapplicable by result - no selected candidate to promote, and its runtime's phases are stubs (HS-233) |
+| 14 | inapplicable by result - consumes Task 13's approved bundle and frozen runtime |
+
+**The single remaining question is the user's, and it is about purpose, not procedure:** was this campaign meant to *compare*
+(pinned baseline vs head-only vs head+task mixed) or to *promote a challenger*? If comparison, the result is in and the plan's
+Tasks 13-14 do not apply. If promotion, the route is HS-254 option (2) - a fresh training campaign for C - and everything after it
+follows the plan as written.
+
+Recorded so the next reader does not spend a round hunting for work that the evidence has already ruled out.
