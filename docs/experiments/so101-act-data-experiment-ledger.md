@@ -35503,6 +35503,21 @@ no second detector, with its RED tests first.
 - **Note for Task 11:** this venv is now part of the toolchain for the Teleop tests and must be recorded in
   the frozen build provenance; the `so101_mujoco_support` underlay rebuild remains outstanding.
 
+- **Task 9 composition wired and verified (round 276).** `compose_head_camera_service` in
+  `src/so101_teleop/so101_teleop/unified/compose.py` derives the head-search runtime from the closed
+  descriptor: `SO101_UNIFIED_SOCKET_DIR` and `SO101_UNIFIED_RUNTIME_ID` must match `bridge_socket_root` and
+  `runtime_id` exactly, the descriptor's runtime ids must agree, and its owner must be live; otherwise
+  `CompositionBlocked` with `HEAD_CAMERA_CONNECTION_MISMATCH`. A missing or inherited-only connection leaves
+  the domain unavailable instead of composing a second detector. **Verified command** (standard-library module,
+  so no ROS and none of the ROS pytest plugins that conflict with this interpreter):
+  `env -u PYTHONPATH PYTHONPATH=src/so101_teleop /data/work/venvs/so101-v5-t004-perception/bin/python3 -m
+  pytest src/so101_teleop/test/teleop/test_head_camera_api.py -q --noconftest` -> **7 passed**.
+- **Environment notes learned the hard way (for Task 11 provenance):** the teleop test environment needs
+  `pydantic>=2` (2.13.5), `fastapi` (0.142.1), `httpx` (0.28.1) and `lark` installed in the perception venv;
+  ROS's `launch_testing` and `launch_testing_ros_pytest_entrypoint` plugins are **incompatible** with that
+  venv's pytest and must not be on the path for these tests; and `PYTHONPATH` must be *prepended* to, never
+  replace, the ROS paths when ROS is needed.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
