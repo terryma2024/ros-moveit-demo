@@ -1,11 +1,37 @@
 {
-  "scene_path": "../../assets/mujoco/act/scene.xml",
+  "accepted_camera_source_sha256": "d8665bb90bf8d4b47f2a75dbf8147094464b82a69a7e57da30a77c5858c7903c",
+  "accepted_scene_sha256": "aea2df3b0bfb608d7d3aec2e58cd8f45b51affd8bf92511de5e99475fcc47f14",
+  "anchors": [
+    {
+      "cup_start_m": [
+        0.02,
+        -0.28,
+        0.165
+      ],
+      "name": "default",
+      "neck_start_rad": 0.1
+    },
+    {
+      "cup_start_m": [
+        -0.08,
+        -0.28,
+        0.165
+      ],
+      "name": "left",
+      "neck_start_rad": 0.0
+    },
+    {
+      "cup_start_m": [
+        0.02,
+        -0.36,
+        0.165
+      ],
+      "name": "forward",
+      "neck_start_rad": 0.0
+    }
+  ],
   "camera": {
     "camera_name": "head_camera",
-    "width": 640,
-    "height": 480,
-    "fovy_rad": 1.0471975511965976,
-    "distortion_model": "plumb_bob",
     "distortion": [
       0.0,
       0.0,
@@ -13,7 +39,9 @@
       0.0,
       0.0
     ],
-    "parent_body": "head_mount",
+    "distortion_model": "plumb_bob",
+    "fovy_rad": 1.0471975511965976,
+    "height": 480,
     "local_position_m": [
       0.0,
       0.0,
@@ -26,9 +54,21 @@
       0.0,
       -0.6,
       0.8
-    ]
+    ],
+    "parent_body": "head_mount",
+    "width": 640
   },
+  "coarse_step_candidate_rad": 0.3,
+  "fov_tolerance_rad": 1e-06,
+  "neck_grid_rad": [
+    -6.283185307179586,
+    6.283185307179586,
+    0.002
+  ],
   "neck_joint": "neck_yaw_joint",
+  "safe_bisection_tolerance_rad": 1e-05,
+  "safe_interval_margin_rad": 1e-05,
+  "scene_path": "../../assets/mujoco/act/scene.xml",
   "validation_arm_rad": [
     -0.25,
     0.0,
@@ -37,35 +77,8 @@
     0.0,
     0.8
   ],
-  "anchors": [
-    {
-      "name": "default",
-      "cup_start_m": [
-        0.02,
-        -0.28,
-        0.165
-      ],
-      "neck_start_rad": 0.1
-    },
-    {
-      "name": "left",
-      "cup_start_m": [
-        -0.08,
-        -0.28,
-        0.165
-      ],
-      "neck_start_rad": 0.0
-    },
-    {
-      "name": "forward",
-      "cup_start_m": [
-        0.02,
-        -0.36,
-        0.165
-      ],
-      "neck_start_rad": 0.0
-    }
-  ],
+  "visible_pixel_minimum": 64,
+  "workspace_step_m": 0.02,
   "workspace_x_m": [
     -0.15,
     0.12
@@ -77,18 +90,5 @@
   "workspace_z_m": [
     0.165,
     0.166
-  ],
-  "workspace_step_m": 0.02,
-  "neck_grid_rad": [
-    -6.283185307179586,
-    6.283185307179586,
-    0.002
-  ],
-  "coarse_step_candidate_rad": 0.3,
-  "safe_interval_margin_rad": 1e-05,
-  "safe_bisection_tolerance_rad": 1e-05,
-  "fov_tolerance_rad": 1e-06,
-  "visible_pixel_minimum": 64,
-  "accepted_scene_sha256": "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f",
-  "accepted_camera_source_sha256": "d8665bb90bf8d4b47f2a75dbf8147094464b82a69a7e57da30a77c5858c7903c"
+  ]
 }

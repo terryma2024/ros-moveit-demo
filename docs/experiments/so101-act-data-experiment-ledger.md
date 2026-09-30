@@ -36032,3 +36032,18 @@ Rather than keep adjusting numbers by guesswork, the next step is to read how `e
 `act/head_camera_geometry.py` (the grep shows the term used there; the loop that builds it is just above the
 refusal) so the fix targets the actual mechanism. The contract edit remains uncommitted and the tree stays
 honest about the seal being unfinished.
+
+### HS-046 fourth addendum — the validator names the right height, so the cause is x/y
+
+Raising `workspace_z_m` to `[0.17, 0.171]` produced a **different and decisive** refusal:
+`HEAD_CAMERA_WORKSPACE_UNSUPPORTED: the declared workspace heights [0.17, 0.171] do not contain the model's
+resting target height 0.165 above the support at 0.12`. So the correct height is **0.165** - what the contract
+already declared - and z was never the problem. Combined with the mechanism read from the code
+(`target_clear_of_support` places the cup at the candidate point and reports a contact involving the cup body),
+the `WORKSPACE_EMBEDDED` failures must come from the **x/y** placement: a cup centred at 0.165 above the support
+still contacts something at those horizontal positions - an existing cup, the neutral block, or a table edge.
+
+So the fix is to narrow `workspace_x_m` / `workspace_y_m` to positions where a resting cup is genuinely free,
+which is a horizontal question, and z stays at 0.165. Two of my earlier readings of this mechanism were wrong
+(first "inside the table footprint", then "occluded by the support"); the code and the validator's own message
+settled it, and both wrong readings are left on the record rather than quietly removed.
