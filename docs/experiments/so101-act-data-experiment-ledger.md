@@ -39277,3 +39277,32 @@ of editing `no_proxy` system-wide would touch host configuration this task has n
 **Consequence for Task 12:** Step 1's `hf auth whoami` gate is satisfiable, so the campaign can proceed - with the A-weights
 download still revision-pinned (`b55430fb75c0207b35bd20f4e328e042bff06f3f`) and sha256-verified per the plan, and the GPU
 recorded (`NVIDIA GeForce RTX 5080`, 16303 MiB, no detector or second stack running).
+
+## HS-182 — Step 1: the pinned weights verify, the download exits non-zero, and `HF_HOME` loses the token
+
+Reading the artefacts rather than the overall impression:
+
+```
+best.pt: present                dataset manifest: present
+sha256 .../b55430fb.../best.pt: OK      sha256 rc=0        <- the plan's exact digest verified
+download rc=1                   httpx.ReadTimeout: The read operation timed out
+hf_auth: Error: Not logged in
+```
+
+Three separate facts, and they must not be merged:
+
+1. **The A weights are correct**: `best.pt` is present and its sha256 matches the plan's pinned
+   `f281d25258493e2c…` with `sha256sum --check --strict rc=0`, and the dataset manifest is present. So the artefact Step 1
+   exists to produce is on disk and verified.
+2. **The download command still exited 1** - `httpx.ReadTimeout` on some later file (the run pulls `model/**` and
+   `dataset/**` too, not just `best.pt`). A partial failure with the critical file already verified is a *different*
+   condition from a failed download, and the plan's `|| exit 1` would treat them the same; I am not going to call rc=1 a
+   pass, nor throw away a verified artefact because a sibling file timed out.
+3. **`hf auth whoami` reports "Not logged in" inside this script** - and the reason is my own doing: I set
+   `HF_HOME="$HEAD_EVIDENCE/models/huggingface"`, **and the stored credential lives under the previous `HF_HOME`**
+   (`/data/models/huggingface`). Changing the cache root moves the token store with it, so the gate fails on a
+   configuration choice I made, not on the host.
+
+**Next step, specific:** re-run the auth check and the download **with the original `HF_HOME`** (so the token is found) while
+keeping the `no_proxy` workaround (HS-181), and re-download with retries so `rc=0` means complete rather than partial. The
+already-verified `best.pt` is kept either way - it is evidence, and its digest is already checked.
