@@ -39717,3 +39717,30 @@ statement of what remains unbuilt rather than "calibration is missing".
 
 I also read it from the **consumer** side deliberately: the producer does not exist to describe itself, so the only honest
 specification available is the one the existing gate already enforces - and that is also the one a reviewer can check.
+
+## HS-202 — Step 4's producer is a composition, and two of its six inputs already exist
+
+Checked the trained manifests against the frozen-candidate schema HS-201 extracted:
+
+```
+candidate-{b,c}/candidate-manifest.json keys: base_model_sha256, best_weight, best_weight_sha256,
+  candidate_id, checkpoint_score, device, history, plan_sha256, schema_version
+schema keys present: candidate_id only
+```
+
+So the training manifest is a **different document** from the frozen candidate identity - training provenance versus the
+evaluation input - and Step 4's missing producer is a **composition**, not a computation from nothing:
+
+| frozen key | source | state |
+| --- | --- | --- |
+| `candidate_id` | training manifest | **exists** (B, C; A needs registration) |
+| `weight_sha256` | training manifest's `best_weight_sha256` (renamed) | **exists** for B/C |
+| `operating_points.head` / `.task` | the calibration measurement | **missing** |
+| `tracker`, `postprocess`, `runtime` | the frozen runtime identity | Task 13's `frozen-runtime.json` exists; the per-candidate binding is missing |
+
+**Net:** of the six fields, two are already produced for two of three candidates, and the genuinely unbuilt part is the
+**operating-point measurement and its per-candidate binding** plus A's registration. That is a smaller and much better
+specified job than "calibration is missing" - and the ledger now carries the interface (HS-201) and this field map (HS-202)
+so the work, if authorised, starts from the consumer's own contract.
+
+Still awaiting the user's decision on the HS-200 fork; no implementation has been started.
