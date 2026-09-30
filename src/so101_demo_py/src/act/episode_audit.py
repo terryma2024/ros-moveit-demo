@@ -1017,6 +1017,10 @@ def _formal_coverage_ok(audit: Path) -> bool:
     # F5: "full registered physics" is every registered kind being present, which is checkable without a phase
     # field the rows do not carry
     kinds = {row["kind"] for row in physics}
+    # F5: the ratified observations must actually be retained, so at least one physics row carries both records
+    observed = any(isinstance(row.get("observation"), dict)
+                   and "planning_scene_observation" in row["observation"]
+                   and "controller_feedback" in row["observation"] for row in physics)
     return bool(physics and events and references
                 # F5: not merely that a reference was accepted, but that it carries one complete raw group -
                 # the legacy flat keys or the packed frames - so a bare projected reference is not coverage
@@ -1025,7 +1029,8 @@ def _formal_coverage_ok(audit: Path) -> bool:
                         for row in references)
                 and any(row["kind"] == "release" for row in events)
                 and all(phase in phases for phase in FORMAL_PHASES)
-                and all(kind in kinds for kind in _PHYSICS_KINDS))
+                and all(kind in kinds for kind in _PHYSICS_KINDS)
+                and observed)
 
 
 def _verify_streams(audit: Path, identity: dict) -> None:

@@ -40660,3 +40660,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 six of seven steps
   done** with this one a verified one-character matcher fix away, F1/F11 open; targeted gates **430 / 201 / 201 /
   201 passed**; HEAD `6e796ff60`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2164 — F5 complete: a formal seal now carries the lifecycle, the raw reference, the physics kinds and the observations
+
+- **What landed**: `_formal_coverage_ok` requires at least one physics row whose observation carries **both**
+  ratified records — `planning_scene_observation` and `controller_feedback`, each satisfying the audit's own
+  validators and joined by the row's instant — and the **three formal writers** retain them (anchors printed first:
+  the support rows at lines 746, 830, 1109 with receivers `writer`, `complete`, `writer`; the two remaining anchors
+  at 166/171 are the diagnostic writer and are untouched).
+- **The slips on the way, all recorded**: a matcher one character short (CP-2163), and a row with one closing brace
+  too many (`_feedback}})` → `_feedback})`) which the parser caught at line 758 in the same run.
+- **F5's seven steps, all landed**: shared predicate (CP-2146); lifecycle declared (CP-2148); lifecycle enforced
+  with the fixture sites expanded (CP-2150); a complete raw reference group required (CP-2154); every registered
+  physics kind required (CP-2159); and now the ratified observations (this entry). A formal audit can no longer
+  seal as complete on "a few nonempty streams", which is what F5 said it could.
+- **Evidence.** `logs/task3-f5-complete.run` rc=0: **246 passed in 2.36s** across the audit, recorder, release-boundary, capture,
+  `test_act_task8`, qualification, W8-verifier and campaign-admission suites under `pytest-xdist` with 8 workers,
+  its own NVMe scratch and a non-empty tempfile proof.
+- **Task 3's remaining list**: **F13**'s `sim_time_s` question (needs the plan's ruling on the closed seven-key
+  record), then **F1** and **F11** — with **F12, F3 and F5 closed**.
+- **State.** HEAD `206650339`; targeted gates **430 / 201 / 201 / 201 / 246 passed in 2.36s passed**; no push, no evidence
+  deletion, no hardware, no second stack.
