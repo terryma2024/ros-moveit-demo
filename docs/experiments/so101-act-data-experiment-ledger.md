@@ -36397,3 +36397,32 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   producers exist.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `1a9d4a796`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1972 — Task 3 fix pass, twenty-fifth instalment: the registered physics document is admitted, per-kind measurements required (T3-F1)
+
+- **The source document can now travel through the boundary.** The physics observation schema accepts the
+  fields the registered source actually publishes — `publisher_sequence`, `reset_epoch` and `paused`
+  alongside the ones already known (`release_retreat.py::evidence_dict`) — and the runner's raw-block
+  validator now accepts lists of names, so `other_contact_geoms: ["table_collision"]` passes instead of
+  being refused by my own `_raw()`. That was the reviewer's sharpest point: an unchanged source document
+  could not cross this boundary at all.
+- **A timestamp is no longer an observation.** Each kind must carry the measurements its verdict is made
+  of: `support` needs `table_contact` and the verified `supported` flag, `contact` needs both contact
+  counts and table contact, `pose` and `retract` need the cup position, all of them the simulation time
+  and step. A block containing only `simulation_time_s`/`simulation_step` is refused for every kind, which
+  closes the reviewer's "a contact/pose/retract observation containing just the time passes" case.
+- **Evidence.** `logs/task3-fix25.run` rc=0: **102 passed** across `test_act_episode_audit.py`,
+  `test_act_release_boundary.py`, `test_act_recorder.py` and `test_act_supervisor.py`, with its own NVMe
+  scratch and a non-empty tempfile proof. The control admits a full registered `evidence_dict` document
+  (including the named geometry list) and refuses a time-only block for each kind, a `retract` block
+  missing the position, a `support` block missing both support facts, and a geometry list of numbers.
+  The runner's fake port now carries the named list end to end.
+- **Still open from the fourth verdict.** **T3-F1**: the full robot contact pairs, the independent
+  Planning Scene and gripper/controller feedback are still summaries rather than the source records, and
+  the broker hop plus the per-kind raw-frame shape await the reviewer's ruling. **T3-F3**: event identity
+  beyond session/attempt, legitimate release transitions, physics envelope/source-clock correlation, null
+  `sim_time_s`, integer-not-numeric sequence types. **T3-F4**: the zero-row labelled-binding rule.
+  **T3-F5**: the fail-closed eligibility and sealing gate once the producers exist.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `50fb8d67d`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

@@ -98,6 +98,10 @@ class PickPlaceRunner:
                     and all(isinstance(item, (int, float)) and not isinstance(item, bool)
                             and math.isfinite(item) for item in value)):
                 continue
+            if (isinstance(value, (list, tuple))
+                    and all(isinstance(item, str) and item for item in value)):
+                # the source contract also carries names, such as the contact geometry list
+                continue
             return False
         return True
 

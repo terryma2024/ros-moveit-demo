@@ -79,12 +79,22 @@ _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
 # (backends/mujoco/qualified_phases/release_retreat.py::evidence_dict) plus the verified support boolean
 # the runner adds for support rows; another source would extend this set when it exists
 _PHYSICS_OBSERVATION_FIELDS = frozenset({
-    "simulation_time_s", "simulation_step", "cup_position_world_m", "cup_orientation_world_xyzw",
+    "publisher_sequence", "simulation_time_s", "simulation_step", "reset_epoch", "paused",
+    "cup_position_world_m", "cup_orientation_world_xyzw",
     "cup_linear_velocity_world_m_s", "cup_angular_velocity_world_rad_s", "left_contact_count",
     "right_contact_count", "table_contact", "other_contact_geoms", "maximum_normal_force_n",
     "supported"})
-_PHYSICS_INTEGERS = {"simulation_step", "left_contact_count", "right_contact_count"}
-_PHYSICS_BOOLEANS = {"table_contact", "supported"}
+# each kind must carry the measurements its verdict is made of, not merely a timestamp
+_PHYSICS_REQUIRED = {
+    "support": frozenset({"simulation_time_s", "simulation_step", "table_contact", "supported"}),
+    "contact": frozenset({"simulation_time_s", "simulation_step", "left_contact_count",
+                          "right_contact_count", "table_contact"}),
+    "pose": frozenset({"simulation_time_s", "simulation_step", "cup_position_world_m"}),
+    "retract": frozenset({"simulation_time_s", "simulation_step", "cup_position_world_m"}),
+}
+_PHYSICS_INTEGERS = {"simulation_step", "left_contact_count", "right_contact_count",
+                     "publisher_sequence", "reset_epoch"}
+_PHYSICS_BOOLEANS = {"table_contact", "supported", "paused"}
 # each vector keeps its source dimension: a position and a velocity are 3, a quaternion is 4
 _PHYSICS_VECTORS = {"cup_position_world_m": 3, "cup_orientation_world_xyzw": 4,
                     "cup_linear_velocity_world_m_s": 3, "cup_angular_velocity_world_rad_s": 3}
@@ -131,7 +141,8 @@ def _physics_observation_typed(observation, *, kind: str) -> bool:
 
     if (not isinstance(observation, dict) or not observation
             or not set(observation) <= _PHYSICS_OBSERVATION_FIELDS
-            or "simulation_time_s" not in observation):
+            or not _PHYSICS_REQUIRED[kind] <= set(observation)):
+        # a subset that merely carries a timestamp is not a physical observation of that kind
         return False
     for key, value in observation.items():
         if key in _PHYSICS_INTEGERS:

@@ -53,6 +53,7 @@ class FakePort:
                                            "table_contact": phase in ("RELEASE", "RADIAL_RETREAT",
                                                                       "FINAL_CHECK"),
                                            "maximum_normal_force_n": 0.5,
+                                           "other_contact_geoms": ["table_collision"],
                                            "cup_position_world_m": [0.02, -0.28, 0.165]}}
         record.update(overrides)
         return record

@@ -626,3 +626,29 @@ def test_readback_refuses_a_resigned_partial_raw_reference(tmp_path):
     _resign(writer, path, "references.jsonl", payload)
     with pytest.raises(ValueError, match="AUDIT_REFERENCE_INVALID"):
         verify_audit_manifest(path)
+
+
+def test_a_registered_source_document_is_admitted_and_a_time_only_block_is_not(tmp_path):
+    """The real evidence_dict document must pass; a timestamp alone must not (T3-F1)."""
+
+    document = {"publisher_sequence": 7, "simulation_time_s": 1.1, "simulation_step": 11,
+                "reset_epoch": 1, "paused": False, "left_contact_count": 2, "right_contact_count": 2,
+                "table_contact": True, "other_contact_geoms": ["table_collision"],
+                "maximum_normal_force_n": 0.5, "cup_position_world_m": [0.02, -0.28, 0.165],
+                "cup_orientation_world_xyzw": [0.0, 0.0, 0.0, 1.0],
+                "cup_linear_velocity_world_m_s": [0.0, 0.0, 0.0],
+                "cup_angular_velocity_world_rad_s": [0.0, 0.0, 0.0]}
+    writer = EpisodeAuditWriter(tmp_path / "ok", scope(), identity(), {"inputs_sha256": "a" * 64})
+    writer.append_source("physics", {"kind": "contact", "sim_time_s": 1.1, "release_epoch": 1,
+                                     "observation": document})
+    for kind, observation in (
+            ("contact", {"simulation_time_s": 1.1, "simulation_step": 11}),
+            ("pose", {"simulation_time_s": 1.1, "simulation_step": 11}),
+            ("retract", {"simulation_time_s": 1.1, "simulation_step": 11, "table_contact": True}),
+            ("support", {"simulation_time_s": 1.1, "simulation_step": 11, "supported": True}),
+            ("contact", {**document, "other_contact_geoms": [1, 2]})):
+        other = EpisodeAuditWriter(tmp_path / f"bad-{kind}-{len(observation)}", scope(), identity(),
+                                   {"inputs_sha256": "a" * 64})
+        with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+            other.append_source("physics", {"kind": kind, "sim_time_s": 1.1, "release_epoch": 1,
+                                            "observation": observation})
