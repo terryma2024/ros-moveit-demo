@@ -41184,3 +41184,20 @@ task is no longer blocked at step one by a missing file. It remains **inapplicab
 promote, and its runtime's six phases are stubs (HS-233) so a formal calibration run would still measure nothing. Both facts are
 recorded; neither is something a further round of mine can resolve without the user's decision on the campaign's purpose
 (HS-254/256).
+
+## HS-259 — Auto-proceed enacted: the campaign's outcome is accepted as a comparison; the objective is blocked on purpose
+
+Per the user's standing instruction to take the recommended option at decision points, HS-254/255's resolution is enacted: **the outcome
+stands as a comparison result**, and Tasks 13-14 are **inapplicable by result** rather than pending on effort.
+
+- Task 12's Step 5 returned **no supportable selection** (HS-258), auditable as
+  `evaluation/{model-comparison,model-selection-verdict}.json` with `selection: null`, `retained_model: "C"`, `promoted: false`;
+- Task 13 promotes a selected candidate that does not exist, and its runtime's six phases are stubs (HS-233), so the 17-value bundle
+  the plan asks the user to approve cannot be measured by the named mechanism;
+- Task 14 consumes Task 13's approved bundle and frozen runtime (HS-256), so it is inapplicable for the same reason.
+
+**Blocked condition, stated concretely:** the remaining plan steps require a *selected* candidate, and the design's retention rule
+declined to produce one because the incumbent mixed model C gives up 0.011 task-domain mask mAP against a 0.01 margin. No further round
+of measurement can change that - only a decision about the campaign's purpose (comparison *or* promotion), or a new training campaign
+for C (HS-254 option 2), can. That has been the state for seven consecutive rounds (HS-254 through HS-259), and it is recorded here as
+the blocker rather than re-described as a finding.
