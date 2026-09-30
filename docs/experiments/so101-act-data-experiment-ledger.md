@@ -35094,6 +35094,14 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   `test_act_search.py` / `test_act_task8_search_binding.py` / `test_act_head_search_binding.py`, and the
   independent sweep checker alongside the calibration binding.
 
+- **Underlay mismatch blocks two Task 5 test files (recorded, not a source regression).**
+  `test_act_task8_search_binding.py` and `test_act_head_search_binding.py` fail at import with
+  `ImportError: cannot import name 'ScalarJointEvidence' from 'so101_mujoco_support.msg'`: the installed
+  underlay is older than the message definitions in the worktree, so the closure needs a rebuild of
+  `so101_mujoco_support` (Task 11's build gate, per the repository rule about distinguishing incomplete
+  underlays from test failures). `test_act_search.py` (21 passed) and `test_act_head_search_domain.py`
+  (9 passed) run and pass in the same environment.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
