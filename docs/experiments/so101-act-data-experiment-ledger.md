@@ -38316,3 +38316,21 @@ traceback section pairs (a consequence of `-n 8` worker output and of collection
 table is **complete for what it pairs and explicit about what it does not**. Closing the remainder needs either a serial
 run (one worker, so every failure gets a header) or parsing the summary's `FAILED id - reason` lines where pytest emits
 them.
+
+## HS-146 — Final attribution table: every summary id, deduplicated, with 37 left visibly uncaused
+
+Rebuilt keyed on the **summary's** full ids (`file::test`), which the `--tb=short` headers lacked, and matched each to
+its header's final `E …` line:
+
+```
+scratch/attribution-final.tsv     231 rows    37 UNCAUSED
+     61 soN_demo.act.contracts.ContractError: FIELDS_INVALID
+     30 soN_demo.cli.mujoco_parallel_batch.CliError: TRUSTED_FINAL_TARGET_INVALID
+     14 ValueError: MEASUREMENT_CONTRACT_VN_INVALID
+     14 soN_teleop.unified.contracts.MutationError: BRIDGE_CHILD_EXITED: N
+```
+
+This is the shape the seventh verdict asked for: **one row per failing id**, deduplicated, with a cause where a traceback
+supplies one and the literal string `UNCAUSED` where it does not - so missing coverage is visible in the artefact rather
+than in a caveat. The 37 uncaused rows are the entries whose failure produced no per-test traceback line (setup and
+collection-level failures), plus the 11 module-level collection errors recorded separately via HS-122's XML.
