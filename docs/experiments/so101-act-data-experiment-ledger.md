@@ -41923,3 +41923,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision** (CP-2217), **F13's amendment landed**
   (CP-2218); item 4's QC half is green and its commit half now has a chosen wiring point; items 5+ wait on the four
   blocked bindings. HEAD `8e2f01cd9`; thirteen gates green.
+
+
+## CP-2220 — ③a has no unknowns left: the coordinator already holds the worker roots
+
+- **Read this round** (`coordinator.py`): line **671** does `roots = getattr(self.result_port, 'worker_roots', None)`
+  and, at 673-677, resolves a worker's workspace as `Path(roots[worker_id]) / collection / point_id / attempt` — so
+  the mapping the verifier needs is **already on the coordinator's result port**, and the coordinator already uses it
+  to locate a result. Leases are built at 229 (`LeaseIdentity(**worker['lease'])`) and 344 (from a `LEASE_GRANTED`
+  response), and `self.request.run_mode` is available, so `RunMode.EXECUTE` is checkable against the batch's own
+  mode rather than assumed.
+- **The edit, therefore, is one guarded call where the coordinator already resolves a result's workspace**: build
+  `ActCollectionResultVerifier(roots)` and call
+  `verify(lease, str(workspace), self.request.run_mode)`, and on any refusal leave the point **non-terminal** —
+  do not treat it as a completed result. All three of the verifier's inputs are in hand at that point; nothing new
+  has to be plumbed, which settles CP-2214's "one input to plumb" in the coordinator's favour.
+- **What the test should show**: a result whose workspace has no sealed episode — or whose lease does not match the
+  location — must not become terminal, which is the store's own assertion ("an unsealed directory cannot be
+  committed") restated at the coordinator's boundary. The existing `parallel_batch` suites already build coordinators
+  with a fake result port, so the control has a home.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13's amendment landed**; item 4's
+  QC half is green and its commit half is this one call plus its control; items 5+ wait on the four blocked bindings.
+  HEAD `11ebd0240`; thirteen gates green.
