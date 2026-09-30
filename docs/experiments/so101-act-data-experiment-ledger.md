@@ -37111,3 +37111,26 @@ Where the change goes, established by reading rather than guessing:
 
 Sequencing matters here: the seal hash change ripples into the dataset chain, so this is a small change with a
 medium blast radius and belongs at the start of a round, not the end of one.
+
+## HS-097 — Correction: the seal comes from a different class, and a fresh run reproduces the gap (round 697)
+
+I re-ran the validator from the **current source** and hashed what it wrote:
+
+```
+validator rc=0
+new seal_sha256: f168bfc180c215fb29b5f5df9f2ce0756b20e89a67d888e447d40a814d36e515   (identical to probe5)
+new seal has coarse_step_candidate_rad: False
+```
+
+Two things follow. First, the seal on disk is **not stale** - the current code reproduces it byte-identically, so
+nothing was produced by an old build and there is no re-generation to do. Second, HS-095's reading was
+**incomplete**: the `to_document()` I found at lines 415-432, which *does* carry `coarse_step_candidate_rad`,
+belongs to a different class than the one the CLI writes. The seal's key set
+(`anchors, camera, camera_mount_origin_m, camera_mount_xyaxes, camera_name, fov_union_covers_required_domain,
+horizontal_fov_rad, image_height, image_width, in_frame_failures`) identifies the real one, whose `to_document` is
+the place the field is missing.
+
+So the fix is still one field - but in the **result/geometry document class** the CLI actually serialises, and the
+next step is to read that class's `to_document` and add it there, with the RED test from HS-096. Recording the wrong
+site twice is worth keeping in the ledger: both times the mistake was reading the *nearest* matching code rather
+than the code path the CLI takes.
