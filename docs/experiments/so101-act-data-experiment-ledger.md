@@ -38629,3 +38629,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9877c1b71`;
   targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2070 — Task 3: the CP-2069 cleanup applied, so the document's stated and derived gates are separated
+
+- **What landed.** The four gates the port's own validation guarantees (`contact_ok`, `mujoco_ok`,
+  `head_rgb_ok`, `wrist_rgb_ok`) are stated as explicit values again, with a four-line reason block naming the
+  refusals that guarantee them (a non-locking result, a truncated world, contact evidence from another step, a
+  stamp outside `skew`). The SEARCH document therefore now derives exactly three gates —
+  `planning_scene_ok`, `controller_reference_ok`, `joint_feedback_ok` — and states the rest, while the
+  boundary's four remain derived from observations that can genuinely be absent.
+- **How it was applied after the previous round aborted.** Line-based location (CP-2043's pattern) instead of
+  remembered multi-line anchors: the two gate lines were found by their unique content and rewritten, and the
+  reason block was inserted immediately before them. Both rewritten lines and their neighbours were printed.
+- **Evidence.** `logs/task3-stated2.run` rc=0: **98 passed** across the search-port, three task8 phase,
+  release-boundary and supervisor suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a
+  non-empty tempfile proof.
+- **Honest residue.** The local computations that fed those four gates are now unused; removing them is a
+  tidy-up, not a correctness matter, and it is recorded here rather than done in a round with little budget.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `e654eb16b`;
+  targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

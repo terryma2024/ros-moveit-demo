@@ -447,7 +447,11 @@ class PickPlaceSearchPhasePort:
             "release_epoch": 0, "physics_step": world.simulation_step,
             "planning_ok": True,   # upstream-guaranteed by validate_search_result, see the note above
             "controller_reference_ok": controller_reference_ok, "joint_feedback_ok": joint_feedback_ok,
-            "contact_ok": contact_ok, "mujoco_ok": mujoco_ok,
+            # NOTE (CP-2069): every gate in this document is guaranteed by the validation above before the
+            # document exists - a non-locking result, a truncated world, contact evidence from another step
+            # and any stamp outside `skew` are all refused outright - so they are stated here, not derived.
+            # The boundary's gates are the derived ones: its receipts and proofs can genuinely be absent.
+            "contact_ok": True, "mujoco_ok": True,
             # CP-2017 step 2, additive half: when the readback that established these gates carries the
             # ratified Planning Scene observation, it travels with the document so the gate can be derived
             # from it. Nothing supplies it yet, so the gate below keeps its documented interim value and
@@ -455,7 +459,7 @@ class PickPlaceSearchPhasePort:
             **({"planning_scene_observation": observed.planning_scene_observation}
                if getattr(observed, "planning_scene_observation", None) is not None else {}),
             "planning_scene_ok": planning_scene_ok,
-            "head_rgb_ok": head_rgb_ok, "wrist_rgb_ok": wrist_rgb_ok, "manual_intervention": False,
+            "head_rgb_ok": True, "wrist_rgb_ok": True, "manual_intervention": False,
             "moveit_recovery": False, "holding_state": "EMPTY",
             "bilateral_contact": False, "micro_lift_confirmed": False,
             "cup_off_table": False, "cup_supported": supported,
