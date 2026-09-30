@@ -38473,3 +38473,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the four real input roles are still unapproved.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2064 — Handoff: the consolidated brief for a fresh session
+
+- **Owner decision recorded**: hand Task 3's remaining work to a new session rather than continue with this
+  one's exhausted context.
+- **`docs/experiments/so101-act-task3-next-session-brief.md` written** as the single entry point: where to
+  work (worktree, `env.zsh`, the xdist gate rule, the fresh-scratch and tempfile-proof requirement, and the
+  staging rule with the backup-diff command from CP-2026); the four remaining items with their file and line
+  anchors (the record's travel, the port's three-way controls with what CP-2061's experiment already proved,
+  T3-F11's self-consistent fixtures, and the fresh checkpoint); the patterns that landed first-try versus the
+  five that reverted; the three documented choices and the open `planning_ok` semantics; and what Tasks 4-8
+  need, including the install overlay and the four unapproved input roles.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `36df61a74`;
+  targeted gate `logs/task3-gate17.run` **419 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
