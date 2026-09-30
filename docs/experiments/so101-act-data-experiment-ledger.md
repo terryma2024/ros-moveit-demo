@@ -36124,3 +36124,17 @@ The complementary half of this gate is the **refusal**: a promotion or compariso
 non-promotable candidate must refuse by name rather than proceed. The next round exercises that half - the
 evaluator's own refusal path - so both sides of the rule are covered: the artefact says "not promotable", and
 the gate that consumes it says "then I will not".
+
+## HS-052 — The refusal half is missing: the evaluator does not check promotability (round 351)
+
+HS-051 verified that the smoke candidates record `promotable: false`. Checking the consuming side finds a real
+gap: `promotable` appears in the dataset generator, the dataset verifier and the training adapter, but **not** in
+`perception_benchmark/head_search_models.py` nor in `cli/evaluate_head_search_yolo_candidates.py`. So the
+comparison gate currently has no notion of promotability and would happily evaluate - and a promotion step
+consume - a smoke candidate.
+
+That is exactly the complementary half I set out to test, and it is **not implemented**. The fix belongs in the
+evaluation path: the candidate loader should refuse a candidate whose run manifest is not promotable, by name
+(`EVALUATION_CANDIDATE_NOT_PROMOTABLE`), with a test that a smoke manifest is refused and a promotable one is
+not. Recorded here rather than patched in a hurry at the end of a round, because it is a gate boundary and
+deserves its own RED-then-GREEN step like every other rule in this task.
