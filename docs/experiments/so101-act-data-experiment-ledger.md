@@ -42217,3 +42217,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   yet); no worktree change was made in this round beyond documentation.
 - **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
   green, commit half landed; items 5+ wait on the values above. HEAD `af3585bb8`; fourteen gates green.
+
+
+## CP-2234 — `rgb_skew` has an evidence-backed proposal; the other three need engineering judgement
+
+- **`rgb_skew` (`max_age_s`, `max_skew_s`)**: the code already works to a **0.1 s** tolerance everywhere this
+  stretch touched it — the audit's `_TOLERANCE_S` (CP-2178), the feedback record's source skew
+  (`_FEEDBACK_SOURCE_SKEW_S = 0.1`, CP-2218), and the frozen source contract's grid comment ("rows sit on the 10 Hz
+  grid, a frame is at most one grid step old", `episode_audit.py:151-153`) — so **0.1 s for both** is the reading
+  the code itself implies: one grid step of age and one of skew. The role is mapped to the `synchronization` check
+  (`first_episode_inputs.py:446`) and to `nonhead_calibration` (line 59), i.e. these are the **bounds the calibration
+  report is judged against**, not measurements themselves.
+- **`path_policy` (`path_step_s`, `path_clearance_m`)**, **`placement_qc` (five values)** and the
+  **`resource_thresholds` selection**: no evidence in the code this stretch read gives these numbers a defensible
+  default — they are physical acceptance criteria for the non-Head run, and inventing them would be exactly the
+  mistake this ledger keeps recording. They stay with the owner; the questions to answer are the units and the
+  intent (a cartesian step for the approach path, a clearance against the scene, the occlusion window for a grasp's
+  verdict, the support distance that counts as held, the hold times that count as stable, and the retreat distance).
+- **Review status**: the seventh review is still running (pid 2700637, 1:29 elapsed, no verdict file yet); this round
+  changed documentation only.
+- **State.** Task 3: **F12, F3, F5 and F1 closed**, **F11 closed by decision**, **F13 amended**; item 4: QC half
+  green, commit half landed; items 5+ wait on CP-2232's list. HEAD `8ea94376d`; fourteen gates green.
