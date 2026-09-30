@@ -38276,3 +38276,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `86d25f51b`;
   consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2054 — Task 3: why the last five SEARCH gates need a definition before a derivation
+
+- **The obstacle, stated from the code.** The port validates a **closed** key set for `raw`
+  (`{"world", "scene", "contact", "observation", "reference", "source_stamps_s", "source_received_wall_s"}`)
+  and type-checks `world` as `SimulationEvidence`. So a derivation of `mujoco_ok`, `head_rgb_ok` or
+  `wrist_rgb_ok` from the **presence** of those entries would be a tautology — the entry cannot be absent
+  when the document is assembled — and the reviewer's standing objection to decorative gates would apply. My
+  CP-2053 derivation is different: it reports the reference readback whose **contents a verifier establishes**
+  before assembly, not a key that the closed set already guarantees.
+- **What each remaining gate needs before it can be derived honestly**:
+  - `mujoco_ok` — a content property of the world evidence (for example `truncated is False` at the same
+    instant, or a step/sequence relationship with the physics record), not its presence.
+  - `head_rgb_ok` / `wrist_rgb_ok` — a property of the published frame (non-degenerate shape, fresh stamp
+    within the frozen source age, or the lossless digest the recorder already computes), not its presence.
+  - `contact_ok` — a property of the contact evidence the port already inspects (the fingertip/table
+    membership rules it applies), which is the closest of the five to being defined today.
+  - `planning_ok` — the search result's own status/verdict, which `validate_search_result` already consumes.
+- **Why I am not guessing them.** Each of the four needs a semantic choice the plan does not spell out, and
+  writing a presence-based or arbitrary-content gate would be exactly the "manufacture it later" the reviewer
+  refused for `scene_revision` and I refused for `status_sequence`. Recording the choice is the honest step;
+  the first of the four that can be settled from existing code without a new decision is `contact_ok`.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `84383132e`;
+  consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
