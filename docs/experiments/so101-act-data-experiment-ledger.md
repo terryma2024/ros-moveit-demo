@@ -36417,3 +36417,25 @@ attempt for NOT MET item 3, with the enabled-plugin list taken from what the ord
 Two corrections in three rounds, both mine on the same point: first I blamed the plugins while disabling them
 incorrectly, then I retracted that when the *symptom* changed. The ledger keeps all three entries so the sequence
 is visible rather than tidied away.
+
+## HS-066 — The complete parallel gate runs but hangs on a worker-killing test (round 387)
+
+With automatic plugin loading disabled the full ordinary suite **does** run:
+
+```zsh
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -n 8 -q -p xdist src/so101_demo_py/test
+```
+
+It advanced past 99% with everything green except one `F`, then reported `[gw4] node down: Not properly
+terminated` and **never finished**: xdist waits on a worker that a test killed, so the run hangs instead of
+failing. I stopped it by PID rather than leaving it holding the host.
+
+NOT MET item 3 therefore has two distinct causes, both evidenced: the ROS plugin breaks *collection* under
+autoload (HS-065), and at least one test in the wider suite kills its xdist worker, which makes a single
+all-suite `-n 8` invocation unstable by construction. Neither cause is a Head Search defect.
+
+**The defensible answer for item 3**, short of fixing another subsystem's test inside this task: run the parallel
+gate over the ordinary suite in per-directory batches (the way the five head-search suites already run clean),
+record each batch's counts, and state explicitly that one worker-killing test in an unrelated module makes the
+single-invocation form unusable, with the evidence above. That turns the gate from "five selected suites" into
+"the whole ordinary suite, minus a named and evidenced instability", which is what the reviewer asked for.
