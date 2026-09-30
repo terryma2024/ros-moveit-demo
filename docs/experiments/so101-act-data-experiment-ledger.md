@@ -41537,3 +41537,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan on `sim_time_s`); **F11 six
   of seven**; targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 / 287 passed in 4.60s
   passed**; HEAD `ec8d2ff5b`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2204 — The consolidated gate table for this stretch, all green
+
+| gate (`logs/<name>.run`) | rc | result |
+| --- | --- | --- |
+| `task3-final` | 0 | 430 passed in 10.64 s (the Task 3 baseline, unchanged since CP-2112) |
+| `task4-fix` | 0 | 115 passed in 4.82 s (the evidence-port repair) |
+| `task4-w8` | 0 | 9 passed in 0.57 s (the W8 verifier suite alone) |
+| `task4-positive` | 0 | 113 passed in 2.22 s (the verifier's positive path with its controls) |
+| `task3-f5-lifecycle` | 0 | 201 passed in 1.25 s |
+| `task3-f5-rawref` | 0 | 201 passed in 1.30 s |
+| `task3-f5-physics` | 0 | 201 passed in 1.37 s |
+| `task3-f1-sample` | 0 | 247 passed in 2.33 s |
+| `task3-f1-expert` | 0 | 283 passed in 4.73 s |
+| `task3-f1-chain` | 0 | 284 passed in 4.69 s |
+| `task3-f11-endpoints` | 0 | 287 passed in 4.60 s |
+
+- **What the table is for**: every finding this stretch closed has at least one gate that ran the suites touching it,
+  under `pytest-xdist` with eight workers, its own NVMe scratch under the registered evidence root and a non-empty
+  tempfile proof. A reviewer can pick the row matching a finding and read that run's log and JUnit XML.
+- **The stretch's landed work, by finding**: **F12** closed (carrier, `_raw`, scene and feedback joins — CP-2116 to
+  CP-2120); **F3** closed (round trips, release correlation, lease, initial epoch, seal and readback ties — CP-2127
+  to CP-2142); **F5** closed (shared predicate, lifecycle, raw reference group, physics kinds, ratified observations
+  — CP-2146 to CP-2164); **F1** two cuts plus its sample fixture, its A.1 wiring and the chain test (CP-2166 to
+  CP-2183); **F11** six of seven items (CP-2184 to CP-2203).
+- **What waits on a ruling, both stated with their evidence**: **F11's frozen policy** — the audit module has no
+  frozen home for `cadence_s`, `streams_required` or `permitted_gaps_s` (CP-2195), candidates being the writer's
+  `inputs.json` or the plan's frozen inputs; and **F13's `sim_time_s`** — the ratified record is closed at seven keys
+  and the audit requires that instant to equal its parent's, so an observed source instant cannot ride along without
+  an amendment (CP-2121/CP-2124).
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, F13 residual; items 0-2 completed; item 4's
+  QC increments exist and pass their suites but the plan's converge-first rule keeps them behind Task 3. HEAD
+  `717e5743b`; no push, no evidence deletion, no hardware, no second stack.
