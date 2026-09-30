@@ -35677,6 +35677,13 @@ visual evidence, starting with the named component tests that must fail for the 
   entries for the new endpoints, then Task 10's review. The e2e spec (`web/e2e/head-camera.spec.ts`) and the
   visual evidence belong to Task 14, where a real stack and screenshots exist.
 
+- **Task 10 CSS and schema done (round 309).** `unified-layout.css` gives the frame a fixed 4:3 box
+  (`aspect-ratio: 4 / 3`, capped width) so an overlay never shifts with the incoming image, with a readout that
+  reflows to a single column below 360px; `schema.d.ts` describes the five head-camera paths including both
+  target refusals and the note that the stream is a websocket OpenAPI does not describe. Verified: **12
+  passed** and the **web build succeeds**.
+- **Owed for Task 10:** its review, then Task 11. The e2e spec and visual evidence remain Task 14's.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
