@@ -42621,3 +42621,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   one-variable negatives CP-2251 names.
 - **State.** **F14 closed**; F3 (a)(b)(c) landed, positive control outstanding and now one read away;
   F1/F5/F11/F12/F13 open; the goal is paused. HEAD `aedc6b6f9`; eighteen gates green.
+
+
+## CP-2253 — F3's positive control: the formal identity validator refused a hand-built lease
+
+- **What I wrote and removed**: the positive control this ledger specified — a real `PickPlaceRunner` against a
+  **formal** `EpisodeAuditWriter` carrying a lease, asserting every admitted event carries it and that exactly one
+  `release` event names epoch 1, plus the negative where the lease is withheld and the run must fail. The positive
+  half refused at construction with **`AUDIT_IDENTITY_INVALID`**: the formal writer validates its identity more
+  strictly than the diagnostic one, and my hand-built `{session_id: "s", attempt_id: "a", reset_epoch: 1,
+  release_epoch: 1, lease: _lease()}` did not satisfy it.
+- **The two candidate causes, each one read away**: either `_lease()`'s fields must agree with the identity's own
+  session/attempt (the audit fenced lease identity against the episode), or the lease shape needs the registered
+  worker/generation keys the formal path expects. `_self_consistent_formal` builds exactly this writer successfully
+  with `{**identity(), "lease": _lease()}` — so the difference between its identity and mine is the first thing to
+  compare, and note that the runner's `request()` in this file uses `"s"`/`"a"`, which the writer's identity must
+  match while the lease may name someone else.
+- **Reverted**; the release-boundary suite is green (14 passed).
+- **State.** **F14 closed**; F3 (a)(b)(c) landed, its positive control blocked on identity/lease consistency with the
+  comparison above named; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `24fab17c8`; eighteen gates green.
