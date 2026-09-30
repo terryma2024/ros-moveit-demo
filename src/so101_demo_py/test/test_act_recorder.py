@@ -206,30 +206,43 @@ def test_fsync_failure_is_infrastructure_not_a_business_failed_seal(tmp_path, mo
 
 
 def _audit_and_scope(tmp_path):
-    from so101_demo.act.episode_audit import EpisodeAuditWriter
+    import hashlib as _hashlib
 
-    writer = EpisodeAuditWriter(tmp_path / "audit-episode", {"mode": "preselected_target_diagnostic"},
-                                {"session_id": "session-1", "attempt_id": "attempt-1",
-                                 "reset_epoch": 2, "scene_id": "default", "seed": 0},
-                                {"inputs_sha256": "c" * 64})
     import numpy as _np
 
     from so101_demo.act.acquisition import AcquisitionMinter
+    from so101_demo.act.episode_audit import EpisodeAuditWriter
 
+    def canonical(document):
+        return json.dumps(document, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+
+    # the scope exists first: the audit records the digest of the scope this episode ran under
+    scope = tmp_path / "collection-scope.json"
+    scope.write_bytes(canonical({"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
+                                 "mode": "preselected_target_diagnostic", "scene_id": "default",
+                                 "seed": 0, "inputs_sha256": "c" * 64}))
+    scope_sha256 = _hashlib.sha256(scope.read_bytes()).hexdigest()
+
+    writer = EpisodeAuditWriter(tmp_path / "audit-episode",
+                                {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
+                                 "mode": "preselected_target_diagnostic", "scene_id": "default",
+                                 "seed": 0, "inputs_sha256": "c" * 64,
+                                 "scope_sha256": scope_sha256},
+                                {"session_id": "session-1", "attempt_id": "attempt-1",
+                                 "reset_epoch": 2, "scene_id": "default", "seed": 0},
+                                {"inputs_sha256": "c" * 64})
     minter = AcquisitionMinter()
-    frames = [minter.mint(camera, session_id="session-1", reset_epoch=2, stamp_s=1.0,
-                          received_monotonic_ns=1,
-                          pixels=_np.zeros((480, 640, 3), dtype=_np.uint8))
-              for camera in ("head", "wrist")]
-    for frame in frames:
+    frames = {}
+    for camera in ("head", "wrist"):
+        frame = minter.mint(camera, session_id="session-1", reset_epoch=2, stamp_s=1.0,
+                            received_monotonic_ns=1, pixels=_np.zeros((480, 640, 3), dtype=_np.uint8))
         writer.append_acquisition(frame)
+        frames[camera] = frame
     writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
                                         "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
                                         "accepted": True})
-    writer.bind_row(0, 1.0, frames[0].acquisition_id, frames[1].acquisition_id, 1)
+    writer.bind_row(0, 1.0, frames["head"].acquisition_id, frames["wrist"].acquisition_id, 1)
     manifest = writer.seal({"start_s": 1.0, "end_s": 1.2})
-    scope = tmp_path / "collection-scope.json"
-    scope.write_bytes(b'{"collection_mode":"preselected_target_diagnostic","schema_version":1}\n')
     return manifest, scope
 
 

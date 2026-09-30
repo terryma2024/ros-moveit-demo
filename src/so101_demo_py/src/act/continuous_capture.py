@@ -270,10 +270,14 @@ class ContinuousEpisodeCapture:
         accepted = message.get("accepted") is True
         if self.audit is not None:
             # every message is kept, acceptance and revocation alike, so the audit holds the raw
-            # history the run actually received rather than only its final state
-            self.audit.append_source("references", {"reference_time_s": key,
-                                                    "source": _REFERENCE_SOURCE,
-                                                    "positions": values, "accepted": accepted})
+            # history the run actually received rather than only its final state; a refusing writer
+            # is terminal like every other dependency
+            try:
+                self.audit.append_source("references", {"reference_time_s": key,
+                                                        "source": _REFERENCE_SOURCE,
+                                                        "positions": values, "accepted": accepted})
+            except Exception as error:  # noqa: BLE001
+                self._reject(self._reason(error, "CAPTURE_AUDIT_WRITE_FAILED"))
         if (not accepted and self._last_labelled_target_s is not None
                 and key <= self._last_labelled_target_s + _TOLERANCE_S):
             # a trajectory revoked after its instant was labelled voids that label: an irreversible

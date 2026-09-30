@@ -218,6 +218,21 @@ class EpisodeRecorder:
             verify_audit_manifest(audit_manifest)
             if not scope.is_file() or scope.is_symlink():
                 raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+            # the audit must belong to this episode, and the scope it names must be the scope handed in
+            with (audit_manifest.parent / "episode.json").open("rb") as stream:
+                audit_identity = json.loads(stream.read())
+            with (audit_manifest.parent / "source.json").open("rb") as stream:
+                audit_scope = json.loads(stream.read())
+            if (audit_identity.get("session_id") != self.session_id
+                    or audit_identity.get("attempt_id") != self.attempt_id
+                    or audit_identity.get("reset_epoch") != self.reset_epoch):
+                raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
+            with scope.open("rb") as stream:
+                scope_document = json.loads(stream.read())
+            if (audit_scope.get("scope_sha256") != _hash(scope.read_bytes())
+                    or any(scope_document.get(key) != audit_scope.get(key)
+                           for key in ("mode", "scene_id", "seed"))):
+                raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
             audit_block = {"manifest_sha256": _hash(audit_manifest.read_bytes()),
                            "scope_sha256": _hash(scope.read_bytes()),
                            "manifest_path": str(audit_manifest), "scope_path": str(scope)}

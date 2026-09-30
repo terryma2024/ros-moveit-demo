@@ -35445,3 +35445,46 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL, fix pass
   outstanding); items 4-8 pending.** HEAD `ca3c5162a`; 39-path dirty baseline untouched; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-1944 — Task 3 fix pass, first instalment: F6 and F4 landed, F2 attempted and deliberately reverted
+
+- **Landed, green.** (1) **T3-F6**: the capture→audit reference append is now wrapped and routes through
+  `_reject()`, so a refusing audit writer latches the first reason like every other dependency instead
+  of escaping. (2) **T3-F4**: a v2 seal now proves the audit belongs to its episode — it reads the
+  audit's `episode.json` and `source.json`, requires the session/attempt/reset to equal the recorder's
+  (`EPISODE_SEAL_AUDIT_EPISODE_MISMATCH`), requires the audit's recorded `scope_sha256` to equal the
+  digest of the scope actually handed in and the mode/scene/seed to agree
+  (`EPISODE_SEAL_AUDIT_SCOPE_MISMATCH`). (3) The fixture the review used as its counterexample is fixed:
+  the audit fixture now binds a real head frame and a real wrist frame with a real scope digest, so the
+  "complete audit" is complete.
+- **Attempted and reverted (T3-F2).** I implemented the semantic binding the finding asks for —
+  distinct head/wrist cameras, episode ownership by session/reset, contiguous row order, and a
+  `reference_sequence` that resolves to a reference accepted for exactly `sim_time_s + 0.1` — and the
+  audit suite went red exactly where it should: eight tests, including the camera-first fixture the
+  reviewer had identified. Landing the rule therefore requires rewriting those fixtures and adding the
+  negative controls (wrong camera, same id in both slots, cross-reset/session, nonexistent or revoked
+  reference, duplicate/out-of-order rows) **together**, and my remaining budget this round could not do
+  that rewrite with the same evidence standard as the rest of the increment. I reverted the
+  `episode_audit.py` binding edits rather than leave the suite red, and kept the F6/F4 work.
+  **The exact rule is already written above and must land with its controls next.**
+- **Evidence.** `logs/task3-fix1.run` rc=0: **76 passed in 0.65 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_continuous_capture.py` and `test_act_release_boundary.py`, with its
+  own NVMe scratch and a non-empty tempfile proof. The intermediate red run is on disk but was
+  overwritten as the pointer; its content is described here rather than claimed as evidence.
+- **Still open from the verdict (the bulk of the fix pass).** **T3-F1** — implement the frozen
+  `ACT_EPISODE_AUDIT` v2 contract (now read verbatim into this ledger from the plan: manifest kind
+  `ACT_EPISODE_AUDIT`/version 2 with `kind,schema_version,scope_sha256,identity,window,files`; file
+  entries `path,size,sha256`; `acquisitions.jsonl` with `shape,dtype`; `row-bindings.jsonl` with
+  `head_acquisition_id`/`wrist_acquisition_id`; events with `sequence,kind,identity,sim_time_s,
+  monotonic_ns,payload` and per-kind payload schemas; references preserving the observer's raw message,
+  joint names, timing and revocation boundaries; physics carrying pose, velocity, full contact pairs,
+  support, planning scene and gripper/controller feedback; seal v2 adding `audit_manifest_sha256` and
+  `scope_sha256` on the existing closed keys rather than a nested block) or obtain an owner amendment.
+  **T3-F2** as above with its controls. **T3-F3** — closed-inventory readback with safe relative paths
+  and semantic re-validation of every stream. **T3-F5** — gate full-run eligibility on the required raw
+  physics and broker events instead of sealing an audit that lacks them. Contract fixtures must be
+  written from the plan text, not from my writer.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL, fix pass part-way);
+  items 4-8 pending.** HEAD `4a01c0607`; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
