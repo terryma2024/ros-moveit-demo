@@ -39373,3 +39373,24 @@ revision-pinned download (`b55430fb75c0207b35bd20f4e328e042bff06f3f`) exited **0
 Three host-environment obstacles were cleared to get here, each recorded rather than worked around silently: the httpx
 `no_proxy` bug (HS-181), the token store moving with `HF_HOME` (HS-182/183), and the transient read timeouts that the retry
 loop absorbs (this entry). **Step 2 - generate and seal the exact head dataset - is next**, and it consumes this root.
+
+## HS-187 — Task 12 Step 2 COMPLETE: 1200 head images generated (rc=0) and verified (rc=0)
+
+```
+generate_yolo_seg_dataset  rc=0
+  geometry_seal_sha256 = 7d963fdcabfa132e77ccf961c0f99e10b4c6d2ed56920b41d36a7558814d1eb4   (the reviewed final seal)
+verify_head_search_dataset rc=0
+  {"cross_domain": "SEED_DISJOINT_ONLY", ...}
+produced: head-dataset/{dataset-manifest.json, dataset.yaml, images/, labels/}
+```
+
+So the sealed head dataset the campaign needs exists, was generated against the reviewed geometry seal with the toolchain's
+own commit recorded, and **verified with `--expected-train 800 --expected-val 200 --expected-test 200`** against the pinned A
+task dataset - which is the plan's acceptance for this step: exit 0, four scenarios at 200/50/50, no cross-domain split
+leakage (`SEED_DISJOINT_ONLY`), no Grounded-SAM provenance, and digest-clean files and camera identities.
+
+**Step 3 next: train B then C, never concurrently.** The plan's commands are `train_yolo_seg --candidate B … --run-name
+head-only` then `--candidate C … --run-name head-task-mixed`, both against
+`config/perception/head_search_yolo_training.yaml`, with C's sampling manifest required to show **800 head and 800 task
+images per epoch at 1:1 batches**, both jobs on CUDA, and "never concurrently" holding - which on this host also means no
+detector process may hold the GPU while training runs.
