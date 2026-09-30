@@ -35694,6 +35694,15 @@ visual evidence, starting with the named component tests that must fail for the 
   geometry from the frame, clamping, and a payload carrying extra keys that must not be forwarded. Verified:
   **15 passed** and the web build succeeds.
 
+- **Task 10 confirmation REJECT on the mask, fixed (round 320).** The reviewer approved the clamping and the
+  restricted stop payload but found `overlay-mask` was an **image with an always-empty data URI**
+  (`mask_sha256.slice(0, 0)`) - a placeholder in disguise, which its test missed because it only read the `x`
+  attribute. Fixed: a detection may carry its mask outline in frame pixels, and the overlay draws that
+  **polygon**, falling back to the detection box when no outline is supplied, both carrying the mask digest;
+  the test asserts the polygon points and the digest, and a new case exercises `onExecute` against a narrow
+  interval so the value handed to the caller is checked rather than only the slider's attributes. Verified:
+  **16 passed** and the web build succeeds.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
