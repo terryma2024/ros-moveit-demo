@@ -40182,3 +40182,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   fixtures it moves identified exactly; F13 down to `sim_time_s`; **F1/F5/F11 open**; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `d06b9abc6`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2141 — F3's tie now holds on the readback too, scoped to formal audits
+
+- **What landed** (`episode_audit.py`): right after the readback's event loop, a formal audit's stream is refused
+  with `AUDIT_EVENT_INVALID` if any release epoch above 0 was reached without a `release` event naming it — the
+  same tie as the writer's (CP-2137), restated on the path a **re-signed** stream actually travels. The clause
+  reads the audit's own `source.json` to decide, so a **diagnostic** audit is out of scope exactly as it is for
+  that gate, which is what took CP-2140's eight failures down to one.
+- **The last fixture, re-derived rather than patched**: the relabelled-coverage control rewrites its events'
+  `release_epoch` to **0**, so its stream takes no step and its subject — the coverage gate — is once again the
+  refusal that fires; a step no release names is now the tie's business.
+- **Evidence.** Targeted run this round: **199 passed** across the audit, recorder, release-boundary, capture,
+  `test_act_task8` and qualification suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a
+  non-empty tempfile proof.
+- **F3's last item**: an explicit **negative control** for this readback tie — a re-signed formal stream that steps
+  to an epoch no `release` names must be refused — which CP-2138's recipe now reaches in two edits instead of a
+  dozen, since the relabel machinery is already in that test.
+- **State.** Item 3's list: **F12 closed**; **F3 landed on both paths** but for that one control; F13 down to
+  `sim_time_s`; **F1/F5/F11 open**; targeted gate `logs/task3-final.run` **430 passed**; HEAD `2770b6d19`; no
+  push, no evidence deletion, no hardware, no second stack.

@@ -996,8 +996,11 @@ def test_readback_reapplies_the_formal_coverage_gate(tmp_path):
     # its events must carry the same lease too, or the identity rule refuses before the coverage gate does;
     # the rewrite is recorded in this same manifest document, the way the two above are
     events_lines = (audit / "events.jsonl").read_text().splitlines()
-    events_bytes = ("\n".join(json.dumps({**json.loads(line), "identity": {**json.loads(line)["identity"],
-                                                                "lease": _lease()}},
+    # the stream is kept at its initial epoch: this control is about coverage, and a step no release names
+    # would be refused by the tie before that gate is reached (CP-2140)
+    events_bytes = ("\n".join(json.dumps({**json.loads(line),
+                                           "identity": {**json.loads(line)["identity"], "lease": _lease(),
+                                                        "release_epoch": 0}},
                                            sort_keys=True, separators=(",", ":"))
                                for line in events_lines) + "\n").encode()
     audit.joinpath("events.jsonl").write_bytes(events_bytes)

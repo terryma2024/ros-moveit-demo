@@ -1136,6 +1136,25 @@ def _verify_streams(audit: Path, identity: dict) -> None:
         if not _payload_typed(payload):
             raise ValueError("AUDIT_EVENT_INVALID")
         sequence = row["sequence"]
+    # F3: on a formal audit every release step the stream takes must be named by a release event - the
+    # writer's own tie (CP-2137) restated here, because a re-signed stream never passes through the writer.
+    # A diagnostic audit is out of scope, exactly as it is for that gate.
+    _source = audit / "source.json"
+    _formal_mode = False
+    if _source.is_file():
+        try:
+            _formal_mode = json.loads(_source.read_bytes()).get("mode") == "formal"
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+            _formal_mode = False
+    if _formal_mode and (audit / "events.jsonl").is_file():
+        _named: dict = {}
+        for _row in _records(audit / "events.jsonl", _EVENT_FIELDS, "AUDIT_EVENT_INVALID"):
+            _step = _row["identity"].get("release_epoch")
+            if type(_step) is int:
+                _named[_step] = _named.get(_step, False) or _row["kind"] == "release"
+        if any(step > 0 and not seen for step, seen in _named.items()):
+            raise ValueError("AUDIT_EVENT_INVALID")
+
     epoch: int | None = None
     sequence = 0
     for row in _records(audit / "physics.jsonl", _PHYSICS_FIELDS, "AUDIT_PHYSICS_INVALID"):
