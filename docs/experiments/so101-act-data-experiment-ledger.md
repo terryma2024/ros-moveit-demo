@@ -38775,3 +38775,25 @@ Step 3's "never concurrently" matters given the standing constraint of one CUDA 
 trained **serially**, and no detector process may be running while training holds the GPU. Step 1 is the gate that makes
 that safe to start - it resolves the toolchain and geometry roots, proves the installed package resolves to the toolchain,
 and refuses a pre-existing `MODEL_RUN`.
+
+## HS-164 — Task 12 inputs: geometry root resolved, toolchain root's `source-commit.txt` is not where Step 1 expects it
+
+**Resolved:** `GEOMETRY_RUN = $HEAD_EVIDENCE/head-camera-probe11-20260930T101722Z` - its
+`head-camera-geometry.json` carries `seal_sha256 7d963fdcabfa132e77ccf961…` and `coarse_step_candidate_rad 0.3`, i.e. the
+**reviewed** seal from HS-115-117, not one of the seven superseded probe/geometry runs. That is the exact root the plan
+asks for.
+
+**Not resolved:** Step 1 requires `TOOLCHAIN_COMMIT=$(<"$TOOLCHAIN_RUN/source-commit.txt")` and neither candidate toolchain
+root has that file:
+
+| candidate | `install/setup.zsh` | `source-commit.txt` |
+| --- | --- | --- |
+| `head-task2-overlay` | yes | **missing** |
+| `head-benchmark-code-gate-20260930T065404Z` | yes | **missing** |
+
+So Task 12's Step 1 fails closed at the commit check, which is the plan working as designed rather than a defect in it -
+but it means the **retained toolchain root Task 11 was supposed to hand over does not exist in the required form**. Either
+it lives somewhere I have not looked, or Task 11's provenance record (HS-105 digests, `bee7d3f487d61579…` for
+`so101_demo_py`) needs to be materialised as a proper toolchain root with `source-commit.txt` before Task 12 can consume
+it. Establishing which is the next step, and I am not going to synthesise a `source-commit.txt` to make a gate pass - that
+would destroy the provenance guarantee the check exists to provide.
