@@ -23,14 +23,14 @@ describe("HeadCameraPanel", () => {
   it("keeps control disabled until authority and qualification are present", () => {
     render(<HeadCameraPanel status={status()} />);
 
-    expect(screen.getByRole("button", { name: "Execute" })).toBeDisabled();
-    expect(screen.getByText("View only")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Execute" })).toHaveProperty("disabled", true);
+    expect(screen.getByText("View only")).toBeTruthy();
   });
 
   it("enables control only when authority and qualification are both present", () => {
     render(<HeadCameraPanel status={status({ qualified: true, authority: true })} />);
 
-    expect(screen.getByRole("button", { name: "Execute" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Execute" })).toHaveProperty("disabled", false);
     expect(screen.queryByText("View only")).toBeNull();
   });
 
@@ -77,29 +77,29 @@ describe("HeadCameraPanel", () => {
     expect(screen.getByTestId("deadband")).toBeTruthy();
     expect(screen.getByTestId("vertical-bounds")).toBeTruthy();
     expect(screen.getByTestId("candidate-center")).toBeTruthy();
-    expect(screen.getByTestId("lock-progress")).toHaveTextContent("1 of 3");
+    expect(screen.getByTestId("lock-progress").textContent).toBe("1 of 3");
     expect(screen.getByText("head-search-v2")).toBeTruthy();
     expect(screen.getByText("runtime-0001")).toBeTruthy();
   });
 
   it("shows the stopping state until the proof completes and then stopped", () => {
     const { rerender } = render(<HeadCameraPanel status={status({ state: "STOPPING" })} />);
-    expect(screen.getByTestId("head-camera-state")).toHaveTextContent("Stopping");
+    expect(screen.getByTestId("head-camera-state").textContent).toBe("Stopping");
 
     rerender(<HeadCameraPanel status={status({ state: "STOPPED" })} />);
-    expect(screen.getByTestId("head-camera-state")).toHaveTextContent("Stopped");
+    expect(screen.getByTestId("head-camera-state").textContent).toBe("Stopped");
   });
 
   it("says the domain is unavailable rather than showing a frame", () => {
     render(<HeadCameraPanel status={null} />);
 
-    expect(screen.getByText("Head camera unavailable")).toBeVisible();
+    expect(screen.getByText("Head camera unavailable")).toBeTruthy();
     expect(screen.queryByLabelText("Head camera frame")).toBeNull();
   });
 
   it("never claims a detector of its own", () => {
     render(<HeadCameraPanel status={status({ detector_constructed: 0 })} />);
 
-    expect(screen.getByTestId("detector-constructed")).toHaveTextContent("0");
+    expect(screen.getByTestId("detector-constructed").textContent).toBe("0");
   });
 });
