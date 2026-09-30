@@ -249,11 +249,14 @@ def test_a_zombie_process_is_not_a_live_owner(tmp_path: Path) -> None:
         os.kill(child, signal.SIGKILL)
         # wait for the kernel to report the zombie state directly, reading /proc rather than the helper
         state = None
+        vanished = False
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
             try:
                 fields = Path(f"/proc/{child}/stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()
             except OSError:
+                # only a /proc entry that has gone away counts as external reaping
+                vanished = True
                 break
             state = fields[0]
             if state == "Z":
@@ -266,8 +269,11 @@ def test_a_zombie_process_is_not_a_live_owner(tmp_path: Path) -> None:
             assert process_start_ticks(child) is None
             with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
                 verify_owner({"pid": child, "started_ticks": alive_ticks})
-        else:  # pragma: no cover - the child was already reaped by an external reaper
-            pytest.skip(f"the child never reached the zombie state (state {state!r})")
+        elif vanished:
+            pytest.skip("an external reaper removed the child before the zombie state was observed")
+        else:
+            # a still-readable process that never became a zombie is a failure, not a reason to skip
+            pytest.fail(f"the child never reached the zombie state (state {state!r})")
     finally:
         try:
             os.waitpid(child, 0)
