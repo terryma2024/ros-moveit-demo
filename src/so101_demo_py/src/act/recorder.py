@@ -331,6 +331,10 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
     v2_keys = keys | {"audit_manifest_sha256", "scope_sha256"}
     if not isinstance(document, dict) or set(document) not in (keys, v2_keys):
         raise ValueError("EPISODE_SEAL_SCHEMA")
+    if set(document) != (v2_keys if document.get("schema_version") == 2 else keys):
+        # the field set is version-specific: a rehashed v1 document may not carry v2 digest fields and
+        # thereby skip their verification
+        raise ValueError("EPISODE_SEAL_SCHEMA")
     if source_bytes != _canonical(document) + b"\n":
         raise ValueError("EPISODE_SEAL_NONCANONICAL")
     digest = document["manifest_sha256"]

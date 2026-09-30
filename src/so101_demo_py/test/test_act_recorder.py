@@ -340,3 +340,39 @@ def test_a_v2_seal_refuses_an_audit_of_another_episode(tmp_path):
     # identity comparison behind that digest is exercised by the positive case above
     with pytest.raises(ValueError, match="EPISODE_SEAL_AUDIT_MISMATCH"):
         verify_episode_seal(path, audit_manifest=other, scope=other_scope)
+
+
+def test_a_rehashed_v1_seal_may_not_carry_v2_fields(tmp_path):
+    """The seal field set is version-specific, so v2 digests cannot ride on a v1 document (T3-F4)."""
+
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    path = recorder.finish(outcome("FAILED"))
+    document = json.loads(path.read_bytes())
+    assert document["schema_version"] == 1
+    document["audit_manifest_sha256"] = "a" * 64
+    document["scope_sha256"] = "b" * 64
+    document.pop("manifest_sha256")
+    document["manifest_sha256"] = hashlib.sha256(
+        json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="EPISODE_SEAL_SCHEMA"):
+        verify_episode_seal(path)
+
+
+def test_a_rehashed_v1_seal_may_not_carry_v2_fields(tmp_path):
+    """The seal field set is version-specific, so v2 digests cannot ride on a v1 document (T3-F4)."""
+
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    path = recorder.finish(outcome("FAILED"))
+    document = json.loads(path.read_bytes())
+    assert document["schema_version"] == 1
+    document["audit_manifest_sha256"] = "a" * 64
+    document["scope_sha256"] = "b" * 64
+    document.pop("manifest_sha256")
+    document["manifest_sha256"] = hashlib.sha256(
+        json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="EPISODE_SEAL_SCHEMA"):
+        verify_episode_seal(path)

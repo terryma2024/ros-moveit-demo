@@ -36023,3 +36023,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   rehashed v1 document carrying v2 digest fields. **T3-F5**: the fail-closed eligibility and sealing gate.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `425f3f027`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1959 — Task 3 fix pass, fourteenth instalment: the seal field set is version-specific (T3-F4)
+
+- **The gate is now exact per version.** `verify_episode_seal` requires the document's key set to be
+  exactly the v1 keys when `schema_version == 1` and exactly the v2 keys when it is 2, instead of
+  accepting the union for either. A rehashed v1 document carrying `audit_manifest_sha256` and
+  `scope_sha256` — which previously passed the key gate and then skipped those digests' verification —
+  is now refused with `EPISODE_SEAL_SCHEMA`, and the new control builds exactly that document by sealing
+  a v1 episode, adding both v2 fields and recomputing `manifest_sha256`.
+- **Evidence.** `logs/task3-fix14.run` rc=0: **123 passed in 0.81 s** across `test_act_recorder.py`,
+  `test_act_episode_audit.py`, `test_act_release_boundary.py`, `test_act_continuous_capture.py` and
+  `test_act_supervisor.py`, with its own NVMe scratch and a non-empty tempfile proof. One of my own shell
+  invocations was malformed (an unterminated heredoc swallowed the following commands), so no test ran in
+  that attempt; the corrected run is the pointer recorded here.
+- **Still open, and the two that need an owner decision are now explicit.** **T3-F1's window schema**:
+  the plan names source schedule, first command, physical end and label cutoff but fixes no key names, so
+  strict enforcement requires an owner-approved key list; until then the writer records the caller's
+  window verbatim and the reviewer's position (missing required facts must still be refused) is recorded
+  as the binding requirement for that schema. **T3-F1's raw payloads and event kinds** (controller
+  accepted-goal history with joint names and revocation boundaries, source/receipt clocks, full physics
+  payloads, and the dispatch/accept/revoke/stop/contact/release/final-check kinds with typed validators)
+  wait on their producers. **T3-F4's multi-row correlation** needs a recorder fixture that seals real
+  rows. **T3-F5**'s fail-closed eligibility and sealing gate follows the raw coverage.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `49ef37acc`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
