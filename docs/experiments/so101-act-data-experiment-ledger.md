@@ -35019,3 +35019,32 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
   build still stops at `mujoco_vendor`. The plan places the full gate at Task 11; Task 4 does not claim it.
 - **Gate after the rework:** benchmark suite 19 passed; ordinary suites 99 passed, 1 skipped;
   `ruff check` clean.
+
+## HS-020 — Task 4 re-review: five findings CLOSED, one open, and the open one fixed (commit d924a5cb5)
+
+- **Verdict:** `reviews/task4/task4-rereview-verdict.md` (GPT-6.1-Sol/high, fresh session, one time-boxed
+  pass). It judged findings 1, 2, 3, 5 and 6 **CLOSED** on the inspected source - the pinned invocation
+  reaching evaluation, measured false candidates and latency p95, complete coverage with unmatched cells
+  reported as non-finite, the positive paired scene interval before a challenger is accepted, and
+  traversal/wrong-digest refusal - while recording, honestly, that it did **not** re-run any reproduction,
+  gate, CUDA evaluation or build in that pass, and that the branch advanced during the review.
+- **Finding 4 was NOT CLOSED,** and it was right three times over:
+  1. the rival F1/recall guards inspected only `static_image_metrics`, so a retained selection that another
+     candidate beat on **held-out episode** recall or F1 was still recorded (its unexecuted counterexample:
+     C retained while B beats it by 0.09 on the episodes);
+  2. `episode_winner` was overwritten by each qualifying challenger, so the **last** one inspected won
+     rather than the best;
+  3. the unsupported-operating-condition check read only the per-domain operating point, while a frozen
+     identity also carries top-level `tracker`/`postprocess`/`runtime` fields.
+- **Its residual on finding 1 was also correct:** `_episode_frames()` refused `records=None` *before*
+  resolving the declared `held-out-episodes` sibling, so that default was unreachable and the pinned
+  command could never consume it.
+- **All four are fixed (commit `d924a5cb5`)** with tests: the guards inspect both families on both domains;
+  the episode winner is the strongest qualifier; the sealed identity's top-level conditions are inspected
+  wherever they are declared; and the sibling default is resolved before the refusal, with the refusal
+  message naming both ways to supply episodes. Benchmark suite **21 passed**, ordinary suites 99 passed and
+  1 skipped, `ruff check` clean.
+- **The verdict's host items stand as recorded:** the `mujoco_vendor` fresh closure is a dependency/staging
+  boundary rather than a Head Search regression but the fresh closure did **not** pass, and the benchmark
+  gate is **not** green (62 pre-existing environment failures, attribution provisional). Both belong to
+  Task 11, and neither is claimed as passed here.
