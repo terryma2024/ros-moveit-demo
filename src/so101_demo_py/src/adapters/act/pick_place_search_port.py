@@ -371,6 +371,15 @@ class PickPlaceSearchPhasePort:
                 or any(not 0 <= world.simulation_time_s - finite(stamp) <= skew
                        for stamp in stamps.values())):
             raise ValueError("RGB source skew")
+        # the two camera gates are the freshness of their own published stamp, which is the same rule the
+        # check above applies to all four sources: the gate reports the value, not a presence (CP-2054)
+        def _fresh(name):
+            try:
+                return 0 <= world.simulation_time_s - finite(stamps[name]) <= skew
+            except (KeyError, TypeError, ValueError):
+                return False
+
+        head_rgb_ok, wrist_rgb_ok = _fresh("head"), _fresh("wrist")
         reference = raw["reference"]
         if (type(reference) is not dict
                 or set(reference) != {"positions", "velocities", "accelerations",
@@ -446,8 +455,8 @@ class PickPlaceSearchPhasePort:
             # step 3 flips it to a derivation; the audit refuses a record whose instant or fields disagree.
             **({"planning_scene_observation": observed.planning_scene_observation}
                if getattr(observed, "planning_scene_observation", None) is not None else {}),
-            "planning_scene_ok": planning_scene_ok, "head_rgb_ok": True,
-            "wrist_rgb_ok": True, "manual_intervention": False,
+            "planning_scene_ok": planning_scene_ok,
+            "head_rgb_ok": head_rgb_ok, "wrist_rgb_ok": wrist_rgb_ok, "manual_intervention": False,
             "moveit_recovery": False, "holding_state": "EMPTY",
             "bilateral_contact": False, "micro_lift_confirmed": False,
             "cup_off_table": False, "cup_supported": supported,

@@ -38378,3 +38378,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `a2d4f7ba3`;
   consolidated gate `logs/task3-gate15.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2059 — Task 3: both camera gates derived, so the SEARCH document asserts no gate either
+
+- **What landed.** `_search_evidence` reports `head_rgb_ok` and `wrist_rgb_ok` as the freshness of each
+  camera's own published stamp against the same `skew` the block above already applies to all four sources —
+  the value, not the presence of a key (CP-2054's refusal). This implements option ① (freshness) from
+  CP-2057's second question as the documented choice, revisitable like the two counters. **With that, neither
+  the boundary helper nor the SEARCH document asserts any gate: ten gates are derived from observations.**
+- **Evidence.** `logs/task3-rgb.run` rc=0 across the search-port, three task8 phase, release-boundary and
+  supervisor suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **What Task 3 still wants**: the full `planning_scene_observation` record's travel once the readback fills
+  it (the port's counter plus the caller's instant are already in place), T3-F11's window-to-rows checks
+  (CP-1997/CP-2001 recipes), controls for the gates that still lack a three-way case, and then a fresh
+  checkpoint — which is what the owner's "converge Task 3" choice has been pointing at.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `ba29dc02a`;
+  consolidated gate `logs/task3-gate15.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
