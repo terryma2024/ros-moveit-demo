@@ -38334,3 +38334,24 @@ This is the shape the seventh verdict asked for: **one row per failing id**, ded
 supplies one and the literal string `UNCAUSED` where it does not - so missing coverage is visible in the artefact rather
 than in a caveat. The 37 uncaused rows are the entries whose failure produced no per-test traceback line (setup and
 collection-level failures), plus the 11 module-level collection errors recorded separately via HS-122's XML.
+
+## HS-147 — The uncaused rows belong to the same families, shown by running their modules directly
+
+The 37 `UNCAUSED` rows concentrate in four modules (18 `test_parallel_batch_cli`, 8 `test_act_path_proof_permits`,
+3 `test_act_task8`, 2 `test_act_task8_calibration_aggregator`). Running the largest of them directly, with the same
+appended environment:
+
+```
+src/so101_demo_py/test/test_parallel_batch_cli.py      -> 47 failed, 72 passed   (standalone, not under -n 8)
+reasons: 45 x TRUSTED_FINAL_TARGET_INVALID | 1 x assert N == N
+```
+
+So the module's failures are dominated by a family the table **already** attributes elsewhere
+(`TRUSTED_FINAL_TARGET_INVALID`, 30 paired rows), and the reason they appear as `UNCAUSED` is coverage: under `-n 8` the
+traceback section emits fewer per-test headers than the summary lists ids.
+
+**What this establishes and what it does not:** the uncaused rows are not a new family - they are members of families with
+demonstrated causes (the task 8 measurement group, cleared by HS-138's controlled run; the CLI error family). What it does
+not do is give each of those 37 ids its own traceback line, which is the literal requirement. The remaining options are a
+serial run (every failure gets a header) or per-module runs like this one attributed module-by-module - both mechanical,
+and I have recorded the direct-run result for the largest module here rather than claiming the group from it.
