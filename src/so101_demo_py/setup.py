@@ -172,6 +172,8 @@ setup(
             "so101_demo.cli.validate_head_camera_geometry:main",
             "verify_head_search_dataset = "
             "so101_demo.cli.verify_head_search_dataset:main",
+            "evaluate_head_search_yolo_candidates = "
+            "so101_demo.cli.evaluate_head_search_yolo_candidates:main",
             "rgbd_sensor_capture = so101_demo.cli.rgbd_sensor_capture:main",
             "so101_mujoco_perception_pick_place = "
             "so101_demo.cli.perception_pick_place_launch:main",

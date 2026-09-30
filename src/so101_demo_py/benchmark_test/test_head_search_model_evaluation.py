@@ -173,3 +173,77 @@ def test_a_candidate_whose_weight_changed_is_refused(tmp_path: Path) -> None:
     path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(EvaluationError, match="EVALUATION_FROZEN_IDENTITY_DRIFT"):
         load_frozen_candidate(path, expected_sha256="a" * 64)
+
+
+def _write_candidate(root: Path, candidate_id: str, weight_sha: str = "a" * 64) -> Path:
+    path = root / f"frozen-{candidate_id.lower()}.json"
+    path.write_text(
+        json.dumps(
+            {
+                "candidate_id": candidate_id,
+                "weight_sha256": weight_sha,
+                "operating_points": {"head": {"min_confidence": 0.4}, "task": {"min_confidence": 0.4}},
+                "tracker": {"iou": 0.3},
+                "postprocess": {"min_area_px2": 64},
+                "runtime": {"device": "cuda"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_compare_cli_refuses_an_incomplete_candidate_set(tmp_path: Path) -> None:
+    from so101_demo.cli.evaluate_head_search_yolo_candidates import main
+
+    candidates = [
+        str(_write_candidate(tmp_path, "A", "a" * 64)),
+        str(_write_candidate(tmp_path, "B", "b" * 64)),
+    ]
+    arguments = ["compare"]
+    for path in candidates:
+        arguments += ["--candidate", path]
+    arguments += [
+        "--head-dataset", str(tmp_path / "head.json"),
+        "--task-dataset", str(tmp_path / "task.json"),
+        "--episode-partitions", str(tmp_path / "partitions.json"),
+        "--weights-dir", str(tmp_path),
+        "--head-dataset-root", str(tmp_path),
+        "--task-dataset-root", str(tmp_path),
+        "--output", str(tmp_path / "out"),
+    ]
+    assert main(arguments) == 2
+
+
+def test_compare_cli_refuses_a_drifted_weight_file(tmp_path: Path) -> None:
+    from so101_demo.cli.evaluate_head_search_yolo_candidates import main
+
+    for candidate_id, digest in (("A", "a" * 64), ("B", "b" * 64), ("C", "c" * 64)):
+        _write_candidate(tmp_path, candidate_id, digest)
+        (tmp_path / f"{candidate_id}.pt").write_bytes(f"weights-{candidate_id}".encode())
+    (tmp_path / "head.json").write_text(
+        json.dumps({"split_counts": {"test": 1}, "samples": [{"split": "test", "image": "a.png"}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "task.json").write_text(
+        json.dumps({"split_counts": {"test": 1}, "samples": [{"split": "test", "image": "a.png"}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "partitions.json").write_text(
+        json.dumps({"held_out_evaluation": [1]}), encoding="utf-8"
+    )
+    arguments = [
+        "compare",
+        "--candidate", str(tmp_path / "frozen-a.json"),
+        "--candidate", str(tmp_path / "frozen-b.json"),
+        "--candidate", str(tmp_path / "frozen-c.json"),
+        "--head-dataset", str(tmp_path / "head.json"),
+        "--task-dataset", str(tmp_path / "task.json"),
+        "--episode-partitions", str(tmp_path / "partitions.json"),
+        "--weights-dir", str(tmp_path),
+        "--head-dataset-root", str(tmp_path),
+        "--task-dataset-root", str(tmp_path),
+        "--output", str(tmp_path / "out"),
+    ]
+    # the weight files do not hash to the sealed digests, so the gate refuses before measuring
+    assert main(arguments) == 2
