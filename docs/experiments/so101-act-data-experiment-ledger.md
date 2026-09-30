@@ -36946,3 +36946,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `5739a39f1`;
   gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1994 — Task 3: the T3-F9 dedicated control was attempted and reverted; the fix itself stands
+
+- **The fix is committed and green** in `4faa498b6` (the sequence is a per-kind publication counter,
+  advanced only on successful admission and reset with the epoch), and the observer suite passes.
+- **The extra control did not land.** Three attempts failed on my own construction of the fixture: hardcoded
+  joint names instead of the registered `ARM_JOINTS` list (the observer rejected the first message), then
+  reading frames through `recent()` as if it returned mappings, then asserting on the retained buffer and
+  still tripping. Rather than spend more of the round guessing, I restored the test file to the last green
+  revision and verified it: `logs/task3-fix41.run` rc=0, 58 passed across the observer and audit suites.
+- **Exact next step, recorded so it is not rediscovered.** Read
+  `test_act_controller_reference_observer.py`'s existing helpers first and build the publication loop from
+  them — the file already drives `accept()` successfully seven times, so the loop should reuse its message
+  factory and its receipt convention rather than a new one. The assertions belong on whatever accessor those
+  tests already use for retained frames.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `408660e62`;
+  gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
