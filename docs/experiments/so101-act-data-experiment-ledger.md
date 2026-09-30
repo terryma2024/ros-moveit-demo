@@ -40272,3 +40272,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 narrowed as
   above**, F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD `1ada2b142`; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-2145 — F5's gap is now exact: the shared predicate exists but only the readback calls it
+
+- **Read verbatim this round**: `_formal_coverage_ok(audit)` (lines **995-1010**) requires nonempty physics,
+  events and references, **one accepted reference** and **a release event**. Its **only caller is the readback**
+  (line **958**); the writer's seal gate checks its own inline condition (`"release" not in self._event_kinds`,
+  the line CP-2137 extended), which is exactly F5's "the new reader coverage gate is useful but is not the
+  writer's predicate".
+- **So F5 is two single-module edits, both now anchored**:
+  1. **tighten the predicate** to what F5 lists — one `phase_complete` event for **every** phase in
+     `PickPlaceRunner.PHASES` (nine, CP-2144), an accepted reference whose raw half is one **complete** exclusive
+     group (F3's alternatives, CP-2127), the ratified physics kinds, and the ratified scene/feedback observations
+     that F12 wired (CP-2120);
+  2. **make the writer's seal gate call the same function** rather than its inline condition, so one predicate
+     governs both sides — the verdict's literal instruction.
+- **The expected cost, stated in advance**: formal fixtures that today seal with `phase_complete(SEARCH)` plus
+  `release` will fail until their streams carry the nine phases and the rest — the same "module and fixtures in
+  one pass" coupling that made F3's last items three-pass work (CP-2131/2136/2140). That is why this round stops
+  at reading the predicate: the next pass should add the predicate's new requirements **together with** the
+  fixture upgrades, guided by which formal fixtures fail.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 reduced to these
+  two edits plus fixture upgrades**, F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD
+  `37fedaac3`; no push, no evidence deletion, no hardware, no second stack.
