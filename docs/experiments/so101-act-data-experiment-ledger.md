@@ -35186,3 +35186,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (audit writer, release boundary and
   seal v2 green); items 4-8 pending.** 39-path dirty baseline untouched; no push, no evidence deletion,
   no hardware, no second stack.
+
+
+## CP-1937 — Task 3 second bullet (first half): the run's real events feed the audit
+
+- **The runner emits its own boundaries.** `PickPlaceRunner(port, *, clock_ns=..., audit=None)` takes
+  an optional audit writer and emits `append_source("events", ...)` at the moment each phase's evidence
+  has been verified (`phase_complete` with the verified `physics_step`), at the end of a full run
+  (`run_complete`, `FULL_COMPLETE`) and on the abort path after the stop is confirmed (`run_aborted`,
+  `TASK8_ABORT`). Phase names therefore come from events the run actually produced, in order, and no
+  code fills a success list after the fact.
+- **No time is invented.** The event schema now carries `physics_step` (a required non-negative
+  integer, the value the boundary actually verified) and `sim_time_s`, which stays `None` unless a
+  source supplies a real sim time; the writer validates each field instead of accepting a step-derived
+  fake clock. This keeps the closed-schema rule while making the runner's knowledge explicit.
+- **Evidence.** `logs/task3-events.run` rc=0: **94 passed in 10.99 s** across
+  `test_act_release_boundary.py`, `test_act_episode_audit.py`, `test_act_recorder.py`,
+  `test_act_supervisor.py` and the four `test_act_task8*.py` suites, with its own NVMe scratch and a
+  non-empty tempfile proof. New cases: a completed run records exactly
+  `phase_complete` for every phase in order followed by `run_complete`, with non-decreasing verified
+  steps and no invented sim time; an aborted run (detach failure) records `run_aborted` and no phase it
+  never verified, and never records `run_complete`.
+- **Still open in Task 3.** The broker's claim/dispatch/accept/revoke/stop events and the controller
+  observer's raw history are not yet wired into the writer (only the runner's phase events are), and
+  the raw observations needed to recompute the physical criteria offline (desktop initial state,
+  bilateral contact, micro-lift height and off-table, hold/collision, placement support, detach/open
+  order, the release epoch's finger-contact-free window, final pose/velocity stability, retreat) are
+  not yet recorded as raw evidence rather than phase booleans. The Task 3 Codex checkpoint follows
+  those.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** 39-path dirty
+  baseline untouched; no push, no evidence deletion, no hardware, no second stack.

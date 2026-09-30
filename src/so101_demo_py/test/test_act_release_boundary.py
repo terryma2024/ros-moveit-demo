@@ -148,3 +148,37 @@ def test_a_release_observation_from_the_old_epoch_is_refused():
         PickPlaceRunner(port).run(request())
     assert port.opened == ["RELEASE"]
     assert port.stops == ["TASK8_ABORT"]
+
+
+class RecordingAudit:
+    def __init__(self):
+        self.events = []
+
+    def append_source(self, kind, record):
+        assert kind == "events"
+        self.events.append(record)
+
+
+def test_the_audit_receives_the_events_the_run_actually_produced():
+    """Phase names come from the run's own verified boundaries, not from a preset list."""
+
+    audit = RecordingAudit()
+    port = FakePort()
+    PickPlaceRunner(port, audit=audit).run(request())
+    assert [(event["kind"], event["detail"]) for event in audit.events] == (
+        [("phase_complete", phase) for phase in PickPlaceRunner.PHASES]
+        + [("run_complete", "FULL_COMPLETE")])
+    assert [event["physics_step"] for event in audit.events] == sorted(
+        event["physics_step"] for event in audit.events)
+    assert all(event["sim_time_s"] is None for event in audit.events)
+
+
+def test_an_aborted_run_records_its_abort_and_no_phase_it_did_not_verify():
+    audit = RecordingAudit()
+    port = FakePort(detach=False)
+    with pytest.raises(PickPlaceError, match="DETACH_NOT_CONFIRMED"):
+        PickPlaceRunner(port, audit=audit).run(request())
+    kinds = [event["kind"] for event in audit.events]
+    assert kinds.count("run_aborted") == 1
+    assert "RELEASE" not in [event["detail"] for event in audit.events]
+    assert "run_complete" not in kinds

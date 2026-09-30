@@ -18,6 +18,7 @@ class PickPlaceError(RuntimeError):
 class PickPlaceExecutionPort(Protocol):
     def begin(self, request: dict) -> dict: ...
     def run_phase(self, phase: str, request: dict) -> dict: ...
+    def set_down(self, request: dict) -> dict: ...
     def release_preflight(self, request: dict) -> dict: ...
     def detach_moveit(self, request: dict) -> bool: ...
     def planning_attached(self, request: dict) -> bool: ...
@@ -38,7 +39,7 @@ class PickPlaceRunner:
         "session_id", "attempt_id", "reset_epoch", "release_epoch", "full_restart",
     })
     _EVIDENCE_KEYS = frozenset({
-        "phase", "session_id", "attempt_id", "reset_epoch", "release_epoch",
+        "phase", "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
         "planning_ok", "controller_reference_ok", "joint_feedback_ok", "contact_ok",
         "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok",
         "manual_intervention", "moveit_recovery", "holding_state", "bilateral_contact",
@@ -51,12 +52,28 @@ class PickPlaceRunner:
     )
     _RELEASE_KEYS = frozenset({
         "holding_state", "cup_supported", "fresh", "planning_attached",
-        "session_id", "attempt_id", "reset_epoch", "release_epoch",
+        "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
+    })
+    _SET_DOWN_KEYS = frozenset({
+        "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
+        "holding_state", "cup_supported", "bilateral_contact", "controller_stopped",
+        "controller_reference_ok", "joint_feedback_ok",
+        "planning_attached", "contact_ok", "mujoco_ok", "planning_scene_ok",
+        "head_rgb_ok", "wrist_rgb_ok",
     })
 
-    def __init__(self, port: PickPlaceExecutionPort, *, clock_ns=time.monotonic_ns) -> None:
+    def __init__(self, port: PickPlaceExecutionPort, *, clock_ns=time.monotonic_ns,
+                 audit=None) -> None:
         self.port = port
         self.clock_ns = clock_ns
+        # the audit receives the events this run actually produced, in the order it produced them
+        self.audit = audit
+
+    def _event(self, kind: str, detail: str, physics_step: int) -> None:
+        if self.audit is None:
+            return
+        self.audit.append_source("events", {"kind": kind, "sim_time_s": None,
+                                            "physics_step": physics_step, "detail": detail})
 
     def _validate_request(self, request: dict) -> None:
         if not isinstance(request, dict) or set(request) != self._REQUEST_KEYS:
@@ -92,11 +109,14 @@ class PickPlaceRunner:
 
     def _verify_phase(
         self, phase: str, evidence: dict, request: dict,
-        reset_epoch: int, release_epoch: int,
-    ) -> None:
+        reset_epoch: int, release_epoch: int, after_step: int,
+    ) -> int:
         if not isinstance(evidence, dict) or set(evidence) != self._EVIDENCE_KEYS:
             raise PickPlaceError("PHASE_EVIDENCE_INVALID")
         if evidence["phase"] != phase or not self._scope(evidence, request, reset_epoch, release_epoch):
+            raise PickPlaceError("PHASE_EVIDENCE_INVALID")
+        step = evidence["physics_step"]
+        if type(step) is not int or step <= after_step:
             raise PickPlaceError("PHASE_EVIDENCE_INVALID")
         if evidence["manual_intervention"] is not False or evidence["moveit_recovery"] is not False:
             raise PickPlaceError("HUMAN_OR_RECOVERY_INTERVENTION")
@@ -111,6 +131,7 @@ class PickPlaceRunner:
             and evidence["bilateral_contact"] is True
             and evidence["micro_lift_confirmed"] is True
             and evidence["cup_off_table"] is True
+            and evidence["cup_supported"] is False
         ):
             raise PickPlaceError("HOLD_NOT_CONFIRMED")
         if phase in ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK") and not (
@@ -124,14 +145,35 @@ class PickPlaceRunner:
             evidence["placement_stable"] is True and evidence["retreat_stable"] is True
         ):
             raise PickPlaceError("FINAL_PLACEMENT_INVALID")
+        return step
+
+    def _set_down(self, request: dict, reset_epoch: int,
+                  release_epoch: int, after_step: int) -> int:
+        evidence = self.port.set_down(request)
+        if (not isinstance(evidence, dict) or set(evidence) != self._SET_DOWN_KEYS
+                or not self._scope(evidence, request, reset_epoch, release_epoch)
+                or type(evidence["physics_step"]) is not int
+                or evidence["physics_step"] <= after_step
+                or evidence["holding_state"] != "HOLDING"
+                or any(evidence[key] is not True for key in (
+                    "cup_supported", "bilateral_contact", "controller_stopped",
+                    "controller_reference_ok", "joint_feedback_ok",
+                    "planning_attached", "contact_ok", "mujoco_ok", "planning_scene_ok",
+                    "head_rgb_ok", "wrist_rgb_ok",
+                ))):
+            raise PickPlaceError("SET_DOWN_EVIDENCE_INVALID")
+        return evidence["physics_step"]
 
     def _release_preflight(
-        self, request: dict, reset_epoch: int, release_epoch: int,
-    ) -> None:
+        self, request: dict, reset_epoch: int, release_epoch: int, after_step: int,
+    ) -> int:
         evidence = self.port.release_preflight(request)
         if not isinstance(evidence, dict) or set(evidence) != self._RELEASE_KEYS:
             raise PickPlaceError("RELEASE_PREFLIGHT_INVALID")
         if not self._scope(evidence, request, reset_epoch, release_epoch):
+            raise PickPlaceError("RELEASE_PREFLIGHT_INVALID")
+        if (type(evidence["physics_step"]) is not int
+                or evidence["physics_step"] <= after_step):
             raise PickPlaceError("RELEASE_PREFLIGHT_INVALID")
         if not (evidence["holding_state"] == "HOLDING" and evidence["cup_supported"] is True
                 and evidence["fresh"] is True and evidence["planning_attached"] is True):
@@ -140,6 +182,7 @@ class PickPlaceRunner:
             raise PickPlaceError("DETACH_NOT_CONFIRMED")
         if self.port.planning_attached(request) is not False:
             raise PickPlaceError("DETACH_NOT_CONFIRMED")
+        return evidence["physics_step"]
 
     def _stop(self, reason: str, request: dict) -> None:
         try:
@@ -152,6 +195,7 @@ class PickPlaceRunner:
     def run(self, request: dict) -> dict:
         self._validate_request(request)
         started = False
+        latest_step = 0
         try:
             # begin may perform a reset before its response is lost. Treat even an
             # uncertain begin as task-owned activity that requires physical stop.
@@ -170,7 +214,6 @@ class PickPlaceRunner:
                 raise PickPlaceError("FULL_RESTART_NOT_PROVED")
             reset_epoch = beginning["reset_epoch"]
             release_epoch = beginning["release_epoch"]
-            latest_step = 0
             completed: list[str] = []
             for phase in self.PHASES:
                 if request["deadline_ns"] <= self.clock_ns():
@@ -198,6 +241,7 @@ class PickPlaceRunner:
                 if request["deadline_ns"] <= self.clock_ns():
                     raise PickPlaceError("TASK8_DEADLINE_EXPIRED")
                 completed.append(phase)
+                self._event("phase_complete", phase, latest_step)
                 if request["mode"] == "phase_prefix" and phase == request["stop_after"]:
                     self._stop("PHASE_PREFIX_COMPLETE", request)
                     # a prefix is never an episode: it must carry no live evidence artifact
@@ -216,12 +260,14 @@ class PickPlaceRunner:
                     or type(artifact["schema_version"]) is not int):
                 raise PickPlaceError("LIVE_EVIDENCE_ARTIFACT_INVALID")
             self._stop("FULL_COMPLETE", request)
+            self._event("run_complete", "FULL_COMPLETE", latest_step)
             return {"status": "PASSED", "completed_phases": completed,
                     "stopped_confirmed": True, "formal_episode_eligible": True,
                     "live_evidence_artifact": artifact}
         except BaseException:
             if started:
                 self._stop("TASK8_ABORT", request)
+                self._event("run_aborted", "TASK8_ABORT", latest_step)
             raise
 
 

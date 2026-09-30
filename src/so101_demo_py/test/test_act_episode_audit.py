@@ -48,7 +48,8 @@ def complete_audit(tmp_path):
     writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
                                         "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
                                         "accepted": True})
-    writer.append_source("events", {"kind": "first_command", "sim_time_s": 1.0, "detail": "dispatch"})
+    writer.append_source("events", {"kind": "first_command", "sim_time_s": 1.0, "physics_step": 0,
+                                    "detail": "dispatch"})
     writer.append_source("physics", {"kind": "support", "sim_time_s": 1.1, "release_epoch": 1,
                                      "observation": {"supported": True, "contacts": 2}})
     writer.append_source("physics", {"kind": "retract", "sim_time_s": 1.2, "release_epoch": 1,
@@ -121,8 +122,8 @@ def test_one_acquisition_cannot_fill_two_rows(tmp_path):
 def test_an_unknown_schema_field_is_refused(tmp_path):
     writer, _ = complete_audit(tmp_path)
     with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
-        writer.append_source("events", {"kind": "phase", "sim_time_s": 1.0, "detail": "x",
-                                        "success": True})
+        writer.append_source("events", {"kind": "phase", "sim_time_s": 1.0, "physics_step": 0,
+                                        "detail": "x", "success": True})
     with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
         writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
                                             "positions": [0.1] * 6, "accepted": True, "extra": 1})
@@ -175,7 +176,8 @@ def test_every_source_kind_is_closed_and_the_writer_is_exclusive(tmp_path):
     with pytest.raises(ValueError, match="AUDIT_ALREADY_SEALED"):
         writer.append_acquisition(None)
     with pytest.raises(ValueError, match="AUDIT_ALREADY_SEALED"):
-        writer.append_source("events", {"kind": "phase", "sim_time_s": 2.0, "detail": "late"})
+        writer.append_source("events", {"kind": "phase", "sim_time_s": 2.0, "physics_step": 5,
+                                        "detail": "late"})
     with pytest.raises(FileExistsError):
         EpisodeAuditWriter(tmp_path / "episode", {"mode": "diagnostic"}, identity(),
                            {"inputs_sha256": "a" * 64})

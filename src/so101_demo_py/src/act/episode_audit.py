@@ -28,7 +28,7 @@ _ACQUISITION_FIELDS = frozenset({"camera", "session_id", "reset_epoch", "sequenc
                                  "stamp_s", "received_monotonic_ns", "pixel_sha256"})
 _ROW_FIELDS = frozenset({"row_index", "sim_time_s", "head_id", "wrist_id", "reference_sequence"})
 _REFERENCE_FIELDS = frozenset({"sequence", "reference_time_s", "source", "positions", "accepted"})
-_EVENT_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "detail"})
+_EVENT_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "physics_step", "detail"})
 _PHYSICS_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "release_epoch", "observation"})
 _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
 _MANIFEST_FIELDS = frozenset({"kind", "schema_version", "window", "files", "inputs_sha256"})
@@ -154,8 +154,13 @@ class EpisodeAuditWriter:
             raise ValueError("AUDIT_SOURCE_KIND_INVALID")
         if kind == "events":
             item = _closed(record, _EVENT_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
-            _finite(item["sim_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
-            if not isinstance(item["kind"], str) or not item["kind"]:
+            # a runner knows the verified physics step at the boundary; a sim time is recorded only
+            # when the source actually supplies one, never invented from the step
+            _integer(item["physics_step"], "AUDIT_SCHEMA_INVALID")
+            if item["sim_time_s"] is not None:
+                _finite(item["sim_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
+            if (not isinstance(item["kind"], str) or not item["kind"]
+                    or not isinstance(item["detail"], str)):
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             item["sequence"] = self._next("events")
         elif kind == "references":
