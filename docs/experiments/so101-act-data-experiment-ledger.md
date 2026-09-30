@@ -39190,3 +39190,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the
   verifier's three increments landed. HEAD `71cc467ff`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2097 — The runner's raw check located: the supply must be on every phase document, not the funnel return
+
+- **Read from the code** (`pick_place_runner.py:104-120`): an internal recorder called with each phase's evidence
+  begins `if "physical_observation" not in evidence:` → appends the phase to `self._missing_raw` and returns; when
+  the key **is** present it copies the block and reads `simulation_time_s` from it, which is what makes the episode
+  formally eligible. So the runner inspects **the evidence each phase returns to it**, one phase at a time, and
+  `_missing_raw` is what turns the artifact into `None` (line 340).
+- **Why the three earlier attempts missed.** They wrapped `run_phase`'s single return, but the runner's phases are
+  driven through the port's own phase-document methods (`search`, `sequence_facts`/`sequence_phase`, and the
+  overrides), each returning its **own** document — a phase whose document lacks the key is recorded as missing
+  regardless of what `run_phase` returned. The key is accepted on the **phase documents** (the SEARCH document
+  already carries it additively, CP-2028) and **refused by the set-down document** (CP-2091), so the supply belongs
+  on the phase-document methods only.
+- **The next attempt, bounded**: wrap the returns of the phase-document methods that the failing tests actually
+  drive (read which phases those four tests execute first, then wrap exactly those methods' returns, leaving
+  `set_down` alone), and re-run that one suite. The runner's own check is the oracle: the moment every phase it
+  records carries a valid block, `_missing_raw` stays empty and the artifact is produced.
+- **Why I am stopping here rather than trying a fourth time.** Four consecutive fixture attempts have failed; each
+  narrowed the search, and this entry converts the last failure into the exact rule above. Continuing to patch at
+  this context level risks leaving the tree red, which is worse than a precise instruction.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the verifier's
+  three increments landed. HEAD `5ef673856`; no push, no evidence deletion, no hardware, no second stack.
