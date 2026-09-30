@@ -35633,3 +35633,65 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   F1's manifest/acquisition/row-binding/seal/event dimensions closed; F1's reference and physics
   payloads plus F5 outstanding); items 4-8 pending.** HEAD `63b451a7d`; 39-path dirty baseline
   untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1949 — Task 3 re-review verdict FAIL (6 Important): residuals and ordered fix plan
+
+- **Verdict** (`reviews/task3-rereview-verdict.md`, dispatch `624953e7-2cf4-4bee-a40a-f7a250a64c64`,
+  reviewed `cadb9bc9e`): **FAIL, 0 Critical / 6 Important / 0 Minor**. T3-F6 is **closed** and the
+  structural manifest/row-binding/acquisition/event/seal dimensions are accepted as a real improvement.
+  The reviewer also confirmed the release safe-stop and detach-before-RELEASE ordering is still present.
+  Everything else is improved but **not** closed, and two items are explicitly *worse* than the
+  previous revision — both introduced by this fix pass.
+- **T3-F1 residual (metadata and raw payloads).** Constructor admission still accepts any non-empty
+  scope/identity and `seal()` any non-empty window: the collection-scope closed fields/modes, the full
+  lease/session/reset/release identity and the window contract (source schedule, first command, physical
+  end, label cutoff) are not required. The new event envelope has the right field names but its
+  four-kind payload map cannot represent the required dispatch/accept/revoke/stop/contact/final-check
+  kinds, and `phase_start`'s payload value plus terminal-event reason types are not type-validated the
+  way phase-complete values are. References still lose the observer's raw message, accepted-goal
+  identity, joint names, source/receipt timing and revocation boundaries; physics still lacks the
+  required complete source records. **Requirement:** implement the approved raw source and metadata
+  contracts with kind-specific typed validators and the required event kinds, and never reconstruct
+  missing observer facts from phase booleans or locally generated arrival sequences.
+- **T3-F2 residual (causality, cadence, revocation).** Writer admission now checks camera slot, distinct
+  ids, session/reset, consecutive indexes and reference existence/target/acceptance, but it never
+  compares acquisition stamps with the row instant (no source age or skew check), so acquisitions
+  stamped 2.0 can bind a row at 1.0; consecutive indexes are not a contiguous 10 Hz schedule (no
+  comparison with the previous row time); and acceptance is not resolved against revocation history —
+  recording sequence 1 as accepted for 1.1 and then sequence 2 as *not* accepted for the same target
+  still lets row 0 bind sequence 1, and a later revocation of an existing binding is not checked at
+  seal. **Requirement:** validate acquisition contract/causality, time cadence/window and the applicable
+  accepted/revoked controller interval at binding **and** sealing, and add future/stale-frame,
+  irregular-time, accepted-then-revoked and late-revocation controls, keeping audit-only tails distinct.
+- **T3-F3 residual (readback parity).** The inventory and closed row fields are enforced, but
+  `_verify_streams()` is not equivalent to admission: it never checks bound camera/session/reset,
+  contiguous indexes or row/reference relationships, does not validate acquisition field types, shape,
+  dtype, canonical id or monotonic identity, nor reference/event values against their schemas, and it
+  only hashes the metadata without parsing or cross-correlating it. Checksum-consistent counterexamples
+  (swap the head/wrist ids in an existing binding and re-sign; point a binding at a nonexistent
+  sequence; add an event with an unknown kind/invalid payload) verify successfully although admission
+  would refuse them.
+- **T3-F4 residual (self-inflicted weakening).** The new no-argument `verify_episode_seal(path)` skips
+  every v2 audit/scope check because those run only when `audit_manifest` is supplied, so a deleted or
+  corrupted audit still passes that public verifier — weaker than the previous revision, which always
+  re-read its stored references. Supplying only `scope` also skips audit checks, and supplying only
+  `audit_manifest` fails through `Path(None)` instead of a controlled refusal. **Requirement:** require
+  both resolved artifacts for v2, or expose a separately named seal-only inspection that cannot be
+  mistaken for verified evidence.
+- **T3-F5 (unchanged).** Required raw physics/broker coverage still does not gate eligibility or
+  sealing.
+- **T3-F7 (self-inflicted regression).** `_event_identity` is initialized from `begin()` once and never
+  updated when the local `release_epoch` advances during RELEASE, so post-release phase-complete,
+  run-complete and abort events carry the **pre-release** epoch — exactly where independent
+  reconstruction must separate pre-release support from current release outcomes. **Requirement:**
+  update the event identity when the release epoch advances, with a control asserting the post-release
+  events carry epoch 2.
+- **Order for the next pass.** (1) T3-F7 and T3-F4 because they are regressions this pass introduced and
+  are small; (2) T3-F2's causality/cadence/revocation semantics with the four named controls; (3) T3-F3's
+  readback parity with the three checksum-consistent counterexamples as tests; (4) T3-F1's metadata
+  admission, required event kinds and typed validators together with the raw observer-reference and
+  physics payloads; (5) T3-F5's gating, which depends on (4) being real. Then a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL ×2, fix pass continuing:
+  T3-F6 closed, F1/F2/F3/F4/F5/F7 residues open); items 4-8 pending.** HEAD `cadb9bc9e`; 39-path dirty
+  baseline untouched; no push, no evidence deletion, no hardware, no second stack.
