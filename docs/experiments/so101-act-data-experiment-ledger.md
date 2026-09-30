@@ -35740,6 +35740,24 @@ root it passes, so that was my path error, not a suite failure.
   `src/simulation_evidence_plugin.cpp` builds it). So the fix is a rebuild of that package into the overlay,
   which is Task 11's build work - not a source defect in the binding tests.
 
+## HS-043 — The stale underlay is rebuilt: the blocked binding tests run and pass (round 328)
+
+- **Build:** `colcon build --packages-select so101_mujoco_support` from the worktree, with the ROS environment
+  and the task overlay sourced, build base in the low-rate root
+  (`$HEAD_LOWRATE/colcon/build`) and install base in the task overlay (`$HEAD_OVERLAY/install`). Result:
+  `Finished <<< so101_mujoco_support [1min 7s]`, one package with stderr output (warnings only).
+- **Verified:** `from so101_mujoco_support.msg import ScalarJointEvidence` now succeeds from the overlay - the
+  message exports `header`, `joint_names`, `paused` and `positions_rad` - and the two test files that the stale
+  underlay had blocked, `test_act_task8_search_binding.py` and `test_act_head_search_binding.py`, now report
+  **22 passed**.
+- **What this unblocks:** the deferred items recorded earlier can now be done *with verifying tests* rather
+  than shipped blind - the adapter wiring in `adapters/act/task8_calibration_search_binding.py` (deferred in
+  HS-028 because its tests were blocked) and the `runtime/launch_composition.py` /
+  `cli/act_stack_ready.py` call sites for `load_promoted_head_search` (deferred in the Task 8 notes for the
+  same reason). The Task 11 gates can also run as the plan specifies.
+- **Provenance note:** this overlay build is now part of the toolchain and must be recorded in the frozen
+  build provenance, together with the perception venv that provides pydantic v2, fastapi, httpx and lark.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
