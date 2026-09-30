@@ -314,6 +314,11 @@ class PickPlaceRunner:
             _lease = getattr(self.audit, "identity", None)
             if isinstance(_lease, dict) and _lease.get("lease") is not None:
                 self._event_identity["lease"] = _lease["lease"]
+            # T3-F5 integration: a formal writer fences the first event against the initial epoch its own identity
+            # declares, so the runner adopts that epoch instead of assuming zero and being refused
+            if isinstance(_lease, dict) and type(_lease.get("release_epoch")) is int:
+                self._event_identity["release_epoch"] = _lease["release_epoch"]
+                release_epoch = _lease["release_epoch"]
             completed: list[str] = []
             for phase in self.PHASES:
                 if request["deadline_ns"] <= self.clock_ns():
