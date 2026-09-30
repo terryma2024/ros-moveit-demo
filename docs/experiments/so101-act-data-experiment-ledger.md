@@ -39597,3 +39597,35 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ledger now says what is actually there.
 - **State.** HEAD `fe3a55174`; item 3's list unchanged (F1/F3/F5/F11/F12/F13); targeted gate
   `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2115 — F12's complete wiring spec, every anchor now read
+
+- **The four places, with the lines that exist today**:
+  1. `pick_place_search_port.py:445-457` builds the SEARCH document whose keys are exactly `_PHASE_EVIDENCE_KEYS`,
+     and my CP-2028 addition puts `planning_scene_observation` beside them — the one thing F12 says makes a real
+     observation fail. **Edit**: build a `physical_observation` block from the validated `world`
+     (`simulation_time_s`, `simulation_step`, `paused`, `truncated` keep `_raw` satisfied) and carry the typed
+     records **inside** it under their ratified names.
+  2. `pick_place_search_port.py:926-930` (`_checked_sequence_document`) asserts `set(document) !=
+     _PHASE_EVIDENCE_KEYS` for sequence phases; the same closure must be applied to the SEARCH document wherever
+     it is checked. **Edit**: allow the union with `"physical_observation"` and keep every other rule.
+  3. `pick_place_runner.py:181-186` accepts exactly `_EVIDENCE_KEYS` or that set plus `physical_observation`, and
+     then requires `_raw` — which today accepts only flat numbers and booleans. **Edit**: let `_raw` admit the
+     ratified typed sub-records (`planning_scene_observation`, `controller_feedback`) while keeping its flat
+     numeric rule for every other key, so the strictness that protects the raw numbers is preserved.
+  4. The gates: the port's own NOTE (CP-2069) and the boundary's derived gates then read the record from that
+     nested block; F12's second half is the production caller that **fills** it — the segment already fills the
+     scene record (CP-2077) and the broker produces feedback (CP-2040), so the join is what is missing.
+- **F13 belongs in the same pass**, because it changes what the carrier holds: select measured arrays by the
+  kind's registered names (five arm, one gripper) instead of all six for both; age the feedback by the stored
+  joint/reference receipt rather than the physics epoch, with reset/session fences; and give the scene query its
+  own observed source time instead of backdating it from an earlier readback (`_planning_scene_record`, segment
+  line 46). The controls F13 asks for (fresh-physics/stale-joint, per-kind dimension, reset, delayed scene) come
+  with it.
+- **Why this is a spec and not a commit.** It is a three-file coordinated change that includes relaxing a
+  validator in the runner, plus the identity fixes of F13 — the class of edit this session has repeatedly failed
+  at and had to revert. Every anchor above was read in this or the preceding rounds, so the pass needs no further
+  discovery.
+- **State.** HEAD `8ae7fb2ea`; item 3's list F1/F3/F5/F11/F12/F13 stands with this spec attached; targeted gate
+  `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no hardware, no second stack.
