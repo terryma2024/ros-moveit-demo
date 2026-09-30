@@ -39250,3 +39250,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   ledger now records: **read the test's imports and the factory it calls before touching a fixture**.
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `ba6411e27`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2100 — Final location for the supply: the `FakePort` base in `test_act_task8.py`
+
+- **Read from the factory** (`test_act_task8_live_qualification.py:444-500`): `_evidence_port` builds an inner class
+  with an `__init__`, an `_observe(phase, evidence)` that records a `phase=phase` row for the driver, and it wraps
+  a base port rather than implementing the runner's phase methods itself — no `def run_phase` appears in that
+  region, so the evidence the four failing tests feed the runner comes from the **base** the factory extends,
+  which is `test_act_task8.py`'s `FakePort`.
+- **What that means for the one remaining edit**: the `physical_observation` supply belongs in that base port's
+  phase evidence (or in the factory's own overrides if it produces any phase evidence itself), **not** in the
+  inline classes the three failed attempts patched. `test_act_task8.py` currently has **zero** occurrences of
+  `physical_observation`, and its own suite passes — because it does not assert the sealed artifact, which is
+  exactly what the four failing tests in the qualification suite do assert.
+- **So the repair is a two-line change in the right place**, with the oracle being the runner's `_missing_raw`
+  list: once every phase the runner records carries a block, the artifact is produced and those four tests pass.
+  The reading is done; the write is what remains, and it should be done by an executioner with room to run the
+  affected suites afterwards.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the
+  verifier's three increments landed. HEAD `08b487ad6`; targeted gate `logs/task3-final.run` **430 passed**; no
+  push, no evidence deletion, no hardware, no second stack.
