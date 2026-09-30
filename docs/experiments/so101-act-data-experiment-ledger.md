@@ -38302,3 +38302,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `84383132e`;
   consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2055 — Task 3: contact_ok derived from the contact evidence's own step
+
+- **What landed.** `_search_evidence` reports `contact_ok` as "the contact evidence is a mapping whose
+  `physics_step` equals the world's `simulation_step`" — a **content** relationship (the same join the audit
+  enforces between every record and its parent) rather than the presence of a key the port's closed set
+  already guarantees, which is why CP-2054 refused the presence-based form. The fixture already satisfies it
+  (contact `physics_step` 2, world `simulation_step` 2).
+- **Evidence.** `logs/task3-cok.run` rc=0 across the search-port, three task8 phase, release-boundary,
+  supervisor and audit suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty
+  tempfile proof.
+- **What is left asserted in the SEARCH document**: `planning_ok`, `mujoco_ok`, `head_rgb_ok`, `wrist_rgb_ok`.
+  For `planning_ok` the source is `validate_search_result`'s verdict (already consumed); for `mujoco_ok` a
+  content property such as `truncated is False` at the same instant; the two RGB gates need a frame property
+  (shape, stamp freshness or the recorder's lossless digest).
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c7b39f361`;
+  consolidated gate `logs/task3-gate14.run` **419 passed**; no push, no evidence deletion, no hardware, no
+  second stack.

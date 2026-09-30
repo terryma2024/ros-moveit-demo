@@ -412,6 +412,11 @@ class PickPlaceSearchPhasePort:
         # the reference gate is the reference readback this document is built from: the port's own closed
         # key set guarantees the entry exists, and a verifier has established its contents before the
         # document is assembled, so the gate is its presence rather than an assertion
+        # the contact gate is a content property, not a presence check: the contact evidence must belong to
+        # the same physics step as the world it is joined with, which is the relationship the audit enforces
+        # for every other record (a presence-based derivation would be a tautology, CP-2054)
+        contact_ok = (isinstance(raw["contact"], dict)
+                      and raw["contact"].get("physics_step") == world.simulation_step)
         reference_readback = raw["reference"]
         controller_reference_ok = (isinstance(reference_readback, dict) and bool(reference_readback))
         feedback = getattr(observed, "controller_feedback", None)
@@ -425,7 +430,7 @@ class PickPlaceSearchPhasePort:
             "release_epoch": 0, "physics_step": world.simulation_step,
             "planning_ok": True,
             "controller_reference_ok": controller_reference_ok, "joint_feedback_ok": joint_feedback_ok,
-            "contact_ok": True, "mujoco_ok": True,
+            "contact_ok": contact_ok, "mujoco_ok": True,
             # CP-2017 step 2, additive half: when the readback that established these gates carries the
             # ratified Planning Scene observation, it travels with the document so the gate can be derived
             # from it. Nothing supplies it yet, so the gate below keeps its documented interim value and
