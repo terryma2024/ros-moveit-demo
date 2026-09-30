@@ -40486,3 +40486,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   done**, F1/F11 open; targeted gates `logs/task3-final.run` **430 passed**, `logs/task3-f5-lifecycle.run`
   **201 passed**, `logs/task3-f5-rawref.run` **201 passed in 1.30s**; HEAD `ade232510`; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-2155 — F5's physics step: the runner emits per phase, so the clause is about kinds and fixtures
+
+- **Read this round**: `_PHYSICS_KINDS = ("support", "contact", "pose", "retract")` (line 97) is the per-phase
+  mapping the runner indexes (`self.audit.append_source("physics", {"kind": self._PHYSICS_KINDS[phase], ...})`,
+  line 133), and `self._physics(phase, evidence)` is called on **both** of the runner's per-phase paths (lines 323
+  and 341). So, as with the lifecycle (CP-2144), production already covers every phase; the gap F5 names is the
+  **predicate** and the **fixtures**.
+- **The clause to add, therefore**: require one physics row per entry of `_PHYSICS_KINDS` — i.e. every registered
+  kind present in `physics.jsonl` — which is the checkable form of "full registered physics" and does not depend on
+  a phase field the rows do not carry.
+- **The expected fixture cost, stated in advance**: the formal fixtures append a single `pose` row (test lines 733,
+  800, 1064 and the site inside `_self_consistent_formal`), so they will need `support`, `contact` and `retract`
+  rows as well; `_physics`'s own raw shape (the MuJoCo source contract at line 98's comment plus the support
+  boolean) is the model for those rows.
+- **Method notes from CP-2153/2154 that apply here**: patch fixtures by **line number**, confirm a constant's home
+  before importing it (`_PHYSICS_KINDS` lives in the audit itself, so no import is needed in the predicates' own
+  module), and expect one to three rounds for a change whose design is already right.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 five of seven steps
+  done**, F1/F11 open; targeted gates **430 / 201 / 201 passed**; HEAD `1e0b878cb`; no push, no evidence deletion,
+  no hardware, no second stack.
