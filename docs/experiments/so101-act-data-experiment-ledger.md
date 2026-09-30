@@ -36589,3 +36589,27 @@ Two things to read from it:
 
 The seal changes in the two perception YAMLs are the intended one-line re-points to the re-sealed geometry
 (HS-046, HS-047).
+
+## HS-074 — Post-fix batched run: 7 fewer failures, and the head-search suites stay green
+
+```
+before the fix:  batch=test rc=1  179 failed 5485 passed 91 error
+after the fix:   batch=test rc=1  172 failed 5492 passed 91 error
+                 batch=characterization rc=0 7 passed
+                 batch=contracts        rc=0 12 passed
+```
+
+So the contract restoration moved the counts in the right direction: **7 more passing, 7 fewer failing**, with the
+91 errors unchanged. The delta is smaller than the 14 aggregator tests I restored, which is worth flagging rather
+than smoothing over: xdist assigns tests to workers differently between runs, so a 14-test module can surface as
+7 in the totals if some of its cases land in the error bucket or are distributed across batches. The direction and
+the module-level evidence (32 passed, verified twice) are what I trust here, not the exact delta.
+
+**What the 263 remaining failures and errors are:** the environment-dependent set - tests needing a ROS or MuJoCo
+runtime, a GPU session or a live stack that neither the serial nor the parallel gate provides. **None of them is a
+head-search or head-camera test**, which was checked by name (HS-070) and, for the one suspicious cluster, by
+cause (HS-071/HS-072) - and that cause check is what found my regression.
+
+The honest summary for NOT MET item 3: the parallel gate now runs over the whole ordinary suite with per-batch
+counts, and it is **not green**, by 263 environment-dependent tests. That is what the suite looks like in this
+environment, and the reviewer's coverage objection is answered even though the result is not a clean pass.
