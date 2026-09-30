@@ -38768,3 +38768,33 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `b46de1926`;
   targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2078 — Task 3: T3-F11's fixture sketch written out, so the next session types rather than designs it
+
+- **Why this is the honest use of the round.** Item (c) has reverted twice (CP-1997, CP-2001) and needs a
+  self-consistent fixture; with my remaining budget a blind attempt would very likely become the third revert.
+  What helps next is the exact call sequence, which the ledger now carries.
+- **The sketch, using APIs that already exist** (all verified in this session's other tests):
+
+  1. `minter = AcquisitionMinter()` from `so101_demo.act.acquisition`; for each instant the window will declare
+     (for example `1.0` and `1.1`) and each camera (`head`, `wrist`):
+     `frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=instant, received_monotonic_ns=1,
+     pixels=np.zeros((480, 640, 3), dtype=np.uint8))`, then `writer.append_acquisition(frame)`.
+  2. `writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+     "positions": [...6...], "accepted": True})`, one `physics` pose row at `1.1`, and the two events
+     (`phase_complete`, `release`) — the coverage the formal seal gate requires.
+  3. `writer.bind_row(0, 1.0, head_frame.acquisition_id, wrist_frame.acquisition_id, 1)` for the row at the
+     labelled instant.
+  4. **Derive** the window from those values: `source_schedule = {"head": [1.0, 1.1], "wrist": [1.0, 1.1]}`,
+     `streams_required = ["head", "wrist"]`, `cadence_s = 0.1`, `permitted_gaps_s = []`,
+     `collection_start_s = 1.0`, `collection_end_s = 1.1`, `first_command_s = 1.0`, `physics_end_s = 1.1`,
+     `label_cutoff_s = 1.0` (the bound row's instant), `outcome = "complete"`.
+  5. Then the checks themselves are one-line variants: a cutoff that is not the row's instant, a scheduled
+     instant with no acquisition, a gap beyond 1.5 cadences that is not permitted, a required stream missing
+     from the schedule, an instant outside the window.
+- **A helper that returns that sealed pair** makes both the positive case and every negative case a two-liner;
+  the fixture is then correct by construction, which is what both reverts lacked.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f40b5b612`;
+  targeted gate `logs/task3-gate18.run` **420 passed**; no push, no evidence deletion, no hardware, no second
+  stack.
