@@ -277,6 +277,14 @@ def test_the_smoke_refuses_when_no_sealed_step_exists(tmp_path) -> None:
     )
     seal["seal_sha256"] = "b" * 64
     path.write_text(json.dumps(seal), encoding="utf-8")
+    # the step is applied only when a supplied document names this very seal
+    contract.write_text(
+        json.dumps({"coarse_step_candidate_rad": 0.3, "accepted_seal_sha256": "c" * 64}),
+        encoding="utf-8",
+    )
+    assert (
+        main(["--geometry-seal", str(path), "--anchor", "default", "--contract", str(contract)]) == 2
+    ), "a document naming another seal cannot supply the step"
     contract.write_text(
         json.dumps({"coarse_step_candidate_rad": 0.3, "accepted_seal_sha256": "b" * 64}),
         encoding="utf-8",

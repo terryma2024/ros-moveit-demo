@@ -31,6 +31,7 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--geometry-seal", required=True, type=_path)
     parser.add_argument("--anchor", default="default")
     parser.add_argument("--contract", type=_path)
+    parser.add_argument("--perception-config", type=_path)
     parser.add_argument("--output", type=_path)
     parsed = parser.parse_args(arguments)
 
@@ -56,13 +57,29 @@ def main(arguments: list[str] | None = None) -> int:
         fov = float(seal["horizontal_fov_rad"])
         # the step is never invented: it comes from the sealed contract, the seal itself, or the run stops
         step_source = None
+        declared_seal = None
+        if parsed.perception_config is not None:
+            # the perception config is the document that names the seal the camera was measured against
+            import yaml
+
+            declared = yaml.safe_load(parsed.perception_config.read_text(encoding="utf-8")) or {}
+            # the tracked config declares it under geometry_seal; a top-level declaration is accepted too
+            declared_seal = (declared.get("geometry_seal") or {}).get(
+                "accepted_seal_sha256"
+            ) or declared.get("accepted_seal_sha256")
+            if declared_seal and seal.get("seal_sha256") and declared_seal != seal["seal_sha256"]:
+                raise HeadSearchDomainError(
+                    "HEAD_SEARCH_STEP_UNSEALED: the perception config names a different seal"
+                )
         if parsed.contract is not None:
             contract = json.loads(parsed.contract.read_text(encoding="utf-8"))
-            accepted = contract.get("accepted_seal_sha256")
+            # the step is applied only when some supplied document names this very seal: the contract may
+            # name it directly, or the perception config may, and both are tracked beside this seal
+            accepted = contract.get("accepted_seal_sha256") or declared_seal
             sealed = seal.get("seal_sha256")
             if not sealed or accepted != sealed:
                 raise HeadSearchDomainError(
-                    "HEAD_SEARCH_STEP_UNSEALED: the contract is not associated with this geometry seal, "
+                    "HEAD_SEARCH_STEP_UNSEALED: no supplied document is associated with this geometry seal, "
                     "so its step cannot be applied"
                 )
             step_source = contract.get("coarse_step_candidate_rad") or contract.get(
