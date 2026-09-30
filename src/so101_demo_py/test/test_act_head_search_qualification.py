@@ -89,3 +89,33 @@ def test_the_qualification_parser_accepts_only_the_four_subcommands() -> None:
         assert parsed.command == command
     with pytest.raises(SystemExit):
         parser.parse_args(["resume", "--run-root", "/tmp/x"])
+
+
+def test_the_binding_accepts_only_restricted_head_only_admission() -> None:
+    from so101_demo.act.head_search_binding import validate_head_only_admission
+    from so101_demo.act.head_search_qualification import restricted_admission
+
+    for operation in ("GEOMETRY_SMOKE", "CALIBRATION_RUN", "QUALIFICATION_RUN"):
+        accepted = validate_head_only_admission(restricted_admission(operation=operation))
+        assert accepted["operation"] == operation
+        assert accepted["one_stack"] is True and accepted["one_detector"] is True
+
+    qualified = _qualified_report(Path("/tmp/does-not-matter"))
+    teleop = validate_head_only_admission(
+        restricted_admission(operation="TELEOP_ACCEPTANCE", report=qualified)
+    )
+    assert teleop["consumer"] == "teleop_head_camera"
+
+    for refused in (
+        {"operation": "RELEASE"},
+        {"operation": "GEOMETRY_SMOKE", "one_stack": True, "one_detector": False},
+        {
+            "operation": "GEOMETRY_SMOKE",
+            "one_stack": True,
+            "one_detector": True,
+            "consumers": ("recorder",),
+        },
+        {"operation": "TELEOP_ACCEPTANCE", "consumer": "recorder"},
+    ):
+        with pytest.raises(ValueError, match="HEAD_ONLY_OPERATION_REFUSED"):
+            validate_head_only_admission(refused)
