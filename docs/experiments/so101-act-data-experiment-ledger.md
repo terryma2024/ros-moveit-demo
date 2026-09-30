@@ -36544,3 +36544,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   source records.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `591804615`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1977 — Task 3: the two schema proposals written for ratification, and the gate re-run
+
+- **Both pending schemas are now concrete, reviewable documents** in
+  `docs/experiments/so101-act-data-schema-proposals.md`, each stating fields, types, ordering rules,
+  the boundaries that change together, and the current state of the code so nothing is implied to be
+  implemented that is not:
+  - **Proposal A — raw controller reference frames**: separate `arm`/`gripper` frames with ordered
+    `joint_names`, positions **and** velocities, source and receipt stamps, the observer's own sequence,
+    an explicit `evaluation` block (target instant, `published` vs `interval` basis, accepted goal id and
+    stamp, revocation stamp) and a checked six-dimensional `projection_map` (5 arm + 1 gripper). It folds
+    in every constraint the reviewer named, including that a `frames` key alone is not enough and that the
+    present closed schemas would reject it.
+  - **Proposal B — collection window**: source schedule, required streams, cadence, permitted gaps,
+    collection start/end, observed first command, physics end, label cutoff and an explicit `outcome`
+    (`complete`, `no_command`, `no_label`, `interrupted_diagnostic`) with per-outcome ordering rules,
+    adopting the reviewer's correction that `first_command <= label_cutoff` does not hold for
+    early-failure captures and that no-label/no-command evidence must be represented rather than invented.
+- **Ratification is the one thing I cannot do myself**, and the reviewer ruled explicitly that these
+  schemas must be owner-ratified before the boundaries change together. The checklist in the proposal file
+  asks for approve/amend/reject on each, and for confirmation that a formal run keeps refusing to seal
+  while the named producer does not yet supply the fields.
+- **The consolidated gate is green after the whole fix pass.** `logs/task3-gate5.run` rc=0:
+  **387 passed in 26.26 s** across the same 19 files used for the earlier checkpoints, with its own NVMe
+  scratch and a non-empty tempfile proof. That is the number to compare against 337 (before the fix pass)
+  and 378 (at the fourth checkpoint).
+- **Task 3 status.** Every finding from the four checkpoints is closed except **T3-F1**, whose remaining
+  part is exactly the producer wiring that the two proposals describe: full robot contact pairs, an
+  independent Planning Scene record and gripper/controller feedback as source records rather than
+  summaries, and the reference-frame and window schemas above.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (T3-F1's producer wiring blocked on
+  schema ratification); items 4-8 pending.** HEAD `20d5bd609`; 39-path dirty baseline untouched; no push,
+  no evidence deletion, no hardware, no second stack.
