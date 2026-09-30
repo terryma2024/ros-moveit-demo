@@ -37520,3 +37520,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `9edd46733`;
   targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
   untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2021 — Task 3: the literal is a documented caller-supplied placeholder, and where its supplier lives
+
+- **The code says it plainly** (`pick_place_search_boundary.py:303-306`): the gates the validator "can actually
+  establish from the readback above; anything it cannot check refuses rather than being asserted, and
+  `planning_ok`/`planning_scene_ok` come from the Planning Scene receipt **the caller validated (SEARCH's
+  rule)** — so they are established there, not here". So `_gate_facts`'s `"planning_scene_ok": True` is a
+  **placeholder whose supplier is the SEARCH validation**, not an independent claim by this helper. That is
+  consistent with CP-2016's experiment: the six phase documents fail when the placeholder becomes fail-closed,
+  because their paths reach `_gate_facts` without the SEARCH receipt in scope.
+- **Where the wiring goes, refined.** Both call sites (`:308` in `sequence_facts`, `:402` in the set-down
+  document) are instance methods, so the smallest honest change is for the SEARCH validation to **store the
+  validated receipt and its simulation instant on the boundary** and for `_gate_facts` to derive
+  `planning_scene_ok` from it — record present, same instant, its own `source` and read revision carried into
+  the phase document's `planning_scene_observation` — instead of defaulting to true. The next concrete read is
+  the SEARCH evidence validator that validates that receipt (the method whose comment gives SEARCH's rule),
+  which is the single place the supplier must be recorded.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `35ef86acb`;
+  targeted gate `logs/task3-xdist.run` **410 passed** (xdist, 8 workers on 32 CPUs); 39-path dirty baseline
+  untouched; no push, no evidence deletion, no hardware, no second stack.
