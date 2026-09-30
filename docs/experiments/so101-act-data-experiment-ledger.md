@@ -43107,3 +43107,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   (this cut), and the fenced **current** scene record in place of `_planning_scene_record()` returning `None`.
 - **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 two of four cuts**;
   F5/F12 open; the goal is paused. HEAD `6c1f457e9`; twenty-six gates green.
+
+
+## CP-2279 — F13's third cut: the five fixture sites are enumerated
+
+- **Where the feedback records are minted** (`test_act_episode_audit.py`): `_feedback = [{"controller": "arm",
+  "joint_names": ["1"], …}]` at **750**, **846** and **1145**, and the two inline records at **972**
+  (`[0.1, 0.2]`) and **975** (`[0.6]`). Each carries a one-element arm name list where the action has five, so
+  upgrading them is not a rename: the vectors must grow to the registered dimensions (arm `1..5` with five-element
+  vectors, gripper `6` with one), and whatever asserts on those lengths moves with them.
+- **That is why the rule waits**: F13's third cut is a five-site fixture upgrade plus a readback check that both kinds
+  appear, and doing it in one pass with the module rule re-applied is the cheapest honest order.
+- **State.** **F14, F3 and F1 closed**; **F11 three cuts with two negatives handed off**; **F13 two of four cuts**,
+  the third staged to the five sites above; F5/F12 open; the goal is paused. HEAD `34e52a905`; twenty-six gates green.
