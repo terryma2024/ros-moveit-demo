@@ -463,6 +463,9 @@ class PickPlaceSearchPhasePort:
                 "truncated": bool(world.truncated),
                 **({"planning_scene_observation": scene_record}
                    if scene_record is not None else {}),
+                # T3-F12: the comment above always claimed the records travel in this carrier, but only the
+                # scene record was ever put here; the feedback the gates already read travels with them now
+                **({"controller_feedback": list(feedback)} if feedback else {}),
             },
             "planning_scene_ok": planning_scene_ok,
             "head_rgb_ok": True, "wrist_rgb_ok": True, "manual_intervention": False,
