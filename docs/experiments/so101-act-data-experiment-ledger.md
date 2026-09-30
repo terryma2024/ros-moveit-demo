@@ -39762,3 +39762,34 @@ what makes them two candidates rather than one run twice.
 With HS-194 (B and C `rc=0`, serial), HS-195 (C's 800 head / 800 task sampling), and this entry, **Task 12 Step 3 is complete
 against every confirmation the plan lists**, and Steps 1-2 were already complete (HS-186, HS-187). Step 4 remains the open
 fork from HS-200.
+
+## HS-204 — USER-AUTHORIZED: implement Step 4's registration and operating-point calibration
+
+Asked which way the HS-200 fork should go and the user chose **implement the operating-point calibration**. So Step 4 becomes
+work rather than a limitation, and the specification is already on the record (HS-201's consumer contract, HS-202's field map)
+- the implementation starts from a contract the existing gate enforces rather than from invented acceptance criteria.
+
+**Scope, from the plan's own Step 4 invocation:**
+
+```zsh
+evaluate_head_search_yolo_candidates register \
+  --candidate-id A --weights "$A_WEIGHTS" --head-dataset … --task-dataset … --output candidate-a
+evaluate_head_search_yolo_candidates calibrate \
+  --candidate candidate-<c>/candidate-manifest.json \
+  --head-dataset … --head-split val --task-dataset … --task-split val \
+  --episode-partitions …/head-search-scenario-partitions-v1.json --episode-split calibration \
+  --output frozen-<c>.json
+```
+
+**What each must produce, per HS-201/202:**
+
+- `register` writes a candidate manifest carrying `candidate_id` and a `weight_sha256` bound to `--weights`; for A that means
+  digesting the pinned `best.pt` (already verified: `f281d25258493e2c…`), for B/C it already exists from training.
+- `calibrate` writes the six-key frozen identity - `candidate_id`, `weight_sha256`, `operating_points{head,task}`, `tracker`,
+  `postprocess`, `runtime` - with `promotable: true`, measured on the **val** splits and the **calibration** episode split, so
+  the existing `compare` gate can load it (`load_frozen_candidate`) without special-casing.
+
+**Two constraints carried in:** the per-candidate binding must keep HS-052's non-promotable refusal intact (a smoke plan must
+still be refused), and nothing may write into the pinned A root - registration reads it, never edits it.
+
+Still to do: the module functions and CLI wiring, then Step 4's own runs, then Steps 5-6. Task 12 remains `in_progress`.
