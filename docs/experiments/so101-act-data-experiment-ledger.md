@@ -39629,3 +39629,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   discovery.
 - **State.** HEAD `8ae7fb2ea`; item 3's list F1/F3/F5/F11/F12/F13 stands with this spec attached; targeted gate
   `logs/task3-final.run` **430 passed**; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2116 — F12's third edit landed: the raw rule admits the two ratified typed records
+
+- **What landed** (`pick_place_runner.py`): a named constant `_RAW_RECORD_KEYS = ("planning_scene_observation",
+  "controller_feedback")` and one extra branch in `_raw` that accepts a **non-empty mapping** only under those two
+  names, with a comment saying why. Everything else keeps the flat rule — booleans, finite numbers, numeric lists,
+  non-empty string lists — so the strictness that protects the raw numbers is unchanged, and the common audit still
+  validates the typed records for itself when they are present.
+- **Why this edit first**: it is the only one of the three that accepts **strictly more** input and changes no
+  existing behaviour, so it can land alone and be verified against existing suites; the port's block and its
+  closure relaxation (edits 1 and 2) can now put the records inside `physical_observation` without the runner
+  refusing the document.
+- **Evidence.** `logs/task4-fix.run`-style targeted run this round: **86 passed** across `test_act_task8.py`,
+  `test_act_task8_live_qualification.py`, the release-boundary and supervisor suites under `pytest-xdist` with 8
+  workers, with its own NVMe scratch and a non-empty tempfile proof.
+- **What remains of F12**: the port builds the `physical_observation` block and carries the records inside it
+  (edit 1), its closure check at `pick_place_search_port.py:926-930` allows that union (edit 2), a production caller
+  fills the records and the gates read the joined **current** records rather than cached receipts — and F13's
+  dimension/freshness corrections travel with them.
+- **State.** Item 3's list F1/F3/F5/F11/F12/F13 stands with F12's third edit done; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `4fb3f2b53`; no push, no evidence deletion, no hardware, no second
+  stack.
