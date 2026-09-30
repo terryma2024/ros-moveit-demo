@@ -492,7 +492,10 @@ def _window_ok(window, *, mode: str) -> bool:
                    or not instants
                    or any(not _number(instant) for instant in instants)
                    or instants != sorted(instants)
-                   for name, instants in schedule.items())):
+                   for name, instants in schedule.items())
+                # T3-F11: every claimed instant existed, but a shortened or duplicated schedule hid real
+                # coverage, so the list must be strictly increasing — no repeats, nothing out of order
+                or any(instants != sorted(set(instants)) for instants in schedule.values())):
         # a schedule is a chronological list per stream, not a set in arbitrary order
         return False
     # OWNER DECISION (CP-2217): `cadence_s`, `streams_required` and `permitted_gaps_s` are **episode

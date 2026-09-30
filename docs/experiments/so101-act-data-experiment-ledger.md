@@ -42846,3 +42846,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   endpoints against their actual histories (CP-2240).
 - **State.** **F14 closed**, **F3 closed**, **F1 closed**; F5/F11/F12/F13 open; the goal is paused. HEAD `ce00a3856`;
   twenty-two gates green.
+
+
+## CP-2265 — F11's first cut: a schedule must be strictly increasing
+
+- **What landed** (`episode_audit.py`, `_window_ok`): each stream's instants must equal `sorted(set(instants))`, so a
+  duplicated or reordered list is refused. The verdict's point was that the check only proved "every claimed instant
+  exists" one way round: `[1.0]` or `[1.0, 1.0]` could stand in for a real schedule while the predicates all passed.
+- **First try, 204 passed** across the audit, release-boundary, task8 and generic-artifact suites — no fixture carried
+  a repeated or unordered schedule, which is itself consistent with the fixtures having been honest.
+- **What F11 still owes**: the **cross-stream distinctness and coverage** relation (the verdict's "distinct per-stream
+  schedules"), and — the larger half — comparing `physics_end_s` and `first_command_s` against **their own histories**
+  rather than only relating `label_cutoff_s` and the camera endpoints. The shared predicate
+  `_window_matches_observed` receives labelled row times and acquisitions today, so that half needs the physics and
+  command histories plumbed into it, at the seal and the readback alike, plus the shortening/duplication/
+  missing-stream/fabricated-endpoint negatives.
+- **State.** **F14, F3 and F1 closed**; **F11 in progress** (first cut landed); F5/F12/F13 open; the goal is paused.
+  HEAD `76e36a54d`; twenty-three gates green.
