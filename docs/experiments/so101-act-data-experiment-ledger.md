@@ -43150,3 +43150,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Side effect: each rewritten block gained a line, so the two inline records (commanded_positions [0.1, 0.2] at 972 and [0.6] at 975 in the pre-edit numbering) must be located by field from now on.
 - Half two: re-apply the registered-name rule in the feedback check, then require both kinds on readback.
 - HEAD was e2533d83e before this commit; F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 two of four cuts plus this half; F5/F12 open; goal paused.
+
+## CP-2282 - F13's third cut landed: the registered per-kind names and dimensions are enforced
+
+- episode_audit.py: the feedback record's joint_names must equal the registered names for its controller, reusing
+  the same constant the reference frames use; the length-only match no longer admits an invented shape.
+- test_act_episode_audit.py: all five sites carry them - the three identical arm blocks (GREEN in CP-2281) and the
+  two inline records of the planning-scene/feedback control (arm 1..5 with five-element vectors, gripper 6).
+- The rule's own RED->GREEN: eleven refusals before the fixtures, one after the three arm blocks, zero after the two
+  inline records - each step measured rather than assumed.
+- F13 remainder: the readback check that both kinds appear, and the fenced current scene record in place of
+  _planning_scene_record() returning None.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four cuts; F5/F12 open; goal paused.
