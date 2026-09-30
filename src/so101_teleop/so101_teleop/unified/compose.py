@@ -358,8 +358,8 @@ def compose_head_camera_service(environment: Mapping[str, str]):
         raise CompositionBlocked(
             "HEAD_CAMERA_CONNECTION_MISMATCH: the descriptor's runtime ids disagree"
         )
-    owner = descriptor.get("owner")
-    if not isinstance(owner, Mapping) or int(owner.get("pid") or 0) <= 0:
-        raise CompositionBlocked("HEAD_CAMERA_CONNECTION_MISMATCH: the descriptor names no live owner")
+    from so101_teleop.head_camera import OWNER_PID_ENV, verify_owner
+
+    verify_owner(descriptor.get("owner"), expected_owner=environment.get(OWNER_PID_ENV))
     # the domain shares the one detector through the descriptor; it never builds its own
     return HeadCameraBackend(descriptor=dict(descriptor))

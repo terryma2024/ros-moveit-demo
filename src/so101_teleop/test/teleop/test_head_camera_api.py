@@ -18,6 +18,12 @@ from so101_teleop.head_camera import (
 
 
 def valid_descriptor(tmp_path: Path) -> dict:
+    """A descriptor whose owner is this live process, because a dead owner is now refused."""
+
+    import os
+
+    from so101_teleop.head_camera import process_start_ticks
+
     return {
         "operation": "TELEOP_ACCEPTANCE",
         "runtime_id": "runtime-0001",
@@ -26,7 +32,7 @@ def valid_descriptor(tmp_path: Path) -> dict:
         "bundle_sha256": "a" * 64,
         "simulation_session_id": "session-0001",
         "execution_generation": 1,
-        "owner": {"pid": 4242, "started_ticks": 900000},
+        "owner": {"pid": os.getpid(), "started_ticks": process_start_ticks(os.getpid())},
         "bridge_socket_root": str(tmp_path),
     }
 
@@ -87,11 +93,16 @@ def test_bridge_child_consumes_exact_head_runtime_authority(tmp_path: Path) -> N
 def test_stop_needs_three_consecutive_raw_samples(tmp_path: Path) -> None:
     descriptor = valid_descriptor(tmp_path)
     services = compose_head_camera(environment_for(tmp_path, descriptor))
-    assert services.stop()["state"] == "STOPPING"
-    assert services.stop()["state"] == "STOPPING"
-    assert services.stop()["state"] == "STOPPED"
-    assert services.stop(raw_sample_ok=False)["state"] == "STOPPING", "a gap restarts the proof"
-    assert services.stop()["consecutive_samples"] == 1
+    def sample(index: int) -> dict:
+        return {"neck_velocity_rad_s": 0.01, "sim_time_s": 1.0 + index * 0.1}
+
+    assert services.status()["state"] == "STOPPING", "a stop in progress is never reported stopped"
+    assert services.stop(raw_sample=sample(0))["state"] == "STOPPING"
+    assert services.stop(raw_sample=sample(1))["state"] == "STOPPING"
+    assert services.stop(raw_sample=sample(2))["state"] == "STOPPED"
+    assert services.stop(raw_sample=sample(1))["state"] == "STOPPING", "time regression restarts the proof"
+    assert services.stop(raw_sample=None)["state"] == "STOPPING", "a missing sample cannot advance it"
+    assert services.stop(raw_sample=sample(3))["consecutive_samples"] == 1
 
 
 def test_capture_is_atomic_and_refuses_stale_or_mismatched_frames(tmp_path: Path) -> None:
@@ -160,7 +171,12 @@ def test_the_router_exposes_the_five_endpoints_over_the_composed_backend(tmp_pat
     assert refused.status_code == 409
     assert refused.json()["detail"]["code"] == "HEAD_TARGET_OUT_OF_RANGE"
     assert client.post("/teleop/head-camera/target", json={"target_rad": 0.5}).status_code == 200
-    assert client.post("/teleop/head-camera/stop", json={}).json()["state"] == "STOPPING"
+    assert client.post("/teleop/head-camera/stop", json={"sim_time_s": 1.0}).json()["state"] == "STOPPING"
+    sealed = client.post(
+        "/teleop/head-camera/target", json={"target_rad": 0.5, "safe_interval_rad": [-99.0, 99.0]}
+    )
+    assert sealed.status_code == 409
+    assert sealed.json()["detail"]["code"] == "HEAD_TARGET_INTERVAL_SEALED"
     # the stream endpoint exists and refuses an unavailable domain; its live framing is exercised by
     # Task 11's installed smoke and Task 14's end-to-end run, where a real socket and teardown exist
     router = head_camera_router(services)
@@ -176,3 +192,26 @@ def test_the_router_exposes_the_five_endpoints_over_the_composed_backend(tmp_pat
     unavailable = client_for(Unavailable())
     assert unavailable.get("/teleop/head-camera/status").status_code == 503
     assert unavailable.post("/teleop/head-camera/capture").status_code == 503
+
+
+def test_composition_refuses_a_dead_or_drifted_owner(tmp_path: Path) -> None:
+    from so101_teleop.head_camera import CompositionBlocked, verify_owner
+
+    import os
+
+    from so101_teleop.head_camera import process_start_ticks
+
+    live = {"pid": os.getpid(), "started_ticks": process_start_ticks(os.getpid())}
+    verify_owner(live)  # a live owner with the kernel's ticks is accepted
+    with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
+        verify_owner({"pid": os.getpid(), "started_ticks": 1})
+    with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
+        verify_owner({"pid": 999999999, "started_ticks": 1})
+    with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
+        verify_owner(live, expected_owner=4242)
+
+    descriptor = valid_descriptor(tmp_path)
+    dead = {**descriptor, "owner": {"pid": 999999999, "started_ticks": 1}}
+    environment = environment_for(tmp_path, dead)
+    with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
+        compose_head_camera(environment)

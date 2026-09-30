@@ -9,6 +9,7 @@ the identity they were produced with, and the only detector reference is the one
 from __future__ import annotations
 
 import hashlib
+import math
 import json
 import os
 import time
@@ -51,6 +52,7 @@ class HeadCameraBackend:
     detector_factory_calls: int = 0
     sequence: int = 0
     stop_samples: int = 0
+    _last_stop_stamp: float | None = field(default=None, repr=False)
     _last_frame: FrameEnvelope | None = field(default=None, repr=False)
 
     @property
@@ -75,7 +77,7 @@ class HeadCameraBackend:
             "operation": self.descriptor["operation"],
             "runtime_id": self.descriptor["runtime_id"],
             "model_id": self.model_id,
-            "state": "STOPPED" if self.stop_samples >= STOP_SAMPLES else "READY",
+            "state": self.stop_state(),
             "detector_constructed": self.detector_factory_calls,
         }
 
@@ -100,12 +102,37 @@ class HeadCameraBackend:
             raise ValueError("HEAD_TARGET_OUT_OF_RANGE")
         return {"submitted_rad": float(target_rad), "status": "SUBMITTED"}
 
-    def stop(self, *, raw_sample_ok: bool = True) -> dict:
-        """A stop is STOPPING until three consecutive raw samples arrive, then STOPPED."""
+    def stop_state(self) -> str:
+        """STOPPED only once the proof is complete; a stop in progress is never reported as stopped."""
 
-        self.stop_samples = self.stop_samples + 1 if raw_sample_ok else 0
-        state = "STOPPED" if self.stop_samples >= STOP_SAMPLES else "STOPPING"
-        return {"state": state, "consecutive_samples": self.stop_samples}
+        return "STOPPED" if self.stop_samples >= STOP_SAMPLES else "STOPPING"
+
+    def stop(self, *, raw_sample: Mapping[str, object] | None = None) -> dict:
+        """Count one raw sample towards the stop proof; only real, fresh samples count.
+
+        The proof is built from samples, never from a caller's assertion: a sample must carry a finite
+        non-negative velocity and a timestamp no older than the last one seen, and anything else resets the
+        count instead of advancing it.
+        """
+
+        accepted = False
+        if isinstance(raw_sample, Mapping):
+            velocity = raw_sample.get("neck_velocity_rad_s")
+            stamp = raw_sample.get("sim_time_s")
+            if (
+                isinstance(velocity, (int, float))
+                and not isinstance(velocity, bool)
+                and isinstance(stamp, (int, float))
+                and not isinstance(stamp, bool)
+                and math.isfinite(float(velocity))
+                and math.isfinite(float(stamp))
+                and float(stamp) >= 0.0
+                and (self._last_stop_stamp is None or float(stamp) > self._last_stop_stamp)
+            ):
+                accepted = True
+                self._last_stop_stamp = float(stamp)
+        self.stop_samples = self.stop_samples + 1 if accepted else 0
+        return {"state": self.stop_state(), "consecutive_samples": self.stop_samples}
 
     def capture(self, *, now_wall_s: float | None = None) -> dict:
         """Return the last frame atomically, refusing a missing, stale or mismatched one."""
@@ -162,10 +189,7 @@ def compose_head_camera(environment: Mapping[str, str] | None = None, *, detecto
             "HEAD_CAMERA_CONNECTION_MISMATCH: the runtime id does not match the descriptor"
         )
     owner = descriptor.get("owner")
-    if not isinstance(owner, Mapping) or not owner.get("pid"):
-        raise CompositionBlocked("HEAD_CAMERA_CONNECTION_MISMATCH: the descriptor names no owner")
-    if int(owner["pid"]) <= 0:
-        raise CompositionBlocked("HEAD_CAMERA_CONNECTION_MISMATCH: the owner pid is not live")
+    verify_owner(owner, expected_owner=env.get(OWNER_PID_ENV))
     return HeadCameraBackend(descriptor=dict(descriptor))
 
 
@@ -195,8 +219,8 @@ def head_camera_router(services) -> object:
         backend = getattr(services, "head_camera", None)
         await websocket.accept()
         if backend is None:
-            await websocket.send_json({"code": "HEAD_CAMERA_UNAVAILABLE"})
-            await websocket.close()
+            await websocket.send_json({"code": "HEAD_CAMERA_UNAVAILABLE", "status": 503})
+            await websocket.close(code=1013)
             return
         try:
             while True:
@@ -216,7 +240,10 @@ def head_camera_router(services) -> object:
     @router.post("/teleop/head-camera/target")
     def target(payload: dict) -> dict:
         backend = backend_or_503()
-        interval = payload.get("safe_interval_rad") or backend.descriptor["safe_interval_rad"]
+        if "safe_interval_rad" in payload:
+            raise HTTPException(status_code=409, detail={"code": "HEAD_TARGET_INTERVAL_SEALED"})
+        # the interval is the descriptor's, never the caller's
+        interval = backend.descriptor["safe_interval_rad"]
         try:
             return backend.submit_target(target_rad=payload["target_rad"], safe_interval_rad=interval)
         except ValueError as error:
@@ -229,8 +256,8 @@ def head_camera_router(services) -> object:
     @router.post("/teleop/head-camera/stop")
     def stop(payload: dict | None = None) -> dict:
         backend = backend_or_503()
-        raw_sample_ok = True if payload is None else bool(payload.get("raw_sample_ok", True))
-        return backend.stop(raw_sample_ok=raw_sample_ok)
+        # the proof comes from the raw sample, never from a caller's boolean
+        return backend.stop(raw_sample=payload)
 
     @router.post("/teleop/head-camera/capture")
     def capture() -> dict:
@@ -241,3 +268,36 @@ def head_camera_router(services) -> object:
             raise HTTPException(status_code=409, detail={"code": str(error)}) from error
 
     return router
+
+
+OWNER_PID_ENV = "SO101_HEAD_CAMERA_OWNER_PID"
+
+
+def process_start_ticks(pid: int) -> int | None:
+    """The kernel's start ticks for a live process, or None when it is not running."""
+
+    try:
+        fields = Path(f"/proc/{int(pid)}/stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()
+    except (OSError, ValueError):
+        return None
+    return int(fields[19])
+
+
+def verify_owner(owner, *, expected_owner=None) -> None:
+    """Refuse a descriptor whose owner is absent, dead, drifted or not the expected process."""
+
+    if not isinstance(owner, Mapping) or not owner.get("pid"):
+        raise CompositionBlocked("HEAD_CAMERA_CONNECTION_MISMATCH: the descriptor names no owner")
+    pid = int(owner["pid"])
+    if pid <= 0:
+        raise CompositionBlocked("HEAD_CAMERA_CONNECTION_MISMATCH: the owner pid is not positive")
+    ticks = process_start_ticks(pid)
+    if ticks is None:
+        raise CompositionBlocked("HEAD_CAMERA_CONNECTION_MISMATCH: the owner process is not running")
+    recorded = owner.get("started_ticks")
+    if not isinstance(recorded, int) or recorded != ticks:
+        raise CompositionBlocked(
+            "HEAD_CAMERA_CONNECTION_MISMATCH: the owner start ticks do not match the live process"
+        )
+    if expected_owner is not None and str(pid) != str(expected_owner):
+        raise CompositionBlocked("HEAD_CAMERA_CONNECTION_MISMATCH: the owner is not the expected process")
