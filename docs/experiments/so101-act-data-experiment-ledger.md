@@ -43236,3 +43236,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   document's physical_observation holds controller_feedback and the pose kind carries its cup/model evidence.
 - GREEN 120 passed; F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four with the
   fourth blocked on the design contradiction (CP-2285); F12 two of four; F5 open; goal paused.
+
+## CP-2288 - F12's third cut: the typed records actually travel in the nested carrier
+
+- pick_place_search_port.py: the SEARCH document's physical_observation now carries controller_feedback beside the
+  world fields and the scene record. Its own comment had claimed since CP-2115 that the typed records travel in
+  that carrier, but only the scene record was ever placed there - the comment was stale and the writer saw no
+  feedback.
+- First try, green: 238 passed, and the wider gate including the recorder and store suites is recorded in
+  logs/task3-f12-carrier.run.
+- F12's remaining nuance from the verdict: the pose kind's physical observation must also carry its cup/model
+  evidence, and a production-class integration control proving the chain end to end.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four with the fourth blocked
+  on the design contradiction (CP-2285); F12 three of four with the fourth landed alongside; F5 open; goal paused.
