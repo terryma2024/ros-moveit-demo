@@ -3,8 +3,8 @@
 import math
 
 from .bearing import bearing, optical_ray_base
-from .head_search_domain import bounded_search_stops
 from .contracts import fields, finite, identifier, integer, validate_search_result, vector
+from .head_search_domain import bounded_search_stops
 
 
 class HeadSearchController:
