@@ -39928,3 +39928,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: F12 closed; F3's round trips fixed and its correlation added, its identity residuals
   open; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD
   `631f4f3ef`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2129 — F3's lease rule is right, but the formal fixtures must carry the lease first
+
+- **What I added**: `_event_identity_ok` — the predicate the **writer and the readback share** — now requires an
+  event identity to carry the episode's **lease** whenever the episode names one, which is exactly F3's "the event
+  identity check omits the lease identity" and lands in one place for both sides.
+- **Why it is reverted**: **8 failures**, all `AUDIT_SCHEMA_INVALID`/`AUDIT_EVENT_INVALID` from fixtures whose
+  formal episodes carry a lease while their **event identities** are built from the bare `identity()` — the rule
+  doing its job on fixtures that predate it (the same class of coupling as CP-2032 for the window gate). The file
+  and the test file were restored; the suites re-run green.
+- **The two edits that belong together next time**: (1) the lease clause in `_event_identity_ok`; (2) every formal
+  fixture's event identities given the **same** lease as its episode — `_self_consistent_formal`, the coverage
+  events inside the window test, and any other formal writer helper that appends events — plus the unit control
+  added this round (a matching lease passes; a missing or foreign one refuses; a diagnostic episode without a
+  lease is unaffected, which keeps the rule from touching the legacy path).
+- **State.** Item 3's list: F12 closed; F3's round trips and release correlation fixed with the lease item now
+  fully specified; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430 passed**;
+  HEAD `7115eb4d1`; no push, no evidence deletion, no hardware, no second stack.
