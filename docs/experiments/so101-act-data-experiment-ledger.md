@@ -38976,3 +38976,26 @@ never registered in the package's entry points, or it is registered under a diff
 package's entry-point declarations against the plan's list - checking the name first, because "missing" and "named
 differently" are the same symptom and different fixes, and I have already been burned once in this task by reading one of
 those for the other.
+
+## HS-171 — Found it: the entry point is named `head_search_smoke`, the plan requires `so101_head_search_smoke`
+
+Reading the package's declarations against the plan settles the "missing vs named differently" question - it is the second:
+
+```
+setup.py:175   "head_search_smoke = so101_demo.cli.head_search_smoke:main"
+plan line 880  for executable in ... so101_head_search_smoke so101_head_search_calibration; do
+plan line 994  ros2 run so101_demo_py so101_head_search_smoke --scenario no_cup --anchor default ...
+```
+
+So the executable was never missing; it was registered under a name the plan does not use, while its sibling
+`so101_head_search_calibration` follows the `so101_` convention correctly. Step 2's check therefore `exit 1`s on a
+**naming** defect in Task 5's registration, not on an absent CLI.
+
+**Fix:** one line in `setup.py` renaming the console script to `so101_head_search_smoke`, then rebuilding `so101_demo_py`
+into the toolchain root so the frozen root carries the corrected entry point (1.67 s at HS-170, so the rebuild is cheap and
+the root stays consistent with its own `source-commit.txt`).
+
+**Also worth recording:** my Task 11 smoke evidence was produced by invoking the CLI as a **module**, not through
+`ros2 run so101_demo_py so101_head_search_smoke` as the plan's Task 11 step does. The smoke result stands on its own
+evidence (HS-115-117: `coverage_complete: true`, seal `7d963fdc…`), but the plan's **invocation form** could not have worked
+before this fix - which is another reason the installed-entry-point check exists.
