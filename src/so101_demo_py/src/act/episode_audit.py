@@ -103,7 +103,15 @@ _PHYSICS_OBSERVATION_FIELDS = frozenset({
     "cup_position_world_m", "cup_orientation_world_xyzw",
     "cup_linear_velocity_world_m_s", "cup_angular_velocity_world_rad_s", "left_contact_count",
     "right_contact_count", "table_contact", "other_contact_geoms", "maximum_normal_force_n",
-    "supported"})
+    "supported",
+    # the two records the owner ratified defining (Proposal C): what the readback observed, so the
+    # gate booleans can be derived instead of asserted
+    "planning_scene_observation", "controller_feedback"})
+_SCENE_OBSERVATION_FIELDS = frozenset({"scene_revision", "attached_objects", "world_object_ids",
+                                       "is_diff", "sim_time_s", "source"})
+_FEEDBACK_FIELDS = frozenset({"controller", "commanded_positions", "measured_positions",
+                              "measured_velocities", "joint_names", "status_sequence", "sim_time_s"})
+_FEEDBACK_CONTROLLERS = ("arm", "gripper")
 # one contact record, closed exactly as the registered contract defines it
 _CONTACT_FIELDS = frozenset({"robot_geom", "object_body", "normal_force_n", "signed_distance_m"})
 _CONTACT_LISTS = ("left_contacts", "right_contacts", "other_contacts")
@@ -175,6 +183,40 @@ def _finite_vector(value, *, length: int | None = None) -> bool:
     return (isinstance(value, list) and (length is None or len(value) == length)
             and all(not isinstance(item, bool) and isinstance(item, (int, float))
                     and math.isfinite(item) for item in value))
+
+
+def _scene_observation_ok(record) -> bool:
+    if not isinstance(record, dict) or set(record) != _SCENE_OBSERVATION_FIELDS:
+        return False
+    ids = (record["attached_objects"], record["world_object_ids"])
+    return (type(record["scene_revision"]) is int and record["scene_revision"] >= 0
+            and all(isinstance(value, list)
+                    and all(isinstance(item, str) and item for item in value) for value in ids)
+            and all(value == sorted(value) for value in ids)
+            and type(record["is_diff"]) is bool
+            and not isinstance(record["sim_time_s"], bool)
+            and isinstance(record["sim_time_s"], (int, float))
+            and math.isfinite(record["sim_time_s"]) and record["sim_time_s"] >= 0
+            and isinstance(record["source"], str) and record["source"])
+
+
+def _feedback_ok(record) -> bool:
+    if not isinstance(record, dict) or set(record) != _FEEDBACK_FIELDS:
+        return False
+    if record["controller"] not in _FEEDBACK_CONTROLLERS:
+        return False
+    names = record["joint_names"]
+    if (not isinstance(names, list) or not names
+            or any(not isinstance(name, str) or not name for name in names)):
+        return False
+    for key in ("commanded_positions", "measured_positions", "measured_velocities"):
+        if not _finite_vector(record[key], length=len(names)):
+            return False
+    if type(record["status_sequence"]) is not int or record["status_sequence"] < 1:
+        return False
+    return (not isinstance(record["sim_time_s"], bool)
+            and isinstance(record["sim_time_s"], (int, float))
+            and math.isfinite(record["sim_time_s"]) and record["sim_time_s"] >= 0)
 
 
 def _reference_frames_ok(record) -> None:
@@ -269,6 +311,13 @@ def _physics_observation_typed(observation, *, kind: str) -> bool:
             if (isinstance(value, bool) or not isinstance(value, list) or not value
                     or any(isinstance(item, bool) or not isinstance(item, (int, float))
                            or not math.isfinite(item) for item in value)):
+                return False
+        elif key == "planning_scene_observation":
+            if not _scene_observation_ok(value):
+                return False
+        elif key == "controller_feedback":
+            if (not isinstance(value, list) or not value
+                    or any(not _feedback_ok(entry) for entry in value)):
                 return False
         elif key in ("truncated", "diagnostic_hazard_breached"):
             if type(value) is not bool:

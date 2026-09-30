@@ -830,3 +830,42 @@ def test_the_ratified_reference_frames_are_accepted_and_validated(tmp_path):
         mixed.append_source("references", {**base, **_ratified_reference(),
                                            "joint_names": ["a"], "sim_stamp_ns": 1,
                                            "received_monotonic_ns": 1, "velocities": [0.0]})
+
+
+def test_the_planning_scene_and_feedback_records_are_validated(tmp_path):
+    """Proposal C's two records: accepted and typified, so a gate can be derived from them."""
+
+    scene = {"scene_revision": 3, "attached_objects": ["plastic_cup"],
+             "world_object_ids": ["plastic_cup", "table"], "is_diff": False, "sim_time_s": 1.1,
+             "source": "search_boundary"}
+    feedback = [{"controller": "arm", "joint_names": ["shoulder_pan", "shoulder_lift"],
+                 "commanded_positions": [0.1, 0.2], "measured_positions": [0.1, 0.2],
+                 "measured_velocities": [0.0, 0.0], "status_sequence": 4, "sim_time_s": 1.1},
+                {"controller": "gripper", "joint_names": ["gripper"],
+                 "commanded_positions": [0.6], "measured_positions": [0.6],
+                 "measured_velocities": [0.0], "status_sequence": 4, "sim_time_s": 1.1}]
+    pose = {"simulation_time_s": 1.1, "simulation_step": 11, "cup_position_world_m": [0.0, 0.0, 0.0]}
+    writer = EpisodeAuditWriter(tmp_path / "ok", scope(), identity(), {"inputs_sha256": "a" * 64})
+    writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
+                                     "observation": {**pose, "planning_scene_observation": scene,
+                                                     "controller_feedback": feedback}})
+    for broken in ({**scene, "attached_objects": ["b", "a"]},
+                   {**scene, "scene_revision": -1},
+                   {**scene, "extra": 1},
+                   {**scene, "source": ""}):
+        other = EpisodeAuditWriter(tmp_path / f"bad-scene-{len(str(broken))}", scope(), identity(),
+                                   {"inputs_sha256": "a" * 64})
+        with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+            other.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
+                                            "observation": {**pose,
+                                                            "planning_scene_observation": broken}})
+    for broken_feedback in ([{**feedback[0], "measured_positions": [0.1]}],
+                            [{**feedback[0], "controller": "neck"}],
+                            [{**feedback[0], "status_sequence": 0}],
+                            [{**feedback[0], "joint_names": []}]):
+        other = EpisodeAuditWriter(tmp_path / f"bad-fb-{len(str(broken_feedback))}", scope(), identity(),
+                                   {"inputs_sha256": "a" * 64})
+        with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+            other.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
+                                            "observation": {**pose,
+                                                            "controller_feedback": broken_feedback}})

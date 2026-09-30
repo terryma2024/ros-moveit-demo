@@ -36810,3 +36810,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `26c76a793`;
   gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1989 — Task 3 convergence: the audit accepts and validates the two ratified records (Proposal C)
+
+- **What landed.** A physics observation may now carry `planning_scene_observation` (scene revision,
+  sorted attached and world object id lists, diff flag, read instant, source) and `controller_feedback`
+  (a non-empty list of per-controller records with `arm`/`gripper`, ordered joint names, commanded and
+  measured positions and measured velocities of that length, a status sequence ≥ 1 and a read instant).
+  Both are validated strictly at admission and, through the shared observation validator, on readback; the
+  control refuses an unsorted id list, a negative revision, an extra field, an empty source, a measured
+  list of the wrong length, an unknown controller, a zero status sequence and empty joint names.
+- **What is deliberately not yet required.** The records are accepted, not required, because no producer
+  returns them yet; per the definitions recorded in CP-1988 the gate booleans must be **derived** from
+  them, so requiring them belongs with the producer change (the readback that already validates the scene
+  and controller state starts returning the records, and the two helpers stop asserting the booleans).
+- **Evidence.** `logs/task3-fix36.run` rc=0: **131 passed in 1.12 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_release_boundary.py` and `test_act_continuous_capture.py`, with its own
+  NVMe scratch and a non-empty tempfile proof.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `2faf89869`;
+  gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
+- **Still awaiting the owner:** amendment **A.1** (`evaluation` per frame, since the broker evaluates
+  `arm` and `gripper` independently and possibly differently in one call), or an instruction to take the
+  single-controller-kind alternative.
