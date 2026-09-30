@@ -36439,3 +36439,28 @@ gate over the ordinary suite in per-directory batches (the way the five head-sea
 record each batch's counts, and state explicitly that one worker-killing test in an unrelated module makes the
 single-invocation form unusable, with the evidence above. That turns the gate from "five selected suites" into
 "the whole ordinary suite, minus a named and evidenced instability", which is what the reviewer asked for.
+
+## HS-067 — The 62 colcon benchmark failures decompose into two modules (round 393)
+
+Read from the gate's own JUnit XML (`build/so101_demo_py/pytest.xml`, the path `colcon test-result --all`
+reports, which is the worktree build base rather than my low-rate one):
+
+```
+62 failures
+  60  test_perception_benchmark_dataset
+   2  test_perception_benchmark_adapters
+sample names: test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly,
+              test_configured_production_builder_requires_a_real_detect_method,
+              test_polygon_rule_is_round_half_up_and_includes_pillow_boundary
+```
+
+So NOT MET item 11 is really two questions, not one:
+
+1. **The 60 dataset failures** are the rasterizer set Task 4 already recorded; whether they are environmental or
+   real needs one test run under the pinned environment, which is cheap and is the next step.
+2. **The 2 adapter failures** include the SAM2 test that HS-062 fixed by installing the pinned
+   `transformers==4.56.2`. This XML predates that install, so at least one of the two may already be resolved;
+   re-running the adapters module with the pin will say.
+
+That is a much better position than "62 failures": one of the two modules has a known fix in place, and the other
+is a single question with a cheap test.
