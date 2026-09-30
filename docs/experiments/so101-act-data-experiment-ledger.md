@@ -37217,3 +37217,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `95c550b28`;
   gate `logs/task3-gate8.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2007 — Task 3 fix pass: scheduled instants must lie inside the collection window
+
+- **One more ratified-window consistency rule.** Every instant in `source_schedule` must fall inside
+  `[collection_start_s, collection_end_s]`, so a schedule cannot claim a publication from before or after
+  the episode it describes; the control is one line in the existing window test.
+- **Evidence.** `logs/task3-fix51.run` rc=0 across `test_act_episode_audit.py` and `test_act_recorder.py`,
+  with its own NVMe scratch and a non-empty tempfile proof.
+- **Where the remaining Task 3 work sits, unchanged.** The producer wiring (the broker's fused
+  `reference_state` and the two `planning_scene_ok: True` literals) and the window-to-rows checks that need
+  a self-consistent formal fixture; both are recorded with recipes in CP-1993/CP-1997/CP-2001 and in
+  `docs/experiments/so101-act-task3-handoff.md`. Amendment **A.1** still awaits the owner.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `f154ad7b1`;
+  gate `logs/task3-gate8.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

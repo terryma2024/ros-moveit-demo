@@ -741,6 +741,8 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
         writer.seal(_window(permitted_gaps_s=[[0.5, 0.6]]))         # outside the collection window
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
+        writer.seal(_window(source_schedule={"head": [0.9, 1.0], "wrist": [1.0, 1.1]}))
+    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
         writer.seal(_window(outcome="no_command"))                  # must null both instants
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
         writer.seal(_window(outcome="interrupted_diagnostic"))      # never formal evidence

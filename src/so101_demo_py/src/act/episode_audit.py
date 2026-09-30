@@ -462,6 +462,10 @@ def _window_ok(window, *, mode: str) -> bool:
                            window["physics_end_s"])
     if not start <= physics <= end:
         return False
+    if any(instant < start - _TOLERANCE_S or instant > end + _TOLERANCE_S
+           for instants in schedule.values() for instant in instants):
+        # a scheduled instant outside the collection window is not part of this episode
+        return False
     if any(not start - _TOLERANCE_S <= gap[0] and gap[1] <= end + _TOLERANCE_S
            for gap in window["permitted_gaps_s"]):
         # a permitted gap outside the collection window is not a gap this episode could have had
