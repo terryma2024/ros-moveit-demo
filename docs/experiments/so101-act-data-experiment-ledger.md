@@ -41857,3 +41857,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4: QC half green,
   commit half specified to the call and its one missing input named; items 5+ wait on the four blocked bindings.
   HEAD `c97f8b04f`; twelve gates green.
+
+
+## CP-2217 — Owner decisions for Task 3's remaining items, and ①a landed
+
+- **The decisions** (owner, this session): **①a** — `cadence_s`, `streams_required` and `permitted_gaps_s` are
+  **episode parameters**, not frozen inputs, so F11's seventh item closes by decision with the reason recorded;
+  **②b** — the ratified `controller_feedback` record **gains an eighth key** carrying the source-side instant, so
+  F13's request is met by amendment rather than by reinterpreting the field; **③a** — the ACT result verifier is
+  **wired into the coordinator's commit path**, so an episode cannot become terminal before it verifies. After all
+  three land, a **seventh independent checkpoint review** is to be dispatched (GPT-6.1 Sol / High, per the task
+  model rules).
+- **①a landed**: a comment in `_window_ok` (beside the policy checks) records the decision and its evidence — the
+  frozen input roles at `first_episode_inputs.py:37` define no window policy — so the next reader sees why the
+  audit validates consistency and observed coverage rather than comparing against a pre-registered policy. The
+  audit suite re-runs green (72 passed).
+- **Next**: ②b needs the record's field set and the broker's stored source stamps read before the edit; ③a needs the
+  coordinator's `_apply_result` and the lease's route into it.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**; **F11 closed by decision** (six items landed, the seventh
+  answered here); **F13 becomes an amendment** under ②b; item 4's QC half is green and its commit half is ③a.
+  HEAD `d8e24de6c`; twelve gates green.

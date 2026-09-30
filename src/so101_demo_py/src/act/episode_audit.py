@@ -467,6 +467,10 @@ def _window_ok(window, *, mode: str) -> bool:
                    for name, instants in schedule.items())):
         # a schedule is a chronological list per stream, not a set in arbitrary order
         return False
+    # OWNER DECISION (CP-2217): `cadence_s`, `streams_required` and `permitted_gaps_s` are **episode
+    # parameters**, not frozen inputs. F11 asked for them to be checked against the frozen policy, but the
+    # frozen input roles (act/first_episode_inputs.py:37) define no window policy, so the audit checks them for
+    # internal consistency here and, through `_window_matches_observed`, against what the episode observed.
     if (not isinstance(window["streams_required"], list) or not window["streams_required"]
             or any(not isinstance(name, str) or not name for name in window["streams_required"])
             or not _number(window["cadence_s"]) or window["cadence_s"] <= 0
