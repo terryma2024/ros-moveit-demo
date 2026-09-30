@@ -35446,6 +35446,12 @@ no second detector, with its RED tests first.
   otherwise the RED gate would fail at import for the wrong reason and must not be counted as RED. This is an
   environment prerequisite for Task 9 and Task 10, not a source defect.
 
+- **Correction to the Task 9 environment note (round 270).** The perception venv was probed as the candidate
+  interpreter and has **no pydantic at all** (`ModuleNotFoundError: No module named 'pydantic'`), so it is
+  ruled out. The interpreter that provides pydantic v2 for `so101_teleop` still has to be identified - most
+  likely the one the installed overlay records during Task 11's build. Until it is, a Task 9 RED gate would
+  fail at import for the wrong reason and must not be counted as RED.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
