@@ -35163,6 +35163,22 @@ interpreter that owns torch and the pinned rasterizer) or recording a formal, re
 - **Gate:** `test_act_head_search_domain.py` 11 passed; `test_act_search.py` 21 passed under the review
   helper; `ruff check` clean on the changed files.
 
+## HS-027 — Task 5 APPROVED WITH FINDINGS, finding closed; Task 5 complete
+
+- **Re-review verdict:** `reviews/task5/task5-rereview-verdict.md` (GPT-6.1-Sol high, interactive session).
+  All three fixes are **MET**: exhaustion earns the clean negative only when the plan proved coverage; the
+  legacy revolution reports `TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL`; and the smoke requires a truthy
+  `seal_sha256` equal to the contract's `accepted_seal_sha256`, refusing `HEAD_SEARCH_STEP_UNSEALED`
+  otherwise (including the former `None == None` case). Decision: **APPROVE WITH FINDINGS**.
+- **The remaining finding, closed here:** the controller as a whole also emits `SEARCH_TIMEOUT`,
+  `SEARCH_UNSAFE`, `TARGET_AMBIGUOUS` and `TARGET_NOT_CENTERED`, so "exactly three statuses" did not hold
+  for it. Those are refusals and diagnostics rather than search outcomes; `head_search_domain.py` now
+  declares `QUALIFICATION_STATUSES` and `qualification_status_of(...)`, a test pins each diagnostic as
+  not-an-outcome, and the distinction is explicit instead of implied. Test suite: 12 passed.
+- **Task 5 complete.** Commits: `4cff65798`, `61df5f6f5`, `c86ae5bdc`, `a4009a423`, `3a143e6ae`,
+  `4e0448b42`, `5a5a7f452`, `d362d4793`, `2b610ac18`, plus this one. Owed to Task 11: the two binding test
+  files (stale underlay) and the installed smoke.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
