@@ -39889,36 +39889,6 @@ the plan's sha256 pin exists to guarantee.
 policy is fixed in advance (HS-208). What remains is the val-split grid measurement that chooses `min_confidence` and
 `tracking_iou`, then the three `freeze` calls and Step 5's `compare`.
 
-## RESUME POINT (written at HS-209; supersedes every earlier one)
-
-**Task status:** 1-11 completed (Task 11 approved with findings, 16 verdicts). **12 in_progress.** 13-14 pending.
-
-**Task 12 progress:** Steps 1-3 complete and verified - pinned A weights sha256-verified (`f281d25258493e2c…`), 1200-image head
-dataset generated + verified `rc=0`, candidates B and C trained serially `rc=0` (`device=cuda`, same frozen base, distinct
-weights, C at 800 head/800 task 1:1). Step 4 partially implemented: `register_candidate` and `freeze_candidate` written in
-`src/so101_demo_py/src/act/head_search_candidate_freeze.py` (`7fb6825c7`, `c5156c1cf`); A registered with the pinned digest
-(HS-209); B/C manifests exist from training. The frozen-candidate contract, its two-schema contradiction with the plan, and
-the operating-point selection policy are recorded in HS-201/202/205/207/208 - read those before writing more.
-
-**Next actions, in order:**
-1. implement the val-split grid measurement of HS-208 (18 cells, zero-false-candidate gate, head mask-map first), then
-   `freeze_candidate` for A/B/C into `frozen-{a,b,c}.json`;
-2. Step 5: `ros2 run so101_demo_py evaluate_head_search_yolo_candidates compare --candidate frozen-*.json …`;
-3. Step 6: append and commit the model decision checkpoint;
-4. Task 13 pauses for the user's explicit approval of the exact 17-value bundle before anything is promoted.
-
-**Environment facts that cost time to learn:** `TOOLCHAIN_RUN=$HEAD_EVIDENCE/head-toolchain-20260930T125445Z` (built `rc=0`, but
-its `source-commit.txt` is stale and it predates later fixes - rebuild from scratch before citing it as frozen);
-`GEOMETRY_RUN=$HEAD_EVIDENCE/head-camera-probe11-20260930T101722Z` (seal `7d963fdc…`); campaign root
-`$HEAD_EVIDENCE/head-yolo-models-20260930T120608Z`; `HF_ROOT=$HEAD_EVIDENCE/models/huggingface` with the token passed in from
-`/data/models/huggingface/token` (never printed); `no_proxy` needs the bracketed `[::1]` removed for any `hf`/`httpx` command
-(HS-181); training takes `--training-contract --head-dataset-root --head-manifest --task-dataset-root --task-manifest`
-**together** (HS-190); the source layout is `src/act` while the installed layout is `so101_demo/act`, so a temporary shim is
-needed to run a module straight from the worktree.
-
-**Deletion candidates (pending user authorization):** empty roots `head-toolchain-20260930T125637Z` and `…T125856Z`; the
-superseded success roots `…T115640Z`, `…T115927Z`, `…T120204Z`; ~130 scratch dirs under the evidence root; the
-`probe-calibration-*` dir.
 
 ## HS-210 — Budget extended to 2000 rounds at the user's request; measurement entry point inspected
 
@@ -40884,3 +40854,54 @@ until the user decides.
 **Nobody should mistake the 0.001 for permission.** The distinction that matters is procedural, not numerical: choosing the
 operating point on the criterion the design names, before looking at the retention verdict, versus choosing it until the verdict
 turns green. The first was always owed; the second would be the one thing this task has refused throughout.
+
+## RESUME POINT (rewritten at HS-247; supersedes every earlier one)
+
+**Tasks:** 1-11 completed (Task 11 approved with findings, 16 verdicts). **12 in_progress.** 13-14 pending. Goal budget 3000.
+
+**Task 12 state:** Steps 1-3 complete and verified (pinned A weights sha256 `f281d252…`; 1200-image head dataset `rc=0` +
+verified; B and C trained serially `rc=0`, `device=cuda`, shared frozen base, distinct weights, C at 800/800 1:1). **Step 4**:
+18-cell val grid measured (margin 0.0 - non-discriminating), three `frozen-*.json` written and accepted by the real
+`load_frozen_candidate`. **Step 5 has run to completion** and refused on model grounds, not on a contract error:
+
+```
+EVALUATION_TASK_RETENTION_LOST: the mixed model gives up 0.011 mask mAP on the task domain
+TASK_RETENTION_MARGIN = 0.01        (head_search_models.py:33, check at :468)
+```
+
+So the honest outcome so far is **no challenger selected**, and C misses by **0.001**.
+
+**Next actions, in order:**
+1. re-select C's operating point on **val images + calibration episodes** (design line 220) - the half of Step 4 not yet done, and
+   the only fix that is not gate-shopping: the current point came from a flat grid (HS-213) and is a tie-break, not a choice.
+   Calibration episodes are already recorded at `$MODEL_RUN/episodes5/calibration` (20 seeds x 3 angles x 2 domains, 12 frames per
+   condition class). If a faithfully chosen point brings C within 0.01, that is the design's own procedure; if not,
+   "no challenger selected" stands and Task 13's input is unresolved;
+2. re-run Step 5: `ros2 run so101_demo_py evaluate_head_search_yolo_candidates compare` with the flags in `$MODEL_RUN/grid/compare3.sh`
+   (the working invocation), then Step 6's checkpoint;
+3. Task 13 - **pause for the user's exact 17-value approval** before promotion.
+
+**Gate invocation that works** (nine contract requirements each found by running it): `--output` (path); weights resolved as
+`<weights-dir>/<ID>.pt` (symlinks `A.pt`/`B.pt`/`C.pt` exist in `$MODEL_RUN`); absolute `--episode-partitions` path;
+`--episode-records`; frames need `latency_ms` (not `latency`), `domain` (head **and** task), `split`, `scenario` (else every frame
+counts as no-cup), and `detections[<ID>]` must be a **list** (a dict's keys get counted as detections); venv on `PYTHONPATH` so
+ultralytics imports under `ros2 run`.
+
+**Recorder:** `$MODEL_RUN/grid/record_episodes.py` (a script, not toolchain code). Environment recipe: source ROS + workspace +
+the **toolchain** `install/setup.bash` (LD_LIBRARY_PATH - without it EGL context creation fails), `MUJOCO_GL=egl`. It reuses
+`MuJoCoDatasetRenderer._prepare` once per seed, writes `neck_yaw_joint` qpos (qposadr 6) and captures `head_camera` + `task_camera`.
+
+**Open limitation to carry forward:** the seed->condition mapping does not exist in any artefact; a declared plan (two seeds per
+class in the file's order; `no_cup`->0 cups, `two_cups`->2, else 1) is recorded as an assumption in HS-243, and the renderer can
+only express cup counts, so `low_light`/`partial_occlusion`/`fast_interruption`/`reacquire_after_stop` are labelled but not
+rendered differently.
+
+**Environment facts:** `TOOLCHAIN_RUN=$HEAD_EVIDENCE/head-toolchain-20260930T125445Z` (built rc=0; its `source-commit.txt` is
+stale, rebuild from scratch before citing it as frozen); `GEOMETRY_RUN=$HEAD_EVIDENCE/head-camera-probe11-20260930T101722Z`
+(seal `7d963fdc…`); campaign root `$HEAD_EVIDENCE/head-yolo-models-20260930T120608Z`; `HF_ROOT` with the token passed in from
+`/data/models/huggingface/token` (never printed); `no_proxy` needs the bracketed `[::1]` removed for `hf`/`httpx` (HS-181);
+training needs `--training-contract --head-dataset-root --head-manifest --task-dataset-root --task-manifest` **together**.
+
+**Deletion candidates (pending user authorization):** empty roots `head-toolchain-20260930T125637Z`/`…T125856Z`; superseded
+success roots `…T115640Z`/`…T115927Z`/`…T120204Z`; episode generations `episodes`, `episodes2`, `episodes3`, `episodes4` (each
+superseded by `episodes5`); `probe-calibration-*`; ~130 scratch dirs under the evidence root.
