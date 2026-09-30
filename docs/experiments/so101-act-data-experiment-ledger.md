@@ -36923,3 +36923,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4faa498b6`;
   gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1993 — Task 3: the readback exclusivity and coverage checks were attempted and reverted, with the next step
+
+- **What I tried.** Two small checks the fifth verdict names: readback refusing a reference record that
+  carries keys from **both** raw groups (admission already does, the optional-set handling did not), and
+  readback re-applying the formal coverage requirement (`AUDIT_FORMAL_COVERAGE_INCOMPLETE`) that `seal()`
+  enforces.
+- **Outcome: reverted.** The module changes were written, but my control failed repeatedly on its own
+  fixture construction — the same parent-directory mistake I have made before, and then a hand-crafted
+  "bare formal" audit whose manifest re-signing I did not get right within the round's budget. Rather than
+  leave a red suite or a check without a passing control, I restored both files to the last green revision
+  (`5739a39f1`) and verified: `logs/task3-fix40.run` rc=0, 135 passed in the audit and recorder suites.
+- **Exact next step, so the next pass does not rediscover it.** For exclusivity, extend the existing
+  re-signed-record parametrisation (which already builds a fresh sealed audit per case and works) with a
+  reference row carrying both groups, rather than writing a new standalone test. For the coverage gate,
+  build the bare formal audit by sealing a **formal** writer with no source rows — the seal gate refuses
+  that today, so the fixture must instead seal a diagnostic audit and then, if the check is wanted on
+  readback, derive the formal case from `_formal_writer` with its scope file swapped **before** sealing,
+  or expose the coverage check as a named helper tested directly.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `5739a39f1`;
+  gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
