@@ -1470,6 +1470,19 @@ def _sample_camera_document(
         raise ValueError(
             "HEAD_DATASET_CAMERA_IDENTITY_INVALID: the render reports a non-finite neck angle"
         )
+    observed_neck = float(render.neck_rad)
+    low, high = (float(value) for value in config.neck_yaw_rad or ())
+    if not low - 1e-9 <= observed_neck <= high + 1e-9:
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_NECK_UNSAFE: the render used neck "
+            f"{observed_neck}, outside the profile's declared range [{low}, {high}]"
+        )
+    lock = [float(value) for value in context["seal"].get("lock_valid_neck_rad") or []]
+    if len(lock) != 2 or not lock[0] - 1e-9 <= observed_neck <= lock[1] + 1e-9:
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_NECK_UNSAFE: the render used neck "
+            f"{observed_neck}, outside the sealed safe interval {lock}"
+        )
     quaternion_norm = math.sqrt(
         sum(float(value) * float(value) for value in render.camera_quaternion_wxyz)
     )

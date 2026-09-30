@@ -971,3 +971,37 @@ def test_head_camera_generation_refuses_a_non_finite_orientation(tmp_path: Path)
             geometry_seal=seal,
             renderer=_NanOrientation(_HeadFakeRenderer(seal)),
         )
+
+
+def test_head_camera_generation_refuses_a_render_outside_the_declared_neck_range(
+    tmp_path: Path,
+) -> None:
+    seal = _geometry_seal(mjcf_path=_write_head_scene(tmp_path))
+    config = _head_config(tmp_path, accepted_seal_sha256=seal["seal_sha256"])
+
+    class _OutOfRangeNeck:
+        def __init__(self, inner, neck_rad):
+            self.inner = inner
+            self.neck_rad = float(neck_rad)
+
+        def render(self, seed, scenario):
+            render = self.inner.render(seed, scenario)
+            position, quaternion = self.inner.pose
+            return replace(
+                render,
+                neck_rad=self.neck_rad,
+                camera_position_m=position,
+                camera_quaternion_wxyz=quaternion,
+            )
+
+        def close(self):
+            self.inner.close()
+
+    for neck_rad in (0.5, 6.283275307179586):
+        with pytest.raises(ValueError, match="HEAD_DATASET_CAMERA_NECK_UNSAFE"):
+            generate_dataset(
+                config,
+                tmp_path / f"neck-{neck_rad}",
+                geometry_seal=seal,
+                renderer=_OutOfRangeNeck(_HeadFakeRenderer(seal), neck_rad),
+            )
