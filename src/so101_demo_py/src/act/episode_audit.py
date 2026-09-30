@@ -23,6 +23,7 @@ import os
 from pathlib import Path
 
 from .acquisition import CAMERAS, canonical_acquisition_id
+from ..parallel_batch.contracts import ContractError, LeaseIdentity
 
 MANIFEST_KIND = "ACT_EPISODE_AUDIT"
 _METADATA_FILES = ("source.json", "inputs.json", "episode.json")
@@ -32,6 +33,11 @@ _SCOPE_MODES = ("formal", "preselected_target_diagnostic")
 # the plan names session/reset/release as part of the identity; the rest of the lease document is
 # recorded verbatim because the plan does not fix its key names here
 _IDENTITY_REQUIRED = ("session_id", "attempt_id", "reset_epoch", "release_epoch")
+# the registered lease contract, reused rather than re-specified: a formal episode must name the lease
+# it ran under, and its attempt must be the episode's attempt
+_LEASE_FIELDS = frozenset({"batch_id", "coordinator_epoch", "worker_id", "worker_generation",
+                           "point_id", "attempt_id", "lease_generation",
+                           "lease_issued_monotonic_s", "lease_deadline_monotonic_s"})
 _STREAM_NAMES = ("acquisitions.jsonl", "row-bindings.jsonl", "events.jsonl",
                  "references.jsonl", "physics.jsonl")
 SOURCE_KINDS = ("events", "references", "physics")
@@ -83,14 +89,24 @@ def _scope_ok(scope) -> bool:
         and _hex64(scope.get("inputs_sha256")))
 
 
-def _identity_ok(identity) -> bool:
-    return bool(
-        isinstance(identity, dict) and identity
-        and all(key in identity for key in _IDENTITY_REQUIRED)
-        and isinstance(identity.get("session_id"), str) and identity["session_id"]
-        and isinstance(identity.get("attempt_id"), str) and identity["attempt_id"]
-        and type(identity.get("reset_epoch")) is int and identity["reset_epoch"] >= 0
-        and type(identity.get("release_epoch")) is int and identity["release_epoch"] >= 0)
+def _identity_ok(identity, *, formal: bool = False) -> bool:
+    if not (isinstance(identity, dict) and identity
+            and all(key in identity for key in _IDENTITY_REQUIRED)
+            and isinstance(identity.get("session_id"), str) and identity["session_id"]
+            and isinstance(identity.get("attempt_id"), str) and identity["attempt_id"]
+            and type(identity.get("reset_epoch")) is int and identity["reset_epoch"] >= 0
+            and type(identity.get("release_epoch")) is int and identity["release_epoch"] >= 0):
+        return False
+    if not formal:
+        return True
+    lease = identity.get("lease")
+    if not isinstance(lease, dict) or set(lease) != _LEASE_FIELDS:
+        return False
+    try:
+        parsed = LeaseIdentity(**lease)
+    except (ContractError, TypeError, ValueError):
+        return False
+    return parsed.attempt_id == identity["attempt_id"]
 
 
 def _closed(record, fields: frozenset, code: str) -> dict:
@@ -142,7 +158,8 @@ class EpisodeAuditWriter:
         if not _scope_ok(scope):
             # a scope the frozen contract does not recognise may not open an episode audit
             raise ValueError("AUDIT_SCOPE_INVALID")
-        if not _identity_ok(identity):
+        if not _identity_ok(identity, formal=scope["mode"] == "formal"):
+            # a formal episode must name the lease it ran under, using the registered contract
             raise ValueError("AUDIT_IDENTITY_INVALID")
         if not inputs:
             raise ValueError("AUDIT_SCOPE_INVALID")
@@ -554,7 +571,8 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     inputs = json.loads((audit / "inputs.json").read_bytes())
     if (declared != identity or not _scope_ok(scope) or not _identity_ok(declared)
             or not isinstance(inputs, dict) or not _hex64(inputs.get("inputs_sha256"))
-            or inputs["inputs_sha256"] != scope["inputs_sha256"]):
+            or inputs["inputs_sha256"] != scope["inputs_sha256"]
+            or not _identity_ok(declared, formal=scope["mode"] == "formal")):
         # the manifest identity must be the identity the episode actually recorded, and the scope and
         # inputs payloads must be the closed documents they claim to be
         raise ValueError("AUDIT_METADATA_INVALID")

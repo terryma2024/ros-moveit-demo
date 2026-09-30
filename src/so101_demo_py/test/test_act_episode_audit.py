@@ -499,3 +499,31 @@ def test_readback_compares_the_scope_and_inputs_digests(tmp_path):
     _resign(writer, path, "inputs.json", payload)
     with pytest.raises(ValueError, match="AUDIT_METADATA_INVALID"):
         verify_audit_manifest(path)
+
+
+def _lease(**overrides):
+    lease = {"batch_id": "batch-1", "coordinator_epoch": 1, "worker_id": "worker-1",
+             "worker_generation": 1, "point_id": "point-1", "attempt_id": "attempt-1",
+             "lease_generation": 1, "lease_issued_monotonic_s": 100.0,
+             "lease_deadline_monotonic_s": 200.0}
+    lease.update(overrides)
+    return lease
+
+
+def test_a_formal_audit_requires_the_registered_lease_contract(tmp_path):
+    """The plan's formal scope needs the full lease; the contract already exists, so reuse it."""
+
+    formal = dict(scope(), mode="formal")
+    formal_identity = {**identity(), "lease": _lease()}
+    writer = EpisodeAuditWriter(tmp_path / "ok", formal, formal_identity, {"inputs_sha256": "a" * 64})
+    assert writer.identity["lease"]["batch_id"] == "batch-1"
+
+    with pytest.raises(ValueError, match="AUDIT_IDENTITY_INVALID"):
+        EpisodeAuditWriter(tmp_path / "no-lease", formal, identity(), {"inputs_sha256": "a" * 64})
+    for broken in (_lease(lease_deadline_monotonic_s=100.0), _lease(worker_generation=0),
+                   _lease(attempt_id="other-attempt"), _lease(batch_id="")):
+        with pytest.raises(ValueError, match="AUDIT_IDENTITY_INVALID"):
+            EpisodeAuditWriter(tmp_path / "broken", formal, {**identity(), "lease": broken},
+                               {"inputs_sha256": "a" * 64})
+    # a diagnostic audit stays admissible without a lease, keeping the modes distinct
+    EpisodeAuditWriter(tmp_path / "diagnostic", scope(), identity(), {"inputs_sha256": "a" * 64})

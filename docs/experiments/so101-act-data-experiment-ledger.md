@@ -35964,3 +35964,34 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   **T3-F5**: the fail-closed/non-formal eligibility and sealing gate once the raw producers are wired.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `388c13ddb`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1957 — Task 3 fix pass, twelfth instalment: the registered lease is required for formal audits (T3-F1)
+
+- **The lease contract is reused, not re-specified.** `act/episode_audit.py` now imports the registered
+  `LeaseIdentity` and `ContractError` from `parallel_batch/contracts.py` (the source the third verdict
+  named at line 184) and, when the scope mode is `formal`, requires the identity to carry a `lease`
+  document with exactly the nine registered fields. It constructs the contract so its own validation
+  applies (non-empty ids, positive generations and coordinator epoch, finite issue/deadline times and
+  `deadline > issued`) and requires the lease's `attempt_id` to be the episode's attempt. A formal audit
+  with no lease, a malformed one, or one describing a different attempt is refused with
+  `AUDIT_IDENTITY_INVALID`; readback re-applies the same requirement, so a checksum-consistent identity
+  cannot drop its lease.
+- **The modes stay distinct.** A `preselected_target_diagnostic` audit remains admissible without a
+  lease, which keeps the diagnostic path usable while the formal path is held to the plan's contract.
+- **Evidence.** `logs/task3-fix12.run` rc=0: **135 passed in 0.82 s** across
+  `test_act_episode_audit.py`, `test_act_recorder.py`, `test_act_release_boundary.py`,
+  `test_act_continuous_capture.py`, `test_act_supervisor.py` and `test_act_contracts.py`, with its own
+  NVMe scratch and a non-empty tempfile proof. Controls: formal without a lease, `deadline == issued`, a
+  zero worker generation, a lease describing another attempt and an empty `batch_id`, plus the positive
+  formal case and the diagnostic-without-lease case. One of my own runs was a pytest usage error because
+  I guessed a test filename; the corrected run is the pointer recorded here.
+- **Still open.** **T3-F1**: the window schema (source schedule, first command, physical end, label
+  cutoff) needs an **owner decision on its key names** before it can be enforced strictly — recorded as
+  an open question rather than silently accepted — and the raw controller/accepted-goal history,
+  source/receipt clocks, full physics payloads and the broker event kinds with typed validators still
+  wait on their producers. **T3-F4's remaining correlation** (audit identity versus seal identity, and
+  labelled bindings/count/times/actions versus recorder rows) and **T3-F5**'s fail-closed eligibility
+  and sealing gate follow them.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `014f30e4a`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
