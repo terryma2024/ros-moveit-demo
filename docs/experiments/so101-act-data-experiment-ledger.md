@@ -36881,3 +36881,22 @@ Its closing rule is correct and worth keeping: "If acceptance is intentionally n
 change to the acceptance contract; classifying failures does not itself waive a gate." Task 11 therefore stays
 `in_progress` with the enumerated work above, and the next step is to run the gates as written - starting with a
 single non-batched `-n 8` run per package and a full benchmark readback - rather than to argue the failures away.
+
+## HS-087 — The installed ordinary gate for so101_demo_py returned rc=2 without running tests (round 521)
+
+First result from the sequential installed-gate run:
+
+```
+Starting >>> so101_demo_py
+...
+1 package failed: so101_demo_py
+colcon test so101_demo_py rc=2
+```
+
+The log is 20 lines and contains only colcon's package-override warnings plus that verdict: **no test counts at
+all**, which means the gate failed *before* running the ordinary suite rather than reporting failures in it. That
+is a harness-level failure of the gate invocation, not a statement about the suite, and it stays open until the
+cause is identified - exactly the distinction the reviewer's point 2 insisted on, applied to my own gate.
+
+The sequence continues with the `so101_teleop` gate and then the explicit benchmark gate with its readback. Nothing
+about the ordinary gates is claimed from this step.
