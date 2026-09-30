@@ -36987,3 +36987,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `c2e873826`;
   gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1996 — Task 3 fix pass: the two new records join their parent by instant, with no new field (T3-F1)
+
+- **The fifth verdict asked for an explicit parent-step join and warned against manufacturing a field
+  later.** The join is the **instant**: a `planning_scene_observation` or any `controller_feedback` entry
+  whose `sim_time_s` differs from the parent observation's `simulation_time_s` is refused, so a record from
+  another readback cannot be attached to this one. That satisfies the join without adding a key the owner
+  has not ratified, and it is the rule the gate derivation needs — a gate can only be derived from a record
+  of the same instant.
+- **Evidence.** `logs/task3-fix43.run` rc=0 across `test_act_episode_audit.py`, `test_act_recorder.py`,
+  `test_act_release_boundary.py` and `test_act_continuous_capture.py`, with its own NVMe scratch and a
+  non-empty tempfile proof. Controls: an off-instant scene record and an off-instant feedback entry are
+  refused alongside the existing type, ordering, length and membership controls. My own naming mistake was
+  caught by the suite — two control cases shared a directory name because I derived it from the payload's
+  string length — and the directory is now named by index.
+- **Still open.** **T3-F1**'s producer side (the registered physics document still does not pass the real
+  boundaries, and nothing returns these records yet), **T3-F3**/**T3-F5** readback residuals (CP-1993's
+  recorded next step), **T3-F11** (window: observed schedule, frozen policy, labelled coverage), and
+  **A.1** awaiting the owner with the reviewer's clarification.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `6dcf82c72`;
+  gate `logs/task3-gate6.run` **399 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.

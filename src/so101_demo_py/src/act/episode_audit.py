@@ -341,11 +341,15 @@ def _physics_observation_typed(observation, *, kind: str) -> bool:
                            or not math.isfinite(item) for item in value)):
                 return False
         elif key == "planning_scene_observation":
-            if not _scene_observation_ok(value):
+            if (not _scene_observation_ok(value)
+                    or value["sim_time_s"] != observation["simulation_time_s"]):
+                # the record joins its parent observation by the instant, so no extra field is needed
                 return False
         elif key == "controller_feedback":
             if (not isinstance(value, list) or not value
-                    or any(not _feedback_ok(entry) for entry in value)):
+                    or any(not _feedback_ok(entry) for entry in value)
+                    or any(entry["sim_time_s"] != observation["simulation_time_s"]
+                           for entry in value)):
                 return False
         elif key in ("truncated", "diagnostic_hazard_breached"):
             if type(value) is not bool:

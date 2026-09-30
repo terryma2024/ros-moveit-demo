@@ -861,21 +861,23 @@ def test_the_planning_scene_and_feedback_records_are_validated(tmp_path):
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                      "observation": {**pose, "planning_scene_observation": scene,
                                                      "controller_feedback": feedback}})
-    for broken in ({**scene, "attached_objects": ["b", "a"]},
-                   {**scene, "scene_revision": -1},
-                   {**scene, "extra": 1},
-                   {**scene, "source": ""}):
-        other = EpisodeAuditWriter(tmp_path / f"bad-scene-{len(str(broken))}", scope(), identity(),
+    for index, broken in enumerate(({**scene, "sim_time_s": 1.2},
+                                    {**scene, "attached_objects": ["b", "a"]},
+                                    {**scene, "scene_revision": -1},
+                                    {**scene, "extra": 1},
+                                    {**scene, "source": ""})):
+        other = EpisodeAuditWriter(tmp_path / f"bad-scene-{index}", scope(), identity(),
                                    {"inputs_sha256": "a" * 64})
         with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
             other.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
                                             "observation": {**pose,
                                                             "planning_scene_observation": broken}})
-    for broken_feedback in ([{**feedback[0], "measured_positions": [0.1]}],
-                            [{**feedback[0], "controller": "neck"}],
-                            [{**feedback[0], "status_sequence": 0}],
-                            [{**feedback[0], "joint_names": []}]):
-        other = EpisodeAuditWriter(tmp_path / f"bad-fb-{len(str(broken_feedback))}", scope(), identity(),
+    for index, broken_feedback in enumerate(([{**feedback[0], "sim_time_s": 1.2}],
+                                             [{**feedback[0], "measured_positions": [0.1]}],
+                                             [{**feedback[0], "controller": "neck"}],
+                                             [{**feedback[0], "status_sequence": 0}],
+                                             [{**feedback[0], "joint_names": []}])):
+        other = EpisodeAuditWriter(tmp_path / f"bad-fb-{index}", scope(), identity(),
                                    {"inputs_sha256": "a" * 64})
         with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
             other.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
