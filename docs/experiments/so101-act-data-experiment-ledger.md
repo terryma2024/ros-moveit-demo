@@ -34298,3 +34298,88 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   fix and now the real phase path are all GREEN at their boundaries; the formal run remains blocked at the
   calibration/qualification pairing (CP-1919), whose bootstrap the gate6 provenance document itself records as having no
   producer in this repository.** **Task-list statuses: P1-1 in_progress, P1-6 completed, five pending.**
+
+---
+
+## HS-001 — antzb Head Search execution host registration (branch, HEAD, evidence root)
+
+- **Host-override registration, written before any Task 1 evidence exists.** The user moved Head Search execution off
+  ai-station to the Ubuntu host the handoff calls `antzb` and authorized this checkout. This session runs directly on that
+  host and does not SSH to `antzb` or to `ai-station`. Factual host note: `hostname` reports `AI-STATION-001`
+  (tailnet node `ai-station-001-lin`, 100.82.102.56); the tailnet node named `ai-station` (100.104.202.119) is a
+  different machine. This registration binds only the local checkout and the roots below.
+- **Worktree / branch / baseline, read-only at 2026-09-30T04:15:27Z:**
+  - worktree `/data/work/ws_moveit/.worktrees/so101-act-data-0917a`
+  - branch `codex/so101-act-data-0917a`
+  - HEAD `9386860dfed9bdfa840b7b51f061c299459bd390`, matching the handoff baseline
+  - `git status --short` empty; submodule `third_party/mujoco_ros2_control` clean at
+    `54463fce3bfa6192976e74113f5ed7152f708a3f`
+- **Registered durable evidence root for Head Search on this host:**
+  `/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m`
+- **Registered low-rate log root for Head Search on this host:** `/tmp/so101-debug-head-search-antzb-LuFlHq6a`
+- **fsync-heavy gate rule for this host:** every pytest/colcon run creates a previously nonexistent
+  `<durable root>/scratch/<run id>/tmp`, exports `TMPDIR`/`TMP`/`TEMP` to it, verifies with the exact test interpreter
+  that `tempfile.gettempdir()` resolves inside it, fails closed otherwise, and classifies the scratch tree as a deletion
+  candidate after readback. Nothing is deleted without explicit user authorization, and no `/data/work/so101-debug-*`
+  path is created.
+- **Binding documents, read in full before execution (SHA256):**
+  - handoff `.../20260930-antzb-head-search-krIv681m/handoff/head-search-antzb-task.md`
+    `18e841480d2daa091b0b5612cc1aaf5857e10f7518be46c3eeba73b4ef2dc787`
+  - design `docs/superpowers/specs/2026-09-30-so101-head-search-yolo-calibration-teleop-design.md`
+    `aff281eff32a834f3341567b7ca0cfb8be19e1566bb5b917f73640ff424a9e8d`
+  - plan `docs/superpowers/plans/2026-09-30-so101-head-search-yolo-calibration-teleop-implementation.md`
+    `da89624135daaf5db6fba0c9aeed0bbf06e827bb419c95e85ec19e7392e37c1d`
+  - this ledger immediately before this registration
+    `e838e0d3f0cae168d0be560f3ea65e61ec6da942c997b39c3e358b227eca6e0c`
+- **Boundaries carried over unchanged:** ai-station's root `/data/work/so101-evidence/act-data/20260924-fbc25063-resume`
+  belongs to another machine's in-flight Task 8 campaign and is neither used, moved, overwritten nor deleted. No push, no
+  fetch/rebase/merge after local edits, no real SO-101 command, no second ROS/MuJoCo/detector stack, one CUDA YOLO-Seg
+  detector with `allow_cpu_fallback=false`, Grounded-SAM excluded from Head Search. The complete `benchmark_test` suite
+  runs only at the Task 4 and Task 11 boundaries.
+- **Task list:** the DSH TUI visible task list carries the plan's Task 1–14 as 14 separate items with their boundaries and
+  completion conditions. Only item statuses change from here on.
+- **Source-import adaptation on this host, gate semantics preserved:** no built overlay for this worktree exists here, so
+  source-level targeted pytest gates expose the package source as `so101_demo` through a re-creatable alias
+  `<low-rate root>/pysrc/so101_demo -> <worktree>/src/so101_demo_py/src`. The plan's independent, dependency-closed
+  build/install/log triples still happen at the Task 4, 11 and 13 boundaries.
+- **Environment read-only facts:** `/usr/bin/python3` 3.12.3, pytest 7.4.4, `colcon`, `/opt/ros/jazzy`, `zsh` and `bun`
+  present; RTX 5080, driver 595.84; 24 logical CPUs; `/data` 230 GB free; no ROS/MuJoCo/Gazebo/MoveIt process running;
+  `ROS_DOMAIN_ID` and `GZ_PARTITION` unset. Known gap to close before the Task 11 `-n 8` gate: pytest-xdist is absent
+  from the system interpreter and from both existing venvs under `/data/work/venvs`.
+- **State:** **registered. Task 1 in progress; no Head Search code, test, or build has run yet.**
+
+## HS-002 — Task 1 complete: split, episode, and candidate identities (commit 86ccce49b)
+
+- **Boundary:** new `src/so101_demo_py/src/act/head_search_training.py` and
+  `src/so101_demo_py/test/test_act_head_search_training.py`; modified
+  `src/so101_demo_py/src/perception_benchmark/contracts.py` and
+  `src/so101_demo_py/benchmark_test/test_perception_benchmark_contracts.py`.
+- **RED before implementation, both intended files in one run:** rc 1,
+  `ModuleNotFoundError: No module named 'so101_demo.act.head_search_training'` and
+  `ImportError: cannot import name 'OperatingPoint' from 'so101_demo.perception_benchmark.contracts'`
+  (scratch `scratch/head-test-20260930T041719Z-wXpmDLKV`, with console log, JUnit XML, rc and
+  `interpreter-and-cpu.json`). Two earlier attempts (`...T041652Z-XkxUw2jO` rc 2, `...T041658Z-2vi0Jkz0` rc 1)
+  aborted at session level because ROS's `launch_testing` pytest plugin imports each collected module; they are
+  retained unchanged and are not counted as RED. `head_test` now runs pure contract gates with the worktree source
+  alone (`PYTHONPATH=<low-rate root>/pysrc`) so both files are collected and their missing symbols are named.
+- **GREEN:** rc 0, 55 passed, 0.09 s (`scratch/head-test-20260930T041909Z-1IpCHzBB`); earlier green runs at
+  intermediate content: `...T041752Z-2RJNu4q5`, `...T041827Z-XWCTx4Lk`.
+- **Targeted regression:** `test/test_frozen_candidate_evaluation.py`, a source-tree dependent of `contracts.py`,
+  9 passed rc 0 (`scratch/head-test-20260930T041809Z-IvCAWLMl`). The complete `benchmark_test` suite was not run:
+  the plan reserves it for the Task 4 and Task 11 boundaries.
+- **Implementation:** `OperatingPoint` (min_confidence, min_bbox_aspect, min_area_px2, tracking_iou) and
+  `canonical_sha256` join `perception_benchmark/contracts.py`; `HeadSearchSplitSeal`, `CandidateIdentity`,
+  `validate_scene_group_partition`, `validate_episode_seed_partitions` and the frozen document-key tuples live in
+  `act/head_search_training.py`. Exact keys, lowercase SHA256, finite values, unique `scene_group_id`, mutually
+  disjoint image splits and mutually disjoint calibration/held-out/qualification seed lists are each refused by
+  name, and no identity carries a Grounded-SAM field.
+- **Lint:** both new files pass `ruff check` (0.15.20, repository config) and `ruff format --check`. In the modified
+  benchmark test file the import block gains exactly the two new names; its `I001` was already present at HEAD
+  (confirmed through `ruff check --stdin-filename` on the HEAD bytes) and unrelated pre-existing lines were left
+  alone instead of mass-reformatting a shared file.
+- **Commit:** `86ccce49b9d89f231ed77ad6c364df19588ab845`, exactly the four planned paths, 588 insertions, no
+  unrelated staging. The ledger itself was not part of that commit.
+- **Evidence classification:** retained under `20260930-antzb-head-search-krIv681m` (handoff, scratch trees, logs).
+  Deletion candidates: the eight `scratch/head-test-*` trees from Task 1. Nothing deleted, nothing pushed, no real
+  SO-101 command, no ROS/MuJoCo stack started, `ROS_DOMAIN_ID`/`GZ_PARTITION` still unset.
+- **Next:** Task 2 Step 1 RED tests for the production head-camera view, safe geometry, exact counts and camera identity.
