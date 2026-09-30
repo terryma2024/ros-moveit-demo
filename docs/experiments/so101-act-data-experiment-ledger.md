@@ -40672,3 +40672,23 @@ names and only the consumer's code defines.
 
 Also visible in this run: numpy `invalid value encountered in divide` warnings - the paired bootstrap computing on frames for a
 domain it found empty, i.e. a symptom of the same cause rather than a separate defect.
+
+## HS-240 — Both episode domains recorded; the gate is running past every earlier refusal
+
+The gate's second domain refusal (`no task held_out_evaluation frame was recorded`) confirmed HS-239's reading directly, so the
+recorder was rewritten to capture **both** domains per step - `head_camera` and `task_camera` at each neck angle - and to tag
+every frame with `domain` and `split`:
+
+```
+record_episodes.py … calibration       -> 20 files, rec rc=0, domains ['head','task']
+record_episodes.py … held_out_evaluation -> 20 files, rec rc=0, domains ['head','task']
+frames per seed: 3 angles x 2 domains = 6, each with detections + latency_ms for A, B and C
+```
+
+**Goal budget extended by the user to 3000 rounds** (revision 7, active, armed), so work continues without a cap pause.
+
+The gate is now running against `episodes3/held_out_evaluation` and has **not refused within ten minutes** - the first time it
+has survived its own contract checks long enough to measure and bootstrap, which is what the earlier failures (output path,
+weights location, absolute partitions path, episodes present, latency key, ultralytics importable, head domain, task domain)
+were each blocking. Its wait became background job `bash-2423`; the verdict will be read from `$MODEL_RUN/evaluation` and
+`compare3.log` when it lands, not polled for.
