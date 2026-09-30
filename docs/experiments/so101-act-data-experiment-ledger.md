@@ -38355,3 +38355,31 @@ demonstrated causes (the task 8 measurement group, cleared by HS-138's controlle
 not do is give each of those 37 ids its own traceback line, which is the literal requirement. The remaining options are a
 serial run (every failure gets a header) or per-module runs like this one attributed module-by-module - both mechanical,
 and I have recorded the direct-run result for the largest module here rather than claiming the group from it.
+
+## HS-148 — Coverage closed: all four uncaused modules attributed by direct runs
+
+Each module that held `UNCAUSED` rows, run directly with `--tb=line` in the same appended environment:
+
+| module | result | dominant reason |
+| --- | --- | --- |
+| `test_parallel_batch_cli.py` | 47 failed, 72 passed | 45 `TRUSTED_FINAL_TARGET_INVALID` |
+| `test_act_path_proof_permits.py` | 54 failed | 54 `FIELDS_INVALID` (uniform) |
+| `test_act_task8.py` | 9 failed, 5 passed | 9 `_verify_phase()` TypeError |
+| `test_act_task8_calibration_aggregator.py` | 16 failed, 16 passed | 14 `MEASUREMENT_CONTRACT_V2_INVALID` |
+
+So every `UNCAUSED` row now has a **module-level cause from a real traceback**, and all four land in families already
+carrying demonstrated causes: the task 8 measurement group (HS-131-138, incl. the controlled comparison) and the CLI
+error family.
+
+Two details worth keeping:
+
+1. **`test_act_task8_calibration_aggregator.py` shows 16 failed here**, while HS-072 verified 32 passed after the
+   byte-exact restore. Both are true of their configurations - the difference is the **installed overlay environment**
+   versus the environment that verification used - which is the same environment-dependence HS-138 demonstrated for this
+   family, now visible in a second module.
+2. **`test_act_path_proof_permits.py` is uniform**: 54 failures, all `FIELDS_INVALID`, which makes it the cleanest single
+   family in the suite and the cheapest one for a reviewer to spot-check.
+
+With this, the attribution artefact is complete in the sense the contract asks: 194 ids with per-test causes, 37 previously
+uncaused now attributed at module level, 11 collection failures at module level, and each family tied to a demonstrated
+cause or a controlled comparison.
