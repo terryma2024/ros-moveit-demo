@@ -39626,3 +39626,27 @@ fix is **not** to change flags but to call the right tool.
 Step 4 will be driven through `so101_head_search_calibration run` for registration and calibration, and Step 5 through
 `evaluate_head_search_yolo_candidates compare`, with that mapping written down here. Adding `register`/`calibrate`
 subcommands to satisfy one invocation's spelling would duplicate an existing, tested code path.
+
+## HS-198 — Correction to HS-197: `so101_head_search_calibration run` is Task 13's runtime, not Task 12's Step 4
+
+Probed it instead of assuming, and the CLI refused with its own boundary:
+
+```
+ros2 run so101_demo_py so101_head_search_calibration run --run-root <fresh>
+-> HEAD_SEARCH_RUNTIME_REQUIRED: the frozen runtime belongs to Task 13
+```
+
+So `run` is **Task 13's** frozen-runtime entry point, guarded by an explicit refusal, and it is **not** a substitute for the
+plan's Step 4. HS-197's mapping was therefore wrong on that half, and I am correcting it rather than leaving it to mislead.
+
+**What that means for Step 4, stated plainly:** the plan's `evaluate_head_search_yolo_candidates register` (register A from the
+pinned weights) and `… calibrate` (freeze each candidate's operating point on val/calibration episodes into
+`frozen-{a,b,c}.json`) have **no implemented equivalent in this work**. The installed evaluator offers only `compare`, which
+*consumes* frozen candidates; nothing produces them. So Task 12 Step 4 is not a matter of finding the right flags or the right
+tool - it is **code that has not been written**.
+
+That is a genuine gap in what Task 11's toolchain frozen, and it is a different statement from every other mismatch in this
+chain: HS-175/188/191/196 were spelling differences, HS-197 was a wrong-tool guess, and this is **missing capability**. The
+honest next step is to say so rather than to keep probing for a subcommand that does not exist, and to decide with the user
+whether Task 12's Step 4 is implemented now or whether the campaign stops at the point where the plan's own toolchain no
+longer suffices.
