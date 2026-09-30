@@ -39271,3 +39271,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the
   verifier's three increments landed. HEAD `08b487ad6`; targeted gate `logs/task3-final.run` **430 passed**; no
   push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2101 — Fifth attempt aborted before writing: relative line numbers from a grep window are not absolute
+
+- **What happened.** I located `FakePort`'s phase methods with `grep -n "class FakePort" -A 80`, whose printed
+  numbers are **relative to the matched window** (16, 22, 39, 46, …), then treated them as absolute line numbers
+  when patching. The first guard assertion failed immediately — line 77 of the real file is
+  `self.calls.append(("set_down", None))`, not `def run_phase` — and because the script writes only after every
+  assertion passes, **nothing was modified**; both suites re-ran unchanged (`4 failed, 48 passed`).
+- **The lesson, now recorded**: never carry offsets out of a `grep -A`/`sed` window into a patch. Print the
+  absolute lines (or locate by structure inside the script) and assert them first, which is exactly what the
+  guard did here — the abort is the mechanism working, not a failure of the fix's design.
+- **What remains is still the two-line edit** described in CP-2100: give `FakePort`'s **phase** and **retreat**
+  document returns the minimal `physical_observation` block (not `set_down`, whose document refuses the key,
+  CP-2091), with the runner's `_missing_raw` list as the oracle. Its absolute line numbers must be printed first.
+- **Score for this stretch, stated honestly**: five fixture attempts, all reverted or aborted
+  (CP-2091/2092/2096/2099's diagnosis/this one), each narrowing the target and each now recorded with its reason.
+  The remaining work is small and fully specified; it needs an executioner with room to read two lines
+  absolutely and run three suites.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress with the
+  verifier's three increments landed. HEAD `7223aa746`; targeted gate `logs/task3-final.run` **430 passed**; no
+  push, no evidence deletion, no hardware, no second stack.
