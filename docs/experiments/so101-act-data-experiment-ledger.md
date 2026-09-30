@@ -35860,39 +35860,6 @@ env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHO
   as it is.
 
 
-## RESUME POINT (updated every checkpoint, read this first)
-
-- **Where:** worktree `/data/work/ws_moveit/.worktrees/so101-act-data-0917a`, branch
-  `codex/so101-act-data-0917a`, host antzb (`AI-STATION-001`). Nothing is pushed; no real SO-101 is
-  touched; no second ROS/MuJoCo/detector stack is started. Evidence root:
-  `/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m`; low-rate scratch:
-  `/tmp/so101-debug-head-search-antzb-LuFlHq6a` (shell helper `head-test-shell.sh`).
-- **Tasks 1-3: completed and review-approved** (Task 2 with findings, all fixed; Task 3 with findings, all
-  fixed). Ledger HS-001 to HS-015.
-- **Task 4: implemented; five reviews have been returned and every finding fixed.** The fifth verdict's
-  two blockers are fixed (`cad8a5426` task-domain sealed document, `cc07e5424` mandatory seals with the
-  pinned 200-sample test split verified against 3,623 published sums) along with two of its residuals
-  (`9a8fe355e` weights verified before datasets/episodes and every latency validated; `bcda8550a` import
-  fix). A sixth verdict is requested at `reviews/task4/task4-sixth-review-request.md` with the output
-  expected at `reviews/task4/task4-sixth-verdict.md`.
-  Code: `src/perception_benchmark/head_search_models.py`, `src/cli/evaluate_head_search_yolo_candidates.py`,
-  `benchmark_test/test_head_search_model_evaluation.py`, `setup.py`. Findings and fixes: HS-018 (rejection
-  and plan), HS-019 (rework and real-artifact verification), HS-020 (second verdict, fixes, host items),
-  HS-021 (third verdict's P1 and the process correction). Gates: benchmark suite 22 passed; ordinary
-  suites 99 passed, 1 skipped; `ruff check` clean. Host items explicitly NOT claimed and owned by Task 11:
-  the `mujoco_vendor` fresh closure never completed, and the benchmark gate is not green (62 pre-existing
-  environment failures); console-script provenance is also a Task 11 item.
-- **Next actions in order:** (1) obtain `reviews/task4/task4-fourth-verdict.md` from the running
-  execute-first reviewer session (`codex-review8`) and fold in any finding; (2) mark Task 4 completed and
-  Task 5 in_progress in the visible list; (3) implement Task 5 exactly as HS-017 specifies -
-  `bounded_search_stops(...)` visiting the nearer required-domain endpoint first and reversing once,
-  coverage proven by stable FOV intervals rather than accumulated angle, every target and segment passing
-  the calibration binding and an independent sweep checker, and rejection before motion when the safe
-  interval cannot cover the required domain, with the three exact statuses; (4) request each later task's
-  review from a fresh per-task reviewer session with a short, execute-first brief.
-- **Reviewer tooling note:** long-lived `codex` sessions accumulate context and stall; a fresh session per
-  task with a short brief, and an explicit instruction to *execute* the checks rather than read only, is
-  the pattern that has produced decisions.
 
 ## HS-022 — Fourth verdict: replays executed, tracker-IoU finding fixed (commit b64aeba38)
 
@@ -39921,3 +39888,34 @@ the plan's sha256 pin exists to guarantee.
 `freeze_candidate` producer is written and schema-checked against the gate (HS-205/207), and the operating-point selection
 policy is fixed in advance (HS-208). What remains is the val-split grid measurement that chooses `min_confidence` and
 `tracking_iou`, then the three `freeze` calls and Step 5's `compare`.
+
+## RESUME POINT (written at HS-209; supersedes every earlier one)
+
+**Task status:** 1-11 completed (Task 11 approved with findings, 16 verdicts). **12 in_progress.** 13-14 pending.
+
+**Task 12 progress:** Steps 1-3 complete and verified - pinned A weights sha256-verified (`f281d25258493e2c…`), 1200-image head
+dataset generated + verified `rc=0`, candidates B and C trained serially `rc=0` (`device=cuda`, same frozen base, distinct
+weights, C at 800 head/800 task 1:1). Step 4 partially implemented: `register_candidate` and `freeze_candidate` written in
+`src/so101_demo_py/src/act/head_search_candidate_freeze.py` (`7fb6825c7`, `c5156c1cf`); A registered with the pinned digest
+(HS-209); B/C manifests exist from training. The frozen-candidate contract, its two-schema contradiction with the plan, and
+the operating-point selection policy are recorded in HS-201/202/205/207/208 - read those before writing more.
+
+**Next actions, in order:**
+1. implement the val-split grid measurement of HS-208 (18 cells, zero-false-candidate gate, head mask-map first), then
+   `freeze_candidate` for A/B/C into `frozen-{a,b,c}.json`;
+2. Step 5: `ros2 run so101_demo_py evaluate_head_search_yolo_candidates compare --candidate frozen-*.json …`;
+3. Step 6: append and commit the model decision checkpoint;
+4. Task 13 pauses for the user's explicit approval of the exact 17-value bundle before anything is promoted.
+
+**Environment facts that cost time to learn:** `TOOLCHAIN_RUN=$HEAD_EVIDENCE/head-toolchain-20260930T125445Z` (built `rc=0`, but
+its `source-commit.txt` is stale and it predates later fixes - rebuild from scratch before citing it as frozen);
+`GEOMETRY_RUN=$HEAD_EVIDENCE/head-camera-probe11-20260930T101722Z` (seal `7d963fdc…`); campaign root
+`$HEAD_EVIDENCE/head-yolo-models-20260930T120608Z`; `HF_ROOT=$HEAD_EVIDENCE/models/huggingface` with the token passed in from
+`/data/models/huggingface/token` (never printed); `no_proxy` needs the bracketed `[::1]` removed for any `hf`/`httpx` command
+(HS-181); training takes `--training-contract --head-dataset-root --head-manifest --task-dataset-root --task-manifest`
+**together** (HS-190); the source layout is `src/act` while the installed layout is `so101_demo/act`, so a temporary shim is
+needed to run a module straight from the worktree.
+
+**Deletion candidates (pending user authorization):** empty roots `head-toolchain-20260930T125637Z` and `…T125856Z`; the
+superseded success roots `…T115640Z`, `…T115927Z`, `…T120204Z`; ~130 scratch dirs under the evidence root; the
+`probe-calibration-*` dir.
