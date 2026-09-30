@@ -37687,3 +37687,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and a staging rule written into the handoff so it is not repeated.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2028 — Task 3: producer step 2's additive half, and the owner's two decisions
+
+- **Owner decisions recorded**: continue converging Task 3 (the producer wiring), and leave the 46 swept
+  lines as they are — history keeps them, the ledger and handoff state the attribution difference, and no
+  history is rewritten.
+- **What landed.** `_search_evidence` now carries `planning_scene_observation` into the SEARCH document when
+  the observation it is built from supplies it, using a conditional unpack so the document is unchanged when
+  nothing supplies the field. This is deliberately **additive**: `planning_scene_ok` keeps its documented
+  interim value, so the six acceptance tests stay green, and step 3 is what turns that value into a
+  derivation. The audit already refuses a record whose fields or instant disagree, so a malformed supply
+  fails closed rather than travelling.
+- **Evidence.** `logs/task3-step2.run` rc=0 across the search-port, three task8 phase, release-boundary,
+  supervisor and audit suites under `pytest-xdist` with 8 workers, with its own NVMe scratch and a non-empty
+  tempfile proof.
+- **Next**: step 2's producer half (the readback that establishes the gates returns the record and the
+  simulation instant) and then step 3, whose acceptance set and fail-closed controls are already baselined
+  (CP-2024) and specified (CP-2017/CP-2021).
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `685675740`;
+  targeted gate `logs/task3-gate10.run` **412 passed**; no push, no evidence deletion, no hardware, no second
+  stack.

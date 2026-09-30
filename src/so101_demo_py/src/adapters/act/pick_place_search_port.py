@@ -409,6 +409,12 @@ class PickPlaceSearchPhasePort:
             "planning_ok": True,
             "controller_reference_ok": True, "joint_feedback_ok": True,
             "contact_ok": True, "mujoco_ok": True,
+            # CP-2017 step 2, additive half: when the readback that established these gates carries the
+            # ratified Planning Scene observation, it travels with the document so the gate can be derived
+            # from it. Nothing supplies it yet, so the gate below keeps its documented interim value and
+            # step 3 flips it to a derivation; the audit refuses a record whose instant or fields disagree.
+            **({"planning_scene_observation": observed.planning_scene_observation}
+               if getattr(observed, "planning_scene_observation", None) is not None else {}),
             "planning_scene_ok": True, "head_rgb_ok": True,
             "wrist_rgb_ok": True, "manual_intervention": False,
             "moveit_recovery": False, "holding_state": "EMPTY",
