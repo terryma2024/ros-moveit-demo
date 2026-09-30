@@ -38397,3 +38397,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `ba29dc02a`;
   consolidated gate `logs/task3-gate15.run` **419 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2060 — Milestone verified at HEAD `42d8ac443`: 419 passed in 10.47s, and the handoff updated
+
+- **Gate.** `logs/task3-gate16.run` rc=0: **419 passed in 10.47s** across the checkpoint's twenty files plus the observer
+  suite, under `pytest-xdist` with 8 workers on 32 CPUs, with its own NVMe scratch and a non-empty tempfile
+  proof.
+- **Milestone.** Twelve gates on the live path are derived from observations and none is asserted — the
+  boundary helper's four and the SEARCH document's eight (CP-2029 … CP-2059) — each with its source named in
+  the ledger, two of them with three-way controls (CP-2036, CP-2044) and all of them behind the runner's
+  existing `_EVIDENCE_GATES` refusal.
+- **Handoff updated** with the same statement, the three documented choices and the four open items, so a
+  reader who starts from the handoff sees the milestone and what it does not cover.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** No push, no evidence
+  deletion, no hardware, no second stack.

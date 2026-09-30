@@ -168,3 +168,22 @@ An empty diff means the file is safe to stage whole. The backups are flattened a
 - Producer change's acceptance set (CP-2024), all green today by name: the micro-lift, release and
   radial-retreat tests in `test_act_task8_motion_phases.py`, the dispatch test in
   `test_act_task8_close_execution.py`, and the final-check pair.
+
+---
+
+# UPDATE 2026-09-30 (milestone) — no gate is asserted on the live path any more
+
+At HEAD `42d8ac443`, consolidated gate `logs/task3-gate16.run` **419 passed in 10.47s** (xdist, 8 workers on 32 CPUs):
+
+- **Twelve gates are derived from observations the search established**, and neither the boundary helper nor
+  the SEARCH document asserts one: the path proof (`planning_ok`), the reference verifier's own proof
+  (`controller_reference_ok`), the verified scene receipt (`planning_scene_ok`), the ratified controller
+  records at the world's instant (`joint_feedback_ok`), the contact evidence's step join (`contact_ok`),
+  the world not being truncated (`mujoco_ok`), the search result's own verdict (`planning_ok` in the
+  document) and each camera's stamp freshness (`head_rgb_ok`/`wrist_rgb_ok`).
+- **Three documented choices** were made where the plan did not decide, each revisitable in one place:
+  `scene_revision` is the scene port's own read counter (CP-2020), `status_sequence` is the broker's own
+  feedback-read counter (CP-2040), and the camera gates are freshness (CP-2059).
+- **Still open for Task 3**: the full `planning_scene_observation` record's travel once the readback fills
+  it; three-way controls for the gates that lack them; T3-F11's window-to-rows checks (CP-1997/CP-2001); then
+  a fresh checkpoint. Tasks 4-8 have not started, and the four real input roles still need approved values.
