@@ -39306,3 +39306,19 @@ Three separate facts, and they must not be merged:
 **Next step, specific:** re-run the auth check and the download **with the original `HF_HOME`** (so the token is found) while
 keeping the `no_proxy` workaround (HS-181), and re-download with retries so `rc=0` means complete rather than partial. The
 already-verified `best.pt` is kept either way - it is evidence, and its digest is already checked.
+
+## HS-183 — Auth fixed without moving the plan's `HF_ROOT`: carry the token in, redacted
+
+```
+token file: /data/models/huggingface/token   (present)
+HF_HOME=<evidence root>/models/huggingface + HF_TOKEN=<from that file>  ->  ✓ Logged in   user: zjumty
+```
+
+So the plan's own `HF_ROOT="$HEAD_EVIDENCE/models/huggingface"` **can** satisfy `hf auth whoami` - my HS-182 failure was
+purely that overriding `HF_HOME` moves the token store with it. The fix is to **pass the token** from the host's existing
+store into the process, not to relocate the cache back out of the evidence root: the plan's durable-storage intent survives,
+the credential stays where the host keeps it, and nothing is written to disk that contains it. The token value is never
+printed or logged; `hf-auth-retry.txt` records only the tool's own output.
+
+Remaining Step 1 item: a **complete** download (`rc=0`), since the first attempt verified `best.pt` by sha256 but ended on an
+`httpx.ReadTimeout` for a sibling file. Re-running with the token in place, and with the already-verified `best.pt` retained.
