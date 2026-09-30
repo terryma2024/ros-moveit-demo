@@ -37026,3 +37026,26 @@ for the earlier seal. The refusal message is the specification for whichever rou
 
 Worth noting: the first two invocations failed for my own reasons (`--anchors` is not a flag; `--contract` was
 missing), so this finding only appeared on the third attempt with the correct arguments.
+
+## HS-093 — Why the final-seal smoke refuses, read from the code (round 693)
+
+`cli/head_search_smoke.py` resolves the coarse step in a two-branch chain (lines 78-99):
+
+1. **Contract branch** - used only if the contract's `accepted_seal_sha256` (or the declared seal) equals the seal's
+   `seal_sha256`; the step then comes from `contract["coarse_step_candidate_rad"]` or `contract["coarse_step_rad"]`.
+2. **Seal branch** - otherwise from `seal["camera"]["coarse_step_rad"]` or `seal["coarse_step_candidate_rad"]`.
+3. If both are empty: `HEAD_SEARCH_DOMAIN_INVALID`, the refusal in HS-092.
+
+Reading the actual documents explains the refusal exactly:
+
+- the tracked contract `config/act/head-search-calibration-contract-v1.json` declares **no** `accepted_seal_sha256`
+  (it has no seal field at all), so branch 1 is never taken;
+- its `coarse_step_rad` entry is a **parameter declaration** (with `formula_id` and `consumer_field`), not a numeric
+  value, so it would not be usable as a step even if the branch were taken;
+- the final seal has no `camera.coarse_step_rad`, so branch 2 is empty.
+
+So the gap is precisely: **nothing in the sealed or tracked set binds the final seal to a concrete coarse step.**
+Fixing it means either recording the step beside the geometry in the seal, or letting the smoke take the declared
+value from the promotable head-search config (`config/mujoco/act/head_search_v2.json`, Task 8's 17-value bundle)
+rather than from the calibration contract's *declaration* document. That is a design choice on a boundary the plan
+cares about, so it is recorded for a deliberate change with tests - not patched at the end of a round.
