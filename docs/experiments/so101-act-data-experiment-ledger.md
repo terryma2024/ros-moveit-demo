@@ -38853,3 +38853,31 @@ a **fresh** root is built with the vendored five ignored
 sourced underlay - the form that already succeeded at HS-142 (`rc=0`, three packages, empty bases). The `source-commit.txt`
 in the new root is written **before** its build, as Step 2 specifies, so the commit stamp belongs to the build that produced
 the install.
+
+## HS-167 — The toolchain build's real blocker is `empy`, not the vendored stack
+
+The corrected build failed fast (1.38 s) at `so101_mujoco_support`, and the traceback names the cause precisely:
+
+```
+CMake Error at /opt/ros/jazzy/share/rosidl_adapter/cmake/rosidl_adapt_interfaces.cmake:57 (message):
+  ... returned error code 1:
+  ModuleNotFoundError: No module named 'em'
+```
+
+`em` is the `empy` module that `rosidl_adapter` needs to generate interface code. The plan's Step 2 passes
+`-DPython3_EXECUTABLE="$HEAD_PYTHON"`, and **`$HEAD_PYTHON` (the perception venv) does not have `empy`** - so rosidl
+generation fails inside `so101_mujoco_support`, which is why the failure is 1.4 s rather than a compile error.
+
+This also explains why HS-142's closure build **succeeded**: it did not pass `-DPython3_EXECUTABLE`, so CMake used a Python
+with `empy` available. The difference between a passing and a failing toolchain build here is one CMake variable, not the
+vendored packages.
+
+**Options, for the record rather than for a silent choice:**
+
+1. add `empy` to the perception venv (a one-package install into the venv this task already owns) and keep the plan's
+   `-DPython3_EXECUTABLE`; or
+2. build with the interpreter that already has `empy` and record that deviation from Step 2's exact line, as with the
+   vendored-package ignores.
+
+Option 1 keeps the plan's command intact and is a build-time-only dependency, so it is the smaller deviation - but it does
+modify the venv, and that is the sort of change this ledger records rather than performs quietly.
