@@ -38451,3 +38451,30 @@ strictest reading. **Not one id is `CODE_DEPENDENT`**, so no residual failure in
 controlled comparison cannot classify them at test level. Those are precisely the collection-level cases already
 attributed at **module** level in HS-148/149 (and the 11 modules in HS-122's XML), so the coverage is closed in two
 layers - per-id where a test runs, module-level where collection fails - and the split is visible in the artefact.
+
+## HS-152 — The 18 CHECK rows are also not code-dependent: they error identically in both installs
+
+Inspecting rather than leaving them in an unexplained bucket:
+
+```
+CHECK rows: 18, across 9 modules
+  both columns show "1 error in ..." -- i.e. base install AND overlay both fail at collection, identically
+  top modules: test_task8_child_driven_case (5), test_act_task8_live_owner_composition (3),
+               test_act_task8_approach_checker_wiring (3), test_installed_provenance (2), plus 5 singles
+```
+
+So `CHECK` was my own conservative label for "neither pass nor fail", and the data says something stronger: those ids
+**error in both installs**, which is the same controlled evidence as `BOTH_FAIL` - the failure does not vary with the code.
+The correct classification is therefore:
+
+| verdict | ids |
+| --- | --- |
+| fails with base code too (`BOTH_FAIL`) | 213 |
+| errors with base code too (`BOTH_ERROR`, formerly `CHECK`) | 18 |
+| **depends on this work's code** | **0** |
+| total residual ids classified | **231** |
+
+That closes clause (c) at the strictest reading the reviewer has asked for: every residual id carries a **controlled
+comparison** showing it behaves identically under the base code, and none is code-dependent. The module-level
+attribution in HS-148/149 explains *why* they fail (the families), and this table demonstrates *that it is not this work*
+- two different questions, answered by different evidence, both now on disk.
