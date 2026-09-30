@@ -34817,3 +34817,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - The low-rate root `/tmp/so101-debug-head-search-antzb-LuFlHq6a` holds the reviewer probes, the shell
   helper, the `pysrc` source alias, the cached `pytest-xdist`/`execnet` wheels and the candidate probe
   scripts; it is scratch by definition and is reported separately.
+
+## HS-015 — Task 3 APPROVED WITH FINDINGS and its finding fixed (commit 50500e668)
+
+- **Deciding verdict:** `reviews/task3/task3-rereview-verdict.md`, written by a third, time-boxed session
+  (`codex-review3`, **GPT-6.1-Sol / high**, the model the user assigned to reviews). It judged all nine
+  findings from the two rejections **CLOSED** on the current HEAD - findings 1, 2, 5, 6 and 8 on source it
+  read itself, and findings 3, 4, 7 and 9 partly on the recorded integration evidence in HS-009 to HS-013.
+  It recorded its own limits honestly: it did not re-run the gate, did not check the smoke artifacts on
+  disk, and did not finish fresh adversarial reproductions, so "closed" is an implementation decision on
+  available evidence rather than an independent reproduction of every fix.
+- **Its one residual code finding, fixed here:** the layout and stem checks iterated
+  `{**train_pairs, **val_pairs}`, and the merge replaced each training entry with its validation entry, so
+  only the validation split was checked. Both splits are now checked (commit `50500e668`), with a test
+  that an unpaired training sample is refused with `CANDIDATE_SOURCE_UNPAIRED` and leaves no output root.
+- **Gate at this checkpoint (re-run, not historical):** **104 passed, 1 skipped** across the training,
+  container, Task 1 and dataset suites plus **86 passed** on the Task 2 render gate; `ruff check` clean.
+  This answers the verdict's first residual uncertainty with a fresh result rather than a retained claim.
+- **Task 3 closed.** B and C both materialize and train on CUDA with the pinned A weights; the frozen
+  composition, the two-domain score, the earlier-epoch tie rule and the candidate seal are implemented
+  and demonstrated; the plan binds its recipe, its verified datasets and A's weights; the toolchain
+  refuses drift, aliasing, escapes, traversal and re-runs. Task 4 (the two benchmark gates and the A/B/C
+  verdict) is next, with its interface already pinned in HS-011.
