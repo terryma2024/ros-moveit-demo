@@ -42675,3 +42675,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   in CP-2251…CP-2255.
 - **State.** **F14 closed**; F3 (a)(b)(c) landed with this control one write away; F1/F5/F11/F12/F13 open; the goal is
   paused. HEAD `60f6abd40`; eighteen gates green.
+
+
+## CP-2256 — F3's positive control: the formal identity is fenced to its lease
+
+- **Two attempts, one conclusion**: a formal identity is refused with `AUDIT_IDENTITY_INVALID` unless it is
+  `{**identity(), "lease": _lease()}` **verbatim** — aligning `attempt_id` with this file's request (`"a"`) breaks
+  it, so the audit fences the identity's session/attempt against the lease it carries (or against `identity()`'s own
+  values). The runner in turn fences its **begin evidence** against the request, which is why moving the override to
+  the request produced `BEGIN_EVIDENCE_INVALID` instead.
+- **The route that satisfies both fences at once**: keep the writer exactly as the audit suite builds it
+  (`{**identity(), "lease": _lease()}`) and make the **port** agree with it — wrap `FakePort.begin` so its evidence
+  carries `identity()`'s `session_id`/`attempt_id` and the same epochs — rather than editing the writer or the
+  request. `_lease()`'s own fields (printed alongside this entry) are then the only thing left to match, and if it
+  names a worker/attempt the begin wrapper mirrors those too.
+- **Reverted**; the release-boundary suite is green (14 passed).
+- **State.** **F14 closed**; F3 (a)(b)(c) landed, its positive control now blocked only by the two fences above with
+  the wrapper named as the route; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `90f65cad5`; eighteen gates green.
