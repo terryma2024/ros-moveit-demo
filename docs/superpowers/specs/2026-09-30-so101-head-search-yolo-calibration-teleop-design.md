@@ -100,9 +100,9 @@ Teleop 订阅同一个 frame envelope 和检测结果。它不是第二套 Head 
 
 数据生成使用生产 head camera 和 MuJoCo 实例真值。Grounded-SAM 不参与生成标签、补标、筛选或复核。
 
-划分单位是 scene seed。属于同一场景的相邻帧不得分散到不同 split，以免 val/test 被近重复画面污染。train、val、test 的 seed 清单在采集前冻结，并写入 dataset manifest。
+划分单位是跨 camera domain 统一的 `scene_group_id`，不能只看单张图片或局部 seed。属于同一 MuJoCo 世界状态的 head-camera、task-camera 和相邻帧必须进入同一个 split，以免同一场景从一个 camera domain 泄漏到另一个 domain 的 val/test。train、val、test 的 `scene_group_id` 和 seed 清单在采集前冻结，并写入 dataset manifest；校验器发现任一 group 跨 split 时直接拒绝数据集。
 
-1200 张图片用于模型训练与离线评测。tracker、frame freshness 和闭环搜索使用另一组连续 episode；这组 episode 不计入 1200 张图片，也不混入模型 test 指标。
+1200 张图片用于模型训练与离线评测。tracker、frame freshness 和闭环搜索另设互不重叠的 `calibration episodes`、`held-out evaluation episodes` 和最终 40 个 `qualification scenarios`。三组的 seed 清单在任何参数搜索前冻结；qualification seed 不参与参数选择。连续 episode 不计入 1200 张图片，也不混入静态图像指标。
 
 ### 5.3 数据产物
 
@@ -127,7 +127,7 @@ Teleop 订阅同一个 frame envelope 和检测结果。它不是第二套 Head 
 
 B 和 C 使用相同的 YOLO11n-Seg 架构、输入尺寸、optimizer、augmentation、batch size、随机种子、最大 epoch、checkpoint 策略和 early-stop 规则。C 每个 epoch 都完整看到 800 张 head 和 800 张 task 图片，batch 内保持 1:1 domain 比例。两者的 head 数据暴露次数相同；C 多出的计算用于保留 task-camera 能力。
 
-B 和 C 都使用 head val 与 task val 的组合评分选择 checkpoint。test 在权重和 operating point 冻结前保持 sealed。
+B 和 C 都使用 head val 与 task val 的组合评分选择 checkpoint。随后，每个候选分别在 val 图片和 `calibration episodes` 上确定 head/task domain 的感知 operating point，形成不可拆分的候选身份：权重 SHA256、confidence、area、aspect、tracking 参数、后处理版本和 tracker 版本。test 与 `held-out evaluation episodes` 在候选身份冻结前保持 sealed。
 
 ### 6.2 两道离线门禁
 
@@ -146,21 +146,22 @@ A / B / C x task-camera test
 
 ### 6.3 指标
 
-Head-camera 主指标包括：
+Head-camera 的静态图像主指标包括：
 
 - cup-present recall；
 - `no_cup` false-positive rate；
 - `two_cups` 两个实例同时检出的比例；
 - bbox center error 的 median 和 p95；
 - box/mask AP50、AP50-95；
-- tracking continuity；
 - CUDA inference latency p50、p95、p99。
+
+连续指标在 `held-out evaluation episodes` 上单独计算，包括 tracking continuity、identity switch、fragmentation、错误候选、错误锁定、重新获取和端到端时延。静态图像和连续 episode 的统计单位不能混用。
 
 Task-camera 保留指标包括 box/mask AP50-95、precision、recall、F1、`no_cup` false-positive rate 和 `two_cups` both-cup recall。
 
 ### 6.4 等效判定和模型选择
 
-差异不显著不能简化为 `p > 0.05`。评测使用固定 seed、至少 10,000 次 image-level paired bootstrap，检查 95% CI 是否落在预先声明的等效区间内：
+差异不显著不能简化为 `p > 0.05`。评测使用固定 seed、至少 10,000 次按独立 `scene_group_id` 分层的 paired bootstrap，检查 95% CI 是否落在预先声明的等效区间内。只有 dataset manifest 能证明每个 scene 仅有一张测试图时，才允许退化为 image-level bootstrap；连续指标以 episode 为统计单位：
 
 - recall、F1、AP 的绝对差不超过 0.01；
 - bbox center p95 不比最佳候选差超过 2 px；
@@ -171,12 +172,14 @@ Task-camera 保留指标包括 box/mask AP50-95、precision、recall、F1、`no_
 选择顺序如下：
 
 1. 出现错误锁定、CPU fallback、身份不完整或时延超限的候选直接淘汰。
-2. 在剩余候选中比较 head-camera 主指标。
-3. 如果 C 与 head-camera 最佳候选等效，同时通过 task-camera 保留门禁，选择 C。
-4. 如果 B 明显优于 C，Head Search 使用 B，task-camera 继续使用 A。
-5. 如果 A 已与 B/C 等效，保留 A。
+2. 在剩余候选中确定与 head-camera 最佳候选等效的集合。
+3. 如果 C 位于该等效集合内，同时通过 task-camera 保留门禁，选择 C；A、B、C 全部等效时也适用这一条。
+4. 如果 C 不满足共享模型条件，而 B 明显优于 A/C，Head Search 使用 B，task-camera 继续使用 A。
+5. 如果 C 不满足共享模型条件且 A 与 head-camera 最佳候选等效，两个入口保留 A。
 
 共享的是权重，不强制两个 camera domain 使用同一个 confidence threshold。每个 domain 可以保留各自在 val 上锁定的 operating point。
+
+`A/B/C frozen-model evaluation gate` 评测的是上面冻结的“权重 + operating point + tracker”整体，而不是裸权重。打开 test 后不得重新优化任何感知参数。最终正式校准只能逐字段纳入并验证获选候选的已冻结感知值；如果验证失败或任何值需要改变，旧 verdict 立即失效，必须用 val 重新形成候选身份，并用一套此前从未打开的新 test/held-out episode seeds 重新完成比较。
 
 ## 7. 17 项参数校准
 
@@ -185,9 +188,9 @@ Task-camera 保留指标包括 box/mask AP50-95、precision、recall、F1、`no_
 | 参数 | 校准方法和失败条件 |
 | --- | --- |
 | `horizontal_fov_rad` | 从生产 CameraInfo 计算左右视场角，取有效帧的保守最小值；必须与 MuJoCo camera 定义在容差内一致。 |
-| `lock_valid_neck_rad` | 在 `[-2*pi, 2*pi]` 上以 0.002 rad 闭网格检查三个 anchor 的碰撞和净空，状态边界二分至 1e-5 rad；取唯一一个同时包含零位和三个起始角的安全连通区间，端点向内缩 1e-5 rad。 |
-| `coarse_step_rad` | 在 `<= horizontal_fov_rad / 2` 的候选中，选择覆盖整圈、val 中零漏扫且锁定时间最短的最大步长。 |
-| `search_timeout_s` | 按完整粗扫步数、每步 p99 settle/frame 时间、最大精调次数和一个完整控制周期 guard 计算。 |
+| `lock_valid_neck_rad` | 在 `[-2*pi, 2*pi]` 上以 0.002 rad 闭网格检查三个 anchor 的碰撞和净空，状态边界二分至 1e-5 rad；取唯一一个同时包含零位和三个起始角的安全连通区间，端点向内缩 1e-5 rad。另行把合法拾取工作区投影成 `required_search_domain_rad`；该受控依赖不是第 18 个调参项。若安全区间与相机视场不能覆盖整个 required domain，校准直接失败。 |
+| `coarse_step_rad` | 在 `<= horizontal_fov_rad / 2` 的候选中，选择通过有界双向扫描覆盖整个 `required_search_domain_rad`、val 中零漏扫且锁定时间最短的最大步长。禁止用固定正向累计 `2*pi` 代替覆盖证明。 |
+| `search_timeout_s` | 按有界扫描轨迹的最大稳定停点数、每步 p99 settle/frame 时间、最大精调次数和一个完整控制周期 guard 计算。 |
 | `min_confidence` | 与面积、aspect、tracking 条件在 head val 上联合搜索；要求 `no_cup` 零候选、双杯都被检出，并在约束下最大化 recall/F1。 |
 | `tracking_iou` | 用连续 episode 中同一杯子的正样本对和不同杯子的负样本对选择分界；要求零 identity switch，并限制 fragmentation。找不到安全分界时淘汰 tracker/model。 |
 | `min_bbox_aspect` | 用 cup 真值 bbox 与干扰物/误检分布选择；保留所有 required-visible val cup，同时拒绝对应假候选。 |
@@ -206,14 +209,17 @@ Task-camera 保留指标包括 box/mask AP50-95、precision、recall、F1、`no_
 
 ```text
 相机和安全几何
-  -> 模型选择
-  -> 感知参数联合校准
+  -> 每个候选的感知 operating point 校准与冻结
+  -> 冻结候选评测与模型选择
+  -> 获选感知参数原样纳入并验证
   -> 搜索和精调参数
   -> freshness、提交和停车参数
   -> 完整 bundle
 ```
 
-`min_confidence`、`tracking_iou`、`min_bbox_aspect`、`min_area_px2` 联合搜索，避免参数顺序影响结果。`center_deadband_px`、精调次数和累计精调角使用同一批连续 val episode 验证。
+`min_confidence`、`tracking_iou`、`min_bbox_aspect`、`min_area_px2` 在每个候选的 val 和 `calibration episodes` 上联合搜索，避免参数顺序影响结果。候选评测后不得再次优化这四项。`center_deadband_px`、精调次数和累计精调角使用连续 calibration episode 校准，并用互斥的 held-out episode 验证。
+
+粗扫轨迹是按 anchor 生成的确定性、有界停点序列。它从 anchor 先到较近的 required-domain 端点，再反向扫描至另一端；每个相邻目标都必须位于 `lock_valid_neck_rad` 内，并由独立 sweep checker 证明整段安全。覆盖完成以稳定停点的相机水平视场并集完整覆盖 `required_search_domain_rad` 为准，不以累计角度等于 `2*pi` 为准。只有覆盖完成且仍无合法候选时才返回 `TARGET_NOT_FOUND`；到达安全边界但覆盖不完整时返回 `TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL`，资格验证判失败。
 
 每项参数必须记录数值、单位、选择公式、输入证据和 SHA256、observed distribution、安全余量、production owner、启动 readback 以及运行时有效值。如果一个参数只出现在配置文件里，没有被 production component 实际读取并影响决策，整个 bundle 失败。
 
@@ -231,7 +237,7 @@ so101_head_search_calibration verify-promoted-config
 so101_head_search_calibration qualify
 ```
 
-现有 `generate_yolo_seg_dataset` 负责数据生成，`train_yolo_seg` 负责 B/C 训练。新程序消费 sealed dataset 和不可变候选权重，完成真实评测、模型选择、17 项参数校准和 bundle 生成。
+现有 `generate_yolo_seg_dataset` 负责数据生成，`train_yolo_seg` 负责 B/C 训练。新程序消费 sealed dataset、冻结的候选 operating point 和不可变候选权重，完成真实评测、模型选择、17 项参数校准和 bundle 生成。
 
 数学与策略代码放在可独立测试的库模块中。CLI 只解析参数、验证输入和编排阶段。
 
@@ -241,9 +247,10 @@ so101_head_search_calibration qualify
 
 ```text
 输入验证
-  -> 几何测量
-  -> 模型评测与选择
-  -> 感知参数校准
+  -> 几何测量与 required search domain 覆盖证明
+  -> 各候选感知 operating point 的 val 校准与冻结
+  -> 冻结候选评测与选择
+  -> 获选感知参数原样验证
   -> 搜索参数校准
   -> 时序和停车参数校准
   -> bundle 生成
@@ -254,6 +261,8 @@ so101_head_search_calibration qualify
 结果只能是 `SUCCEEDED` 或 `FAILED`。失败时记录首次失败阶段、失败码、命令、退出码和已经生成的证据，并立即停止。失败 run 不得被修改、续跑或晋级。修复后使用同一登记 evidence root 下的新 run ID，从输入验证开始重跑。
 
 数据集和权重如果已经 sealed 且 digest 没变，可以继续作为新 run 的只读输入；没有必要重新生成相同数据或重新训练相同权重。
+
+首次校准不能调用要求既有 `TASK8_READY/QUALIFIED` 的生产 Head Search 入口，否则会形成先有资格才能校准的死锁。`run` 和首次 `qualify` 必须复用现有 `CalibrationMeasurementAdmission` 与 `CalibrationSearchBinding`：只允许 `role=calibration` 的单次 measurement flight，release 和 recorder 永远拒绝；所有 neck target 绑定同一 generation、measurement plan、safe interval 和独立 sweep-check receipt。资源只在 CLI 入口绑定一次，内部阶段不得重绑。当前正向累计 `2*pi` 的生产 controller 不满足本文轨迹契约，必须在 RED/GREEN 中改成前述有界停点序列后才能用于正式资格验证。
 
 ### 8.3 输出和晋级
 
@@ -276,6 +285,13 @@ scratch/
 ```
 
 `run` 只在 evidence root 内生成候选 bundle，不直接修改 tracked config。批准后的值写入仓库配置后，`verify-promoted-config` 逐字段核对 17 项值、单位、模型 SHA、camera、dataset、tracker、runtime identity 和批准记录。存在任何差异时拒绝 `qualify`。
+
+`qualify` 输出两份不可混淆的 head-only 产物：
+
+- `head-search-qualification.json` 复用现有闭合 sample schema，必须包含同一个 PASS sample 中的 17 项 `_MEASURED`、四项 `_CAMERA_MEASURED`、`observed_lock_frames`、完整 runtime descriptor、source commit、config SHA256 和 provenance SHA256；
+- `head-search-qualified-report.json` 只声明 `status=HEAD_SEARCH_QUALIFIED`，逐字段引用上面的 sample，并绑定获选模型、camera、motion 和 bundle identity。
+
+`validate_head_search_binding()` 扩展为接受这一种严格闭合的 head-only report，同时继续接受现有 `TASK8_READY/QUALIFIED` report；两条路径都调用同一个 shape、sample digest 和数值校验。`HEAD_SEARCH_QUALIFIED` 只允许 Head Search 和 Teleop Head Camera consumer 使用，不能被 `task8_live`、release、retreat、动态拾取或整个 Task 8 的 readiness gate 接受。后续 Task 8 聚合器可以引用同一不可变 sample，但必须独立补齐 support 字段并重新形成 `TASK8_READY/QUALIFIED`，不得由本程序自动晋级。
 
 ## 9. Teleop Head Camera
 
@@ -372,7 +388,7 @@ frame 已过期或身份不一致时直接拒绝，不能换成更新的一帧�
 
 ### 10.2 40 场景
 
-40 个场景使用十类条件，每类四个独立 seed，并在三个 anchor 间均衡分布：
+40 个场景使用十类条件，每类四个独立 seed，并在三个 anchor 间均衡分布。这些 qualification seed 在校准前封存，与图像 train/val/test、连续 calibration episodes 和 held-out evaluation episodes 都不重叠：
 
 1. cup 位于左侧搜索边缘；
 2. cup 接近相机中心；
@@ -385,16 +401,15 @@ frame 已过期或身份不一致时直接拒绝，不能换成更新的一帧�
 9. 无 cup；
 10. 临时 frame/detection 中断后重新获取。
 
-场景逐个运行。前一场景完成停车、证据落盘和状态清理后，下一场景才能启动。单杯合法场景必须锁定正确杯子；双杯返回 `TARGET_AMBIGUOUS`；无杯返回 `TARGET_NOT_FOUND`；stale、时间倒退或身份变化必须停车并 fail-closed。中断恢复不能沿用旧 track 或 lock count。
+场景逐个运行。前一场景完成停车、证据落盘和状态清理后，下一场景才能启动。单杯合法场景必须锁定正确杯子；双杯返回 `TARGET_AMBIGUOUS`；无杯只有在视场覆盖证明完成后才返回 `TARGET_NOT_FOUND`；安全边界先到、stale、时间倒退或身份变化必须停车并 fail-closed。中断场景收到故障后终止旧 attempt，清空旧 track 和 lock count，再以新的 attempt ID 启动重新获取。
 
 40 场景之后，`default`、`left`、`forward` 各运行一次独立 `FULL_RESTART`。三次都要通过构图、检测、搜索、锁定、时序和停车门禁，不设置连续成功计数。
 
 ### 10.3 闭环门禁
 
-全部资格运行必须满足：
+所有场景共同满足：
 
 - 零错误锁定、零越界 neck command；
-- 最终中心连续三帧位于 deadband 和 vertical bounds 内；
 - inference、frame age 和 source skew 均在冻结阈值内；
 - 生产 10 Hz 帧序列无重复、倒退或未声明缺口；
 - coarse/fine 次数和累计角度不超限；
@@ -402,6 +417,13 @@ frame 已过期或身份不一致时直接拒绝，不能换成更新的一帧�
 - 全程 CUDA，无 CPU fallback；
 - runtime effective config 与批准 bundle 完全一致；
 - producer、journal、aggregator 和最终报告可以从证据中回读。
+
+结果类别门禁分别是：
+
+- 合法单杯：正确 cup 的中心连续三帧位于 deadband 和 vertical bounds 内，最终状态为 `LOCKED`；
+- 双杯：最终状态为 `TARGET_AMBIGUOUS`，全程零错误锁定，并有停车证据；
+- 无杯：完整覆盖 required search domain 后返回 `TARGET_NOT_FOUND`，全程零错误候选/错误锁定，并有停车证据；
+- frame/detection 中断：旧 attempt fail-closed 并停车，新 attempt 使用空 tracker/lock state 重新获取，不能把旧帧计入三帧锁定。
 
 ### 10.4 Teleop 验收
 
