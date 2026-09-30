@@ -34747,3 +34747,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `--build-base`/`--install-base`) followed by `colcon test --packages-select so101_demo_py
   --pytest-args benchmark_test` and a `colcon test-result` readback: ordinary `test/` collection does not
   substitute for it, and the benchmark suite must not run during ordinary feature work.
+
+## HS-012 — The candidate trainer trained for real on CUDA (commits 4792c53e3, e6fbe8cc)
+
+- **A one-epoch CUDA smoke now exits 0.** `model-campaign-smoke-20260930T064435Z/run-c` prepared a smoke
+  candidate C from the **pinned A weights** (`deps/so101-yolo11n-seg-plastic-cup/best.pt`, sha256 verified)
+  over a synthesized 32-head/32-task union and ran `train-candidate.py` with the perception venv
+  (torch 2.13.0+cu130, ultralytics 8.4.115, RTX 5080). It trained the frozen plan, scored **both camera
+  domains**, and wrote `candidate-manifest.json`: candidate `C`, the frozen score
+  `0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95`, history `[{epoch: 0, score: 0.0}]` (both cells
+  are 0.0 on the intentionally identical synthetic images) and the selected weight's sha256
+  (`0f8719ff8e3b…`). The console log is retained beside the run.
+- **Five real wiring faults the unit tests could not see, all fixed in `4792c53e3`:** the sampler must
+  read the loader it was handed, not `self.train_loader` (which does not exist yet); `InfiniteDataLoader`
+  forbids setting `batch_size`/`batch_sampler` after construction, so the loader is built *with* the
+  sampler and completed the way Ultralytics itself does; each validation domain needs its own dataset
+  yaml because the validator takes a path; `validate()` must return `(metrics, fitness)` with `metrics`
+  as a mapping; and a candidate starts from A's weights, whose recorded `best_fitness` outranks any early
+  candidate epoch, so the frozen selection rule must promote the chosen checkpoint explicitly rather than
+  trust the stock comparison. This is exactly the integration the reviewers said only a real run could
+  prove, and it is now proven well before Task 11.
+- **Known cosmetic residue:** the stock results plot fails on the two-cell metrics dict
+  (`index 4 is out of bounds`) and is logged as a non-fatal ERROR. `results.csv` still records both
+  domain cells, and the candidate contracts now set `plots: false` with that reason (commit
+  `e6fbe8cc` declares the key). A fresh preparation carries it; the retained smoke run predates it.
+- **Gate:** 103 passed, 1 skipped, plus 86 passed on the Task 2 render gate; `ruff check` clean.
