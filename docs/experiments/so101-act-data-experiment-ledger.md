@@ -34966,3 +34966,34 @@ pre-existing environment cases (60 rasterizer mismatches, 2 torch/synchronizer) 
 build stops at `mujoco_vendor`. The verdict rightly says Task 4 cannot be called gated on that basis; the
 plan puts the full gate at Task 11, so the fix plan includes either repairing the environment (an
 interpreter that owns torch and the pinned rasterizer) or recording a formal, reviewed quarantine.
+
+## HS-019 — Task 4 rework: all six rejection findings addressed (commits a964f4a96, 6cf3a4ddb, 6e5ff25df)
+
+- **Finding 1, the pinned invocation.** `compare` no longer requires locations the plan's own call does
+  not pass: weights resolve from the candidate files' directory, dataset roots from each manifest's
+  location, and held-out episodes from a declared `held-out-episodes` sibling of the partitions file. A
+  test drives Task 12's exact argument shape and asserts a named `EVALUATION_*` refusal rather than an
+  argparse exit.
+- **Finding 6, manifests as seals.** `verify_split_manifest` requires canonical relative paths inside the
+  dataset root, refuses traversal and digest mismatches, rejects a seed or scene group in two splits, and
+  enforces the declared count against what it verified (three tests).
+- **Findings 2 and 3, measured safety and complete coverage.** Empty-scene false candidates and the
+  latency **p95** are measured from the recorded frames (`EVALUATION_LATENCY_UNMEASURED` when a frame
+  carries no per-candidate timing); every declared partition seed must have a record and every candidate a
+  measurement in every frame, because an absent measurement is not an empty list; and a cell with no match
+  reports infinity rather than a perfect zero.
+- **Finding 4, faithful metrics and conditions.** F1 is derived from the validator's measured precision
+  and recall, an operating point declaring conditions this path cannot apply is refused
+  (`EVALUATION_OPERATING_POINT_UNSUPPORTED`), and a selection another candidate beats on measured F1 or
+  recall is refused - the reviewer's counterexample (C wins AP by 0.005, loses F1 by 0.8) is a test that
+  must raise `EVALUATION_F1_MARGIN`.
+- **Finding 5, intervals that support the decision.** The deciding head cells are measured one scene at a
+  time so each challenger's paired scene-level advantage over the retained model can be bootstrapped, and
+  a challenger whose interval does not exclude zero is refused with
+  `EVALUATION_SELECTION_UNSUPPORTED`; keeping the retained model needs no interval.
+- **Gate status, stated plainly.** Task 4's own suite is 19 passed and the benchmark XML shows all Task 4
+  cases green inside the 601-case run, but the package benchmark gate still exits non-zero because of 62
+  pre-existing environment failures (60 rasterizer mismatches, 2 torch/synchronizer) and the fresh-closure
+  build still stops at `mujoco_vendor`. The plan places the full gate at Task 11; Task 4 does not claim it.
+- **Gate after the rework:** benchmark suite 19 passed; ordinary suites 99 passed, 1 skipped;
+  `ruff check` clean.
