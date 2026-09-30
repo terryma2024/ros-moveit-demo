@@ -43408,3 +43408,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, its hybrid's guard now located and its parts named;
 - goal paused.
+
+## CP-2299 - The epoch adoption was committed but did not cure the refusal
+
+- After adopting the writer's declared initial epoch the probe still refuses with AUDIT_SCHEMA_INVALID, so either
+- _event_identity_ok is still false for another clause or a different condition now fires. The committed change is
+- green and harmless, but it is not the cure, and this entry says so rather than leaving the impression that the
+- hybrid's obstacle is gone.
+- The next probe prints the predicate's clauses rather than its verdict: each comparison between the event's
+- identity and the writer's (session, attempt, reset epoch, release epoch) and the lease clause's own result, so the
+- failing clause is named in one run. The predicate's structure is printed alongside this entry.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, its hybrid's obstacle localized to one predicate;
+- goal paused.
