@@ -41819,3 +41819,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4's QC half passes
   its suites and its commit half is specified to the call with this field inventory; items 5+ wait on the four
   blocked bindings. HEAD `c884a638b`; twelve gates green.
+
+
+## CP-2215 — Correction to CP-2214: `RunMode` has two definitions, and the store's own import decides
+
+- **What the grep actually found**: `RunMode` is defined **twice** in this worktree — `core/domain.py:62` and
+  `parallel_batch/contracts.py:28` — so CP-2214's "the grep printed nothing" was wrong: it printed nothing for the
+  pattern I used first and two hits for the broader one. Which class the verifier expects is settled by
+  `act/result_store.py`'s own import line, printed alongside this entry.
+- **Why the correction matters more than the counts**: the wiring in CP-2213 passes a `RunMode` into
+  `verify(...)`, and passing the *other* module's `RunMode` would be a type that compares unequal to the one the
+  store checks — a silent `WRONG_RUN_MODE` for every run, which is the kind of failure that looks like a policy
+  refusal rather than a plumbing mistake. Recording the two homes prevents exactly that.
+- **State.** Item 3: **F12, F3, F5 and F1 closed**, **F11 six of seven**, **F13 residual**; item 4's commit half
+  specified to the call with this caveat attached; items 5+ wait on the four blocked bindings. HEAD `101036f09`;
+  twelve gates green.
