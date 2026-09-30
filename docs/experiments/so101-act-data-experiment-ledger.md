@@ -35418,6 +35418,26 @@ approved earlier). Next: Task 8, the production startup binding, with its RED te
 - **Owed:** confirmation of this final fix, and the runtime call-site wiring deferred to Task 11 with its
   reason in the Task 8 note above (its tests are underlay-blocked).
 
+## HS-034 — Task 8 APPROVED
+
+Confirmation verdict at `reviews/task8/task8-confirm-verdict.md` (GPT-6.1-Sol high, static at commit
+`c263220df`): **APPROVE** on all three points - `HEAD_SEARCH_CONTEXT_FIELDS` includes `motion` and either
+motion value drifting raises `HEAD_SEARCH_SAMPLE_MISMATCH`; `test_startup_rejects_a_drifted_motion_block`
+independently changes `goal_tolerance_rad` and `settle_velocity_rad_s` and requires the refusal for each;
+and the promoted-binding `search_config()` regression test pins exactly eighteen keys including both camera
+frame IDs and both motion values. The reviewer states plainly that it did not independently verify the test
+counts it was given.
+
+**Task 8 complete.** Commit trail: `bfbfa09c5` (config, pair check, immutable binding), `7921d3269`
+(promoted-pair loader), `38fdc8305` (whole-context comparison, CUDA policy, deep immutability), `3ec7b4f41`
+(a promoted binding builds a search config), `c263220df` (motion as a compared field). Suites: startup 10
+passed; all five head-search suites 56 passed. Owed to Task 11 with its reason recorded: the
+`runtime/launch_composition.py` and `cli/act_stack_ready.py` call sites, whose tests the stale underlay
+blocks - the reviewer agreed that deferral is not a blocker.
+
+**Tasks 1-8 are now complete and independently approved.** Next: Task 9, the Teleop head-camera backend with
+no second detector, with its RED tests first.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
