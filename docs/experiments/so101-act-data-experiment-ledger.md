@@ -36006,3 +36006,17 @@ So the contract's workspace and the current committed scene disagree about the t
 extent, and the resolution is a deliberate contract update (raise the z range to the cup's centre height and
 confirm the x/y extent against the table) rather than a silent edit - the validator's refusal is correct and the
 choice needs the target's actual dimensions, which the cups in the scene supply.
+
+### HS-046 second addendum — what `WORKSPACE_EMBEDDED` actually tests (correcting my earlier reading)
+
+Reading the check itself (`act/head_camera_geometry.py` around line 1415) corrects the interpretation I wrote
+above: a sample is counted as `embedded` when, from the camera at the contract's declared `validation_arm_rad`
+pose, the **first body the ray hits is the support** - not when the point is literally inside a mesh, and not
+about the table's footprint per se. The refusal means **42 of the declared workspace samples are occluded by
+the support from the declared validation pose**, i.e. the contract declares candidate target positions the
+camera cannot actually see from where the validation looks.
+
+So the right fix is not to raise z or shrink y by guesswork, but to **narrow the declared workspace to the
+positions the camera genuinely sees** at the validation pose - which is exactly what the contract is for, and
+what `visible_pixel_minimum` already enforces per sample. My earlier addendum's table-footprint reasoning was a
+plausible story rather than the mechanism; this is the mechanism, read from the code.
