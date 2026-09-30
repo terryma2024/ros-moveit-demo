@@ -39487,3 +39487,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4's QC half complete (CP-2108,
   CP-2109) with this commit-half gap recorded. HEAD `1f53475e3`; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2111 — The coordinator's commit path has no independent verification, confirming CP-2110 from the other side
+
+- **Read from the code** (`src/so101_demo_py/src/parallel_batch/adaptive_runner.py`): the coordinator records
+  `CommittedPointResult` documents (`point_id`, `status`, `evidence_root`, `infra_attempts`, line 68), journals
+  them with fsync (line 118) and replays them on restart (line 138) — a durable, replay-safe commit path. A grep
+  for any verification step in that file matches only a docstring about failing closed; **no independent verifier
+  examines the episode** before a result becomes terminal.
+- **What that means together with CP-2110.** The apparatus that *does* verify independently —
+  `act/result_store.py`'s exact-lease seal, episode-hash and business-status verification, and its refusals
+  (unsealed directories cannot be committed, a corrupt episode never becomes business-failed, the coordinator
+  journals only after the verifier) — exists, is tested, and is imported by nothing. The live coordinator commits
+  on its own journal alone.
+- **So Task 4's commit half is precisely: wire the verification into the commit path** (or convince the plan that
+  the coordinator's journal suffices, which the ACT store's own tests suggest it does not). The wiring point is
+  the coordinator's result-application path (`_apply_result`, line 177), and the verification calls are
+  `ActCollectionResultVerifier`'s; the decision between the two candidate resolutions still belongs to the frozen
+  plan.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4's QC half complete, its commit
+  half now located from both sides. HEAD `c9098a953`; no push, no evidence deletion, no hardware, no second stack.
