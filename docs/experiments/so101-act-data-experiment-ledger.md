@@ -40927,3 +40927,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
   plus its sample fixture**, third cut one read from writing; F11 open. Targeted gates **430 / 201 / 201 / 201 /
   246 / 247 passed**; HEAD `eae53282a`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2176 — F1's third cut is fully specified: the projection rule is read
+
+- **The projection, read verbatim** (`episode_audit.py:287-305`): `projected_positions` is a **six-dimensional
+  finite vector**; `projection_map` is a list of **exactly six** `[kind, index]` pairs, no pair repeated, each
+  kind registered and each index an int inside that kind's `evaluated_positions`; and the A.1 rule is enforced —
+  `projected_positions[i]` must **equal** `frames[kind]["evaluated_positions"][index]` for its pair, "the map
+  selects the evaluated value, the publication stays untouched".
+- **So the expert's assembly is two lines**: the map is the arm's five evaluated positions in order followed by the
+  gripper's one — `[["arm", i] for i in range(5)] + [["gripper", 0]]` — and `projected_positions` is the
+  concatenation of those six evaluated values. With `frames` holding the two `broker.reference_frames` results, the
+  record carries the complete ratified group.
+- **The three edits, all now mechanical**: (1) `RosControllerReferencePort.reference_frames(kind, at_s)` delegating
+  to the broker; (2) `expert.py`'s `reference` adding `frames`/`projected_positions`/`projection_map` when the port
+  can supply them; (3) the chain test — port → expert → capture → writer → readback — with the packed group present,
+  which is the control F1 asks for ("test the real adapter/tap/capture/writer/readback chain").
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts landed
+  plus its sample fixture**, the third cut now fully specified; F11 open. Targeted gates **430 / 201 / 201 / 201 /
+  246 / 247 passed**; HEAD `7cc4c09c9`; no push, no evidence deletion, no hardware, no second stack.
