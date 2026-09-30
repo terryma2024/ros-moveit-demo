@@ -37241,3 +37241,27 @@ latter being something Task 11 cannot supply by construction.
 acceptance for Task 11 is explicitly narrowed to "the head-search and head-camera suites pass; the rest is
 environment" - with that wording recorded - or Task 11 stays open until the environment can run those suites green,
 which is a much larger piece of work than this task.
+
+## HS-103 — Task 11 acceptance contract narrowed, by explicit user authorization
+
+Asked directly, because the reviewer's rule is that narrowing acceptance "requires an explicit change to the
+acceptance contract" and that is not a decision the executor may take alone. **The user chose to narrow it
+explicitly, then re-review.** The wording that now governs Task 11's ordinary-suite gate:
+
+> **Task 11 acceptance for the ordinary suites.** The gate is met when:
+> (a) the head-search and head-camera suites pass under `-n 8` (57 passed) together with their focused startup and
+> binding suites;
+> (b) the installed `so101_teleop` ordinary gate passes (`colcon test --packages-select so101_teleop`, rc=0);
+> (c) every other ordinary-suite failure is **run**, individually attributed to an environmental cause, and recorded
+> with that cause - the missing `mujoco` import for colcon's interpreter, tests requiring a live ROS/MuJoCo stack or
+> a GPU session, the fixed `/tmp/act-<worker>` socket roots, the unwritable `/diagnostics` root, and the stale
+> `pysrc` shadowing;
+> (d) the installed `so101_demo_py` gate is reported as unavailable in this environment rather than as passing.
+>
+> This narrows (a)-(d) only. It does **not** waive any other gate: the benchmark readback, the sealed-geometry chain,
+> the dataset verify, the CLI refusals, the CUDA smokes and the installed server smoke all remain as specified.
+
+Recorded with its basis: the full-suite numbers (198 failed / 5505 passed / 85 error under the corrected gate, HS-077;
+19 failed / 1096 passed / 42 skipped teleop alone, HS-084) and the per-family causes (HS-076/083/085/090), none of
+which is attributable to this work, together with the fact that some of those tests require a live simulator stack
+that a unit-test gate cannot provide by construction.
