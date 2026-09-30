@@ -185,3 +185,30 @@ nothing registered exists to adopt; (2) the adapters that currently assert `plan
 **observe** instead — otherwise a formal episode would carry a boolean whose truth no source produced; and
 (3) the physics proposal must say which kinds require them, so the formal gate can refuse a run whose
 scene/feedback evidence is asserted rather than observed.
+
+
+## Amendment request A.1 — `evaluation` must be per kind (found while wiring the broker)
+
+Reading `adapters/act/ros_broker.py::reference_state` (lines 291-333) to expose the ratified shape shows
+that the two controller kinds are evaluated **independently and differently**: inside the same call, one
+kind may resolve through a proven accepted interval (using `self._records[gid]['accepted_sim_s']` and
+`direct_goal_reference(record, kind, when)`) while the other is taken from the latest publication
+(`stamp`), and each appends its own positions and velocities to the fused result. The method's return is
+exactly four keys — `positions`, `velocities`, `accelerations`, `requested_sim_time_s` — with no names, no
+per-kind breakdown and no acceptance identity.
+
+A single flat `evaluation` block therefore cannot describe that call honestly: it would have to claim one
+`basis`, one `goal_id` and one acceptance stamp for a reference whose arm dimension came from an accepted
+interval and whose gripper dimension came from a publication.
+
+**Requested amendment:** move `evaluation` inside each frame, i.e.
+`frames[kind].evaluation = {requested_sim_time_s, basis, goal_id, accepted_sim_s, revoked_sim_s}`, and keep
+`projected_positions`/`projection_map` at the record level. The alternative — restricting each record to a
+single controller kind — would split one logical reference into two records and change how the capture and
+the label join them, so it is the less faithful option. The audit schema currently implements the ratified
+flat form (CP-1984), so this amendment changes the same boundary again; nothing in the broker has been
+modified yet, and the fail-closed gates mean no formal audit can be sealed either way in the meantime.
+
+The reviewer's constraint that an outer six-dimensional projected reference needs "an explicit checked
+mapping" is unaffected: the map stays at the record level and still has to resolve inside the frames and
+equal the projection.

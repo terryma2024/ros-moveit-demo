@@ -36744,3 +36744,27 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `da01e7680`;
   gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-1986 — Task 3: an amendment to Proposal A found while wiring the broker, and why I stopped there
+
+- **Finding.** To expose the ratified shape from `ros_broker.py::reference_state` I read the method's
+  whole body (lines 291-333). It evaluates the two controller kinds **independently and differently** in
+  one call — one kind may resolve through a proven accepted interval (`self._records[gid]['accepted_sim_s']`,
+  `direct_goal_reference(record, kind, when)`) while the other comes from the latest publication — and it
+  returns exactly `positions`, `velocities`, `accelerations`, `requested_sim_time_s`, with no names, no
+  per-kind breakdown and no acceptance identity behind the fused six dimensions.
+- **So a single flat `evaluation` cannot be honest.** As ratified, Proposal A has one `evaluation` per
+  record, which would have to claim a single basis, goal id and acceptance stamp for a reference whose arm
+  part came from an interval and whose gripper part came from a publication. I recorded an **amendment
+  request (A.1)** in the proposals file: move `evaluation` inside each frame and keep
+  `projected_positions`/`projection_map` at the record level, with the alternative (one controller kind per
+  record) noted and rejected as less faithful to how the reference is actually formed.
+- **Why I stopped instead of implementing.** Writing the flat form into the live broker would have produced
+  exactly the kind of unapproved contract the reviewer rejected earlier, and then required redoing it. The
+  audit schema already implements the ratified flat form (CP-1984), no broker line has been changed, and
+  the fail-closed gates keep a formal audit from being sealed either way meanwhile. The amendment needs the
+  owner's word because Proposal A was ratified as written.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `6edd7a8f3`;
+  gate `logs/task3-gate5.run` **387 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
