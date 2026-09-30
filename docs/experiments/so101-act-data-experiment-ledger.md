@@ -37756,3 +37756,27 @@ identified and I then failed to carry into the very next run.
 That means the ordinary-suite numbers quoted so far (347 failed / 4392 passed / 165 error) are **inflated by my
 invocation**, and a run with the environment appended rather than replaced is the one to quote. It is launched with
 this entry; until it lands, no number from those earlier runs should be treated as a property of the suite.
+
+## HS-124 — With the environment appended, the demo suite lands near its earlier numbers
+
+```
+src/so101_demo_py/test   (overlay + venv APPENDED, ROS paths preserved, plugins off, -n 8)
+   193 failed, 5510 passed, 152 skipped, 84 error      (demo rc=1)
+```
+
+Compare the three configurations now measured for the same tree:
+
+| configuration | failed | passed | error |
+| --- | --- | --- | --- |
+| source path only (HS-077) | 198 | 5505 | 85 |
+| installed layout, PYTHONPATH **replaced** (HS-113/116) | 347 | 4392 | 165 |
+| installed layout, PYTHONPATH **appended** (this entry) | 193 | 5510 | 84 |
+
+So appending rather than replacing recovers ~1,100 passing tests and removes ~150 failures - HS-123's single-module A/B
+generalised as predicted - and the residual (193 failed / 84 error) sits within a few tests of the earlier source-path
+result. That agreement between two differently-configured runs is the strongest evidence yet that this residual is a
+property of the **environment** (live ROS/MuJoCo stacks, GPU sessions, writable `/diagnostics`, uncontended socket
+roots) rather than of the invocation.
+
+The reason histogram for the residual is recorded with this entry rather than summarised, and the teleop half of the
+same run is still executing.
