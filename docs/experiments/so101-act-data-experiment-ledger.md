@@ -35617,6 +35617,26 @@ no second detector, with its RED tests first.
   the reviewer's finding was about the *strength of the proof* rather than the code, which is exactly the
   failure mode that manufactures false confidence in a suite.
 
+## HS-040 — Task 9 APPROVED
+
+Verdict at `reviews/task9/task9-skip-verdict.md` (GPT-6.1-Sol high, static at `2c29ddce7`, no tests rerun):
+**APPROVE**. The state-`Z` branch asserts unchanged recorded start ticks, `process_start_ticks` returning
+`None` and `verify_owner` refusing; the function contains exactly **one** `pytest.skip`, guarded by `vanished`,
+which is set only when the wait-loop `/proc` read raises `OSError`, and no other path skips; a timeout with a
+still-readable non-`Z` process calls `pytest.fail`. The reviewer notes one scope limit: every wait-loop
+`OSError` counts as disappearance, so missing-entry errors are not distinguished from other I/O errors.
+
+**Task 9 complete.** Commit trail: `b390e521a` (boundary), `25b11df0` (composition), `9dd1e537d` (endpoints),
+`ef6cce332` + `982ad3dd9` + `1ac630dbf` (app inclusion and the corrected diff), `a92c0ab85` (package gate),
+`51775325b` (owner liveness, sealed interval, sample-driven stop), `608052c7a` (zombie and negative velocity),
+`7ba09f15c` + `2c29ddce7` (the deterministic zombie proof). Gate: head-camera suite **10 passed**, `ruff check`
+clean under `set -o pipefail`. Four review rounds found: shallow owner validation, a caller-overridable sealed
+interval, a boolean-driven stop proof, a zombie accepted as an owner, a negative velocity counted as a stop,
+and finally two weaknesses in the test's own proof strength.
+
+**Tasks 1-9 are now complete and independently approved.** Next: Task 10, the Teleop Head Camera page and its
+visual evidence, starting with the named component tests that must fail for the right reason first.
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
