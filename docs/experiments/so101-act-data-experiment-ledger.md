@@ -40596,3 +40596,34 @@ So through the toolchain environment the verified renderer works headlessly, and
 build the sweep: prepare once per seed, step the neck across the seal's required domain, capture and score each frame with all
 three candidates' frozen operating points, and emit the HS-222 record shape under the campaign root. The environment recipe above
 is part of the recorder now, not an experiment.
+
+## HS-237 — The neck sweep is verified end to end; the recorder is fully specified
+
+Extended probe, through the toolchain environment (HS-236's recipe), with the findings that matter:
+
+```
+RawRender vars: []                      <- the type uses __slots__; read fields via dir()
+renderer attrs: _mujoco _config _model _data _renderer _segmentation_renderer
+                _neck_rad _arm_rad _base_camera_position …
+neck -0.40 -> seg (480,640) distinct 22
+neck +0.00 -> seg (480,640) distinct 33
+neck +0.40 -> seg (480,640) distinct 32
+```
+
+Three things are now established rather than hoped for:
+
+1. **The sweep works**: writing `neck_yaw_joint`'s qpos (qposadr 6) and calling `mj_forward` **changes what the head camera sees** -
+   the segmentation's distinct-label count moves with the angle (22/33/32), so the camera really is being posed, not silently
+   ignored.
+2. **Both capture channels exist and are reachable**: `_renderer` (RGB) and `_segmentation_renderer` (labels), with `_camera_id()`
+   naming the head camera - so a frame can carry the image the detector needs *and* the mask the tracking metrics need.
+3. **The renderer tracks the pose itself** (`_neck_rad`, `_arm_rad`, `_base_camera_position`), which is the natural place for the
+   recorder to read back which angle a captured frame corresponds to - removing the need to infer it from the sweep loop.
+
+**Recorder spec, complete:** per seed in `calibration`/`held_out_evaluation` -> `load_dataset_config` + `MuJoCoDatasetRenderer` ->
+`_prepare(rng, scenario)` once -> for each neck angle in the seal's required domain: write qpos, `mj_forward`, capture RGB +
+segmentation, score with all three candidates' frozen operating points (one detector at a time) -> emit
+`{seed, frames:[{seed, detections:{A,B,C}, latency:{A,B,C}, neck_rad, …}]}` under the campaign root. Environment: ROS + workspace
++ **toolchain setup sourced** (HS-236), `MUJOCO_GL=egl`, single detector, nothing concurrent.
+
+Writing that script is the next action, and it no longer contains any unknown.
