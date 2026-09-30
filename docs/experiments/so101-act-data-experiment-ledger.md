@@ -36566,3 +36566,26 @@ diff against that base, no additive key, and the aggregator back to **32 passed*
 
 The lesson worth keeping: an edit to a shared file is not reverted until its **net diff against the pre-work base
 is empty**, and "the tests pass" is not that check.
+
+## HS-073 — Net-diff audit of every config file this work touched
+
+```
+head-camera-geometry-contract-v1.json      54 insertions, 54 deletions
+head-search-calibration-contract-schema.json  97 insertions
+head-search-calibration-contract-v1.json     150 insertions
+head-search-scenario-partitions-v1.json      308 insertions
+head_search_v2.json                           54 insertions
+head_camera_yolo_seg.yaml                      1 insertion, 1 deletion
+head_camera_yolo_seg_smoke.yaml                1 insertion, 1 deletion
+```
+
+Two things to read from it:
+
+- **The shared contract is clean**: `task8-calibration-measurement-contract-v2.json` no longer appears at all, so
+  its net diff against the branch base is empty after HS-072. That was the check that mattered.
+- **The geometry contract shows 54/54**, which is a whole-file reindentation from my scripted edit rather than 54
+  changed values. It is this task's own file (Task 2 created it), so there is no cross-subsystem risk, but the
+  diff is noisier than the change and is recorded as cosmetic debt rather than presented as substantive.
+
+The seal changes in the two perception YAMLs are the intended one-line re-points to the re-sealed geometry
+(HS-046, HS-047).
