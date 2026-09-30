@@ -39553,3 +39553,32 @@ not what you predicted.**
 
 Task 12 Step 3 is therefore complete on all three of its requirements: B `rc=0`, C `rc=0`, serial execution, and C's per-epoch
 sampling at 800 head / 800 task.
+
+## HS-196 — Which root trained, and what `--symlink-install` means for its provenance
+
+My "new root" launches for attempts 6 and 7 were silently ineffective: I copied `chain.sh` from `125445Z` **after** its
+`__T__` token had already been substituted, so the copied script still built into and sourced from `125445Z`. The evidence:
+
+```
+head-toolchain-20260930T125856Z   rc=-    commit=d304e9ded814   install=no     <- never used
+head-toolchain-20260930T125637Z   rc=-    commit=1b6e83c34b45   install=no     <- never used
+head-toolchain-20260930T125445Z   rc=0    commit=d903e2c9a6a6   install=yes    <- the root that built and trained
+```
+
+So the candidates were trained through `125445Z`, whose `source-commit.txt` is `d903e2c9a6a6` - the HS-191 fix, written
+**before** the HS-192 scene-group fix was committed.
+
+**What that does and does not invalidate.** The build used `--symlink-install`, so the installed package resolves into the
+worktree source:
+
+```
+<root>/install/so101_demo_py/.../act/head_search_training.py -> worktree path (symlink)
+```
+
+which means the code that actually ran was the **worktree at run time** - including the HS-192 fix - while the root's declared
+commit is only a **lower bound** on it. The candidates are valid artefacts of the code that ran; the root's provenance is
+weaker than a copy-install would have made it, and this entry states that rather than letting the commit stamp imply a
+stronger guarantee than it carries.
+
+**Deletion candidates:** `125637Z` and `125856Z` contain no build and no install (a `source-commit.txt` and a script each),
+so they are pure clutter from the copying bug. Recorded here rather than deleted, per the standing rule.
