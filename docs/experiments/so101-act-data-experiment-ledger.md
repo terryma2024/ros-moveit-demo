@@ -40199,3 +40199,29 @@ line 220, then run Step 5's `compare` to produce the model comparison Task 13 co
 Constraints carried in: MuJoCo only, one CUDA detector, no CPU fallback, Grounded-SAM excluded, serial execution (nothing
 concurrent with a detector), and no writes anywhere in the worktree. The interface work starts by reading `act_collect`'s actual
 arguments rather than assuming them - the discipline that has found seven divergences in this task.
+
+## HS-222 — The exact episode-record contract, read from the gate's loader
+
+`_episode_frames(...)` in the compare CLI defines what a `held-out-episodes` recording must contain, field by field:
+
+```
+records dir: *.json, each document = {"seed": <int>, "frames": [ ... ]}
+  a document whose top-level "seed" is not in the partition's wanted set is ignored
+  frames are collected from all documents, then:
+    recorded = {frame["seed"]}                  coverage: every wanted seed must appear
+      missing -> EVALUATION_EPISODES_INCOMPLETE: declares seeds ... that were not recorded
+    per frame:
+      frame["detections"] must be a Mapping     else EVALUATION_EPISODES_INCOMPLETE (no per-candidate detections)
+        and must hold an entry for EVERY id in CANDIDATE_IDS ("A","B","C")
+          absent -> EVALUATION_EPISODES_INCOMPLETE: no measurement for candidates ...
+      frame["latency"] must be a Mapping with every candidate id
+          absent -> EVALUATION_LATENCY_UNMEASURED: no per-candidate latency, so the ...
+```
+
+Three consequences that shape the recorder:
+
+1. **Every frame must carry measurements for all three candidates** - A, B and C - not just the one being scored. So a recording pass runs the same frames through all three detectors (one detector process at a time: MuJoCo-only, one CUDA detector, no CPU fallback, nothing concurrent).
+2. **Coverage is per seed, over the partition's declared set** - so the recorder must iterate exactly the `held_out_evaluation` seeds (and, for Step 4's redo, exactly the `calibration` seeds), and a partial run is refused rather than silently scored on less.
+3. **Latency is part of the contract**, per frame per candidate, not an afterthought - the gate refuses a recording that omits it.
+
+So the recorder's shape is fixed by the consumer: render/step the head-search scenes for a seed, capture per-frame head-camera frames, run each candidate's frozen operating point over them, and emit `{seed, frames:[{seed, detections:{A,B,C}, latency:{A,B,C}, ...}]}`. What remains to decide - and what I will read next rather than assume - is which existing runtime produces the frames (the smoke's MuJoCo path, or the collection stack) and whether frames are captured to disk once and re-scored per candidate (cheapest, and keeps detector seriality trivially true).
