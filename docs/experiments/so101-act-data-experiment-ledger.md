@@ -37069,3 +37069,25 @@ exactly this, so the minimal correct fix is to record the coarse step **beside t
 smoke already looks, instead of adding a third branch that would have to re-derive a seal binding this bundle does
 not carry. One declaration, one consumer, no new coupling - and the refusal in HS-092 remains the guard if the
 declaration is ever missing again.
+
+## HS-095 — The fix is a one-field write: the seal drops the step the contract declares (round 695)
+
+The chain is now fully specified, and the gap is in **my own code**, not in data or the environment:
+
+- `config/act/head-camera-geometry-contract-v1.json` **declares** `"coarse_step_candidate_rad": 0.3` (line 61).
+- `act/head_camera_geometry.py` **has** the field: it is listed in the contract's accepted keys (line 57), the
+  document carries it when built (line 424), and the loader reads it back (line 459).
+- The **written seal** does **not** contain it: top-level keys are `anchors, camera, camera_mount_origin_m,
+  camera_mount_xyaxes, camera_name, fov_union_covers_required_domain, horizontal_fov_rad, image_height,
+  image_width, in_frame_failures` - no `coarse_step_candidate_rad`.
+- The smoke therefore finds nothing in either branch and refuses (HS-092), correctly, rather than inventing a step.
+
+**So the minimal correct fix is to write `coarse_step_candidate_rad` into the seal document** (from the contract the
+validator already validates against), with a test asserting the seal carries it for a contract that declares it and
+that the smoke then plans coverage from the final seal. That is a one-field change on code this task owns, it needs
+no re-derivation of the seal hash by hand, and it keeps the HS-092 refusal as the guard for contracts that declare
+no step.
+
+This also supersedes HS-094's route reasoning with something stronger: neither the promotable bundle nor a hand-added
+seal field was needed - the declaration already exists in the tracked geometry contract and is simply not
+propagated.
