@@ -40302,3 +40302,26 @@ minutes, while settling the value early would pull a Task 13 approval forward fo
 
 Also worth noting for Task 13: `qualification`'s 40 seeds are the ones design line 391 says are sealed before calibration and
 distributed over ten condition classes across three anchors - they are **not** part of Task 12's recording.
+
+## HS-226 — The frame producer is located: `adapters/perception/mujoco_dataset.py`
+
+Traced the generator to its implementation:
+
+```
+cli/generate_yolo_seg_dataset.py:41   from so101_demo.adapters.perception.mujoco_dataset import generate_dataset
+                                :55   manifest = generate_dataset(config, output_root, geometry_seal=geometry_seal)
+adapters/perception/mujoco_dataset.py   2488 lines
+  DatasetScenario (cup counts) | RenderEvent + render observers | RawRender (one rendered frame)
+  LabeledInstance / LabeledSample (per-sample labels, visibility, occlusion) | ...
+```
+
+So the MuJoCo scene setup, head-camera rendering and per-scene seeding all live in that adapter, and the recorder should
+**reuse its render path per step** rather than reimplement MuJoCo setup - which is what keeps the recorder inside the
+single-detector, MuJoCo-only constraints instead of becoming a parallel stack.
+
+The remaining interface question, and the one I will read next rather than guess: whether `generate_dataset` (or the render
+observer behind `RenderEvent`) can be driven **per step for one scene** - which is what an episode needs - or whether it only
+renders a single settled sample per scenario, in which case the recorder wraps its rendering primitives directly
+(`RawRender`/scene setup) in a step loop.
+
+No implementation started; this is the last piece of interface work before writing the recorder.
