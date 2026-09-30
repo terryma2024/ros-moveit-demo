@@ -36389,3 +36389,31 @@ identify the 16 modules, show that they are pre-existing environment gaps unrela
 in the ROS/venv mix), and then run the parallel gate over the suite **minus those modules**, recording the
 exclusion list and its reason. That is a scoped, evidenced result rather than either a false green or a blanket
 exemption, and it keeps faith with the reviewer's objection that five selected suites are not the whole package.
+
+## HS-065 — Corrected: the plugin IS the cause; my disabling syntax was wrong (round 385)
+
+The collection log's tail names the actual failure outright:
+
+```
+pluggy._manager.PluginValidationError: unknown hook 'pytest_launch_collect_makemodule' in plugin
+<module 'launch_testing_ros_pytest_entrypoint' ...>
+```
+
+So HS-044's explanation was **right** and HS-063's retraction was **wrong**: the ROS
+`launch_testing_ros_pytest_entrypoint` plugin really is what breaks the run. The problem is my **disabling syntax**:
+`-p no:launch_testing_ros_pytest_entrypoint` does not stop it, because `-p no:<name>` takes the registered plugin
+name, not the module name, and this plugin registers under another one.
+
+The clean fix, rather than guessing names, is to stop automatic plugin loading and opt in explicitly:
+
+```zsh
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -n 8 -p xdist -p pytest_asyncio ... <paths>
+```
+
+which removes the ROS plugins from the process entirely while keeping the ones the suite needs. That is the next
+attempt for NOT MET item 3, with the enabled-plugin list taken from what the ordinary suite actually requires
+(reading `setup.cfg`/`pytest.ini` markers rather than guessing).
+
+Two corrections in three rounds, both mine on the same point: first I blamed the plugins while disabling them
+incorrectly, then I retracted that when the *symptom* changed. The ledger keeps all three entries so the sequence
+is visible rather than tidied away.
