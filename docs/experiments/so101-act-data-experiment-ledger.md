@@ -36708,3 +36708,21 @@ because those directories need the installed stack rather than a source-tree run
 (`/tmp/so101-debug-head-search-antzb-LuFlHq6a/tmp/...`) while keeping the `/data` evidence-root scratch for the
 fsync-heavy `so101_demo_py` suites, and record both paths with the evidence. That satisfies both rules instead of
 trading one for the other.
+
+## HS-079 — The short scratch helped but did not clear the teleop failures (round 438)
+
+Re-ran the teleop test batch with a 71-byte scratch path
+(`/tmp/so101-debug-head-search-antzb-LuFlHq6a/tmp-teleop-20260930T094359Z`), inside the UNIX socket limit:
+
+```
+34 failed, 1081 passed, 42 skipped in 234.28 s
+```
+
+against **39 failed** with the evidence-root scratch. So the socket-path explanation in HS-078 is **correct for
+some** of the failures and incomplete for the rest: five went away, 34 remain, and they need their own tracebacks
+before anything is claimed about them.
+
+**What is established:** my own `test_head_camera_api.py` passes in both configurations, and no failing module is a
+head-camera or head-search test. **What is not:** whether the remaining 34 are environmental (a live stack, an IPC
+detail, a fixture needing the installed package) or something this work touched. The next step is the same one that
+has worked three times in this task - read one traceback instead of reasoning from a count.
