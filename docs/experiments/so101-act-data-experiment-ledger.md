@@ -40506,3 +40506,35 @@ to approve could not be measured by this path either. The earlier smoke result (
 scenario-phase episode recorder** that produces the HS-222 record shape for the `calibration` and `held_out_evaluation` seeds -
 reusing the ACT stack's neck/search ports (HS-230) rather than the dataset renderer (HS-227/229, both withdrawn) - and drive it
 from a script under the campaign root first, so nothing in the verified toolchain changes until the shape is proven.
+
+## HS-234 — The neck-to-camera-pose model is analytic, and it supplies exactly the yaw sweep a recorder needs
+
+Searching for where a neck angle becomes a camera pose:
+
+```
+act/task8_production_composition.py:227   def _camera_pose(self, neck_rad: float):
+                                  :235       rpy[2] += float(neck_rad)
+cli/head_search_smoke.py:58                anchor = float(anchors[parsed.anchor]["neck_rad"])
+act/search.py:38                           required_domain_rad / lock_valid_neck_rad
+```
+
+So the head camera's pose as a function of neck angle is modelled **analytically** (the same PhaseCameraMatrixEvaluator area
+whose test HS-130-138 investigated), and the seal carries the neck anchors, the required search domain and the lock interval.
+That is precisely the yaw sweep an episode needs - the sequence of neck angles the bounded search visits - available without
+inventing kinematics.
+
+**Recorder design of record**, now coherent end to end:
+
+1. per seed from `calibration` (Step 4's redo) and `held_out_evaluation` (Step 5): build the scene once through the verified
+   renderer's `_prepare`, then for each neck angle in the sweep from the seal (anchors, required domain, coarse step) set the
+   neck and capture a head-camera frame - preparation once, capture repeatedly, which sidesteps HS-229's entanglement (that was
+   inside `_render_attempt` only);
+2. score every frame with all three candidates' frozen operating points (`min_confidence` + `tracker.iou`), one detector at a
+   time, recording per-frame `detections` and `latency` for A, B and C as HS-222 requires;
+3. emit `{seed, frames:[…]}` per seed under the campaign root, then point `--episode-records` at the directory for Step 5, and
+   run the same recording over the `calibration` seeds for Step 4's combined search.
+
+The one thing still to confirm is the neck's actuation point in the MuJoCo model (`_prepare` does not touch the neck - the
+renderer's only joint write is `_set_free_joint_position` for objects), so the recorder must set the neck joint itself; on the
+auto-proceed rule I will implement it as a joint write against the prepared model and verify against the analytic
+`_camera_pose` prediction rather than assuming the joint name.
