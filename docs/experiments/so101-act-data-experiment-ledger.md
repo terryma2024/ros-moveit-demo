@@ -40420,3 +40420,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   done** (shared predicate, lifecycle named, lifecycle enforced, fixtures expanded), F1/F11 open; targeted gates
   `logs/task3-final.run` **430 passed** and `logs/task3-f5-lifecycle.run` **201 passed**; HEAD `c1b746e0f`; no
   push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2152 — F5's raw-reference step: the fixture shape repeats six times, not three
+
+- **What happened**: I applied the predicate tightening (CP-2151's clause) and then tried to give the three
+  formal reference rows a legacy raw group by matching their two-line shape —
+  `"positions": [0.1] * 6, "accepted": True})`. The matcher found **six** such lines, not three, so the guard
+  aborted **before** writing the test file: the module kept the tightened predicate, the fixtures did not, and the
+  same 7 failures stood. Both files are now restored to HEAD and the audit and recorder suites re-run green.
+- **The bounded next step**: the same two-line shape appears at **six** sites (three of which are the formal ones
+  printed this round — lines 733, 800 and 1064 — and three more among the diagnostic tests). Each formal site needs
+  the legacy group's four fields — `joint_names` (the ratified order), `sim_stamp_ns`, `received_monotonic_ns` and
+  `velocities` — and the diagnostic ones are best left alone, since their audits are not formal and the predicate
+  does not reach them. The exact field names and the ratified arm/gripper sizes were read this round:
+  `_REFERENCE_RAW_FIELDS` (line 56), `_REFERENCE_FRAME_FIELDS` (line 60), `_FRAME_SIZES` (line 63).
+- **Why the guard mattered**: had the script written the test file with the six-line substitution, the diagnostic
+  fixtures would have gained raw groups they do not need, and the failure list would have mixed two causes. The
+  abort kept the experiment single-variable.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 four of six steps
+  done** with this one ready and the six sites listed, F1/F11 open; targeted gates `logs/task3-final.run` **430
+  passed** and `logs/task3-f5-lifecycle.run` **201 passed**; HEAD `64efa9122`; no push, no evidence deletion, no
+  hardware, no second stack.
