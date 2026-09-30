@@ -39040,3 +39040,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   `source_stamps_s` and `source_received_wall_s` per phase), and it is the next increment for Task 4.
 - **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress with this defect
   recorded as its own item. HEAD `24ff631e0`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2090 — The recipe for repairing the qualification suite's evidence port
+
+- **The validator's rule, read from the runner** (`pick_place_runner.py:84-96`): `_raw(observation)`
+  accepts a **non-empty flat mapping whose keys are non-empty strings and whose values are booleans, finite
+  numbers** (and, per the lines below the snippet I read, the few list-valued keys it names) — a nested or
+  non-finite value is refused.
+- **Where to inject.** That suite's `_EvidencePort` already funnels every phase's evidence through one
+  `_observe(phase, evidence)` call inside `run_phase` for `LiveEvidenceWindow.REQUIRED_PHASES`, and its
+  `set_down`/`run_retreat_segment` overrides call the same funnel for `RELEASE` and `RADIAL_RETREAT`. Injecting
+  the raw block at that funnel therefore covers every required phase in one edit, and the existing
+  `seal_live_evidence` path can keep sealing through the real driver.
+- **The block to inject**: the smallest shape the rule accepts, built from the evidence already present —
+  for example `{"simulation_time_s": float(evidence["sim_time_s"]), "simulation_step":
+  int(evidence["physics_step"])}` — so the test keeps its purpose (the real runner seals a real artifact through
+  the real driver) while the amended fail-closed contract is satisfied rather than relaxed.
+- **Why not simply assert `None`**: that would delete the test's subject; the four failures exist because the
+  fixture predates the contract change, and the fix belongs in the fixture.
+- **State.** Item 3 implementation-complete (sixth checkpoint pending); item 4 in progress, this repair being its
+  next increment. HEAD `947018699`; no push, no evidence deletion, no hardware, no second stack.
