@@ -35851,6 +35851,14 @@ env -u PYTHONPATH -u AMENT_PREFIX_PATH -u ROS_DISTRO -u ROS_VERSION -u ROS_PYTHO
   the change is the expected one by comparing against the sealed `source_digests`, which the next round does.
 
 ---
+- **Which source drifted, exactly (round 338).** Comparing the sealed `source_digests` against the drift
+  message isolates it: the **camera** source is identical (`d8665bb90bf8...` on both sides), while the **scene**
+  moved from the sealed `4db48e35df9e...` to `aea2df3b0bfb...`. So only
+  `src/so101_demo_py/assets/mujoco/act/head_search_scene.xml` changed after the seal, and the camera views and
+  contract are untouched. The next round inspects that file's history to confirm the change is expected work,
+  then re-seals with the frozen toolchain and records the new seal - the drift check itself is correct and stays
+  as it is.
+
 
 ## RESUME POINT (updated every checkpoint, read this first)
 
