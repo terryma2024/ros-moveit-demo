@@ -40779,3 +40779,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
   landed** with this fixture one read away; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**;
   HEAD `bc8a958af`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2169 — The registered-sample fixture: the writer refuses it at line 787, one read short
+
+- **What I wrote**: a test appending a thirteen-key registered sample (kind `contact`, `physics_step`, populated
+  left/right contact lists, empty `other_contacts`) to a diagnostic writer, sealing it and reading it back — the
+  end-to-end shape F1 asks for. It failed with `AUDIT_SCHEMA_INVALID` raised at **`episode_audit.py:787`**, which
+  is inside the **physics branch** of `append_source` (the branch that starts around line 776 with the finite
+  `sim_time_s` and integer `release_epoch` checks), not in `_physics_observation_typed`. So the writer insists on
+  something about that row beyond the admitted keys and the typed observation — plausibly the epoch application
+  (`_apply_epoch`) or a physics-specific requirement the registered shape does not yet meet.
+- **Reverted**; the audit suite re-runs green (the appended test is gone, the committed additions stay).
+- **The next read, precisely**: lines 776-800 of `episode_audit.py` — the physics branch's remaining checks — after
+  which the sample fixture is a mechanical edit: the thirteen keys are known (CP-2168), the value rules are known
+  (`_CONTACT_FIELDS`, the four vector lists as non-empty finite vectors), and the only open question is that one
+  check.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
+  landed** with this fixture one read away; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**;
+  HEAD `52f24646e`; no push, no evidence deletion, no hardware, no second stack.
