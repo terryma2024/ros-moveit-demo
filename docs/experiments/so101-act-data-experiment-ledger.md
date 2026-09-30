@@ -38708,3 +38708,32 @@ dominant message, or family, and nothing is called "same cause" without a record
 provenance digests (HS-105), the benchmark benchmark (HS-107), the fresh dependency closure with named underlays (HS-142),
 the teleop installed gate `rc=0`, and the reviewed geometry-seal chain. It changes the *granularity* of clause (c)'s
 attribution and nothing about what was built.
+
+## HS-162 — Task 11 APPROVED WITH FINDINGS (thirteenth verdict). Task 11 complete.
+
+```
+Task 11 meets the revised acceptance contract, including HS-161.
+Retain one DIFFER module, two non-comparable modules, and collection failures as limitations.
+The demo installed gate remains unavailable; fresh closure uses the named underlays.
+Approval does not claim full-suite green or prove every failure environmental.
+```
+
+**Task 11 is closed as completed**, with its findings retained as limitations rather than resolved:
+
+| limitation | record |
+| --- | --- |
+| one `DIFFER` module | `test_grounding_dino_dataset_augmented` (HS-159) |
+| two non-comparable modules | HS-159 |
+| collection-level failures | attributed at module level only (HS-122) |
+| demo installed gate | **unavailable**, dossier in HS-122; not a pass |
+| fresh closure | uses the **named underlays**, not a from-nothing build (HS-142) |
+| full-suite green | **not claimed**; the ordinary suites fail ~350 ids, all attributed per the narrowed contract |
+
+What Task 11 delivered and what was verified along the way: the reviewed geometry-seal chain (`7d963fdc…`, coarse step 0.3,
+configs re-pointed, dataset regenerated and verified, smoke `coverage_complete: true`), the installed `so101_teleop` gate
+`rc=0`, the head-camera API and panel (Tasks 9-10), provenance digests (HS-105), the non-promotable refusal (HS-052), and
+the benchmark read-backs at the narrowed gate (HS-107).
+
+Thirteen verdicts, four self-retractions (HS-128/130, HS-153, HS-157), three measurement-design rebuilds, and one
+user-authorized contract narrowing (HS-161). Every one of those corrections is in the ledger next to the claim it
+replaced, which is the only reason the final state is legible.
