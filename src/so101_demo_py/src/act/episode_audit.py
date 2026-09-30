@@ -641,6 +641,16 @@ def _window_matches_observed(window: dict, row_times, acquisitions, physics_time
     schedule = window["source_schedule"]
     if set(window["streams_required"]) - set(schedule):
         return False
+    # T3-F11: the reverse relation — every instant a stream claims must be an instant the episode actually acquired
+    # for that stream, not only its endpoints, so a shortened or padded schedule cannot describe coverage it lacks
+    acquired: dict = {}
+    for row in acquisitions.values():
+        acquired.setdefault(row["camera"], set()).add(row["stamp_s"])
+    for name, instants in schedule.items():
+        stamps = acquired.get(name)
+        if stamps and any(all(abs(instant - stamp) > _TOLERANCE_S for stamp in stamps)
+                          for instant in instants):
+            return False
 
     def parts(entry):
         if isinstance(entry, dict):

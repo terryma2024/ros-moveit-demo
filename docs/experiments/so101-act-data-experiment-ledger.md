@@ -42976,3 +42976,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   twice and writes once, and no compensating withdrawal without re-running the suite that the withdrawal touches.
 - **State.** **F14, F3 and F1 closed**; **F11 first and second cuts landed and green**; third cut specified and its
   control named; F5/F12/F13 open; the goal is paused. HEAD `7b4d0b6e0`; twenty-three gates green.
+
+
+## CP-2272 — F11's third cut: the reverse relation, first try
+
+- **What landed** (`episode_audit.py`, `_window_matches_observed`): every instant a stream claims must fall within
+  `_TOLERANCE_S` of a stamp the episode actually **acquired for that stream**; streams the acquisitions do not name
+  are left to the existing endpoint check. The predicate builds the per-camera stamp sets from the acquisition rows it
+  already receives, so no signature or call site changed.
+- **Why this is the right phrasing, and the previous one was not**: the two controls read last round settle it —
+  `_self_consistent_formal`'s legal window has `head` and `wrist` on **identical** instants `[1.0, 1.1, 1.2]` (two
+  synchronised cameras), so distinctness could never be the rule; and the parametrised negative at line 1181
+  (`head: [1.0, 1.1, 1.15]`, "an instant never published") is refused today only because 1.15 is an **endpoint**.
+  An interior instant like 1.05 passed, which is exactly the coverage hole the verdict described.
+- **Evidence.** `logs/task3-f11-reverse.run` rc=0: **355 passed in 1.92s** across the audit, release-boundary, task8, recorder,
+  capture, qualification, W8, store-commit, generic-artifact and supervisor suites under `pytest-xdist` with 8
+  workers, its own NVMe scratch and a tempfile proof.
+- **F11's remainder**: the shortening/duplication negatives at the audit level (the "never published" and "required
+  with no schedule" negatives already exist at lines 1181-1182), and the counts/ranges reading of the verdict if it
+  means more than coverage.
+- **State.** **F14, F3 and F1 closed**; **F11 three of four cuts**; F5/F12/F13 open; the goal is paused. HEAD
+  `f4a60d708`; twenty-four gates green.
