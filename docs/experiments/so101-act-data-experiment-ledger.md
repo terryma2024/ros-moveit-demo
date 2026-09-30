@@ -36726,3 +36726,23 @@ before anything is claimed about them.
 head-camera or head-search test. **What is not:** whether the remaining 34 are environmental (a live stack, an IPC
 detail, a fixture needing the installed package) or something this work touched. The next step is the same one that
 has worked three times in this task - read one traceback instead of reasoning from a count.
+
+## HS-080 — The teleop failures are deterministic, not xdist artifacts (round 439)
+
+Ran one failing file both ways in the same short-scratch environment:
+
+```
+serial:      7 failed in 4.07 s   (test_unified_bridge_cleanup.py)
+8 workers:   7 failed in 2.07 s   (same file)
+```
+
+Same count both ways, so these are not parallelism or IPC-contention artifacts: they fail deterministically in
+this environment. The single-test run I tried first produced no matching traceback lines, which means these cases
+depend on state their file's other tests set up - order- or fixture-dependent, not isolated.
+
+**Where this leaves the teleop classification:** 34 failures across `test_unified_bridge`,
+`test_unified_bridge_cleanup`, `test_unified_two_channel` and the `test_task8_*` files, deterministic, none of them
+a head-camera or head-search test, all of them in the unified-bridge and task 8 families that this work did not
+modify except for mounting the head-camera router in `unified/app.py`. That last point is precisely the kind of
+"adjacent, so probably fine" reasoning that hid the task 8 contract regression (HS-071), so the honest statement is:
+**unclassified**, with the next step being a single-file A/B against the commit before the router was mounted.
