@@ -35555,6 +35555,26 @@ no second detector, with its RED tests first.
 - **Owed:** Task 9's review verdict. The websocket's live framing remains for Task 11's installed smoke and
   Task 14's end-to-end run.
 
+## HS-037 — Task 9 verdict REJECT and its four findings fixed (commit 51775325b)
+
+- **Verdict** (`reviews/task9/task9-verdict.md`, GPT-6.1-Sol high, static, no tests run): claim 1 MET, four
+  NOT MET - owner validation checked only a positive pid and never owner drift, liveness or `started_ticks`;
+  a caller could override the descriptor's safe interval and the unavailable websocket accepted then closed;
+  the stop proof accepted caller-supplied booleans and `status()` reported `READY` during a stop in progress;
+  and package-gate registration could not be established from the permitted files.
+- **Fixes:** an owner is accepted only when its process is running, its recorded start ticks equal the
+  kernel's for that pid and it is the expected process when one is named (both composition paths share
+  `verify_owner`, and seven of the suite's own fixtures failed until they carried this live process as the
+  owner - the check working as intended); a target request carrying `safe_interval_rad` is refused with 409
+  `HEAD_TARGET_INTERVAL_SEALED` and only the descriptor's sealed interval is used; the stop proof consumes
+  raw samples requiring a finite non-negative velocity and a strictly newer timestamp, with missing samples
+  and time regression resetting it, and `status()` reports `STOPPING` until the proof completes; the
+  unavailable websocket closes with code 1013 after reporting the 503 code.
+- **Gate:** head-camera suite **9 passed**; `ruff check` clean, run with `set -o pipefail` so a failing check
+  genuinely stops the commit.
+- **Owed:** confirmation of these fixes, and the package-gate registration question (the CMake entry exists;
+  establishing it from the permitted files was outside the reviewer's scope).
+
 ---
 
 ## RESUME POINT (updated every checkpoint, read this first)
