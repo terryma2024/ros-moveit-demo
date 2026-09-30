@@ -39982,3 +39982,30 @@ honest resolution is that **the no-cup gate already exists where the plan puts m
 
 Launching the full grid (18 cells x A/B/C) with `_measure_static`, `os.chdir(cell)` around each call so Ultralytics' `runs/`
 output lands in the campaign root rather than the worktree (HS-211's fix), and per-candidate `*-grid.json` plus a summary.
+
+## HS-213 — Grid complete (18/18 cells for A, B, C) and the three operating points frozen and gate-accepted
+
+| candidate | cells measured | best (min_confidence, iou) | mask_map50_95 | runner-up margin |
+| --- | --- | --- | --- | --- |
+| A (pinned baseline) | 18/18 | (0.25, 0.5) | 0.9540 | **0.0** |
+| B (head-only) | 18/18 | (0.25, 0.5) | 0.9836 | **0.0** |
+| C (head+task 1:1) | 18/18 | (0.25, 0.5) | 0.9882 | **0.0** |
+
+**The margin being exactly zero for all three is the finding, not a rounding artefact:** the head val split does not
+discriminate operating points - the detector saturates it (the probe cell reported `f1 = 1.0`, `recall = 1.0`), so a whole
+region of the grid ties at the top and HS-208's pre-declared tie-break (lower confidence) is what actually chose (0.25, 0.5).
+Recorded because HS-208 item 4 asked for exactly this: whether the winner is robust or knife-edge. Here it is neither - the
+grid is **non-discriminating**, which means the operating point is not meaningfully *selected* by this measurement, and any
+later claim that calibration "chose" 0.25/0.5 would be dressing up a tie-break as a result.
+
+**Frozen and validated by the consumer, not by my own check:**
+
+```
+A: frozen-a.json | gate accepted: candidate_id=A points=['head','task']
+B: frozen-b.json | gate accepted: candidate_id=B points=['head','task']
+C: frozen-c.json | gate accepted: candidate_id=C points=['head','task']
+```
+
+Each was written by `freeze_candidate` and then loaded through the gate's real `load_frozen_candidate`, which enforces the
+six-key contract, the sha256 binding and the both-domains rule (HS-201/205/207). So Step 4's producer now has a validated
+output for all three candidates, and the worktree stayed clean throughout (`git status --porcelain` empty after the grid).
