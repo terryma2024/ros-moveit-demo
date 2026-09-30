@@ -478,8 +478,10 @@ def test_readback_refuses_a_resigned_scope_document(tmp_path):
     ("events.jsonl", lambda row: row["payload"].update({"physics_step": -1}), "AUDIT_EVENT_INVALID"),
     ("physics.jsonl", lambda row: row.update({"release_epoch": -1}), "AUDIT_PHYSICS_INVALID"),
     ("references.jsonl", lambda row: row.update({"sequence": 1.0}), "AUDIT_REFERENCE_INVALID"),
-    # a re-signed row carrying keys from both raw reference groups is refused on readback (T3-F3)
-    ("references.jsonl", lambda row: row.update(_ratified_reference()), "AUDIT_REFERENCE_INVALID"),
+    # a re-signed row that genuinely carries both raw reference groups is refused on readback (T3-F3);
+    # one legacy key beside the packed group is what makes it a mixture rather than a valid alternative
+    ("references.jsonl", lambda row: row.update(_ratified_reference()) or row.update({"joint_names": ["a"]}),
+     "AUDIT_REFERENCE_INVALID"),
     # checks the readback already implements, each now with a re-signed counterexample
     ("acquisitions.jsonl", lambda row: row.update({"camera": "neck"}), "AUDIT_ACQUISITION_INVALID"),
     ("acquisitions.jsonl", lambda row: row.update({"acquisition_id": "s/1/head/9"}),
@@ -1034,3 +1036,30 @@ def test_the_formal_window_must_describe_the_rows_and_frames(tmp_path, overrides
     writer, window = _self_consistent_formal(tmp_path)
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
         writer.seal({**window, **overrides})
+
+
+def test_each_complete_raw_reference_alternative_round_trips(tmp_path):
+    """T3-F3's positive controls: either exclusive group alone verifies after re-sealing."""
+
+    (tmp_path / "packed").mkdir(parents=True, exist_ok=True)
+    writer, window = complete_audit(tmp_path / "packed")
+    path = writer.seal(window)
+    audit = path.parent
+    row = json.loads((audit / "references.jsonl").read_text().splitlines()[0])
+    for key in ("joint_names", "sim_stamp_ns", "received_monotonic_ns", "velocities"):
+        row.pop(key, None)
+    row.update(_ratified_reference())
+    payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    _resign(writer, path, "references.jsonl", payload)
+    assert verify_audit_manifest(path)["kind"] == "ACT_EPISODE_AUDIT"
+
+    (tmp_path / "legacy").mkdir(parents=True, exist_ok=True)
+    writer, window = complete_audit(tmp_path / "legacy")
+    path = writer.seal(window)
+    audit = path.parent
+    row = json.loads((audit / "references.jsonl").read_text().splitlines()[0])
+    for key in ("frames", "projected_positions", "projection_map"):
+        row.pop(key, None)
+    payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    _resign(writer, path, "references.jsonl", payload)
+    assert verify_audit_manifest(path)["kind"] == "ACT_EPISODE_AUDIT"

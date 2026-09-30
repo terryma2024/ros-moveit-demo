@@ -944,16 +944,25 @@ def verify_audit_manifest(path: Path) -> dict:
 
 
 def _records(path: Path, fields: frozenset, code: str, *,
-             optional: frozenset = frozenset()) -> list:
+             optional: frozenset = frozenset(),
+             optional_any: tuple = ()) -> list:
     try:
         rows = [json.loads(line) for line in path.read_text().splitlines()]
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError(code) from error
-    base = fields - optional
+    # F3: alternative groups are options too, so the base requirement must not demand them
+    base = (fields - optional - frozenset().union(*optional_any)) if optional_any \
+        else fields - optional
     for row in rows:
         if not isinstance(row, dict) or not base <= set(row) or not set(row) <= fields:
             raise ValueError(code)
         present = optional & set(row)
+        if optional_any:
+            # F3: exactly one complete group out of the alternatives, or none; a partial group and a
+            # mixture of two are refused, so a partial history still cannot pass as complete
+            carrying = [group for group in optional_any if group & set(row)]
+            if len(carrying) > 1 or (carrying and not carrying[0] <= set(row)):
+                raise ValueError(code)
         if present and present != optional:
             # an optional group is all-or-nothing, so a partial raw history cannot pass as complete
             raise ValueError(code)
@@ -1015,7 +1024,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     for row in _records(audit / "references.jsonl",
                         _REFERENCE_FIELDS | _REFERENCE_RAW_FIELDS | _REFERENCE_FRAME_FIELDS,
                         "AUDIT_REFERENCE_INVALID",
-                        optional=_REFERENCE_RAW_FIELDS | _REFERENCE_FRAME_FIELDS):
+                        optional_any=(_REFERENCE_RAW_FIELDS, _REFERENCE_FRAME_FIELDS)):
         if (type(row["sequence"]) is not int or row["sequence"] != sequence + 1
                 or row["source"] != "CONTROLLER_REFERENCE"
                 or type(row["accepted"]) is not bool

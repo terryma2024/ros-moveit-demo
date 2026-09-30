@@ -39882,3 +39882,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: F12 closed, F13 down to `sim_time_s`, F1/F3/F5/F11 open with F3's design recorded and
   two attempts reverted; targeted gate `logs/task3-final.run` **430 passed**; HEAD `2583b6409`; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-2127 — F3's round-trip defect fixed: the two raw-reference groups are alternatives again
+
+- **What landed** (`episode_audit.py`): `_records` gained `optional_any`, and the requirement reads "the base
+  fields are required; among the alternatives, exactly one complete group may be present, and none is also fine",
+  with the base computed as `fields - optional - union(groups)`. The references readback passes the legacy and
+  packed groups as alternatives instead of their union, so **either exclusive alternative round-trips** while a
+  partial group and a genuine mixture are still refused. Both attempts before this one failed for the reasons
+  CP-2125/CP-2126 record.
+- **The control that had been asserting the bug is now honest**: the mixed-group case adds **one legacy key** to a
+  packed row, which is what makes it a mixture rather than a valid alternative — under the old union rule the
+  "mixture" was manufactured by the rule itself.
+- **F3's required positive controls added**: a sealed audit whose reference carries **only** the packed group
+  verifies after re-sealing, and one carrying **only** the legacy group verifies too — the round trips the verdict
+  said did not exist.
+- **Evidence.** Targeted run this round: **90 passed** across the audit and recorder suites, and **green** across
+  the audit, recorder, release-boundary and capture suites together under `pytest-xdist` with 8 workers, its own
+  NVMe scratch and a non-empty tempfile proof.
+- **What F3 still lists beyond the round trips**: `reference_sequence` must be an exact integer (the readback
+  already refuses `1.0` by type); the readback does not repeat the writer's release-payload/identity epoch
+  equality; and the event identity check omits the lease identity and permits an initial release epoch unrelated
+  to the episode's, with increments not tied to release events. Those remain open and are the next F3 steps.
+- **State.** Item 3's list: **F12 closed**, F13 down to `sim_time_s`, **F3's round trips fixed** with its identity
+  residuals open, F1/F5/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD `241e6bbb3`; no push,
+  no evidence deletion, no hardware, no second stack.
