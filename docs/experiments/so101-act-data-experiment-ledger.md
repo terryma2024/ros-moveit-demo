@@ -37173,3 +37173,25 @@ contract the validator already validates against.
 **Ripple, next:** the seal hash changed from `f168bfc1...` to `7d963fdc...`, so the two perception configs and the
 dataset verify chain must be re-pointed exactly as in HS-046/HS-047 before the final-seal smoke can pass - and only
 then does the reviewer's item 4 close.
+
+## HS-100 — The whole seal chain is consistent again, under the final seal
+
+After the seal step fix (HS-099) the chain was re-pointed and re-verified end to end:
+
+| link | evidence |
+| --- | --- |
+| seal | `head-camera-probe11-20260930T101722Z`, `seal_sha256 7d963fdc...`, `coarse_step_candidate_rad 0.3`, no in-frame failures |
+| perception configs | both re-pointed to `7d963fdc...` (commit `e17a4b09c`) |
+| dataset | regenerated as `head-dataset-smoke-task11e-20260930T101823Z`, `geometry_seal_sha256 7d963fdc...`, rc=0 |
+| dataset verify | `--expected-train 32 --expected-val 8 --expected-test 8 --require-non-promotable` -> rc=0 |
+| search smoke | rc=0 against the final seal; `default` plans `coverage_complete: true`, `coarse_step_rad 0.3`, `stop_count 2` |
+| drift guard | the **old** dataset was refused by name against the new seal (`HEAD_DATASET_GEOMETRY_SEAL_DRIFT`) before regeneration - the chain refuses invented continuity |
+
+Two of my own mistakes are part of the record: `--sample-limit 48` fought the config's declared `split_counts`
+(`sample_limit allocation exceeds a configured split`), and my first attempt at the seal fix edited the contract
+document rather than the result document. Both were caught by the tools refusing rather than by my reading the code
+first.
+
+**Reviewer items now closed by evidence:** final-seal search smoke; dataset verify with an explicit output link;
+`so101_teleop` installed gate (rc=0); the shared-contract restoration. **Still open:** the standalone installed
+Teleop server smoke.
