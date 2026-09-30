@@ -39861,3 +39861,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: F12 closed, F13 down to its `sim_time_s` question, F1/F3/F5/F11 open with F3's fix
   now designed; targeted gate `logs/task3-final.run` **430 passed**; HEAD `14399a190`; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2126 — F3's second attempt reverted too: one refusal case stopped firing
+
+- **What I implemented** (CP-2125's design): `_records` gained `optional_any`, with `base = fields - optional -
+  union(groups)` — the part the first attempt missed — and a per-row rule that refuses a partial group or a
+  mixture of two; the references readback now passes the legacy and packed groups as alternatives.
+- **Result**: `88 passed, 1 failed` — the newly failing case is a **refusal** control that stopped refusing
+  (`DID NOT RAISE`), reported as `[…-<lambda>-AUDIT_REFERENCE_INVALID1]`. Two candidates fit that id: the
+  `{"sequence": 1.0}` case (the exact-integer rule) and the mixed-group case (both groups present). I did not
+  establish which, because pytest's id does not name the lambda — and that ambiguity is itself the reason to stop.
+- **Reverted and verified**: the file is restored and the audit and recorder suites re-run green, so the tree
+  carries no half-applied change.
+- **What the next attempt should do differently, concretely**: before changing `_records`, print the references
+  parametrisation **with each case's lambda source** (`inspect.getsource` or the test's own ids) so the failing
+  index maps to a known case; then assert per case while iterating. The design itself (alternative groups with an
+  explicit `base` subtraction) stands, and the positive round trips F3 asks for — one sealed audit carrying only
+  the packed group, one carrying only the legacy group — remain to be added.
+- **State.** Item 3's list: F12 closed, F13 down to `sim_time_s`, F1/F3/F5/F11 open with F3's design recorded and
+  two attempts reverted; targeted gate `logs/task3-final.run` **430 passed**; HEAD `2583b6409`; no push, no
+  evidence deletion, no hardware, no second stack.
