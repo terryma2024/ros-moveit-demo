@@ -43284,3 +43284,12 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   replaces the preset-fixture shortcut.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
   three of four plus its carrier cut; F5 in progress; goal paused.
+
+## CP-2291 - F5 first half, item two: every registered kind carries a non-decreasing history
+
+- _formal_coverage_ok now requires each registered physics kind to appear with sim_time_s values that never
+  decrease, so presence as a name no longer stands in for a history. First try, green: 204 passed.
+- F5's last first-half item: the physics release epochs must never decrease and must only name epochs a release
+  event named - the relation between the physics stream and the events stream that the audit has never checked.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+  three of four plus its carrier cut; F5 first half two of three items; goal paused.
