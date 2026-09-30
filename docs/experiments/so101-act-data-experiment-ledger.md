@@ -36174,3 +36174,17 @@ Progress and one concrete obstacle:
 
 No test result was produced, so nothing is claimed about the benchmark suite from this attempt; the build is
 verified and the next step is pinned.
+
+## HS-055 — README pinning: mostly present, one required statement missing (round 360)
+
+Checked against Task 11's requirements rather than assumed:
+
+| requirement | state |
+| --- | --- |
+| pins `zjumty/so101-yolo11n-seg-plastic-cup` at revision `b55430fb75c0207b35bd20f4e328e042bff06f3f` | **present** (line 480) |
+| pins `best.pt` SHA256 `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` | **present** (line 549), and the file on disk hashes to exactly that value (verified this round) |
+| states that Head Search uses YOLO11n-Seg only with **no** Grounded-SAM | **missing** - the README currently describes the Grounded-SAM bundle as a separate, complementary asset (lines 475, 481), which is true for the existing ACT work but does not say that Head Search excludes it |
+
+So the remaining README edit is one scoped paragraph, and per the repository rules it must be written with the
+project's humanizer for English prose. The weights digest is confirmed independently this round, so the pinning
+claim in that paragraph will be a verified fact rather than a quotation.
