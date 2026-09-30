@@ -40442,3 +40442,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   done** with this one ready and the six sites listed, F1/F11 open; targeted gates `logs/task3-final.run` **430
   passed** and `logs/task3-f5-lifecycle.run` **201 passed**; HEAD `64efa9122`; no push, no evidence deletion, no
   hardware, no second stack.
+
+
+## CP-2153 — F5's raw-reference step: the three sites are patched, the joint names' home is the last unknown
+
+- **What happened**: site 1064's reference line spells its positions out (`[0.1, 0.2, ... 0.6]`) rather than using
+  the `[0.1] * 6` form the other two use, so the shape-matched patch aborted (nothing written to the test file,
+  the predicate edit already applied). A second attempt matched each site's `"accepted": True})` tail by **line
+  number** and did patch all three — then the suite failed at **collection** with
+  `ImportError: cannot import name 'ARM_JOINTS' from 'so101_demo.act.episode_audit'`: the constant lives elsewhere
+  (the grep printed nothing from that module), so the import I appended is wrong.
+- **Both files restored to HEAD; the audit suite re-runs green.**
+- **What the next pass needs, and nothing more**: the home of the ratified joint order — the grep this round shows
+  it is not defined or imported in `episode_audit.py`, so it must come from a sibling module (the runner imports it
+  from somewhere, and the test file already imports from several) — then the same three line-number patches with
+  that name imported from the right place, plus the predicate clause CP-2152 recorded.
+- **One environment fact worth keeping**: the failing import's path was
+  `.../nonhead-first-episode-plan.hKhvkON3/pypath/so101_demo/act/episode_audit.py`, so the test interpreter resolves
+  `so101_demo` through the plan's `pypath` copy, which does reflect worktree edits (the predicate change took
+  effect) — useful the next time a module and its tests disagree about what was loaded.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 four of six steps
+  done**, F1/F11 open; targeted gates `logs/task3-final.run` **430 passed** and `logs/task3-f5-lifecycle.run`
+  **201 passed**; HEAD `763b466df`; no push, no evidence deletion, no hardware, no second stack.
