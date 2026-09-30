@@ -1116,6 +1116,14 @@ def _formal_coverage_ok(audit: Path) -> bool:
     # F5: "full registered physics" is every registered kind being present, which is checkable without a phase
     # field the rows do not carry
     kinds = {row["kind"] for row in physics}
+    # F5: presence is not history, so each registered kind's rows must also advance in time - a kind whose rows
+    # jump backwards, or that appears only once where the phase sequence needs several, is not the history the
+    # phase completions above claim to summarise
+    for kind in _PHYSICS_KINDS:
+        times = [row["sim_time_s"] for row in physics if row["kind"] == kind]
+        if (not times or any(type(value) not in (int, float) for value in times)
+                or any(later < earlier for earlier, later in zip(times, times[1:]))):
+            return False
     # F5: the ratified observations must actually be retained, so at least one physics row carries both records
     observed = any(isinstance(row.get("observation"), dict)
                    and "planning_scene_observation" in row["observation"]
