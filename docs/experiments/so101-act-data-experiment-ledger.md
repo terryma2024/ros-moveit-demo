@@ -40471,3 +40471,38 @@ selected candidate. Something has to give, and there are only two honest reading
 Reading 1 is the only one that keeps both tasks' stated contracts intact, and it is a decision about *identity semantics* rather
 than a code change - so it is the user's call, not mine. No implementation started; recorded because a circular dependency
 should be surfaced where it is found, not worked around by quietly minting an artefact whose name says "Task 13".
+
+## HS-233 — The calibration runtime "succeeds" in 45 s producing 378 bytes: the six phases are stubs
+
+Started the run with a clearly-labelled pre-selection runtime identity (user-authorized, HS-231 option 1):
+
+```
+frozen-runtime.json = {"runtime_id": "head-search-preselection-20260930T144533Z",
+                       "allow_cpu_fallback": false, "purpose": "Task 12 pre-selection episode recording;
+                       NOT Task 13's promoted frozen runtime", "toolchain_root": ..., "source_commit": ...}
+so101_head_search_calibration run --run-root $MODEL_RUN/head-search-run-20260930T144533Z
+-> RUN_SUCCEEDED head-search-preselection-20260930T144533Z   rc=0
+```
+
+and the entire run root is two small files:
+
+```
+run-receipt.json        {"phases": ["production_smoke","scenarios","restart_default","restart_left",
+                                    "restart_forward","aggregate"], "runtime_id": "head-search-preselection-…"}
+calibration-state.json  {"completed": [ … same six … ], "state": "SUCCEEDED"}
+                        378 bytes total
+```
+
+**So the six heavy phases are declared and marked complete without doing anything**: no measurements, no episode records, no
+calibration bundle, no per-phase evidence. The run "succeeds" because the phase list is walked and receipted, not because the
+work exists.
+
+**This is the largest gap found yet, and it sits upstream of two tasks:** Step 5's held-out episodes cannot come from this
+runtime (it records nothing), and Task 13's own Step 1 run would equally produce nothing - so the 17 values Task 13 asks the user
+to approve could not be measured by this path either. The earlier smoke result (HS-178: `coverage_complete: true`) came from the
+**separate** `so101_head_search_smoke` CLI, which is a planning/coverage proof, not a closed-loop episode recorder.
+
+**Auto-chosen next step** (per the user's instruction to take the recommended option at decision points): implement a **minimal
+scenario-phase episode recorder** that produces the HS-222 record shape for the `calibration` and `held_out_evaluation` seeds -
+reusing the ACT stack's neck/search ports (HS-230) rather than the dataset renderer (HS-227/229, both withdrawn) - and drive it
+from a script under the campaign root first, so nothing in the verified toolchain changes until the shape is proven.
