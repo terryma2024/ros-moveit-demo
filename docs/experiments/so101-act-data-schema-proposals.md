@@ -260,3 +260,41 @@ the audit holds what was observed rather than the conclusion alone. Implementati
 already validates the scene and the controller state starts returning these records, the two helpers stop
 asserting the booleans and derive them, and the audit's physics schema requires the records for the kinds
 whose verdicts depend on them.
+
+
+## Amendment A.1 — RATIFIED 2026-09-30 by the owner
+
+The owner approved amendment A.1 and resolved its one open detail: **the projection map selects
+`evaluated_positions`** — the interval-evaluated values at `evaluation.requested_sim_time_s` — while the
+original publication stays immutable beside them. Both live in the record, the label uses the evaluated
+values, and no publication is ever overwritten or presented as a new one.
+
+Ratified per-frame shape, replacing the single flat `evaluation` in Proposal A:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `frames[kind].joint_names` | list of non-empty strings | the published names in order (5 arm, 1 gripper) |
+| `frames[kind].published_positions` | list of finite numbers | the original publication, immutable |
+| `frames[kind].published_velocities` | list of finite numbers | the original publication's velocities, immutable |
+| `frames[kind].evaluated_positions` | list of finite numbers | the value evaluated for the record's target instant |
+| `frames[kind].evaluated_velocities` | list of finite numbers | that evaluation's velocities |
+| `frames[kind].evaluation` | object | `{requested_sim_time_s, basis, goal_id, accepted_sim_s, revoked_sim_s}` for **this kind** |
+| `frames[kind].sim_stamp_ns` | integer ≥ 1 | the publication's source stamp |
+| `frames[kind].received_monotonic_ns` | integer ≥ 1 | the observer's receipt instant |
+| `frames[kind].observer_sequence` | integer ≥ 1 | the observer's own per-kind publication sequence |
+
+Record level, unchanged from Proposal A: `projected_positions` (six finite numbers) and `projection_map`
+(six `[kind, index]` pairs). **The map indexes `evaluated_positions`**, and each entry must equal the
+projected value, which is the checked relationship that replaces the five-plus-one fusion.
+
+Rules that follow from the ratification: every per-kind `evaluation.requested_sim_time_s` must equal the
+record's `reference_time_s` (already enforced at the record level and now per kind); `accepted_sim_s` may
+not lie after the target and a `revoked_sim_s` before it voids that kind's evaluation; the per-kind history
+ordering applies to `sim_stamp_ns`, `received_monotonic_ns` and `observer_sequence`; and the two raw groups
+(packed and legacy) remain mutually exclusive.
+
+Implementation order for the six boundaries, in one pass: `act/episode_audit.py` (this schema, including
+readback parity), `act/expert.py` (forward instead of projecting), `act/continuous_capture.py` (forward the
+packed group), `adapters/act/ros_expert.py` (pass-through, already lossless), and
+`adapters/act/ros_broker.py::reference_state` (expose per-kind frames and evaluations from the stored
+publications plus the accepted-interval records, instead of the fused six-joint projection).

@@ -37263,3 +37263,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `697920350`;
   gate `logs/task3-gate9.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2010 — Owner ratified amendment A.1 with the evaluated-position mapping, and chose to converge Task 3
+
+- **Ratification recorded** in `docs/experiments/so101-act-data-schema-proposals.md`: the per-kind
+  `evaluation` replaces the flat block, each frame carries its **immutable publication**
+  (`published_positions`/`published_velocities`) beside the **evaluated** values
+  (`evaluated_positions`/`evaluated_velocities`) for the record's target instant, and the **projection map
+  selects the evaluated values** — the detail the reviewer insisted on, since an interval evaluation at a
+  later target may legitimately differ from the publication.
+- **Routing chosen: converge Task 3.** The next pass therefore changes the six boundaries in one go —
+  the audit schema and its readback parity, the expert tap and the continuous capture forwarding the packed
+  group, and the broker exposing per-kind frames with their evaluations instead of the fused six-joint
+  projection — while the fail-closed gates stay in place until a producer actually supplies the shape.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `203d6f56b`;
+  gate `logs/task3-gate9.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
+  deletion, no hardware, no second stack.
