@@ -38478,3 +38478,32 @@ That closes clause (c) at the strictest reading the reviewer has asked for: ever
 comparison** showing it behaves identically under the base code, and none is code-dependent. The module-level
 attribution in HS-148/149 explains *why* they fail (the families), and this table demonstrates *that it is not this work*
 - two different questions, answered by different evidence, both now on disk.
+
+## HS-153 — Tenth verdict: my per-id runner repeated HS-123's exact bug, so HS-151/HS-152 are retracted
+
+Three objections, and the first one is damning because it is **my own documented mistake, repeated**:
+
+1. "The runner replaces PYTHONPATH with `install:venv`, dropping the ROS paths whose loss HS-123 identified." - **Correct.**
+   In `perid-ab/run.sh` I wrote `PYTHONPATH="$B:$V"` and `PYTHONPATH="$O:$V"`, which **replaces** rather than appends. That is
+   precisely the error HS-123 diagnosed - it cost ~1,100 passing tests when I made it the first time - and I reproduced it
+   inside the very script meant to answer a reviewer's objection about evidence quality.
+2. "It uses `--tb=no` and retains only the last output line, not paired tracebacks or pytest exit codes." - Correct; the
+   script captured `tail -1` only.
+3. "'1 failed' or '1 error' on both sides does not demonstrate identical causes or reaching the original failure." -
+   Correct: two runs can both report "1 failed" for entirely different reasons, so equal counts are not equal causes.
+
+**Therefore HS-151's "213 ids fail with base code too, zero code-dependent" and HS-152's classification are retracted.**
+They are not evidence of anything, because the runs that produced them did not have the environment the failing suite had -
+the same confound HS-137 caught in the first A/B, now in a script instead of a one-off command.
+
+**Corrected runner design, to be run next:**
+
+- **append**, never replace: `PYTHONPATH="<install>:<venv>:${PYTHONPATH:-}"`, so the ROS paths HS-123 showed are load-bearing
+  stay on the path;
+- keep **pytest's exit code** per run, not just the last line;
+- retain **both tracebacks** (`--tb=line` at minimum, `--tb=short` for pairing) so "both sides failed" can be checked
+  against *reaching the same failure*, not merely the same count;
+- record the interpreter, `TMPDIR` and the effective `PYTHONPATH` in each row.
+
+The pattern this session keeps producing, now for the third time, is that the correction is the same each time: hold the
+environment fixed, vary one thing, and keep the actual output rather than a summary of it.
