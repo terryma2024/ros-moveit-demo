@@ -35391,3 +35391,57 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   attach the raw block in the port's `_search_evidence`/`_sequence_evidence`, wire the broker's
   claim/dispatch/accept/revoke/stop events into the writer, then the Task 3 Codex checkpoint. HEAD
   `2adbed448`; 39-path dirty baseline untouched; no push, no evidence deletion, no hardware.
+
+
+## CP-1943 — Task 3 checkpoint verdict FAIL (6 Important) and the fix plan
+
+- **Verdict** (`reviews/task3-verdict.md`, dispatch `52f4ba6c-e793-45c8-9eee-c3a6c458be38`, reviewed HEAD
+  `ca3c5162a`): **FAIL, 0 Critical / 6 Important / 0 Minor**. This is the first review to compare my
+  implementation against the **frozen plan's declared common evidence schema**, and it does not match.
+  The findings are source traces plus contract citations, not executed counterexamples.
+- **T3-F1 (the root of several others).** The plan declares `ACT_EPISODE_AUDIT`, schema version 2, with
+  `scope_sha256`, the full `identity`, window/schedule metadata and file entries of
+  `{path,size,sha256}`. I shipped `ACT_EPISODE_AUDIT_MANIFEST` version 1 with an `inputs_sha256` string
+  and a filename→digest mapping, `rows.jsonl` with `head_id/wrist_id` instead of the declared
+  `row-bindings.jsonl` acquisition fields, acquisitions without shape/dtype, events without identity,
+  monotonic time or kind-specific payload schemas, and references reduced to a rounded requested time,
+  six positions, a source constant and a local sequence — dropping the raw controller/accepted-goal
+  history, joint names, source/receipt timing and revocation boundaries that
+  `adapters/act/controller_reference_observer.py:69` actually retains. Seal v2 invents a nested `audit`
+  path/hash block instead of the declared audit/scope digest keys. **No amendment authorized this
+  replacement format**, so the honest disposition is to implement the frozen schema (or obtain an
+  explicit amendment), and to add contract fixtures consumed independently of my writer rather than
+  tests that adopt whatever format I wrote.
+- **T3-F2.** `bind_row` checks presence and single-use only: it never checks head versus wrist, the
+  acquisition's session/reset against the writer identity, source time, or that `reference_sequence`
+  resolves to an accepted reference for that action instant; sequence 0 or a nonexistent sequence is
+  accepted, the same unbound acquisition passes as both head and wrist (both checks run before `_bound`
+  is updated), and row order/contiguity is not enforced or re-checked on readback. The reviewer adds a
+  sharp example: my own `complete_audit()` fixture passes because it appends camera-first, so
+  `frames[0]`/`frames[1]` are both head acquisitions — the "complete" audit was never complete.
+- **T3-F3.** `verify_audit_manifest` iterates whatever `manifest["files"]` lists instead of requiring
+  the full expected inventory with safe relative paths, then semantically reads only acquisitions, rows
+  and physics — so an inventory omitting `references.jsonl` leaves that stream unchecked and an empty
+  inventory still verifies. It also does not reapply closed fields/types, acquisition or row
+  uniqueness, stream sequence order, support schema, or input/scope/window consistency.
+- **T3-F4.** Seal v2 hashes the audit manifest and scope files it is handed without establishing that
+  they belong to this episode (no link from the audit's identity/scope to the recorder's own
+  identity), so an arbitrary audit of another episode could be bound into this seal.
+- **T3-F5.** Missing raw physics and missing broker events are not gated: a run can still reach full-run
+  eligibility and seal an audit with no physics rows and no broker history, because the raw block is
+  optional and the broker events are unwired — i.e. my "optional by design" choice currently creates
+  exactly the hole the reviewer was asked to judge, and it does.
+- **T3-F6.** The new capture→audit call I added in CP-1940 is an unguarded dependency call, so it
+  reintroduces the very failure class Task 2 closed: a refusing audit writer escapes without latching.
+- **Fix order for the next pass.** (1) Read the frozen plan's schema section verbatim and either
+  implement `ACT_EPISODE_AUDIT` v2 field-for-field (identity, scope, window/schedule, file entries,
+  `row-bindings.jsonl`, acquisition shape/dtype, event identity/monotonic/payloads, raw reference
+  history with timing and revocation boundaries, declared seal digest keys) or record an owner
+  amendment; (2) make binding semantic (camera, episode ownership, epoch/session, resolved accepted
+  reference, contiguous unique rows, readback parity); (3) make readback closed-inventory and
+  semantic; (4) make seal v2 prove the audit/scope belong to its episode; (5) gate full-run
+  eligibility on the required raw physics and broker evidence; (6) latch the capture→audit call like
+  every other dependency. Contract fixtures must be written from the plan text, not from my writer.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL, fix pass
+  outstanding); items 4-8 pending.** HEAD `ca3c5162a`; 39-path dirty baseline untouched; no push, no
+  evidence deletion, no hardware, no second stack.
