@@ -35995,3 +35995,31 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   and sealing gate follow them.
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `014f30e4a`;
   39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1958 — Task 3 fix pass, thirteenth instalment: the seal is correlated with its audit (T3-F4 residual)
+
+- **Identity correlation.** `verify_episode_seal(path, audit_manifest=, scope=)` now reads the audit's
+  `episode.json` and requires its session, attempt and reset epoch to equal the seal's
+  (`EPISODE_SEAL_AUDIT_EPISODE_MISMATCH`), so a seal that hashes correctly but names an audit of another
+  episode cannot pass. The digest comparison runs first, so the visible refusal for a *different* audit
+  remains `EPISODE_SEAL_AUDIT_MISMATCH`; the identity comparison is the guard once the bytes match, and
+  the positive case exercises it. New control: two audits of different sessions, the second handed to the
+  first seal's verification.
+- **Row correlation, with an honest limit.** For an episode with recorded rows the number of audit
+  bindings must equal `record_count` (`EPISODE_SEAL_ROWS_MISMATCH`), so a successful multi-row episode
+  cannot name insufficient bindings. A business-failed episode with zero recorded rows is **not**
+  constrained by this count, and my recorder fixture pairs exactly that case with an audit holding one
+  binding — an inconsistent fixture I chose to record rather than silently weaken. A multi-row positive
+  control needs a recorder fixture that seals real rows and is still open.
+- **Evidence.** `logs/task3-fix13.run` rc=0 across `test_act_recorder.py`, `test_act_episode_audit.py`,
+  `test_act_release_boundary.py` and `test_act_continuous_capture.py`, with its own NVMe scratch and a
+  non-empty tempfile proof. One of my own controls had to be corrected: the cross-episode case expected
+  the identity error while the digest check legitimately fires first.
+- **Still open.** **T3-F1**: the window schema needs an owner decision on key names before strict
+  enforcement, and the raw controller/accepted-goal history, source/receipt clocks, full physics payloads
+  and broker event kinds with typed validators wait on their producers. **T3-F4**: the multi-row
+  binding/count/time/action correlation and the exact version-specific field gate that still admits a
+  rehashed v1 document carrying v2 digest fields. **T3-F5**: the fail-closed eligibility and sealing gate.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `425f3f027`;
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware.

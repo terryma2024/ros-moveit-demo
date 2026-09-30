@@ -380,6 +380,18 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
                 raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
             # and the audit must still verify end to end, not merely hash to the sealed digest
             verify_audit_manifest(audit_manifest)
+            with (audit_manifest.parent / "episode.json").open("rb") as stream:
+                audit_identity = json.loads(stream.read())
+            if (audit_identity.get("session_id") != document["session_id"]
+                    or audit_identity.get("attempt_id") != document["attempt_id"]
+                    or audit_identity.get("reset_epoch") != document["reset_epoch"]):
+                # a checksum-consistent seal naming a valid but unrelated audit is still not evidence
+                raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
+            bindings = (audit_manifest.parent / "row-bindings.jsonl").read_text().splitlines()
+            if document["record_count"] > 0 and len(bindings) != document["record_count"]:
+                # every recorded row must be bound to the acquisitions it consumed; a business-failed
+                # episode with no recorded rows is not constrained by this count
+                raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
     rows = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
     if len(rows) != document["record_count"]:
         raise ValueError("EPISODE_RECORD_COUNT_MISMATCH")

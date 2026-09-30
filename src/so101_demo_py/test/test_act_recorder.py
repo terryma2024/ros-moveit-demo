@@ -205,7 +205,7 @@ def test_fsync_failure_is_infrastructure_not_a_business_failed_seal(tmp_path, mo
     assert not (tmp_path / "episode/seal.json").exists()
 
 
-def _audit_and_scope(tmp_path):
+def _audit_and_scope(tmp_path, *, session="session-1", attempt="attempt-1"):
     import hashlib as _hashlib
 
     import numpy as _np
@@ -226,14 +226,14 @@ def _audit_and_scope(tmp_path):
 
     scope_document = json.loads(scope.read_bytes())
     writer = EpisodeAuditWriter(tmp_path / "audit-episode", scope_document,
-                                {"session_id": "session-1", "attempt_id": "attempt-1",
+                                {"session_id": session, "attempt_id": attempt,
                                  "reset_epoch": 2, "release_epoch": 1, "scene_id": "default",
                                  "seed": 0},
                                 {"inputs_sha256": "c" * 64})
     minter = AcquisitionMinter()
     frames = {}
     for camera in ("head", "wrist"):
-        frame = minter.mint(camera, session_id="session-1", reset_epoch=2, stamp_s=1.0,
+        frame = minter.mint(camera, session_id=session, reset_epoch=2, stamp_s=1.0,
                             received_monotonic_ns=1, pixels=_np.zeros((480, 640, 3), dtype=_np.uint8))
         writer.append_acquisition(frame)
         frames[camera] = frame
@@ -325,3 +325,18 @@ def test_a_v2_seal_fsyncs_the_referenced_files_and_the_parent_directory(tmp_path
     inodes = {inode for inode, _ in synced}
     assert manifest.stat().st_ino in inodes and scope.stat().st_ino in inodes
     assert (recorder.root.parent.stat().st_ino, True) in synced
+
+
+def test_a_v2_seal_refuses_an_audit_of_another_episode(tmp_path):
+    """A checksum-consistent seal naming a valid but unrelated audit is not evidence (T3-F4)."""
+
+    manifest, scope = _audit_and_scope(tmp_path)
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    path = recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
+    (tmp_path / "other").mkdir(parents=True, exist_ok=True)
+    other, other_scope = _audit_and_scope(tmp_path / "other", session="session-2")
+    # a valid audit of another episode is refused; its digest cannot match the sealed one, and the
+    # identity comparison behind that digest is exercised by the positive case above
+    with pytest.raises(ValueError, match="EPISODE_SEAL_AUDIT_MISMATCH"):
+        verify_episode_seal(path, audit_manifest=other, scope=other_scope)
