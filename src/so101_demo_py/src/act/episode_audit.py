@@ -401,6 +401,11 @@ def _event_identity_ok(event_identity, episode_identity, *, release_epoch: int |
             or event_identity.get("attempt_id") != episode_identity.get("attempt_id")
             or event_identity.get("reset_epoch") != episode_identity.get("reset_epoch")):
         return False
+    lease = episode_identity.get("lease")
+    if lease is not None and event_identity.get("lease") != lease:
+        # F3: when the episode names a registered lease, every event identity must carry that same lease, so a
+        # foreign or missing lease cannot ride along with an otherwise matching episode identity.
+        return False
     epoch = event_identity.get("release_epoch")
     if type(epoch) is not int or epoch < 0:
         return False

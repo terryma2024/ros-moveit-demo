@@ -692,7 +692,7 @@ def test_readback_requires_exact_types_and_correlated_clocks(tmp_path):
                                     "sim_time_s": 1.0, "monotonic_ns": 1,
                                     "payload": {"phase": "SEARCH"}})
     with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
-        writer.append_source("events", {"kind": "phase_start", "identity": identity(),
+        writer.append_source("events", {"kind": "phase_start", "identity": {**identity(), "lease": _lease()},
                                         "sim_time_s": 1.0, "monotonic_ns": 2,
                                         "payload": {"phase": "SEARCH"}})
     # readback repeats the clock correlation on a re-signed stream of its own
@@ -730,7 +730,7 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
     for kind, payload in (("phase_complete", {"phase": "SEARCH", "physics_step": 1}),
                           ("release", {"release_epoch": 1, "supported": True,
                                        "no_fingertip_contact": True})):
-        writer.append_source("events", {"kind": kind, "identity": identity(), "sim_time_s": 1.1,
+        writer.append_source("events", {"kind": kind, "identity": {**identity(), "lease": _lease()}, "sim_time_s": 1.1,
                                         "monotonic_ns": 1, "payload": payload})
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
         writer.seal(_window() | {"extra": 1})
@@ -797,7 +797,7 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
     for kind, payload in (("phase_complete", {"phase": "SEARCH", "physics_step": 1}),
                           ("release", {"release_epoch": 1, "supported": True,
                                        "no_fingertip_contact": True})):
-        complete.append_source("events", {"kind": kind, "identity": identity(),
+        complete.append_source("events", {"kind": kind, "identity": {**identity(), "lease": _lease()},
                                           "sim_time_s": 1.1, "monotonic_ns": 1, "payload": payload})
     # this formal audit has coverage but no bound row, so its window says exactly that (T3-F11); it must
     # also hold the acquisitions its schedule declares, which is the rule the matcher enforces
@@ -985,6 +985,16 @@ def test_readback_reapplies_the_formal_coverage_gate(tmp_path):
     document["files"]["episode.json"] = {"path": "episode.json", "size": len(identity_bytes),
                                          "sha256": hashlib.sha256(identity_bytes).hexdigest()}
     document["identity"] = {**identity(), "lease": _lease()}
+    # its events must carry the same lease too, or the identity rule refuses before the coverage gate does;
+    # the rewrite is recorded in this same manifest document, the way the two above are
+    events_lines = (audit / "events.jsonl").read_text().splitlines()
+    events_bytes = ("\n".join(json.dumps({**json.loads(line), "identity": {**json.loads(line)["identity"],
+                                                                "lease": _lease()}},
+                                           sort_keys=True, separators=(",", ":"))
+                               for line in events_lines) + "\n").encode()
+    audit.joinpath("events.jsonl").write_bytes(events_bytes)
+    document["files"]["events.jsonl"] = {"path": "events.jsonl", "size": len(events_bytes),
+                                         "sha256": hashlib.sha256(events_bytes).hexdigest()}
     path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
     with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
         verify_audit_manifest(path)
@@ -1010,7 +1020,7 @@ def _self_consistent_formal(tmp_path):
     for kind, payload in (("phase_complete", {"phase": "SEARCH", "physics_step": 1}),
                           ("release", {"release_epoch": 1, "supported": True,
                                        "no_fingertip_contact": True})):
-        writer.append_source("events", {"kind": kind, "identity": identity(), "sim_time_s": 1.1,
+        writer.append_source("events", {"kind": kind, "identity": {**identity(), "lease": _lease()}, "sim_time_s": 1.1,
                                         "monotonic_ns": 1, "payload": payload})
     writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id,
                     frames[("wrist", 1.0)].acquisition_id, 1)

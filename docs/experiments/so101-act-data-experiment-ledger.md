@@ -39990,3 +39990,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: F12 closed; F3's round trips and release correlation fixed with the lease item one
   coupled fixture away; F13 down to `sim_time_s`; F1/F5/F11 open; targeted gate `logs/task3-final.run` **430
   passed**; HEAD `64cc6cd54`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2132 — F3's lease item closed: the shared identity predicate now requires the episode's lease
+
+- **What landed** (three coupled edits, in one pass as CP-2131 prescribed): (1) `_event_identity_ok` — the
+  predicate **both the writer and the readback** call — refuses an event identity whose lease differs from the
+  episode's whenever the episode names one; (2) the **four formal append sites** (`test_act_episode_audit.py` lines
+  695, 733, 800, 1013) give their events `{**identity(), "lease": _lease()}`; (3) the relabelled-coverage test's
+  tamper path re-signs its **events file** in the same in-memory manifest document as its scope and identity,
+  which is what the previous round's `AUDIT_HASH_MISMATCH` was missing.
+- **The rule's boundary is deliberate**: a diagnostic episode names no lease, so the clause is inert on that path
+  — the three diagnostic append sites at lines 59/146/206 are untouched, and the unit control (added in CP-2129
+  and re-landed here) asserts a matching lease passes, a missing or foreign one refuses, and a lease-less episode
+  is unaffected.
+- **Evidence.** Targeted run this round: **147 passed** across the audit, recorder, release-boundary and capture
+  suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a non-empty tempfile proof.
+- **What Task 3 still lists**: F3's last identity item (an initial release epoch unrelated to the episode's own,
+  and increments not tied to release events), F13's `sim_time_s` question (which needs the plan's ruling on the
+  closed seven-key record), and **F1**, **F5**, **F11**.
+- **State.** Item 3's list: **F12 closed**; **F3's round trips, release correlation and lease item closed** with one
+  identity item left; F13 down to `sim_time_s`; targeted gate `logs/task3-final.run` **430 passed**; HEAD
+  `c1906f678`; no push, no evidence deletion, no hardware, no second stack.
