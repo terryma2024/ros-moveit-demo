@@ -40012,3 +40012,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**; **F3's round trips, release correlation and lease item closed** with one
   identity item left; F13 down to `sim_time_s`; targeted gate `logs/task3-final.run` **430 passed**; HEAD
   `c1906f678`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2133 — The release-transition rule is right and it flags a production-path defect in the runner
+
+- **What I added**: a shared `_release_transition_ok(epoch, previous, *, kind)` — the first event must name the
+  run's own initial epoch (0 or 1), a repeat is fine, and `previous + 1` is allowed **only when the event is a
+  `release`** — called from the writer (beside its identity check) and from the readback, which is exactly F3's
+  "an initial release epoch unrelated to the episode's own, followed by increments not tied to release events".
+- **Result: 2 failures, and one of them is not a fixture.** `test_act_release_boundary.py`'s
+  `test_the_missing_raw_branch_is_accepted_by_a_real_audit_writer` drives the **real** `PickPlaceRunner` through a
+  real audit writer, and it now fails with `AUDIT_SCHEMA_INVALID` — so the runner advances its event identity's
+  release epoch on an event that is **not** a `release`, which the rule correctly refuses. The other failure is an
+  episode-audit fixture with the same shape. F3's complaint therefore describes the live path, not only the tests.
+- **Reverted, tree verified green** (audit + release-boundary suites pass).
+- **The next pass, precisely**: the runner builds each event's identity from `self._event_identity`
+  (`pick_place_runner.py:146`); find where that dict's `release_epoch` advances and tie the advance to the
+  `release` event it belongs to (the release epoch changes when the gripper opens, and that is the event the epoch
+  names), then re-land the shared rule with the two fixtures adjusted. The rule's boundary stays as designed: a
+  diagnostic episode names no lease and its events still must start at 0 or 1.
+- **State.** Item 3's list: F12 closed; F3's round trips, release correlation and lease closed, with this
+  production-path item now identified by a failing real-path test; F13 down to `sim_time_s`; F1/F5/F11 open;
+  targeted gate `logs/task3-final.run` **430 passed**; HEAD `1956cba24`; no push, no evidence deletion, no
+  hardware, no second stack.
