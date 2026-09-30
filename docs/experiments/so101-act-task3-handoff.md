@@ -72,3 +72,50 @@ installed CLI, the freeze/build/integration gates, one real `FULL_RESTART` MuJoC
 Recorder's lossless files, and the negative-copy delivery step. None of them start before the owner decides
 between converging Task 3 further (A.1 plus the producer wiring) and freezing Task 3 in its current
 fail-closed state to begin Task 4.
+
+---
+
+# UPDATE 2026-09-30 (later) — supersedes the sections above where they disagree
+
+Verified against HEAD `4be0018ef`; targeted gate `logs/task3-xdist.run` **410 passed under `pytest-xdist`
+(8 workers on 32 CPUs)**, which is the gate form the SO-101 skill requires — the serial figures quoted earlier
+in this file (403/410 in 26 s) were localisation runs, not gates.
+
+## Closed since the first version of this file
+
+- **Amendment A.1, ratified by the owner**, is implemented at the audit boundary, the tap, the capture and the
+  broker's data side: each frame carries its immutable `published_positions`/`published_velocities` beside
+  `evaluated_positions`/`evaluated_velocities` for the record's target instant, with a **per-kind**
+  `evaluation {requested_sim_time_s, basis, goal_id, accepted_sim_s, revoked_sim_s}`, and the record-level
+  `projection_map` **selects the evaluated values** (the owner's explicit choice). The broker serves both bases
+  through `reference_frames(kind, when)`; `reference_state` keeps the fused projection as the compatibility path.
+- **Readback exclusivity** for the two raw reference groups (CP-1999) and the **formal coverage gate on
+  readback** (CP-2000); five more re-signed counterexamples (CP-2003); the observer counter's off-by-one fix
+  with its 60-publication control (CP-1995); three more ratified-window rules (CP-2005/2006/2007).
+- **Producer step 1 of 4** (CP-2017/CP-2020): `RosTaskScenePort.observe_observation()` returns the record's
+  parts — sorted attached and world ids, `is_diff`, `source`, and `scene_revision` as the port's **own
+  documented read counter**, because MoveIt's `PlanningScene` message has no revision field (CP-2019).
+
+## Open, with the exact wiring
+
+1. **Producer steps 2-4.** Step 2: the readback that establishes the eight gates returns
+   `planning_scene_observation` (and `controller_feedback` from the controller status it already reads).
+   Step 3: `_gate_facts` (`pick_place_search_boundary.py:272`, called at `:308` in `sequence_facts` and `:402`
+   in `set_down`) **derives** `planning_scene_ok`/`joint_feedback_ok`/`controller_reference_ok` from those
+   records on the same instant; the literal is a **documented caller-supplied placeholder** (`:303-306`), and
+   the supplier is the SEARCH validation (`search()` at `:739`), which should store the validated receipt and
+   its instant on the boundary. Port side: the literal sits at `pick_place_search_port.py:412` inside
+   `_search_evidence` (`:313`). Step 4: keep the **six** phase-document tests green (CP-2016 names them) and
+   add controls for a missing or off-instant record.
+2. **Consumer half of A.1**: callers still read `reference_state`'s fused projection.
+3. **T3-F11's window-to-rows checks** (reverted twice; recipes in CP-1997/CP-2001).
+4. **`scene_revision`'s meaning** — option (a) is implemented; the owner may prefer amending the field.
+
+## Recipes and environment (unchanged from above, restated once)
+
+Extend an existing parametrisation or assertion block rather than building a new fixture (six first-try
+landings versus five reverts). Reusable helpers live in `test_act_recorder.py`, `test_act_episode_audit.py`,
+`test_act_controller_reference_observer.py` and `test_act_task8_search_port.py`; writers create their own root,
+so a fixture creates only the parent. Every run needs a fresh NVMe scratch with `TMPDIR`/`TMP`/`TEMP` and a
+tempfile proof. The **full module scope cannot be collected** here until Task 6 builds an install overlay
+(CP-2002), so the xdist gate covers the checkpoint's twenty files plus the observer suite.
