@@ -131,3 +131,35 @@ def test_startup_refuses_an_undeclared_key_and_binds_immutably() -> None:
     with pytest.raises(TypeError):
         binding.camera["width"] = 1280
     assert isinstance(binding.search_values["vertical_bounds_px"], tuple)
+
+
+def test_the_promoted_binding_can_build_a_search_config() -> None:
+    """The reviewer's remaining defect: search_config() must not raise KeyError from a promoted binding."""
+
+    config = _config()
+    binding = validate_head_search_binding(config, copy.deepcopy(config))
+    search = binding.search_config(session_id="session", attempt_id="attempt", search_start_rad=0.1)
+    assert search["frame_id"] == config["camera"]["frame_id"]
+    assert search["ray_origin_frame_id"] == config["camera"]["ray_origin_frame_id"]
+    assert search["settle_velocity_rad_s"] == config["motion"]["settle_velocity_rad_s"]
+    assert search["goal_tolerance_rad"] == config["motion"]["goal_tolerance_rad"]
+    assert set(search) == {
+        "horizontal_fov_rad",
+        "coarse_step_rad",
+        "search_timeout_s",
+        "max_age_s",
+        "max_skew_s",
+        "center_deadband_px",
+        "vertical_bounds_px",
+        "min_area_px2",
+        "min_confidence",
+        "max_fine_corrections",
+        "max_fine_total_rad",
+        "session_id",
+        "attempt_id",
+        "search_start_rad",
+        "settle_velocity_rad_s",
+        "goal_tolerance_rad",
+        "frame_id",
+        "ray_origin_frame_id",
+    }

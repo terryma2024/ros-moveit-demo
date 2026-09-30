@@ -236,7 +236,18 @@ def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearch
                 }
             ),
             camera=_freeze(runtime.get("camera") or {}),
-            motion=_freeze({"tracker": runtime.get("tracker") or {}}),
+            motion=_freeze(
+                {
+                    "tracker": runtime.get("tracker") or {},
+                    **(runtime.get("motion") or {}),
+                    "settle_velocity_rad_s": (runtime.get("motion") or {}).get(
+                        "settle_velocity_rad_s", runtime["values"]["stop_velocity_rad_s"]
+                    ),
+                    "goal_tolerance_rad": (runtime.get("motion") or {}).get(
+                        "goal_tolerance_rad", 0.05
+                    ),
+                }
+            ),
             search_values=_freeze(values),
         )
     try:
@@ -430,6 +441,7 @@ HEAD_SEARCH_DOCUMENT_KEYS = frozenset(
         "candidate_identity_sha256",
         "camera",
         "tracker",
+        "motion",
         "cuda_device",
         "allow_cpu_fallback",
         "controlled_dependencies",

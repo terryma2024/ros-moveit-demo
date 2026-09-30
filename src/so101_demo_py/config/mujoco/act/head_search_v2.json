@@ -4,6 +4,7 @@
     "frame_id": "head_camera_optical_frame",
     "height": 480,
     "name": "head_camera",
+    "ray_origin_frame_id": "base_link",
     "width": 640
   },
   "candidate_identity_sha256": "9c8a213ed9dcbc75a697e9fe6f10003be221901a938daad4e3afde1e18f91bcc",
@@ -12,6 +13,10 @@
     "torch"
   ],
   "cuda_device": "cuda:0",
+  "motion": {
+    "goal_tolerance_rad": 0.05,
+    "settle_velocity_rad_s": 0.05
+  },
   "runtime_id": "head-search-v2",
   "schema_version": 2,
   "tracker": {
