@@ -40252,3 +40252,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 planned here**,
   F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD `3220bf760`; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2144 — F5 correction: the runner already emits the lifecycle; the gap is the gate and the evidence
+
+- **Read this round** (`pick_place_runner.py:304-337`): the runner loops over `self.PHASES` and calls
+  `self._event("phase_complete", phase, latest_step)` at line **337** for **every** phase — so the prescribed
+  nine-phase lifecycle is **already produced** end to end, with RELEASE routed through `_set_down` and
+  `_release_preflight` and RADIAL_RETREAT through its own branch.
+- **What that changes about CP-2143's ordering**: "do the runner-side production first" was too broad. The
+  lifecycle half of F5 is done in the runner; what the retained positive fixture lacks (`phase_complete(SEARCH)`
+  plus `release` only) is therefore a **fixture** shortfall, and the real remaining work is (a) the **shared
+  predicate** that requires the nine phases' events plus the release, (b) what that predicate demands of
+  **references** (an accepted, complete raw group), **physics** (the ratified per-phase rows) and the
+  **observations** (scene/feedback), and (c) the fixture/evidence upgrade so a formal seal demonstrates it.
+- **Why this matters for effort**: (a) and (b) are gate-side edits in one module with both callers already
+  identified (775 and 968), while (c) is the part that will move the most fixtures — the same coupling that made
+  F3's last items three-pass work, now known in advance.
+- **State.** Item 3's list: **F12 closed**, **F3 closed**, F13 residual (needs the plan), **F5 narrowed as
+  above**, F1/F11 open; targeted gate `logs/task3-final.run` **430 passed**; HEAD `1ada2b142`; no push, no
+  evidence deletion, no hardware, no second stack.
