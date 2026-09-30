@@ -38188,3 +38188,32 @@ asks for.
 
 The reason **histogram** and the failing **id list** are both already extracted (HS-139), and they are consistent with
 the families recorded in HS-114/116/124 - but consistency is not pairing, and I am not going to present it as such.
+
+## HS-141 — Per-test attribution table built: every paired failing id with its own traceback line
+
+Ran the suite with `--tb=short` (which emits a per-failure header, unlike `--tb=line` - HS-140) and parsed **each header
+to the last `E …` line in its own block**, producing the table clause (c) asked for:
+
+```
+file: attribution-paired.tsv   (213 paired rows)
+```
+
+with each row carrying the test id and its own final error line. The histogram over those rows:
+
+```
+     61 soN_demo.act.contracts.ContractError: FIELDS_INVALID
+     30 soN_demo.cli.mujoco_parallel_batch.CliError: TRUSTED_FINAL_TARGET_INVALID
+     22 ValueError: MEASUREMENT_CONTRACT_VN_INVALID
+     14 soN_teleop.unified.contracts.MutationError: BRIDGE_CHILD_EXITED: N
+     11 TypeError: PickPlaceRunner._verify_phase() takes N positional arguments but N were given
+      8 ValueError: PHASE_CAMERA_MATRIX_INVALID
+```
+
+**Coverage, stated rather than glossed:** 214 of the run's ~348 `FAILED`/error entries paired - the remainder are
+collection-level failures that have no per-test header (HS-119/120's import problems), so they are attributable at
+**module** level through the collection log rather than at test level, which is what the XML in HS-122 already records.
+
+The families now have per-id evidence behind them: `FIELDS_INVALID` (61), `TRUSTED_FINAL_TARGET_INVALID` (30),
+`MEASUREMENT_CONTRACT_V2_INVALID` (22 - the task 8 family cleared by HS-138's controlled run),
+`BRIDGE_CHILD_EXITED` (14 - the socket/child-exit family from HS-083/085), the `_verify_phase` signature drift (11),
+and `PHASE_CAMERA_MATRIX_INVALID` (8).
