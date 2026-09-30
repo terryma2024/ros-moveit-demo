@@ -40144,3 +40144,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12 closed**; **F3 closed but for this one control**; F13 down to `sim_time_s`;
   **F1/F5/F11 open**; targeted gate `logs/task3-final.run` **430 passed**; HEAD `1c806f610`; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2139 — Why F3's control is not a one-line addition: the readback's gate precedes its event loop
+
+- **Read this round**: the readback raises `AUDIT_FORMAL_COVERAGE_INCOMPLETE` at **line 960**, immediately before
+  its `return manifest` — i.e. at the **end of that function** — while the event rows are consumed by the loop
+  around **line 1090**, which lives in a **different** function of the same module. So a readback-side copy of
+  CP-2137's tie cannot simply join the coverage gate: the epochs and their release names are not yet known there.
+- **What that means for the control**: either the events must be collected before that gate (moving work, not a
+  small edit), or the tie gets its **own** gate after the event loop — which is the smaller change and still makes
+  a re-signed stream refusable, which is what the verdict asks for.
+- **What already holds**: the **writer-side** tie is landed and green (CP-2137), so a run cannot seal a stream
+  whose epoch steps lack a release; what is missing is the same refusal on the **readback** path, and the control
+  that demonstrates it (CP-2138's recipe, now with this function-boundary constraint attached).
+- **State.** Item 3's list: **F12 closed**; **F3** landed on the writer path, its readback tie and control
+  pending with the constraint above; F13 down to `sim_time_s`; **F1/F5/F11 open**; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `494d2e211`; no push, no evidence deletion, no hardware, no second
+  stack.
