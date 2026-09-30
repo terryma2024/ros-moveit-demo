@@ -39694,3 +39694,26 @@ itself the argument for reading the library before concluding anything about it.
 **Decision needed from the user**, in the shape of HS-103/107/161: either implement the operating-point calibration and
 freezing for A/B/C (new code in this work, feeding the existing `compare` gate), or record Task 12 as complete through Step 3
 with Step 4 blocked on a capability the plan assumes and this work never built.
+
+## HS-201 — The missing producer's interface, read out of the consumer rather than invented
+
+`load_frozen_candidate` (perception_benchmark/head_search_models.py:304) defines exactly what a `frozen-{a,b,c}.json` must
+carry, and refuses anything else:
+
+```
+required keys: candidate_id, weight_sha256, operating_points, tracker, postprocess, runtime
+  candidate_id  in CANDIDATE_IDS == ("A", "B", "C")
+  weight_sha256 64 hex chars; a mismatch against expected_sha256 raises EVALUATION_FROZEN_IDENTITY_DRIFT
+  operating_points must carry BOTH "head" and "task" (else EVALUATION_FROZEN_IDENTITY_INVALID)
+  optional "promotable": if present and not True -> EVALUATION_CANDIDATE_NOT_PROMOTABLE (HS-052's rule)
+consumed by: CandidateEvaluation {static_image_metrics, held_out_episode_metrics,
+             latency_ms_per_frame, no_cup_false_candidates} -> choose_candidate -> write_comparison
+```
+
+So the unbuilt half of Step 4 has a **precise, testable contract** — six keys, both domains sealed, the weight digest bound to
+the frozen weights, and the non-promotable refusal preserved. That is the specification whichever way the open decision goes:
+if the operating-point calibration is authorised, this is what it must emit; if Task 12 stops at Step 3, this is the exact
+statement of what remains unbuilt rather than "calibration is missing".
+
+I also read it from the **consumer** side deliberately: the producer does not exist to describe itself, so the only honest
+specification available is the one the existing gate already enforces - and that is also the one a reviewer can check.
