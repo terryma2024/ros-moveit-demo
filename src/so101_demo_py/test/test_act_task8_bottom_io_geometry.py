@@ -223,6 +223,8 @@ def _camera_document(**overrides: object) -> dict[str, object]:
         "width": 640,
         "height": 480,
         "fovy_rad": math.radians(60.0),
+        "distortion_model": "plumb_bob",
+        "distortion": [0.0, 0.0, 0.0, 0.0, 0.0],
         "parent_body": "head_mount",
         "local_position_m": [0.0, 0.0, 0.0],
         "local_xyaxes": [-1.0, 0.0, 0.0, 0.0, -0.6, 0.8],

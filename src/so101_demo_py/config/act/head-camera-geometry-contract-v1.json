@@ -5,6 +5,14 @@
     "width": 640,
     "height": 480,
     "fovy_rad": 1.0471975511965976,
+    "distortion_model": "plumb_bob",
+    "distortion": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
     "parent_body": "head_mount",
     "local_position_m": [
       0.0,

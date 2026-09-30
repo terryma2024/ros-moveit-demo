@@ -35,10 +35,14 @@ CAMERA_KEYS = (
     "width",
     "height",
     "fovy_rad",
+    "distortion_model",
+    "distortion",
     "parent_body",
     "local_position_m",
     "local_xyaxes",
 )
+DISTORTION_MODEL = "plumb_bob"
+DISTORTION_COEFFICIENTS = (0.0, 0.0, 0.0, 0.0, 0.0)
 ANCHOR_KEYS = ("name", "cup_start_m", "neck_start_rad")
 CONTRACT_KEYS = (
     "camera",
@@ -178,9 +182,11 @@ class CameraDefinition:
     width: int
     height: int
     fovy_rad: float
-    parent_body: str
-    local_position_m: tuple[float, float, float]
-    local_xyaxes: tuple[float, float, float, float, float, float]
+    distortion_model: str = DISTORTION_MODEL
+    distortion: tuple[float, float, float, float, float] = DISTORTION_COEFFICIENTS
+    parent_body: str = ""
+    local_position_m: tuple[float, float, float, float] = (0.0, 0.0, 0.0)
+    local_xyaxes: tuple[float, ...] = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
 
     def __post_init__(self) -> None:
         if not isinstance(self.camera_name, str) or not self.camera_name:
@@ -199,6 +205,12 @@ class CameraDefinition:
                 "HEAD_CAMERA_CONTRACT_INVALID: fovy_rad must be inside (0, pi)"
             )
         object.__setattr__(self, "fovy_rad", fovy)
+        if self.distortion_model != DISTORTION_MODEL:
+            raise HeadCameraGeometryError(
+                f"HEAD_CAMERA_CONTRACT_INVALID: distortion_model must be {DISTORTION_MODEL!r}, the "
+                "only model MuJoCo's pinhole camera implements"
+            )
+        object.__setattr__(self, "distortion", _vector("distortion", self.distortion, 5))
         if not isinstance(self.parent_body, str) or not self.parent_body:
             raise HeadCameraGeometryError(
                 "HEAD_CAMERA_CONTRACT_INVALID: parent_body must be a non-empty string"
@@ -218,6 +230,8 @@ class CameraDefinition:
             "width": self.width,
             "height": self.height,
             "fovy_rad": self.fovy_rad,
+            "distortion_model": self.distortion_model,
+            "distortion": list(self.distortion),
             "parent_body": self.parent_body,
             "local_position_m": list(self.local_position_m),
             "local_xyaxes": list(self.local_xyaxes),
@@ -625,6 +639,11 @@ def validate_head_camera_geometry(
         or observed.height != frozen.height
         or observed.parent_body != frozen.parent_body
         or abs(observed.fovy_rad - frozen.fovy_rad) > contract.fov_tolerance_rad
+        or observed.distortion_model != frozen.distortion_model
+        or any(
+            abs(observed.distortion[index] - frozen.distortion[index]) > contract.fov_tolerance_rad
+            for index in range(5)
+        )
         or any(
             abs(observed.local_position_m[index] - frozen.local_position_m[index])
             > contract.fov_tolerance_rad
@@ -933,6 +952,8 @@ class _MuJoCoHeadCameraScene:
             "width": int(model.cam_resolution[camera_id][0]),
             "height": int(model.cam_resolution[camera_id][1]),
             "fovy_rad": fovy,
+            "distortion_model": DISTORTION_MODEL,
+            "distortion": list(DISTORTION_COEFFICIENTS),
             "parent_body": str(body_name),
             "local_position_m": position,
             "local_xyaxes": axes,

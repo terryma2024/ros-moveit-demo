@@ -392,6 +392,7 @@ class _HeadFakeRenderer:
         self.camera_name = camera_name
         self.local_position_m = tuple(float(value) for value in local_position_m)
         self.neck_rad = 0.05
+        self.fovy_rad = 1.0471975511965976 if seal is None else float(seal["camera"]["fovy_rad"])
         if seal is None:
             self.pose = ((-0.06, 0.06, 0.43), (0.9, 0.0, 0.0, 0.44))
         else:
@@ -419,6 +420,7 @@ class _HeadFakeRenderer:
             camera_quaternion_wxyz=self.pose[1],
             camera_local_position_m=self.local_position_m,
             camera_local_xyaxes=(-1.0, 0.0, 0.0, 0.0, -0.6, 0.8),
+            camera_fovy_rad=self.fovy_rad,
             arm_pose_rad=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
         )
 
@@ -447,6 +449,8 @@ def _geometry_seal(*, mjcf_path: Path, camera_name: str = "head_camera") -> dict
             "width": 640,
             "height": 480,
             "fovy_rad": 1.0471975511965976,
+            "distortion_model": "plumb_bob",
+            "distortion": [0.0, 0.0, 0.0, 0.0, 0.0],
             "parent_body": "head_mount",
             "local_position_m": [0.0, 0.0, 0.0],
             "local_xyaxes": [-1.0, 0.0, 0.0, 0.0, -0.6, 0.8],

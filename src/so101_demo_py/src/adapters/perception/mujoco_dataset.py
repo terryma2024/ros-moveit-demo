@@ -146,6 +146,7 @@ class RawRender:
     camera_quaternion_wxyz: tuple[float, float, float, float] | None = None
     camera_local_position_m: tuple[float, float, float] | None = None
     camera_local_xyaxes: tuple[float, ...] | None = None
+    camera_fovy_rad: float | None = None
     arm_pose_rad: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
@@ -197,6 +198,8 @@ class RawRender:
                 "camera_local_xyaxes",
                 tuple(float(value) for value in self.camera_local_xyaxes),
             )
+        if self.camera_fovy_rad is not None:
+            object.__setattr__(self, "camera_fovy_rad", float(self.camera_fovy_rad))
         if self.arm_pose_rad is not None:
             object.__setattr__(
                 self, "arm_pose_rad", tuple(float(value) for value in self.arm_pose_rad)
@@ -1425,6 +1428,15 @@ def _sample_camera_document(
             "HEAD_DATASET_ARM_POSE_DRIFT: the render used an arm configuration the seal was not "
             f"validated at ({observed_arm} vs {sealed_arm})"
         )
+    sealed_fovy = float(context["camera"]["fovy_rad"])
+    if (
+        render.camera_fovy_rad is None
+        or not abs(float(render.camera_fovy_rad) - sealed_fovy) <= 1e-9
+    ):
+        raise ValueError(
+            "HEAD_DATASET_CAMERA_FOV_DRIFT: the render used a field of view the seal does not "
+            f"describe ({render.camera_fovy_rad} vs {sealed_fovy})"
+        )
     sealed = context["camera"]
     sealed_local = _require_finite("camera.local_position_m", sealed.get("local_position_m"), 3)
     sealed_axes = _require_finite("camera.local_xyaxes", sealed.get("local_xyaxes"), 6)
@@ -1475,8 +1487,9 @@ def _sample_camera_document(
         "width": config.image_width,
         "height": config.image_height,
         "k": [focal, 0.0, cx, 0.0, focal, cy, 0.0, 0.0, 1.0],
-        "distortion": [0.0, 0.0, 0.0, 0.0, 0.0],
-        "distortion_model": "plumb_bob",
+        "fovy_rad": sealed_fovy,
+        "distortion": [float(value) for value in sealed["distortion"]],
+        "distortion_model": str(sealed["distortion_model"]),
         "position_m": list(render.camera_position_m),
         "quaternion_wxyz": list(render.camera_quaternion_wxyz),
         "local_position_m": observed_local,
@@ -1944,6 +1957,7 @@ class MuJoCoDatasetRenderer:
             camera_quaternion_wxyz=tuple(float(value) for value in camera_quaternion),
             camera_local_position_m=tuple(float(value) for value in self._model.cam_pos[camera_id]),
             camera_local_xyaxes=_local_xyaxes(self._model.cam_mat0[camera_id]),
+            camera_fovy_rad=float(self._model.cam_fovy[camera_id]) * math.pi / 180.0,
             arm_pose_rad=self._arm_rad,
         )
 
@@ -2178,6 +2192,7 @@ def _verify_sample_camera(
         return ValueError(f"HEAD_DATASET_CAMERA_IDENTITY_INVALID: seed {seed} {reason}")
 
     seal_camera_name = geometry_seal.get("camera_name")
+    geometry_seal_camera = geometry_seal.get("camera") or {}
     if camera.get("frame_id") != seal_camera_name:
         raise invalid("names another camera")
     fields = {
@@ -2214,6 +2229,28 @@ def _verify_sample_camera(
     width = float(geometry_seal["image_width"])
     height = float(geometry_seal["image_height"])
     focal = (width / 2.0) / math.tan(float(geometry_seal["horizontal_fov_rad"]) / 2.0)
+    if (
+        not abs(
+            float(camera.get("fovy_rad", float("nan"))) - float(geometry_seal_camera["fovy_rad"])
+        )
+        <= 1e-9
+    ):
+        raise ValueError(
+            f"HEAD_DATASET_CAMERA_FOV_DRIFT: seed {seed} reports a field of view the seal does not "
+            "describe"
+        )
+    if camera.get("distortion_model") != geometry_seal_camera.get("distortion_model") or any(
+        not abs(float(value) - float(frozen)) <= 1e-12
+        for value, frozen in zip(
+            camera.get("distortion") or [],
+            geometry_seal_camera.get("distortion") or [],
+            strict=False,
+        )
+    ):
+        raise ValueError(
+            f"HEAD_DATASET_CAMERA_DISTORTION_DRIFT: seed {seed} reports a lens model the seal does not "
+            "describe"
+        )
     expected_k = [focal, 0.0, width / 2.0, 0.0, focal, height / 2.0, 0.0, 0.0, 1.0]
     if any(
         not abs(value - expected) <= 1e-6
