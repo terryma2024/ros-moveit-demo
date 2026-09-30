@@ -37280,3 +37280,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `203d6f56b`;
   gate `logs/task3-gate9.run` **410 passed**; 39-path dirty baseline untouched; no push, no evidence
   deletion, no hardware, no second stack.
+
+
+## CP-2011 — Gate compliance: the targeted scope now runs under the required parallel gate, and an honest correction
+
+- **Compliance fix.** The project's SO-101 skill requires every module's full ordinary pytest scope to run
+  under `pytest-xdist` with `min(8, logical CPUs)` workers and a record of CPU count, worker count, scope,
+  exit code, JUnit and skips; serial or narrowed runs count only as localisation. My previous checkpoints
+  were **serial**, so by that rule they were targeted runs rather than full gates. The same twenty files now
+  run distributed: **32 logical CPUs, 8 workers, `--dist loadfile`, rc=0, 410 passed in 11.83 s** (versus
+  26.7 s serial), JUnit `junit.xml` in the run's scratch, **0 skipped**
+  (`logs/task3-xdist.run`, `logs/task3-xdist.summary`).
+- **What is still not a full gate, stated plainly.** The complete `src/so101_demo_py/test/` scope cannot even
+  be collected in this environment until Task 6 builds an install overlay (CP-2002: `ament_index` sees only
+  `/opt/ros/jazzy`, so `test_copied_installed_entrypoint.py` aborts collection). The 410-passed figure
+  therefore covers twenty files of the ACT boundary plus the observer suite, not the module.
+- **The `so101-dev` skill was also loaded this round** (repository rule: load it before taking task actions
+  on an SO-101 application). Its evidence-root, one-hypothesis-per-round and RED→GREEN rules match what this
+  session has been doing; the parallel-gate rule is the one gap it closed.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `1cb823f3a`
+  (which records the owner's ratification of amendment A.1 and the evaluated-position mapping);
+  39-path dirty baseline untouched; no push, no evidence deletion, no hardware, no second stack.
