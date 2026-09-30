@@ -39429,3 +39429,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   proved or recorded, so it is one pass for an executioner with room to run the suite afterwards.
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD `41b933b25`;
   no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2108 — The W8 verifier's positive path verifies end to end
+
+- **What landed** (`test_act_w8_qualification.py`): a `QUALIFIED` document over a **really prepared bundle** and
+  **fourteen journal rows** now makes `verify_w8_qualification(path, payload)` return `True` — the verifier's
+  positive case, which every previous round was one write short of.
+- **Three vocabularies and one layout were read from the validators rather than assumed**, each refusal naming the
+  next fact: `TASK8_CAMPAIGN_CASE_ID_INVALID` showed the manifest lists cases as objects with a `case_id` of shape
+  `[a-z]+-NN` (`task8_live_evidence.py:396-399`); `TASK8_QUALIFICATION_JOURNAL_MISSING` printed the path the
+  producer expects — `<case_root>/task8-live/cases/<case_id>.json` — so **the verifier's own glob was wrong** and
+  now reads that layout, and the test writes there and keeps per-case distinct digests.
+- **Evidence.** `logs/task4-positive.run` rc=0: **113 passed in 2.22s** across the verifier suite, both teleop admission suites,
+  the qualification suite and `test_act_task8.py` under `pytest-xdist` with 8 workers, with its own NVMe scratch and
+  a non-empty tempfile proof.
+- **What Task 4 has left**: the one-variable negative variant for the positive path (a journal edited after
+  sealing must refuse with `W8_QUALIFICATION_EVIDENCE_MISMATCH`), then confirming the live production composition
+  uses the commit and export-refusal apparatus (`act/result_store.py`).
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 nearly complete. HEAD
+  `25ac06c52`; no push, no evidence deletion, no hardware, no second stack.

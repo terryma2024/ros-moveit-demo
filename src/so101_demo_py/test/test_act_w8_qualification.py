@@ -16,9 +16,10 @@ def _document(tmp_path, **overrides):
     case_root = tmp_path / "campaign"
     case_root.mkdir(parents=True, exist_ok=True)
     digests = []
+    cases = case_root / "task8-live" / "cases"
+    cases.mkdir(parents=True, exist_ok=True)
     for index in range(14):                      # nine prefix cases and five fulls, all distinct
-        journal = case_root / f"case-{index}" / "journal.json"
-        journal.parent.mkdir(parents=True, exist_ok=True)
+        journal = cases / f"{'prefix' if index < 9 else 'full'}-{index % 9 + 1:02d}.json"
         journal.write_bytes(json.dumps({"case": index}).encode())
         digests.append(hashlib.sha256(journal.read_bytes()).hexdigest())
     campaign = case_root / "campaign-result.json"
@@ -146,3 +147,73 @@ def test_journal_rows_for_a_prepared_bundle_can_be_built_and_match_it(tmp_path):
                                       manifest_document_sha256=document_sha)
         require_case_row_matches_bundle(row, identities=bundle.identities,
                                         manifest_document_sha256=document_sha)
+
+
+def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verifies(tmp_path):
+    """CP-2107: the verifier's positive path, end to end."""
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from test_act_task8_artifact_bundle import _inputs
+
+    from so101_demo.act.task8_artifact_bundle import (
+        prepare_task8_bundle, verify_prepared_task8_bundle,
+    )
+    from so101_demo.act.task8_live_evidence import (
+        case_row_to_journal_row, require_case_row_matches_bundle,
+    )
+
+    prefixes = [f"prefix-{index:02d}" for index in range(1, 10)]
+    fulls = [f"full-{index:02d}" for index in range(1, 6)]
+    inputs = _inputs(tmp_path)
+    # the frozen manifest lists cases as objects with a `case_id` whose shape is `[a-z]+-NN`
+    inputs.manifest.write_text(json.dumps({
+        "schema_version": 2, "kind": "ACT_TASK8_LIVE", "manifest_sha256": "f" * 64,
+        "prefix_cases": [{"case_id": case_id} for case_id in prefixes],
+        "full_cases": [{"case_id": case_id} for case_id in fulls]}))
+    receipt = prepare_task8_bundle(inputs, tmp_path / "bundle")
+    bundle = verify_prepared_task8_bundle(receipt)
+    manifest = json.loads(Path(bundle.manifest).read_bytes())
+    document_sha = manifest["manifest_document_sha256"]
+    case_root = tmp_path / "campaign"
+    child = tmp_path / "child.json"
+    stack = tmp_path / "stack.json"
+    child.write_bytes(b'{"retired": "child"}')
+    stack.write_bytes(b'{"retired": "stack"}')
+    digests = []
+    cases = case_root / "task8-live" / "cases"
+    cases.mkdir(parents=True, exist_ok=True)
+    for case_id in prefixes + fulls:
+        directory = cases
+        evidence = tmp_path / f"{case_id}-live.json"
+        mode = "full" if case_id in fulls else "phase_prefix"
+        if mode == "full":
+            evidence.write_bytes(json.dumps({"case": case_id}).encode())
+            live_path, live_digest = str(evidence), hashlib.sha256(evidence.read_bytes()).hexdigest()
+        else:
+            live_path, live_digest = "", "0" * 64
+        row = case_row_to_journal_row(
+            {"case_id": case_id, "mode": mode, "status": "PASSED",
+             "live_evidence_path": live_path, "live_evidence_sha256": live_digest,
+             "child_retirement_receipt_path": str(child),
+             "child_receipt_sha256": hashlib.sha256(child.read_bytes()).hexdigest(),
+             "stack_retirement_receipt_path": str(stack),
+             "stack_receipt_sha256": hashlib.sha256(stack.read_bytes()).hexdigest()},
+            identities=bundle.identities, manifest_document_sha256=document_sha)
+        require_case_row_matches_bundle(row, identities=bundle.identities,
+                                        manifest_document_sha256=document_sha)
+        journal = cases / f"{case_id}.json"
+        journal.write_bytes(json.dumps(row).encode())
+        digests.append(hashlib.sha256(journal.read_bytes()).hexdigest())
+    campaign = case_root / "campaign-result.json"
+    campaign.write_bytes(json.dumps({"status": "PASSED", "prefix_count": len(prefixes),
+                                     "consecutive_full_count": len(fulls),
+                                     "case_journal_sha256": digests}).encode())
+    document = {"status": "QUALIFIED", "worker_count": 8,
+                "live_campaign": {"case_root": str(case_root),
+                                  "campaign_result_sha256": hashlib.sha256(campaign.read_bytes()).hexdigest(),
+                                  "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                                  "journal_sha256": digests}}
+    path = tmp_path / "qualified.json"
+    path.write_text(json.dumps(document))
+    payload = {"preparation_receipt_path": str(receipt), "manifest_path": str(bundle.manifest)}
+    assert verify_w8_qualification(path, payload) is True
