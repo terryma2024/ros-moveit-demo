@@ -163,16 +163,19 @@ def calibrate_head_search(inputs: Mapping[str, object]) -> HeadSearchCalibration
 
     # the unsafe-motion and identity risks are checked before the finite-sample scan, so a caller hears the
     # reason that matters rather than a generic one
+    fov_sealed = float(geometry.get("horizontal_fov_rad", float("nan")))
     fine_total = episodes.get("max_fine_total_rad")
     if (
         isinstance(fine_total, bool)
         or not isinstance(fine_total, (int, float))
         or not math.isfinite(float(fine_total))
         or float(fine_total) <= 0.0
+        or not math.isfinite(fov_sealed)
+        or float(fine_total) > fov_sealed
     ):
         raise HeadSearchCalibrationError(
             "HEAD_SEARCH_CALIBRATION_UNSAFE_MOTION: the fine-motion allowance is not a positive finite "
-            "angle"
+            "angle no larger than one field of view"
         )
     if int(episodes.get("tracker_identity_switches", 0)) != 0:
         raise HeadSearchCalibrationError(
@@ -210,16 +213,58 @@ def calibrate_head_search(inputs: Mapping[str, object]) -> HeadSearchCalibration
             f"HEAD_SEARCH_CALIBRATION_BOUND: max_skew_s {max_skew} exceeds {MAX_SKEW_BOUND_S}"
         )
 
+    fov_value = geometry.get("horizontal_fov_rad")
+    if (
+        isinstance(fov_value, bool)
+        or not isinstance(fov_value, (int, float))
+        or not math.isfinite(float(fov_value))
+        or not 0.0 < float(fov_value) < math.pi
+    ):
+        raise HeadSearchCalibrationError(
+            "HEAD_SEARCH_CALIBRATION_INVALID: the horizontal field of view must be finite and inside "
+            "(0, pi)"
+        )
+    timeout = timing.get("search_timeout_s")
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or not math.isfinite(float(timeout))
+        or float(timeout) <= 0.0
+    ):
+        raise HeadSearchCalibrationError(
+            "HEAD_SEARCH_CALIBRATION_INVALID: the search timeout must be a positive finite duration"
+        )
+    for name in (
+        "val_false_candidates",
+        "two_cup_detections",
+        "tracker_identity_switches",
+        "max_fine_corrections",
+    ):
+        value = episodes.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise HeadSearchCalibrationError(
+                f"HEAD_SEARCH_CALIBRATION_INVALID: {name} must be a non-negative whole count"
+            )
     safe = _numbers(geometry.get("lock_valid_neck_rad"), name="lock_valid_neck_rad")
     required = _numbers(
         geometry.get("required_search_domain_rad"), name="required_search_domain_rad"
     )
-    fov = float(geometry["horizontal_fov_rad"])
+    fov = float(fov_value)
     if required[0] < safe[0] - fov / 2.0 or required[1] > safe[1] + fov / 2.0:
         raise HeadSearchCalibrationError(
             "HEAD_SEARCH_CALIBRATION_DOMAIN_UNCOVERED: the safe interval cannot cover the required domain"
         )
 
+    # (b) the four perception values must be the ones the frozen candidate identity was sealed with
+    declared_identity = str(identities.get("candidate_identity_sha256", ""))
+    measured_identity = canonical_sha256(
+        {name: float(candidate[name]) for name in CANDIDATE_MEASUREMENTS}
+    )
+    if declared_identity != measured_identity:
+        raise HeadSearchCalibrationError(
+            "HEAD_SEARCH_CALIBRATION_IDENTITY_DRIFT: the perception values are not the frozen candidate "
+            f"identity ({measured_identity[:12]} vs {declared_identity[:12]})"
+        )
     geometry_digest = _digest(geometry)
     candidate_digest = _digest(candidate)
     timing_digest = _digest(timing)
@@ -468,14 +513,21 @@ def load_scenario_partitions(document: Mapping[str, object]) -> ScenarioPartitio
                 anchor=anchor,
             )
         )
-    groups: dict[object, str] = {}
+    if len(qualification) != 40:
+        raise HeadSearchCalibrationError(
+            f"HEAD_SEARCH_CALIBRATION_INVALID: the qualification list must hold exactly 40 items, holds "
+            f"{len(qualification)}"
+        )
+    by_seed: dict[object, str] = {}
+    by_scene: dict[object, object] = {}
     for item in qualification:
-        previous = groups.get(item.seed)
-        if previous == item.scene_group_id:
+        if item.seed in by_seed or item.scene_group_id in by_scene:
             raise HeadSearchCalibrationError(
-                f"HEAD_SEARCH_CALIBRATION_INVALID: seed {item.seed} repeats inside the qualification list"
+                f"HEAD_SEARCH_CALIBRATION_INVALID: seed {item.seed} or its scene repeats inside the "
+                "qualification list"
             )
-        groups[item.seed] = item.scene_group_id
+        by_seed[item.seed] = item.scene_group_id
+        by_scene[item.scene_group_id] = item.seed
     seen = set(calibration) | set(held_out)
     if seen & {item.seed for item in qualification} or set(calibration) & set(held_out):
         raise HeadSearchCalibrationError(

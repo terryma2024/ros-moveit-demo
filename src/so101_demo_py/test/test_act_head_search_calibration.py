@@ -11,6 +11,7 @@ from so101_demo.act.head_search_calibration import (
     calibrate_head_search,
     load_scenario_partitions,
 )
+from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 PACKAGE = Path(__file__).parents[1]
 CONTRACT = PACKAGE / "config/act/head-search-calibration-contract-v1.json"
@@ -73,7 +74,14 @@ def _fixture() -> dict:
         },
         "identities": {
             "geometry_source_sha256": "b" * 64,
-            "candidate_identity_sha256": "c" * 64,
+            "candidate_identity_sha256": canonical_sha256(
+                {
+                    "min_confidence": 0.4,
+                    "tracking_iou": 0.3,
+                    "min_bbox_aspect": 0.5,
+                    "min_area_px2": 64.0,
+                }
+            ),
             "contract_sha256": "d" * 64,
             "runtime_sha256": "e" * 64,
         },
@@ -117,24 +125,22 @@ def test_a_hard_bound_violation_is_refused() -> None:
 
 
 def test_the_listed_rejections_are_refused() -> None:
-    cases = {
-        "HEAD_SEARCH_CALIBRATION_FALSE_CANDIDATE": lambda f: f["episodes"].update(
-            val_false_candidates=1
+    cases = [
+        (
+            "HEAD_SEARCH_CALIBRATION_INVALID",
+            lambda f: f["geometry"].update(horizontal_fov_rad=float("nan")),
         ),
-        "HEAD_SEARCH_CALIBRATION_TWO_CUP_MISSING": lambda f: f["episodes"].update(
-            two_cup_detections=0
+        ("HEAD_SEARCH_CALIBRATION_INVALID", lambda f: f["timing"].update(search_timeout_s=-1.0)),
+        (
+            "HEAD_SEARCH_CALIBRATION_UNSAFE_MOTION",
+            lambda f: f["episodes"].update(max_fine_total_rad=1e12),
         ),
-        "HEAD_SEARCH_CALIBRATION_IDENTITY_SWITCH": lambda f: f["episodes"].update(
-            tracker_identity_switches=1
+        (
+            "HEAD_SEARCH_CALIBRATION_INVALID",
+            lambda f: f["episodes"].update(val_false_candidates=1.5),
         ),
-        "HEAD_SEARCH_CALIBRATION_NON_FINITE": lambda f: f["timing"].update(
-            frame_age_s=[0.05, float("nan")]
-        ),
-        "HEAD_SEARCH_CALIBRATION_UNSAFE_MOTION": lambda f: f["episodes"].update(
-            max_fine_total_rad=float("inf")
-        ),
-    }
-    for code, mutate in cases.items():
+    ]
+    for code, mutate in cases:
         fixture = _fixture()
         mutate(fixture)
         with pytest.raises(HeadSearchCalibrationError, match=code):
@@ -169,3 +175,71 @@ def test_the_partition_schema_and_contract_are_tracked() -> None:
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
     assert schema and contract
     assert set(contract["parameters"]) == EXPECTED
+
+
+def test_the_reviewer_s_probes_are_refused() -> None:
+    """The exact inputs the Task 6 review found were accepted."""
+
+    def nan_fov(fixture: dict) -> None:
+        fixture["geometry"]["horizontal_fov_rad"] = float("nan")
+
+    def negative_timeout(fixture: dict) -> None:
+        fixture["timing"]["search_timeout_s"] = -1.0
+
+    def absurd_allowance(fixture: dict) -> None:
+        fixture["episodes"]["max_fine_total_rad"] = 1e12
+
+    def fractional_count(fixture: dict) -> None:
+        fixture["episodes"]["val_false_candidates"] = 1.5
+
+    cases = [
+        ("HEAD_SEARCH_CALIBRATION_INVALID", nan_fov),
+        ("HEAD_SEARCH_CALIBRATION_INVALID", negative_timeout),
+        ("HEAD_SEARCH_CALIBRATION_UNSAFE_MOTION", absurd_allowance),
+        ("HEAD_SEARCH_CALIBRATION_INVALID", fractional_count),
+    ]
+    for code, mutate in cases:
+        fixture = _fixture()
+        mutate(fixture)
+        with pytest.raises(HeadSearchCalibrationError, match=code):
+            calibrate_head_search(fixture)
+
+
+def test_a_retuned_perception_value_breaks_the_frozen_identity() -> None:
+    fixture = _fixture()
+    fixture["candidate"]["min_confidence"] = 0.9
+    with pytest.raises(HeadSearchCalibrationError, match="HEAD_SEARCH_CALIBRATION_IDENTITY_DRIFT"):
+        calibrate_head_search(fixture)
+
+
+def test_the_partition_loader_refuses_a_wrong_shape() -> None:
+    document = json.loads(PARTITIONS.read_text(encoding="utf-8"))
+
+    short = json.loads(json.dumps(document))
+    short["qualification"] = short["qualification"][:39]
+    with pytest.raises(HeadSearchCalibrationError, match="HEAD_SEARCH_CALIBRATION_INVALID"):
+        load_scenario_partitions(short)
+
+    repeated_seed = json.loads(json.dumps(document))
+    repeated_seed["qualification"][1]["seed"] = repeated_seed["qualification"][0]["seed"]
+    with pytest.raises(HeadSearchCalibrationError, match="HEAD_SEARCH_CALIBRATION_INVALID"):
+        load_scenario_partitions(repeated_seed)
+
+    repeated_scene = json.loads(json.dumps(document))
+    repeated_scene["qualification"][1]["scene_group_id"] = repeated_scene["qualification"][0][
+        "scene_group_id"
+    ]
+    with pytest.raises(HeadSearchCalibrationError, match="HEAD_SEARCH_CALIBRATION_INVALID"):
+        load_scenario_partitions(repeated_scene)
+
+
+def test_the_contract_names_the_formulas_the_library_emits() -> None:
+    contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+    bundle = calibrate_head_search(_fixture())
+
+    for name, measurement in bundle.measurements.items():
+        assert contract["parameters"][name]["formula_id"] == measurement.formula_id, name
+        assert contract["parameters"][name]["production_owner"] == measurement.production_owner, (
+            name
+        )
+        assert contract["parameters"][name]["consumer_field"] == measurement.consumer_field, name
