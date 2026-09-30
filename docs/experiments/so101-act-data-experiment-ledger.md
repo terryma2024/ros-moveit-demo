@@ -43306,3 +43306,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   than by a fixture that names it.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete; goal paused.
+
+## CP-2293 - F5's second half specified: a hybrid fixture, with the runner half already proven
+
+- _self_consistent_formal (test_act_episode_audit.py) mints acquisitions through AcquisitionMinter, appends one
+  accepted reference carrying the legacy raw group, then appends physics rows - and, further down, the phase
+  completions whose names it takes from FORMAL_PHASES. That last part is the shortcut the verdict names: coverage
+  shown by a fixture that names the phases rather than by an episode that produced them.
+- The honest shape of the fix is a hybrid, because the two halves genuinely come from different producers: the
+  camera acquisitions and the accepted reference are minted (a camera path the runner does not own), while the
+  events and the physics history must come from a real PickPlaceRunner driving the same port the release-boundary
+  suite already uses. That suite's test_the_audit_receives_the_events_the_run_actually_produced proves the
+  runner half works end to end against a real writer, and the formal writer accepts a runner's stream since
+  CP-2250/CP-2260 - so the second half is joining two proven halves, not inventing one.
+- Remaining details for the write: the formal seal also needs the window derived from the rows the audit holds (the
+  minter's stamps and the runner's row times), the physics rows the runner writes must carry the ratified
+  observations for the coverage check, and the fixture must keep using _formal_writer for the lease.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, second half specified here; goal paused.
