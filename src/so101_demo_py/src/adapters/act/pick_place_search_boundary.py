@@ -282,7 +282,7 @@ class PickPlaceSearchBoundary:
         return None
 
     @staticmethod
-    def _gate_facts(aggregates, world, receipt=None):
+    def _gate_facts(aggregates, world, receipt=None, feedback=None):
         """The eight gates and the holding/contact facts one validated readback establishes.
 
         Shared rather than copied: the set-down document needs the same gates the phase documents carry, and a second
@@ -291,7 +291,11 @@ class PickPlaceSearchBoundary:
 
         facts = {
             "physics_step": world.simulation_step,
-            "planning_ok": True, "controller_reference_ok": True, "joint_feedback_ok": True,
+            "planning_ok": True, "controller_reference_ok": True, "joint_feedback_ok": (
+            isinstance(feedback, (list, tuple)) and len(feedback) > 0
+            and all(isinstance(record, dict)
+                    and record.get("sim_time_s") == world.simulation_time_s
+                    for record in feedback)),
             # CP-2017 step three: derived from the receipt SEARCH validated, never asserted. The default
             # parameter keeps every other caller working, and a missing or unsuccessful receipt fails the
             # gate instead of licensing it.
@@ -322,7 +326,9 @@ class PickPlaceSearchBoundary:
         # caller validated (SEARCH's rule) - so they are established there, not here
         # the gates and the holding/contact facts one readback establishes: ONE construction, shared with the
         # set-down document the runner asks for (which needs the same eight gates and used to omit them entirely)
-        facts = self._gate_facts(aggregates, world, getattr(self, "_planning_scene_receipt", None))
+        facts = self._gate_facts(
+            aggregates, world, getattr(self, "_planning_scene_receipt", None),
+            getattr(self, "_controller_feedback", None))
         # the phase flags are ESTABLISHED from the same readback, never asserted: a cup that is no longer supported is
         # off the table, and a lifted cup is one the aggregates call HOLDING (held and unsupported) - which is why
         # MICRO_LIFT and everything after it agrees with the aggregate rules while CLOSE has to be modelled carefully
@@ -416,7 +422,9 @@ class PickPlaceSearchBoundary:
         # The runner keeps its own count of the same event and COMPARES them, so a disagreement is refused rather than
         # silently accepted - which is why a second count is tolerable here and nowhere else.
         self._set_down_step = world.simulation_step
-        gates = self._gate_facts(aggregates, world, getattr(self, "_planning_scene_receipt", None))
+        gates = self._gate_facts(
+            aggregates, world, getattr(self, "_planning_scene_receipt", None),
+            getattr(self, "_controller_feedback", None))
         return {"session_id": request["session_id"], "attempt_id": request["attempt_id"],
                 "reset_epoch": self.reset.receipt.new_epoch, "release_epoch": self._release_epoch,
                 "physics_step": world.simulation_step,

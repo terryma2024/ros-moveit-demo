@@ -38046,3 +38046,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `722d11747`;
   consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
   second stack.
+
+
+## CP-2043 — Task 3: the joint-feedback gate is derived, and the line-based patch is the pattern that worked
+
+- **What landed.** `_gate_facts` now takes a fifth parameter `feedback=None` and derives
+  `joint_feedback_ok` as "the records exist and each one's `sim_time_s` equals `world.simulation_time_s`";
+  both call sites pass `getattr(self, "_controller_feedback", None)` beside the scene receipt. The literal for
+  that gate is gone, so of the SEARCH document's eight gates only `controller_reference_ok` (and `planning_ok`)
+  remain documented placeholders at this boundary.
+- **How the edit avoided CP-2042's failure.** Instead of anchoring on text I had mis-remembered, the patch
+  located `_gate_facts` by its `def` line, bounded the body at the next method, asserted the signature and
+  found the single line containing the placeholder, then printed the patched neighbourhood — the read is
+  recorded in the log: the real line is
+  `"planning_ok": True, "controller_reference_ok": True, "joint_feedback_ok": True,`. This is the pattern to
+  reuse for the remaining edits: locate by structure, assert the exact line, print the neighbours.
+- **Evidence.** `logs/task3-jf2.run` rc=0: **94 passed** across the motion-phases, close-execution, task8,
+  search-port, release-boundary and supervisor suites under `pytest-xdist` with 8 workers, with its own NVMe
+  scratch and a non-empty tempfile proof. The fixtures already stamp their records with the fixture's own
+  `world.simulation_time_s` (CP-2042), which is why the instant join holds.
+- **What remains for the controller gates.** `controller_reference_ok` at this boundary (and the port
+  document's two controller gates) still need their own derivation and three-way controls
+  (present / absent / off-instant), and the full `planning_scene_observation` record should travel once the
+  readback fills it.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress; items 4-8 pending.** HEAD `4a1588916`;
+  consolidated gate `logs/task3-gate11.run` **415 passed**; no push, no evidence deletion, no hardware, no
+  second stack.
