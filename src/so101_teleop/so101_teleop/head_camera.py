@@ -125,6 +125,7 @@ class HeadCameraBackend:
                 and isinstance(stamp, (int, float))
                 and not isinstance(stamp, bool)
                 and math.isfinite(float(velocity))
+                and float(velocity) >= 0.0
                 and math.isfinite(float(stamp))
                 and float(stamp) >= 0.0
                 and (self._last_stop_stamp is None or float(stamp) > self._last_stop_stamp)
@@ -274,11 +275,17 @@ OWNER_PID_ENV = "SO101_HEAD_CAMERA_OWNER_PID"
 
 
 def process_start_ticks(pid: int) -> int | None:
-    """The kernel's start ticks for a live process, or None when it is not running."""
+    """The kernel's start ticks for a *running* process, or None when it is gone or a zombie.
+
+    After the comm field, index 0 is the state; a process in state Z has exited and only awaits reaping, so
+    it must not be accepted as a live owner even though its /proc entry and start ticks still exist.
+    """
 
     try:
         fields = Path(f"/proc/{int(pid)}/stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()
     except (OSError, ValueError):
+        return None
+    if not fields or fields[0] == "Z":
         return None
     return int(fields[19])
 

@@ -104,6 +104,12 @@ def test_stop_needs_three_consecutive_raw_samples(tmp_path: Path) -> None:
     assert services.stop(raw_sample=None)["state"] == "STOPPING", "a missing sample cannot advance it"
     assert services.stop(raw_sample=sample(3))["consecutive_samples"] == 1
 
+    # a negative velocity is not a stopped neck, however fresh the samples are
+    for index in range(3):
+        negative = {"neck_velocity_rad_s": -0.5, "sim_time_s": 10.0 + index}
+        assert services.stop(raw_sample=negative)["consecutive_samples"] == 0
+    assert services.stop_state() == "STOPPING"
+
 
 def test_capture_is_atomic_and_refuses_stale_or_mismatched_frames(tmp_path: Path) -> None:
     descriptor = valid_descriptor(tmp_path)
@@ -215,3 +221,34 @@ def test_composition_refuses_a_dead_or_drifted_owner(tmp_path: Path) -> None:
     environment = environment_for(tmp_path, dead)
     with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
         compose_head_camera(environment)
+
+
+def test_a_zombie_process_is_not_a_live_owner(tmp_path: Path) -> None:
+    """A zombie keeps its /proc entry and start ticks but has exited."""
+
+    import os
+    import time
+
+    from so101_teleop.head_camera import (
+        CompositionBlocked,
+        process_start_ticks,
+        verify_owner,
+    )
+
+    child = os.fork()
+    if child == 0:  # pragma: no cover - the child exits immediately
+        os._exit(0)
+    ticks = None
+    try:
+        ticks = process_start_ticks(child)
+        assert ticks is not None and ticks > 0
+        # the child is now a zombie until reaped, and must not count as a live owner
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if process_start_ticks(child) is None:
+                break
+            time.sleep(0.02)
+        with pytest.raises(CompositionBlocked, match="HEAD_CAMERA_CONNECTION_MISMATCH"):
+            verify_owner({"pid": child, "started_ticks": ticks})
+    finally:
+        os.waitpid(child, 0)
