@@ -41443,3 +41443,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   five items landed, the endpoint pass now two fixture deltas plus two comparisons, and the frozen-policy item with
   the plan (CP-2195); targeted gates **430 / 201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154
   passed**; HEAD `7cfd2633c`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2200 — F11's endpoint rule works and moves four expectations
+
+- **What I landed and then reverted**: the endpoint comparison inside `_window_matches_observed` (the collection
+  window's start and end must be the observed camera extremes, within `_TOLERANCE_S`), plus the two fixture deltas
+  CP-2199 predicted — `_window()`'s schedule gains 1.2 for both streams and `_self_consistent_formal` mints a frame
+  at `stamp=1.2` per camera. Result: **4 failed / 150 passed**, all `AUDIT_WINDOW_INVALID`:
+  1. `test_a_self_consistent_formal_window_seals` — a fixture whose window and acquisitions still disagree
+     somewhere the deltas did not reach (the overrides family passes windows this rule now judges);
+  2. `test_readback_refuses_a_window_naming_an_instant_no_acquisition_holds` — **my own control now passes for the
+     better reason**: the endpoint rule fires before the invented instant matters, so its expected code changes;
+  3. `test_a_sealed_schedule_naming_no_instant_is_refused_on_readback` — the same shift: the emptied schedule is
+     now refused by `AUDIT_WINDOW_INVALID` from the shared predicate instead of `AUDIT_MANIFEST_INVALID` from the
+     earlier gate, which is an improvement in the error's precision, not a regression;
+  4. one more expectation in the same family.
+- **What that means**: the rule behaves as specified and the remaining work is **expectation alignment** — the two
+  controls I wrote should assert the window code now, and the self-consistent fixture needs its window and evidence
+  reconciled in the same pass (its overrides cases each need recording, since the verdict's own overrides family is
+  what exercises the window-to-rows matcher).
+- **Reverted, tree verified green** (69 passed in the audit suite).
+- **State.** Item 3's list: **F12, F3, F5 and F1 closed**; F13 residual (needs the plan); **F11 in progress** with
+  five items landed, the endpoint rule proven to fire and four expectations left to align; targeted gates **430 /
+  201 / 201 / 201 / 246 / 247 / 200 / 283 / 176 / 284 / 151 / 152 / 154 passed**; HEAD `3af738ea9`; no push, no
+  evidence deletion, no hardware, no second stack.
