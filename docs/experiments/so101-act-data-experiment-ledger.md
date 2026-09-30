@@ -36188,3 +36188,25 @@ Checked against Task 11's requirements rather than assumed:
 So the remaining README edit is one scoped paragraph, and per the repository rules it must be written with the
 project's humanizer for English prose. The weights digest is confirmed independently this round, so the pinning
 claim in that paragraph will be a verified fact rather than a quotation.
+
+## HS-056 — Frozen toolchain provenance for Task 11-14
+
+Recorded so later tasks and later readers can reproduce every gate; all paths are absolute on `antzb`.
+
+| element | value |
+| --- | --- |
+| worktree | `/data/work/ws_moveit/.worktrees/so101-act-data-0917a`, branch `codex/so101-act-data-0917a` |
+| durable evidence root | `/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m` |
+| low-rate root | `/tmp/so101-debug-head-search-antzb-LuFlHq6a` |
+| helper | `/tmp/so101-debug-head-search-antzb-LuFlHq6a/head-test-shell.sh` (`head_test`, `head_test_render`, `expect_head_red`, `run_logged`, `$HEAD_PYTHON`, `$HEAD_OVERLAY`, `$HEAD_EVIDENCE`, `$HEAD_LOWRATE`, `$HEAD_VENV_SITE`, `$HEAD_COLCON`) |
+| ROS | Jazzy, sourced from `/opt/ros/jazzy/setup.bash` then `/data/work/ws_moveit/install/setup.bash` then `$HEAD_OVERLAY/install/setup.bash` |
+| task overlay | `$HEAD_EVIDENCE/head-task2-overlay` — carries the rebuilt `so101_mujoco_support` (fixes the stale `ScalarJointEvidence` messages) and `so101_demo_py` (built 2026-09-30, 3.05 s) |
+| colcon build base | `$HEAD_LOWRATE/colcon/build` |
+| headless GL | `MUJOCO_GL=egl` (GLFW has no DISPLAY here); the helper exports it |
+| perception venv | `/data/work/venvs/so101-v5-t004-perception` — torch 2.13.0+cu130, ultralytics 8.4.115, pytest, **pydantic 2.13.5**, **fastapi 0.142.1**, **httpx 0.28.1**, **lark 6.0.1**, **pytest-xdist 3.8.0** (all installed during this work) |
+| parallel gate | run **without** the ROS environment for suites that do not need it, because ROS's `launch_testing` plugins are incompatible with this pytest and surface as a misleading `INTERNALERROR ... KeyError: WorkerController` |
+| web toolchain | bun 1.3.14, vitest 1.6.0; the suite **must** run with `NODE_ENV=test`, and assertions use vitest + testing-library **without** jest-dom |
+| geometry seal | `$HEAD_EVIDENCE/head-camera-probe5-20260930T085930Z/head-camera-geometry.json`, `seal_sha256 f168bfc180c215fb29b5f5df9f2ce0756b20e89a67d888e447d40a814d36e515`, `in_frame_failures` none across `default`, `left`, `forward`; both perception configs name it |
+| head smoke dataset | `$HEAD_EVIDENCE/head-dataset-smoke-task11c-20260930T090103Z` (32/8/8, non-promotable, under the seal above; verified) |
+| pinned A weights | `$HEAD_EVIDENCE/deps/so101-yolo11n-seg-plastic-cup/best.pt`, sha256 `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` (re-verified this session) |
+| CUDA smokes | B `plan_sha256 70d8e74b...` (head 32 only), C `plan_sha256 8a04f9fa...` (head 32 + task 32, two batches), both `rc=0`, both `promotable: false` |
