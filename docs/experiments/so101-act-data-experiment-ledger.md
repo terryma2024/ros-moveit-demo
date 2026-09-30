@@ -38627,3 +38627,28 @@ failure. The distinction is the whole point of the exercise, and I collapsed it 
 (the traceback recorded in `attribution-final.tsv` from the suite run), not against the other install; and for the teleop
 package, ensure both sides resolve the same `ros_child.py` or state explicitly which code each side executes. Until a run
 does that, no count in this thread should be called complete.
+
+## HS-159 — "Reaching the original failure" checked at module level: 7 of 8 comparable modules MATCH
+
+The eleventh verdict's standard applied the way it can actually be met. Per-id runs cannot reproduce a suite failure whose
+reason depends on suite context (which is why 47 ids shifted to `RUNTIME_POLICY_ROOT_INVALID`), but the **direct module
+runs** can be compared against the **reasons the suite recorded for those same ids**:
+
+| module | suite reason | direct module run | verdict |
+| --- | --- | --- | --- |
+| `test_act_path_proof_permits` | `ContractError: FIELDS_INVALID` | same | **MATCH** |
+| `test_act_task8` | `_verify_phase()` TypeError | same | **MATCH** |
+| `test_act_task8_calibration_aggregator` | `MEASUREMENT_CONTRACT_V2_INVALID` | same | **MATCH** |
+| `test_act_task8_measurement_contract` | `MEASUREMENT_CONTRACT_V2_INVALID` | same | **MATCH** |
+| `test_nonpenetrating_train_val_contract` | grounding-dino fields | same | **MATCH** |
+| `test_parallel_batch_cli` | `TRUSTED_FINAL_TARGET_INVALID` | same | **MATCH** |
+| `test_task8_child_driven_case` | `MutationError: BRIDGE_CHILD_EXITED` | same | **MATCH** |
+| `test_grounding_dino_dataset_augmented` | grounding-dino import | `AssertionError: Regex pattern did not match` | **DIFFER** |
+
+So for **7 modules the direct run reaches the same failure the suite reported**, which is the identity the verdict asked
+for - not equality between two installs I chose, but the recorded reason reproduced. One module differs and is recorded as
+differing, and two modules had no per-id suite rows to compare against.
+
+**Granularity stated:** this is module-level identity, because id-level identity is not achievable for context-dependent
+failures - a limitation the 47 shifted ids demonstrate rather than suggest. Where identity cannot be shown, the honest
+output is "differs" or "not comparable", not a same-cause label.
