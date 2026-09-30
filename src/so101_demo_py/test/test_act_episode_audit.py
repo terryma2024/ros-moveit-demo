@@ -1222,3 +1222,21 @@ from so101_demo.act.episode_audit import FORMAL_PHASES   # F5: the prescribed li
 
 
 from so101_demo.act.joints import ARM_JOINTS   # F5: the ratified joint order
+
+
+def test_a_registered_live_sample_reaches_the_audit_and_reads_back(tmp_path):
+    """T3-F1: the thirteen-key shape act/contact_live.py publishes is admitted and survives readback."""
+
+    (tmp_path / "sample").mkdir(parents=True, exist_ok=True)
+    writer, window = complete_audit(tmp_path / "sample")
+    contact = {"robot_geom": "g", "object_body": "b", "normal_force_n": 0.0, "signed_distance_m": -0.001}
+    writer.append_source("physics", {
+        "kind": "contact", "sim_time_s": 1.1, "release_epoch": 1,
+        "observation": {
+            "simulation_session_id": "session-1", "reset_epoch": 1, "physics_step": 1,
+            "simulation_time_s": 1.1, "model_qpos": [0.0] * 6, "model_qvel": [0.0] * 6,
+            "cup_position_m": [0.0, 0.0, 0.0], "cup_velocity_m_s": [0.0, 0.0, 0.0],
+            "left_contacts": [contact], "right_contacts": [contact], "other_contacts": [],
+            "truncated": False, "diagnostic_hazard_breached": False}})
+    path = writer.seal(window)
+    assert verify_audit_manifest(path)["kind"] == "ACT_EPISODE_AUDIT"

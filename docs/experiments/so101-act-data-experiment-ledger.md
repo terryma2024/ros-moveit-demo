@@ -40860,3 +40860,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
   landed**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 221 passed**; HEAD `be954ae42`; no push, no
   evidence deletion, no hardware, no second stack.
+
+
+## CP-2173 — F1's sample fixture landed, and the whole refusal was one untyped key
+
+- **The fix is one word**: `physics_step` joins `_PHYSICS_INTEGERS` (line 143). The typing loop's last branch is a
+  catch-all — `else: return False` — so a key no group claims is refused outright, and the registered sample's step
+  counter was in no group. That is precisely F1's "a complete registered sample therefore fails admission"; the
+  earlier cuts (CP-2166 admitting the name, CP-2167 widening `_raw`) were necessary but not sufficient, and the
+  probes of CP-2171/CP-2172 found this by elimination rather than by guessing.
+- **The conclusive probe, worth reusing**: dropping `physics_step` still failed, which looked like a second
+  violator but was the registered branch refusing for want of **either** step name — so the contradiction was the
+  clue that the column was untyped rather than mistyped.
+- **What landed with it**: `test_a_registered_live_sample_reaches_the_audit_and_reads_back` — the thirteen-key
+  shape `act/contact_live.py` publishes, appended, sealed and read back through `verify_audit_manifest`.
+- **Evidence.** `logs/task3-f1-sample.run` rc=0: **247 passed in 2.33s** across the audit, recorder, release-boundary, capture,
+  `test_act_task8`, qualification, W8-verifier and campaign-admission suites under `pytest-xdist` with 8 workers,
+  its own NVMe scratch and a non-empty tempfile proof.
+- **What F1 still owes**: its **third cut** — the A.1 per-kind frames through the real expert adapter
+  (`adapters/act/ros_expert.py:10`), tap and capture into the common reference record, with the chain test the
+  verdict requires.
+- **State.** Item 3's list: **F12, F3 and F5 closed**; F13 residual (needs the plan); **F1 two of three cuts
+  landed plus its fixture**; F11 open. Targeted gates **430 / 201 / 201 / 201 / 246 / 247 passed in 2.33s passed**; HEAD
+  `5a527e071`; no push, no evidence deletion, no hardware, no second stack.

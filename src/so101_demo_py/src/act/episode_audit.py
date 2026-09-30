@@ -140,7 +140,7 @@ _PHYSICS_REQUIRED_REGISTERED = {
     "pose": frozenset({"cup_position_m", "model_qpos"}),
     "retract": frozenset({"cup_position_m", "cup_velocity_m_s"}),
 }
-_PHYSICS_INTEGERS = {"simulation_step", "left_contact_count", "right_contact_count",
+_PHYSICS_INTEGERS = {"simulation_step", "physics_step", "left_contact_count", "right_contact_count",
                      "publisher_sequence", "reset_epoch"}
 _PHYSICS_BOOLEANS = {"table_contact", "supported", "paused"}
 # each vector keeps its source dimension: a position and a velocity are 3, a quaternion is 4
