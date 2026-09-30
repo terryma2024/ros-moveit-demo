@@ -167,6 +167,9 @@ def bounded_search_stops(
     targets: list[float] = []
     current = anchor
     for endpoint in (nearer, farther):
+        # never command outside the safe interval: the last stop of a leg is clamped to the bound and the
+        # field of view of that stop is what covers the rest of the required domain
+        endpoint = min(max(endpoint, safe_low), safe_high)
         if abs(endpoint - current) <= 1e-12:
             continue
         direction = 1.0 if endpoint > current else -1.0

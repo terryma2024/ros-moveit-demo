@@ -12,6 +12,7 @@ from so101_demo.act.head_search_domain import (
     HeadSearchDomainError,
     bounded_search_stops,
     coverage_is_complete,
+    independent_sweep_check,
 )
 
 SAFE = (-2 * math.pi + 1e-5, 2 * math.pi - 1e-5)
@@ -224,3 +225,28 @@ def test_the_independent_sweep_checker_agrees_only_with_a_real_coverage_proof() 
     )
     ok, reason = independent_sweep_check(unsafe, required_domain_rad=(-2.5, 2.5))
     assert not ok and "safe interval" in reason
+
+
+def test_a_domain_reaching_past_the_safe_interval_is_still_served_by_the_field_of_view() -> None:
+    """The reviewer's finding: a coverable domain must not be refused just because its ends exceed the bound."""
+
+    plan = bounded_search_stops(
+        anchor_rad=0.0,
+        required_domain_rad=(-2.5, 2.5),
+        safe_interval_rad=(-2.0, 2.0),
+        horizontal_fov_rad=1.0,
+        coarse_step_rad=0.5,
+    )
+    assert plan.coverage_complete
+    assert max(plan.targets_rad) <= 2.0 and min(plan.targets_rad) >= -2.0
+    ok, reason = independent_sweep_check(plan, required_domain_rad=(-2.5, 2.5))
+    assert ok, reason
+    # a domain the field of view cannot reach from the bound is still refused before motion
+    with pytest.raises(HeadSearchDomainError, match="HEAD_SEARCH_DOMAIN_UNSAFE"):
+        bounded_search_stops(
+            anchor_rad=0.0,
+            required_domain_rad=(-2.9, 2.9),
+            safe_interval_rad=(-2.0, 2.0),
+            horizontal_fov_rad=1.0,
+            coarse_step_rad=0.5,
+        )
