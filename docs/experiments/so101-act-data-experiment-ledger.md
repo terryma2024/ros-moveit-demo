@@ -39771,3 +39771,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** Item 3's list stands at F1/F3/F5/F11 plus these F13 residuals, with F12 closed; targeted gate
   `logs/task3-final.run` **430 passed**; HEAD `c98b41d4c`; no push, no evidence deletion, no hardware, no second
   stack.
+
+
+## CP-2122 — F13's scene stamp: the manufactured clock equality is gone, by refusing to emit
+
+- **What landed** (`pick_place_search_segment.py`): `_planning_scene_record` no longer stamps a **fresh** scene
+  query with an **earlier** readback's `simulation_time_s`. That stamp was exactly what F13 called manufacturing
+  exact clock equality: the port's read carries no observed instant of its own, so nothing proved the scene and the
+  physics described the same step. Until the read can be fenced — the port would report the instant it observed and
+  this method would check it against `raw` — the method returns `None`, so no record is emitted. The audit refuses
+  an unfenced record anyway, and a refusal is the honest outcome; the parameter's comment now says it is the
+  readback the future fence must compare against.
+- **Evidence.** Targeted run this round: **107 passed** across `test_act_task8`, the search-port, qualification,
+  motion-phase and close-execution suites under `pytest-xdist` with 8 workers, its own NVMe scratch and a
+  non-empty tempfile proof. The scene-record travel control (CP-2067/CP-2117) still passes because it supplies the
+  record directly, which is the carrier's own test rather than the producer's.
+- **What F13 still lists**: the joint state's own receipt as an age bound (the epoch's and the reference's are
+  already used, CP-2121), and the `sim_time_s` schema tension — the ratified record is closed at seven keys and
+  the audit requires that instant to equal its parent's, so an observed source time cannot ride along without an
+  amendment; my reading is that the receipts carry the observed bound instead, which the plan should confirm.
+- **State.** Item 3's list stands at F1/F3/F5/F11 plus those F13 residuals, with F12 closed; targeted gate
+  `logs/task3-final.run` **430 passed**; HEAD `30e86f0da`; no push, no evidence deletion, no hardware, no second
+  stack.

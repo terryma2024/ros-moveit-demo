@@ -43,7 +43,7 @@ class PickPlaceSearchObservation:
 class PickPlaceSearchSegment:
     """Drive only SEARCH; the caller decides whether its evidence passes."""
 
-    def _planning_scene_record(self, raw):
+    def _planning_scene_record(self, raw):   # `raw` is the readback the future fence must compare against
         """The ratified scene observation for this readback, or None when the port cannot supply it.
 
         The port's own read (CP-2020) provides everything but the simulation instant, which is stamped here from
@@ -56,12 +56,12 @@ class PickPlaceSearchSegment:
         probe = getattr(port, "observe_observation", None)
         if not callable(probe):
             return None
-        try:
-            record = dict(probe())
-        except Exception:
-            return None
-        record["sim_time_s"] = raw["world"].simulation_time_s
-        return record
+        # F13: the port's read is a fresh query and carries no observed instant of its own, so stamping it with
+        # an earlier readback's `simulation_time_s` would manufacture exact clock equality rather than prove the
+        # scene and physics describe the same step. Until the read can be fenced (the port would have to report
+        # the instant it observed, and this method would have to check it against `raw`), no record is emitted:
+        # the audit refuses an unfenced record anyway, and a refusal is the honest outcome.
+        return None
 
     def __init__(self, sources, adapter, scene_port, geometry: TaskGeometry, *,
                  operation_guard, history_verifier, reference_verifier,
