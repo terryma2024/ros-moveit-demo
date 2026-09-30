@@ -42455,3 +42455,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Tree state**: the patch was reverted immediately after the diagnostic; no file of mine is dirty.
 - **State.** **F14 closed**; F3(b) landed; F3(a) one named block away with the next step specified as a print of the
   rewritten stream; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `85086bb6e`; sixteen gates green.
+
+
+## CP-2245 — F3(a) is correct; the control's stream simply has no `release` event
+
+- **The probe's answer, in one line**: under the patch, the readback tie saw `named == {1: False}` — every event
+  carries epoch 1 (so rule (a) passes) and **not one of them is a `release`**, which is why the tie refuses. That
+  settles the four-way guess of CP-2244: the rule is right, the fixture is incomplete.
+- **Where my appendix went**: the test file contains the `events_lines = (audit / "events.jsonl")
+  .read_text().splitlines()` line at more than one site (the count is printed alongside this entry), and my append
+  targeted the first — the same first-of-N mistake CP-2202 recorded for the minter loops. The relabelled-coverage
+  fixture's own stream therefore stayed `phase_complete`-only.
+- **The fix for the next attempt, now precise**: append the `release` event at the site that this test actually
+  writes (the one inside the relabel block), or better, have that control build its stream explicitly — a
+  `phase_complete` plus a `release` at the identity's epoch — so the count of `events_lines` sites stops mattering.
+  Then rule (a) and the tie both hold, and the control asserts what it is for: coverage, not epoch bookkeeping.
+- **Tree state**: the probe was reverted immediately; nothing of mine is dirty.
+- **State.** **F14 closed**; F3(b) landed; F3(a) correct with its control one targeted edit away; F1/F5/F11/F12/F13
+  open; the goal is paused. HEAD `ba186694c`; sixteen gates green.
