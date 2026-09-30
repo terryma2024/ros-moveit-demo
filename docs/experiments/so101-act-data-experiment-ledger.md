@@ -39141,3 +39141,28 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   tests landed here cover the named-bundle-cannot-open path in the meantime.
 - **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD
   `71b3a6606`; no push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-2095 — The verifier's positive test and the fixture repair are one increment, not two
+
+- **What the bundle side needs, read from the model fixture** (`test_act_task8_artifact_bundle.py:34-86`):
+  `ValidInputs(root)` writes the nine closed-set artifacts plus a manifest and carries the five identities;
+  `_inputs(tmp_path)` wraps them in `Task8ArtifactInputs`; the tests then prepare and verify the bundle. A
+  positive delegation test can reuse that pattern directly (cross-test imports are already used in this session,
+  for example `from test_act_episode_audit import _ratified_reference`).
+- **What the journal side needs, and why it is the same job**: `validate_case_journals` wants **fourteen**
+  complete rows, each bound to that bundle's identity, with a prefix carrying no live-evidence artifact and a full
+  carrying one. The only fixtures in this worktree that produce such rows live in
+  `test_act_task8_live_qualification.py` — the very suite whose evidence port still needs the `_with_raw` repair
+  (CP-2089/CP-2091/CP-2092). So the positive test cannot be finished before that fixture is fixed, and the two
+  are one increment: fix the port, reuse its journals, then assert the verifier returns `True` end to end.
+- **The order to do it in**: (1) read both `_EvidencePort` class bodies (353-455, 456-…) and wrap only the return
+  that follows the `REQUIRED_PHASES` funnel; (2) re-run that suite until it is green, which also restores the
+  artifact the qualification chain seals; (3) build the positive verifier test from its journals plus a
+  `ValidInputs`-style bundle; (4) run the verifier suite and the campaign admission suite together.
+- **Evidence pointers for whoever continues**: the verifier's refusals are `W8_QUALIFICATION_EVIDENCE_INVALID`
+  and `_MISMATCH`; the bundle model is `test_act_task8_artifact_bundle.py`; the journal model is
+  `test_act_task8_live_qualification.py`; both suites currently pass except the four failures CP-2089 traced to
+  my contract change.
+- **State.** Item 3 implementation-complete (sixth checkpoint still pending); item 4 in progress. HEAD
+  `38bb7eff4`; no push, no evidence deletion, no hardware, no second stack.
