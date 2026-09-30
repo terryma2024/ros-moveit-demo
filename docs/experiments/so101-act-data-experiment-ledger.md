@@ -42488,3 +42488,21 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Reverted**; the audit suite is green (206 passed) and nothing of mine is dirty.
 - **State.** **F14 closed**; F3(b) landed; F3(a) has a named block, a named probe and a targeted edit, three
   attempts reverted; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `7b64295c7`; sixteen gates green.
+
+
+## CP-2247 — The probe moves the refusal to 1196 and clears the fixture
+
+- **Both probe outputs, decisive**: the fixture's rewritten stream is exactly
+  `[("phase_complete", 1), ("release", 1)]` — so CP-2245's fix landed, the append is in the right stream, and the
+  tie at 1235 has nothing to refuse. The traceback, however, ends at **`episode_audit.py:1196`**, i.e. in the
+  readback's **per-row event loop** (the block that checks each row's identity predicate, payload schema and the
+  release-payload/identity correlation), which fires before the tie ever runs.
+- **What that means**: three rounds of hypothesis were aimed at the wrong block. Rule (a) is fine, the fixture is
+  fine, and the refusal is the per-row admission of the **appended `release` row** — its payload keys
+  (`release_epoch`, `supported`, `no_fingertip_contact`), its `monotonic_ns`/`sim_time_s` copied from a
+  `phase_complete` row, or the identity predicate's lease/epoch clauses.
+- **The one read that names it**: `episode_audit.py:1186-1200`, printed alongside this entry — the same technique
+  that ended CP-2244's four-way guess, now pointed at the right block.
+- **Tree state**: reverted immediately after the probe; nothing of mine is dirty and the audit suite is green.
+- **State.** **F14 closed**; F3(b) landed; F3(a) blocked by this per-row admission rather than by the rule it
+  implements; F1/F5/F11/F12/F13 open; the goal is paused. HEAD `4b716c2d6`; sixteen gates green.
