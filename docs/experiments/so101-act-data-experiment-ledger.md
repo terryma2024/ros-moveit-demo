@@ -35758,3 +35758,38 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL ×2; T3-F2, F4, F6, F7
   closed; F1, F3, F5 open); items 4-8 pending.** HEAD `09732c136`; 39-path dirty baseline untouched; no
   push, no evidence deletion, no hardware, no second stack.
+
+
+## CP-1952 — Task 3 fix pass, eighth instalment: readback parity closed (T3-F3 residual)
+
+- **Readback now re-applies admission semantics to every stream.** `_verify_streams` validates
+  acquisitions field by field (camera in the frozen set, `[480, 640, 3]` shape, `uint8`, 64-hex digest,
+  finite stamp, positive receipt, and an id equal to the canonical
+  `session/reset/camera/sequence`), requires the per-camera sequence to increase without duplicates,
+  resolves each row binding's reference sequence to a reference this episode recorded as accepted for
+  exactly `sim_time_s + 0.1` and refuses one that a later revocation voided, re-checks camera slots,
+  session/reset ownership, causality, skew and the 10 Hz schedule on the bindings, validates event
+  kinds, payload key sets, identities and monotonic instants against `_EVENT_PAYLOADS`, checks physics
+  kinds, sequences, epoch monotonicity and the support flag, and cross-correlates the metadata: the
+  manifest identity must equal the identity the episode recorded, and `inputs.json` must declare a
+  64-hex inputs digest.
+- **The reviewer's three checksum-consistent counterexamples are now tests**, each rewriting a stream
+  *and* re-signing the manifest so only semantics can catch it: swapping the head/wrist ids in an
+  existing binding (`AUDIT_BINDING_UNKNOWN`), pointing a binding at a nonexistent reference sequence
+  (`AUDIT_BINDING_REFERENCE_INVALID`), and appending an event with an unknown kind
+  (`AUDIT_EVENT_INVALID`) — the last two were genuinely unchecked before this instalment.
+- **Evidence.** `logs/task3-fix8.run` rc=0: **92 passed in 0.73 s** across `test_act_episode_audit.py`,
+  `test_act_recorder.py`, `test_act_release_boundary.py` and `test_act_continuous_capture.py`, with its
+  own NVMe scratch and a non-empty tempfile proof. One of my own mistakes was caught by the suite and
+  fixed: `canonical_acquisition_id` takes separate arguments, not a joined string, so the first version
+  of the id check raised `TypeError` instead of validating.
+- **Still open.** **T3-F1** (metadata admission: the collection-scope closed fields and modes, the full
+  lease/session/reset/release identity and the source-schedule/first-command/physical-end/label-cutoff
+  window contract; the required event kinds — dispatch, accept, revoke, stop, contact, release,
+  final-check — with typed payload validators; and the raw observer-reference and physics payloads,
+  implemented together and never reconstructed from phase booleans) and **T3-F5** (gate eligibility and
+  sealing on that raw coverage, which depends on F1 being real). Then the consolidated 19-file gate and
+  a fresh checkpoint.
+- **State.** **Task-list items 0-2 completed; item 3 in_progress (checkpoint FAIL ×2; T3-F2, F3, F4, F6,
+  F7 closed; F1 and F5 open); items 4-8 pending.** HEAD `f92ab8f57`; 39-path dirty baseline untouched;
+  no push, no evidence deletion, no hardware, no second stack.

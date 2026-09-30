@@ -376,3 +376,41 @@ def test_a_late_revocation_prevents_sealing_a_bound_row(tmp_path):
                                         "positions": [0.1] * 6, "accepted": False})
     with pytest.raises(ValueError, match="AUDIT_BINDING_REVOKED"):
         writer.seal({"start_s": 1.0})
+
+
+def test_readback_refuses_a_resigned_swapped_binding(tmp_path):
+    """The reviewer's checksum-consistent counterexample: swap the camera slots and re-sign."""
+
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    row = json.loads((path.parent / "row-bindings.jsonl").read_text().splitlines()[0])
+    row["head_acquisition_id"], row["wrist_acquisition_id"] = (row["wrist_acquisition_id"],
+                                                               row["head_acquisition_id"])
+    payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    _resign(writer, path, "row-bindings.jsonl", payload)
+    with pytest.raises(ValueError, match="AUDIT_BINDING_UNKNOWN"):
+        verify_audit_manifest(path)
+
+
+def test_readback_refuses_a_resigned_unresolvable_reference_sequence(tmp_path):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    row = json.loads((path.parent / "row-bindings.jsonl").read_text().splitlines()[0])
+    row["reference_sequence"] = 99
+    payload = (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    _resign(writer, path, "row-bindings.jsonl", payload)
+    with pytest.raises(ValueError, match="AUDIT_BINDING_REFERENCE_INVALID"):
+        verify_audit_manifest(path)
+
+
+def test_readback_refuses_a_resigned_unknown_event(tmp_path):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    lines = (path.parent / "events.jsonl").read_text().splitlines()
+    payload = ("\n".join([*lines, json.dumps({"sequence": len(lines) + 1, "kind": "claim",
+                                              "identity": identity(), "sim_time_s": None,
+                                              "monotonic_ns": 5, "payload": {}},
+                                             sort_keys=True, separators=(",", ":"))]) + "\n").encode()
+    _resign(writer, path, "events.jsonl", payload)
+    with pytest.raises(ValueError, match="AUDIT_EVENT_INVALID"):
+        verify_audit_manifest(path)

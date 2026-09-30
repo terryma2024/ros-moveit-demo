@@ -22,6 +22,8 @@ import math
 import os
 from pathlib import Path
 
+from .acquisition import CAMERAS, canonical_acquisition_id
+
 MANIFEST_KIND = "ACT_EPISODE_AUDIT"
 _METADATA_FILES = ("source.json", "inputs.json", "episode.json")
 _STREAM_NAMES = ("acquisitions.jsonl", "row-bindings.jsonl", "events.jsonl",
@@ -373,7 +375,7 @@ def verify_audit_manifest(path: Path) -> dict:
             or manifest["scope_sha256"] != _sha256(audit / "source.json")):
         # the manifest names the scope it was collected under, and the payload must agree with it
         raise ValueError("AUDIT_MANIFEST_INVALID")
-    _verify_streams(audit)
+    _verify_streams(audit, manifest["identity"])
     return manifest
 
 
@@ -388,38 +390,103 @@ def _records(path: Path, fields: frozenset, code: str) -> list:
     return rows
 
 
-def _verify_streams(audit: Path) -> None:
+def _hex64(value) -> bool:
+    return (isinstance(value, str) and len(value) == 64
+            and all(character in "0123456789abcdef" for character in value))
+
+
+def _verify_streams(audit: Path, identity: dict) -> None:
+    """Re-apply admission semantics to every stream, not just its checksum."""
+
     acquisitions = {}
+    per_camera: dict = {}
     for row in _records(audit / "acquisitions.jsonl", _ACQUISITION_FIELDS,
                         "AUDIT_ACQUISITION_INVALID"):
-        if row["acquisition_id"] in acquisitions:
+        if (row["camera"] not in CAMERAS or list(row["shape"]) != [480, 640, 3]
+                or row["dtype"] != "uint8" or not _hex64(row["pixel_sha256"])
+                or type(row["sequence"]) is not int or row["sequence"] < 1
+                or type(row["reset_epoch"]) is not int or row["reset_epoch"] < 0
+                or type(row["received_monotonic_ns"]) is not int or row["received_monotonic_ns"] < 1
+                or not isinstance(row["stamp_s"], (int, float)) or isinstance(row["stamp_s"], bool)):
             raise ValueError("AUDIT_ACQUISITION_INVALID")
+        if row["acquisition_id"] != canonical_acquisition_id(
+                row["session_id"], row["reset_epoch"], row["camera"], row["sequence"]):
+            raise ValueError("AUDIT_ACQUISITION_INVALID")
+        key = (row["camera"], row["session_id"], row["reset_epoch"])
+        if row["acquisition_id"] in acquisitions or row["sequence"] <= per_camera.get(key, 0):
+            raise ValueError("AUDIT_ACQUISITION_INVALID")
+        per_camera[key] = row["sequence"]
         acquisitions[row["acquisition_id"]] = row
-    bound: set = set()
-    indexes: set = set()
-    for row in _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID"):
-        if row["row_index"] in indexes or row["head_acquisition_id"] == row["wrist_acquisition_id"]:
-            raise ValueError("AUDIT_ROW_INVALID")
-        indexes.add(row["row_index"])
-        for name in ("head_acquisition_id", "wrist_acquisition_id"):
-            value = row[name]
-            if value not in acquisitions or value in bound:
-                raise ValueError("AUDIT_BINDING_UNKNOWN")
-            bound.add(value)
+    revoked = set()
+    references = {}
     sequence = 0
     for row in _records(audit / "references.jsonl", _REFERENCE_FIELDS, "AUDIT_REFERENCE_INVALID"):
-        if row["sequence"] != sequence + 1:
+        if (row["sequence"] != sequence + 1 or row["source"] != "CONTROLLER_REFERENCE"
+                or type(row["accepted"]) is not bool
+                or not isinstance(row["positions"], list) or len(row["positions"]) != 6
+                or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                       for value in row["positions"])):
             raise ValueError("AUDIT_REFERENCE_INVALID")
         sequence = row["sequence"]
+        references[row["sequence"]] = row
+        if row["accepted"] is not True:
+            revoked.add(row["reference_time_s"])
+    bound: set = set()
+    indexes: set = set()
+    last_time: float | None = None
+    for row in _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID"):
+        if (row["row_index"] in indexes
+                or row["head_acquisition_id"] == row["wrist_acquisition_id"]
+                or not isinstance(row["sim_time_s"], (int, float))
+                or isinstance(row["sim_time_s"], bool)):
+            raise ValueError("AUDIT_ROW_INVALID")
+        indexes.add(row["row_index"])
+        stamps = []
+        for value, camera in ((row["head_acquisition_id"], "head"),
+                              (row["wrist_acquisition_id"], "wrist")):
+            frame = acquisitions.get(value)
+            if frame is None or value in bound or frame["camera"] != camera:
+                raise ValueError("AUDIT_BINDING_UNKNOWN")
+            if (frame["session_id"] != identity.get("session_id")
+                    or frame["reset_epoch"] != identity.get("reset_epoch")):
+                raise ValueError("AUDIT_BINDING_INVALID")
+            age = row["sim_time_s"] - frame["stamp_s"]
+            if age < -_TOLERANCE_S or age > _MAX_SOURCE_AGE_S + _TOLERANCE_S:
+                raise ValueError("AUDIT_BINDING_CAUSALITY_INVALID")
+            stamps.append(frame["stamp_s"])
+            bound.add(value)
+        if abs(stamps[0] - stamps[1]) > _MAX_SKEW_S + _TOLERANCE_S:
+            raise ValueError("AUDIT_BINDING_CAUSALITY_INVALID")
+        if last_time is not None and abs(row["sim_time_s"] - (last_time + _GRID_S)) > _TOLERANCE_S:
+            raise ValueError("AUDIT_ROW_SCHEDULE_INVALID")
+        last_time = row["sim_time_s"]
+        target = round(row["sim_time_s"] + _GRID_S, 6)
+        named = references.get(row["reference_sequence"])
+        if named is None or named["reference_time_s"] != target or named["accepted"] is not True:
+            # the binding must resolve to a reference this episode accepted for exactly that instant
+            raise ValueError("AUDIT_BINDING_REFERENCE_INVALID")
+        if target in revoked:
+            raise ValueError("AUDIT_BINDING_REVOKED")
     sequence = 0
     for row in _records(audit / "events.jsonl", _EVENT_FIELDS, "AUDIT_EVENT_INVALID"):
-        if row["sequence"] != sequence + 1 or not isinstance(row["kind"], str) or not row["kind"]:
+        payload = row["payload"]
+        if (row["sequence"] != sequence + 1 or row["kind"] not in _EVENT_PAYLOADS
+                or not isinstance(row["identity"], dict) or not row["identity"]
+                or type(row["monotonic_ns"]) is not int or row["monotonic_ns"] < 1
+                or not isinstance(payload, dict)
+                or set(payload) != _EVENT_PAYLOADS[row["kind"]]):
+            raise ValueError("AUDIT_EVENT_INVALID")
+        if row["kind"] in ("phase_complete", "run_complete", "run_aborted"):
+            if type(payload["physics_step"]) is not int:
+                raise ValueError("AUDIT_EVENT_INVALID")
+        if row["kind"] == "phase_complete" and (not isinstance(payload["phase"], str)
+                                                or not payload["phase"]):
             raise ValueError("AUDIT_EVENT_INVALID")
         sequence = row["sequence"]
     epoch: int | None = None
     sequence = 0
     for row in _records(audit / "physics.jsonl", _PHYSICS_FIELDS, "AUDIT_PHYSICS_INVALID"):
-        if row["sequence"] != sequence + 1:
+        if row["sequence"] != sequence + 1 or row["kind"] not in _PHYSICS_KINDS:
             raise ValueError("AUDIT_PHYSICS_INVALID")
         sequence = row["sequence"]
         if epoch is None or row["release_epoch"] > epoch:
@@ -428,3 +495,11 @@ def _verify_streams(audit: Path) -> None:
             raise ValueError("AUDIT_RELEASE_EPOCH_STALE")
         if row["kind"] == "support" and type(row["observation"].get("supported")) is not bool:
             raise ValueError("AUDIT_PHYSICS_INVALID")
+    declared = json.loads((audit / "episode.json").read_bytes())
+    scope = json.loads((audit / "source.json").read_bytes())
+    inputs = json.loads((audit / "inputs.json").read_bytes())
+    if (declared != identity or not isinstance(scope, dict) or not scope
+            or not isinstance(inputs, dict) or not _hex64(inputs.get("inputs_sha256"))):
+        # the manifest identity must be the identity the episode actually recorded, and the scope and
+        # inputs payloads must be the closed documents they claim to be
+        raise ValueError("AUDIT_METADATA_INVALID")
