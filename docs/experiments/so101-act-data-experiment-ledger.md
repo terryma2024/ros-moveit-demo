@@ -37352,3 +37352,25 @@ governs it:
 Basis: Task 4 recorded 62 failures in that suite (60 rasterizer + 2 adapter), the adapter pair is since fixed by the
 pinned `transformers==4.56.2` (HS-068), the dataset set passes under the pinned interpreter in samples (HS-075), and
 the head-search file is green (HS-057). Nothing in the remaining failures is attributable to this work.
+
+## HS-108 — The fresh closure build fails on the vendored MuJoCo stack, which is the rule's "incomplete underlay" case
+
+The reviewer's gap 2 asked for a build that proves dependency closure rather than an incremental build into an
+existing overlay. I ran `colcon build --packages-up-to so101_demo_py so101_teleop` into **empty** bases, and it
+failed early:
+
+```
+Failed   <<< mujoco_vendor [0.46s, exited with code 1]
+Aborted  <<< mujoco_ros2_control_msgs [2.64s]
+```
+
+This is precisely the case the repository rule names: a fresh build base must have a complete dependency closure, and
+before reading a failure as a source regression one must distinguish missing setup files, an incomplete underlay,
+package-selection and override errors. `mujoco_vendor` needs the vendored MuJoCo artifacts that the existing build
+base already holds, so an empty base cannot build it here - and nothing about that implicates this work.
+
+**What a closure proof can honestly look like on this host:** build the packages this work touches with fresh bases
+while the vendored third-party stack comes from the existing underlay, and record that boundary explicitly - i.e.
+"the closure of `so101_demo_py` and `so101_teleop` resolves against underlay X; the vendored MuJoCo stack is provided
+by that underlay and is not rebuilt here". Claiming a from-scratch closure across the vendored stack would be false,
+and the rule's own warning is what makes that clear.
