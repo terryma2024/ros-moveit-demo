@@ -19,7 +19,7 @@
 - Head Search 不使用 Grounded-SAM。Grounded-SAM 不参与标签、筛选、复核、fallback、模型投票或运行时决策。
 - 只允许 MuJoCo；全程 CUDA，`allow_cpu_fallback=false`。不得触及真实 SO-101。
 - 当前任务不实现产品级并行执行。数据生成、训练、A/B/C 评测、正式校准、40 场景和三个 restart 全部串行；只允许一套 ROS/MuJoCo/YOLO stack 和一个 detector instance。
-- 普通包测试按仓库门禁使用 pytest-xdist；这是测试运行器行为，不是产品并行支持。`benchmark_test` 只在 Task 4 和 Task 11 的明确边界显式运行；Task 12 运行的是冻结模型的真实数据比较入口。
+- 普通包测试按仓库门禁使用 pytest-xdist；这是测试运行器行为，不是产品并行支持。Task 1 和 Task 4 只运行正在修改的具名 benchmark 测试文件，完整 `benchmark_test` suite 只在 Task 4 和 Task 11 的明确集成边界运行；Task 12 运行的是冻结模型的真实数据比较入口。
 - head-camera 数据固定为 train 800、val 200、test 200；四个场景各占 1/4。B 使用 800 张 head train；C 每个 epoch 使用 head 800 + task 800，batch 内 1:1 domain balance。
 - A/B/C 都在冻结的 head test 与 task test 上评测。若 C 与最佳 head 候选等效且保留 task 能力，则选择 C；所有候选等效时也选择 C。
 - 校准程序没有 resume、checkpoint replay 或阶段继续入口。失败 run 保持不可变；修复后使用新 run ID 从输入验证重新开始。sealed dataset 和未变化权重可以作为新 run 的只读输入。
@@ -38,12 +38,20 @@
 所有 ai-station pytest/colcon 命令使用同一 shell 中的以下辅助函数。每次测试都创建此前不存在的 NVMe scratch，并记录路径、elapsed、退出码、测试数和日志；scratch 只标记为 deletion candidate，不删除。
 
 ```zsh
+set -o errexit -o pipefail
 source /opt/ros/jazzy/setup.zsh
 HEAD_EVIDENCE=/data/work/so101-evidence/act-data/20260924-fbc25063-resume
-HEAD_PYTHON=$(command -v python3)
+HEAD_PYTHON=$(python3 -c 'import sys; print(sys.executable)')
+HEAD_COLCON=$(command -v colcon)
 test -d "$HEAD_EVIDENCE" || exit 1
 test -x "$HEAD_PYTHON" || exit 1
-export HEAD_EVIDENCE HEAD_PYTHON
+test -f "$HEAD_COLCON" || exit 1
+"$HEAD_PYTHON" "$HEAD_COLCON" --help >/dev/null || exit 1
+export HEAD_EVIDENCE HEAD_PYTHON HEAD_COLCON
+
+head_colcon() {
+  "$HEAD_PYTHON" "$HEAD_COLCON" "$@"
+}
 
 new_head_scratch() {
   mkdir -p "$HEAD_EVIDENCE/scratch"
@@ -51,16 +59,43 @@ new_head_scratch() {
   mkdir "$HEAD_SCRATCH/tmp" || return 1
   export TMPDIR="$HEAD_SCRATCH/tmp" TMP="$HEAD_SCRATCH/tmp" TEMP="$HEAD_SCRATCH/tmp"
   "$HEAD_PYTHON" -c 'import os,tempfile; from pathlib import Path; assert Path(tempfile.gettempdir()).resolve() == Path(os.environ["TMPDIR"]).resolve()' || return 1
+  "$HEAD_PYTHON" -c 'import json,os,platform,sys,tempfile; print(json.dumps({"python":sys.executable,"tempdir":tempfile.gettempdir(),"cpu_count":os.cpu_count(),"platform":platform.platform()},sort_keys=True))' \
+    >"$HEAD_SCRATCH/interpreter-and-cpu.json" || return 1
 }
 
 head_test() {
   new_head_scratch || return 1
   set -o pipefail
-  /usr/bin/time -p "$HEAD_PYTHON" -m pytest -p no:cacheprovider "$@" \
+  set +o errexit
+  /usr/bin/time -p "$HEAD_PYTHON" -m pytest -p no:cacheprovider \
+    --junitxml="$HEAD_SCRATCH/pytest.junit.xml" "$@" \
     2>&1 | tee "$HEAD_SCRATCH/pytest.console.log"
   test_rc=$?
+  set -o errexit
+  print -r -- "$test_rc" >"$HEAD_SCRATCH/pytest.rc"
   print -r -- "scratch=$HEAD_SCRATCH rc=$test_rc"
   return $test_rc
+}
+
+run_logged() {
+  log_path=$1
+  shift
+  set +o errexit
+  "$@" 2>&1 | tee "$log_path"
+  command_rc=$?
+  set -o errexit
+  print -r -- "$command_rc" >"$log_path.rc"
+  return $command_rc
+}
+
+expect_head_red() {
+  red_pattern=$1
+  shift
+  if head_test "$@"; then
+    print -u2 -- "RED gate unexpectedly passed: $red_pattern"
+    return 1
+  fi
+  rg -n "$red_pattern" "$HEAD_SCRATCH/pytest.console.log" >/dev/null || return 1
 }
 ```
 
@@ -70,7 +105,8 @@ head_test() {
 
 | Area | Files | Responsibility |
 | --- | --- | --- |
-| Dataset identity | `adapters/perception/mujoco_dataset.py`, `config/perception/head_camera_yolo_seg.yaml` | head-camera 渲染、跨 domain `scene_group_id`、split seal 和 800/200/200 manifest |
+| Camera geometry | `act/head_camera_geometry.py`, `cli/validate_head_camera_geometry.py`, `assets/mujoco/act/so101.xml` | 解决 `in_frame=0`，证明三个 anchor、required domain 和安全 neck 区间 |
+| Dataset identity | `adapters/perception/mujoco_dataset.py`, `config/perception/head_camera_yolo_seg.yaml` | 消费 camera geometry seal，生成跨 domain `scene_group_id` 和 800/200/200 manifest |
 | Training identity | `adapters/perception/yolo_training.py`, `cli/train_yolo_seg.py`, `act/head_search_training.py` | B/C 数据组合、1:1 domain balance、不可变 candidate manifest |
 | Model evaluation | `perception_benchmark/head_search_models.py`, `cli/evaluate_head_search_yolo_candidates.py` | operating point 冻结、scene bootstrap、A/B/C 双 domain 比较和 verdict |
 | Search geometry | `act/head_search_domain.py`, `act/search.py`, `act/head_search_binding.py` | required domain、双向有界停点、覆盖证明和终止状态 |
@@ -112,8 +148,9 @@ def test_candidate_identity_binds_operating_point_and_tracker():
 - [ ] **Step 2: Run RED.**
 
 ```zsh
-head_test src/so101_demo_py/test/test_act_head_search_training.py \
-  src/so101_demo_py/benchmark_test/test_perception_benchmark_contracts.py -q
+expect_head_red 'scene_group_cannot_cross|CandidateIdentity|candidate_identity_binds' \
+  src/so101_demo_py/test/test_act_head_search_training.py \
+  src/so101_demo_py/benchmark_test/test_perception_benchmark_contracts.py -q || exit 1
 ```
 
 Expected: new symbols or new closed fields are missing; environment/import failures do not count as RED.
@@ -138,7 +175,7 @@ Require exact keys, finite values, lowercase SHA256, unique `scene_group_id`, mu
 
 ```zsh
 head_test src/so101_demo_py/test/test_act_head_search_training.py \
-  src/so101_demo_py/benchmark_test/test_perception_benchmark_contracts.py -q
+  src/so101_demo_py/benchmark_test/test_perception_benchmark_contracts.py -q || exit 1
 git add src/so101_demo_py/src/act/head_search_training.py \
   src/so101_demo_py/src/perception_benchmark/contracts.py \
   src/so101_demo_py/test/test_act_head_search_training.py \
@@ -151,19 +188,31 @@ git commit -m "feat: define head search model identities"
 
 **Files:**
 
+- Create: `src/so101_demo_py/src/act/head_camera_geometry.py`
+- Create: `src/so101_demo_py/src/cli/validate_head_camera_geometry.py`
+- Create: `src/so101_demo_py/config/act/head-camera-geometry-contract-v1.json`
 - Create: `src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml`
 - Create: `src/so101_demo_py/src/cli/verify_head_search_dataset.py`
+- Modify: `src/so101_demo_py/assets/mujoco/act/so101.xml`
+- Modify: `src/so101_demo_py/config/mujoco/camera_views.yaml`
 - Modify: `src/so101_demo_py/src/adapters/perception/mujoco_dataset.py`
 - Modify: `src/so101_demo_py/src/cli/generate_yolo_seg_dataset.py`
 - Modify: `src/so101_demo_py/setup.py`
+- Modify: `src/so101_demo_py/test/test_act_task8_bottom_io_geometry.py`
 - Modify: `src/so101_demo_py/test/test_yolo_seg_dataset.py`
 - Modify: `src/so101_demo_py/test/test_yolo_seg_dataset_augmented.py`
 
-**Interfaces:** Consumes `HeadSearchSplitSeal`. Produces the sealed 800/200/200 head-camera dataset manifest with RGB, YOLO-Seg labels, raw masks, CameraInfo, camera pose, neck yaw and `scene_group_id`.
+**Interfaces:** `validate_head_camera_geometry` consumes the production MJCF/camera, three anchors and the frozen geometry matrix. It emits `head-camera-geometry.json` with the resolved `in_frame` matrix, `horizontal_fov_rad`, `lock_valid_neck_rad`, required search domain, safe neck interval and all source digests. Dataset generation refuses to run without that seal and produces the sealed 800/200/200 head-camera manifest with RGB, YOLO-Seg labels, raw masks, CameraInfo, camera pose, neck yaw and `scene_group_id`.
 
-- [ ] **Step 1: Add RED tests for the exact count and camera identity.**
+- [ ] **Step 1: Add RED tests for the production view, safe geometry, exact count and camera identity.**
 
 ```python
+def test_production_head_camera_covers_geometry_matrix_at_all_anchors():
+    result = validate_head_camera_geometry(PRODUCTION_SCENE, GEOMETRY_CONTRACT)
+    assert result.in_frame_failures == []
+    assert tuple(result.anchors) == ("default", "left", "forward")
+    assert result.safe_interval_contains_required_domain
+
 def test_head_camera_plan_has_four_balanced_scenarios():
     plan = split_scene_plan(camera_name="head_camera", counts={"train": 800, "val": 200, "test": 200})
     assert plan.counts("train") == {
@@ -173,40 +222,43 @@ def test_head_camera_plan_has_four_balanced_scenarios():
     assert all(item.camera_name == "head_camera" for item in plan.samples)
 ```
 
-- [ ] **Step 2: Run RED.**
+- [ ] **Step 2: Run RED and prove the intended camera/count assertions failed.**
 
 ```zsh
-head_test src/so101_demo_py/test/test_yolo_seg_dataset.py \
-  src/so101_demo_py/test/test_yolo_seg_dataset_augmented.py -q
+expect_head_red 'in_frame|geometry|head_camera|balanced_scenarios' \
+  src/so101_demo_py/test/test_act_task8_bottom_io_geometry.py \
+  src/so101_demo_py/test/test_yolo_seg_dataset.py \
+  src/so101_demo_py/test/test_yolo_seg_dataset_augmented.py -q || exit 1
 ```
 
-- [ ] **Step 3: Implement the head-camera profile and fail-closed manifest.**
+- [ ] **Step 3: Repair and freeze the production camera, then implement the fail-closed dataset profile.**
 
-The YAML freezes `camera_name: head_camera`, `640x480`, exact split counts, four scenario names, seed ranges, neck-yaw sampling and the production MJCF/camera digest. `generate_dataset()` writes each sample's `scene_group_id`, camera intrinsics/extrinsics and raw instance-mask digest. Reject missing CameraInfo, duplicate groups, split leakage, image/label count drift, non-head camera renders and an existing output root.
+Make the minimal production-camera correction in `assets/mujoco/act/so101.xml` and its owned camera view so the real `head_camera` sees the target-support geometry; do not add a dataset-only camera. The validator renders the production scene headlessly over `default`, `left`, `forward`, both required-domain endpoints, the legal neck grid, target-support positions and occluder extrema. It rejects any `in_frame=0`, an unsafe swept segment, insufficient FOV-union coverage, camera/MJCF drift or a required domain outside the safe interval. The YAML freezes `camera_name: head_camera`, `640x480`, exact split counts, four scenario names, seed ranges, neck-yaw sampling and the accepted geometry-seal digest. `generate_dataset()` requires `--geometry-seal`, writes each sample's `scene_group_id`, camera intrinsics/extrinsics and raw instance-mask digest, and rejects missing CameraInfo, duplicate groups, split leakage, image/label count drift, non-head camera renders, a changed production-camera digest or an existing output root.
 
-- [ ] **Step 4: Run GREEN, a 12-image formal-entry smoke, and commit.**
+- [ ] **Step 4: Run GREEN and commit the formal programs.**
 
 ```zsh
-head_test src/so101_demo_py/test/test_yolo_seg_dataset.py \
-  src/so101_demo_py/test/test_yolo_seg_dataset_augmented.py -q
-SMOKE_ROOT="$HEAD_EVIDENCE/head-dataset-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$SMOKE_ROOT"
-generate_yolo_seg_dataset \
-  --config "$PWD/src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml" \
-  --output-root "$SMOKE_ROOT" --generator-commit "$(git rev-parse HEAD)" --sample-limit 12
-test -f "$SMOKE_ROOT/dataset-manifest.json"
-git add src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml \
+head_test src/so101_demo_py/test/test_act_task8_bottom_io_geometry.py \
+  src/so101_demo_py/test/test_yolo_seg_dataset.py \
+  src/so101_demo_py/test/test_yolo_seg_dataset_augmented.py -q || exit 1
+git add src/so101_demo_py/src/act/head_camera_geometry.py \
+  src/so101_demo_py/src/cli/validate_head_camera_geometry.py \
+  src/so101_demo_py/config/act/head-camera-geometry-contract-v1.json \
+  src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml \
   src/so101_demo_py/src/cli/verify_head_search_dataset.py \
+  src/so101_demo_py/assets/mujoco/act/so101.xml \
+  src/so101_demo_py/config/mujoco/camera_views.yaml \
   src/so101_demo_py/src/adapters/perception/mujoco_dataset.py \
   src/so101_demo_py/src/cli/generate_yolo_seg_dataset.py \
   src/so101_demo_py/setup.py \
+  src/so101_demo_py/test/test_act_task8_bottom_io_geometry.py \
   src/so101_demo_py/test/test_yolo_seg_dataset.py \
   src/so101_demo_py/test/test_yolo_seg_dataset_augmented.py
 git diff --cached --check
 git commit -m "feat: generate sealed head camera datasets"
 ```
 
-The smoke must exit 0 and report exactly 12 samples. Preserve its log and manifest; do not treat it as the 1200-image deliverable.
+The installed camera-validation and 12-image dataset smokes run once at Task 11's integration boundary. Task 2 is not accepted as runtime-complete until those retained artifacts are read back there.
 
 ### Task 3: Make B/C training reproducible and domain-balanced
 
@@ -231,55 +283,31 @@ def test_mixed_candidate_uses_full_union_and_balanced_batches():
     assert plan.domain_counts == {"head": 800, "task": 800}
     assert all(batch.head_count == batch.task_count for batch in plan.batches)
     assert plan.device == "cuda" and not plan.allow_cpu_fallback
+
+def test_b_and_c_use_the_same_two_domain_checkpoint_score():
+    for candidate in (build_candidate_plan("B", head=HEAD_MANIFEST, task=TASK_MANIFEST),
+                      build_candidate_plan("C", head=HEAD_MANIFEST, task=TASK_MANIFEST)):
+        assert candidate.checkpoint_score == "0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95"
+        assert candidate.validation_domains == ("head", "task")
 ```
 
 - [ ] **Step 2: Run RED.**
 
 ```zsh
-head_test src/so101_demo_py/test/test_yolo_training.py \
-  src/so101_demo_py/test/test_yolo_training_container.py -q
+expect_head_red 'mixed_candidate|two_domain_checkpoint_score|checkpoint_score' \
+  src/so101_demo_py/test/test_yolo_training.py \
+  src/so101_demo_py/test/test_yolo_training_container.py -q || exit 1
 ```
 
 - [ ] **Step 3: Implement exact candidate plans.**
 
-`train_yolo_seg --candidate B` reads only head train/val. `--candidate C` reads the full head/task union and writes a deterministic balanced sampling manifest. Both inherit A, share optimizer/augmentation/imgsz/batch/seed/epoch/early-stop settings, set `YOLO_OFFLINE=true`, require a CUDA device, and atomically write weight/config/dataset/runtime digests after a successful child exit. Existing output roots remain an error.
+`train_yolo_seg --candidate B` trains only on head train, but receives both head val and task val. `--candidate C` trains on the full head/task union and writes a deterministic balanced sampling manifest. For both, checkpoint score is exactly `0.5 * head_val_mask_mAP50_95 + 0.5 * task_val_mask_mAP50_95`; non-finite/missing cells invalidate the epoch, and an exact score tie selects the earlier epoch. Both inherit A, share optimizer/augmentation/imgsz/batch/seed/max-epoch/early-stop settings, set `YOLO_OFFLINE=true`, require a CUDA device, and atomically write weight/config/dataset/runtime digests after a successful child exit. Existing output roots remain an error.
 
-- [ ] **Step 4: Run GREEN, one-epoch B and C container smokes, and commit.**
+- [ ] **Step 4: Run GREEN and commit the reproducible training entry.**
 
 ```zsh
 head_test src/so101_demo_py/test/test_yolo_training.py \
-  src/so101_demo_py/test/test_yolo_training_container.py -q
-TRAIN_SMOKE_ROOT="$HEAD_EVIDENCE/head-training-dataset-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
-TRAIN_SMOKE_CAMPAIGN="$HEAD_EVIDENCE/head-training-smokes-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$TRAIN_SMOKE_ROOT"
-test ! -e "$TRAIN_SMOKE_CAMPAIGN"
-mkdir "$TRAIN_SMOKE_CAMPAIGN"
-generate_yolo_seg_dataset \
-  --config "$PWD/src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml" \
-  --output-root "$TRAIN_SMOKE_ROOT" --generator-commit "$(git rev-parse HEAD)" \
-  --sample-limit 12
-HF_ROOT="$HEAD_EVIDENCE/models/huggingface"
-YOLO_REV=b55430fb75c0207b35bd20f4e328e042bff06f3f
-A_ROOT="$HF_ROOT/so101-yolo11n-seg-plastic-cup/$YOLO_REV"
-A_WEIGHTS="$A_ROOT/best.pt"
-hf download zjumty/so101-yolo11n-seg-plastic-cup --revision "$YOLO_REV" \
-  --include best.pt --include 'dataset/**' --include SHA256SUMS \
-  --local-dir "$A_ROOT" || exit 1
-TASK_DATASET_MANIFEST="$A_ROOT/dataset/dataset-manifest.json"
-test -f "$A_WEIGHTS"
-test -f "$TASK_DATASET_MANIFEST"
-set -o pipefail
-printf '%s  %s\n' "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781" "$A_WEIGHTS" \
-  | sha256sum --check --strict || exit 1
-train_yolo_seg --candidate B --epochs 1 --fraction 0.05 \
-  --contract src/so101_demo_py/config/perception/head_search_yolo_training.yaml \
-  --head-dataset "$TRAIN_SMOKE_ROOT/dataset-manifest.json" --base-model "$A_WEIGHTS" \
-  --output "$TRAIN_SMOKE_CAMPAIGN/candidate-b" --run-name smoke-b
-train_yolo_seg --candidate C --epochs 1 --fraction 0.05 \
-  --contract src/so101_demo_py/config/perception/head_search_yolo_training.yaml \
-  --head-dataset "$TRAIN_SMOKE_ROOT/dataset-manifest.json" \
-  --task-dataset "$TASK_DATASET_MANIFEST" --base-model "$A_WEIGHTS" \
-  --output "$TRAIN_SMOKE_CAMPAIGN/candidate-c" --run-name smoke-c
+  src/so101_demo_py/test/test_yolo_training_container.py -q || exit 1
 git add src/so101_demo_py/config/perception/head_search_yolo_training.yaml \
   src/so101_demo_py/src/act/head_search_training.py \
   src/so101_demo_py/src/adapters/perception/yolo_training.py \
@@ -290,7 +318,7 @@ git diff --cached --check
 git commit -m "feat: prepare head search YOLO candidates"
 ```
 
-Both smokes must actually enter Ultralytics, detect CUDA and exit 0. A CLI/config-only success is insufficient.
+The installed one-epoch B/C smokes run at Task 11 after the package is rebuilt. They must actually enter Ultralytics, consume both validation domains, detect CUDA and exit 0. A CLI/config-only success is insufficient.
 
 ### Task 4: Implement the two benchmark gates and A/B/C verdict
 
@@ -321,7 +349,8 @@ def test_all_equivalent_candidates_prefer_retained_mixed_model():
 - [ ] **Step 2: Run RED, then implement.**
 
 ```zsh
-head_test src/so101_demo_py/benchmark_test/test_head_search_model_evaluation.py -q
+expect_head_red 'bootstrap_resamples|equivalent_candidates_prefer' \
+  src/so101_demo_py/benchmark_test/test_head_search_model_evaluation.py -q || exit 1
 ```
 
 Freeze each candidate's weight, domain-specific confidence/area/aspect, tracker IoU, postprocess and runtime before test access. Static image metrics and held-out detector/tracker episode metrics remain separate. Require 10,000 paired scene bootstrap repetitions, AP/F1/recall margin 0.01, bbox-center p95 margin 2 px, zero `no_cup` false candidates, C task retention margin 0.01, and the latency budget from the spec. Do not compute controller-dependent wrong-lock/reacquisition metrics here.
@@ -330,28 +359,28 @@ Freeze each candidate's weight, domain-specific confidence/area/aspect, tracker 
 
 ```zsh
 TASK4_GATE="$HEAD_EVIDENCE/head-benchmark-code-gate-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$TASK4_GATE"
-mkdir "$TASK4_GATE"
+test ! -e "$TASK4_GATE" || exit 1
+mkdir "$TASK4_GATE" || exit 1
 source /opt/ros/jazzy/setup.zsh
 set -o pipefail
-new_head_scratch
-/usr/bin/time -p colcon --log-base "$TASK4_GATE/build-log" build \
+new_head_scratch || exit 1
+run_logged "$TASK4_GATE/build.console.log" /usr/bin/time -p \
+  "$HEAD_PYTHON" "$HEAD_COLCON" --log-base "$TASK4_GATE/build-log" build \
   --build-base "$TASK4_GATE/build" \
   --install-base "$TASK4_GATE/install" \
   --packages-up-to so101_demo_py --symlink-install --executor sequential \
-  2>&1 | tee "$TASK4_GATE/build.console.log"
-task4_build_rc=$?
-test $task4_build_rc -eq 0
+  --cmake-args -DPython3_EXECUTABLE="$HEAD_PYTHON" || exit 1
+test -f "$TASK4_GATE/install/setup.zsh" || exit 1
 source "$TASK4_GATE/install/setup.zsh"
-new_head_scratch
-/usr/bin/time -p colcon --log-base "$TASK4_GATE/test-log" test \
+new_head_scratch || exit 1
+run_logged "$TASK4_GATE/test.console.log" /usr/bin/time -p \
+  "$HEAD_PYTHON" "$HEAD_COLCON" --log-base "$TASK4_GATE/test-log" test \
   --build-base "$TASK4_GATE/build" \
   --install-base "$TASK4_GATE/install" \
   --packages-select so101_demo_py --return-code-on-test-failure --executor sequential \
-  --pytest-args benchmark_test 2>&1 | tee "$TASK4_GATE/test.console.log"
-benchmark_rc=$?
-colcon test-result --test-result-base "$TASK4_GATE/build" --verbose
-test $benchmark_rc -eq 0
+  --pytest-args benchmark_test || exit 1
+head_colcon test-result --test-result-base "$TASK4_GATE/build" --verbose \
+  >"$TASK4_GATE/test-result.txt" || exit 1
 git add src/so101_demo_py/src/perception_benchmark/head_search_models.py \
   src/so101_demo_py/src/cli/evaluate_head_search_yolo_candidates.py \
   src/so101_demo_py/benchmark_test/test_head_search_model_evaluation.py \
@@ -399,9 +428,10 @@ def test_default_anchor_never_commands_past_safe_upper_bound():
 - [ ] **Step 2: Run RED.**
 
 ```zsh
-head_test src/so101_demo_py/test/test_act_head_search_domain.py \
+expect_head_red 'never_commands_past_safe|coverage_complete|bounded_search_stops' \
+  src/so101_demo_py/test/test_act_head_search_domain.py \
   src/so101_demo_py/test/test_act_search.py \
-  src/so101_demo_py/test/test_act_task8_search_binding.py -q
+  src/so101_demo_py/test/test_act_task8_search_binding.py -q || exit 1
 ```
 
 - [ ] **Step 3: Implement deterministic bounded stops.**
@@ -417,18 +447,13 @@ def bounded_search_stops(*, anchor_rad: float,
 
 Every target and swept segment must pass the existing calibration binding and independent sweep checker. Stable FOV intervals, not accumulated angle, establish coverage. If the safe interval cannot cover the required domain, reject before motion. A no-cup result is `TARGET_NOT_FOUND` only after complete coverage; reaching a bound first is `TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL` and fails qualification.
 
-- [ ] **Step 4: Run GREEN, then a production-composition no-cup smoke, and commit.**
+- [ ] **Step 4: Run GREEN and commit the bounded-search entry.**
 
 ```zsh
 head_test src/so101_demo_py/test/test_act_head_search_domain.py \
   src/so101_demo_py/test/test_act_search.py \
   src/so101_demo_py/test/test_act_task8_search_binding.py \
-  src/so101_demo_py/test/test_act_head_search_binding.py -q
-SEARCH_SMOKE_ROOT="$HEAD_EVIDENCE/search-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$SEARCH_SMOKE_ROOT"
-so101_head_search_smoke --scenario no_cup --anchor default \
-  --evidence-root "$SEARCH_SMOKE_ROOT"
-test -f "$SEARCH_SMOKE_ROOT/coverage-proof.json"
+  src/so101_demo_py/test/test_act_head_search_binding.py -q || exit 1
 git add src/so101_demo_py/src/act/head_search_domain.py \
   src/so101_demo_py/src/act/search.py \
   src/so101_demo_py/src/cli/head_search_smoke.py \
@@ -442,7 +467,7 @@ git diff --cached --check
 git commit -m "fix: bound head search to the calibrated domain"
 ```
 
-The smoke must start the real MuJoCo/controller composition, exit 0, show complete coverage and never command outside the safe interval. This task registers `so101_head_search_smoke = so101_demo.cli.head_search_smoke:main`; the entry calls the production composition and does not carry a fixture-only backend.
+Task 11 runs the installed smoke after Task 7's restricted admission exists. The smoke must start the real MuJoCo/controller composition, exit 0, show complete coverage and never command outside the safe interval. This task registers `so101_head_search_smoke = so101_demo.cli.head_search_smoke:main`; the entry calls the production composition and does not carry a fixture-only backend.
 
 ### Task 6: Implement the 17-parameter calibration library
 
@@ -479,7 +504,8 @@ def test_bundle_has_exactly_seventeen_measured_values():
 - [ ] **Step 2: Run RED.**
 
 ```zsh
-head_test src/so101_demo_py/test/test_act_head_search_calibration.py -q
+expect_head_red 'exactly_seventeen|EXPECTED|max_age_s|max_skew_s' \
+  src/so101_demo_py/test/test_act_head_search_calibration.py -q || exit 1
 ```
 
 - [ ] **Step 3: Implement pure calibration functions.**
@@ -492,7 +518,7 @@ Each result stores `value`, `unit`, formula ID, ordered input SHA256 list, obser
 
 ```zsh
 head_test src/so101_demo_py/test/test_act_head_search_calibration.py \
-  src/so101_demo_py/test/test_act_calibration.py -q
+  src/so101_demo_py/test/test_act_calibration.py -q || exit 1
 git add src/so101_demo_py/src/act/head_search_calibration.py \
   src/so101_demo_py/config/act/head-search-calibration-contract-v1.json \
   src/so101_demo_py/config/act/head-search-calibration-contract-schema.json \
@@ -516,7 +542,7 @@ git commit -m "feat: calibrate head search parameters"
 - Modify: `src/so101_demo_py/src/adapters/act/task8_calibration_search_binding.py`
 - Modify: `src/so101_demo_py/setup.py`
 
-**Interfaces:** Produces `so101_head_search_calibration run`, `verify-promoted-config`, and `qualify`. `run` emits the calibration bundle. `qualify` consumes a complete real-runtime evidence set and only then emits closed `head-search-qualification.json` and `head-search-qualified-report.json` with `HEAD_SEARCH_QUALIFIED`.
+**Interfaces:** Produces `so101_head_search_calibration run`, `verify-promoted-config`, `qualify`, and `serve-teleop`. `run` emits the calibration bundle. `qualify` consumes a complete real-runtime evidence set and only then emits closed `head-search-qualification.json` and `head-search-qualified-report.json` with `HEAD_SEARCH_QUALIFIED`. `serve-teleop` is a blocking process owner used only after qualification: it starts one fresh production stack from the frozen runtime and head-only report, publishes a readiness receipt, and performs owned teardown on signal. It is not a resume path and is not one of the three qualification `FULL_RESTART` gates.
 
 - [ ] **Step 1: Write RED tests for no-resume and Task 8 isolation.**
 
@@ -530,34 +556,39 @@ def test_head_only_report_does_not_grant_task8_ready(tmp_path):
     assert report["status"] == "HEAD_SEARCH_QUALIFIED"
     with pytest.raises(ValueError, match="TASK8"):
         require_gate(report, "task8_live")
+
+def test_serve_teleop_requires_closed_head_only_report(tmp_path):
+    with pytest.raises(ValueError, match="HEAD_SEARCH_QUALIFIED_REQUIRED"):
+        serve_teleop(unqualified_report(), tmp_path / "fresh-run")
+
+def test_serve_teleop_owns_teardown_and_cannot_resume(tmp_path):
+    receipt = serve_then_signal(qualified_report(), tmp_path / "fresh-run")
+    assert receipt["controller_stopped"] is True
+    assert receipt["graph_clear"] is True
+    with pytest.raises(ValueError, match="RUN_ROOT_ALREADY_EXISTS"):
+        serve_teleop(qualified_report(), tmp_path / "fresh-run")
 ```
 
 - [ ] **Step 2: Run RED.**
 
 ```zsh
-head_test src/so101_demo_py/test/test_act_head_search_qualification.py \
+expect_head_red 'no_resume|head_only_report|TASK8' \
+  src/so101_demo_py/test/test_act_head_search_qualification.py \
   src/so101_demo_py/test/test_head_search_calibration_cli.py \
-  src/so101_demo_py/test/test_act_task8_calibration_admission.py -q
+  src/so101_demo_py/test/test_act_task8_calibration_admission.py -q || exit 1
 ```
 
 - [ ] **Step 3: Implement the runner and closed bridge.**
 
-`run` accepts only a new, nonexistent run root. It writes `RUNNING` once, executes the fixed phase list, then atomically writes `SUCCEEDED` or `FAILED`; a pre-existing root is always refused. It obtains one `CalibrationMeasurementAdmission` and one `CalibrationSearchBinding` for the generation; release/recorder stay refused. `verify-promoted-config` requires the exact user-approved bundle SHA256, writes an immutable `approval-receipt.json`, and compares all values and identities byte-for-byte. `qualify` uses the same restricted owner to run one production smoke, 40 serial scenes, and one independent `FULL_RESTART` per anchor; it has no resume path and publishes nothing qualified until every required evidence digest passes. The final aggregator reuses `_MEASURED`, `_CAMERA_MEASURED`, `validate_head_search_shape()` and sample digest checks. `validate_head_search_binding()` accepts the strict head-only report for later Head Search consumers but `task8_live`, release, retreat and dynamic pick continue to reject it.
+`run` accepts only a new, nonexistent run root. It writes `RUNNING` once, executes the fixed phase list, then atomically writes `SUCCEEDED` or `FAILED`; a pre-existing root is always refused. A single issuer creates operation-bound head-only admission for exactly `GEOMETRY_SMOKE`, `CALIBRATION_RUN`, `QUALIFICATION_RUN`, or `TELEOP_ACCEPTANCE`. The first three bind generation, production camera, safe interval, independent sweep checker, one stack and one detector; `TELEOP_ACCEPTANCE` additionally requires the already closed `HEAD_SEARCH_QUALIFIED` report and may expose only the Teleop Head Camera consumer. Release, recorder, retreat, pick and Task 8 readiness remain refused in every mode. `run` and the initial `qualify` construction both consume this restricted admission. Task 5's smoke can run only after this issuer exists and only with `GEOMETRY_SMOKE`. `verify-promoted-config` requires the exact user-approved bundle SHA256, writes an immutable `approval-receipt.json`, and compares all values and identities byte-for-byte. `qualify` uses the same restricted owner to run one production smoke, 40 serial scenes, and one independent `FULL_RESTART` per anchor; it has no resume path and publishes nothing qualified until every required evidence digest passes. `serve-teleop` accepts a new nonexistent run root plus the exact qualification report, promoted config and approval receipt, owns one process group, writes a readiness receipt only after graph/detector/CUDA/identity probes pass, blocks until SIGINT/SIGTERM, then records controller stop, graph clear and teardown status. The final aggregator reuses `_MEASURED`, `_CAMERA_MEASURED`, `validate_head_search_shape()` and sample digest checks. `validate_head_search_binding()` accepts the strict head-only report for later Head Search consumers but `task8_live`, release, retreat and dynamic pick continue to reject it.
 
-- [ ] **Step 4: Run GREEN, exercise the installed help/invalid-root path, and commit.**
+- [ ] **Step 4: Run GREEN and commit the formal CLI.**
 
 ```zsh
 head_test src/so101_demo_py/test/test_act_head_search_qualification.py \
   src/so101_demo_py/test/test_head_search_calibration_cli.py \
   src/so101_demo_py/test/test_act_task8_calibration_admission.py \
-  src/so101_demo_py/test/test_act_head_search_binding.py -q
-so101_head_search_calibration --help
-CLI_REFUSAL_ROOT="$HEAD_EVIDENCE/cli-refusal-existing-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$CLI_REFUSAL_ROOT"
-mkdir "$CLI_REFUSAL_ROOT"
-so101_head_search_calibration run --run-root "$CLI_REFUSAL_ROOT"
-cli_rc=$?
-test $cli_rc -ne 0
+  src/so101_demo_py/test/test_act_head_search_binding.py -q || exit 1
 git add src/so101_demo_py/src/act/head_search_qualification.py \
   src/so101_demo_py/src/cli/head_search_calibration.py \
   src/so101_demo_py/src/act/head_search_binding.py \
@@ -581,7 +612,7 @@ git commit -m "feat: add formal head search calibration entry"
 - Modify: `src/so101_demo_py/test/test_act_stack_ready.py`
 - Modify: `src/so101_demo_py/test/test_launch_composition.py`
 
-**Interfaces:** Consumes either the calibration-only qualification context or an approved `HEAD_SEARCH_QUALIFIED` report plus promoted config. Produces one immutable `HeadSearchBinding` used by the only detector/controller instance. The calibration-only path is available only to `so101_head_search_calibration qualify`.
+**Interfaces:** Consumes either an operation-bound head-only context (`GEOMETRY_SMOKE`, `CALIBRATION_RUN`, `QUALIFICATION_RUN`, or `TELEOP_ACCEPTANCE`) or an approved `HEAD_SEARCH_QUALIFIED` report plus promoted config. `TELEOP_ACCEPTANCE` additionally requires that exact closed report and grants only the Teleop Head Camera consumer. Produces one immutable `HeadSearchBinding` used by the only detector/controller instance. Restricted contexts never grant Task 8, release, recorder, retreat or pick authority.
 
 - [ ] **Step 1: Add RED tests for exact readback and fail-closed drift.**
 
@@ -596,9 +627,10 @@ def test_startup_rejects_one_field_of_bundle_drift():
 - [ ] **Step 2: Run RED, implement, and run GREEN.**
 
 ```zsh
-head_test src/so101_demo_py/test/test_act_head_search_binding.py \
+expect_head_red 'bundle_drift|HEAD_SEARCH_SAMPLE_MISMATCH' \
+  src/so101_demo_py/test/test_act_head_search_binding.py \
   src/so101_demo_py/test/test_act_stack_ready.py \
-  src/so101_demo_py/test/test_launch_composition.py -q
+  src/so101_demo_py/test/test_launch_composition.py -q || exit 1
 ```
 
 Startup verifies regular no-follow weight file, weight SHA, candidate identity, camera, tracker, all 17 values, controlled dependencies, CUDA device and `allow_cpu_fallback=false` before ROS/model construction. The effective-config readback lists every consumed value and consumer; any unused value rejects startup.
@@ -608,7 +640,7 @@ Startup verifies regular no-follow weight file, weight SHA, candidate identity, 
 ```zsh
 head_test src/so101_demo_py/test/test_act_head_search_binding.py \
   src/so101_demo_py/test/test_act_stack_ready.py \
-  src/so101_demo_py/test/test_launch_composition.py -q
+  src/so101_demo_py/test/test_launch_composition.py -q || exit 1
 git add src/so101_demo_py/config/mujoco/act/head_search_v2.json \
   src/so101_demo_py/src/act/head_search_binding.py \
   src/so101_demo_py/src/runtime/launch_composition.py \
@@ -633,7 +665,7 @@ git commit -m "feat: bind qualified head search at startup"
 - Modify: `src/so101_teleop/so101_teleop/openapi_export.py`
 - Modify: `src/so101_teleop/CMakeLists.txt`
 
-**Interfaces:** Produces `GET /head-camera/status`, `WS /head-camera/stream`, `POST /head-camera/target`, `POST /head-camera/stop`, and `POST /head-camera/capture`. Consumes the existing detector stream and controller ownership; it does not instantiate either.
+**Interfaces:** Produces `GET /teleop/head-camera/status`, `WS /teleop/head-camera/stream`, `POST /teleop/head-camera/target`, `POST /teleop/head-camera/stop`, and `POST /teleop/head-camera/capture`. Consumes the existing detector stream and controller ownership; it does not instantiate either.
 
 - [ ] **Step 1: Add RED API/ownership tests.**
 
@@ -644,7 +676,7 @@ def test_head_camera_stream_uses_composed_detector_identity(client, services):
     assert services.detector_factory_calls == 1
 
 def test_out_of_range_target_is_refused_before_submit(client):
-    response = client.post("/head-camera/target", json={"target_rad": 99.0}, headers=AUTH)
+    response = client.post("/teleop/head-camera/target", json={"target_rad": 99.0}, headers=AUTH)
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "HEAD_TARGET_OUT_OF_RANGE"
 ```
@@ -652,34 +684,27 @@ def test_out_of_range_target_is_refused_before_submit(client):
 - [ ] **Step 2: Run RED.**
 
 ```zsh
-head_test src/so101_teleop/test/teleop/test_head_camera_api.py \
-  src/so101_teleop/test/teleop/test_unified_arbiter.py -q
+expect_head_red 'composed_detector_identity|HEAD_TARGET_OUT_OF_RANGE|head_camera' \
+  src/so101_teleop/test/teleop/test_head_camera_api.py \
+  src/so101_teleop/test/teleop/test_unified_arbiter.py -q || exit 1
 ```
 
 - [ ] **Step 3: Implement typed status/frame/control/capture contracts.**
 
 The WebSocket envelope binds JPEG and detections to one `frame_sequence`, image SHA, camera stamp/frame, CameraInfo, model/bundle SHA, inference latency and search projection. Latest-frame display dropping never backpressures the production stream. Target commands are bounded absolute positions with instance authority, lease, global mutation reservation, safe interval and sweep checks. Stop remains `STOPPING` until three consecutive raw velocity samples meet the calibrated threshold. Capture atomically writes raw image, overlay inputs, detections, runtime state and manifest for the exact requested frame; stale or mismatched frames are refused.
 
-- [ ] **Step 4: Run GREEN, export OpenAPI, run a composed API smoke, and commit.**
+- [ ] **Step 4: Run GREEN, export the exact OpenAPI files, and commit.**
 
 ```zsh
 head_test src/so101_teleop/test/teleop/test_head_camera_api.py \
   src/so101_teleop/test/teleop/test_unified_arbiter.py \
-  src/so101_teleop/test/teleop/test_unified_api.py -q
-"$HEAD_PYTHON" -m so101_teleop.openapi_export
-BACKEND_SMOKE_ROOT="$HEAD_EVIDENCE/teleop-head-backend-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$BACKEND_SMOKE_ROOT"
-mkdir "$BACKEND_SMOKE_ROOT"
+  src/so101_teleop/test/teleop/test_unified_api.py -q || exit 1
 PYTHONPATH="$PWD/src/so101_teleop${PYTHONPATH:+:$PYTHONPATH}" \
-  "$HEAD_PYTHON" src/so101_teleop/scripts/so101_unified_web_server.py \
-  --host 127.0.0.1 --port 18081 --capture-dir "$BACKEND_SMOKE_ROOT/captures" \
-  >"$BACKEND_SMOKE_ROOT/server.log" 2>&1 &
-server_pid=$!
-trap 'kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null' EXIT
-curl --fail http://127.0.0.1:18081/head-camera/status
-kill "$server_pid"
-wait "$server_pid" || true
-trap - EXIT
+  "$HEAD_PYTHON" -m so101_teleop.openapi_export \
+  src/so101_teleop/so101_teleop/openapi.json || exit 1
+PYTHONPATH="$PWD/src/so101_teleop${PYTHONPATH:+:$PYTHONPATH}" \
+  "$HEAD_PYTHON" -m so101_teleop.openapi_export --unified \
+  src/so101_teleop/so101_teleop/unified_openapi.json || exit 1
 git add src/so101_teleop/so101_teleop/head_camera.py \
   src/so101_teleop/so101_teleop/unified/ports.py \
   src/so101_teleop/so101_teleop/unified/compose.py \
@@ -687,10 +712,13 @@ git add src/so101_teleop/so101_teleop/head_camera.py \
   src/so101_teleop/so101_teleop/unified/arbiter.py \
   src/so101_teleop/so101_teleop/openapi_export.py \
   src/so101_teleop/so101_teleop/openapi.json \
+  src/so101_teleop/so101_teleop/unified_openapi.json \
   src/so101_teleop/test/teleop/test_head_camera_api.py src/so101_teleop/CMakeLists.txt
 git diff --cached --check
 git commit -m "feat: expose qualified head camera controls"
 ```
+
+Task 11 runs the installed `/teleop/head-camera/status` composed-service smoke after the backend is rebuilt; Task 14 runs the real production-stack API/control/capture acceptance.
 
 ### Task 10: Add the Teleop Head Camera page and visual evidence
 
@@ -720,30 +748,39 @@ it("keeps control disabled until authority and qualification are present", () =>
 - [ ] **Step 2: Run RED.**
 
 ```zsh
-cd src/so101_teleop/web
-bun test --run src/api/head-camera-client.test.ts \
-  src/components/teleop/head-camera-panel.test.tsx
+TASK10_RED="$HEAD_EVIDENCE/head-teleop-web-red-$(date -u +%Y%m%dT%H%M%SZ)"
+test ! -e "$TASK10_RED" || exit 1
+mkdir -p "$TASK10_RED" || exit 1
+(
+  cd "$PWD/src/so101_teleop/web" || exit 1
+  set -o pipefail
+  bun run test -- src/api/head-camera-client.test.ts \
+    src/components/teleop/head-camera-panel.test.tsx \
+    2>&1 | tee "$TASK10_RED/vitest-red.log"
+  web_red_rc=$pipestatus[1]
+  print -r -- "$web_red_rc" >"$TASK10_RED/vitest-red.rc"
+  test "$web_red_rc" -ne 0 || exit 1
+  rg -n 'head-camera-client|head-camera-panel|keeps control disabled until authority and qualification are present' \
+    "$TASK10_RED/vitest-red.log" >/dev/null || exit 1
+) || exit 1
 ```
+
+Read back the nonzero exit code and the named failing test from the retained log. A missing `bun`, collection error, wrong working directory or unrelated failure is not RED.
 
 - [ ] **Step 3: Implement the page.**
 
 Render the fixed 4:3 frame, mask, bbox, class, confidence, track ID, optical axis, horizontal deadband, vertical bounds, candidate center and three-frame lock progress. Show angle, velocity, target, interval, owner, lease, operation, model/weight/bundle SHA, CUDA, FPS, latency, frame age, skew and display drops. Expose absolute angle plus `-5°`, `-1°`, `+1°`, `+5°`, Execute and Stop; do not expose threshold editing or model hot switching.
 
-- [ ] **Step 4: Run GREEN, build, E2E, and fresh visual review.**
+- [ ] **Step 4: Run GREEN and build the web bundle.**
 
 ```zsh
-cd src/so101_teleop/web
-bun test --run src/api/head-camera-client.test.ts \
-  src/components/teleop/head-camera-panel.test.tsx
-bun run build
-TELEOP_VISUAL_ROOT="$HEAD_EVIDENCE/teleop-head-camera-visual-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$TELEOP_VISUAL_ROOT"
-mkdir "$TELEOP_VISUAL_ROOT"
-bunx playwright test e2e/head-camera.spec.ts --config playwright.config.ts \
-  --output "$TELEOP_VISUAL_ROOT/playwright"
+(cd "$PWD/src/so101_teleop/web" && \
+  bun run test -- src/api/head-camera-client.test.ts \
+    src/components/teleop/head-camera-panel.test.tsx && \
+  bun run build) || exit 1
 ```
 
-With the installed app and one MuJoCo stack, capture fresh light/dark screenshots at desktop and narrow widths for Raw, Overlay, conflict, stale, stopping and stopped states. Store screenshots and the exact browser URL under `$TELEOP_VISUAL_ROOT`; inspect them rather than relying on test snapshots.
+Do not claim installed-app or visual acceptance here. Task 14 sets `SO101_TELEOP_BASE_URL` to the installed unified service, runs Playwright without Vite's development server, and captures the fresh runtime screenshots.
 
 - [ ] **Step 5: Commit.**
 
@@ -786,68 +823,196 @@ revision 52b8334358e5ff11f94f10f7c14b1697ef44d964
 
 State explicitly that Head Search uses YOLO11n-Seg only and does not load Grounded-SAM. Add the formal head calibration commands, no-resume behavior and evidence layout. Run the project `$humanizer` skill on README prose without changing commands, paths, identifiers, hashes or links.
 
-- [ ] **Step 2: Build a fresh dependency-closed installed toolchain.**
+- [ ] **Step 2: Build a fresh dependency-closed installed toolchain and prove entry-point provenance.**
 
 ```zsh
 TOOLCHAIN_RUN="$HEAD_EVIDENCE/head-toolchain-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$TOOLCHAIN_RUN"
-mkdir "$TOOLCHAIN_RUN"
+test ! -e "$TOOLCHAIN_RUN" || exit 1
+mkdir "$TOOLCHAIN_RUN" || exit 1
+git rev-parse HEAD >"$TOOLCHAIN_RUN/source-commit.txt" || exit 1
 source /opt/ros/jazzy/setup.zsh
 set -o pipefail
-new_head_scratch
-/usr/bin/time -p colcon --log-base "$TOOLCHAIN_RUN/build-log" build \
+new_head_scratch || exit 1
+run_logged "$TOOLCHAIN_RUN/build.console.log" /usr/bin/time -p \
+  "$HEAD_PYTHON" "$HEAD_COLCON" --log-base "$TOOLCHAIN_RUN/build-log" build \
   --build-base "$TOOLCHAIN_RUN/build" \
   --install-base "$TOOLCHAIN_RUN/install" \
   --packages-up-to so101_demo_py so101_teleop --symlink-install --executor sequential \
-  2>&1 | tee "$TOOLCHAIN_RUN/build.console.log"
-build_rc=$?
-test $build_rc -eq 0
-test -f "$TOOLCHAIN_RUN/install/setup.zsh"
+  --cmake-args -DPython3_EXECUTABLE="$HEAD_PYTHON" || exit 1
+test -f "$TOOLCHAIN_RUN/install/setup.zsh" || exit 1
 source "$TOOLCHAIN_RUN/install/setup.zsh"
-command -v generate_yolo_seg_dataset
-command -v train_yolo_seg
-test -x "$TOOLCHAIN_RUN/install/so101_teleop/lib/so101_teleop/so101_unified_web_server.py"
-test -f "$TOOLCHAIN_RUN/install/so101_teleop/share/so101_teleop/web/index.html"
+test "$(ros2 pkg prefix so101_demo_py)" = "$TOOLCHAIN_RUN/install/so101_demo_py" || exit 1
+test "$(ros2 pkg prefix so101_teleop)" = "$TOOLCHAIN_RUN/install/so101_teleop" || exit 1
+ros2 pkg executables so101_demo_py >"$TOOLCHAIN_RUN/so101_demo_py.executables" || exit 1
+for executable in validate_head_camera_geometry generate_yolo_seg_dataset train_yolo_seg \
+  verify_head_search_dataset evaluate_head_search_yolo_candidates \
+  so101_head_search_smoke so101_head_search_calibration; do
+  rg -n "so101_demo_py[[:space:]]+$executable$" "$TOOLCHAIN_RUN/so101_demo_py.executables" \
+    >/dev/null || exit 1
+done
+test -x "$TOOLCHAIN_RUN/install/so101_teleop/lib/so101_teleop/so101_unified_web_server.py" || exit 1
+test -f "$TOOLCHAIN_RUN/install/so101_teleop/share/so101_teleop/web/index.html" || exit 1
 ```
 
 If dependency closure, underlay setup, package selection, or override validation fails before compilation, classify it as an environment failure and do not count it as a source RED.
 
-- [ ] **Step 3: Run the ordinary package gates with fresh scratch.**
+- [ ] **Step 3: Run source and installed ordinary package gates with explicit CPU/worker evidence.**
 
 ```zsh
-head_test -n 8 src/so101_demo_py/test -q
-demo_rc=$?
-head_test -n 8 src/so101_teleop/test -q
-teleop_rc=$?
-test $demo_rc -eq 0 -a $teleop_rc -eq 0
+nproc >"$TOOLCHAIN_RUN/nproc.txt" || exit 1
+lscpu >"$TOOLCHAIN_RUN/lscpu.txt" || exit 1
+head_test -n 8 src/so101_demo_py/test -q || exit 1
+head_test -n 8 src/so101_teleop/test -q || exit 1
+
+new_head_scratch || exit 1
+run_logged "$TOOLCHAIN_RUN/test-demo-ordinary.console.log" /usr/bin/time -p \
+  "$HEAD_PYTHON" "$HEAD_COLCON" \
+  --log-base "$TOOLCHAIN_RUN/test-log-demo-ordinary" test \
+  --build-base "$TOOLCHAIN_RUN/build" --install-base "$TOOLCHAIN_RUN/install" \
+  --packages-select so101_demo_py --return-code-on-test-failure --executor sequential \
+  --pytest-args test || exit 1
+
+new_head_scratch || exit 1
+run_logged "$TOOLCHAIN_RUN/test-teleop.console.log" /usr/bin/time -p \
+  "$HEAD_PYTHON" "$HEAD_COLCON" \
+  --log-base "$TOOLCHAIN_RUN/test-log-teleop" test \
+  --build-base "$TOOLCHAIN_RUN/build" --install-base "$TOOLCHAIN_RUN/install" \
+  --packages-select so101_teleop --return-code-on-test-failure --executor sequential || exit 1
+head_colcon test-result --test-result-base "$TOOLCHAIN_RUN/build" --verbose \
+  >"$TOOLCHAIN_RUN/test-result-ordinary.txt" || exit 1
 ```
 
-Confirm neither ordinary command collected `src/so101_demo_py/benchmark_test/`.
+Confirm neither ordinary command collected `src/so101_demo_py/benchmark_test/`. Retain pytest JUnit XML, colcon xUnit files, both `interpreter-and-cpu.json` files, `nproc.txt`, `lscpu.txt`, exact `-n 8` argv and elapsed times.
 
-- [ ] **Step 4: Run the explicit benchmark implementation gate and installed package gates.**
+- [ ] **Step 4: Run every installed formal-entry smoke serially.**
 
 ```zsh
-new_head_scratch
-/usr/bin/time -p colcon --log-base "$TOOLCHAIN_RUN/test-log-benchmark" test \
+GEOMETRY_RUN="$HEAD_EVIDENCE/head-camera-geometry-$(date -u +%Y%m%dT%H%M%SZ)"
+DATASET_SMOKE_ROOT="$HEAD_EVIDENCE/head-dataset-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
+TRAIN_SMOKE_CAMPAIGN="$HEAD_EVIDENCE/head-training-smokes-$(date -u +%Y%m%dT%H%M%SZ)"
+SEARCH_SMOKE_ROOT="$HEAD_EVIDENCE/head-search-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
+BACKEND_SMOKE_ROOT="$HEAD_EVIDENCE/teleop-head-backend-smoke-$(date -u +%Y%m%dT%H%M%SZ)"
+for root in "$GEOMETRY_RUN" "$DATASET_SMOKE_ROOT" "$TRAIN_SMOKE_CAMPAIGN" \
+  "$SEARCH_SMOKE_ROOT" "$BACKEND_SMOKE_ROOT"; do
+  test ! -e "$root" || exit 1
+done
+mkdir "$TRAIN_SMOKE_CAMPAIGN" "$BACKEND_SMOKE_ROOT" || exit 1
+
+run_logged "$TOOLCHAIN_RUN/head-camera-geometry.console.log" \
+  ros2 run so101_demo_py validate_head_camera_geometry \
+  --scene "$PWD/src/so101_demo_py/assets/mujoco/act/so101.xml" \
+  --camera-config "$PWD/src/so101_demo_py/config/mujoco/camera_views.yaml" \
+  --contract "$PWD/src/so101_demo_py/config/act/head-camera-geometry-contract-v1.json" \
+  --anchors default,left,forward --output-root "$GEOMETRY_RUN" || exit 1
+test -f "$GEOMETRY_RUN/head-camera-geometry.json" || exit 1
+
+run_logged "$TOOLCHAIN_RUN/head-dataset-smoke.console.log" \
+  ros2 run so101_demo_py generate_yolo_seg_dataset \
+  --config "$PWD/src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml" \
+  --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" \
+  --output-root "$DATASET_SMOKE_ROOT" --generator-commit "$(git rev-parse HEAD)" \
+  --sample-limit 12 || exit 1
+run_logged "$TOOLCHAIN_RUN/head-dataset-verify.console.log" \
+  ros2 run so101_demo_py verify_head_search_dataset \
+  --head "$DATASET_SMOKE_ROOT/dataset-manifest.json" \
+  --expected-total 12 --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" || exit 1
+
+HF_ROOT="$HEAD_EVIDENCE/models/huggingface"
+YOLO_REV=b55430fb75c0207b35bd20f4e328e042bff06f3f
+A_ROOT="$HF_ROOT/so101-yolo11n-seg-plastic-cup/$YOLO_REV"
+A_WEIGHTS="$A_ROOT/best.pt"
+run_logged "$TOOLCHAIN_RUN/hf-download.console.log" \
+  hf download zjumty/so101-yolo11n-seg-plastic-cup --revision "$YOLO_REV" \
+  --include best.pt --include SHA256SUMS --include 'dataset/**' --local-dir "$A_ROOT" || exit 1
+TASK_DATASET_MANIFEST="$A_ROOT/dataset/dataset-manifest.json"
+test -f "$TASK_DATASET_MANIFEST" || exit 1
+printf '%s  %s\n' "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781" "$A_WEIGHTS" \
+  | sha256sum --check --strict || exit 1
+
+run_logged "$TOOLCHAIN_RUN/train-smoke-b.console.log" \
+  ros2 run so101_demo_py train_yolo_seg --candidate B --epochs 1 --fraction 0.05 \
+  --contract "$PWD/src/so101_demo_py/config/perception/head_search_yolo_training.yaml" \
+  --head-dataset "$DATASET_SMOKE_ROOT/dataset-manifest.json" \
+  --task-dataset "$TASK_DATASET_MANIFEST" --base-model "$A_WEIGHTS" \
+  --output "$TRAIN_SMOKE_CAMPAIGN/candidate-b" --run-name smoke-b || exit 1
+run_logged "$TOOLCHAIN_RUN/train-smoke-c.console.log" \
+  ros2 run so101_demo_py train_yolo_seg --candidate C --epochs 1 --fraction 0.05 \
+  --contract "$PWD/src/so101_demo_py/config/perception/head_search_yolo_training.yaml" \
+  --head-dataset "$DATASET_SMOKE_ROOT/dataset-manifest.json" \
+  --task-dataset "$TASK_DATASET_MANIFEST" --base-model "$A_WEIGHTS" \
+  --output "$TRAIN_SMOKE_CAMPAIGN/candidate-c" --run-name smoke-c || exit 1
+
+run_logged "$TOOLCHAIN_RUN/head-search-smoke.console.log" \
+  ros2 run so101_demo_py so101_head_search_smoke --scenario no_cup --anchor default \
+  --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" \
+  --evidence-root "$SEARCH_SMOKE_ROOT" || exit 1
+test -f "$SEARCH_SMOKE_ROOT/coverage-proof.json" || exit 1
+ros2 run so101_demo_py evaluate_head_search_yolo_candidates --help >/dev/null || exit 1
+ros2 run so101_demo_py so101_head_search_calibration --help >/dev/null || exit 1
+CLI_REFUSAL_ROOT="$HEAD_EVIDENCE/cli-refusal-existing-$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir "$CLI_REFUSAL_ROOT" || exit 1
+if run_logged "$TOOLCHAIN_RUN/cli-existing-root-refusal.console.log" \
+    ros2 run so101_demo_py so101_head_search_calibration run \
+    --run-root "$CLI_REFUSAL_ROOT" \
+    --evidence-root "$HEAD_EVIDENCE" \
+    --candidate "$TRAIN_SMOKE_CAMPAIGN/candidate-b/candidate-manifest.json" \
+    --dataset "$DATASET_SMOKE_ROOT/dataset-manifest.json" \
+    --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" \
+    --production-config "$PWD/src/so101_demo_py/config/mujoco/act/head_search_v2.json" \
+    --camera-config "$PWD/src/so101_demo_py/config/mujoco/camera_views.yaml" \
+    --episode-partitions "$PWD/src/so101_demo_py/config/act/head-search-scenario-partitions-v1.json" \
+    --episode-split calibration; then
+  exit 1
+fi
+rg -n 'RUN_ROOT_ALREADY_EXISTS|existing.*run.root' \
+  "$TOOLCHAIN_RUN/cli-existing-root-refusal.console.log" >/dev/null || exit 1
+
+SO101_UNIFIED_BACKEND=mujoco_py \
+SO101_UNIFIED_INSTALL_PREFIX="$TOOLCHAIN_RUN/install" \
+SO101_UNIFIED_EVIDENCE_ROOT="$BACKEND_SMOKE_ROOT" \
+SO101_UNIFIED_ROS_PYTHON="$HEAD_PYTHON" \
+  "$TOOLCHAIN_RUN/install/so101_teleop/lib/so101_teleop/so101_unified_web_server.py" \
+  --host 127.0.0.1 --port 18081 --capture-dir "$BACKEND_SMOKE_ROOT/captures" \
+  >"$BACKEND_SMOKE_ROOT/server.log" 2>&1 &
+server_pid=$!
+trap 'kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null' EXIT
+for attempt in {1..60}; do
+  curl --silent --fail http://127.0.0.1:18081/teleop/head-camera/status \
+    >"$BACKEND_SMOKE_ROOT/status.json" && break
+  kill -0 "$server_pid" 2>/dev/null || exit 1
+  sleep 1
+done
+curl --fail http://127.0.0.1:18081/teleop/head-camera/status \
+  >"$BACKEND_SMOKE_ROOT/status.json" || exit 1
+kill "$server_pid"
+set +o errexit
+wait "$server_pid"
+server_rc=$?
+set -o errexit
+case $server_rc in 0|130|143) ;; *) exit 1 ;; esac
+print -r -- "$server_rc" >"$BACKEND_SMOKE_ROOT/server.rc"
+trap - EXIT
+```
+
+Read back zero `in_frame` failures, all three anchors, safe-domain containment, exactly 12 smoke images, CUDA entry in both one-epoch training logs, two-domain validation scoring for B and C, bounded no-cup coverage, expected existing-root refusal, zero detector construction by the standalone Teleop backend, and the view-only `/teleop/head-camera/status` identity. The Head Search smoke separately proves exactly one production detector. Task 14 proves the installed backend consuming that detector in the final production composition. These artifacts close the runtime portions deferred by Tasks 2, 3, 5, 7 and 9 without claiming premature Teleop control acceptance.
+
+- [ ] **Step 5: Run the explicit perception benchmark implementation gate.**
+
+```zsh
+new_head_scratch || exit 1
+run_logged "$TOOLCHAIN_RUN/test-benchmark.console.log" /usr/bin/time -p \
+  "$HEAD_PYTHON" "$HEAD_COLCON" --log-base "$TOOLCHAIN_RUN/test-log-benchmark" test \
   --build-base "$TOOLCHAIN_RUN/build" \
   --install-base "$TOOLCHAIN_RUN/install" \
   --packages-select so101_demo_py --return-code-on-test-failure --executor sequential \
-  --pytest-args benchmark_test 2>&1 | tee "$TOOLCHAIN_RUN/test-benchmark.console.log"
-bench_rc=$?
-new_head_scratch
-/usr/bin/time -p colcon --log-base "$TOOLCHAIN_RUN/test-log-teleop" test \
-  --build-base "$TOOLCHAIN_RUN/build" \
-  --install-base "$TOOLCHAIN_RUN/install" \
-  --packages-select so101_teleop --return-code-on-test-failure --executor sequential \
-  2>&1 | tee "$TOOLCHAIN_RUN/test-teleop.console.log"
-teleop_colcon_rc=$?
-colcon test-result --test-result-base "$TOOLCHAIN_RUN/build" --verbose
-test $bench_rc -eq 0 -a $teleop_colcon_rc -eq 0
+  --pytest-args benchmark_test || exit 1
+head_colcon test-result --test-result-base "$TOOLCHAIN_RUN/build" --verbose \
+  >"$TOOLCHAIN_RUN/test-result-with-benchmark.txt" || exit 1
 ```
 
 Read back exact console scripts, Python module paths, web bundle and OpenAPI from `$TOOLCHAIN_RUN/install`; do not accept a matching source-tree path as installed evidence.
 
-- [ ] **Step 5: Commit documentation and ledger checkpoint.**
+- [ ] **Step 6: Commit documentation and ledger checkpoint.**
 
 ```zsh
 git add src/so101_demo_py/README.md docs/experiments/so101-act-data-experiment-ledger.md
@@ -870,27 +1035,39 @@ All generated datasets, weights, reports and logs are immutable evidence artifac
 - [ ] **Step 1: Create a new model-campaign root and verify inputs.**
 
 ```zsh
+: "${TOOLCHAIN_RUN:?set to the exact retained Task 11 toolchain root named in the ledger}"
+: "${GEOMETRY_RUN:?set to the exact retained Task 11 production-camera geometry root}"
+case "$TOOLCHAIN_RUN" in "$HEAD_EVIDENCE"/*) ;; *) exit 1 ;; esac
+case "$GEOMETRY_RUN" in "$HEAD_EVIDENCE"/*) ;; *) exit 1 ;; esac
+test -f "$TOOLCHAIN_RUN/install/setup.zsh" || exit 1
+test -f "$GEOMETRY_RUN/head-camera-geometry.json" || exit 1
+TOOLCHAIN_COMMIT=$(<"$TOOLCHAIN_RUN/source-commit.txt")
+git cat-file -e "$TOOLCHAIN_COMMIT^{commit}" || exit 1
+source "$TOOLCHAIN_RUN/install/setup.zsh"
+test "$(ros2 pkg prefix so101_demo_py)" = "$TOOLCHAIN_RUN/install/so101_demo_py" || exit 1
 MODEL_RUN="$HEAD_EVIDENCE/head-yolo-models-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$MODEL_RUN"
-mkdir "$MODEL_RUN"
+test ! -e "$MODEL_RUN" || exit 1
+mkdir "$MODEL_RUN" || exit 1
 HF_ROOT="$HEAD_EVIDENCE/models/huggingface"
 YOLO_REV=b55430fb75c0207b35bd20f4e328e042bff06f3f
 A_ROOT="$HF_ROOT/so101-yolo11n-seg-plastic-cup/$YOLO_REV"
 A_WEIGHTS="$A_ROOT/best.pt"
 export no_proxy=localhost,127.0.0.1 NO_PROXY=localhost,127.0.0.1
-hf auth whoami
-hf download zjumty/so101-yolo11n-seg-plastic-cup --revision "$YOLO_REV" \
+hf auth whoami || exit 1
+run_logged "$MODEL_RUN/hf-download.console.log" \
+  hf download zjumty/so101-yolo11n-seg-plastic-cup --revision "$YOLO_REV" \
   --include README.md --include SHA256SUMS --include best.pt --include 'model/**' \
-  --include 'dataset/**' --local-dir "$A_ROOT"
+  --include 'dataset/**' --local-dir "$A_ROOT" || exit 1
 TASK_DATASET_MANIFEST="$A_ROOT/dataset/dataset-manifest.json"
 SCENARIO_PARTITIONS="$PWD/src/so101_demo_py/config/act/head-search-scenario-partitions-v1.json"
-test -f "$A_WEIGHTS"
-test -f "$TASK_DATASET_MANIFEST"
-test -f "$SCENARIO_PARTITIONS"
+test -f "$A_WEIGHTS" || exit 1
+test -f "$TASK_DATASET_MANIFEST" || exit 1
+test -f "$SCENARIO_PARTITIONS" || exit 1
 set -o pipefail
 printf '%s  %s\n' "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781" "$A_WEIGHTS" \
-  | sha256sum --check --strict
-nvidia-smi --query-gpu=uuid,name,memory.total --format=csv,noheader
+  | sha256sum --check --strict || exit 1
+nvidia-smi --query-gpu=uuid,name,memory.total --format=csv,noheader \
+  >"$MODEL_RUN/gpu.txt" || exit 1
 ```
 
 Record `hf auth status` and the pinned repository/revision without printing credentials. Do not download `main` without `--revision`.
@@ -898,15 +1075,17 @@ Record `hf auth status` and the pinned repository/revision without printing cred
 - [ ] **Step 2: Generate and seal the exact head dataset.**
 
 ```zsh
-generate_yolo_seg_dataset \
+run_logged "$MODEL_RUN/generate-head-dataset.console.log" \
+  ros2 run so101_demo_py generate_yolo_seg_dataset \
   --config "$PWD/src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml" \
-  --output-root "$MODEL_RUN/head-dataset" --generator-commit "$(git rev-parse HEAD)"
-dataset_rc=$?
-test $dataset_rc -eq 0
-"$HEAD_PYTHON" -m so101_demo.cli.verify_head_search_dataset \
+  --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" \
+  --output-root "$MODEL_RUN/head-dataset" --generator-commit "$TOOLCHAIN_COMMIT" || exit 1
+run_logged "$MODEL_RUN/verify-head-dataset.console.log" \
+  ros2 run so101_demo_py verify_head_search_dataset \
   --head "$MODEL_RUN/head-dataset/dataset-manifest.json" \
   --task "$TASK_DATASET_MANIFEST" \
-  --expected-train 800 --expected-val 200 --expected-test 200
+  --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" \
+  --expected-train 800 --expected-val 200 --expected-test 200 || exit 1
 ```
 
 Expected: exit 0, four scenarios at 200/50/50, no cross-domain split leakage, no Grounded-SAM provenance, all files and camera identities digest-clean.
@@ -914,21 +1093,20 @@ Expected: exit 0, four scenarios at 200/50/50, no cross-domain split leakage, no
 - [ ] **Step 3: Train B then C, never concurrently.**
 
 ```zsh
-train_yolo_seg --candidate B \
+run_logged "$MODEL_RUN/train-b.console.log" \
+  ros2 run so101_demo_py train_yolo_seg --candidate B \
   --contract src/so101_demo_py/config/perception/head_search_yolo_training.yaml \
   --head-dataset "$MODEL_RUN/head-dataset/dataset-manifest.json" \
+  --task-dataset "$TASK_DATASET_MANIFEST" \
   --base-model "$A_WEIGHTS" \
-  --output "$MODEL_RUN/candidate-b" --run-name head-only
-b_rc=$?
-test $b_rc -eq 0
+  --output "$MODEL_RUN/candidate-b" --run-name head-only || exit 1
 
-train_yolo_seg --candidate C \
+run_logged "$MODEL_RUN/train-c.console.log" \
+  ros2 run so101_demo_py train_yolo_seg --candidate C \
   --contract src/so101_demo_py/config/perception/head_search_yolo_training.yaml \
   --head-dataset "$MODEL_RUN/head-dataset/dataset-manifest.json" \
   --task-dataset "$TASK_DATASET_MANIFEST" --base-model "$A_WEIGHTS" \
-  --output "$MODEL_RUN/candidate-c" --run-name head-task-mixed
-c_rc=$?
-test $c_rc -eq 0
+  --output "$MODEL_RUN/candidate-c" --run-name head-task-mixed || exit 1
 ```
 
 Read back the C sampling manifest: each epoch must use 800 head and 800 task images with 1:1 batches. Confirm both jobs used CUDA and the same frozen hyperparameters. Seal `best.pt`, configs, logs and candidate manifests.
@@ -936,14 +1114,16 @@ Read back the C sampling manifest: each epoch must use 800 head and 800 task ima
 - [ ] **Step 4: Calibrate and freeze each candidate operating point on val/calibration episodes.**
 
 ```zsh
-evaluate_head_search_yolo_candidates register \
+run_logged "$MODEL_RUN/register-a.console.log" \
+  ros2 run so101_demo_py evaluate_head_search_yolo_candidates register \
   --candidate-id A --weights "$A_WEIGHTS" \
   --head-dataset "$MODEL_RUN/head-dataset/dataset-manifest.json" \
   --task-dataset "$TASK_DATASET_MANIFEST" \
-  --output "$MODEL_RUN/candidate-a"
+  --output "$MODEL_RUN/candidate-a" || exit 1
 for candidate in A B C; do
   candidate_name=$(print -r -- "$candidate" | tr '[:upper:]' '[:lower:]')
-  evaluate_head_search_yolo_candidates calibrate \
+  run_logged "$MODEL_RUN/calibrate-$candidate_name.console.log" \
+    ros2 run so101_demo_py evaluate_head_search_yolo_candidates calibrate \
     --candidate "$MODEL_RUN/candidate-$candidate_name/candidate-manifest.json" \
     --head-dataset "$MODEL_RUN/head-dataset/dataset-manifest.json" --head-split val \
     --task-dataset "$TASK_DATASET_MANIFEST" --task-split val \
@@ -957,7 +1137,8 @@ Expected: three frozen identities containing weight, both domain operating point
 - [ ] **Step 5: Run the actual frozen-model evaluation gate.**
 
 ```zsh
-evaluate_head_search_yolo_candidates compare \
+run_logged "$MODEL_RUN/compare.console.log" \
+  ros2 run so101_demo_py evaluate_head_search_yolo_candidates compare \
   --candidate "$MODEL_RUN/frozen-a.json" \
   --candidate "$MODEL_RUN/frozen-b.json" \
   --candidate "$MODEL_RUN/frozen-c.json" \
@@ -965,9 +1146,7 @@ evaluate_head_search_yolo_candidates compare \
   --task-dataset "$TASK_DATASET_MANIFEST" --task-split test \
   --episode-partitions "$SCENARIO_PARTITIONS" --episode-split held_out_evaluation \
   --bootstrap-repetitions 10000 --device cuda \
-  --output "$MODEL_RUN/evaluation"
-eval_rc=$?
-test $eval_rc -eq 0
+  --output "$MODEL_RUN/evaluation" || exit 1
 ```
 
 Read back all six candidate/domain cells, scene-level confidence intervals, zero false candidates, latency, retention verdict and final choice. If the gate requests parameter changes after test access, invalidate the verdict and create new test/held-out seeds; do not retune against the opened test.
@@ -998,24 +1177,33 @@ git commit -m "docs: record head search model decision"
 ```zsh
 CAL_RUN="$HEAD_EVIDENCE/head-calibration-$(date -u +%Y%m%dT%H%M%SZ)"
 : "${MODEL_RUN:?set to the exact retained Task 12 run root named in the reviewed ledger checkpoint}"
+: "${TOOLCHAIN_RUN:?set to the exact retained Task 11 toolchain root}"
+: "${GEOMETRY_RUN:?set to the exact retained Task 11 production-camera geometry root}"
 HEAD_CAMERA_CONFIG="$PWD/src/so101_demo_py/config/mujoco/camera_views.yaml"
 SCENARIO_PARTITIONS="$PWD/src/so101_demo_py/config/act/head-search-scenario-partitions-v1.json"
-test ! -e "$CAL_RUN"
+test ! -e "$CAL_RUN" || exit 1
 case "$MODEL_RUN" in "$HEAD_EVIDENCE"/*) ;; *) exit 1 ;; esac
-test -f "$MODEL_RUN/evaluation/model-selection-verdict.json"
-test -f "$MODEL_RUN/head-dataset/dataset-manifest.json"
-test -f "$HEAD_CAMERA_CONFIG"
-test -f "$SCENARIO_PARTITIONS"
-so101_head_search_calibration run \
+case "$TOOLCHAIN_RUN" in "$HEAD_EVIDENCE"/*) ;; *) exit 1 ;; esac
+case "$GEOMETRY_RUN" in "$HEAD_EVIDENCE"/*) ;; *) exit 1 ;; esac
+test -f "$MODEL_RUN/evaluation/model-selection-verdict.json" || exit 1
+test -f "$MODEL_RUN/head-dataset/dataset-manifest.json" || exit 1
+test -f "$TOOLCHAIN_RUN/install/setup.zsh" || exit 1
+test -f "$GEOMETRY_RUN/head-camera-geometry.json" || exit 1
+test -f "$HEAD_CAMERA_CONFIG" || exit 1
+test -f "$SCENARIO_PARTITIONS" || exit 1
+source "$TOOLCHAIN_RUN/install/setup.zsh"
+test "$(ros2 pkg prefix so101_demo_py)" = "$TOOLCHAIN_RUN/install/so101_demo_py" || exit 1
+CAL_LAUNCH_LOG="$HEAD_EVIDENCE/head-calibration-launch-$(date -u +%Y%m%dT%H%M%SZ).log"
+run_logged "$CAL_LAUNCH_LOG" \
+  ros2 run so101_demo_py so101_head_search_calibration run \
   --run-root "$CAL_RUN" \
   --evidence-root "$HEAD_EVIDENCE" \
   --candidate "$MODEL_RUN/evaluation/model-selection-verdict.json" \
   --dataset "$MODEL_RUN/head-dataset/dataset-manifest.json" \
+  --geometry-seal "$GEOMETRY_RUN/head-camera-geometry.json" \
   --production-config src/so101_demo_py/config/mujoco/act/head_search_v2.json \
   --camera-config "$HEAD_CAMERA_CONFIG" \
-  --episode-partitions "$SCENARIO_PARTITIONS" --episode-split calibration
-cal_rc=$?
-test $cal_rc -eq 0
+  --episode-partitions "$SCENARIO_PARTITIONS" --episode-split calibration || exit 1
 ```
 
 Expected: fixed phases run in order, one calibration-only generation, safe bounded motion, no release/recorder, `SUCCEEDED`, all declared outputs and exactly 17 measurements. If interrupted or failed, inspect process/log/output state, retain the run unchanged, and restart from input validation under a new run ID; never reuse `run-status.json` as a checkpoint.
@@ -1030,14 +1218,13 @@ Use `apply_patch` once to copy the approved bundle's exact model identity, 17 va
 
 ```zsh
 : "${APPROVED_BUNDLE_SHA256:?set this only from the user's exact approval message}"
-test "$APPROVED_BUNDLE_SHA256" = "$(sha256sum "$CAL_RUN/head-search-calibration-bundle.json" | cut -d' ' -f1)"
-so101_head_search_calibration verify-promoted-config \
+test "$APPROVED_BUNDLE_SHA256" = "$(sha256sum "$CAL_RUN/head-search-calibration-bundle.json" | cut -d' ' -f1)" || exit 1
+run_logged "$CAL_RUN/verify-promoted-config.console.log" \
+  ros2 run so101_demo_py so101_head_search_calibration verify-promoted-config \
   --bundle "$CAL_RUN/head-search-calibration-bundle.json" \
   --production-config src/so101_demo_py/config/mujoco/act/head_search_v2.json \
   --approved-bundle-sha256 "$APPROVED_BUNDLE_SHA256" \
-  --approval-output "$CAL_RUN/approval-receipt.json"
-verify_rc=$?
-test $verify_rc -eq 0
+  --approval-output "$CAL_RUN/approval-receipt.json" || exit 1
 ```
 
 The config edit copies approved values and identities only. It must not recompute, round, clamp or silently substitute a threshold.
@@ -1050,49 +1237,47 @@ git add src/so101_demo_py/config/mujoco/act/head_search_v2.json \
 git diff --cached --check
 git commit -m "config: promote calibrated head search bundle"
 
-head_test -n 8 src/so101_demo_py/test -q
-demo_rc=$?
-head_test -n 8 src/so101_teleop/test -q
-teleop_rc=$?
-test $demo_rc -eq 0 -a $teleop_rc -eq 0
+head_test -n 8 src/so101_demo_py/test -q || exit 1
+head_test -n 8 src/so101_teleop/test -q || exit 1
 ```
 
 - [ ] **Step 5: Build the final frozen runtime and run installed gates.**
 
 ```zsh
 FINAL_RUN="$HEAD_EVIDENCE/head-final-runtime-$(date -u +%Y%m%dT%H%M%SZ)"
-test ! -e "$FINAL_RUN"
-mkdir "$FINAL_RUN"
+test ! -e "$FINAL_RUN" || exit 1
+mkdir "$FINAL_RUN" || exit 1
+git rev-parse HEAD >"$FINAL_RUN/source-commit.txt" || exit 1
 source /opt/ros/jazzy/setup.zsh
 set -o pipefail
-new_head_scratch
-/usr/bin/time -p colcon --log-base "$FINAL_RUN/build-log" build \
+new_head_scratch || exit 1
+run_logged "$FINAL_RUN/build.console.log" /usr/bin/time -p \
+  "$HEAD_PYTHON" "$HEAD_COLCON" --log-base "$FINAL_RUN/build-log" build \
   --build-base "$FINAL_RUN/build" \
   --install-base "$FINAL_RUN/install" \
   --packages-up-to so101_demo_py so101_teleop --symlink-install --executor sequential \
-  2>&1 | tee "$FINAL_RUN/build.console.log"
-final_build_rc=$?
-test $final_build_rc -eq 0
-test -f "$FINAL_RUN/install/setup.zsh"
+  --cmake-args -DPython3_EXECUTABLE="$HEAD_PYTHON" || exit 1
+test -f "$FINAL_RUN/install/setup.zsh" || exit 1
 source "$FINAL_RUN/install/setup.zsh"
-new_head_scratch
-/usr/bin/time -p colcon --log-base "$FINAL_RUN/test-log-benchmark" test \
+test "$(ros2 pkg prefix so101_demo_py)" = "$FINAL_RUN/install/so101_demo_py" || exit 1
+test "$(ros2 pkg prefix so101_teleop)" = "$FINAL_RUN/install/so101_teleop" || exit 1
+new_head_scratch || exit 1
+run_logged "$FINAL_RUN/test-demo-ordinary.console.log" /usr/bin/time -p \
+  "$HEAD_PYTHON" "$HEAD_COLCON" --log-base "$FINAL_RUN/test-log-demo-ordinary" test \
   --build-base "$FINAL_RUN/build" \
   --install-base "$FINAL_RUN/install" \
   --packages-select so101_demo_py --return-code-on-test-failure --executor sequential \
-  --pytest-args benchmark_test 2>&1 | tee "$FINAL_RUN/test-benchmark.console.log"
-bench_rc=$?
-new_head_scratch
-/usr/bin/time -p colcon --log-base "$FINAL_RUN/test-log-teleop" test \
+  --pytest-args test || exit 1
+new_head_scratch || exit 1
+run_logged "$FINAL_RUN/test-teleop.console.log" /usr/bin/time -p \
+  "$HEAD_PYTHON" "$HEAD_COLCON" --log-base "$FINAL_RUN/test-log-teleop" test \
   --build-base "$FINAL_RUN/build" \
   --install-base "$FINAL_RUN/install" \
-  --packages-select so101_teleop --return-code-on-test-failure --executor sequential \
-  2>&1 | tee "$FINAL_RUN/test-teleop.console.log"
-teleop_colcon_rc=$?
-colcon test-result --test-result-base "$FINAL_RUN/build" --verbose
-test $bench_rc -eq 0 -a $teleop_colcon_rc -eq 0
-test -x "$FINAL_RUN/install/so101_teleop/lib/so101_teleop/so101_unified_web_server.py"
-test -f "$FINAL_RUN/install/so101_teleop/share/so101_teleop/web/index.html"
+  --packages-select so101_teleop --return-code-on-test-failure --executor sequential || exit 1
+head_colcon test-result --test-result-base "$FINAL_RUN/build" --verbose \
+  >"$FINAL_RUN/test-result.txt" || exit 1
+test -x "$FINAL_RUN/install/so101_teleop/lib/so101_teleop/so101_unified_web_server.py" || exit 1
+test -f "$FINAL_RUN/install/so101_teleop/share/so101_teleop/web/index.html" || exit 1
 ```
 
 Record `$FINAL_RUN` in the ledger together with package, console script, model, CUDA, config, camera, tracker and web bundle identities. Task 14 must source exactly `$FINAL_RUN/install/setup.zsh`; this is the final controlled runtime freeze.
@@ -1103,9 +1288,9 @@ Record `$FINAL_RUN` in the ledger together with package, console script, model, 
 
 **Interfaces:** Consumes the frozen installed runtime and approved calibration bundle. Produces the final production, 40-scenario, restart, head-only qualification, Teleop and evidence-readback verdicts.
 
-- [ ] **Step 1: Verify exclusive ownership and start one production stack.**
+- [ ] **Step 1: Verify exclusive ownership before the formal qualifier starts its owned stack.**
 
-Read the fresh process table, ROS graph, GPU processes, tmux ownership and evidence root. Refuse to start if another detector, MuJoCo instance, controller owner or campaign holds the resources. Qualification uses the formal calibration-only owner; confirm one YOLO instance, CUDA, correct weights/bundle SHA and effective 17-value readback.
+Read the fresh process table, ROS graph, GPU processes, tmux ownership and evidence root. Refuse to proceed if another detector, MuJoCo instance, controller owner or campaign holds the resources. Do not pre-start a stack: the qualifier owns every start and teardown. During qualification confirm one YOLO instance, CUDA, correct weights/bundle SHA and effective 17-value readback.
 
 - [ ] **Step 2: Run the complete no-resume qualification command.**
 
@@ -1114,24 +1299,25 @@ QUAL_RUN="$HEAD_EVIDENCE/head-qualification-$(date -u +%Y%m%dT%H%M%SZ)"
 : "${CAL_RUN:?set to the exact approved Task 13 calibration run root}"
 : "${FINAL_RUN:?set to the exact frozen Task 13 runtime root}"
 SCENARIO_PARTITIONS="$PWD/src/so101_demo_py/config/act/head-search-scenario-partitions-v1.json"
-test ! -e "$QUAL_RUN"
+test ! -e "$QUAL_RUN" || exit 1
 case "$CAL_RUN" in "$HEAD_EVIDENCE"/*) ;; *) exit 1 ;; esac
 case "$FINAL_RUN" in "$HEAD_EVIDENCE"/*) ;; *) exit 1 ;; esac
-test -f "$CAL_RUN/head-search-calibration-bundle.json"
-test -f "$CAL_RUN/approval-receipt.json"
-test -f "$FINAL_RUN/install/setup.zsh"
-test -f "$SCENARIO_PARTITIONS"
+test -f "$CAL_RUN/head-search-calibration-bundle.json" || exit 1
+test -f "$CAL_RUN/approval-receipt.json" || exit 1
+test -f "$FINAL_RUN/install/setup.zsh" || exit 1
+test -f "$SCENARIO_PARTITIONS" || exit 1
 source "$FINAL_RUN/install/setup.zsh"
-so101_head_search_calibration qualify \
+test "$(ros2 pkg prefix so101_demo_py)" = "$FINAL_RUN/install/so101_demo_py" || exit 1
+QUAL_LAUNCH_LOG="$HEAD_EVIDENCE/head-qualification-launch-$(date -u +%Y%m%dT%H%M%SZ).log"
+run_logged "$QUAL_LAUNCH_LOG" \
+  ros2 run so101_demo_py so101_head_search_calibration qualify \
   --run-root "$QUAL_RUN" \
   --bundle "$CAL_RUN/head-search-calibration-bundle.json" \
   --approval-receipt "$CAL_RUN/approval-receipt.json" \
   --production-config src/so101_demo_py/config/mujoco/act/head_search_v2.json \
   --episode-partitions "$SCENARIO_PARTITIONS" \
-  --profile mujoco --serial --workers 1 \
-  --anchors default,left,forward
-qualify_rc=$?
-test $qualify_rc -eq 0
+  --profile mujoco --serial \
+  --anchors default,left,forward || exit 1
 ```
 
 The command's fixed phases are `production-smoke -> qualification-40 -> FULL_RESTART(default) -> FULL_RESTART(left) -> FULL_RESTART(forward) -> aggregate`. It has no phase-select, skip, resume or existing-root mode. If any phase fails or is interrupted, inspect and retain the run, then repeat the entire command under a new `QUAL_RUN`.
@@ -1150,13 +1336,90 @@ Each phase tears down and reconstructs the one stack, then passes graph, detecto
 
 Read back `head-search-qualification.json` and `head-search-qualified-report.json`. Confirm the former holds one PASS sample with all 17 + four camera measurements and cites the smoke, 40 scenes and three restart roots. Confirm the latter says only `HEAD_SEARCH_QUALIFIED`, then prove `task8_live` still refuses it.
 
-- [ ] **Step 6: Run the installed Teleop acceptance and inspect fresh screenshots.**
+- [ ] **Step 6: Start one separately owned Teleop-acceptance stack, run the installed acceptance, and inspect fresh screenshots.**
 
-Use the installed unified app against the same production stack. Verify Raw/Overlay correlation, bounded absolute and step movement, conflicting owner refusal, stale-frame refusal, stop proof and atomic capture. Run the installed Playwright Head Camera case, then inspect light/dark desktop/narrow screenshots and captured raw/overlay pairs. The page must show the same model and bundle SHA as the production process and must not create another detector.
+The qualifier tears down its final `forward` restart before returning; do not depend on a leaked child process. Start one new `TELEOP_ACCEPTANCE` stack from the same frozen install, selected model, promoted config, approval receipt and closed head-only report. This startup is a separate functional-acceptance fixture, not a fourth qualification `FULL_RESTART`, and it cannot mutate the qualification report. Run the installed unified app against that one stack and detector. Verify Raw/Overlay correlation, bounded absolute and step movement, conflicting owner refusal, stale-frame refusal, stop proof and atomic capture.
+
+```zsh
+TELEOP_ACCEPT_ROOT="$HEAD_EVIDENCE/teleop-head-camera-acceptance-$(date -u +%Y%m%dT%H%M%SZ)"
+test ! -e "$TELEOP_ACCEPT_ROOT" || exit 1
+mkdir "$TELEOP_ACCEPT_ROOT" || exit 1
+ros2 run so101_demo_py so101_head_search_calibration serve-teleop \
+  --run-root "$TELEOP_ACCEPT_ROOT/runtime" \
+  --qualification-report "$QUAL_RUN/head-search-qualified-report.json" \
+  --bundle "$CAL_RUN/head-search-calibration-bundle.json" \
+  --approval-receipt "$CAL_RUN/approval-receipt.json" \
+  --production-config src/so101_demo_py/config/mujoco/act/head_search_v2.json \
+  --profile mujoco --ready-file "$TELEOP_ACCEPT_ROOT/runtime-ready.json" \
+  >"$TELEOP_ACCEPT_ROOT/runtime.log" 2>&1 &
+runtime_pid=$!
+server_pid=""
+cleanup_head_acceptance() {
+  test -z "$server_pid" || { kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null; }
+  test -z "$runtime_pid" || { kill "$runtime_pid" 2>/dev/null; wait "$runtime_pid" 2>/dev/null; }
+}
+trap cleanup_head_acceptance EXIT
+for attempt in {1..180}; do
+  test -f "$TELEOP_ACCEPT_ROOT/runtime-ready.json" && break
+  kill -0 "$runtime_pid" 2>/dev/null || exit 1
+  sleep 1
+done
+test -f "$TELEOP_ACCEPT_ROOT/runtime-ready.json" || exit 1
+SO101_UNIFIED_BACKEND=mujoco_py \
+SO101_UNIFIED_INSTALL_PREFIX="$FINAL_RUN/install" \
+SO101_UNIFIED_EVIDENCE_ROOT="$TELEOP_ACCEPT_ROOT" \
+SO101_UNIFIED_RUNTIME_ID="$(<"$FINAL_RUN/source-commit.txt")" \
+SO101_UNIFIED_ROS_PYTHON="$HEAD_PYTHON" \
+  "$FINAL_RUN/install/so101_teleop/lib/so101_teleop/so101_unified_web_server.py" \
+  --host 127.0.0.1 --port 18082 --capture-dir "$TELEOP_ACCEPT_ROOT/captures" \
+  >"$TELEOP_ACCEPT_ROOT/server.log" 2>&1 &
+server_pid=$!
+for attempt in {1..60}; do
+  curl --silent --fail http://127.0.0.1:18082/teleop/head-camera/status \
+    >"$TELEOP_ACCEPT_ROOT/status-before.json" && break
+  kill -0 "$server_pid" 2>/dev/null || exit 1
+  sleep 1
+done
+curl --fail http://127.0.0.1:18082/teleop/head-camera/status \
+  >"$TELEOP_ACCEPT_ROOT/status-before.json" || exit 1
+(cd "$PWD/src/so101_teleop/web" && \
+  SO101_TELEOP_BASE_URL=http://127.0.0.1:18082 \
+  SO101_E2E_EVIDENCE_ROOT="$TELEOP_ACCEPT_ROOT" \
+  bun run test:e2e -- e2e/head-camera.spec.ts) || exit 1
+kill "$server_pid"
+set +o errexit
+wait "$server_pid"
+server_rc=$?
+set -o errexit
+case $server_rc in 0|130|143) ;; *) exit 1 ;; esac
+print -r -- "$server_rc" >"$TELEOP_ACCEPT_ROOT/server.rc"
+server_pid=""
+kill "$runtime_pid"
+set +o errexit
+wait "$runtime_pid"
+runtime_rc=$?
+set -o errexit
+test $runtime_rc -eq 0 || exit 1
+print -r -- "$runtime_rc" >"$TELEOP_ACCEPT_ROOT/runtime.rc"
+runtime_pid=""
+test -f "$TELEOP_ACCEPT_ROOT/runtime/teardown-receipt.json" || exit 1
+trap - EXIT
+unfunction cleanup_head_acceptance
+```
+
+Because `SO101_TELEOP_BASE_URL` is set, Playwright must not start Vite. The case captures fresh light/dark desktop/narrow screenshots for Raw, Overlay, conflict, stale, stopping and stopped states plus exact raw/overlay frame pairs. Inspect those files and their browser URL. The page must show the same model and bundle SHA as the production process and the process/GPU readback must show one detector. The teardown receipt must prove controller stop, process-group exit and graph clear.
 
 - [ ] **Step 7: Read back all evidence and close the ledger.**
 
 Verify every manifest digest, exit code, producer/journal/aggregator chain, scenario count, anchor restart, screenshot and runtime identity from disk. Append retained runs, archived runs and deletion candidates to the ledger. Do not delete anything. Report the final result as `HEAD_SEARCH_QUALIFIED` or an exact blocker; no threshold, worker, camera, sample-rate or device downgrade is allowed.
+
+```zsh
+git add docs/experiments/so101-act-data-experiment-ledger.md
+git diff --cached --check
+git commit -m "docs: record head search qualification"
+```
+
+This final commit may contain only the ledger closeout. Any controlled source/config/policy change invalidates Task 13 and requires a new run root.
 
 ## Review checkpoints
 
@@ -1169,4 +1432,4 @@ Verify every manifest digest, exit code, producer/journal/aggregator chain, scen
 
 ## Completion definition
 
-This plan is complete only when Tasks 1–14 are all complete, the selected model passes both camera-domain gates, all 17 parameters are consumed by production and bound to one approved sample, the 40 serial scenarios and three independent anchor restarts pass, Teleop is visually and functionally accepted, and evidence readback closes without an identity or digest mismatch. A green unit test suite, a successful training process, a generated bundle, or an unreviewed screenshot is not completion on its own.
+This plan is complete only when Tasks 1–14 are all complete, the production head camera passes the three-anchor geometry seal with zero `in_frame=0` failures, the selected model passes both camera-domain gates, all 17 parameters are consumed by production and bound to one approved sample, the 40 serial scenarios and three independent anchor restarts pass, Teleop is visually and functionally accepted, and evidence readback closes without an identity or digest mismatch. A green unit test suite, a successful training process, a generated bundle, or an unreviewed screenshot is not completion on its own.
