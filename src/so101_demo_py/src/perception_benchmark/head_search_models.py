@@ -171,11 +171,17 @@ def verify_split_manifest(
         raise EvaluationError(
             f"EVALUATION_MANIFEST_INVALID: the {domain} manifest is not a mapping"
         )
-    for key in ("dataset_contract", "camera_name", "split_counts", "samples", "sample_count"):
+    for key in ("camera_name", "split_counts", "samples", "sample_count"):
         if key not in manifest:
             raise EvaluationError(
                 f"EVALUATION_MANIFEST_INVALID: the {domain} manifest has no {key}"
             )
+    if "dataset_contract" not in manifest and "schema_version" not in manifest:
+        # the head dataset carries its contract marker, the pinned task dataset carries a schema version
+        raise EvaluationError(
+            f"EVALUATION_MANIFEST_INVALID: the {domain} manifest declares neither a dataset contract nor "
+            "a schema version"
+        )
     counts = manifest["split_counts"]
     if not isinstance(counts, Mapping) or split not in counts:
         raise EvaluationError(
@@ -193,15 +199,20 @@ def verify_split_manifest(
                 f"EVALUATION_MANIFEST_INVALID: the {domain} manifest has a non-mapping sample"
             )
         sample_split = sample.get("split")
-        for key, seen, label in (
-            ("seed", seeds, "seed"),
-            ("scene_group_id", groups, "scene group"),
+        for key, seen, label, required in (
+            ("seed", seeds, "seed", True),
+            # the pinned task dataset identifies its episodes by seed; scene groups are checked where the
+            # manifest carries them, and a seed is required everywhere
+            ("scene_group_id", groups, "scene group", False),
         ):
             value = sample.get(key)
             if value is None:
-                raise EvaluationError(
-                    f"EVALUATION_MANIFEST_INVALID: the {domain} manifest has a sample without a {label}"
-                )
+                if required:
+                    raise EvaluationError(
+                        f"EVALUATION_MANIFEST_INVALID: the {domain} manifest has a sample without a "
+                        f"{label}"
+                    )
+                continue
             previous = seen.get(value)
             if previous is not None and previous != sample_split:
                 raise EvaluationError(
