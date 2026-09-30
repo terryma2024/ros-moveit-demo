@@ -347,6 +347,7 @@ def main(arguments: list[str] | None = None) -> int:
                         operating_point,
                         parsed.device,
                         domain_scratch,
+                        document=candidate.document,
                     )
                 for key in STATIC_METRIC_KEYS:
                     if key not in measured:
