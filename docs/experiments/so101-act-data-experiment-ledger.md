@@ -38652,3 +38652,31 @@ differing, and two modules had no per-id suite rows to compare against.
 **Granularity stated:** this is module-level identity, because id-level identity is not achievable for context-dependent
 failures - a limitation the 47 shifted ids demonstrate rather than suggest. Where identity cannot be shown, the honest
 output is "differs" or "not comparable", not a same-cause label.
+
+## HS-160 — Twelfth verdict maintains the per-ID environmental bar, and four designs have now shown why that bar is unreachable here
+
+The verdict: "HS-159 establishes matching failure messages for seven modules, not environmental causes for every failing ID."
+
+That is consistent with verdicts 9, 10 and 11, and the four designs I have run establish the obstacle rather than a
+shortfall of effort:
+
+| design | what it measured | why it was retracted |
+| --- | --- | --- |
+| HS-151/152 | base vs overlay, count-only | replaced `PYTHONPATH`, counts not causes |
+| HS-155 | base vs overlay, same traceback line | compared the wrong equality (install vs install) |
+| HS-157 | 231/231 same cause, both packages | did not reach the ORIGINAL failure; teleop ran worktree code |
+| HS-159 | direct module reason vs suite reason | identity shown for 7/8 modules, not per-ID |
+
+The obstacle is structural and now measured: **the suite's per-ID failures are context-dependent.** When the same id is
+run alone it frequently fails differently - the reviewer's own count of **47 ids reaching `RUNTIME_POLICY_ROOT_INVALID`
+instead of `TRUSTED_FINAL_TARGET_INVALID`** is the demonstration. Per-ID environmental causes therefore cannot be produced
+by any invocation that isolates an id, and the suite as a whole is the only thing that produces them. What *is* achievable
+is what HS-159 records: module-level identity with the recorded failure for 7 of 8 comparable modules, one module differing
+honestly, two not comparable, plus 11 collection modules at module level and the invocation/environment families already
+documented.
+
+**So this is not a gap I can close by trying harder, and saying otherwise for a fifth time would be the dishonest move.**
+The options are a contract decision - accept module-level identity as the attribution standard, as HS-103 and HS-107
+narrowed two earlier gates at the user's direction - or commission a serial, single-worker full-suite run whose per-ID
+tracebacks would be produced in suite context (hours of wall-clock, one worker, on a suite that currently fails ~350 ids)
+and then compare those tracebacks id by id. I am recording both and asking the user, rather than choosing unilaterally.
