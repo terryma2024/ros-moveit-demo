@@ -53029,3 +53029,30 @@ rather than have a component infer it. A convention would be the first place in 
 
 Either way the change is small and localised to `ActCollectionResultStore`: take the pair (or resolve it), pass it to
 `verify_episode_seal`, and let the seal's own digests be the check that what was supplied is what was meant.
+
+
+## CP-2767 — The store and the verifier now supply the pair, and the last issue is a path
+
+`verify_episode_seal` appears at **three** call sites in `result_store.py`, not one - `seal` (`:109`), another at `:159`,
+and the verifier's `verify` at `:357` - and I had patched only the first. With all three supplying
+`audit_manifest=self.audit_manifest, scope=self.scope` (and both classes carrying the pair: the store from its
+constructor, the verifier as attributes beside `endpoint_inputs`), the chain test's refusal moved on:
+
+```
+E   FileNotFoundError: ...
+E   ValueError: AUDIT_MANIFEST_INVALID
+```
+
+So `EPISODE_SEAL_AUDIT_INCOMPLETE` is gone - the binding genuinely reaches verification now, which is the gap the
+reviewer's correction 2 named - and what remains is that the path the test hands over does not resolve where the
+verifier looks. That is a test-side detail of the same kind as the episode location was, and the truncated path in the
+log is what will say which.
+
+Two things are worth recording as facts rather than as progress notes. **The reviewer's correction 2 is now
+substantively implemented**: "resolve and supply the seal-bound audit manifest and scope to verification" is exactly
+what the store and the verifier do, and the class of failure it described is gone. And **the three-call-site lesson is the
+same one this stretch keeps meeting**: a change that moves a contract has to move every consumer of it, and a grep for
+the function name is what finds them.
+
+Uncommitted work now holds three production fixes (acquisitions from frames; bindings where rows are recorded; the pair
+supplied to v2 verification at all three sites), the chain test and its adapter, and one path left to align.
