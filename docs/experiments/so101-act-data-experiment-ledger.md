@@ -45523,3 +45523,26 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's artifact,
   discovery and resource route landed, with the recorded identity the remaining item on that route. HEAD 67ecf350f;
   goal active.
+
+
+## CP-2413 — Zero blockers: the whole input registry is READY
+
+- The mismatch CP-2411 surfaced was the collection config's own binding, exactly as `_inspect_motion_config` reads
+  it: `binding = {"parallel_runtime_sha256": document["parallel_runtime"]["sha256"], "runtime_config_sha256":
+  _digest(runtime)}`, refused when the two differ. Adding the two hard stops changed the runtime config's bytes, so
+  the recorded digest had to follow - the design's literal instruction to sync the runtime hash bound in the
+  collection config.
+- A first attempt failed honestly: a regex for `parallel_runtime:
+  sha256:` did not match, and computing the
+  "old" digest from `git show HEAD:` was useless because the runtime edit was already committed, so old and new were
+  identical. Printing the actual block gave the recorded value `991b5c1b...`, which was replaced by the current
+  `ba8ddefd...`.
+- Measured on the installed CLI: **`inspect` exits 0 with twelve roles and zero blockers.** Every role - the four the
+  user's authorization covers through the artifact and the resource route, and the eight others - now resolves with
+  its own provenance, which is the input side of the milestone complete.
+- Next on this axis: run `prepare` end to end (`--mode preselected_target_diagnostic --endpoint-policy
+  <installed policy> --runtime-policy <installed runtime>`) and then `preflight`, recording the real argv and rc; that
+  is the plan's first three E3 commands, after which the remaining work is the run itself, the fresh-process QC and
+  the coordinator commit.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 67ecf350f;
+  goal active.
