@@ -50147,3 +50147,25 @@ E2's safety half is the runner's codes, all preserved verbatim (CP-2639): identi
 `RELEASE_UNSUPPORTED`, `DETACH_NOT_CONFIRMED`. Its quality half is the measurement contract, which the first-episode
 chain does not import (CP-2641/2642, committed as ef6b13a16). With that, E2's checklist is complete as a set of measured
 properties and stated readings.
+
+
+## CP-2646 — The five consumers E2's wiring has to reach, and where they live
+
+The plan's line for this item - "connect all object-result calls into E1/E2, covering the real Worker, the container
+shard protocol, the qualification contract, ACT rollout and route comparison, **without implementing containers**" -
+maps onto these homes:
+
+- **`application/qualification.py`** - the qualification contract itself, with `application/e2e_acceptance.py` beside it
+  as the end-to-end acceptance side;
+- **`cli/act_evaluate.py`** - where rollout and route comparison are driven from, with `act/sampling.py`,
+  `act/collection.py` and `act/contracts.py` holding the vocabulary they share;
+- **`adapters/act/pick_place_search_port.py`** - which also names qualification, so the search port is one of the call
+  sites rather than only a gatherer;
+- and the **real Worker** itself, which is the batch/coordinator side already examined (`parallel_batch`,
+  `ProductionBatchComposition`).
+
+So the wiring is a survey of five call sites against what E1/E2 now offer: an endpoint policy and calculator, a shared QC
+that recomputes endpoints from a sealed audit, and a document that keeps a run's claim apart from a fresh process's
+verdict. The next read is the smallest of the five - the qualification contract - to see what it currently asks for and
+whether its question is now answerable by the endpoint rule rather than by the process-quality calibration the amendment
+removes.
