@@ -55263,3 +55263,26 @@ plus the phase rule for handing it on (pre-publish pair for the store, published
 Written because this is now the single thing between the objective and its completion, and because a checklist with file
 and line references is what the coordinator can act on between other work - whereas the same content as prose has already
 been read once and not yet acted on.
+
+
+## CP-2856 — Hunting the production drive point, and three layers ruled out
+
+The five-step wiring has to land where a production run actually drives an episode, so this round was spent finding that
+place rather than assuming it. Three candidates are now ruled out, each by reading rather than by guessing:
+
+* **`PickPlaceRunner` has no production caller** - the class every test in `test_act_release_boundary.py` drives is not
+  what a run executes (`grep -rn "PickPlaceRunner(" src/` returns nothing);
+* **`application/e2e_acceptance.py` is a validator, not a driver** - 523 lines of `_validate_*` and an `AcceptanceReport`,
+  judging an episode after the fact;
+* **`core/workflow.py` and `core/dynamic_pick.py` are not drivers either** - a 131-line state machine and 282 lines of pose
+  geometry.
+
+What the phase names being in `core/` did establish is that the vocabulary is shared across layers, which is why a
+`CLOSE`-shaped grep points at six files and none of them is the driver. The trail now leads to `parallel_batch/`: the CLI
+composes a `BatchRequestV2` around a single point and the worker runtime executes it, so the assembly belongs wherever that
+runtime turns a point into an episode.
+
+Recorded mid-hunt deliberately: the next rounds should resume from `parallel_batch/`'s runtimes (`adaptive_runner.py`,
+`campaign_supervisor.py`, and the worker modules beside them) rather than re-walking the three layers already excluded.
+Which is also the honest shape of this stretch - the wiring is not five small edits in a known place; it is a place that
+has to be found first, and finding it has already taken several reads.
