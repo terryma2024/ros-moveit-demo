@@ -54791,3 +54791,25 @@ whether the refusal is raised by a different `verify_episode_seal` call than the
 
 The test is reverted so the tree stays green, and the E3 test is now three alignments from its assertion rather than six:
 the window, the lease identity and the physical audit are all settled.
+
+
+## CP-2834 — The store does read those attributes, so the missing pair is supplied by someone else
+
+```python
+    def seal(self, episode_seal_path: Path) -> Path:
+        if _safe(episode_seal_path) != self.episode_root / "seal.json":
+            raise ValueError("EPISODE_LOCATION_MISMATCH")
+        try:
+            episode = verify_episode_seal(episode_seal_path,
+                                          audit_manifest=self.audit_manifest, scope=self.scope)
+```
+
+which is exactly what E3's test sets from `episode_audit_pair(store.episode_root)` immediately before calling it - so the
+store's own verification should be receiving both, and `EPISODE_SEAL_AUDIT_INCOMPLETE` is therefore either about those two
+attributes being `None` at that moment (they are not, by construction of the test) or about a **different**
+`verify_episode_seal` call, earlier in the same test.
+
+The earlier one is the capture's own: `capture.finish(...)` seals the audit and then hands the recorder the manifest and
+the scope it knows about, and that call is where a v2 seal is first verified. So the next step is not another alignment
+guess - it is running the test with `--tb=long` and reading **which line** raises, which the last round's `--tb=short`
+never showed. That is the one piece of instrumentation this question has needed since CP-2833, and it costs a single run.
