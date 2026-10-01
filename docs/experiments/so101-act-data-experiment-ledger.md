@@ -47693,3 +47693,21 @@ provenance verifier (CP-2479) and now the catalogue.
 
 Next: write the specification and instantiate `ProductionBatchComposition(spec, broker_command_builder=_broker_command)`
 in `_run`, then drive it and let the run name the next layer.
+
+
+## CP-2520 — The specification passes, and the composition asks for a start guard
+
+Ran the `run` subcommand with the specification written this round. It got **past** everything the spec validates - the
+V2 request, the manifest and `_catalog` on the pinned twenty-point file, the deployment provenance verifier, the frozen
+runtime config - and failed inside `ProductionBatchComposition.__init__` with
+`ResourceAllocationError('START_GUARD_UNAVAILABLE')`. So the composition wants a **start guard**, which I passed as
+`None`; everything before it is now proven end to end.
+
+The values are not a guess: the dispatch's design section lists the existing start guard as `timeout_s=2.0`,
+`cpu_busy_warn_fraction=0.90`, `ram_minimum_bytes=1073741824`, `ram_minimum_fraction=0.05`,
+`gpu_minimum_bytes=1073741824`, and says to keep it. So the next step is to construct `StartGuardPolicy` (or its
+equivalent) from exactly those five values and pass it as `start_guard=...`, then re-run and let the composition name
+the next layer - which is how the five previous layers of this integration were cleared.
+
+Also fixed this round: the scene path now comes from the frozen set unconditionally, because the `run` subcommand has
+no `--scene` flag and referencing one would have raised an AttributeError before reaching the guard.
