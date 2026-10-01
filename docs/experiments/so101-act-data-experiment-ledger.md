@@ -54680,3 +54680,29 @@ seam and the production producer, the store given the published audit pair, and 
 verdict is not PASS must not be committed as a success, and an episode the endpoint rule accepts must commit with a
 terminal point. Every object it needs is already proven by `test_act_result_commit.py` or by the six tests in
 `test_act_seal_and_downgrade.py`, so the next round writes it rather than exploring.
+
+
+## CP-2829 — E3's closed loop advances one refusal per alignment, and stops at a clause whose inputs look equal
+
+Writing E3's test in the chain file - the placement round 915 settled - got much further than the earlier attempts, and
+each step was a named refusal:
+
+1. **`finish` without a window does not seal** (the episode root held `['audit', 'frames', 'records.jsonl']` and the store
+   answered `RESULT_EPISODE_INVALID` wrapping `EPISODE_SEAL_MISSING`). With
+   `window={"start_s": 1.0, "end_s": 1.4, "label_cutoff_s": 1.4}` the seal is written.
+2. **`LEASE_IDENTITY_MISMATCH`**: the episode's `attempt_id` must be the lease the coordinator granted, not a fixture
+   constant - `identity={**IDENTITY, "attempt_id": current.attempt_id}`.
+3. **`EPISODE_SCOPE_INVALID`**, and there it sits. The check is four clauses - the audit's `session_id`, `attempt_id` and
+   `reset_epoch` (int, and equal) against the recorder's - and printing both sides says they agree:
+
+```
+RECORDER: session-1 scene-1-lease-1 2
+AUDIT   : session-1 scene-1-lease-1 2
+```
+
+So the offending `audit` dictionary is not the writer's identity that print read: it is the dict the capture assembles for
+a row, whose coordinates come from `capture.start(...)` and the sampler rather than from the writer. Which is the next
+thing to read - `start`'s four arguments and where the row's `session_id`/`attempt_id`/`reset_epoch` are taken from.
+
+The test is reverted again so the tree stays green (`7 passed`), and the shape of the remaining work is now one print away
+rather than one design away.
