@@ -49460,3 +49460,21 @@ touches the live path rather than a closed set.
 
 So K2 stands at three of its measured pieces done and the carriage next, with the schema ready to receive what the
 carriage emits.
+
+
+## CP-2614 — The carriage split: the port gathers, the runner writes
+
+The review's `pick_place_search_port.py` is at **`adapters/act/pick_place_search_port.py`** (961 lines), not under
+`act/` - worth noting because my earlier reading had only ever seen a *test* of that name. Its API is about gathering
+and binding: `validated_search_observation()`, `selected_prefix_source(max_skew_s=...)`,
+`bind_case_targets(...)`, `bind_startup_receipt(receipt)`, `bind_live_evidence(window, ...)`,
+`_bind_case_epoch(result)`. And a search for `append_source` across it finds **nothing**.
+
+So the carriage split in this repository is: the **port gathers and binds** the evidence about a search, and the
+**runner writes** it to the audit. That is consistent with the review's phrasing, which put "record carriage, gate
+derivation" in `pick_place_runner.py` alongside the port, and it means K2's A/Q/R emission belongs on the **runner**
+side - where the audit writer is already in hand - reading what the port bound rather than adding a writer to the port.
+
+That is the next piece of work, and it is bounded by three questions I can answer by reading: which method on the runner
+holds the port's bound evidence, where the apply/query/receipt boundaries fall in its flow, and which of the port's
+`bind_*` results carry the identity each record needs.
