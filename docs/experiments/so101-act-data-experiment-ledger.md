@@ -44757,3 +44757,35 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
   the window contract now fully read; F5's regression fixed, step one landed, step two 仍开放 as described;
   HEAD d83fa9d0e; goal active.
+
+
+## CP-2375 — K2's protocol table, before any implementation (the plan requires it first)
+
+K2 = B: the source side must provide a provable observation correlation. The plan forbids manufacturing equality
+(copying `raw.sim_time` into a later scene response), reading the clock at receipt, and treating `scene_revision`
+(a local read counter) as an update sequence. This table states what the real producer can supply and what the
+versioned record must carry; it is the artifact a Codex checkpoint reviews before code changes.
+
+| Field of the scene correlation record | Source in the real chain | Why it is defensible |
+| --- | --- | --- |
+| `kind`, `schema_version` | new closed values, e.g. `ACT_SCENE_CORRELATION`, `1` | versioned so old six-field records keep their historical reading |
+| `derived_from.physics_stamp_s`, `derived_from.physics_sequence` | the source physics Pose the scene was derived from (`control/planning_scene/task_scene.py` already reads the world readback) | the scene's own origin, not a later query's time |
+| `apply_event.kind`, `apply_event.sequence`, `apply_event.monotonic_ns` | the scene-apply command's own event identity (the same broker/receipt path the search boundary validates) | proves which mutation this snapshot follows |
+| `query.window_start_s`, `query.window_end_s` (sim-time), `query.sequence` | the actual `_observe()` call's bounds and its own sequence | states the interval the query observed, not a point equality |
+| `readback.sequence`, `readback.monotonic_ns`, `readback.sim_time_s` | the actual readback receipt | binds the returned document to a real receipt |
+| `content.world_object_ids`, `content.attached_objects`, `content.is_diff`, `content.digest` | the verified world/attached content of that readback | lets the verifier rebuild the content relation rather than trust a boolean |
+| `fence.kind`, `fence.proof` | one of: the existing synchronised-snapshot mechanism, or the verified ROS-sim-clock mapping plus the interval containment | the proof the plan asks for; `fence.kind` names which route |
+| `session_id`, `reset_epoch`, `attempt_id`, `lease` | the episode identity that produced the query | fences cross-session reuse |
+
+- **Refusals the record must make possible**: a raw whose source stamp/step is missing; an apply identity that is not
+  the one preceding the query; a query interval that does not contain the derived stamp; a content digest that does
+  not match the verified world/attached content; an absent fence; a cross-session/reset mixture. Each is a semantic
+  refusal on an isolated copy whose file hashes were recomputed.
+- **Fail-closed and the honest alternative**: if no implementable production correlation exists for the fence route
+  chosen, the record is not emitted and the plan's instruction applies - report the precise protocol gap rather than
+  claiming a field fixes it. `scene_revision` may stay as an audit field but never as the correlation proof.
+- **Consumers changing with K2, not after E2** (the plan's words): `act/episode_audit.py`'s scene closed schema, the
+  writer/serializer, `verify_episode_audit()` and every actual consumer of scene records, plus the segment's raw
+  fence in `adapters/act/pick_place_search_segment.py` and the port's observation return in
+  `control/planning_scene/task_scene.py`.
+- HEAD d83fa9d0e (the tree's own HEAD is authoritative at implementation time); goal active.
