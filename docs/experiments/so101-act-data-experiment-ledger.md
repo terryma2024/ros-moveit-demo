@@ -52837,3 +52837,28 @@ Two requirements, both now derived rather than guessed:
 
 Both are small, and both are readable from the check itself rather than from another probe. The chain has now closed
 seven distinct refusals in order; these are the eighth and the shape of the ninth.
+
+
+## CP-2760 — Decision 1 taken: reuse the existing broker image (option 3)
+
+The coordinator has decided the pending question: **reuse the previous broker image** rather than the container-free
+route's host broker (option 2's torch installation) or declaring the episode perception-free (option 1). So E3 runs the
+broker the way it was designed to run - in its image - and the container-free route stays as the separately-approved
+capability it is rather than the path this milestone takes.
+
+The image is not in doubt, because the repository names it in two places:
+
+- **`src/cli/mujoco_parallel_batch.py:110`** and **`src/runtime/parallel_perception_runtime.py:37`** both name
+  **`so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1`**.
+
+And it is present on this host: **`010dca70ce3c`, 10.6 GB, seven days old**, alongside the two `so101-act-*` benchmark
+images (12.5 GB each) and `so101-yolo11n-seg-inference:ros-jazzy-torch2.13.0-cu130-ultralytics8.4.115` (12.3 GB). Docker
+itself is available - server `29.1.3` on `overlayfs` - so the earlier "torch is missing" boundary was exactly what it
+looked like: a host-side limitation of the container-free route, not a missing capability.
+
+Two consequences for the work ahead. First, E3 can proceed: the composition's container route is the default
+(`container_brokers=True`), the image exists, and the test that caught my earlier regression -
+`test_physical_composition_prepares_and_supervises_one_external_broker` - already exercises a docker-based external broker
+end to end. Second, the container-free route's host substitutions (`_broker_command` in `act_first_episode.py` and its
+`container_brokers=False`) are not the path E3 takes, and they stay committed as a capability without being the route the
+milestone's first episode uses.
