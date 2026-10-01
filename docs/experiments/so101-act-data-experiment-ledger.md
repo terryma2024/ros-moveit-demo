@@ -46282,3 +46282,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - Measured remnant state after the slip: the recorded launch pid `3107569` is gone, while `pgrep -c -f
   ros2_control_node` reports **2** surviving children. So the stack is genuinely half-shut, and the next round kills
   those two by pid (never by a pattern that could match its own shell) before relaunching with the corrected order.
+
+
+## CP-2451 — The remnant is a foreign workspace's process, and that workspace is the likely stack
+
+- Listed before killing: pid `3107577` runs
+  `/home/matianyi/Projects/ws_mujoco_ros2_control_fork/install/lib/mujoco...` - a **different workspace**, not this
+  worktree. Attempting to kill the two pids left two `ros2_control_node` processes still running, which is consistent
+  with a supervisor or a process I do not own. **It must not be killed**: it is not mine, and this task's constraints
+  forbid touching processes that belong to the user's own work.
+- That read is more useful than the cleanup attempt: the MuJoCo simulator the ACT stack needs is plausibly shipped by
+  that fork workspace's install (`ws_mujoco_ros2_control_fork`), which is exactly what "reuse one approved MuJoCo
+  stack" means and why sourcing only this worktree's overlay (CP-2449) left `controller_manager` waiting for
+  `robot_description`.
+- My relaunch is up (launch pid `3108837`, log `launch3.log`) and has brought a **new** node,
+  `/so101_mujoco_scene_setup`, but `controller_manager` still logs "Waiting for data on 'robot_description' topic",
+  so the publisher is still missing. The next step is to find who is supposed to publish it - most likely a node from
+  that fork workspace - by reading that workspace's install and the launch composition's expected node set, not by
+  starting anything new.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD 3f33ec39c; goal active.
