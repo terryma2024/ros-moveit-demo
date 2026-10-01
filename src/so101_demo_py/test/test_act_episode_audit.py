@@ -1387,3 +1387,33 @@ def test_the_capture_preserves_the_packed_reference_the_tap_supplies(tmp_path):
     assert recorder.calls and recorder.calls[0][1] == tuple(label)
     assert set(capture.raw_reference) == {"frames", "projected_positions", "projection_map"}
     assert capture.raw_reference["projected_positions"] == projected
+
+
+def test_coverage_owns_a_missing_record_while_the_window_stays_valid(tmp_path):
+    """K1=B: with the camera window legal, removing a required record must reach the coverage gate."""
+
+    (tmp_path / "cov").mkdir(parents=True, exist_ok=True)
+    writer, window = _self_consistent_formal(tmp_path / "cov")
+    # the window is derived from this audit's own rows and acquisitions and is sealed first, so the audit is legal
+    path = writer.seal(window)
+    assert verify_audit_manifest(path)
+    # now remove the physics history - the camera schedule and the window it supports are untouched, and coverage
+    # is checked before both the window and the row bindings, so this reaches the coverage gate specifically
+    audit = path.parent
+    payload = b""
+    (audit / "physics.jsonl").write_bytes(payload)
+    document = json.loads(path.read_bytes())
+    document["files"]["physics.jsonl"] = {"path": "physics.jsonl", "size": len(payload),
+                                          "sha256": hashlib.sha256(payload).hexdigest()}
+    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
+    with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
+        verify_audit_manifest(path)
+
+
+def test_a_window_naming_an_unacquired_instant_is_refused_as_a_window(tmp_path):
+    """K1=B: a window whose schedule names an instant no acquisition holds must report the window error."""
+
+    (tmp_path / "win").mkdir(parents=True, exist_ok=True)
+    writer, window = _self_consistent_formal(tmp_path / "win")
+    with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
+        writer.seal({**window, "source_schedule": {"head": [1.0, 1.15, 1.2], "wrist": [1.0, 1.1, 1.2]}})
