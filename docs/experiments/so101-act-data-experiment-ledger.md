@@ -44123,3 +44123,37 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
 - derivation behind CP-2332; F5's regression fixed, step one landed, step two handed off with its three refusals
 - and its probe recipe; HEAD 5c857850b; goal paused.
+
+## CP-2344 - The remaining work as an executable list, and the two rulings as one-line decisions
+
+- TASK A - F5's runner-backed fixture (step two). State: attempted three times (CP-2342), each refused by name -
+- AUDIT_FORMAL_COVERAGE_INCOMPLETE, then AUDIT_BINDING_REFERENCE_INVALID after adding the binding, then
+- AUDIT_FORMAL_COVERAGE_INCOMPLETE again with the binding mirroring the preset fixture. Everything else is in place:
+- the port's evidence carries both ratified records (CP-2339), AlignedPort is file-level (CP-2302), the request fence
+- is known (CP-2257), and the runner's stream was measured to carry all four kinds across ten instants (CP-2341).
+-   Step 1: instrument _formal_coverage_ok to print each clause's boolean (physics/events/references non-empty,
+-           the completion set and order, every kind's history, the observed row, the accepted reference group).
+-   Step 2: re-add the fixture exactly as CP-2342 describes and run it once - the print names the unsatisfied
+-           clause in that single run.
+-   Step 3: fix that clause (fixture side if it is the acquisitions' schedule or the reference pairing, module side
+-           only if the clause is itself wrong) and run the four suites.
+
+- TASK B - F11's endpoint derivation. State: written and proven twice, reverted twice, handed off with four sites
+- (CP-2329/2331). Sites and values: _window() at lines 722-723 (first_command_s 1.0 -> 1.1, physics_end_s 1.2 stays,
+- matching the relabelled fixture's rows [1.1, 1.2]); _self_consistent_formal's return (line 1184) -> its own window
+- at 1.1/1.1 for its five rows at 1.1; the coverage control's seal sites -> the same 1.1/1.1; then the derivation
+- |endpoint - extreme| <= tolerance. The blocker is the contract question below, because that control's audits have
+- no acquisitions and so cannot satisfy any formal window.
+
+- TASK C - the two rulings, each already reduced to one question:
+-   CP-2285: may the caller that owns the clock stamp the scene record's instant at the same moment it derives the
+-     gate (the port's docstring), or must the read carry it (the segment's comment, which the verdict hedges
+-     toward)? Approving the docstring's rule unblocks F13's last item in one pass; the alternative needs the scene
+-     port to report the instant it observed, a change in task_scene.py:295.
+-   CP-2332: which gate owns "coverage is incomplete"? If AUDIT_WINDOW_INVALID may speak first, the coverage
+-     control's expectation changes (one line); if coverage must own it, that control needs a camera-consistent
+-     audit (mints, a derived window, then one required stream removed).
+
+- Everything else is closed or owned elsewhere: F1/F14/F3/F12 closed, F13 three of four, F5 step one landed, and the
+- objective's own path runs through the owner's nine input values and plan items 5-8.
+- HEAD 07d47894c; fourteen-suite baseline 446 passed (CP-2343); goal paused.
