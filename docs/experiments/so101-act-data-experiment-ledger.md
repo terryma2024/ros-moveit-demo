@@ -45611,3 +45611,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   the fresh-process `qc`, `verify-commit` and `check-export`, plus their isolated-copy negatives.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 0a0ebc98d;
   goal active.
+
+
+## CP-2417 — Pre-live reconnaissance, and the four subcommands that do not exist yet
+
+- Reconnaissance before any live action, per the skill's first step: no `move_group`, MuJoCo, RViz or launch process
+  is running (the only match was the reconnaissance command itself), and `ros2 node list` returns nothing, so no
+  second stack exists to collide with and none may be started. The worktree's own overlay is the one this task uses.
+- The gap the same call exposed: `cli/act_first_episode.py` declares exactly three subcommands - `inspect`,
+  `prepare`, `preflight` - and `mujoco_parallel_batch.py` has no `add_parser` at all and no `--lifecycle`/`--inputs`
+  flags, while no other CLI mentions the first episode. So the plan's remaining E3 commands - `run --inputs --root
+  --mode --lifecycle FULL_RESTART`, `qc --run --output`, `verify-commit --run --output` and `check-export --run
+  --output` - genuinely do not exist and have to be built, in the shape the original non-Head Task7 defined and the
+  plan restates.
+- What that means for the milestone: the input half is finished and measured, and the remaining main line is the
+  execution half - the live run, its lossless Recorder evidence, the fresh-process QC, the coordinator commit and the
+  isolated-copy negatives. That is a larger piece than a flag change, and it will be built and verified the same way
+  as the rest: a failing command first, the smallest change at the right layer, then re-run.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's three
+  commands verified end to end with zero blockers and a frozen input set. HEAD 4acaabec6; goal active.
