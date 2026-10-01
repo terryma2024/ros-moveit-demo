@@ -49980,3 +49980,25 @@ Two findings did the work, and both came from reading the schema rather than add
 The test then passes for the right reason: a fresh process reads the sealed episode through `verify_audit_manifest`, the
 document carries the seal's `qc_passed` **as a claim**, and the independent endpoint verdict sits **beside** it with
 `status: PASS` - the design's distinction between "a legal seal" and "the endpoints were judged by a fresh process".
+
+
+## CP-2639 — The runner's failure codes split into safety, and the quality list is elsewhere
+
+Reading the runner's own refusals gives the safety half of E2's checklist - the things the amendment keeps:
+
+`TASK8_REQUEST_SCHEMA`, `TASK8_REQUEST_IDENTITY_INVALID`, `TASK8_DEADLINE_EXPIRED`, `FULL_RESTART_REQUIRED`,
+`TASK8_PREFIX_INVALID`, `TASK8_MODE_INVALID`, `PHASE_EVIDENCE_INVALID`, **`HUMAN_OR_RECOVERY_INTERVENTION`**,
+**`HOLDING_UNKNOWN`**, **`BILATERAL_CONTACT_MISSING`**, plus the release-path ones read earlier -
+`SET_DOWN_EVIDENCE_INVALID`, `RELEASE_UNSUPPORTED`, `DETACH_NOT_CONFIRMED`.
+
+Those are all safety-shaped: an identity that does not match, a deadline that expired, a run that did not begin with a
+full restart, a human or recovery intervention, a holding state nobody can name, a missing bilateral contact, a release
+whose support was not proven. The plan's own rule agrees that support belongs there - an unsupported but physically held
+cup must stop and wait for a human rather than open the gripper - so `RELEASE_UNSUPPORTED` staying is correct rather
+than a quality check by another name.
+
+And the four things the plan lists as **quality** - grip stability, lift amplitude, a whole-run holding score, and
+post-release contact - **are not among these codes**, which locates them where the amendment says they live: on the
+QC/validation side, judged against the frozen targets and policy, and removed as a **precondition for success** rather
+than as a safety gate. That is the shape of the checklist E2 has to record: this list of safety codes preserved
+verbatim, and the quality items named as things a report may measure but may not require.
