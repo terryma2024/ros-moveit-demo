@@ -55032,3 +55032,22 @@ the capture, where it already has a production implementation.
 
 Found by doing item one of this round's own plan: writing the guard wrapper. The wrapper turned out to be unnecessary, and
 the handover got shorter, which is the useful direction for a task that is waiting on someone else.
+
+
+## CP-2844 — An acceptance script, and what it deliberately cannot do
+
+`handover/verify-e3.sh` is written: it re-runs the six files that carry the chain's end-to-end tests together, under the
+zsh environment the setup scripts need, with `TMPDIR` inside the scratch root and the tempdir checked before anything
+runs. It exits with the suite's own code, so wiring that breaks a link shows up as a failing acceptance rather than as a
+passing summary.
+
+What it cannot do is the point of writing it down. Two things need a live run and no script can manufacture them:
+
+1. **K1's forward half** - the producer being the production one end to end. Its *contract* is already proven
+   (`c7c0c6015`); what is missing is the run that feeds it real frames and state rather than zeros and resting values.
+2. **E3** - one production episode under the frozen inputs after a `FULL_RESTART`, with an independent process's QC
+   verdict and a real coordinator commit and readback.
+
+Both are named in the script's own output, so whoever runs it reads what remains at the same moment they read the result,
+and neither is silently implied by a green run. That is the honest shape of an acceptance for a task whose last step is
+somebody else's: it verifies everything verifiable and states the rest in words.
