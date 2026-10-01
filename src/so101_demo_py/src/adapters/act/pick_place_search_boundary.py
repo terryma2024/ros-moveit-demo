@@ -283,6 +283,18 @@ class PickPlaceSearchBoundary:
             self._controller_reference = physical_proof
         return None
 
+def _feedback_as_lists(record):
+    """T3-F12: the driver's ratified record carries tuples for its names and vectors; the audit types lists.
+
+    `list(record)` alone would only change the outer container, so each named field is converted here, at the one
+    boundary both the boundary's gates and the SEARCH document read.
+    """
+
+    if not isinstance(record, dict):
+        return record
+    return {key: (list(value) if isinstance(value, tuple) else value) for key, value in record.items()}
+
+
     def _remember_controller_feedback(self, observed):
         """Fill the observation's feedback records from the broker, at the readback's own instant.
 
@@ -309,7 +321,7 @@ class PickPlaceSearchBoundary:
         records = []
         for kind in ("arm", "gripper"):
             try:
-                records.append(source.controller_feedback(kind, instant))
+                records.append(_feedback_as_lists(source.controller_feedback(kind, instant)))
             except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
                 return None
         # T3-F12: a frozen carrier refuses the assignment, and the refusal used to escape this helper; the
