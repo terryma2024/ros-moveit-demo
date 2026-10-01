@@ -52975,3 +52975,33 @@ pass both `audit_manifest` and `scope` after all, despite holding them.
 The next read is the body around `recorder.py:412` in `verify_episode_seal`, and then the capture's own `finish` block to
 see which of the two it actually supplied. One of them is a small gap, and it is the last thing between correction 3's test
 and its assertion.
+
+
+## CP-2765 — The store's gap, and it is exactly what the checkpoint's correction 2 named
+
+```python
+    if document["schema_version"] == 2:
+        # a v2 seal names the raw audit and the scope it was collected under
+        sha256(document["audit_manifest_sha256"])
+        sha256(document["scope_sha256"])
+        if audit_manifest is None or scope is None:
+            # a v2 seal is only verified when both artifacts are resolved; a caller that cannot supply
+            # them must not be able to mistake this call for verified evidence
+            raise ValueError("EPISODE_SEAL_AUDIT_INCOMPLETE")
+```
+
+So `verify_episode_seal` does not go looking for the audit: a v2 seal is verified **only when the caller supplies both
+artifacts**, deliberately, so that a caller who cannot resolve them cannot mistake the call for verified evidence. That
+is a good rule - and the store breaks it by supplying neither.
+
+Which means this is a **production gap in `ActCollectionResultStore.seal`**, and it is precisely what the E2 checkpoint
+named as its correction 2: *"Resolve and supply the seal-bound audit manifest and scope to verification. A v2 episode
+currently fails with `EPISODE_SEAL_AUDIT_INCOMPLETE`."* The reviewer wrote that from a reading of the code; the chain test
+has now reproduced it from the other end, with a real v2 episode and a real store.
+
+The fix is on the store's side: `seal` must resolve the manifest and the scope the seal names and pass them to
+`verify_episode_seal`. Where it should look is the remaining question - the seal carries both digests
+(`audit_manifest_sha256`, `scope_sha256`) but not their paths, so the resolution has to come from something the store
+knows: the worker workspace, the frozen inputs, or a convention about where a v2 episode's audit lives.
+
+That is the last read before the fix, and it closes both correction 2's literal text and correction 3's test at once.
