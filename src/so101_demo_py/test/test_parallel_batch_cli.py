@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 import json
 import os
 import sys
@@ -948,9 +949,18 @@ def test_default_production_composition_derives_real_dry_run_snapshot():
     # stated as "not the ACT class" rather than "is this other class", because this codebase has two adapter classes
     # under similar names and the contract is about which one the coordinator's gate recognises
     assert not isinstance(composition.result_verifier, ActCollectionResultVerifier)
-    # The positive direction - a composition built WITH endpoint inputs constructs the verifying class - needs a
-    # spec of its own rather than a second composition from this one: two compositions from the same spec collide on
-    # the evidence root it derives (DIRECTORY_CONFLICT), so that test belongs beside a fresh spec, not here.
+    # The positive direction needs a spec whose evidence root does not collide with the one this composition already
+    # claimed, and the file's own idiom for that is to rebind it (CP-2805). With endpoint inputs present the
+    # composition must build the class the coordinator's gate selects, so a real ACT episode takes that path.
+    judging = ProductionBatchComposition(
+        replace(spec, request=replace(spec.request, evidence_root=scratch / "act-evidence")),
+        resource_probe=Probe(),
+        claim_root=scratch / "claims-act",
+        worker_launcher=lambda owner, path: owner._run_worker_local(path),
+        endpoint_inputs={"initial_target": [0.0] * 7, "final_target": [0.0] * 7,
+                         "endpoint_policy": {"rule_version": "endpoint_pose_v1", "thresholds": {}}},
+    )
+    assert isinstance(judging.result_verifier, ActCollectionResultVerifier)
     summary = composition.run()
     assert isinstance(composition.last_local_components[0], ParallelWorker)
     assert isinstance(composition.last_local_components[1], DryRunWorkerRuntime)
