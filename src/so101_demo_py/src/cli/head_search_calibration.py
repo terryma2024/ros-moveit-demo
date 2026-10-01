@@ -193,6 +193,25 @@ DEADBAND_REQUIRED_FLAGS = (
 DEADBAND_CANDIDATE_FLAG = ("candidate", "--candidate")
 
 
+#: the `measure-fine-correction-episodes` entry: the sealed scene the episodes step the neck in, the sealed
+#: geometry whose corridors and camera the episodes are checked against, the production search
+#: configuration (whose declared fine-correction bounds are the production values, not this flight's
+#: instrument budget), the sealed controller period, the selected candidate's frozen document, the selected
+#: model's weights, the head dataset profile whose own renderer prepares each held-out seed's scene, the
+#: scenario partitions that declare which seeds are held out, and the brand-new directory the documents own
+FINE_CORRECTION_REQUIRED_FLAGS = (
+    ("scene", "--scene"),
+    ("geometry_seal", "--geometry-seal"),
+    ("production_search_config", "--production-search-config"),
+    ("controller_config", "--controller-config"),
+    ("frozen_candidate", "--frozen-candidate"),
+    ("weights", "--weights"),
+    ("dataset_config", "--dataset-config"),
+    ("scenario_partitions", "--scenario-partitions"),
+    ("output_dir", "--output-dir"),
+)
+
+
 #: the `measure-camera` entry: the sealed scene the frames are rendered in, the sealed geometry whose
 #: field of view and image size are the declared camera, the production search configuration, the sealed
 #: controller period, the selected candidate's frozen document, the selected model's weights and the
@@ -612,6 +631,180 @@ def _measure_deadband_candidates(arguments: list[str]) -> int:
         f"DEADBAND_CANDIDATES_MEASURED candidates={receipt['candidate_count']} "
         f"anchors={','.join(receipt['anchor_names'])} trials={receipt['trial_count']} "
         f"locking={len(locking)} output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _fine_correction_parser() -> argparse.ArgumentParser:
+    """The `measure-fine-correction-episodes` entry: the sealed inputs, the split and the budget.
+
+    This is the closed-loop flight the run cannot take itself: one episode per held-out seed of the
+    declared split, in that seed's own prepared scene, driven by the production controller's bounded sweep
+    and its own fine corrections, with the head camera and the selected model closing the loop. Nothing is
+    computed here beyond parsing and validating what the caller declared.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-fine-correction-episodes",
+        description=(
+            "Run one closed-loop episode per held-out seed of the declared scenario split, in the scene "
+            "that seed prepares, and write the fine-correction episodes document phase 6 reads"
+        ),
+    )
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the episodes step")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument(
+        "--production-search-config", type=Path, help="the sealed production search configuration"
+    )
+    parser.add_argument(
+        "--controller-config", type=Path, help="the sealed controller configuration (the control period)"
+    )
+    parser.add_argument("--frozen-candidate", type=Path, help="the selected frozen candidate document")
+    parser.add_argument("--weights", type=Path, help="the selected model's weights file")
+    parser.add_argument(
+        "--dataset-config", type=Path, help="the head dataset profile every seed's scene is prepared from"
+    )
+    parser.add_argument(
+        "--scenario-partitions", type=Path, help="the tracked source of the head-search seed partitions"
+    )
+    parser.add_argument("--output-dir", type=Path, help="the brand-new directory the documents own")
+    parser.add_argument(
+        "--split",
+        default="held_out_evaluation",
+        help="the declared split whose seeds are measured (never the calibration split)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        action="append",
+        help="measure only these seeds of the declared split; repeat once per seed",
+    )
+    parser.add_argument(
+        "--anchor",
+        action="append",
+        help=(
+            "the sealed anchor every episode starts from (default `left`, the anchor whose start lies "
+            "inside the HS-302 corridor and whose sweep sees the held-out scenes' cup)"
+        ),
+    )
+    parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
+    parser.add_argument(
+        "--generator-commit",
+        default="unrecorded",
+        help="the commit the dataset profile is used at (the renderer records it, it changes no scene)",
+    )
+    parser.add_argument("--max-settle-s", type=float, default=None, help="the per-stop settle budget")
+    parser.add_argument(
+        "--settle-consecutive-steps", type=int, default=None, help="the consecutive quiet control steps"
+    )
+    parser.add_argument("--max-frames", type=int, default=None, help="the per-episode frame budget")
+    parser.add_argument(
+        "--max-fine-corrections",
+        type=int,
+        default=None,
+        help=(
+            "the harness's own measurement budget for one episode; an episode that reaches it refuses the "
+            "document rather than understating the maximum (default 8, never the calibrated value)"
+        ),
+    )
+    parser.add_argument(
+        "--max-fine-total-rad",
+        type=float,
+        default=None,
+        help="the harness's own cumulative measurement budget for one episode, in radians (default 2.0)",
+    )
+    return parser
+
+
+def _measure_fine_correction_episodes(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the closed-loop episodes to the library."""
+
+    parsed = _fine_correction_parser().parse_args(arguments)
+    missing = [flag for name, flag in FINE_CORRECTION_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in FINE_CORRECTION_REQUIRED_FLAGS
+        if name != "output_dir" and not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_fine_correction_episodes import (
+        DEFAULT_MAX_FRAMES,
+        DEFAULT_MEASUREMENT_BUDGET,
+        SETTLE_CONSECUTIVE_STEPS,
+        write_head_search_fine_correction_episodes,
+    )
+
+    optional = {"max_frames": DEFAULT_MAX_FRAMES, "settle_consecutive_steps": SETTLE_CONSECUTIVE_STEPS}
+    for key in ("max_settle_s", "settle_consecutive_steps", "max_frames"):
+        if getattr(parsed, key) is not None:
+            optional[key] = getattr(parsed, key)
+    budget = dict(DEFAULT_MEASUREMENT_BUDGET)
+    if parsed.max_fine_corrections is not None:
+        budget["max_fine_corrections"] = parsed.max_fine_corrections
+    if parsed.max_fine_total_rad is not None:
+        budget["max_fine_total_rad"] = parsed.max_fine_total_rad
+    try:
+        result = write_head_search_fine_correction_episodes(
+            scene_path=parsed.scene,
+            geometry_seal_path=parsed.geometry_seal,
+            production_search_config_path=parsed.production_search_config,
+            controller_config_path=parsed.controller_config,
+            frozen_candidate_path=parsed.frozen_candidate,
+            weights_path=parsed.weights,
+            dataset_config_path=parsed.dataset_config,
+            scenario_partitions_path=parsed.scenario_partitions,
+            output_dir=parsed.output_dir,
+            seeds=parsed.seed,
+            split=parsed.split,
+            anchors=parsed.anchor or ["left"],
+            device=parsed.device,
+            generator_commit=parsed.generator_commit,
+            measurement_budget=budget,
+            command=_command_line(arguments, subcommand="measure-fine-correction-episodes"),
+            **optional,
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    for refused in receipt["refused_episodes"]:
+        print(
+            f"{refused['failure_code']}: the episode {refused['episode_id']} did not lock "
+            f"({refused['failure_detail']})",
+            file=sys.stderr,
+        )
+    succeeded = [
+        record for record in receipt["records"] if record["succeeded"] is True
+    ]
+    print(
+        f"FINE_CORRECTION_EPISODES_MEASURED episodes={receipt['episode_count']} "
+        f"succeeded={receipt['succeeded_count']} refused={receipt['refused_count']} "
+        f"split={receipt['split']} anchor={','.join(receipt['anchor_names'])} "
+        f"max_fine_corrections_observed="
+        f"{max((record['fine_corrections'] for record in succeeded), default=0)} "
+        f"max_cumulative_fine_correction_rad="
+        f"{max((sum(record['fine_corrections_rad']) for record in succeeded), default=0.0)!r} "
+        f"output_dir={parsed.output_dir}"
     )
     return 0
 
@@ -1552,6 +1745,10 @@ def main(argv: list[str] | None = None) -> int:
     # declaration this entry reads or refuses, never a number it makes up
     if arguments[:1] == ["measure-camera"]:
         return _measure_camera(arguments[1:])
+    # the held-out fine-correction episodes are the sixth closed-loop flight: one scene per held-out seed,
+    # the production controller's own sweep and corrections, and the selected model closing the loop
+    if arguments[:1] == ["measure-fine-correction-episodes"]:
+        return _measure_fine_correction_episodes(arguments[1:])
     # the legal pick workspace's projection is the sixth: it reads the scene's camera pose and projects,
     # loading no detector, no renderer and no GPU
     if arguments[:1] == ["measure-workspace-projection"]:
