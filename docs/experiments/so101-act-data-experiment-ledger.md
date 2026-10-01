@@ -49123,3 +49123,24 @@ and both are within this host's reach.
 
 Nothing else changed this round: the tree still holds only the user's thirty-five entries, E2's six tests remain green
 under the width gate at 242 passed, and the one decision outstanding is still the user's broker choice (CP-2543).
+
+
+## CP-2598 — K2's implementation starts at the scene schema, and its shape is now read
+
+The first review's complaint about `pick_place_scene_geometry()` was that it **discards provenance**, and about the
+table that it retains only **membership**. In `episode_audit.py` that lands on one closed set and its three consumers:
+
+- **`_SCENE_OBSERVATION_FIELDS`** (line 119) - the exact keys a scene observation may carry, including
+  `scene_revision`, `attached_objects` and `world_object_ids`;
+- **`_scene_observation_ok(record)`** (202) - refuses anything whose key set differs (`set(record) !=
+  _SCENE_OBSERVATION_FIELDS`) and requires `scene_revision` to be a non-negative int;
+- the writer's append path (**380-381**) - `planning_scene_observation` is validated through that predicate; and
+- **1172**, where the coverage check asks for `planning_scene_observation` in a row's observation - the `observed` term
+  of `_formal_coverage_ok`.
+
+So K2's change on this axis is to **add the geometry and source fields to that closed set** - carrying the geometry
+rather than only which objects were attached - and to move the writer, the serializer and the coverage/seal paths with
+it, exactly as the review's file list says. The scope document (`_SCOPE_FIELDS`, line 36) is the other closed set in the
+neighbourhood and is untouched by this table.
+
+The checkpoint passed, so this work is not gated; the tree still holds only the user's thirty-five entries.
