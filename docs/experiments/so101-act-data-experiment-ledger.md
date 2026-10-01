@@ -45259,3 +45259,18 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   state what ran, what it returned, and what remains unproven rather than folding them together.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation;
   E1's CLI written with `inspect` still returning rc 2 by design. HEAD 3f0d3ee20; goal active.
+
+
+## CP-2400 — The build that makes the CLI real is running
+
+- Started `colcon build --packages-select so101_demo_py` in the background (job bash-1556) with the log at
+  `logs/task3-cli-build.log` under the plan root, sourcing the ROS Jazzy underlay first. This is the step CP-2399
+  named: it makes the `act_first_episode` console script exist, which is both the way to verify the CLI's rc contract
+  (inspect returning 2 with its named message, argparse refusing a bad flag or unknown mode with 2, preflight
+  refusing a set with no manifest) and the executable the plan's E3 sequence guards with
+  `test -x "$ACT_FIRST_EPISODE"`.
+- Next round collects the job's output, checks the real rc, sources the overlay and runs the installed entry with its
+  argv recorded - no claim about the CLI until then, per CP-2399's correction.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation;
+  E1's data, loaders, calculator, controls and freezer binding landed, its CLI written and awaiting this build.
+  HEAD c83dff2c0; goal active.
