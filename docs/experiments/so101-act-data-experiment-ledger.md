@@ -44172,3 +44172,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
 - alignment landed and its derivation one clean edit away; F5's regression fixed with step one landed and step two
 - handed off; HEAD 3c8f55a08; goal paused.
+
+## CP-2346 - F11's derivation: correct, single-variable, and blocked only by CP-2332
+
+- On the clean base CP-2345 created, the derivation was the only variable - and it left exactly ONE failure:
+- test_a_formal_audit_may_not_seal_without_source_coverage with AUDIT_WINDOW_INVALID.
+- That is CP-2332's finding reproduced on a clean base and with no shared literal involved: that control's audits
+- carry no acquisitions, so a formal window's source schedule and endpoints cannot be satisfied there however the
+- endpoints are derived. The derivation itself is therefore correct, and its last obstruction is the contract
+- question - which gate owns "coverage is incomplete" - and not a defect in the change.
+- Reverted the derivation and kept the alignment (CP-2345), which is green on its own. That leaves F11 in the best
+- state this stretch can reach without the ruling: divergence fixed, every fixture stating its own history, and one
+- edit recorded that needs CP-2332 answered before it can land.
+- Per CP-2344's plan, this stretch stops investing in F11 and F5's step two until the two rulings arrive.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11 as described; F5's regression
+- fixed, step one landed, step two handed off with its probe recipe; HEAD 43f360a28; goal paused.
