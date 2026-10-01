@@ -1036,11 +1036,10 @@ class ProductionHeadDetector:
         self.detector.reset()
 
     def __call__(self, image, stamp_ns: int):
-        from so101_demo.core.detection import DetectionFrame, DetectionQuery
+        """One frame's detections: the production detector takes the image and its identity, not a frame."""
 
         return self.detector.detect(
-            DetectionFrame(image, int(stamp_ns), self.frame_id),
-            DetectionQuery("plastic_cup"),
+            image,
             session_id=self.session_id,
             attempt_id=self.attempt_id,
             source_stamp_ns=int(stamp_ns),

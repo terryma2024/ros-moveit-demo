@@ -1166,6 +1166,78 @@ def _deadband_arguments(inputs: dict, output: Path) -> list:
     ]
 
 
+def test_the_deadband_detector_wrapper_drives_the_production_head_detector() -> None:
+    """The wrapper is called against the real `HeadRgbDetector`, with only its model port stubbed.
+
+    `HeadRgbDetector.detect` takes the RGB array and its identity as keyword arguments and builds the
+    detection frame itself; a wrapper that passed a frame positionally would only fail once a real model
+    was loaded. This pins the call convention without a detector, a GPU or a weights file.
+    """
+
+    import numpy as np
+    from so101_demo.act.head_search_deadband_measurement import ProductionHeadDetector
+    from so101_demo.adapters.act.detector import HeadRgbDetector
+    from so101_demo.core.detection import DetectionBatch, DetectionCandidate
+
+    def _cup_mask():
+        mask = np.zeros((480, 640), dtype=bool)
+        mask[190:290, 270:370] = True
+        return mask
+
+    class Port:
+        """The model port `HeadRgbDetector` wraps: one cup, one instance, one frame."""
+
+        def detect(self, frame, query):
+            assert query.class_id == "plastic_cup"
+            return DetectionBatch(
+                model_id="selected",
+                weights_sha256="a" * 64,
+                runtime_device="cuda",
+                inference_latency_ms=1.0,
+                image_width=640,
+                image_height=480,
+                candidates=(
+                    DetectionCandidate(
+                        instance_id="i0",
+                        class_id="plastic_cup",
+                        confidence=0.9,
+                        bbox_xyxy=(270.0, 190.0, 370.0, 290.0),
+                        mask=_cup_mask(),
+                        source_stamp_ns=frame.source_stamp_ns,
+                        source_frame_id=frame.source_frame_id,
+                        image_width=640,
+                        image_height=480,
+                    ),
+                ),
+            )
+
+    head = HeadRgbDetector(
+        Port(),
+        model_id="selected",
+        weights_sha256="a" * 64,
+        tracking_iou=0.5,
+        min_bbox_aspect=0.5,
+    )
+    wrapper = ProductionHeadDetector(
+        head,
+        session_id="session",
+        attempt_id="attempt",
+        frame_id="head_camera_optical_frame",
+    )
+    image = np.zeros((480, 640, 3), dtype=np.uint8)
+
+    found = wrapper(image, 1_000_000)
+    assert [detection["track_id"] for detection in found] == ["head-cup-0"]
+    assert tuple(found[0]["xyxy"]) == (270.0, 190.0, 370.0, 290.0)
+    assert found[0]["confidence"] == 0.9
+    assert found[0]["class_id"] == 0
+
+    # the same cup in the next frame keeps its track, and a reset starts a new one
+    assert [detection["track_id"] for detection in wrapper(image, 2_000_000)] == ["head-cup-0"]
+    wrapper.reset()
+    assert [detection["track_id"] for detection in wrapper(image, 3_000_000)] == ["head-cup-0"]
+
+
 def test_the_real_mujoco_plant_places_the_anchor_cup_and_settles(tmp_path: Path) -> None:
     """The entry's own plant is built for real here, so a typo in its MuJoCo calls cannot hide.
 
