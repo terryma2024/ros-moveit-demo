@@ -43748,3 +43748,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - order that worked for F1's names rule and F13's dimension rule, where the fixtures moved first.
 - F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
 - F12 two of three; F13 one of four; HEAD 6fcfb82a3; goal paused.
+
+## CP-2323 - The gripper record's shape and the five collection sites
+
+- Record to append to each collection (the shape the inline gripper record already uses, CP-2282):
+-   {"controller": "gripper", "joint_names": ["6"], "commanded_positions": [0.0],
+-    "measured_positions": [0.0], "measured_velocities": [0.0], "status_sequence": 1,
+-    "sim_time_s": 1.1, "source_sim_time_s": 1.1}
+- Sites: the three _feedback literals at 750, 846 and 1148 (consumed at 758, 854, 1156) and the inline pair at
+- 983 (feedback) and 1005 (broken_feedback). Each collection needs one such record beside its arm record, which is
+- exactly what the verdict says the retained formal fixture lacks.
+- Order for the next pass: append the gripper record at those five sites first (the suite stays green, since the
+- rule is not yet re-applied), then re-apply the transcribed both-kinds rule, then run the four suites.
+- F1 and F14 closed; F3 closed; F13 one of four with this item staged to five sites; HEAD bcd3382e6; goal paused.
