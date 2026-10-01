@@ -50169,3 +50169,27 @@ that recomputes endpoints from a sealed audit, and a document that keeps a run's
 verdict. The next read is the smallest of the five - the qualification contract - to see what it currently asks for and
 whether its question is now answerable by the endpoint rule rather than by the process-quality calibration the amendment
 removes.
+
+
+## CP-2647 — The qualification layer already distinguishes what E2's reading of a safety stop needs
+
+`application/qualification.py` (820 lines) opens with the two outcomes that matter:
+
+```python
+class QualificationError(RuntimeError): ...
+class InvalidRun(QualificationError): ...
+class ValidRunFailure(QualificationError): ...
+```
+
+plus `Lifecycle` and `RunStatus` as `StrEnum`s, `require_mujoco_qualification_capabilities(capabilities)` (refusing with
+`CAPABILITY_MISSING: ...`), `sha256_file`, `validate_bundle_sha256` and `summarize_records(...)`.
+
+So the repository already models **"this run was invalid"** apart from **"a valid run failed"** - which is exactly the
+distinction CP-2645 needed for "a safety stop with matching endpoints": the run can be valid and still fail, and a
+report must not collapse that into either "invalid" or "succeeded". E2's wiring on this consumer is therefore not to
+invent a category but to make the endpoint QC's verdict feed the existing one: an endpoint PASS says the two poses
+matched the frozen targets, `ValidRunFailure` says the run stopped for a reason that keeps it valid, and the design's
+three states keep "committed" separate from both.
+
+That is a much smaller change than the plan's wording suggests, and it is the third time in E2 that reading a module
+turned an apparent design question into a question of connecting two things that already exist.
