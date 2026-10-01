@@ -51625,3 +51625,25 @@ That leaves the original `FileExistsError` unexplained by either class's root be
 rewrite the test with a correct provenance - at which point the error either appears with a full path (which will be
 printed, not truncated) or does not appear at all. What is now closed is the pair of guesses that consumed two rounds:
 neither class refuses a shared root, and the manifest's location is `<root>/audit/audit-manifest.json`.
+
+
+## CP-2708 — The provenance shape, and no unknowns left for the sealing test
+
+```python
+PROVENANCE = {"source_sha256": "a" * 64, "scene_sha256": "b" * 64,
+              "config_sha256": "c" * 64, "policy_fingerprint": "d" * 64, "seed": 7}
+```
+
+Five keys - two hashes I had guessed, plus `config_sha256`, `policy_fingerprint` and a `seed` - which is the opposite of
+what my probe wrote (a `git_commit` and a `dirty` flag, neither of which exists). That refusal was therefore my own, and
+it is the last document the sealing test needed.
+
+So the test can now be written with everything read rather than assumed: the outcome schema (CP-2693), the passing-episode
+recipe (CP-2694), the capture's harness (CP-2699), the writer's signature and the fact that it takes its root verbatim
+and creates both it and `<root>/audit/` (CP-2700, CP-2706), the four document shapes (CP-2701), the recorder's
+indifference to an existing root (CP-2707) and now the provenance.
+
+The layout the evidence supports: **the writer first with `root`**, the manifest at **`<root>/audit/audit-manifest.json`**,
+and **the recorder afterwards with the same `root`**. The one thing still unexplained - the `FileExistsError` that
+started this - will be met with a printed full path rather than a truncated one, and if it does not appear, that is
+itself the answer.
