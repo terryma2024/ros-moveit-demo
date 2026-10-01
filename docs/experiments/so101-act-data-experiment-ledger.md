@@ -44469,3 +44469,125 @@ passed 6490/6490、failure 175/175、error 86/86、skipped 152/152，`only_in_ne
 因此判为并行负载下的抖动，不计入回归结论，但保留首次失败日志 `scratch/hs319/logs/green3-final-regression.log` 不删。
 
 **下一步（未做，需另行批准）**：Task 13 从 Step 1 重做（全新 run root）→ 新 bundle → 重新呈现全部 17 值+证据+身份取得对新摘要的批准 → 新晋级记录 → Task 14 整段重跑。
+
+## HS-322 — Task 13 从 Step 1 重跑（frame 身份修订后）：新 commit-stamped root（安装件带 frame 修复）、恒等派生配置、重产的 admission/bundle-inputs，端到端 `run` `SUCCEEDED`，**新 bundle 17 值与已批准件逐值相同**，第二次精确批准**待用户给出**
+
+**提交**：`4a751678a`（`fix: tick the three-frame lock probe at the declared 10 Hz frame cadence`，2 文件，RED→GREEN，普通 `git commit` rc=0）。父提交 `514baaef6`（已批准的 frame 身份修订）。**未晋级**、**未改** `head_search_v2.json`、未跑 Task 14。变更记录仍为 `$EV/reviews/frame-identity-fixture-classification.md`。
+
+### (a) 工具链 root（commit 戳记 + 机器写断言）
+
+| 项 | 值 |
+| --- | --- |
+| **记录用 root `$T`** | `$EV/head-toolchain-20261001T162030Z`；`source-commit.txt` = `4a751678a`；build rc=**0**、`status=DONE`、`assertions_rc=0`，`/usr/bin/time` real 84.34 s；6 包闭包与 HS-311..318 逐字相同 |
+| 被取代 root（保留） | `$EV/head-toolchain-20261001T160105Z`（由 `514baaef6` 构建，rc=0、real 97.22 s；探针修复在其后落地故弃用） |
+| **frame 断言（安装件，逐字）** | `installed_config_frame_id=head_camera_frame`、`installed_config_ray_origin_frame_id=head_camera_frame`、`installed_scenarios_hardcode=head_camera_frame`、`installed_phantom_head_camera_optical_frame_occurrences=0`、`installed_promoted_config_sha256 == source_promoted_config_sha256 == 3fb9f276…` |
+| 探针修复断言 | 安装版 `head_search_calibration_bundle_inputs.LOCK_RULE_FRAME_PERIOD_S == 0.1`（`now_wall_s = 100.0 + LOCK_RULE_FRAME_PERIOD_S * index`） |
+| 配方 | 两个 root 各写自己的 `build-toolchain{,-2}.sh`，`T=` 行指向**本 root 自身**（未复制已替换脚本）；断言脚本额外证明安装件带 frame 修复 |
+
+### (b) 派生生产配置，以及"哪些文档必须重产"
+
+frame 修复改了唯一一个受控文件——sealed 生产配置：`dfa0af9b…` → **`3fb9f27646b6e314fc30fe2892f6b1c3d44b068f4c6614df8f7de3c5add2ffd9`**（未修改，现摘要）。
+派生件按 HS-301 口径（sealed 配置仅替换 `weight_path`/`weight_sha256`）；HS-313 晋级后 sealed 配置**本身已封 C2a**，故本次派生是**恒等**：`differing_keys=[]`、派生摘要 == sealed 摘要 == `3fb9f276…`
+（`$RUN.derived-input-provenance.json`、`$RUN.sealed-inputs.json`，六依赖逐个 path+sha256；sealed 原件未改）。**没有任何 staged 文档引用被 frame 修复改动的摘要 `dfa0af9b`**；
+引用被取代的派生配置 `dfe71656…` 的有 7 份文档，逐份用**各自的安装版生产者**重产（全过程与 A/B 见 `scratch/hs320/regeneration-findings.md`）：
+
+| 文档 | 生产者 | 结果 |
+| --- | --- | --- |
+| `operating-point-measurements.json`（先重录规则，再测量，再 6 份 phase-3 选点 + static reference） | `measure-selection-rule` + `measure-operating-point` | **重产成功** rc=0 / 27 s（`operating-point-20261001T161433Z`）；引用 `3fb9f276…`；head:C 仍选 `0.25/0.5`（idx 0），`grid`/`grid_sha256` 与 HS-310 **逐值相同**，仅墙钟 `latency_ms` 与检测浮点值有噪声（conf ~1e-6、bbox ~2e-3 px） |
+| `camera-measurements.json` | `measure-camera` | **重产成功** rc=0 / 3 s（`camera-measurements-20261001T161519Z`）；`safety_margin_px=120.0` 不变；`centre_jitter_px` 0.3110569103424543→0.31113045232807535（与 HS-303/305 之间同一量级）→ `ceil(jitter_px)` 仍为 1，`center_deadband_px` 不可能移动 |
+| `deadband-candidates.json` | `measure-deadband-candidates` | **无法重产**：rc=2 `CAL_TIMING_SWEEP_UNSETTLED`（首个候选 0.5 px 即 `INPUT_STALE`；`deadband-20261001T161524Z`） |
+| `fine-correction-episodes.json` | `measure-fine-correction-episodes` | **无法重产**：rc=2 `CAL_FINE_EPISODE_NO_VERDICT`（首个 episode 800000 即 `INPUT_STALE`；`probe-fine-current`） |
+| admission 三件（`measurement-plan`/`admission`/`admission-receipt`） | `measure-admission` | **重产** `admission-20261001T162328Z`，rc=0 / 1 s；计划 `frame_id = ray_origin_frame_id = head_camera_frame`，值取晋级后的 11 个搜索值 |
+| bundle-inputs 两件 | `measure-bundle-inputs` | 首次 rc=2 `CAL_BUNDLE_INPUTS_INCOMPLETE`（探针缺陷，见 (c)）；修复后**重产** `bundle-inputs-20261001T162329Z`，rc=0 / 3 s：6 参数全 `verified`、`unverified=none`、`detector_device=cuda`、锁规则 `ticks_to_lock=3 / TARGET_LOCKED / locked_after_two_ticks=false` |
+
+**A/B 隔离（单一变量，证明阻塞与 frame 身份无关）**：① 用 HS-302 自己的派生配置（phantom frame + `max_age_s 0.05`/`search_timeout_s 12.0`）→ **rc=0**、10 候选、7 次零反转；
+② 用**只改一个 key**（`values.max_age_s` 0.014736005008453503 → 0.05）的当前 sealed 配置 → **rc=0**，且 `longest_locked_run_frames`/`direction_reversals` 与 HS-302 **逐项相同**；
+③ 用当前 sealed 配置本身 → **rc=2** `INPUT_STALE`。即阻塞来自**晋级后的 `max_age_s`（14.736 ms）低于这两个 in-process MuJoCo+CUDA 飞行器的每帧时延**（与 HS-318 在实时栈上的发现同类），
+与 frame 名无关：两个飞行器都按自己的配置给帧打标签，控制器的 frame-id 门在改名前后都满足。未放宽任何阈值、未手改任何文档。
+
+**staging 决策（推断，已报评审）**：两份重产成功件留证但**不入 run**；两份无法重产的按 HS-311 原样 stage。测量层因此保持**统一的历史集合**：
+(a) 没有任何 staged 文档引用被 frame 修复改动的摘要；(b) 输入集不混用修前/修后两代飞行；(c) 新 bundle 相对已批准件的差异**只**是本次要重新批准的身份，不把检测浮点噪声注入任何 17 值的分布。
+强制重产项（派生配置、admission、bundle-inputs）全部来自本轮。
+
+### (c) 途中发现并修复的真实缺陷：锁规则探针的节拍
+
+`measure-bundle-inputs` 的行为探针把墙钟**每 tick 前进 1 s**（`now_wall_s = 100.0 + index`）。在晋级后的 `search_timeout_s = 0.7089213519976479 s` 下，构造出的控制器第二 tick 即 `SEARCH_TIMEOUT`，
+探针得到 `ticks_to_lock=None`，生产者如实 `CAL_BUNDLE_INPUTS_INCOMPLETE` 拒绝——不是 `allow_cpu_fallback`、不是 frame，是探针自身的节拍缺陷（任何 <2 s 的标定预算都不可观测）。
+RED：新用例 `test_the_three_frame_lock_rule_is_observed_under_the_calibrated_timeout` 在提交前树 **1 failed**（逐字复现 `SEARCH_TIMEOUT`）；GREEN：按声明的 10 Hz 帧周期打 tick 后该文件 **21 passed, rc=0**。修复提交 `4a751678a`。
+
+### (d) 端到端 `run`（记录运行，一次，未重试）
+
+```
+ros2 run so101_demo_py so101_head_search_calibration run \
+  --run-root $CAMPAIGN/head-search-calibration-20261001T160314Z \
+  --dataset …/head-dataset/dataset-manifest.json（66dc46d3…）\
+  --candidate …/candidate-c2a/candidate-manifest.json（579c5df0…）\
+  --geometry-seal …/head-camera-probe11-20260930T101722Z/head-camera-geometry.json（0db2eb4c…）\
+  --episode-partitions <staged-inputs-20261001T160342Z/scenario-partitions.json（7973f61a…）> \
+  --production-config <head-search-calibration-20261001T160314Z.production-search-config-c2a.json（3fb9f276…，恒等派生）> \
+  --camera-config <staged-inputs-20261001T160342Z/camera-config.yaml（9ad9b934…）> \
+  --production-search-config <admission-20261001T162328Z/measurement-plan.json> \
+  --admission <admission-20261001T162328Z/admission.json> --candidate-id C \
+  --selection-rule <selection-rule-20261001T114155Z/selection-rule.json（833bbac6…）> \
+  --operating-point-measurements <operating-point-20261001T114155Z/operating-point-measurements.json（605a08a4…）> \
+  --frozen-candidate a/b/c（9d2fa396…/d342c2d5…/f50b8d92…）--task-dataset …（694e5fa5…）\
+  --weights-dir <staged 普通文件 A/B/C（f281d252…/86c17b58…/2afd5506…）> \
+  --episode-records <episode-records-20261001T122043Z/calibration> --device cuda \
+  --bundle-inputs <bundle-inputs-20261001T162329Z/bundle-inputs.json> \
+  + 15 个 measurement flag（camera/deadband/fine-correction 为 HS-300..308 的历史真文档，其余 12 份同上）
+rc=0   elapsed 778 s   run-status.json = SUCCEEDED（phase=bundle_generation、audit_only=true、checkpoint=false、exit_code=0）
+```
+
+| 产物 | file sha256 | 说明 |
+| --- | --- | --- |
+| `head-search-calibration-bundle.json` | **`0563bada4fa6c8017ccc3b91118069412508269261338411f736c1bce5d04c01`** | canonical（安装版 `canonical_sha256`，整份文档）**`1b92c8e60563695cfbfb739ed0152e58d183e56c73364272edf84d8086cc0e0d`**；17 个 `parameter_names` |
+| `manifest.json` | `f2350828b586b37670deafc55aaeda1a6b5efd48035ab2f6c8b521852a771cf2` | — |
+| `run-status.json` | `499bc7f2fdd23949a7c3d37b5851da51eca06b489439516fb549579ee0277e9a` | `SUCCEEDED`、rc=0 |
+| 其余 phase 文档（file sha256） | `calibration-inputs` `408d84fb…`、`geometry-measurements` `4a32c2d5…`、`perception-calibration` `12d63fe6…`、`perception-calibration-readback` `5d1888a1…`、`model-comparison` `dd376014…`、`model-selection-verdict` `c7ceab33…`、`search-calibration` `cc0f4230…`、`timing-calibration` `f8c5f6de…` | 逐份 `parameters` 值域与 HS-311 同名文档**逐值相同**（只差引用/readback 块） |
+
+**17 值（逐值与已批准 bundle `e21899c2…`/canonical `f85b78f6…` 对比：`MOVED_COUNT = 0`，**没有任何数值移动**，17/17 `startup_readback.verified=true`）**：
+`horizontal_fov_rad` 1.3121067481206794；`lock_valid_neck_rad` [-6.283175307179587, 6.283175307179587]；`coarse_step_rad` 0.6560533740603397；`search_timeout_s` 0.7089213519976479；
+`min_confidence` 0.25；`tracking_iou` 0.5；`min_bbox_aspect` 0.5；`min_area_px2` 64.0；`center_deadband_px` 3.0；`vertical_bounds_px` [191.699852915671, 272.6768492617673]；
+`max_fine_corrections` 2；`max_fine_total_rad` 0.6961197054865531；`max_age_s` 0.014736005008453503；`max_skew_s` 0.010000000000001563；`submit_lead_s` 0.004；
+`stop_velocity_rad_s` 0.04136050464213824；`stop_latency_s` 0.07012353999540209。phase 4 的 gate 仍选 **C（C2a）**（理由与 HS-311 同句：在两个测量族里都持最佳 head 格）。
+phase 5 readback 照旧 `values_unmodified`/`selection_identity_matches`（见 `perception-calibration-readback.json`，file 摘要与 HS-311 逐字节相同）。
+
+**与已批准 bundle 的 405 条差异（全部可解释，逐类）**：① `controlled_dependencies.production_config` 的 sha256 `dfe71656…` → `3fb9f276…`，以及 `scenario_partitions`/`camera_config` 指向本轮 staged 普通文件；
+② 各 `input_evidence` 里的配置引用同步更新；③ `also_recorded.three_consecutive_frame_lock_rule.startup_readback` 的 `deadband_px` 18.0→3.0、`vertical_bounds_px` [110,370]→[191.699852915671, 272.6768492617673]（现在回显晋级后的**声明值**）；
+④ **386 条落在 `/parameters/*/startup_readback`**：11 个 measured 参数由已批准件的 `verified:false`/`declared_by_phase_6/7` 变为 `verified:true`/`constructed_production_component`
+（HS-312 的 readback 接线 `630c2237f` 晚于 HS-311 的记录运行，本轮 run 因此天然带 17/17 readback）；新的 readback `configuration.frame_id = ray_origin_frame_id = head_camera_frame`，**frame 修复在 bundle 内可直接读出**。
+其余差异只在 `input_evidence`/`configuration` 的路径与摘要。**没有任何一条落在 17 个 `value` 上。**
+
+### (e) 未晋级与受保护产物（开工前 `scratch/hs320/pre-state/pre-state.txt` 复核，逐字相同）
+
+`src/so101_demo_py/config/mujoco/act/head_search_v2.json` = `3fb9f276…`（17 值 canonical `3c787fd7…` 未变、frame 键为修复后值）；frozen a/b/c = `9d2fa396…`/`d342c2d5…`/`f50b8d92…`；
+dataset manifest = `66dc46d3…`；C2a 权重 = `2afd5506…`；**已批准旧 bundle = `e21899c2…`、其 run-status = `12d35ac4…`**（均未改）。未跑 `verify-promoted-config`、未写 approval 字段、未改任何 sealed/冻结输入。
+运行后 `ps` 无 ros2/MuJoCo/pytest/colcon 残留、`nvidia-smi --query-compute-apps` 为空、`ros2 daemon status` = not running（开工时那个先前已存在的 daemon 现已不在，本轮未启动过 daemon）。
+
+### (f) 门禁
+
+| 项 | 命令 / run dir | rc | 计数 |
+| --- | --- | --- | --- |
+| 探针修复 RED→GREEN | `test_act_head_search_calibration_bundle_inputs.py`（新增 1 例） | 0 | 1 failed → **21 passed** |
+| `ruff check` / `ruff format --check` | 两个改动文件 | 1 / 1 | **与 HEAD 逐条相同的既有 finding**（check 5 条、format 2 文件），改动**未新增**任何一条 |
+| 阶段回归（HS-288..319 的 39 文件，`-n 8`，提交后树） | `bash scratch/hs320/run-tests.sh` | 1 | **4 failed / 1065 passed**；4 个失败与 HS-321 基线**同一节点集**（`test_act_task8_search_port.py` 既有失败），passed +1 = 本用例 |
+| 全量 `src/so101_demo_py/test`（8 workers，基线 run-dir 布局，提交 `4a751678a`） | `$EV/scratch/pytest-xdist8-hs322-demo-suite.413bca28`（`label.txt` 记 commit） | 1 | **175 failed / 6491 passed / 152 skipped / 86 errors**（74.54 s）；与基线 `pytest-xdist8-hs319-demo-suite.ORZY2PwE`（175/6490/152/86）**节点级 diff 0 行（261 节点完全相同）**，passed +1 = 本用例；`node-delta-vs-hs319.txt` 落该 run dir；`tempfile.gettempdir()` 落在其 `tmp/` |
+
+### (g) 本轮声明的推断（待评审，逐条照录）
+
+① 派生配置在 HS-313 晋级后是**恒等派生**（sealed 已封 C2a），因此"被 frame 修复作废的摘要"判据落在 `dfe71656…` 上，而**没有任何 staged 文档引用 `dfa0af9b`**；
+② 两个被取代飞行器无法在晋级后的 `max_age_s` 下重产，(b) 的 A/B 为证，未放宽任何阈值、未手改任何文档——按任务要求"无法重产即停下报告而非打补丁"，此处只报告且不入 run；
+③ 测量层统一 stage 历史件（见 (b) 决策），两份重产成功件留证不入 run；
+④ 探针节拍修复是真实缺陷修复（不是放宽）：它让 bundle-inputs 能在**声明的**时间预算内观测锁规则；
+⑤ `generation` 仍取本次 run root 名（root 在运行前不存在，`run_root_existed=false`）；
+⑥ 首版工具链 root（`514baaef6`）与首版 admission/bundle-inputs 尝试均保留为被取代证据；⑦ `scratch/hs320/{probe-*,ruff-head,probe-*.json}` 为诊断产物，`scratch/hs320/regeneration-findings.md` 是重产分析的证据文件。
+
+**17 值 bundle 状态**：**已产出新 bundle**（上表摘要）并**未晋级**；sealed 配置、frozen 候选、dataset、旧 bundle 均未改。**第二次精确批准待用户给出**：需就新 bundle 的 file sha256 `0563bada…` 与 canonical `1b92c8e6…` 逐项批准 17 值+证据+身份，之后才谈新晋级记录与 Task 14 整段重跑。
+
+**本轮证据与生命周期**：`$CAMPAIGN/head-search-calibration-20261001T160314Z/`（记录运行：bundle/manifest/run-status + 全部 phase 文档与 gate 输出）与同名 `.console.log`/`.provenance.txt`/`.derived-input-provenance.json`/`.sealed-inputs.json`、
+`staged-inputs-20261001T160342Z/`（含 `.staging-receipt.txt`；另有被取代的 `staged-inputs-20261001T160314Z/`）、`admission-20261001T162328Z{,.console.log,.provenance.txt}`、`bundle-inputs-20261001T162329Z{,…}`、
+被取代尝试 `admission-20261001T161755Z{,…}`、`bundle-inputs-20261001T161802Z{,…}`、`deadband-20261001T161524Z{,…}`（`INPUT_STALE` 拒绝）、`selection-rule-20261001T{160347,161433}Z{,…}`、`operating-point-20261001T{160347,161433}Z/`（后者为重产成功件）、`camera-measurements-20261001T161519Z{,…}`；
+`$EV/head-toolchain-20261001T160105Z/`（被取代的 root）、`$EV/head-toolchain-20261001T162030Z/`（记录 root）、`$EV/scratch/pytest-xdist8-hs322-demo-suite.413bca28/`；
+工作树 `scratch/hs320/`（`env`/`common`/`measurement-paths` 脚本、`build-toolchain{,-2}.sh`、`stage-inputs.sh`、`make-derived-config.py`、各 producer runner、`run-calibration.sh`、`verify.sh`、`run-tests.sh`、`pyshim/`、
+`pre-state/`、`probe-*`、`ruff-head/`、`regeneration-findings.md`、`verify*.txt`、`tmp/`）。以上**均为删除候选，未删除**；HS-300..321 的产物只读引用，未改动。
+工作树 `git status --porcelain`：`?? runs/`（既有未跟踪，Ultralytics 校验输出）+ 本条目所在的账本提交。
