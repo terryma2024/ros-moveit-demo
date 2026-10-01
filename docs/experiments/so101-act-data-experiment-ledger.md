@@ -41367,9 +41367,10 @@ selected candidate to promote, and its calibration runtime's six phases are stub
 Task 13's approved bundle and frozen runtime (HS-256). Goal active/armed, budget 3000.
 
 **Canonical roots** (do not use older ones):
-- toolchain: `$HEAD_EVIDENCE/head-toolchain-20261001T032129Z` (commit `1c142f5fae36`; contains the verdict-artefact patch **and**
-  the per-scene memoisation). **Do not cite `…T155706Z`**: it was overwritten after its recorded run, so its `source-commit.txt`
-  no longer matches its content (HS-264).
+- toolchain: **`$HEAD_EVIDENCE/head-toolchain-20261001T051009Z`** (commit `b8c7df5bb055`; contains the per-scene memoisation and
+  the verdict artefacts for **every** selection refusal). `…T032129Z` (commit `1c142f5f`) is **superseded** - it wrote artefacts only
+  for the retention refusal. **Do not cite `…T155706Z`**: it was overwritten after its recorded run, so its `source-commit.txt` no
+  longer matches its content (HS-264).
 - campaign: `$HEAD_EVIDENCE/head-yolo-models-20260930T120608Z`; geometry seal root `…head-camera-probe11-20260930T101722Z`.
 
 **Latest clean comparison** (`compare7`, output `evaluation-reselected/`, failures/verdicts also in `evaluation/` from the earlier run):
@@ -41402,6 +41403,14 @@ candidate's operating point necessarily recomputes that candidate's head cells.
 **Evidence already published to HF (private repos, `zjumty`)**: `so101-yolo11n-seg-plastic-cup-head-only` (B),
 `…-head-task-mixed` (C), `so101-head-search-bc-training-data` (head-dataset, task-dataset, candidate-b, candidate-c). Both weights
 verified by re-download sha256; sample manifests verified by hash.
+
+**C2 experiment result (HS-275) - the campaign's central trade-off**: training C with `epochs 120` (C2a, weight
+`2afd550694abfbe6…`, plan `e00db059e4ee1a8b…`, contract passed as a *copy* so the repo was untouched) **fixes the retention gap**
+(task static mAP 0.9631 -> 0.9699, gap 0.0105 -> 0.0038, so `EVALUATION_TASK_RETENTION_LOST` no longer fires) but **loses head-domain
+episode F1** (1.0000 -> 0.9833), which trips a different guard: `EVALUATION_F1_MARGIN: B beats C on the held_out_episode head f1 by
+0.017`. By the criteria declared *before* the run (HS-272) C2a is a **failure** (criterion 3), not a success. Together with C's
+result this is evidence for a **real two-domain trade-off** between the head-strong and task-retaining configurations, not for a
+bad operating point or insufficient training. Artefacts: `evaluation-c2a/`, `episodes8/`, `candidate-c2a/`, `contracts/`.
 
 **Deletion candidates (need explicit authorization)**: superseded episode generations `episodes`…`episodes6`; empty toolchain roots
 `…T125637Z`, `…T125856Z`; superseded success roots `…T115640Z`, `…T115927Z`, `…T120204Z`, and the polluted `…T155706Z`; `probe-calibration-*`;
