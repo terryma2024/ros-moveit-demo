@@ -47171,3 +47171,31 @@ counted at all: `set(window["streams_required"]) - set(schedule)` must be empty,
 in the schedule. On this fixture both that clause and the reverse relation (each claimed instant acquired for that
 stream) read as satisfied, so the failing clause is one of the three `return False`s above them - offsets 9, 12 and 20 -
 which the next probe prints in one pass, since they are the only ones left unnamed.
+
+
+### The three early clauses are excluded by reading, so the schedule rules are the refusers
+
+Read in full, the predicate's opening clauses are:
+
+```python
+if window["outcome"] == "complete":
+    if not row_times or abs(window["label_cutoff_s"] - max(row_times)) > _TOLERANCE_S:
+        return False                      # 1
+elif row_times:
+    return False                          # 2
+if physics_times:
+    if (abs(window["first_command_s"] - min(physics_times)) > _TOLERANCE_S
+            or abs(window["physics_end_s"] - max(physics_times)) > _TOLERANCE_S):
+        return False                      # 3
+```
+
+Against the runner-backed fixture each one passes on its face: the outcome is `complete` from the shared window, the
+single bound row sits at 1.0 and so does `label_cutoff_s`, and the endpoints are exactly the physics history's minimum
+and maximum because the fixture derives them that way. Clause 2 cannot fire with a `complete` outcome at all.
+
+So the refuser is one of the two schedule rules that follow: `set(streams_required) - set(schedule)` must be empty,
+and every instant a stream claims must be present in `acquired[name]` - the latter built from the **acquisition
+records** via `row["camera"]` and `row["stamp_s"]`. The one thing to print is therefore those two structures side by
+side, and the exact line to patch is the one at eight spaces of indentation inside that loop, now quoted verbatim in
+the note above. On my reading they agree, which has been wrong before and is why the probe prints them rather than
+asserting them.
