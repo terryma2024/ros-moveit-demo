@@ -44,6 +44,8 @@ INPUT_ROLES = (
 NONHEAD_CHECKS = frozenset({"collision", "synchronization", "execution", "release", "retreat"})
 
 _CANDIDATE_FIELDS = frozenset({"path", "sha256", "approved", "approval"})
+#: the artifact kind that carries the user-authorized empirical values (design section 5.1)
+EMPIRICAL_AUTHORIZATION_KIND = "ACT_NONHEAD_EMPIRICAL_AUTHORIZATION"
 _ROLE_FIELDS = frozenset({"status", "candidates", "selected", "identity", "blocker"})
 _REGISTRY_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_commit",
                               "config_sha256", "evidence_root", "roles"})
@@ -923,7 +925,17 @@ def _inspect_calibration_role(role: str, referenced: tuple[Path, ...]) -> dict:
             document = json.loads(path.read_bytes())
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
-        if not isinstance(document, dict) or "checks" not in document:
+        if not isinstance(document, dict):
+            continue
+        if (document.get("kind") == EMPIRICAL_AUTHORIZATION_KIND
+                and document.get("approval") == "user_empirical_default"
+                and isinstance(document.get("roles"), dict) and role in document["roles"]):
+            # the amendment's route: the user-authorized empirical values for this role, carried with their own
+            # provenance rather than a calibration report the amendment exists to stop demanding
+            candidates.append({"path": str(path), "sha256": _digest(path), "approved": True,
+                               "approval": "user_empirical_default"})
+            continue
+        if "checks" not in document:
             continue
         try:
             require_nonhead_gate(document)
