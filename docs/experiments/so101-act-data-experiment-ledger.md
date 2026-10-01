@@ -49782,3 +49782,25 @@ The remaining design decision is small and worth naming: whether the QC calls fo
 loads itself, or reuses this adapter's model handling. The first is fewer moving parts for a fresh process; the second
 keeps one model-loading path in the repository. Either way the question is now about an existing capability rather than
 about what to write from scratch.
+
+
+## CP-2630 — The capability exists and is already a module: `held_cup_state`
+
+The search lands exactly:
+
+- **`adapters/act/held_cup_state.py`** - `transform[:3, 3] = data.xpos[body]` (19) and **`mujoco.mj_forward(model,
+  data)`** (107): a module whose job is to turn a configuration into the **held cup's transform**, which is the cup's
+  pose in the world. That is precisely the "configuration to pose" the QC was looking for, and it lives in the same
+  `adapters/act/` family as the runners and ports;
+- `adapters/act/physics.py:195` does the same inline (`gripper[:3, 3] = self._data.xpos[self.gripper]`), so the pattern
+  is idiomatic here rather than a one-off;
+- and `adapters/perception/mujoco_scene_geometry.py:219` plus `mujoco_dataset.py:1244` call `mj_forward` too, which is
+  the same idea applied to scene geometry.
+
+So E2's gap closes the way K2's three pieces did: by reusing what the repository already has rather than inventing a
+counterpart. The QC's pose rows become "ask `held_cup_state` for the cup's transform at this configuration" - and, since
+the pose is an `xyz_xyzw`, the transform's translation and quaternion rotation are what E1's calculator wants.
+
+That is the next edit: `endpoint_records_from_audit` reads `model_qpos` from the physics rows and derives the pose
+through the existing helper, which also removes the invented `cup_pose_world` key from my module - a key the audit's
+schema rightly refuses, as this round's test established.
