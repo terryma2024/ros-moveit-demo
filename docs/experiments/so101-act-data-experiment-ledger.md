@@ -53718,3 +53718,23 @@ meaning its own tests define. That also matches the shape of the code: `self.aud
 
 With that separation both existing tests keep their contracts unchanged, and the chain test keeps passing because what it
 asserts is that the sealed episode's bindings satisfy the seal - not which callback produced them.
+
+
+## CP-2794 — Correction 4's shape: the production composition must hand the verifier what the tests hand it
+
+Running the chain taught the two classes what they need; correction 4 is the production path actually supplying it:
+
+- **`mujoco_parallel_batch.py:2731`** builds `worker_roots = {worker.worker_id: worker.worker_root for worker in
+  self.resource_manifest.workers}` - the mapping the result port is constructed from - and the reviewer's phrase "complete
+  the requested production and consumer wiring. The default f..." points at whatever the **default factory** constructs
+  from it;
+- **`result_store.py:308`** is `class ActCollectionResultVerifier` itself, the class those roots feed, which now takes
+  `endpoint_inputs` (round 721) and the v2 audit pair (this round's predecessor).
+
+So correction 4 is: the composition that builds the real result port should pass the endpoint inputs and the audit pair
+the way the chain tests do, rather than leaving them unset - which is the same "a step no layer performs" shape as the five
+gaps the chain just closed, one level up in the production path.
+
+The read that makes it concrete is the construction site (the `SealedResultAdapter`/verifier instantiation in
+`mujoco_parallel_batch.py`) and what the frozen spec carries that could supply those values - the expected final cup pose is
+already in the spec (`spec.expected_final_cup_pose_world`, seen in an earlier read), and the audit pair is per-episode.
