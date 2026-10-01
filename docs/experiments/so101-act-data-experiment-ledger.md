@@ -46198,3 +46198,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   run's fourth piece (one allocated worker spawned from a coordinator-written spec) has an environment to talk to.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD 30e67b1ed; goal active.
+
+
+## CP-2447 — The launch plan, with every argument mapped to a frozen counterpart
+
+- `build_act_execution_stack_launch_description` (runtime/launch_composition.py:2647) declares: `headless` default
+  `true` (and the only choice), `sensor_rendering` `true`, `act_profile` `true`, **`session_id` with no default**,
+  **`task_evidence_root` with no default**, `readiness_timeout_s` `90.0`, `mujoco_scene` defaulting to the package
+  share's `assets/mujoco/act/scene.xml`, and `mujoco_initial_keyframe` defaulting to `task_start` with the first four
+  cup keyframes as its choices. Its docstring is explicit: "one headless ACT simulator stack with no command broker or
+  UI".
+- The plan therefore writes itself: the two required arguments are the run's own - a freshly minted `session_id` and
+  the new LIVE_ROOT as `task_evidence_root` - and `mujoco_scene` points at the **frozen** `scene_model/scene.xml` from
+  the input set rather than the package default, so the episode runs the scene the freeze verified. Everything else
+  stays at its approved default, which keeps the stack headless exactly as the entry intends.
+- The command to run once, with its argv, environment, logs, process tree and real rc recorded under the LIVE_ROOT, is
+  `ros2 launch so101_demo_py so101_mujoco_act_execution_stack.launch.py session_id=<minted>
+  task_evidence_root=<LIVE_ROOT> mujoco_scene=<frozen scene_model/scene.xml>`.
+- After it is up, the run's fourth piece has its environment: one allocated worker, spawned from the spec the
+  coordinator writes, talking to this stack - and then the episode, the Recorder evidence, the fresh-process QC and
+  the coordinator commit follow in order.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD 04fbd501f; goal active.
