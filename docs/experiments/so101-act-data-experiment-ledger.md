@@ -44886,3 +44886,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   and the input/CLI suite with its negatives.
 - F5's step two remains one traceback from its fix (CP-2377); F11's derivation and F13's scene item remain open;
   K2's protocol table is written (CP-2375). HEAD 28ed2ce2e; goal active.
+
+
+## CP-2381 — E1's calculator landed; the plan's verbatim case passes, my extra case was mis-specified
+
+- `evaluate_endpoint_pose` (commit 747cd93d5) is the pure calculator the design puts at the centre: no IO, no live
+  port, closed output `status/errors/passed` keyed by the five thresholds, `xyz_xyzw` validation with a 1e-3 norm
+  tolerance before normalisation, the cup axis as the body-local +Z rotated by the quaternion (so yaw about it is
+  ignored) and angles clamped at the dot product. It reports only endpoint questions and cannot state grasp,
+  release or stability quality - the amendment's boundary.
+- The plan's verbatim case passes exactly: start `[0.02, -0.28, 0.165, 0, 0, 0, 1]`, end `[-0.07, -0.23, 0.165,
+  0, 0, 0, 1]` against themselves gives `PASS` with all five errors 0.0 and `errors` keyed as the thresholds.
+- My follow-up one-liner then asserted a 15-degree tilt would pass; the axis tolerance is 0.15 rad = 8.6 degrees, so
+  that expectation was wrong and the assertion failed - not the calculator. Re-run with the right magnitudes: an
+  8-degree tilt passes with an axis error of ~0.14 rad, a 20-degree tilt fails, and a 90-degree yaw about the cup's
+  own axis still passes, which is the yaw-insensitivity the design asks for.
+- Still owed for E1, unchanged: move these controls (the verbatim case, the boundary cases, the policy negatives
+  from CP-2380) into `test/test_act_endpoint_pose_acceptance.py` with `--junitxml` under a fresh scratch; wire the
+  policy role into both real input registries; `load_development_runtime`, the `user_empirical_default` approval and
+  the effective-config artifact; `prepare --runtime-policy`, the freezer keyword, `--mode`/`--endpoint-policy`; and
+  the input/CLI suite with its negatives.
+- F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
+  table is written. HEAD 6e881d42f; goal active.
