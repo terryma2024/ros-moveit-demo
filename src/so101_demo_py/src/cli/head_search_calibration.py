@@ -1,13 +1,15 @@
-"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, verify-promoted-config, qualify.
+"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
 trajectory precondition and the run status live (plan rule 4). Every subcommand refuses a run root that
-already exists, so there is no way to resume or continue a stage. `measure-coarse-step` and
-`measure-mujoco` are the measurement flights the run cannot take itself - the run declares documents, it
-does not render or read a sealed model - so they are their own installed entries, validated here and
-produced by `so101_demo.act.head_search_coarse_step_measurement` and
-`so101_demo.act.head_search_mujoco_measurements`.
+already exists, so there is no way to resume or continue a stage. `measure-coarse-step`,
+`measure-mujoco` and `measure-search-timing` are the measurement flights the run cannot take itself - the
+run declares documents, it does not render, read a sealed model or step a simulator - so they are their own
+installed entries, validated here and produced by
+`so101_demo.act.head_search_coarse_step_measurement`,
+`so101_demo.act.head_search_mujoco_measurements` and
+`so101_demo.act.head_search_timing_measurement`.
 """
 
 from __future__ import annotations
@@ -143,6 +145,19 @@ MUJOCO_IDENTITY_FLAGS = (
     ("dataset_manifest", "--dataset-manifest"),
     ("geometry_contract", "--geometry-contract"),
 )
+
+#: the `measure-search-timing` entry: the sealed scene the sweep steps the neck in, the sealed geometry
+#: the controller plan and the sweep's thresholds come from, the production search configuration, the
+#: sealed controller period and the brand-new directory the documents own. `--weights` is optional: with
+#: it the sweep times its frames with the sealed detector, without it no frame age is invented
+TIMING_REQUIRED_FLAGS = (
+    ("scene", "--scene"),
+    ("geometry_seal", "--geometry-seal"),
+    ("production_search_config", "--production-search-config"),
+    ("controller_config", "--controller-config"),
+    ("output_dir", "--output-dir"),
+)
+TIMING_OPTIONAL_FILE_FLAGS = (("weights", "--weights"),)
 
 
 def _measurement_parser() -> argparse.ArgumentParser:
@@ -319,6 +334,123 @@ def _measure_mujoco(arguments: list[str]) -> int:
     print(
         f"MUJOCO_TIMESTEP_PRODUCED {receipt['simulation_timestep_s']} "
         f"scene={receipt['scene_path']} readback={receipt['mujoco_readback']} "
+        f"output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _timing_parser() -> argparse.ArgumentParser:
+    """The `measure-search-timing` entry: it declares the sealed inputs and calls one library function.
+
+    This is the measurement flight the run cannot take itself: the installed program walks the production
+    controller's own bounded stop points in the sealed MuJoCo scene, commanding the scene's neck joint at
+    the sealed controller period, applies the declared settle rule to every stop, and - when a detector is
+    declared - times one frame per declared frame period of simulation time. Nothing is computed here
+    beyond parsing and validating what the caller declared.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-search-timing",
+        description=(
+            "Walk the bounded stop-point sweep of the production head search controller in the sealed "
+            "MuJoCo scene once, into a brand-new output directory, and write the search timing document "
+            "phase 6 reads and - with a detector - the frame age document phase 7 reads"
+        ),
+    )
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the sweep steps")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument(
+        "--production-search-config", type=Path, help="the sealed production search configuration"
+    )
+    parser.add_argument(
+        "--controller-config", type=Path, help="the sealed controller configuration (the control period)"
+    )
+    parser.add_argument("--weights", type=Path, help="the sealed detector weights, when frames are timed")
+    parser.add_argument("--output-dir", type=Path, help="the brand-new directory the documents own")
+    parser.add_argument("--anchor", action="append", help="measure only these sealed anchors")
+    parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
+    parser.add_argument("--max-settle-s", type=float, default=None, help="the per-stop settle budget")
+    parser.add_argument(
+        "--settle-consecutive-steps", type=int, default=None, help="the consecutive quiet control steps"
+    )
+    return parser
+
+
+def _measure_search_timing(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the sweep to the library module."""
+
+    parsed = _timing_parser().parse_args(arguments)
+    missing = [flag for name, flag in TIMING_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    declared = TIMING_REQUIRED_FLAGS
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in declared
+        if name != "output_dir" and not Path(getattr(parsed, name)).is_file()
+    ] + [
+        str(getattr(parsed, name))
+        for name, _flag in TIMING_OPTIONAL_FILE_FLAGS
+        if getattr(parsed, name) is not None and not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_timing_measurement import (
+        DEFAULT_MAX_SETTLE_S,
+        SETTLE_CONSECUTIVE_STEPS,
+        write_head_search_timing_measurement,
+    )
+
+    optional = {
+        name: getattr(parsed, name)
+        for name, _flag in (
+            ("max_settle_s", "--max-settle-s"),
+            ("settle_consecutive_steps", "--settle-consecutive-steps"),
+        )
+        if getattr(parsed, name) is not None
+    }
+    if "max_settle_s" not in optional:
+        optional["max_settle_s"] = DEFAULT_MAX_SETTLE_S
+    if "settle_consecutive_steps" not in optional:
+        optional["settle_consecutive_steps"] = SETTLE_CONSECUTIVE_STEPS
+    try:
+        result = write_head_search_timing_measurement(
+            scene_path=parsed.scene,
+            geometry_seal_path=parsed.geometry_seal,
+            production_search_config_path=parsed.production_search_config,
+            controller_config_path=parsed.controller_config,
+            weights_path=parsed.weights,
+            output_dir=parsed.output_dir,
+            anchors=parsed.anchor,
+            device=parsed.device,
+            command=_command_line(arguments, subcommand="measure-search-timing"),
+            **optional,
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    print(
+        f"SEARCH_TIMING_MEASURED p99_settle_s={receipt['p99_settle_s']} "
+        f"p99_frame_s={receipt['p99_frame_s']} stops={receipt['stable_stop_count']} "
+        f"frames={receipt['frame_count']} anchors={','.join(receipt['anchors'])} "
         f"output_dir={parsed.output_dir}"
     )
     return 0
@@ -652,6 +784,9 @@ def main(argv: list[str] | None = None) -> int:
     # the sealed scene's own declaration is the other document the run declares but does not read itself
     if arguments[:1] == ["measure-mujoco"]:
         return _measure_mujoco(arguments[1:])
+    # the bounded stop-point sweep's settle and frame timing is the third flight the run cannot take
+    if arguments[:1] == ["measure-search-timing"]:
+        return _measure_search_timing(arguments[1:])
     parsed = qualification_parser().parse_args(arguments)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":

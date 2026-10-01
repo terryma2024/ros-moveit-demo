@@ -860,3 +860,156 @@ def test_measure_mujoco_produces_the_document_the_run_declares(tmp_path: Path, c
     receipt = json.loads((output / "measurement-receipt.json").read_text(encoding="utf-8"))
     assert receipt["measurement_sha256"] == document["sha256"]
     assert receipt["runtime_identity"]["motion_commanded"] is False
+
+
+# --- measure-search-timing ------------------------------------------------------------------------
+
+#: a minimal sealed-scene stand-in: a yaw hinge with a position actuator and the head camera, so the
+#: installed entry's own sweep runs against a real MuJoCo model without a detector, a GPU or a renderer
+TIMING_SCENE = """<mujoco model="timing-fixture">
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <worldbody>
+    <body name="head_mount">
+      <joint name="neck_yaw_joint" type="hinge" axis="0 0 1" damping="0.05" armature="0.001"/>
+      <geom name="head_geom" type="box" size="0.05 0.05 0.05"/>
+      <camera name="head_camera" pos="0 0 0.05" xyaxes="1 0 0 0 1 0"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="neck_yaw_joint" joint="neck_yaw_joint" kp="8" kv="0.6"
+              forcelimited="false" ctrllimited="false"/>
+  </actuator>
+</mujoco>
+"""
+
+TIMING_CONTROLLERS = """controller_manager:
+  ros__parameters:
+    update_rate: 500
+"""
+
+
+def _timing_inputs(tmp_path: Path) -> dict:
+    """The four declared inputs of the sweep-timing measurement, with one sealed anchor."""
+
+    scene = tmp_path / "head_search_scene.xml"
+    scene.write_text(TIMING_SCENE, encoding="utf-8")
+    seal = tmp_path / "head-camera-geometry.json"
+    seal.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "camera_name": "head_camera",
+                "camera": {"camera_name": "head_camera", "parent_body": "head_mount", "width": 64, "height": 48},
+                "image_width": 64,
+                "image_height": 48,
+                "horizontal_fov_rad": 1.3121067481206794,
+                "required_search_domain_rad": [-0.17559216195018026, 0.08047101126546086],
+                "lock_valid_neck_rad": [-6.283175307179587, 6.283175307179587],
+                "in_frame_matrix": {"default": {"neck_start_rad": 0.1}},
+                "source_digests": {"scene_sha256": hashlib.sha256(scene.read_bytes()).hexdigest()},
+            }
+        ),
+        encoding="utf-8",
+    )
+    production = tmp_path / "head_search_v2.json"
+    production.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "camera": {
+                    "name": "head_camera",
+                    "frame_id": "head_camera_optical_frame",
+                    "ray_origin_frame_id": "base_link",
+                },
+                "motion": {"settle_velocity_rad_s": 0.05, "goal_tolerance_rad": 0.05},
+                "tracker": {"name": "bytetrack", "iou_threshold": 0.3},
+                "values": {
+                    "coarse_step_rad": 0.3,
+                    "horizontal_fov_rad": 1.3121067481206794,
+                    "lock_valid_neck_rad": [-6.283175307179587, 6.283175307179587],
+                    "max_age_s": 0.05,
+                    "max_skew_s": 0.02,
+                    "search_timeout_s": 12.0,
+                    "center_deadband_px": 18.0,
+                    "vertical_bounds_px": [11.0, 37.0],
+                    "min_area_px2": 64.0,
+                    "min_confidence": 0.4,
+                    "tracking_iou": 0.3,
+                    "max_fine_corrections": 4,
+                    "max_fine_total_rad": 0.4,
+                    "stop_velocity_rad_s": 0.05,
+                    "min_bbox_aspect": 0.5,
+                    "stop_latency_s": 0.06,
+                    "submit_lead_s": 0.02,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    controllers = tmp_path / "ros2_controllers.yaml"
+    controllers.write_text(TIMING_CONTROLLERS, encoding="utf-8")
+    return {
+        "scene": scene,
+        "seal": seal,
+        "production": production,
+        "controllers": controllers,
+    }
+
+
+def _timing_arguments(inputs: dict, output: Path) -> list:
+    return [
+        "measure-search-timing",
+        "--scene",
+        str(inputs["scene"]),
+        "--geometry-seal",
+        str(inputs["seal"]),
+        "--production-search-config",
+        str(inputs["production"]),
+        "--controller-config",
+        str(inputs["controllers"]),
+        "--output-dir",
+        str(output),
+    ]
+
+
+def test_measure_search_timing_needs_its_declared_inputs(tmp_path: Path, capsys) -> None:
+    assert main(["measure-search-timing"]) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+    assert not (tmp_path / "sweep-timing").exists()
+
+
+def test_measure_search_timing_refuses_a_missing_input_and_an_existing_output(
+    tmp_path: Path, capsys
+) -> None:
+    inputs = _timing_inputs(tmp_path)
+    output = tmp_path / "sweep-timing"
+    arguments = _timing_arguments(inputs, output)
+
+    assert main([arguments[0], "--scene", str(tmp_path / "absent.xml"), *arguments[3:]]) == 2
+    assert "no such input" in capsys.readouterr().err
+
+    output.mkdir()
+    assert main(arguments) == 2
+    assert "never resumed" in capsys.readouterr().err
+
+
+def test_measure_search_timing_sweeps_without_a_detector_and_invents_no_frame_age(
+    tmp_path: Path, capsys
+) -> None:
+    inputs = _timing_inputs(tmp_path)
+    output = tmp_path / "sweep-timing"
+
+    assert main(_timing_arguments(inputs, output)) == 0
+
+    printed = capsys.readouterr().out
+    assert "SEARCH_TIMING_MEASURED" in printed
+    assert "p99_frame_s=None" in printed
+    document = json.loads((output / "search-timing.json").read_text(encoding="utf-8"))
+    assert document["p99_settle_s"] > 0.0
+    assert document["p99_frame_s"] is None
+    assert document["stable_stop_count"] == 2
+    assert document["time_base"] == "simulation"
+    assert not (output / "frame-age-measurements.json").exists()
+    receipt = json.loads((output / "measurement-receipt.json").read_text(encoding="utf-8"))
+    assert receipt["search_timing_sha256"] == document["sha256"]
+    assert receipt["ros_nodes_started"] is False
