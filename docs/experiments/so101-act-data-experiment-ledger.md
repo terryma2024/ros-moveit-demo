@@ -53255,3 +53255,29 @@ already does, and correction 3's is the one that uses the store.
 
 Round state: three production fixes and the chain test are uncommitted; the writer now accepts an existing root (the
 ownership decision of CP-2773, applied); and the remaining failure is a path the test names rather than a contract.
+
+
+## CP-2776 — Confirmed: the store publishes by renaming working to sealed
+
+```python
+            sealed = self.workspace / "sealed"
+            if sealed.exists():
+                ...
+            os.rename(self.working, sealed)
+            return sealed
+```
+
+`ActCollectionResultStore` works inside `<workspace>/working` and **publishes by renaming it to `<workspace>/sealed`** -
+the atomic-publish pattern that makes a half-written episode invisible as a sealed one. Which resolves CP-2774's
+contradiction completely: the source's `working` and the observed `sealed` are the same directory before and after the
+rename, and the store's own requirement (`<workspace>/sealed/episode/seal.json`) is the post-rename path.
+
+And it settles what the test must pass: **`verify_episode_seal` runs before the rename** (the verification is at `:109`,
+the rename at `:143`), so the audit manifest and the scope it hands over must be the **pre-rename** paths - that is,
+under `working/episode/audit/…`, which is exactly what the helper produces when the writer roots at the store's
+`episode_root`. So the pair the test names is right in kind, and `EPISODE_SEAL_AUDIT_INVALID` is now about which of the
+two files fails `is_file()` at that moment rather than about locations or ownership.
+
+Round state, for the record: the writer accepts an existing root (CP-2773's ownership decision, applied); the verifier
+takes the audit pair like the store does; three production fixes and the chain test are uncommitted; correction 2's chain
+test passes and correction 3's is one path away.
