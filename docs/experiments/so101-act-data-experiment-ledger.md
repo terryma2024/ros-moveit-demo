@@ -41825,3 +41825,36 @@ tracker 算法、10 Hz frame contract；Step 4 恢复计划原文的 `head_test 
 **下一步（可以开始写实现代码了）**：按计划 §0 前置先行——把生产 controller 的**正向累计 `2*pi` 轨迹**按 **RED/GREEN** 改成
 **有界停点序列**，因为该前置 gate 在**任何 neck 运动之前**，且 `run` 在入口检查、不满足即
 `CAL_TRAJECTORY_CONTRACT_UNSATISFIED` 且不发任何运动。随后才是 phase 1/2 的库模块。
+
+## HS-286 — §0 前置的实现目标已精确定位：`act/search.py` 里的累计粗扫（违规代码原文）
+
+计划 §0 要求把"正向累计 `2*pi`"改成"有界停点序列"。现已定位到**具体代码**（`src/so101_demo_py/src/act/search.py`，
+`class HeadSearchController`，第 254-258 行）：
+
+```python
+if self.coarse_angle >= 2 * math.pi - 1e-9:
+    return self._result(TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL, feedback, stamp)
+step = min(self.config["coarse_step_rad"], 2 * math.pi - self.coarse_angle)
+self.coarse_angle += step
+self.target = self.config["search_start_rad"] + self.coarse_angle
+```
+
+问题正是设计指出的三点：① 扫描量以 **`2*pi` 为界**，而不是以 `required_search_domain_rad` 为界；
+② 目标角是 `search_start_rad + 累计量`，**单调递增、永不反向**；③ 因此它与 anchor 的 required-domain 端点无关，
+既不"先到较近端点"也不"再反向到另一端"。
+
+**RED 测试方案（下一步执行，先 RED 后 GREEN）**：新增 `src/so101_demo_py/test/test_act_head_search_bounded_sweep.py`，
+用 `HeadSearchController` + 一个声明了 anchor 与 `required_search_domain_rad` 的 plan，断言：
+
+1. **有界**：所有发出的 `target` 都落在 `required_search_domain_rad`（含容差）内，**任何情况下不得越界**，即使
+   `coarse_step_rad` 会带来过冲；
+2. **先近后远**：第一个停点朝**较近**的那个端点，到端点后**反向**扫向另一端；
+3. **确定性**：同一输入重复构造，停点序列逐项相同；
+4. **终止语义保留**：扫完整个 required domain 仍无目标时，仍返回"未找到"而不是越界继续；
+5. **与既有安全区间一致**：所有停点同时满足 `lock_valid_neck_rad`。
+
+**为什么先写测试**：设计明说该改动必须在 **RED/GREEN** 中完成；且这是"修改既有生产 controller"，不是新写模块，
+没有失败测试就无法证明改动只改变了轨迹形状、没有顺带改变终止或安全语义。
+
+**下一步**：写上述测试并**先跑出 RED**（证据：失败输出 + 退出码），再改 `search.py` 至 GREEN，然后跑
+`head_test -n 8 src/so101_demo_py/test -q` 与 `head_test -n 8 src/so101_teleop/test -q` 两个完整套件。
