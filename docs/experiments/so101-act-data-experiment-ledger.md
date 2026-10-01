@@ -55158,3 +55158,25 @@ before anything runs).
 That closes the "how do I run the acceptance" question the same way the rest of this handover closes its questions: written
 where whoever picks it up will read it, rather than rediscovered. With it, the verifying half of this task is complete,
 exercised, and documented - and what remains is one wiring step and one live run.
+
+
+## CP-2852 — The run's command, and the refusal that states this task's principle
+
+The first-episode CLI has three subcommands, read from `act_first_episode.py:45-64`:
+
+```bash
+prepare   --candidates --mode --endpoint-policy --runtime-policy --output
+run       --inputs --root --mode --lifecycle --final-cup-pose
+preflight --inputs --mode --output
+```
+
+so the live step is fully determined: `run --inputs <frozen> --root <evidence> --mode preselected_target_diagnostic
+--lifecycle FULL_RESTART --final-cup-pose "<seven numbers>"`.
+
+And `--final-cup-pose` carries the task's principle in its own comment: the CLI refuses rather than inventing one,
+*"because an invented target would make every later PASS meaningless."* Which is the same rule every refusal in this
+stretch has been obeying - the recorder refusing a guessed scope, `verify_episode_seal` refusing to look for the audit it
+was not handed, the container-free route refusing a stub broker - stated here by the file that has to obey it.
+
+Written into the handover as the second half of the acceptance: `verify-e3.sh` checks the shape, this runs the episode,
+and K1's forward half plus the E3 negatives are read against what comes back.
