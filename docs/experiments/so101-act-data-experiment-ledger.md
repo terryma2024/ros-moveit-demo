@@ -52573,3 +52573,33 @@ this round, uncommitted).
 
 The production fix in this round is worth keeping regardless of how the test ends: an audit writer given to the capture is
 now fed the acquisitions it must contain, which is a step no layer performed before.
+
+
+## CP-2747 — The reference check, and the one value the adapter must pass
+
+```python
+        entry = self._references.get(record["reference_sequence"])
+        target = round(record["sim_time_s"] + _GRID_S, 6)
+        if (entry is None or entry["reference_time_s"] != target
+                or entry["accepted"] is not True
+                or entry["reference_time_s"] in self._revoked_targets):
+            # the binding must name a reference this episode accepted for exactly that instant and
+            # whose acceptance still stands
+            raise ValueError("AUDIT_BINDING_REFERENCE_INVALID")
+```
+
+Two things follow. First, `reference_sequence` is used as a **key** into `self._references`, and that dictionary is keyed
+by the reference's own `round(float(at_s), 6)` (the capture's `key = round(float(at_s), 6)` at its own line 312) - so the
+argument is the rounded instant, not an ordinal. My adapter's constant `1` could never be one.
+
+Second, the check is a conjunction of the things the design has been insisting on throughout: the named reference must
+exist, must be for **exactly** `sim_time_s + 0.1`, must have been **accepted**, and must not have been revoked since.
+That is the same principle as the capture's release rule (CP-2741): an acceptance that could still be revoked cannot
+label a row.
+
+So the adapter passes `round(observation["sim_time_s"] + 0.1, 6)` - which is precisely the instant the tests already feed
+their references at, since `on_reference(reference(stamp + 0.1))` and the row's `sim_time_s` is `stamp`. The values line
+up by construction; only my constant was wrong.
+
+Also noted from the same check's neighbourhood: rows must form a **contiguous 10 Hz schedule**
+(`AUDIT_ROW_SCHEDULE_INVALID` otherwise), which the 1.0/1.1/1.2 rows satisfy by construction.
