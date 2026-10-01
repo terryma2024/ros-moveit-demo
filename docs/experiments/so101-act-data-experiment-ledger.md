@@ -41784,3 +41784,24 @@ operating point 的正式联合搜索（把本 campaign 的临时脚本逻辑**�
 
 **当前状态**：revision 4（commit `b3fccd602`）的复审**已确认开始运行**（面板出现 `Working`），判决尚未产出；
 产出后我将从面板恢复写入 `$HEAD_EVIDENCE/reviews/task13-runtime-plan/verdict-rev4.md`。
+
+## HS-284 — 计划复审循环暂停：revision 4 已按三条 PARTIAL 修改，但其判决无法取得（复审会话无响应）
+
+**循环记录**：rev1 → **REJECT**（五条）；rev2 → **REJECT**（两条关闭、五条新）；rev3 → **REJECT**（②④ CLOSED、①③⑤ PARTIAL）；
+**rev4（commit `b3fccd602`）按 ①③⑤ 逐条修改**：验收 Step 3 与测试第 10 条改为"审批 ↔ **bundle**"、晋级只走
+`apply_patch` + `verify-promoted-config`；§2b 补入 `settle_velocity_rad_s`、`goal_tolerance_rad`、连续三帧锁定规则、
+tracker 算法、10 Hz frame contract；Step 4 恢复计划原文的 `head_test -n 8 …` 两条命令。
+
+**判决未能取得（证据）**：
+- 送审后确曾进入运行（面板出现 `Working (2m 13s)`），但**两轮之间计时只从 2m13s 走到 2m29s**，而墙钟过了数分钟；
+- 全量回滚捕获（79 / 260 行）中**没有晚于 `1:42 PM` 的 `Worked for` 时间戳**，`• REJECT` 只有 revision 3 那一条；
+- 我按流程补发回车、并改用极短请求（Escape 中断后只问"三条是否已关闭"），面板仍无新时间戳、`运行中: 0`。
+
+**决定：暂停这个复审循环，不在无响应的 TUI 上空耗轮次。** 这不是"偷偷放行"——**revision 4 的判决状态是"未知"**，
+账本如实记为未知，而不是记为通过或再拒。两种可选后续（需用户或下一会话决定）：
+
+1. **换一个新会话复审**（重新拉起 codex，指定 gpt-6.1-sol/high，把 rev4 与 rev1–rev3 的判决一起给它，要求只判 ①③⑤ 是否关闭）；
+2. **接受"已知 findings 均已处理"并进入实现**，但必须在计划与账本里显式写明"rev4 未经复审确认"，且实现第一件事是 §0 前置
+   （有界停点轨迹，gate 在任何 neck 运动之前）。
+
+**在取得判决或被授权前，我仍不写实现代码。**
