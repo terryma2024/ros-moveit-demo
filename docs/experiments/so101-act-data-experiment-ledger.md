@@ -51721,3 +51721,32 @@ use.
 
 My test is reverted and the worktree is clean at 35 entries. The valuable outcome of this round is the frame list above,
 which converts a vague "the sealing path is unwired" into a specific type error in a specific line of my own commit.
+
+
+## CP-2712 — The recorder's scope requirement, read: an absolute regular file, cross-checked against the episode
+
+```python
+        if audit_manifest is not None:
+            audit_manifest, scope = Path(audit_manifest), Path(scope)
+            for target in (audit_manifest, scope):
+                if not target.is_absolute() or ".." in target.parts:
+                    raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+            verify_audit_manifest(audit_manifest)
+            if not scope.is_file() or scope.is_symlink():
+                raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+            # the audit must belong to this episode, and the scope it names must be the scope handed in
+            with (audit_manifest.parent / "episode.json").open("rb") as stream:
+```
+
+So the recorder's `scope` is a **path to a regular file** (absolute, no `..`, not a symlink), and it then checks that the
+scope the audit names is the one handed in - i.e. it compares documents, not just existence.
+
+That makes the live path's shape precise and small:
+
+- the **frozen scope document** is written to a file;
+- the **audit writer** is given the **document** (it stores it in the episode metadata);
+- the **recorder** is given that **file's path**.
+
+My 0ca35cc93 wiring held one value and passed it to both, which is exactly the defect the end-to-end test found and
+named. With this read, the fix is a line in the capture (hold the scope's path for the recorder, the document for the
+writer) plus the producer that writes that file - and the test is then the mechanical thing it was always meant to be.
