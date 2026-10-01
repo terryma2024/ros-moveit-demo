@@ -237,7 +237,10 @@ def read_inputs_manifest(path: Path) -> dict:
             raise ValueError("INPUTS_MANIFEST_INVALID")
         if type(item["bytes"]) is not int or item["bytes"] < 0 or item["approval"] not in _APPROVALS:
             raise ValueError("INPUTS_MANIFEST_INVALID")
-    if hashlib.sha256(_canonical(roles)).hexdigest() != document["inputs_sha256"]:
+    # the writer folds the amendment's three bindings into the same digest the design requires them to be part of,
+    # so the reader hashes what was written rather than only the role table (CP-2416)
+    extra = {key: document[key] for key in ("mode", "endpoint_policy", "runtime_policy") if key in document}
+    if hashlib.sha256(_canonical({**roles, **extra})).hexdigest() != document["inputs_sha256"]:
         raise ValueError("INPUTS_MANIFEST_INVALID")
     return document
 
