@@ -48672,3 +48672,18 @@ The convergence is worth noting: four findings, then three, then two - each roun
 specific than the last, and both of this round's are in the two sections the earlier rounds asked for. Revision 4
 therefore has a small brief: correct the clock claim to what `publish_clock()` actually does, and make the schema
 internally consistent - including `schema_version` in every record's key list and agreeing on the `kind` literals.
+
+
+## CP-2572 — K2 revision 4 answers both corrections and is under review
+
+Revision 4 addresses exactly the two findings. Its clock section now states what the source does - `publish_clock()`
+**attempts** publication after each **successful** physics step and publishes **simulation time only** - and draws the
+two consequences the review asked for: a record may not *require* a step index the mechanism does not publish, and a
+skipped publication is carried as a risk (`clock_source` gains `"none"`, and a record with no covering publication
+carries no instant rather than inventing one), which costs ordering nothing because section 1's sequence, not any stamp,
+does the ordering.
+
+Its schema is now one document rather than a description of one: every record's key list includes
+**`schema_version = 2`**, the five `kind` literals are the same everywhere (`k2_source`, `k2_geometry`, `k2_apply`,
+`k2_query`, `k2_receipt`), and the event schema adds exactly the three that are events. The review is running
+(`reviews/k2-protocol-recheck4.log`).
