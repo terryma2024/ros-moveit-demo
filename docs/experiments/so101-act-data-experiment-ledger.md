@@ -48319,3 +48319,19 @@ acquisition keys present. What has not yet been printed **inside one run** is th
 read. That is the next measurement, and it is a two-line addition to the same fixture.
 
 The re-review is still running (`tail -1` empty).
+
+
+## CP-2553/2554 — The isolation says _closed is fine, and the log has to be read verbatim
+
+The probe ran inside the same process, before the binding, and printed:
+`ROW_FIELDS ['head_acquisition_id', 'reference_sequence', 'row_index', 'sim_time_s', 'wrist_acquisition_id']`,
+`RECORD_KEYS` **identical**, and **`CLOSED ok`**. So `_closed(record, _ROW_FIELDS, "AUDIT_ROW_INVALID")` accepts a
+record of exactly the shape `bind_row` builds, from the same module the writer uses, with the same acquisition ids - and
+the four validators accept the same literals. Therefore `bind_row`'s refusal is **after** `_closed`, where the codes are
+`AUDIT_BINDING_INVALID` (same id twice) and `AUDIT_BINDING_UNKNOWN` (an id the audit never saw) - not
+`AUDIT_ROW_INVALID` as the earlier attempts' logs suggested.
+
+That means the earlier readings and this run are not describing the same failure, and I have been reading filtered
+greps of logs rather than their verbatim endings. The remedy is the same one this stretch keeps arriving at: read the
+tail of the log whole. Whatever the current run actually raises is in its last few lines, and this round printed them
+rather than a pattern's matches.
