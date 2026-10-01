@@ -54383,3 +54383,32 @@ milestone and its objective.
 Worth stating plainly for the record: everything this stretch proved is proved on real components **except that no
 production path assembles them**. That is not a flaw in any of the classes - each does what its contract says - it is the
 same "no layer performs this step" family that produced nine fixes already, at the largest scale yet.
+
+
+## CP-2819 — The real producer exists, with the contract verbatim, and is equally unwired
+
+```python
+src/act/synchronizer.py:21    class RgbObservationSynchronizer:
+:24       def __init__(self, *, max_age_s, max_skew_s, capacity=32, ...)
+:39       def reset(self, session_id):
+:45       def push(self, stream, session_id, sim_time_s, value, *, ...):
+:67       def sample(self, session_id, attempt_id, at_s):
+:94       def sample_with_audit(self, session_id, attempt_id, at_s):
+```
+
+`sample_with_audit` is the method `ContinuousEpisodeCapture` calls at `:395`, with the same arguments - so the real producer
+is not something to design: **it is already written**. It pairs camera streams by session and simulation time, holds a
+bounded capacity, and offers both a plain `sample` and the audited one the capture wants.
+
+And like the capture, **nothing in `src/` constructs it**: the only `Synchronizer(` matches in the package are four
+unrelated `DeviceSynchronizer`s in the perception benchmark's torch adapters.
+
+So the objective's remaining work is now stated with no guesswork in it. Two complete, correct, mutually matching classes -
+`RgbObservationSynchronizer` and `ContinuousEpisodeCapture` - have a one-method contract between them and **no wire**. The
+work is to build that wire in the first-episode path: construct the synchronizer with the frozen `max_age_s`/`max_skew_s`,
+feed it from the real camera and physics loops with `push`, and hand it to the capture as its `sampler`, with the recorder
+and audit writer the chain tests already prove. Then K1's forward half is real (a real producer rather than a fixture) and
+E3 has the assembly it needs to run under the frozen inputs after a `FULL_RESTART`.
+
+This is the largest instance yet of the pattern that produced nine fixes this stretch - a component written to its
+contract, and no caller - and it is the last one between this milestone and its objective.
