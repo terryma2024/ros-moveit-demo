@@ -52019,3 +52019,28 @@ has been collecting (time gap, audit schema, scope mismatch) all reduce to facts
 what it must then carry.
 
 Test reverted; worktree clean at 35 entries.
+
+
+## CP-2726 — The union measured: my harness balances exactly, and the capture's two ids are the surplus
+
+The probe, now that rows are actually written:
+
+```
+rows seen keys: 18
+MISSING: []
+EXTRA  : ['head_acquisition_id', 'wrist_acquisition_id']
+```
+
+So `RecorderSampler` plus `recorder_physical_audit` produce **every** key the recorder's closed set names - the missing
+list is empty - and the only surplus is the pair of acquisition identifiers the capture adds itself at
+`continuous_capture.py:412-413`. The balance is therefore right and the refusal is about those two keys, which means either
+`_AUDIT_KEYS` does contain them (and my earlier read of it at `:22-27` was incomplete - it listed sixteen without them) or
+the recorder strips them somewhere before its strict comparison.
+
+The next read is exactly that: the full `_AUDIT_KEYS` definition and any place the recorder handles
+`acquisition_id`. It is a one-grep question now, where four rounds ago it was a guess, and the two tests in
+`test_act_seal_and_downgrade.py` are otherwise complete: both drive a real capture to a real seal with a
+recorder-compatible harness, one reads the episode back through the endpoint QC, the other asserts the downgrade.
+
+That file is left in place as the record of where this stands - it is RED, and it is RED for a named reason with a
+measured difference rather than a hypothesis.
