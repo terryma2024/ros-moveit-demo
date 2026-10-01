@@ -50237,3 +50237,24 @@ change to qualification, and it is the outcome of this round.
 Worth recording as the pattern it is: three rounds of reading have now shown that E2's "wiring" is mostly a matter of
 connecting existing categories rather than adding new ones - and that when a category looks unused, the first question is
 whether it is reserved rather than whether it is missing.
+
+
+## CP-2650 — The route-comparison consumer is a report, not a gate
+
+`cli/act_evaluate.py` (113 lines) says what it is in its first line: "Task 16 CLI: **summarise** one route on one split,
+with a per-scene evidence index", and elaborates - "The report is written once and names the artifacts it was produced
+from, so a route comparison can be reproduced. Runs are read from the route's own runs file - **never by scanning the
+root** - and each scene's ...". Its `SPLITS` are `rollout_validation`, `rollout_test` and `comparison`; it takes
+`--route` from a closed `ROUTES`, reads `<root>/<split>/<route>-runs.jsonl`, and writes
+`<route>-report.json` plus `<route>-report.md`.
+
+So the plan's "route comparison" consumer is a **reporting** tool. It summarises runs and names its sources; it does not
+decide whether a run succeeded, and it certainly does not gate on process-quality calibration. Connecting it to E1/E2
+therefore means an **additive** change at most: the endpoint verdict - the same one `endpoint_qc_document` produces -
+becomes one of the measurements the report carries, so a route comparison can cite "endpoint poses passed" for an
+episode without ever claiming more than that.
+
+That is the second of the five consumers read, and the second whose wiring turns out to be smaller than the plan's
+wording suggested. The remaining three - the real Worker, the container shard protocol and the qualification call sites
+- are where any genuinely new connection would have to live, and the shard protocol is explicitly *not* to be
+implemented (containers are out of scope for this amendment).
