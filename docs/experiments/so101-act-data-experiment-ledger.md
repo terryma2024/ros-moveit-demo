@@ -50300,3 +50300,26 @@ That closes the survey the last rounds opened: three of the plan's five consumer
 is explicitly out of scope, and the one place a genuinely new connection belongs is a named class in `result_store.py`
 that the coordinator already knows how to consult. The next round reads that class's own verification method - what it
 checks today and where an endpoint verdict would enter it - and then the edit is small.
+
+
+## CP-2653 — The verifier reads the episode seal, which is exactly where the endpoint QC belongs
+
+`ActCollectionResultVerifier.verify(self, lease, location, run_mode) -> dict` is the coordinator's entry, and its body
+is a sequence the endpoint verdict can join without disturbing anything:
+
+- `run_mode is RunMode.EXECUTE`, else `WRONG_RUN_MODE`;
+- `self._expected(lease)` - "verify only its registered Worker and exact lease path", with the collection directory named
+  by mode (`attempts` for an execution batch, `validations` otherwise) and `LEASE_IDENTITY_MISMATCH` for an unregistered
+  worker;
+- the sealed path must equal `workspace / "sealed"` (`LEASE_LOCATION_MISMATCH`), must be a directory (`RESULT_MISSING`);
+- `result.json` must be a regular file whose key set is exactly `_MANIFEST_KEYS`, with
+  `kind == "ACT_COLLECTION_RESULT"` and `schema_version == 1`;
+- the lease identity must match, and `completed_monotonic_s` must be finite and strictly inside
+  `(lease_issued_monotonic_s, lease_deadline_monotonic_s]` (`RESULT_AFTER_LEASE_DEADLINE`);
+- and then **`episode_path = sealed / "episode" / "seal.json"`** - it reads the **episode seal** next.
+
+That last line is the connection. The verifier is already opening the episode's seal in order to check it, so the
+endpoint QC - which is precisely an independent recomputation over that sealed episode - belongs beside that read, and
+its verdict belongs in whatever the verifier returns to the coordinator. It is an addition inside one method of one
+class, on the path the coordinator already takes for a verifying port, and it needs no new port, no new mode and no new
+document kind.
