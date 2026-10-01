@@ -43856,3 +43856,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F5's per-kind history, whose correction is equally concrete and whose fixtures are not shared this way.
 - F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed and its derivation handed off here;
 - F5's regression fixed; F12 two of three; HEAD 03135f8a4; goal paused.
+
+## CP-2330 - F5's per-kind item and F11's derivation meet at the same fixture surgery
+
+- The per-kind check (episode_audit.py:1126-1135) requires each registered kind to appear with a non-decreasing
+- time sequence - which a single row with one timestamp satisfies, exactly as the verdict says: it establishes
+- neither history nor transitions. Strengthening it to require a real transition means requiring at least two
+- distinct instants, and that is where the two items meet: the self-consistent formal fixture's five physics rows
+- all sit at 1.1, so it is a one-instant summary, and F11's endpoint derivation refuses it for the same reason.
+- Consequence, and it is good news for whoever finishes this: ONE fixture upgrade unblocks both - give that fixture
+- a physics history spread over the instants its window already names (1.0, 1.1 and the collection's 1.2 where the
+- phases allow), set its window endpoints from that history, and then both the per-kind rule and the endpoint
+- derivation land together. The third fixture CP-2329 names joins the same pass.
+- Recorded rather than attempted with what remains of this context: the surgery touches one fixture shared by
+- several controls, which is the shape that has cost this stretch the most rounds, and it deserves a full pass
+- rather than a tail.
+- F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed with its derivation handed off; F5's
+- regression fixed with its two items now known to share this surgery; F12 two of three; HEAD 9cc72c5cf; goal paused.
