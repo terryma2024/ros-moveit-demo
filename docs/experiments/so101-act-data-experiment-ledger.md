@@ -47246,3 +47246,13 @@ readback checks.
 
 So F5's step two is now a fixture edit, and the earlier probes were not wasted: they excluded every other clause in the
 predicate one by one, which is what made this one visible.
+
+
+### One line of arithmetic to calibrate the next round
+
+`cadence_s * 1.5 + _TOLERANCE_S` is 0.1 * 1.5 + 0.1 = **0.25** for this window. The hybrid's schedule produced gaps of
+0.4 and 0.5, which is why the clause fired. A 10 Hz grid (instants 0.1 apart, 0.1 through 1.0) produces gaps of 0.1,
+so the rule passes with room to spare - and the acquisitions must be minted at the same ten instants, both because the
+"claimed instant must be observed" rule needs them and because the design's readback checks the grid completeness.
+So the next round's fixture differs from CP-2489's in exactly two places: the minting loop's stamps and the
+`source_schedule` lists.
