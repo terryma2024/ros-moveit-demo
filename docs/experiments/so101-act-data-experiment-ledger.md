@@ -48617,3 +48617,22 @@ records are then derived from those re-read rows plus the frozen `inputs`, with 
 arithmetic, so the QC's verdict rests on recomputed evidence at both ends.
 
 The review of K2 revision 3 is still running (`tail -1` empty).
+
+
+## CP-2569 — The design's own words for E2's boundaries
+
+Two lines from the endpoint design settle what the interface consumes and where the two samples come from:
+
+- line 38: **`evaluate_endpoint_pose(initial_pose: list[float], final_pose: list[float], ...)`** - the E1 arithmetic the
+  QC must reuse, whose four inputs are the two measured poses and the two frozen targets;
+- line 67: connect the sampling **"after the real reset and before the arm-gripper dispatch"**, and **"after normal
+  completion or controller-stop"**, noting that the formal Head search and the neck dispatch may precede collection.
+
+So `endpoint_records_from_audit` does not have to invent which rows are the boundaries: the **initial** record is the
+pose evidence at the first boundary (post-reset, pre-arm-gripper-dispatch) and the **final** record is the pose evidence
+at the second (post-completion or post-controller-stop), with the targets taken from the frozen `inputs` rather than
+from anything the run recorded about itself. The remaining unknown is narrower than before - which audit row carries a
+pose, and in what form - and that is one read of the physics record shape the suite already uses
+(`cup_position_world_m` in `observation`) plus whatever the endpoint policy expects (`xyz_xyzw`).
+
+The review of K2 revision 3 is still running (`tail -1` empty).
