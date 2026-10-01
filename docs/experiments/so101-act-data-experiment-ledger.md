@@ -43652,3 +43652,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
 - F1 and F14 closed; F3 closed; F11 one of three with this item staged; F5's regression fixed; F12/F13 narrowed;
 - HEAD 38858d125; goal paused.
+
+## CP-2316 - F11's endpoint derivation handed off, with the probe data for both fixtures
+
+- Three attempts, then the three-strike rule. The probe settled the first fixture exactly: _self_consistent_formal's
+- window claims first_command_s 1.0 and physics_end_s 1.2 while its five physics rows all sit at 1.1, so aligning
+- those two endpoints to 1.1 is right - and with the derivation in place that fixture seals.
+- The second fixture, test_readback_reapplies_the_formal_coverage_gate, then reports AUDIT_WINDOW_INVALID at its
+- seal: its rows do not run to 1.2 either, and its true times are unmeasured. It shares _window() with the first
+- fixture, which is why moving the helper's values breaks it and moving them back breaks the other.
+- The next attempt is therefore two probes, not one edit: print each fixture's window endpoints beside its rows'
+- min and max, give each fixture the values its own history supports, and only then re-apply the derivation. The
+- probe recipe is the one used here, one test per fixture, printed and withdrawn in the same run.
+- Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
+- F1 and F14 closed; F3 closed; F11's divergence fixed (CP-2314) with this item handed off; F5's regression fixed;
+- F12/F13 narrowed; HEAD 0a1a6a4db; goal paused.
