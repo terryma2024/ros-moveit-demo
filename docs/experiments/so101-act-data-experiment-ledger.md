@@ -52650,3 +52650,28 @@ understand - most likely the probe's recorder is missing something the test's su
 
 One read closes it: print `cap._failure` after each drain in this same probe. If it names a reason, the rows were refused
 and the reason is the last fact this chain needs.
+
+
+## CP-2752 — The audit writer is called at the tail handoff, not when a row is released
+
+```
+stamp 1.0: drained=0 rows=0 failure=None
+stamp 1.1: drained=0 rows=0 failure=None
+stamp 1.2: drained=1 rows=0 failure=None
+stamp 1.3: drained=1 rows=0 failure=None
+```
+
+Two rows were written to the recorder (`drained=1` twice, no failure latched) while my `bind` callback was never invoked -
+which places the callback precisely: it lives in `_tail_paths`, the method `finish` calls to hand the tail off
+(`paths = tuple(self._tail_paths())`, CP-2671), and **not** in `_service_pending`, where rows are written. So the audit's
+row-bindings are produced once, at the end, over every row the capture wrote - which is the right design, because the
+bindings are a summary of what was recorded rather than a per-row side effect.
+
+That also explains why the chain test reports the *seal's* complaint rather than the capture's: in that run there is a
+tail, the bindings are written from it, and the seal then checks them. And it means the reference clause of the binding
+check was being evaluated against rows chosen by the tail - whose `sim_time_s` values I have still not observed, since my
+adapter ran at a point this probe never reached (it never called `finish`).
+
+So the last measurement is the one the chain test itself can print: the rows the tail hands to the callback, with their
+`sim_time_s`. That is where the 0.1 offset in the binding check either lines up or does not, and it is a single print
+inside the adapter that already exists.
