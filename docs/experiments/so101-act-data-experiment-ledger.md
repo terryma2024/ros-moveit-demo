@@ -43805,3 +43805,119 @@ GREEN：**15 / 45 / 45 / 32 / 74** 全 rc=0（`scratch/hs312/logs/green-*.log`�
 **本轮证据与生命周期**：`$CAMPAIGN/readback-demonstration-20261001T124726Z{,.console.log,.provenance.txt}`、
 `$EV/scratch/pytest-xdist8-hs312-suite.2335665f`、工作树 `scratch/hs312/`（env/common/runner 脚本、pyshim、pyshim-red、pristine、logs、regression-files.txt、tmp*、
 `demonstrate_readback.py`、`run-demonstration.sh`、`run-red.sh`）。以上**均为删除候选，未删除**；HS-300..311 的产物只读引用，未改动。
+
+## HS-313 — 用户批准 17 值后的**晋级**：一次 patch 把获批模型身份与 17 值写入 `head_search_v2.json`，安装版 `verify-promoted-config` rc=0，提交 `d688ee619`，两套件失败集与基线逐节点相同
+
+**提交**：`d688ee619056a4da298734e58fabb091d774cda2`（`config: promote calibrated head search bundle`，普通 `git commit`，rc=0，
+`git diff --cached --check` rc=0，1 文件 +16/−16）。本条目因本任务把账本排在套件与 receipt **之后**，作为独立的后续 docs 提交
+（计划 Step 4 原本把配置与账本放进同一个 commit；配置提交的 message 与文件范围与计划一致）。**未重跑**任何测量、**未启动**
+ROS/MuJoCo/CUDA detector、**未重建/未重签**、**未改** sealed 几何、frozen 候选、dataset、candidate 权重或 pending run 目录。
+
+### (a) 批准目标与再哈希
+
+| 项 | 值 |
+| --- | --- |
+| 批准原话（用户） | 「批准这 17 个值」——回复的是一份被逐项点名的 bundle（路径 + file sha256 + canonical digest） |
+| bundle 路径 | `$CAMPAIGN/head-search-calibration-20261001T122047Z/head-search-calibration-bundle.json` |
+| file sha256（动作前 `sha256sum` 再哈希） | `e21899c22cb15774bfe06e9f995c85fc20797a61bda08560c6f48044a8767974`（86896 B），**等于批准目标** |
+| canonical sha256（本轮独立重算） | `f85b78f6d1b31aa538671d527b57be1934b43f5d60588760fbc0993f378d88ee`，等于批准陈述的 canonical digest |
+| run 状态 | `SUCCEEDED`、`audit_only:true`、`checkpoint:false`、`phase=bundle_generation`、17 个 `parameter_names` |
+
+**诚实说明**：`APPROVED_BUNDLE_SHA256` 取自批准陈述所点名的摘要（当时**唯一存在**的 bundle），**不是**用户手打的摘要；
+再哈希先于任何其他动作，结果与批准目标逐字相同。
+
+### (b) 晋级：一次 patch，只改 `head_search_v2.json`
+
+本会话**没有** `apply_patch` 可执行文件（`command -v apply_patch` 无结果），因此用本 harness 的补丁工具 `edit` 调用**恰好一次**，
+以一段字面 old/new 覆盖整个变更区；**没有**用任何脚本重写该文件。结果与另一份独立计算的期望文档 **`cmp` 逐字节相同**，
+`git diff` 仅 1 文件 +16/−16。**没有任何值被重算、四舍五入、钳制或替换。**
+
+| 变化的 key | before | after |
+| --- | --- | --- |
+| `weight_path` | `models/head-search/yolo11n-seg-best.pt` | `/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-yolo-models-20260930T120608Z/candidate-c2a/head-task-mixed-taskweighted/weights/best.pt` |
+| `weight_sha256` | `f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781` | `2afd550694abfbe6d1c37922c9ea0b4a0f8567bef94cf4c4ec85d4b50c0cc82a` |
+| `values.min_confidence` | `0.4` | `0.25` |
+| `values.tracking_iou` | `0.3` | `0.5` |
+| `values.center_deadband_px` | `18.0` | `3.0` |
+| `values.coarse_step_rad` | `0.3` | `0.6560533740603397` |
+| `values.search_timeout_s` | `12.0` | `0.7089213519976479` |
+| `values.max_fine_corrections` | `4` | `2` |
+| `values.max_fine_total_rad` | `0.4` | `0.6961197054865531` |
+| `values.max_age_s` | `0.05` | `0.014736005008453503` |
+| `values.max_skew_s` | `0.02` | `0.010000000000001563` |
+| `values.submit_lead_s` | `0.02` | `0.004` |
+| `values.stop_velocity_rad_s` | `0.05` | `0.04136050464213824` |
+| `values.stop_latency_s` | `0.06` | `0.07012353999540209` |
+| `values.vertical_bounds_px` | `[110.0, 370.0]` | `[191.699852915671, 272.6768492617673]` |
+
+**逐字节未动的 4 项**：`horizontal_fov_rad`（1.3121067481206794）、`lock_valid_neck_rad`（`[-6.283175307179587, 6.283175307179587]`）、
+`min_area_px2`（64.0）、`min_bbox_aspect`（0.5）——数组仍保持原有的多行写法。文件 sha256：`d3c4ef9b57cc258ff975d96a29a8426adfdc562bbfbda2029e578542846b1c57`（1378 B）
+→ `dfa0af9b721aa7d810e6302e5f4bd32fd5d8db0379b69743add8f3d4689c25cd`（1633 B）；顶层变化 key 恰为 `["values","weight_path","weight_sha256"]`。
+
+**模型身份的来源**：`weight_sha256` 取 bundle 的 `runtime_identity.detector_weights_sha256`（= 该权重文件本身的 sha256，本轮独立核对）；
+`weight_path` 取 bundle **自己的**受控依赖 `production_config`（`dfe71656…`，即 run-of-record 声明的派生 C2a 配置）中的同名键。
+本轮重新做了 key 级 diff：该派生件与 sealed 生产配置**只差 `weight_path`/`weight_sha256` 两个 key**，其余键（含 17 值、`tracker.iou_threshold` 0.3、
+`motion`、`camera`、`runtime_id`、`candidate_identity_sha256`）逐键不变，与 HS-301/309 的记载一致。
+
+**受控依赖的处理（推断①）**：bundle 的 `controlled_dependencies` 是**六个 sealed 输入文件**的 path+sha256 映射，而晋级配置自己的
+`controlled_dependencies` 是依赖包名列表 `["ultralytics","torch"]`（`head_search_binding.validate_promoted_pair` 只把它当作
+config/report 之间**被比较**的字段，不解释其内容）。两者**形状与语义都不同**，把六项映射写进该键属于改动一个无关字段的 schema 变更，
+因此该键**逐字节保留**；六个 sealed 摘要改在 receipt 里与本晋级绑定。设计 §7 要求作为受控依赖记录的
+`settle_velocity_rad_s`/`goal_tolerance_rad`/tracker 算法/10 Hz frame contract 已在 bundle 的 `also_recorded` 中，逐项与配置核对**全部相等**
+（0.05 / 0.05 / bytetrack+0.3 / 10 Hz），故**无需改动、也未改动**。
+
+### (c) 安装版 `verify-promoted-config`：rc=0；但计划里的 flag 从未实现
+
+安装版子命令的接口（本轮录下它自己的 `--help`）是 `--run-root`（必需）、`--approved-bundle-sha256`、`--promoted-config`，
+**没有** `--bundle`/`--production-config`/`--approval-output`。计划 Step 3（plan 行 1270-1276）的字面命令探针 `rc=2`：
+`error: the following arguments are required: --run-root`，且**未创建任何文件**（探针证据 `plan-literal-command.probe.txt`）。
+
+按安装版接口运行（`--promoted-config` 指向**获批 bundle**，run root 为 campaign root 下全新目录）：
+
+```
+ros2 run so101_demo_py so101_head_search_calibration verify-promoted-config \
+  --run-root $PROMO/verify-run-root --promoted-config "$BUNDLE" \
+  --approved-bundle-sha256 e21899c22cb15774bfe06e9f995c85fc20797a61bda08560c6f48044a8767974
+```
+
+`rc=0`，stdout `HEAD_SEARCH_APPROVED e21899c22cb15774bfe06e9f995c85fc20797a61bda08560c6f48044a8767974`，工具自写
+`verify-run-root/approval-receipt.json`（422 B，sha256 `6e409e7f…`，`hashed:"bytes"`、`verified:true`、approved == promoted == bundle 摘要）。
+该子命令的实现只做**"给它的文件按字节哈希 == 批准摘要"**，**不读**晋级配置、**不逐字段核对** design §8.3 要求的 17 值/模型 SHA/camera/dataset/tracker/runtime identity
+（那是计划与设计对该命令的期望，代码里没有）——因此晋级配置本身由本轮另做只读核对：**17/17 值与 bundle 逐值相等**，
+`weight_sha256` == bundle `runtime_identity.detector_weights_sha256` == 被点名权重文件的 sha256，且顶层 key 集合与晋级前完全一致（无多键无少键）。
+
+### (d) 套件（`head_test` 替代）
+
+`head_test` 在本环境**不是可执行命令**（它是计划测试 shell 里的 zsh 函数，解释器缺 pytest-xdist，HS-288 已认定），故按既有等价方式替代：
+perception venv `/data/work/venvs/so101-v5-t004-perception/bin/python`、pytest-xdist **8 workers**、baseline run-dir 布局
+（`$EV/scratch/pytest-xdist8-<label>.<suffix>/`，`TMPDIR`/`TMP`/`TEMP` 均指向该 run dir 下新建 `tmp`，`tempfile.gettempdir()` 落在其中）、
+ROS 插件关闭（`-p no:launch_ros -p no:launch_testing`）。命令即 HS-311/312 的 `scratch/hs311/baseline-invocation.sh`。
+
+| 套件 | run dir | rc | 计数 | 与基线逐节点 diff |
+| --- | --- | --- | --- | --- |
+| `src/so101_demo_py/test` | `$EV/scratch/pytest-xdist8-hs313-demo-suite.49a67e21` | 1 | **175 failed / 6300 passed / 152 skipped / 86 errors** | **0 行（261 节点相同）**，与 `pytest-xdist8-hs311-suite.fa18958f` 完全一致 |
+| `src/so101_teleop/test`（第一次） | `…hs313-teleop-suite.572167b6` | 1 | 38 failed / 1240 passed / 43 skipped | 多 1 个节点（见下） |
+| `src/so101_teleop/test`（重跑） | `…hs313-teleop-rerun.37e51279` | 1 | **37 failed / 1241 passed / 43 skipped** | **0 行（37 节点相同）**，与 `pytest-xdist8-base-teleop.RkZTKc57` 完全一致 |
+
+**多出的那个节点是既有的 flaky，不是本次晋级造成**：`test_expert_validation_retry_owner_reconcile.py::test_a_genuinely_live_owner_is_never_retired`
+（断言 `VALIDATION_RECOVERY_REQUIRED`，实得 `RETRY_OWNER_ACTIVE`）。单测隔离重跑 3 次得 失败/通过/通过，该文件与其 fixture **零处**引用 head search，
+其判定依赖 `expert_validation.lease.can_start_campaign`（monotonic 租约到期 + supervisor 的 unresolved-campaign 记账）这一**顺序/时序敏感**的
+门；本轮**未**根因定位它。两次全量 teleop 的 37/38 差异即此 flake。
+
+### (e) readback 变体（HS-312）与本 bundle 的差别
+
+HS-312 的**内存** readback 变体 canonical `3d088a60…` 与获批 bundle（canonical `f85b78f6…`）的差异**只在 `parameters.<名字>.startup_readback.*`**
+（85 条路径，全部落在 `parameters.` 之下；11 项 `verified` false→true、`observation` 由 `declared_by_phase_6/7`→`constructed_production_component` 等）。
+**获批并晋级的 17 个数字在两者中完全相同**；该变体**未产出任何 bundle 文件、未晋级**，本轮也没有重签或改动任何 bundle 字节。
+
+**本轮声明的推断（待评审，照录）**：① 见 (b) 对配置 `controlled_dependencies` 语义的判断（保留 `["ultralytics","torch"]`，六项 sealed 摘要进 receipt 而非该键）。
+② 晋级后仓库配置摘要（`dfa0af9b…`）与 bundle 记录的受控依赖 `production_config`（`dfe71656…`，run-of-record 实际读的派生件）**必然不同**——晋级正是改这份配置；
+sealed 输入与 run 目录未动。③ Task 14 的 `qualify` 调用串（plan Task 14 Step 2：`--bundle/--approval-receipt/--production-config/--episode-partitions/--profile/--serial/--anchors`）
+与安装版 `qualify`（`--run-root/--promoted-config/--evidence-root`）同样不一致，属与 (c) 同类的 plan/代码漂移，**本轮未改**，留给 Task 14 处理。
+
+**本轮证据与生命周期**：`$CAMPAIGN/promotion-20261001T125614Z/`（`promotion-approval-receipt.json`（16152 B，`0e62d59a…`，含批准原话、两个 bundle 摘要、
+配置前后 sha256、key 级 diff 范围、verify 命令与 rc、提交哈希、替代说明与诚实说明）、`verify-run-root/approval-receipt.json`（工具自写，`6e409e7f…`）、
+`verify-promoted-config.console.log`（`HEAD_SEARCH_APPROVED …`）、`verify-promoted-config.provenance.txt`、`promoted-config.diff`、`promoted-config.sha256.txt`、
+`plan-literal-command.probe.txt`）、`$EV/scratch/pytest-xdist8-hs313-{demo-suite.49a67e21,teleop-suite.572167b6,teleop-rerun.37e51279,teleop-single-1.9f9ce060,teleop-single-2.2317976c,teleop-single-3.93747f4b}`、
+工作树 `scratch/hs313/`（`common.sh`、`run-verify.sh`、`run-plan-literal-probe.sh`、`toolchain-root.txt`、`promotion-dir.txt`、`timestamp.txt`、`tmp/`）。
+以上**均为删除候选，未删除**；HS-300..312 的产物只读引用，未改动。工作树最终 `git status --porcelain` 仅 `?? runs/`（既有未跟踪）。
