@@ -45384,3 +45384,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - Recorded so the next pass does not re-derive it. F1, F14, F3, F12 and F11 closed; F5's step two one traceback away;
   F13's scene item awaiting K2; E1's CLI verified with `inspect` naming these four roles as the only blockers.
   HEAD ed71dc1a2; goal active.
+
+
+## CP-2406 — The empirical provenance is accepted, and history keeps its reading
+
+- `_APPROVALS` gains `user_empirical_default`, and `path_policy`, `placement_qc` and `rgb_skew` now accept either
+  that kind or the historical `nonhead_calibration`; the role comparison was widened to accept a tuple of kinds.
+  That is the design's rule applied literally: a new candidate carries the provenance the user authorized this round,
+  while an old record keeps its previous reading and conclusion rather than being relabelled.
+- The RED was exactly the expected one and was measured, not assumed: with only the kind added and the three roles
+  moved, the scope suite reported 14 failed / 24 passed with `INPUT_NOT_APPROVED`, because its fixtures carry the
+  historical kind for those roles. After widening the roles, the scope and endpoint suites are GREEN together - 59
+  passed, rc=0, with the scratch pointer and JUnit in this round's logs.
+- Remaining on this axis (CP-2405's steps): register the two landed configuration documents as the candidates for
+  these roles - `path_policy` and `rgb_skew` reading the runtime document's own sections, `placement_qc` reading its
+  `safety_release.support_distance_max_m` as a safety input with the real tabletop-support gate untouched, and
+  `resource_thresholds` staying source-controlled against the newly generated effective configuration - then `inspect`
+  is expected to report zero blockers and `prepare` runs end to end.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 517a592a4;
+  goal active.
