@@ -43510,3 +43510,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - process CPU time, and do not read a missing directory as a failure before the review finishes.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete; eighth review running; goal paused.
+
+## CP-2306 - The zero-delta round was a burst gap: the review gained 618 lines in ninety seconds
+
+- The ninety-second window settled it: the log went 8441 to 9059 (delta 618) with the session alive and no end
+- marker, right after a round that showed no growth at all. So CP-2305's rule holds and the refinement I sketched
+- around it - a monotonic slowdown from 1897 to zero suggesting the review was winding down - was wrong: the deltas
+- are burst artefacts of when Codex flushes, not a curve, and reading them as one is the same mistake as reading a
+- plateau as a stall.
+- Consequence for the next checks: sample once, over a window long enough to cross a flush (sixty seconds or more),
+- and judge by that single delta plus the session state and the end marker - not by comparing successive deltas for
+- a trend they do not carry.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete; eighth review running and active; goal paused.
