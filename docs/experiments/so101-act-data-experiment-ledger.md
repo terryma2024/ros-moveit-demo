@@ -47913,3 +47913,24 @@ Either way the fix is the same kind as every layer before it: read where the com
 `broker_runtime_root`, `broker_input_root` and `broker_spec_path` - the grep is printed beside this entry - and build
 the substitutions only from the ones that are already set at that point, falling back to the run's own root for the
 rest. The frozen flags themselves are right; only their location values need to come from what exists.
+
+
+## CP-2533 — The fallback is the authority's IPC root, which the composition already trusts
+
+The assignments settle it: `self.runtime_ipc_root = configured_runtime_ipc_root(...)` at 2664 (None in this run, because
+that helper found nothing to configure), while `self.broker_runtime_root = self.authority.ipc_root / "broker"` at 2787
+and `self.broker_input_root = spec.request.evidence_root / "broker-inputs"` at 2788 are always populated, and
+`self.broker_spec_path` is None until `_prepare_broker_generation` sets it at 3029. So three of the four locations are
+reliable and the fourth has a trustworthy fallback: the same `authority.ipc_root` the composition itself uses for the
+broker's runtime root.
+
+That makes the builder's substitution:
+
+    endpoint    -> (composition.runtime_ipc_root or composition.authority.ipc_root) / "perception.sock"
+    input-root  -> composition.broker_input_root
+    ready-receipt -> composition.broker_runtime_root / "ready.json"
+    runtime-spec  -> composition.broker_spec_path
+
+with the frozen flags otherwise taken as they are - the detector identity and its digest untouched, which is what the
+broker verifies. One small edit, then a re-run, and the broker should either come up healthy or name the next thing it
+needs.
