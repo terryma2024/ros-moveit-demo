@@ -46898,3 +46898,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   activated, and the pinned catalogue whose `task_start` matches the endpoint rule.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 2176ec44e;
   goal active.
+
+
+## CP-2482 — Settled: the only way past the broker is DRY_RUN, which produces no episode
+
+- Read the broker's own condition and its neighbours: `self.broker_socket_path = self.broker_runtime_root /
+  "perception.sock"`, `self._startup_stage = "broker_runtime"`, and `if spec.request.run_mode is not
+  RunMode.DRY_RUN:` - with a `container.cid` check inside the resume branch. So the broker **is** the perception
+  container, its socket is named accordingly, and the single switch that avoids it is `DRY_RUN`, which by definition
+  produces no episode and therefore cannot serve this milestone.
+- That closes the investigation the last three rounds opened, and the honest statement of the gap is now complete and
+  evidence-backed: the default production composition cannot drive a MuJoCo-only single non-Head episode, because its
+  broker half stands up a perception container that (a) this amendment explicitly excludes implementing and (b) no
+  configuration switch removes. The design's own rule forbids the tempting alternative - a second, simplified
+  scheduler or broker - so this is a decision for the coordinator and the user: either a container-free broker path is
+  approved as its own piece of work, or the milestone's live run waits for it.
+- Also committed this round: the deployment provenance verifier (87b9359a2), with the scope and endpoint-pose suites
+  green at 59 passed.
+- Everything on this side of the gap is ready and recorded: frozen inputs with zero blockers, the endpoint policy and
+  its calculator with twenty-one controls, the CLI's guards and its V2 request, the deployment verifier, the pinned
+  catalogue whose `task_start` matches the endpoint rule, and the environment with RobotSystem activated.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 87b9359a2;
+  goal active.
