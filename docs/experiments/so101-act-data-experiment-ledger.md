@@ -55010,3 +55010,25 @@ So the two mappings have to travel by different paths:
 That split is my side's, and it is the same seam as the recorder's `_RECORDER_LOCAL_KEYS` one more time - evidence that a
 closed channel plus a wider producer will keep meeting at exactly this boundary. Recording it in the handover means the
 coordinator does not have to discover it while wiring.
+
+
+## CP-2843 — The guard is an acquisition guard, so the physical side hands over two parts, not three
+
+Reading what the capture asks of a guard rather than assuming it wanted the step fence:
+
+```python
+continuous_capture.py:80     self.guard = guard if guard is not None else AcquisitionGuard()
+:387                             self.guard.accept(head)
+:388                             self.guard.accept(wrist)
+```
+
+One method, `accept(frame)`, and a **production** default (`AcquisitionGuard`) whose refusal on frame reuse or regression
+is terminal for the capture. So the parameter is about acquisitions, not physics steps - and `RosPhysicsStepFence`, which
+CP-2821 counted among the three parts, is not what it wants.
+
+Which corrects two entries: CP-2821's "three of the four" and the first version of the handover note. **The coordinator
+hands over two things** - `self.rgb` as the `sampler` and `self.readback` for the extraction - and the guard stays with
+the capture, where it already has a production implementation.
+
+Found by doing item one of this round's own plan: writing the guard wrapper. The wrapper turned out to be unnecessary, and
+the handover got shorter, which is the useful direction for a task that is waiting on someone else.
