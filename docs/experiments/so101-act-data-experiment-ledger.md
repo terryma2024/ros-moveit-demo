@@ -43873,3 +43873,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - rather than a tail.
 - F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed with its derivation handed off; F5's
 - regression fixed with its two items now known to share this surgery; F12 two of three; HEAD 9cc72c5cf; goal paused.
+
+## CP-2331 - F11/F5's shared surgery: four sites, three values known, one sub-case unmeasured
+
+- Sixth attempt. The control that refuses AUDIT_WINDOW_INVALID is test_a_formal_audit_may_not_seal_without_source_
+- coverage, and it has THREE sub-cases: `empty` (no rows, so the endpoint check is skipped and it passes the
+- window gate), `partial` (one row at 1.1 - fixed this round by sealing a window those rows support) and
+- `complete`, which is the one still failing because its rows have not been measured.
+- So the surgery now has exactly four sites, three of whose values are measured:
+-   1. _window(): first_command_s 1.0 -> 1.1 (its physics_end_s 1.2 already matches the relabelled fixture's rows
+-      [1.1, 1.2]);
+-   2. _self_consistent_formal (line 1184): return a window with 1.1/1.1, matching its five rows at 1.1;
+-   3. the `partial` sub-case: seal with 1.1/1.1, matching its single row;
+-   4. the `complete` sub-case: UNMEASURED - probe its rows the way the other three were probed, then set its
+-      window from them;
+-   plus the derivation itself (|endpoint - extreme| <= tolerance), the first fixture of which already accepts.
+- Reverted; green and nothing half-applied. This is the same wall documented in CP-2329, one sub-case further on,
+- and the honest statement is that finishing it needs one more probe rather than one more guess.
+- F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed, its derivation handed off with four
+- sites named and three measured; F5's regression fixed and its two items waiting on the same surgery; F12 two of
+- three; HEAD c0ea81491; goal paused.
