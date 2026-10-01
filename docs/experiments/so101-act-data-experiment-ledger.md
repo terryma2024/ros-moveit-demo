@@ -53554,3 +53554,32 @@ settles it without another round of caller-side inference.
 
 That is the state: correction 2's chain test passes; correction 3's is one path from its assertion; four production changes
 and the chain test are uncommitted; and two temporary prints (store, test) remain to be removed when it goes green.
+
+
+## CP-2788 — The callee gets the right path, and the failing test never reaches it
+
+The print inside `verify_audit_manifest` reports what it is handed:
+
+```
+VAM called with: .../working/episode/audit/audit-manifest.json
+VAM called with: .../working/episode/audit/audit-manifest.json
+...
+```
+
+Which is the correct path, `audit` segment included - and every one of those lines belongs to the **first** test, the one
+that passes. The failing test's `VAM` never appears, so its failure happens **before** `verify_audit_manifest` is reached:
+inside `verify_episode_seal`'s earlier clauses, or before `verify_episode_seal` at all.
+
+That narrows the remaining question to one of two things, both now small:
+
+- a clause in `verify_episode_seal` that runs before the `verify_audit_manifest` call and reports
+  `AUDIT_MANIFEST_INVALID` from a `FileNotFoundError` on a path without the `audit` segment - which by elimination is
+  built from a base the store or test supplies, not from either pair that has been read;
+- or a caller of `verify_episode_seal` other than the three counted, reached only in the store's path.
+
+Every caller-side value has now been read and every one of them includes `audit/`, and the callee confirms it receives
+such a path in the test that works. So the next step is a print of the base that the failing call composes from - and it
+is one round of instrumentation, not another hypothesis.
+
+State unchanged: four production changes and the chain test uncommitted, three temporary prints (store, test, callee) to
+remove when it goes green, correction 2's test passing, correction 3's one call away from its assertion.
