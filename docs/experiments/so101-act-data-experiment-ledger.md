@@ -49441,3 +49441,22 @@ dict's role here is membership, which the `in` test in `_payload_typed` gives it
 Two failed attempts on this one piece, both caught before any harm, both recorded: the acquisition producer being left
 out of the ordering edit, and the union applied to a mapping. The remedy each time was the same - read the literal,
 then write.
+
+
+## CP-2613 — The consumers need no edit, and the remaining K2 work is carriage
+
+`recorder.py` verifies a sealed episode twice, at `:254` and `:422`, and both sites do the same thing: check that the
+paths are absolute and free of `..`, call **`verify_audit_manifest(audit_manifest)`**, then read `episode.json` and
+compare the scope's digest against `document["scope_sha256"]`. So the recorder goes through **the same verifier** the
+protocol names, which means K2's three new record kinds and its new payload categories flow through it unchanged - no
+consumer edit is needed, and the width gate agrees (242 passed with the schema additions in place).
+
+That locates what is left of K2 precisely. The review's list had two halves: the **contracts and schema** (geometry
+provenance, the ordering sequence, the closed scene/event schemas - all three landed) and the **record carriage** -
+"`pick_place_search_port.py`, `pick_place_runner.py` (record carriage, gate derivation)" - i.e. actually **emitting** the
+K2 events at the boundaries the protocol defines, the A/Q/R records whose keys the schema now admits. That is the
+remaining piece, it lives in the runner and its port, and it is larger than the three additions just landed because it
+touches the live path rather than a closed set.
+
+So K2 stands at three of its measured pieces done and the carriage next, with the schema ready to receive what the
+carriage emits.
