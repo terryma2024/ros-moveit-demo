@@ -43497,3 +43497,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
   the seventh review's period used.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete, hybrid specified; eighth review running; goal paused.
+
+## CP-2305 - Reading the eighth review's progress honestly: the log is the signal, not the CPU
+
+- Three facts measured this round. The dispatch log grew from 1160 to 1581 lines between checks, so the review is
+- progressing and the earlier plateau was an output burst gap rather than a stall. The codex process's parent shows
+- 00:00:00 CPU across a six second sample, which is expected for a network-bound agent and therefore not a signal
+- either way. And the /tmp directory I created for the verdict has been cleaned away, which is fine: the reviewer
+- runs with /tmp writable and creates its own path, which is exactly what the seventh review did when it could not
+- write into the ledger's directory.
+- Consequence for the next checks: judge progress by the log's growth and by the verdict file's appearance, not by
+- process CPU time, and do not read a missing directory as a failure before the review finishes.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete; eighth review running; goal paused.
