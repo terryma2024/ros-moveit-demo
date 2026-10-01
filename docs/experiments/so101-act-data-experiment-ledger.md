@@ -45896,3 +45896,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   schema, makes the versioned change with its consumers, rebuilds and runs again.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; run's guards,
   contract and run identity are verified, and its three composition calls are wired. HEAD ae4218454; goal active.
+
+
+## CP-2431 — The seam's answer was in the same file: v1 refuses by design, v2 is the route
+
+- `parallel_batch/contracts.py:1198` states it directly: a **v2 document** is refused by the **v1 parser by design**
+  (`UNKNOWN_CONFIG_FIELD`), which is why `load_runtime_config_any_schema` exists at all - it selects the parser by the
+  document's version. So the honest fix for CP-2430 is not to widen v1's closed set for one milestone, but to move the
+  document to the version that admits the new field and carry its consumers along - the amendment's rule read
+  literally: a new field is a versioned change.
+- What that means concretely, for the next pass: read `ParallelRuntimeConfigV2`'s field set (contracts.py:1025) and
+  decide whether `hard_stops` belongs there as a declared field or whether the v2 schema already carries an equivalent
+  resource-stop section under another name; then declare the frozen runtime document at that version with the two
+  values, keep the v1 parser's refusal intact, and re-run. The run should then proceed to compose its three objects or
+  refuse by name for the fourth piece.
+- Nothing about this weakens the safety story: the two values stay explicit in the controlled configuration, the v1
+  contract keeps refusing what it does not know, and the effective values still enter the inputs hash chain through the
+  manifest's `runtime_policy` binding.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; run's guards and
+  identity are verified and its three composition calls are wired. HEAD c9308bee5; goal active.
