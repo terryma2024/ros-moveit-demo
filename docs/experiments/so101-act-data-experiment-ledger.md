@@ -52255,3 +52255,28 @@ and frames whose own reset epoch is 2 as well - the last because `feed()` defaul
 The lesson is the same one this stretch keeps re-learning in new clothes: two helpers in one file that look like the same
 fact (`identity()`'s `"s"` and `audit()`'s `session-1`) are two facts, and reading one does not authorise assuming the
 other.
+
+
+## CP-2735 — The chain now clears every row-level check and stops at the seal's grid
+
+Three alignments and three later refusals, each one a level further in:
+
+1. `session_id`/`reset_epoch` on the recorder and the capture, and the frames' own reset epoch (CP-2734) - which cleared
+   all four clauses of `EPISODE_SCOPE_INVALID`;
+2. the audit writer's `IDENTITY` (`session-1`, epoch 2) - which cleared `EPISODE_SEAL_AUDIT_EPISODE_MISMATCH`, the seal's
+   check that the audit's own `episode.json` names this episode;
+3. and now **`RECORDER_SEAL_FAILED`**, raised from **`EPISODE_TIME_GAP`** - the seal's grid rule.
+
+So the rows are written, their scope is right, the audit is balanced at exactly the recorder's sixteen keys, and the
+audit's identity matches. What is left is the grid: the seal requires the recorded `sim_time_s` values to step by exactly
+`dt_s`, and those values are the observations' own times, which the capture sets from the `at_s` it stamps each row with.
+My frames are at 1.0, 1.1 and 1.2, so the question is which instants the capture actually stamps - the frames' stamps, or
+the rows' `target_s` values one step ahead.
+
+That is one read away, and it is the last one: everything else in the chain - sealing, binding, verification, the
+endpoint QC over the sealed episode - has now been exercised, and the two tests are within a single value of proving E2's
+corrections 2 and 3 end to end.
+
+The uncommitted edits in `test_act_seal_and_downgrade.py` are the three alignments above, each applied with an assertion
+after it (CP-2733's lesson), and they are kept rather than reverted because every one of them moved the failure strictly
+forward.
