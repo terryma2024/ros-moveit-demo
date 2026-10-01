@@ -47662,3 +47662,15 @@ Verified: the package rebuilds clean (build22) and the scope and endpoint-pose s
 Next: pass it as `broker_command_builder=_broker_command` where `_run` instantiates `ProductionBatchComposition`, then
 drive the composition for one episode and let the run name the next layer - the same pattern that has cleared four
 layers of this integration so far (the guard, the run mode, the trusted pose, the versioned request).
+
+
+## CP-2518 — The checkpoint is alive, and its git output is not new work
+
+One observation of the running K2 review, per the review-period discipline: the `k2-review` window is alive, the log
+stands at 5956 lines and there is still no `EXIT=` marker. Its tail shows `??` lines from a `git status` it ran - and
+those paths are the user's **pre-existing** untracked files (the thirteen recorded at CP-2394), not anything the review
+created. That distinction matters because this task's rule is that only `dst` writes this worktree, and a reviewer
+running read-only git commands must not be mistaken for one producing files.
+
+The worktree's dirty count is unchanged at 35 entries, so the constraint holds: the review is reading, and nothing in
+the tree has moved because of it. No further polling until the marker appears; the verdict will be collected then.
