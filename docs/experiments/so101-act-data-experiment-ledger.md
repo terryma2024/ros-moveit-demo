@@ -48034,3 +48034,22 @@ the provenance bootstrap stops assuming the image's `/opt` layout and image-id e
 `cli/parallel_perception_broker.py`, with the substantive checks (detector model id and weights digest, runtime pin
 versions, source provenance verification itself) kept. That is a slightly bigger edit than "one parser change" and it is
 still one module, which is what makes it a piece of work rather than a redesign.
+
+
+## CP-2538 — The next named point is BROKER_IMAGE_ID, and its honest value is this deployment's own digest
+
+After relaxing the location flags the broker got past argparse (exit 2 became exit 1) and failed in its own logic with
+`so101_demo.runtime.parallel_ipc.IpcError: BROKER_IMAGE_ID`, raised while `build_broker_transport(Path(args.runtime_spec))`
+built the transport. So the IPC layer requires an identity of the `sha256:<64 hex>` shape that CP-2537 read in the
+broker's provenance bootstrap - the container route supplies it from `PARALLEL_IMAGE_ID`, and this deployment has
+`broker_image="ABSENT"` by design (CP-2480), which is why the transport refuses.
+
+The honest treatment is not to invent an image tag but to state **this deployment's own identity**, and the task already
+has one: the frozen development runtime document's digest, which the freezer binds into the manifest as
+`runtime_policy.sha256` (CP-2415). Presenting that as the deployment identity is real, reproducible and checkable - a
+reader can recompute it from the frozen file - and it is exactly the sort of substitution the amendment's rule allows:
+name what is actually being run, never something that merely satisfies a shape.
+
+So the next edit is: the run's provenance carries `image_id = "sha256:" + <the frozen runtime_policy sha256>`, and the
+broker's bootstrap accepts a deployment-supplied identity in that same form. Then the transport should build, and the
+next refusal - if any - will name itself as all the others have.
