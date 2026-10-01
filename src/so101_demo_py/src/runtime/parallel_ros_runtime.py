@@ -1048,6 +1048,13 @@ class ParallelRosRuntimePorts:
             if received <= boundary:
                 raise RuntimeError("RGB_SOURCE_NOT_FRESH")
             rgb = np.array(_decode_rgb(color), copy=True)
+            # every captured frame is offered to the episode being recorded, here where the pixels and the
+            # simulation stamp are both in hand - reading the PNG back later would need a decoder and would put
+            # the frame behind its own acquisition. The sink is optional: a runtime that records nothing simply
+            # does not have one, and `record` reports whether it took the frame (CP-2857).
+            _sink = getattr(self, "episode_sink", None)
+            if _sink is not None:
+                _sink.record(camera, stamp_s=stamp / 1_000_000_000.0, pixels=rgb)
             if path.suffix == ".npy":
                 path.parent.mkdir(parents=True, exist_ok=True)
                 buffer = io.BytesIO()
