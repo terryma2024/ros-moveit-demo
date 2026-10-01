@@ -53213,3 +53213,25 @@ recorder must. Whichever is chosen, the other class's constructor changes, and e
 State of the work: three production fixes and the chain test are uncommitted; the first chain test (correction 2) passes;
 the second (correction 3) is one ownership decision away, and the two refusals it alternates between are evidence of
 exactly that decision rather than of a missing value.
+
+
+## CP-2774 — The files say where the store's episode root really is
+
+Running the two tests and listing what they produced:
+
+```
+test_a_run_claiming_success_ca0/.../attempt-1/sealed/episode/audit/audit-manifest.json
+test_a_run_claiming_success_ca0/.../attempt-1/sealed/episode/audit/source.json
+test_a_capture_driven_to_its_s0/.../attempt-1/working/episode/audit/audit-manifest.json
+test_a_capture_driven_to_its_s0/.../attempt-1/working/episode/audit/source.json
+```
+
+The first test - which does not use the store - puts everything under `working/episode`; the second - which does - puts
+it under **`sealed/episode`**. Since the second passes `store.episode_root` to the helper, that is where the store's
+episode root really is, and my earlier reading of `self.working = self.workspace / "working"` must have been the wrong
+line or the wrong attribute: the store's working directory is `sealed`, which is also what its own `seal` requires
+(`<workspace>/sealed/episode/seal.json`).
+
+So the pieces are now consistent rather than contradictory, and `EPISODE_SEAL_AUDIT_INVALID` is about a file that does
+not exist rather than about ownership: the audit manifest and its streams are produced where the store expects the
+episode, and the pair the test hands to the store and the verifier has to name those actual files.
