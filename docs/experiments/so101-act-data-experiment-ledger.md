@@ -52862,3 +52862,30 @@ Two consequences for the work ahead. First, E3 can proceed: the composition's co
 end to end. Second, the container-free route's host substitutions (`_broker_command` in `act_first_episode.py` and its
 `container_brokers=False`) are not the path E3 takes, and they stay committed as a capability without being the route the
 milestone's first episode uses.
+
+
+## CP-2761 — The chain passes: a real capture seals an audit the endpoint QC reads back
+
+```
+EPISODE QC: INCOMPLETE | checks: ['endpoint_pose']
+1 failed, 1 passed in 0.23s
+```
+
+**The first of the two chain tests passes.** A real `ContinuousEpisodeCapture`, holding a real `EpisodeRecorder` and a
+real `EpisodeAuditWriter`, driven through four instants of frames and references, hands its tail off, seals, and the
+episode is then read back by `verify_audit_manifest` and judged by the endpoint QC - which returns the design's prescribed
+report (`rule_version`, `status`, `checks.endpoint_pose`). Correction 2 is therefore proven end to end on production
+classes, and the chain that took seven refusals to close is closed.
+
+The last piece was the adapter: it skips rows whose reference was never accepted for their instant, which are exactly the
+rows that never became recorded rows and that the seal does not ask to be bound. With recorded rows bound where they are
+recorded (`_service_pending`) and the tail's offers skipped, `len(bindings) == record_count` holds - the equality the seal
+demanded (CP-2759) - and every earlier refusal is gone.
+
+The second test fails on **`EPISODE_LOCATION_MISMATCH`**, which is the test's own path arrangement rather than a contract:
+the seal is produced at the recorder's root while `ActCollectionResultStore` expects to find it under the workspace's
+`sealed` directory. That is a two-line fix in the test, and then correction 3's downgrade assertion runs.
+
+Also worth recording for the decision just taken (CP-2760): the container-free route's host substitutions stay committed
+as a capability, and E3 proceeds with the container route and the existing
+`so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1` image, which is present on this host as `010dca70ce3c`.
