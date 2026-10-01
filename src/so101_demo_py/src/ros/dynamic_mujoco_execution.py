@@ -391,6 +391,26 @@ class RosDynamicMujocoExecution:
         self._document.setdefault("monitor_violations", []).append(violation)
 
     def _record(self, state: State, before, after, **details: object) -> None:
+        # Every state the episode passes through is offered to the episode being recorded, from here, because this is
+        # the one place that knows which state is running (CP-2862). The row's facts are all in this object already:
+        # the per-state evidence, the joint-state receipt, the planning-scene readback and attachment, and the input
+        # pose. A layer with no camera stamps says so by passing an empty map rather than inventing times - the
+        # distinction between "this layer has no such fact" and "I assume it is this value" is the one this task keeps
+        # insisting on.
+        if self.episode_recorder is not None:
+            from ..act.episode_assembly import physical_audit_from_execution
+            self.episode_recorder.set_physical_audit(physical_audit_from_execution(
+                phase=state.value, reset_epoch=getattr(self._targets, "reset_epoch", None) or 1,
+                release_epoch=int(details.get("release_epoch", 1)),
+                release_event=bool(details.get("release_event", False)),
+                release_time_s=float(details.get("release_time_s", 0.0)),
+                evidence=after if after is not None else before,
+                contacts=list(details.get("contacts", ())),
+                joint_state_source_stamp_ns=self._joint_state_source_stamp_ns,
+                joint_state_received_monotonic_s=self._joint_state_received_monotonic_s,
+                joint_state_generation=self._joint_state_generation,
+                attached=bool(self._attached), scene_readback=self._scene_readback,
+                input_pose=self._targets.input_pose, source_stamps_s={}))
         self._state_events.append(
             {
                 "state": state.value,
