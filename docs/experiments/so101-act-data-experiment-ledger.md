@@ -46838,3 +46838,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   `catalog`/`catalog_sha256` from `_catalog`, and the driver that runs the connected components to completion.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 9ad21d509; goal active.
+
+
+## CP-2479 — The deployment's provenance verifier, with its claim stated
+
+- `_nonhead_provenance(inputs)` is written into `cli/act_first_episode.py`: it reads the frozen input manifest,
+  checks the `scene_model` role's recorded sha256 against the scene's actual bytes
+  (`NONHEAD_PROVENANCE_SCENE_MISMATCH`), checks the manifest's own digest against the one it was handed
+  (`NONHEAD_PROVENANCE_MANIFEST_MISMATCH`), and returns a provenance document that states in its own fields what it
+  **establishes** - the frozen manifest and the scene it names, at the frozen bytes - and what it explicitly **does
+  not claim**: detector weights, a grounded-SAM root and a broker image, with the reason, that this deployment is
+  MuJoCo-only and neither perception nor a container participates.
+- That is route one of CP-2472/2473 carried out with the obligation attached: the seam is used as designed
+  (`provenance_verifier(inputs)` returns the document), and the run's record says what the verifier proves rather than
+  quietly inheriting the default's detector-and-container assumptions.
+- Next: the twenty-two-field `PreparedBatch` (with `points_path` at the pinned catalogue and `catalog`/`catalog_sha256`
+  from `_catalog`), and the drive that hands it to `ProductionBatchComposition` and runs the connected components to
+  completion.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 9f2d7fdab; goal active.
