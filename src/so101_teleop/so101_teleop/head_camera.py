@@ -17,6 +17,18 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+#: The websocket types are imported at module scope on purpose. This module carries
+#: ``from __future__ import annotations``, so every annotation is a *string* that FastAPI resolves against
+#: the module's globals; with a local import the stream endpoint's ``WebSocket`` was unresolvable, so
+#: FastAPI validated the socket itself as a query parameter named ``websocket`` and closed every
+#: handshake (403) before the handler ran (HS-325). The placeholders keep the backend half importable
+#: without FastAPI, which was the only reason the import was local in the first place.
+try:  # pragma: no cover - FastAPI is a hard dependency of the service that serves this router
+    from fastapi import WebSocket, WebSocketDisconnect
+except ImportError:  # pragma: no cover - a backend-only consumer needs no websocket types
+    WebSocket = object  # type: ignore[assignment,misc]
+    WebSocketDisconnect = Exception  # type: ignore[assignment,misc]
+
 CONNECTION_ENV = "SO101_HEAD_CAMERA_CONNECTION"
 SOCKET_DIR_ENV = "SO101_UNIFIED_SOCKET_DIR"
 RUNTIME_ID_ENV = "SO101_UNIFIED_RUNTIME_ID"
@@ -71,6 +83,26 @@ class HeadCameraBackend:
     def model_id(self) -> str:
         return str(self.descriptor["model_id"])
 
+    def safe_interval_rad(self) -> list:
+        """The sealed interval the target route is bounded by, or a zero-width one.
+
+        A descriptor that declares no interval exposes a zero-width interval rather than nothing: the
+        shipped panel destructures this field unconditionally, so an omission crashed the tab while the
+        domain was perfectly available (HS-325). Zero width also means no motion is claimable, which is
+        the honest reading of a descriptor that seals no interval.
+        """
+
+        interval = self.descriptor.get("safe_interval_rad")
+        if not isinstance(interval, (list, tuple)) or len(interval) != 2:
+            return [0.0, 0.0]
+        return [float(interval[0]), float(interval[1])]
+
+    def qualified(self) -> bool:
+        """True only when the descriptor carries the closed head-only report the plan requires."""
+
+        report = self.descriptor.get("qualification_report")
+        return bool(isinstance(report, Mapping) and report.get("status") == "HEAD_SEARCH_QUALIFIED")
+
     def status(self) -> dict:
         return {
             "available": True,
@@ -79,6 +111,11 @@ class HeadCameraBackend:
             "model_id": self.model_id,
             "state": self.stop_state(),
             "detector_constructed": self.detector_factory_calls,
+            "safe_interval_rad": self.safe_interval_rad(),
+            "qualified": self.qualified(),
+            # the composition verifies the owner before it composes; authority is the descriptor's own
+            # declaration and is never inferred from a live process alone
+            "authority": bool(self.descriptor.get("authority", False)),
         }
 
     def publish_once(self, *, jpeg: bytes = b"", detections: tuple = ()) -> FrameEnvelope:
@@ -201,7 +238,7 @@ def head_camera_router(services) -> object:
     reports that rather than composing anything, so a view-only process exposes no head camera.
     """
 
-    from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+    from fastapi import APIRouter, HTTPException
 
     router = APIRouter()
 

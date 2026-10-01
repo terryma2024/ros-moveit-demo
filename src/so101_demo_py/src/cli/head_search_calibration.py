@@ -49,7 +49,6 @@ from so101_demo.act.head_search_qualification import (
     HEAD_SEARCH_QUALIFIED,
     qualification_parser,
     qualify_head_search,
-    serve_teleop,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - the run module is imported where it is used
@@ -3254,16 +3253,125 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     if parsed.command == "serve-teleop":
-        # the closed report is read from where it was written, never from the root this owner will claim
-        if parsed.report is None or not Path(parsed.report).is_file():
-            print("HEAD_SEARCH_QUALIFIED_REQUIRED: pass --report", file=sys.stderr)
-            return 2
-        report = json.loads(Path(parsed.report).read_text(encoding="utf-8"))
-        connection = serve_teleop(report, run_root, bridge_socket_root=parsed.bridge_socket_root)
-        print(f"TELEOP_ACCEPTANCE {connection['owner']['pid']}")
-        return 0
+        return _serve_teleop(parsed)
     print(f"HEAD_SEARCH_COMMAND_UNKNOWN: {parsed.command!r}", file=sys.stderr)
     return 2
+
+
+def _frozen_run_root(final_run) -> Path:
+    """The frozen toolchain root, from the flag or from the installed package prefix."""
+
+    if final_run is not None:
+        return Path(final_run)
+    from ament_index_python.packages import get_package_prefix
+
+    prefix = Path(get_package_prefix("so101_demo_py"))
+    if prefix.parent.name != "install":
+        raise ValueError(
+            f"RUNTIME_IDENTITY_UNREADABLE: {prefix} is not an install prefix of a toolchain root"
+        )
+    return prefix.parent.parent
+
+
+def _source_web_dir() -> Path | None:
+    """The worktree's own web package, for the case's Bun invocation."""
+
+    override = os.environ.get("SO101_TELEOP_WEB_DIR")
+    if override:
+        return Path(override)
+    candidate = Path(__file__).resolve().parents[4] / "so101_teleop" / "web"
+    return candidate if (candidate / "package.json").is_file() else None
+
+
+def _serve_teleop(parsed) -> int:
+    """Task 14 Step 6's owned acceptance: start, probe, run the case, tear down, then write the receipt.
+
+    Refusing is a result and it is recorded as one: every declared input is read off disk, every probe is
+    measured, and the receipt is written only after the teardown has been observed. There is no longer a
+    path that writes a descriptor without measuring anything, and no path that reports
+    ``teardown: not-attempted``.
+    """
+
+    from so101_demo.act.head_search_teleop_acceptance import (
+        DEFAULT_FRAME_PROBE,
+        DEFAULT_WEB_PORT,
+        PROFILE,
+        RECEIPT_ARTIFACT,
+        TeleopAcceptanceRefused,
+        accept_teleop,
+    )
+
+    if not parsed.bundle:
+        print(
+            "TELEOP_ACCEPTANCE_INPUTS_INCOMPLETE: pass --bundle (the approved calibration bundle)",
+            file=sys.stderr,
+        )
+        return 2
+    if not parsed.runtime_id:
+        print("TELEOP_ACCEPTANCE_INPUTS_INCOMPLETE: pass --runtime-id", file=sys.stderr)
+        return 2
+    try:
+        final_run = _frozen_run_root(parsed.final_run)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    production_config = parsed.production_config or (
+        final_run
+        / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_v2.json"
+    )
+    run_root = Path(parsed.run_root)
+    ready_file = Path(parsed.ready_file) if parsed.ready_file else run_root / "head-camera-connection.json"
+    acceptance_root = Path(parsed.acceptance_root) if parsed.acceptance_root else ready_file.parent
+    socket_root = (
+        Path(parsed.bridge_socket_root)
+        if parsed.bridge_socket_root
+        else Path(os.environ.get("SO101_UNIFIED_SOCKET_DIR") or acceptance_root / "bridge")
+    )
+    expected = {
+        key: value
+        for key, value in (
+            ("source_commit", parsed.expected_source_commit),
+            ("production_config_sha256", parsed.expected_production_config_sha256),
+            ("values_sha256", parsed.expected_values_sha256),
+            ("weight_sha256_declared", parsed.expected_weights_sha256),
+        )
+        if value is not None
+    }
+    try:
+        receipt = accept_teleop(
+            run_root=run_root,
+            acceptance_root=acceptance_root,
+            socket_root=socket_root,
+            ready_file=ready_file,
+            final_run=final_run,
+            production_config=production_config,
+            approved_bundle=parsed.bundle,
+            approval_receipt=parsed.approval_receipt,
+            qualification_report=parsed.qualification_report,
+            runtime_id=parsed.runtime_id,
+            profile=parsed.profile or PROFILE,
+            device=parsed.device,
+            frames=parsed.frames if parsed.frames is not None else DEFAULT_FRAME_PROBE,
+            web_port=parsed.web_port if parsed.web_port is not None else DEFAULT_WEB_PORT,
+            weights_path=parsed.weights,
+            frozen_candidate=parsed.frozen_candidate,
+            expected=expected or None,
+            web_dir=parsed.web_dir or _source_web_dir(),
+            ros_python=os.environ.get("SO101_UNIFIED_ROS_PYTHON") or sys.executable,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+    except TeleopAcceptanceRefused as error:
+        print(f"{error.code}: {error.detail}", file=sys.stderr)
+        return 2
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt_path = acceptance_root / RECEIPT_ARTIFACT
+    print(f"TELEOP_ACCEPTANCE {receipt['status']} receipt={receipt_path}")
+    for reason in receipt["refusals"]:
+        print(f"  refusal {reason['code']}: {reason['detail']}", file=sys.stderr)
+    return 0 if receipt["status"] == "PASSED" else 2
 
 
 def _digest(path: Path) -> str:

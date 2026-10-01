@@ -155,6 +155,9 @@ class UnifiedServices:
     lifecycle: Any = None
     act_workload: Any = None
     act_error: str | None = None
+    #: the Teleop Head Camera domain, composed from the closed head-search connection or left None
+    head_camera: Any = None
+    head_camera_error: str | None = None
     #: True for the schema-only composition used by OpenAPI export and route tests.
     schema_only: bool = False
 

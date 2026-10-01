@@ -3453,3 +3453,106 @@ def test_measure_restarts_reports_the_librarys_refusal_and_returns_two(
     monkeypatch.setattr(restarts, "write_head_search_restarts", refuse)
     assert main(_restart_arguments(inputs, tmp_path / "restart-run")) == 2
     assert restarts.RESTART_OWNERSHIP_REFUSED in capsys.readouterr().err
+
+
+# --- Task 14 Step 6: serve-teleop is the owned acceptance, not a descriptor writer -------------------
+
+
+def test_serve_teleop_runs_the_owned_acceptance_with_the_plans_declarations(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """The installed entry must reach the acceptance with every declaration the plan names.
+
+    Before HS-325 this handler wrote a descriptor from a `--report` it had to be handed and returned 0
+    without starting, probing or tearing anything down.
+    """
+
+    from so101_demo.act import head_search_teleop_acceptance as acceptance
+
+    recorded: dict = {}
+
+    def fake_accept(**kwargs):
+        recorded.update(kwargs)
+        return {"status": "REFUSED", "refusals": [{"code": "X", "detail": "y"}]}
+
+    monkeypatch.setattr(acceptance, "accept_teleop", fake_accept)
+    final_run = tmp_path / "frozen"
+    (final_run / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act").mkdir(parents=True)
+    (
+        final_run / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_v2.json"
+    ).write_text(json.dumps({"values": {}}), encoding="utf-8")
+    acceptance_root = tmp_path / "teleop-acceptance"
+    rc = main(
+        [
+            "serve-teleop",
+            "--run-root",
+            str(acceptance_root / "runtime"),
+            "--final-run",
+            str(final_run),
+            "--bundle",
+            str(tmp_path / "head-search-calibration-bundle.json"),
+            "--qualification-report",
+            str(tmp_path / "head-search-qualified-report.json"),
+            "--approval-receipt",
+            str(tmp_path / "approval-receipt.json"),
+            "--production-config",
+            str(tmp_path / "promoted.json"),
+            "--profile",
+            "mujoco",
+            "--runtime-id",
+            "head-teleop-956b5b74b",
+            "--bridge-socket-root",
+            str(tmp_path / "sock"),
+            "--ready-file",
+            str(acceptance_root / "runtime-connection.json"),
+            "--expected-source-commit",
+            "956b5b74b",
+        ]
+    )
+
+    assert rc == 2, "a refused acceptance is not a pass"
+    assert recorded["final_run"] == final_run
+    assert recorded["acceptance_root"] == acceptance_root, "the ready file's own directory is the root"
+    assert recorded["socket_root"] == tmp_path / "sock"
+    assert recorded["runtime_id"] == "head-teleop-956b5b74b"
+    assert recorded["profile"] == "mujoco"
+    assert recorded["expected"] == {"source_commit": "956b5b74b"}
+    assert "HEAD_SEARCH_QUALIFIED_REQUIRED" not in capsys.readouterr().err
+
+
+def test_serve_teleop_refuses_without_the_acceptance_declarations(tmp_path: Path, capsys) -> None:
+    """No descriptor is written without the bundle the acceptance must be bound to."""
+
+    rc = main(["serve-teleop", "--run-root", str(tmp_path / "runtime"), "--runtime-id", "x"])
+
+    assert rc == 2
+    assert "TELEOP_ACCEPTANCE_INPUTS_INCOMPLETE" in capsys.readouterr().err
+
+
+def test_serve_teleop_reports_a_library_refusal_by_name(tmp_path: Path, monkeypatch, capsys) -> None:
+    from so101_demo.act import head_search_teleop_acceptance as acceptance
+
+    def refuse(**kwargs):
+        raise acceptance.TeleopAcceptanceRefused(
+            acceptance.TELEOP_SOCKET_PATH_TOO_LONG, "the socket path is 158 bytes"
+        )
+
+    monkeypatch.setattr(acceptance, "accept_teleop", refuse)
+    final_run = tmp_path / "frozen"
+    final_run.mkdir()
+    rc = main(
+        [
+            "serve-teleop",
+            "--run-root",
+            str(tmp_path / "runtime"),
+            "--final-run",
+            str(final_run),
+            "--bundle",
+            str(tmp_path / "b.json"),
+            "--runtime-id",
+            "x",
+        ]
+    )
+
+    assert rc == 2
+    assert acceptance.TELEOP_SOCKET_PATH_TOO_LONG in capsys.readouterr().err

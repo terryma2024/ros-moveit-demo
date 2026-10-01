@@ -139,6 +139,14 @@ def compose_domain_services(
         service_epoch=registry.service_epoch,
     )
     gateway = AdmissionGateway(arbiter, registry)
+    # the head-camera domain is composed from the closed descriptor, never from a second detector; a
+    # descriptor that drifts leaves the domain unavailable with its reason instead of failing the app
+    head_camera = None
+    head_camera_error = None
+    try:
+        head_camera = compose_head_camera_service(environment)
+    except Exception as error:  # noqa: BLE001 - a blocked domain reports a reason, not a crash
+        head_camera_error = f"{type(error).__name__}: {error}"
     teleop = None
     tasks = None
     if worker is not None:
@@ -208,6 +216,8 @@ def compose_domain_services(
         budget_source=budget_source or UnknownBudgetSource(),
         act_workload=act_workload,
         act_error=act_error,
+        head_camera=head_camera,
+        head_camera_error=head_camera_error,
     )
     services.store = store  # type: ignore[attr-defined]
     services.validation_error = validation_error  # type: ignore[attr-defined]

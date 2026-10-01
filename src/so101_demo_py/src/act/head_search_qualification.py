@@ -113,8 +113,36 @@ def qualification_parser() -> argparse.ArgumentParser:
             command.add_argument("--expected-values-sha256")
             command.add_argument("--expected-weights-sha256")
         if name == "serve-teleop":
+            # the plan's own Step 6 declarations. `--report` stays as the alias the installed surface
+            # already had, but nothing here runs without the acceptance's own evidence
             command.add_argument("--bridge-socket-root", type=Path)
-            command.add_argument("--report", type=Path)
+            command.add_argument("--report", dest="qualification_report", type=Path)
+            command.add_argument(
+                "--qualification-report",
+                dest="qualification_report",
+                type=Path,
+                help="the closed head-only report the acceptance starts from",
+            )
+            command.add_argument("--bundle", type=Path, help="the approved calibration bundle")
+            command.add_argument("--approval-receipt", type=Path)
+            command.add_argument(
+                "--production-config", type=Path, help="the promoted production search config"
+            )
+            command.add_argument("--final-run", type=Path, help="the frozen runtime root of record")
+            command.add_argument("--profile", default="mujoco")
+            command.add_argument("--runtime-id")
+            command.add_argument("--ready-file", type=Path)
+            command.add_argument("--acceptance-root", type=Path)
+            command.add_argument("--device", default="cuda")
+            command.add_argument("--frames", type=int, default=10)
+            command.add_argument("--web-port", type=int, default=18082)
+            command.add_argument("--weights", type=Path)
+            command.add_argument("--frozen-candidate", type=Path)
+            command.add_argument("--web-dir", type=Path)
+            command.add_argument("--expected-source-commit")
+            command.add_argument("--expected-production-config-sha256")
+            command.add_argument("--expected-values-sha256")
+            command.add_argument("--expected-weights-sha256")
     return parser
 
 

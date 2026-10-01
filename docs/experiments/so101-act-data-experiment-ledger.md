@@ -44691,3 +44691,92 @@ HS-322 自己的 A/B 产物（`scratch/hs320/probe-maxage/deadband-candidates.js
 - 测试运行：`$EV/scratch/pytest-xdist8-hs324-{regression.xupZDtR9,regression-control,demo-suite.SMv42KWz,demo-suite.bkpJVfwb}`、`$EV/scratch/pytest-xdist8-hs324-demo-suite.{06UCJklK,h5UQCZmA}`（**空目录**：一次 CWD/相对路径用错的启动尝试与其 mktemp 目录，无内容）、`$EV/scratch/{hs324-tmp-probe,tmp-fullsuite-pytest-xdist8-hs324-demo-suite.bkpJVfwb}`。
 - 工作树 `scratch/hs324/`：`env.sh`、`env-runs.sh`、`run-tests.sh`、`run-fullsuite.sh`、`build-toolchain.sh`、`run-real-flight.sh`、`report-flight.py`、`doc-keys.py`/`doc-keys.out`、`regression-files.txt`、`regression-rundir.txt`、`toolchain-root.txt`、`pre-hashes/`、`post-hashes-*`、`logs/`（RED/GREEN/回归/两次全量/两个真实飞行器及其 report/provenance）、`runs/{deadband-20261001T170344Z,fine-20261001T170357Z}`、`tmp*`、`litter-runA/`（运行 A 在工作树根留下的 broker/ipc 测试副产物，已移入此处）。
 - 以上与 HS-300..323 的产物**均为删除候选，未删除**。工作树 `git status --porcelain`：`?? runs/`（既有未跟踪）+ 本条目所在的账本提交。
+
+## HS-325 — Task 14 Step 6 的 Teleop 验收第一次**真的跑起来**：`serve-teleop` 自持一套生产组合并证明拆除、补上 `e2e/head-camera.spec.ts`，途中修掉三个真实缺陷；bundle 字节未变
+
+**提交**：见本轮 commit（`feat: real teleop acceptance with teardown proof and the head-camera e2e spec (RED->GREEN)`，8 文件）。**未晋级**、**未改** `head_search_v2.json`（`3fb9f276…` 前后相同）、**未改任何测量文档**、**未重新生成 bundle**（待批准件 `0563bada…` 前后逐字节相同）、未跑 Task 14 的其它 phase、未重跑三次 restart。
+
+**边界**：本轮只做"Teleop acceptance"这一段：`serve-teleop` 的真实化、缺失的 e2e spec、验收 receipt、聚合复跑。Step 6 计划要求的**起点**是一份"已关闭的 head-only report"；该文档只在九道 qualification 门全成立时才发布，而 `production_smoke` 与 `runtime_readback` 至今没有生产者、`anchor_restarts` 因 HS-318 receipt 里的 frame 身份缺陷被拒——所以验收**照跑**，并在 receipt 里如实记 `qualification_report.status = null`。
+
+### (a) 被验收面**自己**暴露并修掉的三个缺陷（全部 RED→GREEN，全部是被验收的 `so101_teleop` 面）
+
+| # | 缺陷（证据） | 机制 | 修法 |
+| --- | --- | --- | --- |
+| 1 | 统一组合根**从不组合** head-camera 域：真实服务上 `/teleop/head-camera/status` 恒 `503`，而 descriptor 就在盘上 | `compose_head_camera_service` 有实现、有单测、**没有调用者**；`UnifiedServices` 也没有该字段（`app.py` 的 router 只 `getattr(services,"head_camera",None)`） | `ports.py` 增 `head_camera`/`head_camera_error`；`compose_domain_services` 组合它，descriptor 漂移则**留空并记 reason**（不炸整个 app） |
+| 2 | `/teleop/head-camera/stream` **永远无法升级**：同一台服务上 `/expert-validation/events` 返回 `101`，它返回 `403` | `head_camera.py` 有 `from __future__ import annotations`，注解是字符串，FastAPI 用模块 globals 求值；`WebSocket` 是在 `head_camera_router()` **函数内**导入的 → 注解不可解析 → FastAPI 把 socket 本身当成名为 `websocket` 的 **query 参数**校验 → handler 未运行就先 403 | `WebSocket`/`WebSocketDisconnect` 提到模块级（`try/except ImportError` 保后端半边仍可无 FastAPI 导入）；router 内只留 `APIRouter`/`HTTPException` |
+| 3 | `status()` 缺少 shipped panel **无条件解构**的字段：`safe_interval_rad`（以及 `qualified`/`authority`），tab 一渲染就抛 | UI 读 `status.safe_interval_rad`，路由只回 `{available,operation,runtime_id,model_id,state,detector_constructed}` | `status()` 增 `safe_interval_rad`（descriptor 未声明时为**零宽**区间）、`qualified`（descriptor 的 closed report 状态）、`authority`（descriptor 自己的声明） |
+
+### (b) `serve-teleop` 从 STUB 变成真实验收运行
+
+新模块 `src/so101_demo_py/src/act/head_search_teleop_acceptance.py`（`so101_demo.act.head_search_teleop_acceptance`）。顺序不可选：claim 全新 run root → 读冻结 runtime 身份并逐项核对 expected → 校验 bundle 的 17 值 canonical 与晋级配置一致 → **≤103 字节**校验两个 bridge endpoint → 启动前证明进程/ROS/GPU 表为空 → 起**一套**生产组合（复用 HS-318 的 `RestartStack` 与 `stack_environment`）→ 在**本进程内**构造**一个**生产 `HeadRgbDetector`（CUDA，`allow_cpu_fallback=false`，权重 equals 声明）并消费 `/head_camera/color` 的**真实帧** → 探针通过后才写 connection descriptor（owner=本进程 pid/start_ticks、runtime_id、session、generation、model、bundle、sealed interval）→ 起 frozen install 的 unified app（独立进程组，显式 `--static-dir`）→ HTTP 逐个探针 → 跑安装版 Playwright case → 停 app 与 stack → 证明**四个** owned 进程组全没了、ROS graph 空、GPU 释放 → 写 `teardown-receipt.json`、`cleanup-receipt.json`，最后写 `teleop-acceptance-receipt.json`。任何 probe/teardown 不成立即**按名拒绝**；`RUN_ROOT_EXISTS` 不可续跑；stack 起来之后的任何失败都由本函数先拆干净再抛。
+
+| 项 | 值 |
+| --- | --- |
+| 安装版入口 | `serve-teleop --run-root --qualification-report(别名 --report) --bundle --approval-receipt --production-config --final-run --profile --runtime-id --bridge-socket-root --ready-file --acceptance-root --weights --frozen-candidate --web-dir --frames --web-port --device --expected-{source-commit,production-config-sha256,values-sha256,weights-sha256}` |
+| 拒绝码 | `TELEOP_ACCEPTANCE_{INPUTS_INCOMPLETE,RUN_ROOT_EXISTS,RUNTIME_UNVERIFIED,BUNDLE_MISMATCH,REPORT_NOT_PUBLISHED,REPORT_NOT_CLOSED,SOCKET_PATH_TOO_LONG,OWNERSHIP_REFUSED,STACK_START_FAILED,DETECTOR_FAILED,FRAME_PROBE_FAILED,APP_NOT_SERVED,PROBE_FAILED,E2E_FAILED,E2E_EVIDENCE_MISSING,TEARDOWN_UNPROVEN,GPU_NOT_RELEASED}` |
+| 测试 | 新 `test_act_head_search_teleop_acceptance.py`（16 例，合成夹具：假 stack/app/route/case runner + 注入 observer，钉的是**顺序**与拒绝）+ `test_head_search_calibration_cli.py` 新增 3 例（`serve-teleop` 的声明转发、缺声明即拒、库拒绝按名转 rc=2） |
+| 旧路径 | CLI 里"只要有 `--report` 就写 descriptor 并 return 0"的分支**已删除**；`head_search_qualification.serve_teleop`（含 `probe_only`）保留，其 4 个既有用例原样通过 |
+
+### (c) `e2e/head-camera.spec.ts`（计划点名的 case）
+
+新文件 `src/so101_teleop/web/e2e/head-camera.spec.ts`。对**真实**服务（`SO101_TELEOP_BASE_URL`，Vite 关闭）跑：status 身份（operation/runtime/model/`detector_constructed==0`/sealed interval）→ tab 渲染 → capture 无帧 `409 HEAD_CAPTURE_NO_FRAME` → 调用方自带 interval `409 HEAD_TARGET_INTERVAL_SEALED` → 越界 `409 HEAD_TARGET_OUT_OF_RANGE` → 区间内 `200 SUBMITTED` 且原值回显 → WebSocket 一帧 + `/capture` **同 sequence 同 jpeg_sha256**（raw/overlay 的**身份**配对）→ 超 `MAX_FRAME_AGE_S` 后 `409 HEAD_CAPTURE_STALE_FRAME` → stop 1/2/3 连续新鲜样本 `STOPPING→STOPPED`、重放旧 `sim_time_s` 归零 → 9 张截图（desktop light/dark、narrow、raw/overlay/conflict/stale/stopping/stopped）→ 末尾写 `$SO101_E2E_EVIDENCE_ROOT/head-camera-evidence.json`（receipt 读它，不读调用者的声明）。**诚实边界**（写进 manifest 的 `limitations`）：安装版 backend 发布的 envelope 是空 jpeg、无 detections，所以本 case 能证的 raw/overlay 相关是**帧身份**，不是像素叠加。
+
+| 步骤 | 命令 | 结果 |
+| --- | --- | --- |
+| bun | `command -v bun` → `/home/lenovo/.bun/bin/bun`，`bun --version` → `1.3.14` | — |
+| 收集 | `cd src/so101_teleop/web && bun x playwright test --list --config playwright.config.ts` | rc=0，84 tests / 17 files，含 `head-camera.spec.ts:94:1` |
+| 替身 RED→GREEN（`scratch/hs325/run-e2e-stub.sh`：活 owner 写 descriptor + frozen install 的 unified app，**无 detector、无 MuJoCo、无 ROS**） | `SO101_TELEOP_BASE_URL=… SO101_E2E_EVIDENCE_ROOT=… bun run test:e2e -- e2e/head-camera.spec.ts` | RED 三次：`e2e-stub-20261002T{021000,022500,023500}Z`（Chrome profile socket 过长 → 短 `TMPDIR`；`/` 503 → 显式 `--static-dir`；403 WS → (a)#2）；**GREEN** `e2e-stub-20261002T025500Z` rc=0（2.8 s，9 截图 / 1 pair / 4 refusal） |
+| 真实验收里的 case | 见 (d) | `PASSED`，9 截图，1 pair |
+
+### (d) 真实验收运行（记录运行，一次，未重试）
+
+| 项 | 值 |
+| --- | --- |
+| 记录 root | `$EV/teleop-acceptance-20261002T052000Z/`（`$EV` = 本任务族唯一登记根） |
+| 命令 | `bash scratch/hs325/real-acceptance.sh`（内部：`serve-teleop --run-root $EV/teleop-acceptance-<UTC>/runtime --final-run $EV/head-toolchain-20261001T130437Z --bundle $CAMPAIGN/head-search-calibration-20261001T122047Z/head-search-calibration-bundle.json --qualification-report $EV/head-qualification-20261001T140822Z/head-search-qualified-report.json --production-config <frozen 130437Z 的 head_search_v2.json> --runtime-id head-teleop-956b5b74b --weights <C2a best.pt> --frozen-candidate <frozen-c.json> --frames 10 --web-port 18095 --expected-* …`） |
+| 结果 | **rc=2、16.5 s、`status=REFUSED`、refusals=1**：唯一的拒绝是 `TELEOP_ACCEPTANCE_REPORT_NOT_PUBLISHED`（Step 6 的起点文档不存在，见边界）；**12/12 checks PASSED** |
+| detector | `count=1`、`teleop_detector_factory_count=0`、`device=cuda`、`frame_count=10`、`detections=10`、`frame_rate_hz=10.1108`、`weights_sha256=2afd5506…`、来源=本进程生产 `HeadRgbDetector` 消费 `/head_camera/color` |
+| probes | `capture_no_frame` / `target_sealed_interval` / `target_out_of_range` / `target_bounded` / `stop_stopping` / `stop_proof` / `stop_replay_resets` 全 `PASSED` |
+| e2e | `e2e/head-camera.spec.ts` `PASSED`、9 截图、1 raw/overlay pair、4 refusal、Chrome `150.0.7871.181` |
+| teardown | `controller_stopped=true`、`graph_clear=true`、`process_groups_exited=4`（≥2）、`gpu_released=true`；`runtime/{teardown-receipt.json,cleanup-receipt.json}` |
+| bridge | 两个 endpoint 各 **95 B**（≤103），`cleanup-receipt` 落 `runtime/`，socket 根 `$EV/ipc/t-175817` |
+| 被取代尝试（保留） | `…T031000Z`（run root 被双重 claim，代码缺陷）、`…T032000Z`（105 B > 103，按名拒绝，**证明门生效**）、`…T033000Z`（`detector_flight` 缺 `operating_point`；**并暴露 stack 泄漏**，已修为"起来之后失败先自拆"）、`…T035000Z`（ROS node 名含 `-` 非法）、`…T040500Z`（e2e 的 stop 采样与 owner 探针撞 stamp，已把 case 的采样基线上移到 100.0） |
+| 收工复核 | 运行前后 `ps` 无 mujoco/ros2_control/spawner/unified_web 残留、`nvidia-smi --query-compute-apps` 为空 |
+
+### (e) 聚合复跑（与 HS-318 同一声明集，只多一份 Teleop receipt）
+
+`bash scratch/hs325/aggregate.sh` → `$EV/head-qualification-teleop-agg-20261002T053000Z/qualification-verdict.json`，Step 1 receipt `$EV/head-qualification-teleop-agg-ownership-20261002T053000Z/exclusive-ownership.json`（rc=0），**gate_rc=0 / agg_rc=2**。
+
+| 项 | HS-318（`…restarts-agg-20261001T152503Z`） | **HS-325** |
+| --- | --- | --- |
+| `teleop_acceptance` | MISSING | **VIOLATED**（receipt 被消费并复算；唯一 reason `QUAL_AGGREGATE_TELEOP_INCOMPLETE: the acceptance did not start from a closed head-only report: status None`） |
+| `missing` | 3（`runtime_readback`、`production_smoke_root`、`teleop_acceptance_receipt`） | **2**（`runtime_readback`、`production_smoke_root`） |
+| `violations` | 14 | **15**（14 + Teleop 的 report 状态项） |
+| citations | 无 Teleop | `teleop_acceptance` → receipt 路径 + sha256 |
+| 其余门 | `exclusive_ownership`/`runtime_identity`/`scenario_journal`/`frame_cadence`/`stop_proofs` HOLDS；`approved_values_readback`/`production_smoke` MISSING；`anchor_restarts`/`scenario_terminals` VIOLATED | **逐项相同**（未重跑 restart，未改 scenarios 证据） |
+
+**各门现状（照录，不重跑）**：`runtime_readback` 无生产者（缺）；`production_smoke_root` 无生产者（缺）；`anchor_restarts` 有生产者但 VIOLATED——HS-318 三份 receipt 的 `declared_frame_id=head_camera_optical_frame` vs 插件发布 `head_camera_frame`，frame 身份修订（HS-321）已把**配置**改对，但 receipt 是修订前的，重跑才能改状态；`scenario_terminals` VIOLATED——HS-316 的 900002/900013 两个场景终端与声明类不符（未重测）；其余五门 HOLDS。
+
+### (f) 门禁
+
+| 步骤 | 命令 | 结果 |
+| --- | --- | --- |
+| RED（`git stash push` 三个源文件 + 移走新模块，保留新测试） | 三个文件（module/CLI/head-camera） | 新模块 **collection error rc=2**；CLI `-k serve_teleop` **3 failed rc=1**；head-camera **2 failed/10 passed rc=1**（`logs/red.txt`） |
+| GREEN | 同三个 | **16 passed rc=0** / **3 passed rc=0** / **12 passed rc=0**（`logs/green.txt`） |
+| e2e 自身 RED→GREEN | 见 (c) | 替身服务上 3 次 RED → **rc=0** |
+| phase 回归（HS-324 的 39 文件清单 + 本轮新文件，`-n 8`，TMPDIR 在 `scratch/hs325`） | `bash scratch/hs325/run-tests.sh regression -q -n 8 …` | **4 failed / 1094 passed rc=1**；4 个失败节点与 HS-324 控制运行**逐节点相同**（`test_act_task8_search_port.py` 的 4 条既有失败，diff 空）；passed +19 = 本轮 16+3 条新测试 |
+| 全量 `src/so101_demo_py/test`（8 workers，基线 run-dir 布局） | `bash scratch/hs325/run-fullsuite.sh` → `$EV/scratch/pytest-xdist8-hs325-demo-suite.OcoBV4MT` | **175 failed / 6520 passed / 152 skipped / 86 errors, rc=1**（84 s，失败节点 261）；对最新基线 `pytest-xdist8-hs324-demo-suite.SMv42KWz`（175/6501/152/86）**节点级 diff 0 行**（261 vs 261），passed +19 = 本轮新测试；`node-delta-vs-hs324.txt` 两侧空 |
+| 受保护产物 | 开工/收工 | 待批准 bundle `0563bada…` **前后相同**；已批准 bundle `e21899c2…` 未变；源码与两个 install 的 `head_search_v2.json` 均 `3fb9f276…`/`dfa0af9b…` 未变；未跑 `verify-promoted-config`、未写任何 approval 字段 |
+
+### (g) 本轮推断（待评审，逐条照录）
+
+① 记录运行用的是 `$EV/head-toolchain-20261001T130437Z`（commit `956b5b74b`，与聚合既有声明一致），而本轮改的两个包（`so101_demo_py` 新模块/CLI、`so101_teleop` 的 head-camera 与组合根）**都不在那个 root 里**，因此经 HS-315 起的 shim 用工作树源码、其余包/配置/资产/console script 全部来自该 root（`ros2 pkg prefix` 已断言）——与 HS-315..318 同一处显式披露；② app 只有在本轮修好 (a)#1/#2/#3 之后才对真实 stack 工作，这三处是"被验收面"的缺陷修复，不是放宽门禁；③ 计划 Step 6 的 `--ready-file`/`--qualification-report`/`--bundle`/`--approval-receipt`/`--production-config`/`--profile`/`--runtime-id` 现已全部存在，唯一按计划**照写但内容不同**的是 `qualification_report`（起点文档不存在，如实写 `status: null`）；④ 验收 receipt 里 `frame_rate_hz` 用首末到达墙钟跨度计算（早先一版误用"最后一帧年龄"，已在记录运行前修掉）；⑤ Step 6 还要求 status/stream/broker 复述 session/generation 身份，但安装版 `status()` 只暴露 operation/runtime_id/model_id——这些身份记在 receipt 的 `connection` 块（descriptor 原文 + sha256），**未**改路由去伪造；⑥ e2e 的 raw/overlay 是帧身份配对而非像素叠加，原因写在 spec 的 `limitations`；⑦ `--report` 作为 `--qualification-report` 的别名保留，避免打断既有调用方；⑧ 早先一次运行的 stack 子进程泄漏（`ros2_control_node`+`robot_state_publisher`）已手工清理并记为"已修的真实缺陷"，其后所有运行收工 `ps`/GPU 均为空。
+
+### (h) 证据与生命周期
+
+- 记录运行：`$EV/teleop-acceptance-20261002T052000Z/`（receipt、`runtime-connection.json`、`runtime/{teardown-receipt.json,cleanup-receipt.json,calibration-state.json,stack/}`、`head-camera-evidence.json`、`reports/screenshots/`×9、`server.log`、`e2e.{log,err.log}`、`captures/`、`unified/`、`validation-service/`）。
+- 被取代尝试（**全部保留**）：`$EV/teleop-acceptance-20261002T{031000,032000,033000,035000,040500,042000}Z/`。
+- 聚合：`$EV/head-qualification-teleop-agg-20261002T053000Z/qualification-verdict.json` 与其 ownership receipt。
+- 测试：`$EV/scratch/pytest-xdist8-hs325-demo-suite.OcoBV4MT`（全量）、`$EV/scratch/pytest-xdist8-hs325-regression.*`（若生成）。
+- 工作树 `scratch/hs325/`：`env.sh`、`run-tests.sh`、`run-fullsuite.sh`、`run-e2e-stub.sh`、`real-acceptance.sh`、`aggregate.sh`、`regression-files.txt`、`logs/`（RED/GREEN/回归/全量/验收/聚合/替身 e2e 全部日志）、`e2e-dev/`（替身 e2e 的 5 个 run dir）、`pyshim/`、`tmp*`。
+- 以上**均为删除候选，未删除**；HS-300..324 的产物只读引用，未改动。工作树 `git status --porcelain`：本轮 8 个文件 + `?? runs/`（既有未跟踪）+ 全量/回归测试在工作树根留下的 `broker-*/`、`ipc/` 测试副产物（已移入 `scratch/hs325/litter/`）。
