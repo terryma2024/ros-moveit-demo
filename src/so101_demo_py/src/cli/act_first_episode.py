@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from so101_demo.act.endpoint_pose_acceptance import load_development_runtime, load_endpoint_policy
-from so101_demo.act.first_episode_inputs import freeze_inputs
+from so101_demo.act.first_episode_inputs import freeze_inputs, inspect_inputs
 
 MODES = ("formal", "preselected_target_diagnostic")
 
@@ -83,9 +83,12 @@ def _preflight(arguments) -> int:
 def main(argv=None) -> int:
     arguments = build_parser().parse_args(sys.argv[1:] if argv is None else argv)
     if arguments.command == "inspect":
-        print("act_first_episode: inspect is not implemented yet; no candidate registry was invented",
-              file=sys.stderr)
-        return 2
+        # the discovery already exists in the inputs module and is read-only: it selects nothing by recency and
+        # defaults nothing, reporting a blocker for every role without an approved, identity-matching candidate
+        document = inspect_inputs(Path(arguments.source_root), Path(arguments.ledger))
+        Path(arguments.output).write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
+        print(arguments.output)
+        return 0
     if arguments.command == "prepare":
         return _prepare(arguments)
     if arguments.command == "preflight":
