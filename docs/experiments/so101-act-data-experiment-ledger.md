@@ -45447,3 +45447,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - With those three pieces the flow runs end to end: `inspect` reports no blockers, `prepare` freezes the set, and E3's
   command sequence has its first two steps. F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's
   scene item awaiting K2. HEAD 7e71c7bf9; goal active.
+
+
+## CP-2409 — The effective authorization artifact is written, and the ledger names it
+
+- Wrote `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/nonhead-first-episode-plan.hKhvkON3/nonhead-empirical-authorization-policy.json` (the filename carries "policy" so the discovery's token
+  check admits it): `kind ACT_NONHEAD_EMPIRICAL_AUTHORIZATION`, schema 1, `approval: user_empirical_default`,
+  `authorized_by` naming this dispatch and design section 5.1, an explicit sentence that these are **not** a
+  calibration report and must never be read as one, `base_documents` with the path, byte count and sha256 of the two
+  current runtime/collection configurations and the two landed amendment documents, and a `roles` map carrying the
+  authorized values for `path_policy` (0.002 / 0.002), `rgb_skew` (0.1 / 0.1), `placement_qc` (0.002 as the safety
+  input) and `resource_thresholds` (0.90, 53687091200).
+- **Its absolute path is named here, in this ledger**, because that is the only way `_ledger_referenced_json` can see
+  it: /data/work/so101-evidence/act-data/20260924-fbc25063-resume/experiments/nonhead-first-episode-plan.hKhvkON3/nonhead-empirical-authorization-policy.json
+- Still to do for step 4: extend `_inspect_calibration_role` to accept a document declaring this kind (stamping it
+  `user_empirical_default`, and reading only the role it was called for) beside the historical `checks`-bearing
+  reports, then run `inspect` expecting zero blockers and `prepare` end to end.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 8b02237e4;
+  goal active.
