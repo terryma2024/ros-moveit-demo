@@ -52889,3 +52889,33 @@ the seal is produced at the recorder's root while `ActCollectionResultStore` exp
 Also worth recording for the decision just taken (CP-2760): the container-free route's host substitutions stay committed
 as a capability, and E3 proceeds with the container route and the existing
 `so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1` image, which is present on this host as `010dca70ce3c`.
+
+
+## CP-2762 — The store defines the episode root, so the recorder has to live inside it
+
+```python
+        self.workspace.mkdir(parents=True, exist_ok=True)
+        self.working = self.workspace / "working"
+        self.working.mkdir(exist_ok=False)
+        self.episode_root = self.working / "episode"
+    def seal(self, episode_seal_path: Path) -> Path:
+        if _safe(episode_seal_path) != self.episode_root / "seal.json":
+            raise ValueError("EPISODE_LOCATION_MISMATCH")
+```
+
+`ActCollectionResultStore` does not merely accept an episode seal: it **owns** the location, fixing the episode root at
+`<workspace>/working/episode` and refusing any seal that is not exactly `<workspace>/working/episode/seal.json`. So the
+recorder has to be built inside the store's episode root, which in the test means constructing the store first and handing
+its `episode_root` to the helper that builds the capture - the reverse of the current order.
+
+That is a small test-side restructure: `sealed_episode` takes the episode root as an argument instead of making its own
+`tmp_path / "episode"`, and each test creates its store before calling it. Everything else - the two distinct roots for
+the audit writer and the recorder, the scope file being the audit's own `source.json`, the four instants of frames and
+references, the adapter that binds recorded rows and skips the rest - stays exactly as it is, because it is all passing.
+
+With that, both tests should be green: the first proving correction 2 (already passing) and the second proving correction
+3's downgrade.
+
+Also recorded: the coordinator's decision of this round's predecessor (CP-2760) is in the ledger - reuse the existing
+broker image `so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1` (present as `010dca70ce3c`) for E3, with the
+container-free route's host substitutions kept as a capability rather than the milestone's path.
