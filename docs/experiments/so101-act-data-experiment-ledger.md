@@ -43734,3 +43734,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
 - F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
 - F12 two of three; F13 one of four with this item transcribed; HEAD c772a77f1; goal paused.
+
+## CP-2322 - F13's both-kinds rule is correct; the fixtures are arm-only, as the verdict said
+
+- Fourth attempt, and this time the edit itself was right: the condition landed between the two closers and parses
+- cleanly. Ten tests then reported AUDIT_SCHEMA_INVALID, which is the verdict's own sentence about the retained
+- formal fixture - "arm-only feedback despite the now-correct five-joint arm dimension". So the rule is correct and
+- the fixtures are what must change: each feedback collection needs one gripper record beside its arm record.
+- The sites are the ones CP-2281/2282 already enumerated for the arm records, plus whatever the ten failing tests
+- build inline; the grep for controller_feedback and the feedback-list literal is printed alongside this entry.
+- Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
+- Next attempt, in one pass: add the gripper record to those sites, then re-apply the transcribed rule - the same
+- order that worked for F1's names rule and F13's dimension rule, where the fixtures moved first.
+- F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
+- F12 two of three; F13 one of four; HEAD 6fcfb82a3; goal paused.
