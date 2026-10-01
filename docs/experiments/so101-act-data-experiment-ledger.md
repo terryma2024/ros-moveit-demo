@@ -51671,3 +51671,31 @@ share a root in the real design - and the next read is the recorder's constructo
 
 My test is reverted again and the worktree is clean at 35 entries. Four attempts, and the value of them is now a precise
 question about two constructors rather than a vague one about ordering.
+
+
+## CP-2710 — The resolution: the two directories must simply be different, and the manifest is under the writer's own audit directory
+
+Three lines settle it:
+
+```python
+        self.root.mkdir(parents=False, exist_ok=False)            # recorder.py:135
+        (self.root / "frames").mkdir()                            # recorder.py:136
+            with (audit_manifest.parent / "episode.json").open("rb") as stream:   # recorder.py:258
+        self.files = _Files(audit / "source.json", audit / "inputs.json", audit / "episode.json", ...)  # episode_audit.py:743
+```
+
+The audit writer writes `episode.json` (and `source.json`, `inputs.json`) into **`<its own root>/audit/`**, and the
+recorder's `finish` reads `audit_manifest.parent / "episode.json"`. Both put it together: the manifest is at
+**`<writer root>/audit/audit-manifest.json`**, and the recorder reaches it through `audit_manifest.parent` **regardless
+of where the recorder's own root is**.
+
+So there was never a shared-root problem to solve - the two classes simply must not be handed the same directory, because
+each creates its own with `exist_ok=False`. The test's shape is therefore:
+
+- **writer** at `tmp_path / "audit-root"`;
+- **recorder** at `tmp_path / "episode"`;
+- drive the capture, finish it with a window and an outcome;
+- the manifest lands at `<audit-root>/audit/audit-manifest.json`, which the endpoint QC can read.
+
+Four attempts, and the answer was one directory apart from where I was looking. Recorded because the next attempt is now
+mechanical: two distinct roots, nothing shared.
