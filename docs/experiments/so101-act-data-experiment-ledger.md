@@ -44482,3 +44482,19 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
 - landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two all ten checks cleared
 - on paper and four to print with a traceback line; HEAD f60f2488c; goal active.
+
+## CP-2362 - The ninth clause: the writer's own tie never got CP-2311's exemption
+
+- Two greps found it: AUDIT_FORMAL_COVERAGE_INCOMPLETE is raised in exactly two places (911/914 in seal and 1055
+- in the readback), and the seal's condition is not the coverage predicate alone - it ORs the writer's own
+- self._release_named tie, which still required EVERY positive epoch to be named. CP-2311 exempted the declared
+- initial epoch in the READBACK's copy of that tie and left the writer's as it was, so the two disagreed and a
+- stream the readback accepts could not be sealed at all. That is why every hybrid probe refused with a coverage
+- code while all ten coverage checks read true.
+- The fix mirrors CP-2311 on the writer's side: read the declared initial epoch from the writer's own identity and
+- exempt it, so both ties agree by construction. GREEN 204 passed, wider gate recorded.
+- Expected effect on F5's step two: the hybrid's seal should now pass the clause that refused it, leaving only the
+- fixture details - to be confirmed by re-running the CP-2360 probe, which now costs one run.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
+- landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two's seal-side blocker
+- fixed here; HEAD ccebea374; goal active.
