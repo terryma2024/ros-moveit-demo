@@ -48982,3 +48982,22 @@ such module and no shared QC anywhere under `src/` (CP-2566), so this is its cre
 The width gate is green at **237 passed** and the module imports cleanly. Its docstring carries the design's two
 boundaries and the IO/arithmetic split, so the next step - the RED test that a legal-endpoint, quality-absent episode is
 not refused - has its subject in place. The review of revision 7 will be read when its marker lands, not before.
+
+
+## CP-2590 — E2's RED names a real constraint: a position is not a pose, and the summary rows have no orientation
+
+The test's first run reported `ENDPOINT_POSES_ABSENT` with zero poses, which was my extractor's fault: the registered
+live sample writes `cup_position_m` while the MuJoCo summary rows the suite seals write `cup_position_world_m`.
+Teaching `endpoint_poses` to read both (with a comment saying why) fixed that, and the run then reached E1's calculator
+and stopped at **`endpoint_pose_acceptance.py:71: ValueError`** - the evaluator's own pose validation refusing a
+**three-value** position, which is right: the endpoint rule's thresholds include radians, so it needs an `xyz_xyzw`
+pose, not a point.
+
+That is a genuine constraint rather than a bug to patch: the audit's **summary** rows carry the cup's position, the
+contact groups and the support flag, but **no orientation**, while the registered **live sample** carries `model_qpos`
+and with it the full configuration. So endpoint records can be derived from a live-sample episode and **cannot** be
+derived from a summary-only one - and the honest form of that statement belongs in the QC (a named
+`ENDPOINT_POSE_NOT_DERIVABLE`-style absence rather than a position passed off as a pose), plus in the ledger so the
+design's boundary claim is not overstated.
+
+The test currently fails at that line, which is the correct state for a RED whose subject has just been measured.
