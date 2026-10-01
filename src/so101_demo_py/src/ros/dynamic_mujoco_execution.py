@@ -134,6 +134,9 @@ class RosDynamicMujocoExecution:
         self._positions: dict[str, float] = {}
         self._joint_state_generation = 0
         self._joint_state_source_stamp_ns: int | None = None
+        # where this execution's per-state evidence is offered to the episode being recorded (CP-2862). Optional:
+        # an execution that records nothing behaves exactly as before, and the caller sets this when it has one.
+        self.episode_recorder = None
         self._joint_state_received_monotonic_s: float | None = None
         self._state_events: list[dict[str, object]] = []
         self._planning_attempts: list[dict[str, object]] = []
