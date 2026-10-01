@@ -44926,3 +44926,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   in-episode hot change refused, formal mode still refused without Head/activation).
 - F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
   table is written. HEAD e4ed7e93c; goal active.
+
+
+## CP-2383 — E1's development-runtime loader landed
+
+- `load_development_runtime(path)` (commit 00a160175) parses only the closed four-section document the design's
+  section 5.1 defines - `path_policy`, `rgb_sync`, `safety_release`, `hard_stops`, behind the fixed
+  `ACT_ENDPOINT_DEVELOPMENT_RUNTIME` kind and schema version - and refuses unknown sections or keys, non-numbers,
+  booleans, non-finite or non-positive values, and a non-integer `disk_free_min_bytes`, all by name
+  (`DEVELOPMENT_RUNTIME_INVALID`). It states in its docstring that a CLI-specified run configuration still takes
+  precedence over the installed file.
+- Verified by loading the installed runtime (the authorized values come back exactly) and by six negatives: an extra
+  section, a missing key, a boolean, a float byte count, a negative age and a wrong kind.
+- Honest gap, same shape as CP-2380: that verification ran as a one-liner, and the plan requires these controls in
+  `test/test_act_first_episode_inputs.py` (with the policy/scheme cases already in
+  `test_act_endpoint_pose_acceptance.py`). Moving them in is part of the next E1 pass.
+- E1's remaining plan items: the policy/runtime roles in both real input registries; the `user_empirical_default`
+  approval with a real immutable effective-config artifact carrying the base runtime/collection bytes and hashes,
+  the override source, every effective value and the episode identity; `prepare --runtime-policy`; the freezer's
+  keyword-only `runtime_policy`; `--mode`/`--endpoint-policy` preserving old-call behaviour; and the input/CLI suite
+  with the plan's negatives.
+- F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
+  table is written. HEAD e58a82f91; goal active.
