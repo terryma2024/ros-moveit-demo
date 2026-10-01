@@ -49038,3 +49038,21 @@ What fails is the second test's final assertion, `verdict.get("passed") is True`
 means something other than "the verdict passed", or the QC's pass-through of `verdict["passed"]` is misreading E1's
 output - and the way to settle it is to read `evaluate_endpoint_pose`'s return rather than to adjust the assertion until
 it goes green, which would be exactly the kind of "make the test agree with the code" move this task forbids.
+
+
+## CP-2593 — E2's RED is green, and what reading E1's return settled
+
+`evaluate_endpoint_pose` returns `{"status": "PASS" if all(passed.values()) else "FAIL", "errors": errors,
+"passed": passed}` where **`passed` is a per-threshold map** and **`errors` is a map of the measured errors** - not a
+list and not a single boolean. That is why the previous run's verdict showed `status: PASS` while its `errors` listed
+the five threshold names: the names are the keys of the measurement map. Reading the return settled it; adjusting the
+assertion would have settled nothing.
+
+So the QC now passes both maps through unchanged and adds the one boolean a caller wants,
+`endpoint_passed = all(passed.values())`, and the test asserts `status`, `endpoint_passed`, and that the two maps share
+their key set.
+
+Committed as **0b996b36d** with the width gate at **239 passed**. Both halves are real measurements rather than
+fixtures that agree with the code: a summary-only sealed episode yields `ENDPOINT_POSE_NOT_DERIVABLE` (poses 0,
+positions 2), and a sealed episode carrying full `xyz_xyzw` poses yields a genuine endpoint verdict. E2's first
+artefact is therefore complete and its RED is green, which is what the plan asked for before any wiring.
