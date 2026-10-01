@@ -22,7 +22,7 @@ from .recorder import EpisodeRecorder
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
            "ProductionProducer", "assemble_episode_capture", "begin_episode", "end_episode",
            "episode_audit_pair",
-           "record_instant", "end_episode",
+           "record_instant", "end_episode", "RecordingWorldObserver",
            "physical_audit_from_captured", "physical_audit_from_observation",
            "readback_from_frozen"]
 
@@ -523,3 +523,33 @@ def end_episode(recorder, *, end_s: float, start_s: float, outcome: dict):
         return None
     return recorder.finish(float(end_s), window={"start_s": float(start_s), "end_s": float(end_s),
                                                 "label_cutoff_s": float(end_s)}, outcome=outcome)
+
+
+class RecordingWorldObserver:
+    """Wraps a run's world observer so that every instant it is asked for is also offered to the episode.
+
+    The state machine asks its observer for a snapshot at each instant it acts on, which makes the observer the one
+    place that sees them all - so wrapping it records every instant by construction, where inserting calls at the two
+    places it happens to be used would record every instant that still exists after the next refactor. Delegation is
+    total: the wrapper exists to observe, not to intercept, and the state machine must not be able to tell the
+    difference.
+    """
+
+    def __init__(self, inner, *, record) -> None:
+        self._inner = inner
+        self._record = record
+
+    def snapshot(self):
+        evidence = self._inner.snapshot()
+        self._record(evidence)
+        return evidence
+
+    def snapshot_with_receipt(self):
+        received = self._inner.snapshot_with_receipt()
+        self._record(received)
+        return received
+
+    def __getattr__(self, name):
+        # anything the wrapped observer offers beyond the protocol - close(), counters, its own diagnostics - is the
+        # inner object's business, and swallowing it here would turn a missing method into a confusing AttributeError
+        return getattr(self._inner, name)

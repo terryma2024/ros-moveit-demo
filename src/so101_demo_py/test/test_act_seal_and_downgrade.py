@@ -678,3 +678,32 @@ def test_ending_an_episode_always_carries_the_window_that_seals_it():
     assert end_episode(None, end_s=21.5, start_s=12.5, outcome=outcome) is None
     with pytest.raises(ValueError, match="EPISODE_WINDOW_INVALID"):
         end_episode(recorder, end_s=11.0, start_s=12.5, outcome=outcome)
+
+
+def test_a_recording_world_observer_records_every_instant_it_is_asked_for():
+    """RED first: wrapping the observer is what makes every instant recorded by construction (CP-2862 step 2)."""
+    from so101_demo.act.episode_assembly import RecordingWorldObserver
+
+    class Inner:
+        def __init__(self):
+            self.calls = []
+
+        def snapshot(self):
+            self.calls.append("snapshot")
+            return "evidence"
+
+        def snapshot_with_receipt(self):
+            self.calls.append("snapshot_with_receipt")
+            return "received"
+
+    seen = []
+    inner = Inner()
+    wrapper = RecordingWorldObserver(inner, record=seen.append)
+    assert wrapper.snapshot() == "evidence"
+    assert wrapper.snapshot_with_receipt() == "received"
+    # delegation happened, and every instant was seen - which is the point of wrapping rather than inserting
+    assert inner.calls == ["snapshot", "snapshot_with_receipt"]
+    assert seen == ["evidence", "received"]
+    # the runner takes a WorldObserver and must not be able to tell the difference: the protocol has two methods
+    for name in ("snapshot", "snapshot_with_receipt"):
+        assert callable(getattr(wrapper, name))
