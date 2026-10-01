@@ -43482,3 +43482,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - fourth blocked on CP-2285's contradiction; F5's first half complete. Every landed item names its own green run,
 - twenty-seven gates are recorded, and the tree carries nothing half-applied.
 - F14, F3 and F1 closed; goal paused; HEAD b7a6da8ef.
+
+## CP-2304 - The eighth review is dispatched
+
+- Owner's choice this round: dispatch the review rather than finish F5's hybrid first. The packet is
+  reviews/task3-review8-packet.md (63 lines) and names the checkpoint 875360b31, the closure map by commit, the state of
+  all seven findings, the owner decisions in force, and the four things to verify.
+- Dispatched as codex exec with gpt-6.1-sol at high reasoning in the tmux session task3review8, log
+  logs/task3-review8-dispatch.log, exit code to logs/task3-review8.rc. The verdict path is under
+  /tmp/so101-debug-task3-review8-875360b31/ - deliberately, because the seventh review could not write into the
+  ledger's directory and said so; the operator copies the file into reviews/ once it exists.
+- Two pre-existing tmux sessions (codex, dst) are not this task's and were left untouched.
+- Until the verdict arrives: no code changes, no polling every round, light progress checks only - the discipline
+  the seventh review's period used.
+- F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
+- three of four plus its carrier cut; F5 first half complete, hybrid specified; eighth review running; goal paused.
