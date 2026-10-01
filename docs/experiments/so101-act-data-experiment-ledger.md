@@ -51111,3 +51111,34 @@ and CP-2678 characterised: the `test_act_task8_*` family calling `search`, `plan
 
 So the gate is red for reasons that pre-date this stretch, with one exception that this stretch caused and has now
 repaired. Reporting it that way - with the numbers, the split, and my own share named - is the point.
+
+
+## CP-2687 — The "common top-level schema" is the admission report's shape, and endpoint_pose is one entry in its checks map
+
+The design's line 121 says the QC report "keeps the top-level common schema" and records results through
+`rule_version=endpoint_pose_v1` and `checks.endpoint_pose`. The common schema is in the repository, in the admission
+report:
+
+```python
+        "status": result.status,
+        "checked_monotonic_s": result.completed_monotonic_s,
+        "cleanup_state": result.cleanup_state,
+        "checks": {
+            name: {"status": check.status, "reason": check.reason, "observed": check.observed,
+                   "cutoff": check.cutoff, "unit": check.unit}
+            for name, check in sorted(result.checks.items())
+        },
+        "gpu_uuid": ..., "effective_cpu_cores": ..., "ram_available_bytes": ..., "gpu_free_bytes": ...,
+```
+
+with the closed key set confirmed at 2110 (`status, reason, checks, observed_monotonic_s, gpu_uuid, cleanup_state`).
+
+So a QC report is: a status, when it was checked, a cleanup state, a **map of named checks**, and the resource fields -
+and `checks.endpoint_pose` is **one entry** in that map. The design then gives that entry its own closed keys
+(`status, policy_sha256, initial_sequence, final_sequence, initial_pose, final_pose, initial_target...`), which differ
+from the admission checks' `{status, reason, observed, cutoff, unit}` - so the map holds entries shaped by the check that
+produced them, not one uniform record.
+
+That is the shape correction 1 asks for, and it replaces my `ACT_ENDPOINT_QC` document with its invented `claim` and
+`endpoint` fields. Now that both halves - the common schema and the prescribed entry keys - have been read rather than
+guessed, the next round can write it.
