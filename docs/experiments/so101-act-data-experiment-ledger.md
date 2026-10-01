@@ -53081,3 +53081,25 @@ lives.
 
 With that, the chain has one arrangement left rather than one contract: the same set of documents, in the locations the
 components' own conventions name.
+
+
+## CP-2769 — The convention forces two self-creating components into one directory
+
+Pointing the audit writer's root at the store's `episode_root`, so that the manifest lands where the verifier resolves it
+by convention, produces `FileExistsError` - and it is the same conflict CP-2709 found, now made unavoidable by the
+convention rather than avoidable by arrangement:
+
+- the **store** creates `<workspace>/working/episode` (`self.episode_root`) - and the store must exist before the capture,
+  because it owns the location;
+- the **recorder** creates its root with `mkdir(parents=False, exist_ok=False)`, so it refuses a root that already exists;
+- the **audit writer** does the same, refusing a root that already exists and creating `<root>/audit/` inside it.
+
+Three components, one directory, and two of them insist on creating it. The earlier resolution - give them different
+directories (CP-2707/CP-2709) - is exactly what the verifier's convention forbids, which means the real answer is a design
+one rather than an arrangement: either the store should not pre-create `episode_root` (leaving it to whichever component
+legitimately creates it), or the audit writer should accept an existing root by design when it is the episode's own
+directory.
+
+That is the shape of the remaining work on this chain, and it is now a question about ownership rather than about values.
+The two tests are as close as they have been: correction 2 passes end to end, and correction 3 needs this directory
+question settled - which, being a convention the live path must also obey, is work E3 needs done anyway.
