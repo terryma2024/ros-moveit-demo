@@ -1,15 +1,16 @@
-"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, verify-promoted-config, qualify.
+"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
 trajectory precondition and the run status live (plan rule 4). Every subcommand refuses a run root that
 already exists, so there is no way to resume or continue a stage. `measure-coarse-step`,
-`measure-mujoco` and `measure-search-timing` are the measurement flights the run cannot take itself - the
-run declares documents, it does not render, read a sealed model or step a simulator - so they are their own
-installed entries, validated here and produced by
+`measure-mujoco`, `measure-search-timing` and `measure-deadband-candidates` are the measurement flights
+the run cannot take itself - the run declares documents, it does not render, read a sealed model, step a
+simulator or close a control loop - so they are their own installed entries, validated here and produced by
 `so101_demo.act.head_search_coarse_step_measurement`,
-`so101_demo.act.head_search_mujoco_measurements` and
-`so101_demo.act.head_search_timing_measurement`.
+`so101_demo.act.head_search_mujoco_measurements`,
+`so101_demo.act.head_search_timing_measurement` and
+`so101_demo.act.head_search_deadband_measurement`.
 """
 
 from __future__ import annotations
@@ -158,6 +159,23 @@ TIMING_REQUIRED_FLAGS = (
     ("output_dir", "--output-dir"),
 )
 TIMING_OPTIONAL_FILE_FLAGS = (("weights", "--weights"),)
+
+
+#: the `measure-deadband-candidates` entry: the sealed scene the lock trials step the neck in, the sealed
+#: geometry the controller plan, the motion corridor and the anchor cup placements come from, the
+#: production search configuration, the sealed controller period, the selected candidate's frozen
+#: document, the selected model's weights and the brand-new directory the documents own. At least one
+#: `--candidate` has to be declared: the trials measure the candidates the run declares, never a default
+DEADBAND_REQUIRED_FLAGS = (
+    ("scene", "--scene"),
+    ("geometry_seal", "--geometry-seal"),
+    ("production_search_config", "--production-search-config"),
+    ("controller_config", "--controller-config"),
+    ("frozen_candidate", "--frozen-candidate"),
+    ("weights", "--weights"),
+    ("output_dir", "--output-dir"),
+)
+DEADBAND_CANDIDATE_FLAG = ("candidate", "--candidate")
 
 
 def _measurement_parser() -> argparse.ArgumentParser:
@@ -335,6 +353,126 @@ def _measure_mujoco(arguments: list[str]) -> int:
         f"MUJOCO_TIMESTEP_PRODUCED {receipt['simulation_timestep_s']} "
         f"scene={receipt['scene_path']} readback={receipt['mujoco_readback']} "
         f"output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _deadband_parser() -> argparse.ArgumentParser:
+    """The `measure-deadband-candidates` entry: it declares the sealed inputs and the candidates.
+
+    This is the closed-loop flight the run cannot take itself: the installed program walks the production
+    controller's own bounded plan in the sealed MuJoCo scene, renders the head camera, detects the cup with
+    the selected model and feeds the measured centre error back as the next correction, once per declared
+    deadband candidate. Nothing is computed here beyond parsing and validating what the caller declared.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-deadband-candidates",
+        description=(
+            "Run one closed-loop lock trial per declared deadband candidate in the sealed MuJoCo scene, "
+            "into a brand-new output directory, and write the deadband candidates document phase 6 reads"
+        ),
+    )
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the trials step")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument(
+        "--production-search-config", type=Path, help="the sealed production search configuration"
+    )
+    parser.add_argument(
+        "--controller-config", type=Path, help="the sealed controller configuration (the control period)"
+    )
+    parser.add_argument("--frozen-candidate", type=Path, help="the selected frozen candidate document")
+    parser.add_argument("--weights", type=Path, help="the selected model's weights file")
+    parser.add_argument("--output-dir", type=Path, help="the brand-new directory the documents own")
+    parser.add_argument(
+        "--candidate",
+        type=float,
+        action="append",
+        help="a declared deadband candidate in pixels; repeat once per candidate",
+    )
+    parser.add_argument("--anchor", action="append", help="trial only these sealed anchors")
+    parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
+    parser.add_argument("--max-settle-s", type=float, default=None, help="the per-stop settle budget")
+    parser.add_argument(
+        "--settle-consecutive-steps", type=int, default=None, help="the consecutive quiet control steps"
+    )
+    parser.add_argument("--max-frames", type=int, default=None, help="the per-trial frame budget")
+    return parser
+
+
+def _measure_deadband_candidates(arguments: list[str]) -> int:
+    """Validate the declared inputs and candidates, then hand the lock trials to the library."""
+
+    parsed = _deadband_parser().parse_args(arguments)
+    missing = [flag for name, flag in DEADBAND_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    name, flag = DEADBAND_CANDIDATE_FLAG
+    if not getattr(parsed, name):
+        missing.append(flag)
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in DEADBAND_REQUIRED_FLAGS
+        if name != "output_dir" and not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_deadband_measurement import (
+        DEFAULT_MAX_FRAMES,
+        SETTLE_CONSECUTIVE_STEPS,
+        write_head_search_deadband_measurement,
+    )
+
+    optional = {"max_frames": DEFAULT_MAX_FRAMES, "settle_consecutive_steps": SETTLE_CONSECUTIVE_STEPS}
+    for key in ("max_settle_s", "settle_consecutive_steps", "max_frames"):
+        if getattr(parsed, key) is not None:
+            optional[key] = getattr(parsed, key)
+    try:
+        result = write_head_search_deadband_measurement(
+            scene_path=parsed.scene,
+            geometry_seal_path=parsed.geometry_seal,
+            production_search_config_path=parsed.production_search_config,
+            controller_config_path=parsed.controller_config,
+            frozen_candidate_path=parsed.frozen_candidate,
+            weights_path=parsed.weights,
+            output_dir=parsed.output_dir,
+            candidates=parsed.candidate,
+            anchors=parsed.anchor,
+            device=parsed.device,
+            command=_command_line(arguments, subcommand="measure-deadband-candidates"),
+            **optional,
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    locking = [
+        record
+        for record in receipt["records"]
+        if record["longest_locked_run_frames"] >= receipt["lock_frames_required"]
+        and record["direction_reversals"] == 0
+    ]
+    print(
+        f"DEADBAND_CANDIDATES_MEASURED candidates={receipt['candidate_count']} "
+        f"anchors={','.join(receipt['anchor_names'])} trials={receipt['trial_count']} "
+        f"locking={len(locking)} output_dir={parsed.output_dir}"
     )
     return 0
 
@@ -787,6 +925,9 @@ def main(argv: list[str] | None = None) -> int:
     # the bounded stop-point sweep's settle and frame timing is the third flight the run cannot take
     if arguments[:1] == ["measure-search-timing"]:
         return _measure_search_timing(arguments[1:])
+    # the closed-loop deadband lock trials are the fourth flight the run cannot take
+    if arguments[:1] == ["measure-deadband-candidates"]:
+        return _measure_deadband_candidates(arguments[1:])
     parsed = qualification_parser().parse_args(arguments)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":

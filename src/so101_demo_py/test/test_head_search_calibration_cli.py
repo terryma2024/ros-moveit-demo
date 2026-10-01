@@ -1013,3 +1013,293 @@ def test_measure_search_timing_sweeps_without_a_detector_and_invents_no_frame_ag
     receipt = json.loads((output / "measurement-receipt.json").read_text(encoding="utf-8"))
     assert receipt["search_timing_sha256"] == document["sha256"]
     assert receipt["ros_nodes_started"] is False
+
+
+# --- measure-deadband-candidates --------------------------------------------------------------------
+
+#: the sealed scene stand-in of the deadband entry: the same yaw hinge and head camera, plus the cup the
+#: anchor places. The trials themselves are handed to a declared plant and detector in these tests, so no
+#: detector, GPU, renderer or ROS is needed to exercise the entry end to end
+DEADBAND_SCENE = """<mujoco model="deadband-fixture">
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <worldbody>
+    <body name="cup">
+      <joint name="cup_free_joint" type="free"/>
+      <geom name="cup_geom" type="cylinder" size="0.04 0.045"/>
+    </body>
+    <body name="head_mount">
+      <joint name="neck_yaw_joint" type="hinge" axis="0 0 1" damping="0.05" armature="0.001"/>
+      <geom name="head_geom" type="box" size="0.05 0.05 0.05"/>
+      <camera name="head_camera" pos="0 0 0.05" xyaxes="1 0 0 0 1 0"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="neck_yaw_joint" joint="neck_yaw_joint" kp="8" kv="0.6"
+              forcelimited="false" ctrllimited="false"/>
+  </actuator>
+</mujoco>
+"""
+
+
+def _deadband_inputs(tmp_path: Path) -> dict:
+    """The six declared inputs of the lock-trial measurement, with one sealed anchor."""
+
+    scene = tmp_path / "head_search_scene.xml"
+    scene.write_text(DEADBAND_SCENE, encoding="utf-8")
+    scene_sha256 = hashlib.sha256(scene.read_bytes()).hexdigest()
+    seal = tmp_path / "head-camera-geometry.json"
+    seal.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "camera_name": "head_camera",
+                "camera": {
+                    "camera_name": "head_camera",
+                    "parent_body": "head_mount",
+                    "width": 640,
+                    "height": 480,
+                    "fovy_rad": 1.0471975511965976,
+                },
+                "image_width": 640,
+                "image_height": 480,
+                "horizontal_fov_rad": 1.3121067481206794,
+                "required_search_domain_rad": [-0.17559216195018026, 0.08047101126546086],
+                "lock_valid_neck_rad": [-6.283175307179587, 6.283175307179587],
+                "in_frame_matrix": {"left": {"neck_start_rad": 0.0}},
+                "workspace_matrix": {
+                    "key_samples": [
+                        {"anchor": "left", "kind": "anchor", "point_m": [-0.08, -0.28, 0.165]}
+                    ]
+                },
+                "source_digests": {"scene_sha256": scene_sha256},
+            }
+        ),
+        encoding="utf-8",
+    )
+    weights = tmp_path / "C.pt"
+    weights.write_bytes(b"selected-model")
+    production = tmp_path / "head_search_v2.json"
+    production.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "runtime_id": "head-search-v2",
+                "weight_path": "models/head-search/yolo11n-seg-best.pt",
+                "weight_sha256": hashlib.sha256(weights.read_bytes()).hexdigest(),
+                "camera": {
+                    "name": "head_camera",
+                    "frame_id": "head_camera_optical_frame",
+                    "ray_origin_frame_id": "base_link",
+                },
+                "motion": {"settle_velocity_rad_s": 0.05, "goal_tolerance_rad": 0.05},
+                "tracker": {"name": "bytetrack", "iou_threshold": 0.3},
+                "values": {
+                    "coarse_step_rad": 0.3,
+                    "horizontal_fov_rad": 1.3121067481206794,
+                    "lock_valid_neck_rad": [-6.283175307179587, 6.283175307179587],
+                    "max_age_s": 0.05,
+                    "max_skew_s": 0.02,
+                    "search_timeout_s": 12.0,
+                    "center_deadband_px": 18.0,
+                    "vertical_bounds_px": [110.0, 370.0],
+                    "min_area_px2": 64.0,
+                    "min_confidence": 0.4,
+                    "tracking_iou": 0.3,
+                    "max_fine_corrections": 4,
+                    "max_fine_total_rad": 0.4,
+                    "min_bbox_aspect": 0.5,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    frozen = tmp_path / "frozen-c.json"
+    frozen.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "kind": "head-search-frozen-candidate",
+                "candidate_id": "C",
+                "weight_sha256": hashlib.sha256(weights.read_bytes()).hexdigest(),
+                "operating_points": {
+                    "head": {"min_confidence": 0.25, "tracker": {"iou": 0.5}},
+                    "task": {"min_confidence": 0.25, "tracker": {"iou": 0.5}},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    controllers = tmp_path / "ros2_controllers.yaml"
+    controllers.write_text(TIMING_CONTROLLERS, encoding="utf-8")
+    return {
+        "scene": scene,
+        "seal": seal,
+        "production": production,
+        "controllers": controllers,
+        "weights": weights,
+        "frozen": frozen,
+    }
+
+
+def _deadband_arguments(inputs: dict, output: Path) -> list:
+    return [
+        "measure-deadband-candidates",
+        "--scene",
+        str(inputs["scene"]),
+        "--geometry-seal",
+        str(inputs["seal"]),
+        "--production-search-config",
+        str(inputs["production"]),
+        "--controller-config",
+        str(inputs["controllers"]),
+        "--frozen-candidate",
+        str(inputs["frozen"]),
+        "--weights",
+        str(inputs["weights"]),
+        "--output-dir",
+        str(output),
+        "--candidate",
+        "18",
+        "--candidate",
+        "2",
+    ]
+
+
+def test_measure_deadband_candidates_needs_its_declared_inputs(tmp_path: Path, capsys) -> None:
+    assert main(["measure-deadband-candidates"]) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+    assert not (tmp_path / "deadband").exists()
+
+
+def test_measure_deadband_candidates_refuses_a_missing_input_an_existing_output_and_no_candidate(
+    tmp_path: Path, capsys
+) -> None:
+    inputs = _deadband_inputs(tmp_path)
+    output = tmp_path / "deadband"
+    arguments = _deadband_arguments(inputs, output)
+
+    assert main([arguments[0], "--scene", str(tmp_path / "absent.xml"), *arguments[3:]]) == 2
+    assert "no such input" in capsys.readouterr().err
+
+    output.mkdir()
+    assert main(arguments) == 2
+    assert "never resumed" in capsys.readouterr().err
+
+    output.rmdir()
+    assert main(arguments[:-4]) == 2  # the two declared candidates are the last four arguments
+    assert "--candidate" in capsys.readouterr().err
+
+
+def test_measure_deadband_candidates_hands_the_flight_to_the_library(tmp_path: Path, capsys, monkeypatch) -> None:
+    inputs = _deadband_inputs(tmp_path)
+    output = tmp_path / "deadband"
+    from so101_demo.act import head_search_deadband_measurement as measurement
+
+    class Plant:
+        """A yaw-only plant whose cup sits at the principal point once the neck reaches the anchor."""
+
+        def __init__(self, request) -> None:
+            self.request = request
+            self.simulation_timestep_s = 0.002
+            self.yaw_rad = 0.0
+            self.velocity_rad_s = 0.0
+            self.time_s = 0.0
+            self.stops = 0
+
+        @property
+        def frame_stamp_ns(self) -> int:
+            return int(round(self.time_s * 1e9))
+
+        def settle_to(self, target_rad: float) -> dict:
+            start, rad = self.time_s, self.yaw_rad
+            self.yaw_rad, self.time_s = float(target_rad), self.time_s + 0.01
+            self.stops += 1
+            return {
+                "target_rad": float(target_rad),
+                "start_rad": rad,
+                "sim_start_s": start,
+                "sim_end_s": self.time_s,
+                "steps": 5,
+                "settle_s": self.time_s - start,
+                "settled": True,
+                "reached": True,
+                "final_velocity_rad_s": 0.0,
+                "final_position_error_rad": 0.0,
+                "quiet_steps": 5,
+            }
+
+        def render_frame(self):
+            return {"yaw_rad": self.yaw_rad}
+
+        def optical_geometry(self) -> dict:
+            return {
+                "k": (415.69219381653056, 0.0, 320.0, 0.0, 415.69219381653056, 240.0, 0.0, 0.0, 1.0),
+                "distortion": (0.0, 0.0, 0.0, 0.0, 0.0),
+                "rotation_optical_to_base": (
+                    (-1.0, 0.0, 0.0),
+                    (0.0, 0.6, -0.8),
+                    (0.0, -0.8, -0.6),
+                ),
+            }
+
+    class Detector:
+        """A cup that sits on the principal point: every candidate locks on the first frame."""
+
+        def __init__(self, plant) -> None:
+            self.plant = plant
+
+        def reset(self) -> None:
+            pass
+
+        def __call__(self, image, stamp_ns):
+            return [
+                {
+                    "xyxy": (270.0, 190.0, 370.0, 290.0),
+                    "confidence": 0.9,
+                    "class_id": 0,
+                    "track_id": "head-cup-0",
+                }
+            ]
+
+    monkeypatch.setattr(measurement, "MujocoClosedLoopPlant", Plant)
+    monkeypatch.setattr(
+        measurement,
+        "build_production_head_detector",
+        lambda **kwargs: Detector(None),
+    )
+
+    assert main(_deadband_arguments(inputs, output)) == 0
+
+    printed = capsys.readouterr().out
+    assert "DEADBAND_CANDIDATES_MEASURED" in printed
+    assert "candidates=2" in printed
+    assert f"output_dir={output}" in printed
+    document = json.loads((output / "deadband-candidates.json").read_text(encoding="utf-8"))
+    assert [record["center_deadband_px"] for record in document["records"]] == [18.0, 2.0]
+    assert all(record["longest_locked_run_frames"] >= 3 for record in document["records"])
+    assert all(record["direction_reversals"] == 0 for record in document["records"])
+    assert document["detector_operating_point"] == {"min_confidence": 0.25, "iou": 0.5}
+    receipt = json.loads((output / "measurement-receipt.json").read_text(encoding="utf-8"))
+    assert receipt["document_sha256"] == document["sha256"]
+    assert receipt["anchor_names"] == ["left"]
+    assert receipt["ros_nodes_started"] is False
+    assert receipt["hardware_motion_commanded"] is False
+
+
+def test_measure_deadband_candidates_prints_the_librarys_refusal_and_returns_two(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    inputs = _deadband_inputs(tmp_path)
+    output = tmp_path / "deadband"
+    from so101_demo.act import head_search_deadband_measurement as measurement
+
+    def refuse(request):
+        raise measurement.CalibrationDeadbandMeasurementRefused(
+            measurement.CAL_DEADBAND_CUP_LOST, "the detector found no cup at all"
+        )
+
+    monkeypatch.setattr(measurement, "MujocoClosedLoopPlant", refuse)
+    monkeypatch.setattr(measurement, "build_production_head_detector", lambda **kwargs: None)
+
+    assert main(_deadband_arguments(inputs, output)) == 2
+    assert measurement.CAL_DEADBAND_CUP_LOST in capsys.readouterr().err
