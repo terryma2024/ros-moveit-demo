@@ -43690,3 +43690,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - verifier chain to thread the replacement, which is the structural half and the next work.
 - F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
 - F12 two of three; F13 narrowed; HEAD 15c3a5ea8; goal paused.
+
+## CP-2319 - F12's immutable-carrier item: the mechanism is available, the threading is not one edit
+
+- Read this round: PickPlaceSearchObservation is a frozen dataclass with slots (search_segment.py:23), so
+- dataclasses.replace can produce the replacement the verdict asks for; the segment builds the observation at its
+- return (line 278) and the boundary's verifier chain reaches the feedback helper through a lambda
+- (search_boundary.py:858) that returns the helper's None so the `or` chain keeps the verifier's verdict.
+- Why it is not a one-line change: the feedback lives on the boundary (the reset's broker), not the segment, so
+- the replacement has to be produced in the boundary and then reach the port call that reads
+- observed.controller_feedback - which means the chain's callers, not only the helper, have to thread the
+- replacement. That is a structural change across the boundary and segment, and it wants its own pass rather than
+- the tail of this one.
+- Decision, stated so it is not mistaken for abandonment: F12's first two items are landed (CP-2317, CP-2318) and
+- this third one is specified; the next work moves to F13's delayed-callback fencing, which is independent and
+- whose verdict text is equally concrete, and this item returns with the threading design above.
+- F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
+- F12 two of three; F13 narrowed; HEAD a1dc4c646; goal paused.
