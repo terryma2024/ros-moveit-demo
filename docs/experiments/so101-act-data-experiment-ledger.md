@@ -47310,3 +47310,23 @@ neighbourhood, and the clause that consumes them names itself.
 
 The module has been restored again (marker count zero, tree at the user's 35 entries) and the audit suite is green at
 74 passed.
+
+
+### CP-2498 — The trailing rule, and the mismatch it explains
+
+Read the predicate's tail: after the per-stream rules it builds
+`observed_stamps = [v for values in held.values() for v in values if v is not None]`, refuses if that is empty, and
+then requires `collection_start_s` and `collection_end_s` to equal the **observed camera extremes** within tolerance -
+"the collection window is the episode's own claim about what it observed, so its endpoints must be the observed extremes
+rather than numbers the caller chose; each stream's held stamps are that evidence".
+
+That is the rule my fixture violates, and now the shape of the violation is exact: I derived
+`"collection_start_s": min(times)` and `"collection_end_s": max(times)` from the **physics** times, while the rule
+compares them with the **camera** stamps. The two agree only if the runner's physics history and the minted
+acquisitions happen to share the same extremes - and the acquisitions are 0.1 through 1.0 while the runner's rows are
+whatever the port produces. One print of the runner's physics times (the CP-2497 probe already prints `phys`, though
+truncated to its first three) settles it, and the fix is then one line either way: set the collection endpoints from
+the acquisitions, or mint the acquisitions to match the physics extremes.
+
+So F5's step two now has a named rule, a specific mismatch to check, and a one-line fix. The remaining work is the
+fixture (CP-2495's 10 Hz version) plus the inert read-style probe (CP-2497), both already recorded verbatim.
