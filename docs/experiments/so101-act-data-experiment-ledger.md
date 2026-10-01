@@ -43775,3 +43775,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - scene production, which waits on the owner's CP-2285 ruling.
 - F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
 - F12 two of three; F13 two of four; HEAD 47ca6aff1; goal paused.
+
+## CP-2325 - F13's reader now consumes the measured source stamp
+
+- controller_feedback refuses a record whose retained _joint_stamp is further from the instant it is for than the
+- driver's own max_age bound, raising CONTROLLER_FEEDBACK_STALE. That is the check the verdict says was missing:
+- receipt ages and the reference stamp were checked, the measured stamp was not, so a delayed callback after a
+- reset could be read as current. GREEN 215 passed.
+- The verdict's second half of this item - the current epoch floor - is not yet enforced: the caches are cleared on
+- an epoch change and the stamp bound now catches the probe's 0.2-against-1.1 case, but a callback that arrives
+- with an epoch-matching stamp after a reset would still be admitted. Recording that so the next pass does not
+- mistake this for the whole fence.
+- F13's last item is scene production, which waits on the owner's CP-2285 ruling.
+- F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
+- F12 two of three; F13 three of four; HEAD 5dc860d21; goal paused.
