@@ -91,11 +91,16 @@ _EVENT_PAYLOADS = {
     "contact": frozenset({"left_contacts", "right_contacts", "table_contact"}),
     "release": frozenset({"release_epoch", "supported", "no_fingertip_contact"}),
     "final_check": frozenset({"placement_stable", "retreat_stable"}),
+    # K2's record kinds (the passed protocol table, section 3): the key sets its five record types declare
+    "k2_apply": frozenset({"apply_event_id", "applied_at_s", "accepted"}),
+    "k2_query": frozenset({"query_id", "query_at_s", "request_bytes", "response_bytes"}),
+    "k2_receipt": frozenset({"receipt_id", "received_at_s", "clock_source", "uncertainty_s"}),
 }
-_EVENT_STRINGS = {"phase": "phase", "reason": "reason", "owner": "dispatch", "permit_id": "accept"}
+_EVENT_STRINGS = {"phase": "phase", "reason": "reason", "owner": "dispatch", "permit_id": "accept",
+                  "apply_event_id": "k2_apply", "query_id": "k2_query", "receipt_id": "k2_receipt"}
 _EVENT_FLAGS = {"stopped_confirmed", "table_contact", "supported", "no_fingertip_contact",
-                "placement_stable", "retreat_stable"}
-_EVENT_COUNTS = {"left_contacts", "right_contacts"}
+                "placement_stable", "retreat_stable", "accepted"}
+_EVENT_COUNTS = {"left_contacts", "right_contacts", "request_bytes", "response_bytes"}
 _PHYSICS_FIELDS = frozenset({"sequence", "task_sequence", "kind", "sim_time_s", "release_epoch", "observation"})
 _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
 # the MuJoCo source contract for a physics observation, taken from what the backend already publishes
@@ -457,6 +462,12 @@ def _event_identity_ok(event_identity, episode_identity, *, release_epoch: int |
     return True
 
 
+#: K2's instants and uncertainties: finite reals, non-negative except an uncertainty
+_EVENT_FLOATS = frozenset({"applied_at_s", "query_at_s", "received_at_s", "uncertainty_s"})
+#: a string that is legitimately null - the clock source of a record no publication covered (protocol section 2)
+_EVENT_NULLABLE_STRINGS = frozenset({"clock_source"})
+
+
 def _payload_typed(payload) -> bool:
     """Type every payload value the way its key declares, per kind."""
 
@@ -472,6 +483,14 @@ def _payload_typed(payload) -> bool:
                 return False
         elif key == "release_epoch":
             if type(value) is not int or value < 0:
+                return False
+        elif key in _EVENT_FLOATS:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return False
+            if not math.isfinite(value) or (key != "uncertainty_s" and value < 0):
+                return False
+        elif key in _EVENT_NULLABLE_STRINGS:
+            if value is not None and (not isinstance(value, str) or not value):
                 return False
         elif key in _EVENT_STRINGS:
             if not isinstance(value, str) or not value:
