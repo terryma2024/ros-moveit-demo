@@ -2635,7 +2635,9 @@ class ProductionBatchComposition:
         try:
             # the scope document the episodes of this run belong to (CP-2862). Optional: a composition told nothing about
             # it produces workers whose specifications omit the field, which is the behaviour every existing caller has.
-            self._episode_scope_path = kwargs.get("episode_scope_path")
+            # Popped rather than read: _initialize names its keywords one by one and takes no **kwargs, so a key left
+            # in the mapping would reach it as an unexpected argument and fail the whole run at construction.
+            self._episode_scope_path = kwargs.pop("episode_scope_path", None)
             self._initialize(spec, **kwargs)
         except BaseException as error:
             partial_cleanup = self._release_partial()
