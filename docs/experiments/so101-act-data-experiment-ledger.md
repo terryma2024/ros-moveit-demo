@@ -41533,3 +41533,21 @@ HYPERPARAMETER_KEYS = (task, imgsz, batch, workers, seed, deterministic, amp, op
 
 **证否含义**：若 task 差距消失但 head 明显下降 → 说明两域存在真实的权衡（H-c 方向）；若两者都不动 → 选点假设被否证，
 转 C2-a（epochs）。**失败也照实记录。**
+
+## HS-273 — C2-b 被实现本身否决：`checkpoint_score` 必须是 B/C 共享的"两域分数"
+
+```
+training input error: CANDIDATE_CHECKPOINT_SCORE_INVALID: B and C share the two-domain score
+'0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95'
+train-c2 rc=2
+```
+
+训练 CLI **拒绝**只给 C 改 `checkpoint_score`：它把"两域分数"当作 **B 与 C 必须共享**的量（尽管该键不在
+`HYPERPARAMETER_KEYS` 里，实现另有一条校验）。所以"只改 C 的选点权重"这条路**在实现层面是关着的**，
+要检验该假设只能 **B、C 一起重训**（代价回到"两个模型 + 新的可比性建立"）。
+
+**这已经是本轮第三次"先验证可行性、再决定跑不跑"救下一次白跑的尝试**（HS-270 可表达性、HS-271 代价、本条实现校验），
+三次都没花掉训练时间：本次失败在**几秒内**返回，而不是训练 10 分钟后才报错。
+
+**下一选项**：`epochs` 60 → 120（C2-a）。它与 `checkpoint_score` 同属逐候选计划键，**是否也被"共享"校验拦住尚未知**——
+用同样便宜的办法先试：契约副本改一行，若被拒会立即返回，若通过则正式跑。
