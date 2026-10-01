@@ -45835,3 +45835,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   fail in one named layer - and that failure is the next piece of evidence rather than a setback.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished with inspect, prepare and preflight all rc=0. HEAD 2f7cd598c; goal active.
+
+
+## CP-2428 — run's first version: fail-closed guards, the request, and the run identity
+
+- `act_first_episode run --inputs --root --mode --lifecycle --final-cup-pose` exists now, with four guards: the
+  frozen set's own mode must equal the requested one; the root must not already exist (a run is a new evidence root);
+  a missing `--final-cup-pose` refuses with the reason stated - the endpoint rule compares the cup against the
+  scenario's frozen target and this CLI will not invent one; and the target must be three finite numbers. It then
+  builds one `TaskPoint` and the four-field `BatchRequest` from the frozen manifest and writes `run.log` under the new
+  LIVE_ROOT with the batch id, mode, lifecycle, target and inputs path.
+- Measured on the installed entry after a rebuild: `--help` rc=0 and now lists four subcommands
+  (`inspect, prepare, run, preflight`); without the target rc=2 and the refusal names the reason; with
+  `--final-cup-pose=-0.07,-0.23,0.165` rc=0, and `experiments/nonhead-first-episode-live.k3Tq8wRs/run.log` carries the
+  identity. Two honest notes from the same run: the equals form is required because argparse reads a leading `-` as a
+  flag, and the first attempt failed with `ImportError: cannot import name 'CoordinatorJournal'` - it lives in
+  `parallel_batch.journal`, where the batch CLI imports it, and the import is corrected.
+- What this version deliberately does not do yet: the four composition calls (journal, sealed-result adapter,
+  coordinator, episode runner) and therefore the episode itself. That is the next increment, and it is the one that
+  turns this subcommand into the live run the milestone needs.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished with inspect, prepare, preflight and now run's own contract verified. HEAD ec79e3453; goal active.
