@@ -214,3 +214,42 @@ def test_the_real_synchronizer_satisfies_the_sampler_contract_the_capture_calls(
     assert observation["sim_time_s"] == 1.0
     # what the capture records about a sample's provenance comes from this pair, so the key it reads has to be here
     assert "source_stamps" in source_audit and set(source_audit["source_stamps"]) == {"head", "wrist", "arm", "neck"}
+
+
+def test_the_qc_verdict_comes_from_a_separate_process(tmp_path):
+    """E3 asks for an independent QC, and independence has a testable meaning: the process that seals an episode is not
+    the process that grades it.
+
+    A sealed audit describes itself **relative to its own directory** - the manifest lists its files by name - so the
+    child is started in that directory as well as given absolute paths (CP-2826).
+    """
+    import subprocess
+    import sys
+
+    store = store_for(tmp_path)
+    manifest_path, episode_seal = sealed_episode(
+        tmp_path, episode_root=store.episode_root,
+        outcome={"status": "FAILED", "reason": "search_failed",
+                 "task8_success": False, "stopped_confirmed": True})
+    store.audit_manifest = manifest_path
+    store.scope = manifest_path.parent / "source.json"
+    sealed = store.seal(episode_seal)
+
+    # the publish renames working/ to sealed/, so the audit's directory is the published one - the same phase
+    # distinction the store's own verification and the verifier have to make (CP-2777)
+    audit_dir = (sealed / "episode" / "audit").resolve()
+    program = (
+        "import json, sys\n"
+        "from so101_demo.act.episode_qc import endpoint_qc_document\n"
+        "from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy\n"
+        "inputs = {'initial_target': [0.0] * 7, 'final_target': [0.0] * 7,\n"
+        "          'endpoint_policy': load_endpoint_policy(sys.argv[2])}\n"
+        "document = endpoint_qc_document(sys.argv[1], inputs)\n"
+        "print(json.dumps({'status': document['status'], 'checks': sorted(document['checks'])}))\n"
+    )
+    completed = subprocess.run([sys.executable, "-c", program, str(audit_dir), str(POLICY.resolve())],
+                               capture_output=True, text=True, cwd=str(audit_dir))
+    assert completed.returncode == 0, completed.stderr[-900:]
+    verdict = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert verdict["checks"] == ["endpoint_pose"]
+    assert verdict["status"] in ("PASS", "FAIL", "INCOMPLETE")
