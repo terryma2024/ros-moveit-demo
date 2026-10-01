@@ -718,3 +718,129 @@ def test_the_stationary_flight_refuses_a_pose_that_never_settles() -> None:
             plant_factory=_UnsettledPlant,
         )
     assert refused.value.code == stop.CAL_STATIONARY_UNSETTLED
+
+
+# --- the real plant and the installed criterion, so a wrong MuJoCo call cannot hide -------------------
+
+#: the fixture scene of the real-plant regression: the six arm joints, the neck and the cup the plant places
+STOP_SCENE = """<mujoco model="stop-fixture">
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <worldbody>
+    <body name="cup">
+      <joint name="cup_free_joint" type="free"/>
+      <geom name="cup_geom" type="cylinder" size="0.04 0.045"/>
+    </body>
+    <body name="link1">
+      <joint name="1" type="hinge" axis="0 0 1" damping="0.6" armature="0.028"/>
+      <geom name="link1_geom" type="box" size="0.03 0.03 0.05" contype="0" conaffinity="0"/>
+      <body name="link2" pos="0 0 0.06">
+        <joint name="2" type="hinge" axis="0 0 1" damping="0.6" armature="0.028"/>
+        <geom name="link2_geom" type="box" size="0.03 0.03 0.05" contype="0" conaffinity="0"/>
+          <body name="link3" pos="0 0 0.06">
+          <joint name="3" type="hinge" axis="0 0 1" damping="0.6" armature="0.028"/>
+          <geom name="link3_geom" type="box" size="0.03 0.03 0.05" contype="0" conaffinity="0"/>
+            <body name="link4" pos="0 0 0.06">
+            <joint name="4" type="hinge" axis="0 0 1" damping="0.6" armature="0.028"/>
+            <geom name="link4_geom" type="box" size="0.03 0.03 0.05" contype="0" conaffinity="0"/>
+              <body name="link5" pos="0 0 0.06">
+              <joint name="5" type="hinge" axis="0 0 1" damping="0.6" armature="0.028"/>
+              <geom name="link5_geom" type="box" size="0.03 0.03 0.05" contype="0" conaffinity="0"/>
+                <body name="link6" pos="0 0 0.06">
+                <joint name="6" type="hinge" axis="0 0 1" damping="0.6" armature="0.028"/>
+                <geom name="link6_geom" type="box" size="0.03 0.03 0.05" contype="0" conaffinity="0"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    <body name="head_mount" pos="0 0 0.06">
+      <joint name="neck_yaw_joint" type="hinge" axis="0 0 1" damping="0.05" armature="0.001"/>
+      <geom name="head_geom" type="box" size="0.05 0.05 0.05"/>
+      <camera name="head_camera" pos="0 0 0.05" fovy="60" xyaxes="1 0 0 0 1 0"/>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="1" joint="1" kp="998.22" kv="2.731" forcelimited="false" ctrllimited="false"/>
+    <position name="2" joint="2" kp="998.22" kv="2.731" forcelimited="false" ctrllimited="false"/>
+    <position name="3" joint="3" kp="998.22" kv="2.731" forcelimited="false" ctrllimited="false"/>
+    <position name="4" joint="4" kp="998.22" kv="2.731" forcelimited="false" ctrllimited="false"/>
+    <position name="5" joint="5" kp="998.22" kv="2.731" forcelimited="false" ctrllimited="false"/>
+    <position name="6" joint="6" kp="998.22" kv="2.731" forcelimited="false" ctrllimited="false"/>
+    <position name="neck_yaw_joint" joint="neck_yaw_joint" kp="8" kv="0.6"
+              forcelimited="false" ctrllimited="false"/>
+  </actuator>
+</mujoco>
+"""
+
+
+def test_the_real_mujoco_stop_flight_commands_through_admission_and_proves_a_stop(tmp_path: Path) -> None:
+    """The entry's own plant and the installed stop criterion are built for real here.
+
+    The injected-plant tests above cannot reach a wrong MuJoCo call, so this one constructs the real
+    `MujocoStopFlight` on a fixture scene with all seven monitored joints, submits a target through the
+    admission port, and then hands receipts to the installed `RosControllerPort` until three consecutive
+    ones qualify. The plant is not paced here, so the test stays fast and no GL context is opened.
+    """
+
+    scene = tmp_path / "stop_scene.xml"
+    scene.write_text(STOP_SCENE, encoding="utf-8")
+    flight = stop.MujocoStopFlight(
+        {
+            "scene_path": str(scene),
+            "camera_name": "head_camera",
+            "image_width": 640,
+            "image_height": 480,
+            "fovy_rad": math.radians(60.0),
+            "control_period_s": 0.002,
+            "feedback_period_s": 0.01,
+            "frame_period_s": 0.1,
+            "max_settle_s": 5.0,
+            "settle_consecutive_steps": 5,
+            "settle_velocity_rad_s": 0.05,
+            "goal_tolerance_rad": 0.05,
+            "start_rad": 0.0,
+            "cup_start_m": [-0.08, -0.28, 0.165],
+            "cup_joint": "cup_free_joint",
+            "cup_body": "cup",
+            "realtime": False,
+            "stop_velocity_rad_s": 0.05,
+            "max_age_s": 0.05,
+        }
+    )
+    try:
+        assert flight.simulation_timestep_s == 0.002
+        assert flight.joint_velocity_vector() == (0.0,) * 6 + (0.0,)
+        # every monitored joint is held where the sealed model starts it, so nothing is yanked
+        assert flight.joint_position_vector()[6] == 0.0
+
+        motion = flight.command_through_admission(0.2, purpose="plan_stop", max_cycles=5)
+        assert motion["lead_s"] == pytest.approx(flight.simulation_timestep_s)
+        assert motion["first_target_sim_s"] == motion["plant_consumed_sim_s"]
+        assert motion["settled"] is False
+
+        port, transport, clock = stop.controller_stop_criterion(
+            stop_velocity_rad_s=0.05, max_age_s=0.05
+        )
+        proof = stop.confirm_stop(
+            plant=flight,
+            port=port,
+            transport=transport,
+            clock=clock,
+            hold_rad=flight.yaw_rad,
+            stop_budget_s=2.0,
+            index=0,
+            reason="test_revoke",
+            period_s=0.01,
+            motion=motion,
+        )
+        assert len(proof["confirming_sample_indices"]) == 3
+        assert proof["latency_s"] > 0.0
+        assert proof["sim_latency_s"] > 0.0
+        assert proof["feedback_samples"][-1]["qualifying"] is True
+        assert len(proof["feedback_samples"][-1]["velocity_rad_s"]) == 7
+        assert transport.delivered == len(proof["feedback_samples"])
+    finally:
+        flight.close()
+    # the admitted target really reached the plant: the neck moved away from its start
+    assert flight.yaw_rad > 0.0

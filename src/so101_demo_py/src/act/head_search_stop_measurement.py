@@ -1484,7 +1484,9 @@ class MujocoStopFlight(MujocoClosedLoopPlant):
                 )
             self._dof_addresses.append(int(self._model.jnt_dofadr[joint]))
             self._qpos_addresses.append(int(self._model.jnt_qposadr[joint]))
-            actuator = self._mujoco.mj_name2id(self._mujoco.mjtObj.mjOBJ_ACTUATOR, name)
+            actuator = self._mujoco.mj_name2id(
+                self._model, self._mujoco.mjtObj.mjOBJ_ACTUATOR, name
+            )
             if actuator >= 0:
                 # hold every monitored joint where the sealed model starts it: the arm must not be pulled to
                 # a command this flight never declared
