@@ -49657,3 +49657,21 @@ physics rows were written** - while the same runner and fake port do produce eve
 Worth recording plainly: this is the fifth round in which a test of mine has been red for my own construction reasons
 rather than for the property it measures. Each has been fixed by reading the literal (the suite's helper, the writer's
 refusals, the error's full path) rather than by relaxing an assertion.
+
+
+## CP-2623 — The run completes, so the physics writer is not being reached
+
+`run()`'s guards, read in order: it validates the request, refuses a second run on the same runner
+(`TASK8_RUNNER_REUSED` - "one runner owns one attempt"), calls `port.begin` and refuses evidence that is not the
+`_BEGIN_KEYS` shape or that does not match the request's session/attempt, and in the phase loop it returns
+`{"status": "PASSED", ...}` on `phase_prefix` plus two other completion paths. The fake port's request has
+`mode: "full"`, so the `phase_prefix` early return does not apply, and the test's failure is a missing
+`physics.jsonl` rather than a raised error - which means the run **completed** without writing a physics row.
+
+Since `_physics` is what writes them - `self.audit.append_source("physics", {...})` at 140 - the question narrows to
+whether it is called at all on this path: `_verify_phase` (194) is its caller, and either it was not reached for any
+phase or a guard inside it returned first. That is the next read, and it is a single method rather than a search.
+
+The honest note for the record: five rounds of red have been my construction, and the failures have nevertheless
+narrowed the question each time - from "the audit refuses my identity" to "the run writes no physics rows", which is a
+question about the runner rather than about the test.
