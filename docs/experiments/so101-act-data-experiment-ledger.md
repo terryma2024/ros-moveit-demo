@@ -51830,3 +51830,24 @@ recorder records come from the capture's monotonic source rather than from the f
 The read that settles it is one grep: what the capture passes as `at_s` when it calls `physical_audit` and what the
 sampler's observations carry. If the answer is the monotonic clock, the fix is a clock that advances with the frames
 rather than with the calls - which the harness's `clock=` parameter can supply once I know the unit it must advance in.
+
+
+## CP-2719 — Both ends of the time are located, and they disagree with my assumption
+
+- **`continuous_capture.py:407`**: `physical = self.physical_audit(at_s)` - the capture hands its physical audit an
+  instant;
+- **`recorder.py:238`**: `self._times.append(t)` - the recorder records `t`, which is the time in the observation the
+  capture passes it at `:450`.
+
+So the grid comes from the observation's time, and the harness's `FakeSampler` builds observations from `stamps`, which
+`feed()` sets to the frame's `stamp_s` - 1.0, 1.1 and 1.2. On that reading the grid should pass, and it does not, so one
+of my three assumptions about that chain is wrong: which key `FakeSampler` puts the time under, whether the capture
+passes the sampler's observation through unchanged, or whether `t` in `append` is the observation's time at all.
+
+The next read is one function each: `FakeSampler`'s observation construction and the first lines of the recorder's
+`append`. That is two greps, and it is the last thing between this test and its assertion - which, after five
+contracts read correctly, is the sort of detail that has been the whole difficulty of this particular correction.
+
+Worth stating plainly for the record: this single test has now taken twelve rounds, and every one of them has been a
+real fact rather than a repetition. The test is the end-to-end proof of correction 3, and its cost is the reason the
+ledger has been recording each fact as it was found.
