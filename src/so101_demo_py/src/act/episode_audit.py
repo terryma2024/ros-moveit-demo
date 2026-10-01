@@ -46,11 +46,11 @@ _LEASE_FIELDS = frozenset({"batch_id", "coordinator_epoch", "worker_id", "worker
 _STREAM_NAMES = ("acquisitions.jsonl", "row-bindings.jsonl", "events.jsonl",
                  "references.jsonl", "physics.jsonl")
 SOURCE_KINDS = ("events", "references", "physics")
-_ACQUISITION_FIELDS = frozenset({"camera", "session_id", "reset_epoch", "sequence", "acquisition_id",
+_ACQUISITION_FIELDS = frozenset({"camera", "session_id", "reset_epoch", "sequence", "task_sequence", "acquisition_id",
                                  "stamp_s", "received_monotonic_ns", "shape", "dtype", "pixel_sha256"})
 _ROW_FIELDS = frozenset({"row_index", "sim_time_s", "head_acquisition_id",
                          "wrist_acquisition_id", "reference_sequence"})
-_REFERENCE_FIELDS = frozenset({"sequence", "reference_time_s", "source", "positions", "accepted"})
+_REFERENCE_FIELDS = frozenset({"sequence", "task_sequence", "reference_time_s", "source", "positions", "accepted"})
 # the observer's raw frame fields (adapters/act/controller_reference_observer.py): either a reference
 # record preserves all of them or none, so a partial raw history can never look complete
 _REFERENCE_RAW_FIELDS = frozenset({"joint_names", "sim_stamp_ns", "received_monotonic_ns",
@@ -72,7 +72,7 @@ _FRAME_FIELDS = frozenset({"joint_names", "published_positions", "published_velo
 _EVALUATION_FIELDS = frozenset({"requested_sim_time_s", "basis", "goal_id", "accepted_sim_s",
                                 "revoked_sim_s"})
 _EVALUATION_BASES = ("published", "interval")
-_EVENT_FIELDS = frozenset({"sequence", "kind", "identity", "sim_time_s", "monotonic_ns",
+_EVENT_FIELDS = frozenset({"sequence", "task_sequence", "kind", "identity", "sim_time_s", "monotonic_ns",
                            "payload"})
 # the frozen contract delegates the per-kind payload schema here; each entry is the exact key set a
 # kind may carry, so a success boolean can never stand in for a physical fact
@@ -96,7 +96,7 @@ _EVENT_STRINGS = {"phase": "phase", "reason": "reason", "owner": "dispatch", "pe
 _EVENT_FLAGS = {"stopped_confirmed", "table_contact", "supported", "no_fingertip_contact",
                 "placement_stable", "retreat_stable"}
 _EVENT_COUNTS = {"left_contacts", "right_contacts"}
-_PHYSICS_FIELDS = frozenset({"sequence", "kind", "sim_time_s", "release_epoch", "observation"})
+_PHYSICS_FIELDS = frozenset({"sequence", "task_sequence", "kind", "sim_time_s", "release_epoch", "observation"})
 _PHYSICS_KINDS = ("support", "contact", "pose", "retract")
 # the MuJoCo source contract for a physics observation, taken from what the backend already publishes
 # (backends/mujoco/qualified_phases/release_retreat.py::evidence_dict) plus the verified support boolean
@@ -729,6 +729,7 @@ class EpisodeAuditWriter:
         self._write_new(self.files.episode, _canonical(self.identity))
         self._streams = {name: self._open(path) for name, path in self.files.streams().items()}
         self._sequence = {name: 0 for name in self._streams}
+        self._task_sequence = 0
         self._acquisitions: dict = {}
         self._references: dict = {}
         self._bound: set = set()
@@ -751,8 +752,9 @@ class EpisodeAuditWriter:
 
     def append_acquisition(self, frame) -> None:
         self._require_open()
-        record = {field: getattr(frame, field) for field in _ACQUISITION_FIELDS}
+        record = {field: getattr(frame, field) for field in _ACQUISITION_FIELDS - {"task_sequence"}}
         record["shape"] = list(record["shape"])
+        record["task_sequence"] = self._next_task()
         _closed(record, _ACQUISITION_FIELDS, "AUDIT_SCHEMA_INVALID")
         if record["acquisition_id"] in self._acquisitions:
             raise ValueError("AUDIT_ACQUISITION_DUPLICATE")
@@ -823,7 +825,7 @@ class EpisodeAuditWriter:
         if kind not in SOURCE_KINDS:
             raise ValueError("AUDIT_SOURCE_KIND_INVALID")
         if kind == "events":
-            item = _closed(record, _EVENT_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
+            item = _closed(record, _EVENT_FIELDS - {"sequence", "task_sequence"}, "AUDIT_SCHEMA_INVALID").copy()
             if (not isinstance(item["kind"], str) or item["kind"] not in _EVENT_PAYLOADS
                     or not isinstance(item["identity"], dict) or not item["identity"]
                     or not _event_identity_ok(item["identity"], self.identity,
@@ -855,6 +857,7 @@ class EpisodeAuditWriter:
                 self._release_named[_epoch] = (self._release_named.get(_epoch, False)
                                                or item["kind"] == "release")
             item["sequence"] = self._next("events")
+            item["task_sequence"] = self._task_sequence
         elif kind == "references":
             keys = set(record) if isinstance(record, dict) else set()
             packed = _REFERENCE_FRAME_FIELDS & keys
@@ -870,7 +873,7 @@ class EpisodeAuditWriter:
                 _reference_frames_ok(record, history=self._reference_history)
             elif raw_present:
                 _reference_raw_ok(record, "AUDIT_SCHEMA_INVALID")
-            item = _closed(record, (_REFERENCE_FIELDS | packed | raw_present) - {"sequence"},
+            item = _closed(record, (_REFERENCE_FIELDS | packed | raw_present) - {"sequence", "task_sequence"},
                            "AUDIT_SCHEMA_INVALID").copy()
             _finite(item["reference_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
             positions = item["positions"]
@@ -882,6 +885,7 @@ class EpisodeAuditWriter:
             if item["source"] != "CONTROLLER_REFERENCE" or type(item["accepted"]) is not bool:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             item["sequence"] = self._next("references")
+            item["task_sequence"] = self._task_sequence
             # the recorded row keeps the declared closed fields; the revocation state lives beside it
             self._references[item["sequence"]] = item
             if item["accepted"] is not True:
@@ -889,7 +893,7 @@ class EpisodeAuditWriter:
                 # binding an acceptance the controller has since withdrawn
                 self._revoked_targets.add(item["reference_time_s"])
         else:
-            item = _closed(record, _PHYSICS_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
+            item = _closed(record, _PHYSICS_FIELDS - {"sequence", "task_sequence"}, "AUDIT_SCHEMA_INVALID").copy()
             if item["kind"] not in _PHYSICS_KINDS or not isinstance(item["observation"], dict):
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             _finite(item["sim_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
@@ -902,6 +906,7 @@ class EpisodeAuditWriter:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             self._apply_epoch(epoch, item["kind"], item["observation"])
             item["sequence"] = self._next("physics")
+            item["task_sequence"] = self._task_sequence
         self._append(kind, item)
 
     def seal(self, window: dict) -> Path:
@@ -977,8 +982,15 @@ class EpisodeAuditWriter:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
             self._observed_epochs[epoch] = supported
 
+    def _next_task(self) -> int:
+        """The one counter every record draws from, so any two records can be ordered from the records alone (K2)."""
+
+        self._task_sequence += 1
+        return self._task_sequence
+
     def _next(self, kind: str) -> int:
         self._sequence[kind] += 1
+        self._next_task()
         return self._sequence[kind]
 
     def _require_open(self) -> None:
