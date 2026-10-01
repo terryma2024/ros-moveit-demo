@@ -50625,3 +50625,24 @@ episode to its seal has both things in hand - the audit writer's sealed manifest
 wrote - and must pass them to `finish(audit_manifest=..., scope=...)`.
 
 Recorded with its evidence so the next round starts from the diagnosis rather than re-deriving it.
+
+
+## CP-2667 — The episode Recorder's v2 sealing path has no caller at all
+
+The search for whoever drives an episode to its seal returns one module, and it is not the episode's:
+
+- `cli/act_capture_synchronized_rgb.py:64` builds a **`SynchronizedFrameRecorder`**, and its two `recorder.finish()`
+  calls (153, 174) are that class's own.
+
+So **the episode `Recorder.finish(outcome, audit_manifest=..., scope=...)` is called by nothing in `src/`.** The v2
+sealing path - the one that binds the raw audit and the scope into the seal - is **unwired**, which is why an episode
+that goes through it cannot be verified afterwards and the reviewer saw `EPISODE_SEAL_AUDIT_INCOMPLETE`.
+
+That changes the nature of the fix, and makes it smaller and clearer: it is not a wrong argument at some call site but a
+**missing** call site. Whoever drives a live episode to completion - the worker path that owns the audit writer and the
+frozen scope - must finish the recorder with both, and the two things it needs are already in its hands: the sealed
+`audit-manifest.json` the writer produces and the scope document the freezer wrote.
+
+This also explains why the QC-side work looked complete while E2 still failed: everything I built reads a sealed
+episode, and the sealing side of the v2 contract was never connected. The next rounds take the reviewer's five
+corrections in order with this diagnosis as the first.
