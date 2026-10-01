@@ -51535,3 +51535,25 @@ already exists), **then the recorder takes the same `root`** (which tolerates it
 That is a two-line correction to the version I already wrote, and this time it is derived from the failure's own line
 number rather than from a guess about ordering. The test is reverted and the worktree is clean at 35 entries; the next
 round rewrites it in this form.
+
+
+## CP-2704 — The writing class's root rule, read from its own line
+
+The traceback's only interesting frame is inside the writer:
+
+```
+>       self.root.mkdir(parents=False, exist_ok=False)
+```
+
+So the writer creates its root with **`parents=False, exist_ok=False`**: the parent must already exist and the root
+itself must not. That is the rule I was guessing at, and it is narrower than either of my attempts assumed.
+
+What it does not yet explain is the `FileExistsError` when the writer ran **first** on a fresh `tmp_path / "episode"`,
+since nothing had created that directory. Two possibilities remain - `self.root` is not the argument I passed (perhaps
+the writer appends its own `audit` segment, or derives the root differently), or the path I passed is not what I think -
+and they are distinguished by exactly one read: the writer's `__init__`, its first ten lines.
+
+Rather than a third attempt at the constructor, the test is reverted (worktree clean at 35 entries) and that read is the
+next round's first act. The count is now explicit: this one test has cost five shapes read (outcome, recipe, harness,
+writer signature, document shapes), two refusals diagnosed, and one line of real evidence about how a root is created -
+which is the honest price of not guessing, and it is still cheaper than the two guesses already made.
