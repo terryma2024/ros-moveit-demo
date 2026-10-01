@@ -50071,3 +50071,22 @@ fix the scan or to drop the corroborating test - it was never the property under
 The next round fixes the helper (the imports are `ImportFrom` nodes with `module` starting
 `so101_demo.act.task8_measurement_contract`, and their `level` may matter) and re-runs both, so the isolation is
 corroborated by a tool that reads the same thing grep does.
+
+
+## CP-2643 — The helper was right; the test was running in the overlay copy
+
+Diagnosing rather than adjusting: running the same AST walk directly against
+`src/so101_demo_py/src/cli/act_build_task8_calibration_report.py` finds **five** imports, one of them exactly
+`so101_demo.act.task8_measurement_contract`. So the helper is correct and the `users: []` came from somewhere else - and
+the place is familiar from this stretch: pytest resolves `so101_demo` through the plan root's **`pypath` overlay**,
+whose `src/` holds only part of the package, and that overlay has no `cli/` directory to scan. A corroborating test that
+enumerates the tree therefore depends on which copy it runs in, which is not a property worth asserting.
+
+The honest repair is to make that second test robust to its location - scan what is importable rather than what is on
+disk under a guessed root, or skip explicitly when the calibration CLIs are absent with a printed reason - because its
+job is corroboration, not the claim. The first test, which asserts the actual property (the six chain files import no
+quality contract), already passes and is unaffected: it names concrete files that exist in both copies.
+
+Worth stating plainly for the record: this is the third time the `pypath` overlay has shaped an observation in this
+stretch (CP-2439/2451, and now here), always as a difference between what the source tree says and what the running copy
+does. Reading which copy a result came from is now a reflex worth naming in the ledger.
