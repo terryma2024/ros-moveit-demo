@@ -53476,3 +53476,30 @@ of `audit_manifest` immediately before it calls `verify_audit_manifest`.
 Worth recording plainly: this chain has been at "one path" for several rounds, and each round has removed one candidate
 (ownership, publish phase, overlay, stale assignment, existence). What is left is the smallest version of the same
 question - which segment - and it is answerable by reading two adjacent lines rather than by another probe.
+
+
+## CP-2785 — The arithmetic, and it makes the writer's own layout self-consistent
+
+Two literals, read together:
+
+```python
+        self.files = _Files(audit / "source.json", audit / "inputs.json", audit / "episode.json", ...)
+        target = self.root / "audit" / "audit-manifest.json"          # episode_audit.py:986
+```
+
+So the audit's **streams** live in `<root>/audit/` and its **manifest** is written at `<root>/audit/audit-manifest.json` -
+the same directory. Which means the directory the rest of the system calls the episode's audit directory **is**
+`<writer root>/audit`, and the writer's root is its **parent**.
+
+That makes the writer self-consistent and locates the disagreement precisely: the verifier (and the store's expectation)
+wants the manifest at **`<episode root>/audit-manifest.json`**, so `<episode root>` must equal `<writer root>/audit` - and
+in my test the writer's root is the recorder's root (`store.episode_root`), which makes `<episode root>` one level too
+deep. The reconciliation is therefore a **root choice**, not a name change: the audit writer must be rooted at the
+**parent** of the episode directory, so that `<root>/audit` is the episode directory and the manifest lands directly in it.
+
+That also explains why every earlier arrangement failed in a different way: each time I moved the writer's root, I moved
+the streams with it and broke a different reader - the recorder's `episode.json` lookup, or the manifest's location - and
+the one place that satisfies all of them is the parent.
+
+I have not applied it: my context for this round is spent, and the change is a single argument at the writer's call site
+plus the removal of two temporary prints and the four production changes committed together. The next round applies it.
