@@ -43991,3 +43991,99 @@ sealed 输入与 run 目录未动。③ Task 14 的 `qualify` 调用串（plan T
 ⑦ 本轮**未提交**账本改动（计划 Step 5 没有 git 步骤，Task 14 Step 7 才收尾提交），因此 `git status --porcelain` 会显示该账本文件为已修改。
 
 **本轮证据与生命周期**：`$EV/head-toolchain-20261001T130437Z/`（最终冻结 root：`build.sh`、`source-commit.txt`、`build.console.log`、`build.rc`、`build.provenance.txt`、`assertions.txt`、`assertions.rc`、`status`、两个 `.executables`、`step5-identity.{json,txt}`、`step5-measurement-inventory.txt`、`build/`、`install/`、`build-log/`、`test-log-*`）、`$EV/head-toolchain-20261001T130309Z/`（第一次尝试，rc=1，重复包发现错误，被取代但保留）、`$EV/head-search-smoke-20261001T130757Z/{coverage-proof.json,head-search-plan-default.json}`、`$EV/handoff/task14-handoff.md`、`$EV/scratch/head-test-{smoke-o1AMrnmG,demo-ordinary-*,teleop-*,demo-ordinary-workaround-*,teleop-workaround-*,teleop-noautoload-*}/`（每份含 `interpreter-and-cpu.json` 与指向该 run 下 `tmp/` 的 TMPDIR 证明）、工作树 `scratch/hs314/`（`toolchain-root.txt`、`timestamp.txt`、`run-installed-gates.sh`、`run-installed-gates-workaround.sh`、`record-identity.py`、`run-record-identity.sh`、`gates/` 含 4 份 console log、rc、facts 与 `demo-node-diff.txt`）、工作树 `scratch/COLCON_IGNORE`（新增空文件）。以上**均为删除候选，未删除**；HS-300..313 的产物只读引用，未改动。工作树 `git status --porcelain`：`?? runs/`（既有未跟踪）+ `M docs/experiments/so101-act-data-experiment-ledger.md`（本条目）。
+
+## HS-315 — Task 14 起手诚实清点 + Step 1「独占所有权门」落地：新模块与安装版 `check-ownership`（RED→GREEN，31 例），**真实运行 rc=0 / 3 s** 并在磁盘上证明冻结 runtime 身份；生产 smoke、40 场景、三次 restart、Teleop 验收**都没有生产者**
+
+**运行时基线**：worktree HEAD `f711e9ca6`（`docs: Task 13 Step 5 record and the Task 14 handoff`），branch `codex/so101-act-data-0917a`；
+冻结 root `$FINAL_RUN=$EV/head-toolchain-20261001T130437Z`（`source-commit.txt` = `956b5b74bfc2581a6222970c924ac0fd4e5e93e0`）；运行入口是**冻结 root 自身的安装版 console script**
+`$FINAL_RUN/install/so101_demo_py/lib/so101_demo_py/so101_head_search_calibration`（sha256 `e30c8d73…`；`ros2 pkg prefix so101_demo_py` == `$FINAL_RUN/install/so101_demo_py`）；
+`ROS_DOMAIN_ID`/`GZ_PARTITION` **unset**（本轮不启动任何 stack），`MUJOCO_GL=egl`，`TMPDIR` 为 `scratch/hs315/tmp-*`。
+本轮**未启动** MuJoCo/ROS/YOLO/GPU 计算进程（运行前后 `ps`、`nvidia-smi --query-compute-apps` 均无 owner 行），**未触碰真实硬件**，**未推进任何测量**。
+
+### (a) 缺口清点（写入 `$EV/reviews/task14-gap-audit.md`，逐条一行的状态表）
+
+| 计划要求 | 状态 | 归属文件 | 缺什么 |
+| --- | --- | --- | --- |
+| Step 1 进程表 / ROS 图 / GPU / tmux / evidence root 独占检查 | **本轮前 MISSING**，本轮实现 | 新 `act/head_search_ownership.py` + CLI `check-ownership` | 原先无任何枚举或拒绝逻辑 |
+| Step 1 qualifications 期间的 one-YOLO/CUDA/weights/bundle/17 值 readback | **MISSING** | 读者存在（`head_search_calibration_bundle_inputs.py:689`、`head_search_binding.py`），无 qualifier 接线 | qualifier 不跑 stack，无"期间"可确认；Step 5 身份记录出自工作树脚本 `scratch/hs314/record-identity.py`，不是安装入口 |
+| Step 2 字面命令 `qualify --bundle/--approval-receipt/--production-config/--episode-partitions/--profile/--serial/--anchors` | **MISSING** | `cli/head_search_calibration.py:2705-2735` | 安装版只有 `--run-root/--promoted-config/--evidence-root`；`--production-config`/`--episode-partitions` 只存在于无关的八 phase `run` |
+| Step 2 固定 phase 序列且无 resume | **STUBBED** | `act/head_search_qualification.py:242-282` | `run_head_search` 只写 phase 名与 receipt（HS-233 的桩仍在），且**从安装版 CLI 不可达**（`main()` 把 `run` 路由到八 phase 校准编排）；真正的 smoke/40/restart/aggregate 主体不存在 |
+| Step 3 生产 smoke（producer → sealed journal → 真 aggregator、TARGET_LOCKED、10 Hz、bounded、三样本停车、身份） | **STUBBED** | `cli/head_search_smoke.py` | 安装版 smoke 只对 seal 证明**计划覆盖**（不启动 stack、无 journal、无 aggregator，`--scenario` 接受但未用）；live search journal 的生产者与消费者都不存在 |
+| Step 3 40 个串行场景 | **MISSING** | 真相源 `config/act/head-search-scenario-partitions-v1.json` | 见 (b)；最接近的闭环生产者 `measure-fine-correction-episodes` 按构造拒绝全部 qualification 种子 |
+| Step 4 三个 anchor 各一次 `FULL_RESTART` | **MISSING**（head search） | `application/qualification.py:74-77` 的 lifecycle 属 pick-place | `run_qualification` 驱动 `/workflow/run`（`light_cup_wall_pick`），无 anchor 维度、无 head-camera 门禁；交接 §9 的候选推断**判为否定** |
+| Step 5 资格文档（17+4 测量、引用 smoke/40/restart 根） | **STUBBED** | `act/head_search_qualification.py:142-185` + CLI `qualify` | 只发布 `evidence_sha256` 摘要图；无任何测量值、无 camera 测量、无 phase 根引用，`runtime_id` 取 run root 名；任意合法十六进制摘要（含合成 fixture）即可发布 `HEAD_SEARCH_QUALIFIED` |
+| Step 5 `task8_live` 仍拒绝 head-only 报告 | **RUNNABLE** | `act/head_search_qualification.py:128-139`、`act/head_search_binding.py:214/367` | 已实现且有测试 |
+| Step 6 `serve-teleop` 独占 stack + 探测后发布 descriptor + teardown 证据 | **STUBBED** | `act/head_search_qualification.py:188-238` | 不启动 stack、不探测，descriptor 立即写出；CLI 不传 `teardown`，receipt 恒为 `controller_stopped=false/graph_clear=false/not-attempted` |
+| Step 6 安装版 app + `e2e/head-camera.spec.ts` + 新截图 | **MISSING**（spec） | 后端 `so101_teleop/head_camera.py:197-271`、`unified/app.py:1059`、UI `head-camera-panel.tsx` 已实现，冻结安装里也有该路由 | `src/so101_teleop/web/e2e/` **没有** `head-camera.spec.ts`（只有 teleop/tasks/expert-validation/unified-live-sim），无截图生产者 |
+| Step 6 桥 socket ≤103 B + `ipc/` 命名空间 | **RUNNABLE**（仅断言） | 计划自带 `python -c` | 没有任何安装产物创建桥目录/`cleanup-receipt.json`/`--ready-file` |
+| Step 6 单 detector / Teleop factory=0 / teardown / 桥清理 readback | **MISSING** | 无 | 无生产者 |
+| Step 7 全证据回读与账本收尾 | **PARTIAL/manual** | `scratch/hs314/` 清单工具（非安装） | 没有安装版资格运行 readback 器，也没有可回读的 smoke/40/restart 链 |
+
+**(b) 「40 个串行场景」到底会执行什么**：真相源 `head-search-scenario-partitions-v1.json` 的 `qualification` 列表共 **40 项**，
+seed `900000…900039`、每项一个 `scene_group_id`、10 个 condition class **每类恰好 4 个**、anchor 为 `default` 14 / `left` 13 / `forward` 13（文档称"balanced"，实为 14/13/13），
+与 `calibration`（700000…700019）和 `held_out_evaluation`（800000…800019）**零重叠**。每个场景必须：按该 seed 准备 MuJoCo 场景、跑唯一生产 stack（一个 MuJoCo、一个 controller owner、一个 CUDA detector、`allow_cpu_fallback=false`）、
+在 head camera 上以 10 Hz 驱动生产 bounded search + fine correction、逐场景停车/落盘/清态后再启动下一个，并记录终态（`TARGET_LOCKED` / `TARGET_AMBIGUOUS` / `TARGET_NOT_FOUND` 需完整覆盖）、零错误锁定、neck 命令不越 `lock_valid_neck_rad`、coarse/fine 次数与累计角不超限、帧年龄/推理/skew 在冻结阈值内、中断时清空 tracker/lock 并以新 attempt 重获、三连续原始反馈证明停车、全程 CUDA 与 effective 17 值身份，以及 producer/journal/aggregator 链。
+**今天没有任何生产者**：唯一的安装版闭环 flight `measure-fine-correction-episodes` 在 `head_search_fine_correction_episodes.py:307-355`（`declared_split_seeds`）**按构造拒绝一切非声明 split 的种子**，即拒绝全部 40 个 qualification seed；即便放开，它的产物是 fine-correction 测量文档（锁定 episode + 每 seed 一次修正），没有 `two_cups`/`no_cup`/`fast_interruption` 结果类别、没有逐帧 journal、没有 aggregator。
+
+### (c) 本轮实现（TDD，红→绿）
+
+| 项 | 内容 |
+| --- | --- |
+| 新库模块 | `src/so101_demo_py/src/act/head_search_ownership.py`（sha256 `5513108b8ac19c965daed5368c04f80166c0eb3e81de6538a4080354189ee063`） |
+| 公开 API | `check_exclusive_ownership(*, run_root, evidence_root, runtime=None, expected_runtime=None, expected_package_prefix=None, planned_run_root=None, observers=None, excluded_pids=None) -> dict`；`read_runtime_identity(final_run, production_config=None)`；`default_observers(...)`；纯读者 `classify_owner_command`/`parse_gpu_compute_apps`/`parse_ros_nodes`/`parse_tmux_panes`；观测器 `observe_process_table/ros_graph/gpu_processes/tmux_panes/evidence_root/planned_run_root/ament_prefix`；常量 `EXCLUSIVE_OWNERSHIP_OK`/`EXCLUSIVE_OWNERSHIP_REFUSED`，receipt `exclusive-ownership.json` |
+| 拒绝码 | `STACK_OWNER_ACTIVE`、`DETECTOR_OWNER_ACTIVE`、`ROS_GRAPH_NOT_EMPTY`、`GPU_COMPUTE_APP_ACTIVE`、`TMUX_OWNER_ACTIVE`、`PACKAGE_PREFIX_MISMATCH`、`PLANNED_RUN_ROOT_ALREADY_EXISTS`、`EVIDENCE_ROOT_UNUSABLE`、`RUNTIME_CUDA_REQUIRED`、`RUNTIME_VALUES_INCOMPLETE`、`RUNTIME_WEIGHTS_MISMATCH`、`RUNTIME_OF_RECORD_MISMATCH`、`OWNERSHIP_PROBE_FAILED`（探测失败**fail-closed**）、`RUN_ROOT_ALREADY_EXISTS`（rc=2） |
+| 安装版入口 | `so101_head_search_calibration check-ownership --run-root --evidence-root [--planned-run-root] [--final-run] [--production-config] [--expected-source-commit] [--expected-production-config-sha256] [--expected-values-sha256] [--expected-weights-sha256] [--expected-package-prefix]`（CLI sha256 `c565432583850bf5c9c0c41d3076051d9ef5d6dcfcac018c635304a0fa90552c`）；不进入资格四子命令 parser，`qualification_parser()` 未改动 |
+| 测试 | 新 `test/test_act_head_search_ownership.py`（29 例）+ `test/test_head_search_calibration_cli.py` 追加 2 例；全部合成 fixture（假 `/proc` 树、假 runner、注入观测器），无 stack/GPU/真进程表 |
+| RED | `HS315_TMPDIR=scratch/hs315/tmp-red bash scratch/hs315/run-tests.sh -q src/so101_demo_py/test/test_act_head_search_ownership.py` → `ModuleNotFoundError: No module named 'so101_demo.act.head_search_ownership'`（1 collection error）；CLI `-k check_ownership` → `2 failed`（`invalid choice: 'check-ownership'`，逐字见 `scratch/hs315/logs/red.txt`） |
+| GREEN | 29 passed（0.19 s，rc=0）+ 2 passed（0.13 s，rc=0）；`ruff check` 与 `ruff format --check` 对新文件 rc=0（见 `scratch/hs315/logs/green.txt`） |
+
+### (d) 真实运行（一次，rc=0，elapsed 3 s）
+
+```
+GATE=$EV/head-qualification-ownership-20261001T132757Z        # 运行前不存在
+PLANNED=$EV/head-qualification-20261001T132757Z               # 计划中的 qualifier 根，运行前不存在
+$FINAL_RUN/install/so101_demo_py/lib/so101_demo_py/so101_head_search_calibration check-ownership \
+  --run-root $GATE --evidence-root $EV --planned-run-root $PLANNED --final-run $FINAL_RUN \
+  --expected-source-commit 956b5b74bfc2581a6222970c924ac0fd4e5e93e0 \
+  --expected-production-config-sha256 dfa0af9b721aa7d810e6302e5f4bd32fd5d8db0379b69743add8f3d4689c25cd \
+  --expected-values-sha256 3c787fd7ec402355d8a6e363a6bcbf814273ce30d98d47a3af2bc4400f568df2 \
+  --expected-weights-sha256 2afd550694abfbe6d1c37922c9ea0b4a0f8567bef94cf4c4ec85d4b50c0cc82a \
+  --expected-package-prefix $FINAL_RUN/install/so101_demo_py
+-> EXCLUSIVE_OWNERSHIP_OK …   rc=0
+```
+
+receipt `$GATE/exclusive-ownership.json`：`status=EXCLUSIVE_OWNERSHIP_OK`、`refusals=[]`；`runtime` 从磁盘读出并逐项等于交接值——
+`source_commit 956b5b74b…`、`production_config_sha256 dfa0af9b…`、`values_count 17`、`values_sha256 3c787fd7…`、`weight_sha256_observed == weight_sha256_declared == 2afd5506…`、`allow_cpu_fallback=False`、`cuda_device=cuda:0`；
+观测：`process_table` 0 行、`ros_graph` `clean`、`gpu_processes` 0 行、`tmux_panes` 0 行、`evidence_root` `usable`、`planned_run_root` `absent`、`ament_prefix` == 冻结前缀。
+**诚实记录**：第一次尝试（`…ownership-20261001T132741Z`，rc=2）把 `…/src/so101_demo_py/src` 直接放进 `PYTHONPATH`，包名不是 `so101_demo`，于是执行到的是**冻结安装里的旧 CLI**，argparse 报 `invalid choice: 'check-ownership'`，未创建任何根；
+改为既有 shim（`scratch/hs315/pyshim/so101_demo -> …/src/so101_demo_py/src`）后成功。该失败尝试与其 `.provenance.txt` **保留**，不计入结论。
+**替代说明**：本门是新增模块，冻结安装早于它，因此以**冻结 root 的安装版 console script** 为入口、把 worktree 源码放在 `PYTHONPATH` 最前（overlay、`ros2 pkg prefix`、除门自身两个文件外的所有包都来自冻结 root）；provenance 同时记录 `installed_console_script_sha256`、`gate_module_sha256`、`cli_module_sha256` 与 `pythonpath_head_target`。
+
+### (e) 回归与全量套件
+
+| 套件 | run dir | rc | 计数 | 与基线逐节点 diff |
+| --- | --- | --- | --- | --- |
+| HS-288..314 的 33 个 phase 文件（`scratch/hs312/regression-files.txt`，`-n 8`） | 工作树内联（`scratch/hs315/logs/regression.txt`） | **0** | **816 passed, 0 failed**（4.55 s） | — |
+| 全量 `src/so101_demo_py/test`（基线调用式 `bash scratch/hs311/baseline-invocation.sh hs315-demo-suite[-final] src/so101_demo_py/test`，`-n 8`，24 逻辑 CPU） | `$EV/scratch/pytest-xdist8-hs315-demo-suite-final.886da551`（最终修订版；docstring 修订前的同 label 运行 `…hs315-demo-suite.eaaf779c` 结果逐项相同） | 1 | **175 failed / 6331 passed / 152 skipped / 86 errors**（72.53 s） | 与 `…hs313-demo-suite.49a67e21`（175/6300/152/86）**0 行**（261 节点相同），`passed +31` 恰为本轮新增 31 例 |
+| （无效调用，保留不计）省略测试路径的整仓收集 | `$EV/scratch/pytest-xdist8-hs315-demo-suite.9db1f3d7` | 1 | 577 节点 / 436 s（把 `scratch/hs312/pristine`、`third_party` 一并收集） | 不用于结论；已标注为无效调用 |
+
+`head_test`/`head_colcon` 在本机仍不可执行（HS-288/314），按既有等价方式替代：perception venv `…/so101-v5-t004-perception/bin/python` + `pytest -p no:launch_ros -p no:launch_testing -n 8`，`TMPDIR`/`TMP`/`TEMP` 指向 `scratch/hs315/tmp-*`。
+
+### (f) Task 14 今天能走多远（audit 结论）
+
+Step 1 的独占所有权门**今天可以跑**（本轮已跑，rc=0）；Step 2 的字面命令不存在、安装版 `qualify` 只是摘要聚合器（跑它等于用"没有生产者的证据"发布 `HEAD_SEARCH_QUALIFIED`，即 HS-233 的失败模式，**不得**算作资格运行）；Step 3/4 **完全没有生产者**；Step 5 只能发布摘要聚合；Step 6 缺 spec 且 `serve-teleop` 是桩。
+因此 Task 14 今日的诚实终点是 **exact blocker**，不是 `HEAD_SEARCH_QUALIFIED`。并且本门是**附加的源码改动**：按计划 Global Constraints，真正的 Task 14 资格运行必须从一个**新的 toolchain root**（含本门的提交构建）出发，不得改写 `head-toolchain-20261001T130437Z`。
+
+### (g) 本轮声明的推断（待评审，逐条照录）
+
+① **`run_head_search` 是 CLI 死代码**：`main()` 把 `run` 路由到八 phase 校准编排（`_run`），`src/` 内无任何模块 import `run_head_search`；故 `RUN_PHASES` 的"固定序列"目前只是库内声明。
+② **`run_qualification` 不是 head-search 生产者**（判为否定）：它用 `light_cup_wall_pick` policy 驱动统一 stack 的 `/workflow/run`，无 anchor、无 head camera；交接 §9 的推断由此关闭。
+③ **设计 §11 的注册证据根文字（`…/20260924-fbc25063-resume`）已过期**：该目录不存在，campaign 实际使用唯一的 `$EV`。
+④ **门以"worktree 源码 + 冻结 overlay"运行**是新增模块无法改冻结安装时的唯一诚实路径；若评审要求门本身也来自安装产物，则需先按 Task 13 配方构建新 root 再重跑本门（不改变本轮 receipt 的证据含义，但会改变 `gate_module` 的来源身份）。
+⑤ **`--expected-weights-sha256` 比较的是配置声明的 `weight_sha256`**（而非重新声明的第二个期望键）：观测值另由 `weight_sha256_observed` 记录，declared/observed 不一致本身即 `RUNTIME_WEIGHTS_MISMATCH`。
+⑥ **anchor 分布 14/13/13** 与 scenario-partitions 文档里"balanced"的措辞不完全一致（40 不能三等分），本轮如实记录为 14/13/13，未改配置。
+
+**本轮证据与生命周期**：`$EV/reviews/task14-gap-audit.md`（清点+本轮结论，含 §6 实现与真实运行）；`$EV/head-qualification-ownership-20261001T132757Z/exclusive-ownership.json` 与 `$EV/head-qualification-ownership-20261001T132757Z.provenance.txt`（成功门运行）；
+`$EV/head-qualification-ownership-20261001T132741Z.provenance.txt`（第一次失败尝试的 provenance；该次未创建根）；工作树 `scratch/hs315/`（`run-tests.sh`、`run-ownership-gate.sh`、`pyshim/`、`logs/`（含 `qualify-help.txt`、`serve-teleop-help.txt`、`run-help.txt`、`red.txt`、`green.txt`、`regression.txt`、`gate-run-*.{out,err}`、`ps/gpu/tmux-{before,after}.txt`）、`tmp-red/`、`tmp-green/`、`tmp-regression/`、`tmp-real-20261001T132757Z/`）；
+`$EV/scratch/pytest-xdist8-hs315-demo-suite-final.886da551`、`$EV/scratch/pytest-xdist8-hs315-demo-suite.{eaaf779c,9db1f3d7}`。以上**均为删除候选，未删除**；HS-300..314 的产物只读引用，未改动。
+工作树 `git status --porcelain`：` M src/so101_demo_py/src/cli/head_search_calibration.py`、` M src/so101_demo_py/test/test_head_search_calibration_cli.py`、`?? src/so101_demo_py/src/act/head_search_ownership.py`、`?? src/so101_demo_py/test/test_act_head_search_ownership.py`、`?? runs/`（既有未跟踪）、` M docs/experiments/so101-act-data-experiment-ledger.md`（本条目）。功能改动提交 **`ec8cc3ded`**（message `feat: task 14 exclusive-ownership gate and qualification gap audit (RED->GREEN)`，4 文件 +1307/−2）；本条目为紧随其后的 docs 提交。
