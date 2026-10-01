@@ -940,6 +940,17 @@ def test_default_production_composition_derives_real_dry_run_snapshot():
     assert not hasattr(composition, "broker")
     assert composition.broker_spec_path is None
     assert composition.results is not composition.result_verifier
+    # the port is chosen by the contract it must implement (correction 4): without endpoint inputs the generic
+    # adapter keeps its own paths, exactly as the coordinator's ACT gate requires; with them the composition
+    # builds the verifying class the gate selects, so a real ACT episode takes that path
+    from so101_demo.act.result_store import ActCollectionResultVerifier
+
+    # stated as "not the ACT class" rather than "is this other class", because this codebase has two adapter classes
+    # under similar names and the contract is about which one the coordinator's gate recognises
+    assert not isinstance(composition.result_verifier, ActCollectionResultVerifier)
+    # The positive direction - a composition built WITH endpoint inputs constructs the verifying class - needs a
+    # spec of its own rather than a second composition from this one: two compositions from the same spec collide on
+    # the evidence root it derives (DIRECTORY_CONFLICT), so that test belongs beside a fresh spec, not here.
     summary = composition.run()
     assert isinstance(composition.last_local_components[0], ParallelWorker)
     assert isinstance(composition.last_local_components[1], DryRunWorkerRuntime)
