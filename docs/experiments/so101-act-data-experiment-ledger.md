@@ -46756,3 +46756,27 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   this stretch built - the frozen inputs, the policy, the guards, the environment - is what that runner will consume.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 1708b00dc; goal active.
+
+
+## CP-2475 — The design confirms the route: the real components in a one-worker configuration
+
+- Read the non-Head first-episode design's section 4 verbatim. Its "uniform entry" chain is:
+  an explicit mode with the frozen scene and policy plus **single-worker admission** -> the Coordinator issues the
+  real lease -> FULL_RESTART, one reset, initial-state confirmation -> the preselected-target provider and a stable
+  state -> the MoveIt expert's real pick and place with continuous sampling -> Recorder drain, fsync and episode seal
+  -> a **fresh process** for the independent readback and the shared QC -> `ResultStore` publishes the sealed result
+  -> the Coordinator verifier, `RESULT_COMMITTED` and the index receipt. And its binding sentence: "使用正式
+  Coordinator、Worker 与结果接口的单 Worker 配置，**不搭建简化的第二套 scheduler 或 Recorder**" - use the real
+  Coordinator, Worker and result interfaces in a one-worker configuration, and do not stand up a second, simplified
+  scheduler or Recorder. Resource binding happens only at the uniform start entry.
+- So CP-2458/2471's option A was the design's own route all along, and CP-2474's reading is not a dead end but a
+  boundary to satisfy honestly: the composition wants the approved twenty-point catalogue and a detector-and-container
+  provenance verifier, while this milestone is one episode with no perception and no container. The design's rule
+  forbids the tempting shortcut - a second, simplified scheduler or Recorder - so the honest options are to supply the
+  **real** catalogue and a deployment-appropriate verifier if the first can be had, or to report precisely which real
+  input is missing rather than to substitute a lookalike.
+- The next read is the rest of that chain's specification (section 6's recording, independent QC and commit, and
+  section 8's implementation and acceptance boundary), which names what this run must produce and how it is judged -
+  after which the implementation list for the single-episode runner is complete.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 5cac7a723; goal active.
