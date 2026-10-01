@@ -46119,3 +46119,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   isolated-copy negatives.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 1603978f7;
   goal active.
+
+
+## CP-2443 — The fourth piece is the production worker entry, driven by a spec the coordinator writes
+
+- Read the launcher: `_run_worker_spec(path, *, runtime_side_effects=None)` builds the worker through
+  `_build_worker_from_spec(path, ...)` and then reads the same document for `resources`, `control_socket_path`,
+  `coordinator_epoch`, `control_token_path` and an optional `start_paused`. So the production pattern is: the
+  coordinator allocates a worker (line 2726's `self.allocator.allocate(...)` plus `write_manifest()`) and **writes a
+  JSON worker spec**, and the worker process is started with the batch CLI's internal entry
+  (`--internal-worker <spec>`, per its `main`).
+- That is the fourth piece's honest shape: the single-episode `run` allocates **one** worker, writes its spec beside
+  the run's evidence, and spawns the **existing** worker entry with that spec - the production path itself, not a
+  second stack and not a bespoke harness. The spawn's argv, stdout/stderr and real rc then belong under the new
+  LIVE_ROOT beside `run.log`.
+- What still has to be true for that to work, and is not yet verified: the allocator needs a resource manifest and a
+  live MuJoCo/ROS environment, the worker's spec needs the frozen inputs, and the coordinator must be told about the
+  worker it just started. Those are the next reads - `allocator.allocate`'s inputs and `_build_worker_from_spec`'s
+  expectations - after which the spawn is a transcription with a real rc to report.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end (inspect, prepare, preflight rc=0; four suites 236 passed). HEAD 92339922d; goal active.
