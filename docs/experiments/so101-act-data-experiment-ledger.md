@@ -48502,3 +48502,20 @@ loop actually maintained it, with the observed deviation carried as uncertainty 
 It restates the four things never done - manufactured equality, a receipt-time clock read, a receipt timestamp used as
 evidence about the simulation, and a stamp used as an ordering device - the last of which section 1 exists to make
 unnecessary.
+
+
+## CP-2563 — K2 revision 3's schema is defined, not described
+
+Section 3 gives the correction what it asked for: a **version** (`ACT_EPISODE_AUDIT_K2`, `schema_version: 2`, with
+version 1 documents untouched), **five record types with their keys and types fixed** rather than listed as things that
+must be fixed - S, G, A, Q and R, each with `kind`, `sequence`, `parent` and its own substantive fields, `parent`
+pointing at the previous type's sequence, and only `R` allowed to name a `clock_source` (∈ `published_step`,
+`sync_pair`) and required to carry `uncertainty_s`, which is section 2's rule expressed in the schema rather than in
+prose. Every record asserts `sequence(parent) < sequence(self)` from the single namespace of section 1.
+
+**Event kinds** are exactly three additions to the existing closed schema - `k2_apply`, `k2_query`, `k2_receipt` - with
+`payload` keys exactly the record keys above, and the existing kinds unchanged. Verification is added to
+**`verify_audit_manifest()`** rather than to a new verifier, with the semantic checks (ordering, descent, uncertainty
+presence) beside the digest recomputation so a rewritten audit fails as a truncated one does.
+
+With that, revision 3 answers all three of the review's corrections and is ready to be re-reviewed.
