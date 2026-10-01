@@ -50281,3 +50281,22 @@ Three of the plan's five consumers are now read - the qualification contract (va
 route-comparison report (a summary, additive at most) and the real Worker (a verifying result port) - and the remaining
 two are the container shard protocol, which is explicitly out of scope, and the qualification call sites already
 surveyed.
+
+
+## CP-2652 — Two classes share the name, and the coordinator's path uses the one in result_store
+
+`ActCollectionResultVerifier` is defined **twice**:
+
+- `adapters/act/parallel_collection_results.py:78`;
+- **`act/result_store.py:305`**.
+
+And the coordinator's special path is unambiguous about which it means: `coordinator.py:777` does
+`from so101_demo.act.result_store import ActCollectionResultVerifier` immediately before the `isinstance` branch at
+`:790`. So E2's wiring point is the **`act/result_store.py`** class, and the same-named adapter is a trap worth naming
+in the ledger before any edit touches it - the kind of detail that produces a plausible-looking patch against the wrong
+class.
+
+That closes the survey the last rounds opened: three of the plan's five consumers are read, the container shard protocol
+is explicitly out of scope, and the one place a genuinely new connection belongs is a named class in `result_store.py`
+that the coordinator already knows how to consult. The next round reads that class's own verification method - what it
+checks today and where an endpoint verdict would enter it - and then the edit is small.
