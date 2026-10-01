@@ -7,7 +7,11 @@ import json
 from pathlib import Path
 
 import pytest
-from so101_demo.cli.head_search_calibration import HEAD_SEARCH_RUN_INPUTS_INCOMPLETE, main
+from so101_demo.cli.head_search_calibration import (
+    HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE,
+    HEAD_SEARCH_RUN_INPUTS_INCOMPLETE,
+    main,
+)
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 
@@ -375,6 +379,44 @@ def _run_arguments(
             "workspace-projection.json",
             {"top_px": 110.0, "bottom_px": 370.0},
         ),
+        "--coarse-step-observations": (
+            "coarse-step-observations.json",
+            {
+                "schema_version": 1,
+                "kind": "head_search_coarse_step_val_sweep",
+                "phase": "coarse_step_measurement",
+                "domain": "head",
+                "split": "val",
+                "match_radius_px": 8.0,
+                "passes": 1,
+                "geometry": {
+                    "path": str(geometry_path),
+                    "sha256": _digest(geometry_path),
+                    "seal_sha256": canonical_sha256(RUN_GEOMETRY_BODY),
+                    "horizontal_fov_rad": RUN_GEOMETRY_BODY["horizontal_fov_rad"],
+                    "lock_valid_neck_rad": list(RUN_GEOMETRY_BODY["lock_valid_neck_rad"]),
+                    "required_search_domain_rad": list(
+                        RUN_GEOMETRY_BODY["required_search_domain_rad"]
+                    ),
+                    "anchors_rad": {"default": 0.0},
+                },
+                "model": {
+                    "candidate_id": "C",
+                    "weights_sha256": RUN_WEIGHT_SHA256,
+                    "min_confidence": RUN_HIGH_POINT["min_confidence"],
+                    "tracking_iou": RUN_HIGH_POINT["tracking_iou"],
+                },
+                "dataset": {
+                    "manifest_path": declared["dataset_manifest"]["path"],
+                    "manifest_sha256": declared["dataset_manifest"]["sha256"],
+                    "split": "val",
+                    "scene_count": 2,
+                    "scene_limit": None,
+                },
+                "candidates": [],
+                "path": str(tmp_path / "coarse-step-observations.json"),
+            },
+        ),
         "--fine-correction-episodes": (
             "fine-correction-episodes.json",
             [
@@ -626,3 +668,98 @@ def test_a_formatting_only_change_is_caught_because_bytes_are_hashed(tmp_path: P
         )
         == 2
     )
+
+
+# --------------------------------------------------------------------------------------------------
+# the measurement flight: the installed entry that produces the raw coarse-step val sweep
+# --------------------------------------------------------------------------------------------------
+
+
+def test_the_run_declares_the_coarse_step_sweep_as_its_fifteenth_measurement(tmp_path, capsys) -> None:
+    from so101_demo.cli.head_search_calibration import RUN_PHASE_SIX_MEASUREMENTS
+
+    assert ("coarse_step_observations", "--coarse-step-observations", "document") in (
+        RUN_PHASE_SIX_MEASUREMENTS
+    )
+    # a run that declares no sweep is refused at the entry, before it claims a root
+    assert main(_run_arguments(tmp_path, omit=("--coarse-step-observations",))) == 2
+    assert HEAD_SEARCH_RUN_INPUTS_INCOMPLETE in capsys.readouterr().err
+    assert not (tmp_path / "run").exists()
+
+
+def test_measure_coarse_step_needs_its_declared_inputs(tmp_path, capsys) -> None:
+    assert main(["measure-coarse-step"]) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+    assert not (tmp_path / "measurement").exists()
+
+
+def test_measure_coarse_step_refuses_a_missing_input_and_an_existing_output(tmp_path, capsys) -> None:
+    declared = {
+        "--geometry-seal": tmp_path / "geometry-seal.json",
+        "--head-dataset": tmp_path / "head-dataset.json",
+        "--dataset-config": tmp_path / "head_camera_yolo_seg.yaml",
+        "--weights": tmp_path / "C.pt",
+        "--frozen-candidate": tmp_path / "frozen-c.json",
+        "--output-dir": tmp_path / "measurement",
+    }
+    arguments = ["measure-coarse-step"]
+    for flag, path in declared.items():
+        arguments += [flag, str(path)]
+    assert main(arguments) == 2
+    assert "no such input" in capsys.readouterr().err
+
+    for flag, path in declared.items():
+        if flag == "--output-dir":
+            continue
+        path.write_text("{}", encoding="utf-8")
+    declared["--output-dir"].mkdir()
+    assert main(arguments) == 2
+    assert "never resumed" in capsys.readouterr().err
+
+
+def test_measure_coarse_step_parses_and_hands_the_flight_to_the_library(tmp_path, monkeypatch, capsys) -> None:
+    """The CLI is a parser and a validator: the measurement itself is the library module's."""
+
+    from so101_demo.act import head_search_coarse_step_measurement
+
+    input_paths = {}
+    for flag, name in (
+        ("--geometry-seal", "geometry-seal.json"),
+        ("--head-dataset", "head-dataset.json"),
+        ("--dataset-config", "head_camera_yolo_seg.yaml"),
+        ("--weights", "C.pt"),
+        ("--frozen-candidate", "frozen-c.json"),
+    ):
+        path = tmp_path / name
+        path.write_text("{}", encoding="utf-8")
+        input_paths[flag] = path
+    output = tmp_path / "measurement"
+    seen = {}
+
+    def fake_measure(**arguments):
+        seen.update(arguments)
+        return {"receipt": {"chosen_coarse_step_rad": 0.6560533740603397, "scene_count": 200,
+                            "candidate_count": 6, "passes": 2}}
+
+    monkeypatch.setattr(
+        head_search_coarse_step_measurement, "measure_coarse_step_val_sweep", fake_measure
+    )
+    arguments = ["measure-coarse-step"]
+    for flag, path in input_paths.items():
+        arguments += [flag, str(path)]
+    arguments += ["--output-dir", str(output), "--passes", "2", "--scene-limit", "8"]
+
+    assert main(arguments) == 0
+
+    assert seen["geometry_seal_path"] == input_paths["--geometry-seal"]
+    assert seen["dataset_manifest_path"] == input_paths["--head-dataset"]
+    assert seen["dataset_config_path"] == input_paths["--dataset-config"]
+    assert seen["weights_path"] == input_paths["--weights"]
+    assert seen["frozen_candidate_path"] == input_paths["--frozen-candidate"]
+    assert seen["output_dir"] == output
+    assert seen["passes"] == 2
+    assert seen["scene_limit"] == 8
+    assert seen["command"].startswith(
+        "ros2 run so101_demo_py so101_head_search_calibration measure-coarse-step"
+    )
+    assert "COARSE_STEP_MEASURED 0.6560533740603397" in capsys.readouterr().out

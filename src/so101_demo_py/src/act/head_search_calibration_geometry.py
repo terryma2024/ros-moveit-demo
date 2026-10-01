@@ -211,6 +211,32 @@ def load_sealed_geometry(sealed_inputs) -> dict:
     if not isinstance(document, Mapping):
         raise _unsealed(path, "the sealed geometry must be a JSON object")
 
+    return {
+        "sealed_geometry": {
+            "input": GEOMETRY_INPUT_NAME,
+            "path": declaration["path"],
+            "sha256": declaration["sha256"],
+            "size_bytes": declaration["size_bytes"],
+            "seal_sha256": document.get("seal_sha256"),
+            "manifest_sha256": manifest["manifest_sha256"],
+        },
+        "geometry": read_geometry_document(document, path=path),
+    }
+
+
+def read_geometry_document(document, *, path="the sealed geometry") -> dict:
+    """Read one sealed geometry body: its own digest, then the values this calibration consumes.
+
+    The document has to be a JSON object whose `seal_sha256` is the canonical digest of its own body -
+    that is what makes the seal a seal rather than a claim - and every field the calibration reads has to
+    be present and well formed. A geometry the seal cannot vouch for is refused with phase 1's own
+    `CAL_INPUT_UNSEALED`, the same code phase 2 refuses it with, so phase 6's val sweep cannot measure
+    against a geometry the run did not seal. The returned mapping is phase 2's `geometry` block, field for
+    field, so both phases read one shape and not two.
+    """
+
+    if not isinstance(document, Mapping):
+        raise _unsealed(path, "the sealed geometry must be a JSON object")
     seal_sha256 = document.get("seal_sha256")
     body = {key: value for key, value in document.items() if key != "seal_sha256"}
     try:
@@ -233,26 +259,15 @@ def load_sealed_geometry(sealed_inputs) -> dict:
         except (TypeError, ValueError) as error:
             raise _unsealed(path, str(error)) from error
     anchors = _document_anchors(document, path)
-
     return {
-        "sealed_geometry": {
-            "input": GEOMETRY_INPUT_NAME,
-            "path": declaration["path"],
-            "sha256": declaration["sha256"],
-            "size_bytes": declaration["size_bytes"],
-            "seal_sha256": seal_sha256,
-            "manifest_sha256": manifest["manifest_sha256"],
-        },
-        "geometry": {
-            "horizontal_fov_rad": horizontal_fov_rad,
-            "lock_valid_neck_rad": [lock_valid_neck_rad[0], lock_valid_neck_rad[1]],
-            "required_search_domain_rad": [
-                required_search_domain_rad[0],
-                required_search_domain_rad[1],
-            ],
-            "sealed_coarse_step_candidate_rad": declared_candidate,
-            "anchors_rad": dict(anchors),
-        },
+        "horizontal_fov_rad": horizontal_fov_rad,
+        "lock_valid_neck_rad": [lock_valid_neck_rad[0], lock_valid_neck_rad[1]],
+        "required_search_domain_rad": [
+            required_search_domain_rad[0],
+            required_search_domain_rad[1],
+        ],
+        "sealed_coarse_step_candidate_rad": declared_candidate,
+        "anchors_rad": dict(anchors),
     }
 
 

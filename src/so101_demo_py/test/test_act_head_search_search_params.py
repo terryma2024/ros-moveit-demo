@@ -23,6 +23,10 @@ from so101_demo.act.head_search_calibration_inputs import (
     SEALED_INPUT_NAMES,
     CalibrationInputsRefused,
 )
+from so101_demo.act.head_search_coarse_step_measurement import (
+    CAL_SWEEP_EVIDENCE_CONTRADICTORY,
+    CAL_SWEEP_EVIDENCE_PARTIAL,
+)
 from so101_demo.act.head_search_operating_point import CAL_SPLIT_LEAK
 from so101_demo.act.head_search_search_params import (
     CAL_DEADBAND_OSCILLATES,
@@ -40,6 +44,7 @@ from so101_demo.act.head_search_search_params import (
     max_stable_stop_points,
     validate_head_search_calibration_search_parameters,
 )
+from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -234,6 +239,126 @@ def synthetic_runtime_identity() -> dict:
     identity["detector_weights_sha256"] = SHA_A
     identity["camera_intrinsics_sha256"] = SHA_B
     return identity
+
+
+#: the generated candidate steps of the phase-6 fixture geometry (HS-290's field of view, largest first)
+COARSE_STEP_CANDIDATES = (
+    0.6560533740603397,
+    0.32802668703016985,
+    0.16401334351508493,
+    0.08200667175754246,
+    0.04100333587877123,
+)
+COARSE_STEP_OBSERVATIONS_PATH = "coarse-step-observations.json"
+
+
+def coarse_step_observations(*, geometry=None, weights_sha256=SHA_A, steps=None, digest=True) -> dict:
+    """The raw val sweep of the phase-6 fixture geometry: a real bounded plan, four val scenes.
+
+    The stops are the repository's own `bounded_search_stops`, because phase 6 refuses a recorded stop
+    that is not the bounded plan of its candidate.
+    """
+
+    from so101_demo.act.head_search_calibration_geometry import generate_coarse_step_candidates
+    from so101_demo.act.head_search_domain import bounded_search_stops
+
+    geometry = sweep_document()["geometry"] if geometry is None else geometry
+    if steps is None:
+        steps = generate_coarse_step_candidates(geometry["horizontal_fov_rad"])
+    anchors_rad = dict(geometry["anchors_rad"])
+    scenes = (
+        (410000, "scene-004100000", "one_cup_distractors", 1),
+        (410002, "scene-004100002", "two_cups", 2),
+    )
+    candidates = []
+    for step in steps:
+        anchors = []
+        for name, anchor_rad in anchors_rad.items():
+            plan = bounded_search_stops(
+                anchor_rad=anchor_rad,
+                required_domain_rad=geometry["required_search_domain_rad"],
+                safe_interval_rad=geometry["lock_valid_neck_rad"],
+                horizontal_fov_rad=geometry["horizontal_fov_rad"],
+                coarse_step_rad=step,
+            )
+            anchors.append(
+                {
+                    "anchor": name,
+                    "anchor_rad": anchor_rad,
+                    "targets_rad": [float(target) for target in plan.targets_rad],
+                }
+            )
+        records = []
+        for scene_id, scene_group_id, scenario, visible in scenes:
+            cups = (("plastic_cup", 100.0, 100.0), ("plastic_cup_b", 200.0, 120.0))[:visible]
+            stops = []
+            for anchor in anchors:
+                for index, target in enumerate(anchor["targets_rad"]):
+                    stops.append(
+                        {
+                            "anchor": anchor["anchor"],
+                            "stop_index": index,
+                            "stop_rad": target,
+                            "truth": [
+                                {"x": x, "y": y, "body": body, "visible_px": 8000}
+                                for body, x, y in cups
+                            ],
+                            "detections": [
+                                {"x": x + 0.2, "y": y + 0.2, "conf": 0.9 - 0.05 * position}
+                                for position, (_body, x, y) in enumerate(cups)
+                            ],
+                            "image_sha256": SHA_D,
+                        }
+                    )
+            records.append(
+                {
+                    "scene_id": scene_id,
+                    "scene_group_id": scene_group_id,
+                    "scenario": scenario,
+                    "dataset_visible_instances": visible,
+                    "passes": [{"pass_index": 0, "stops": stops}],
+                }
+            )
+        candidates.append({"coarse_step_rad": float(step), "anchors": anchors, "scenes": records})
+    document = {
+        "schema_version": 1,
+        "kind": "head_search_coarse_step_val_sweep",
+        "phase": "coarse_step_measurement",
+        "domain": "head",
+        "split": "val",
+        "match_radius_px": 8.0,
+        "passes": 1,
+        "geometry": {
+            "path": "head-camera-geometry.json",
+            "sha256": SHA_C,
+            "seal_sha256": SHA_C,
+            "horizontal_fov_rad": geometry["horizontal_fov_rad"],
+            "lock_valid_neck_rad": list(geometry["lock_valid_neck_rad"]),
+            "required_search_domain_rad": list(geometry["required_search_domain_rad"]),
+            "anchors_rad": anchors_rad,
+        },
+        "model": {
+            "candidate_id": "C",
+            "weights_sha256": weights_sha256,
+            "min_confidence": 0.25,
+            "tracking_iou": 0.5,
+        },
+        "dataset": {
+            "manifest_path": "head-dataset/dataset-manifest.json",
+            "manifest_sha256": SHA_D,
+            "split": "val",
+            "scene_count": len(scenes),
+            "scene_limit": None,
+        },
+        "candidates": candidates,
+        "path": COARSE_STEP_OBSERVATIONS_PATH,
+    }
+    document["sha256"] = (
+        canonical_sha256({key: value for key, value in document.items() if key != "sha256"})
+        if digest
+        else "0" * 64
+    )
+    return document
 
 
 def build(**overrides) -> dict:
@@ -784,8 +909,12 @@ def test_a_startup_readback_that_disagrees_refuses_with_phase_8s_code():
     assert code == CAL_EFFECTIVE_VALUE_MISMATCH
 
 
-def test_the_five_blocks_survive_phase_8_assembly_verbatim():
-    document = build()
+def test_the_six_blocks_survive_phase_8_assembly_verbatim():
+    document = build(
+        bounded_sweep=sweep_document(chosen_candidate_rad=COARSE_STEP_CANDIDATES[0]),
+        coarse_step_observations=coarse_step_observations(),
+        selected_weights_sha256=SHA_A,
+    )
     phase_inputs = {
         "geometry_coverage": {
             "parameters": {
@@ -800,10 +929,7 @@ def test_the_five_blocks_survive_phase_8_assembly_verbatim():
             }
         },
         "search_parameters": {
-            "parameters": {
-                **{name: dict(block) for name, block in document["parameters"].items()},
-                "coarse_step_rad": synthetic_block(0.6560533740603397, "rad"),
-            }
+            "parameters": {name: dict(block) for name, block in document["parameters"].items()}
         },
         "timing_stop_parameters": {
             "parameters": {
@@ -833,3 +959,150 @@ def test_the_five_blocks_survive_phase_8_assembly_verbatim():
     bundled = assembly["bundle"]["parameters"]
     for name, block in document["parameters"].items():
         assert bundled[name] == block, name
+
+
+# --------------------------------------------------------------------------------------------------
+# the sixth parameter: the val sweep phase 6 owns the value of
+# --------------------------------------------------------------------------------------------------
+
+
+def test_phase_six_owns_the_coarse_step_when_the_val_sweep_is_declared():
+    document = build(
+        bounded_sweep=sweep_document(chosen_candidate_rad=COARSE_STEP_CANDIDATES[0]),
+        coarse_step_observations=coarse_step_observations(),
+        selected_weights_sha256=SHA_A,
+    )
+
+    assert list(document["parameter_names"]) == [
+        "coarse_step_rad",
+        *PARAMETERS,
+    ]
+    assert set(document["parameters"]) == {"coarse_step_rad", *PARAMETERS}
+    assert document["uncomputed_parameter"] is None
+    block = document["parameters"]["coarse_step_rad"]
+    assert block["value"] == COARSE_STEP_CANDIDATES[0], "the largest candidate of the fixture"
+    assert block["unit"] == "rad"
+    assert tuple(block) == PARAMETER_EVIDENCE_KEYS
+    assert document["coarse_step_measurement"]["chosen_coarse_step_rad"] == block["value"]
+    assert document["coarse_step_measurement"]["candidates"], "every candidate keeps its verdict"
+
+
+def test_without_a_declared_sweep_phase_six_still_records_the_gap_rather_than_a_number():
+    document = build()
+
+    assert "coarse_step_rad" not in document["parameters"]
+    assert document["uncomputed_parameter"]["name"] == "coarse_step_rad"
+    assert document["uncomputed_parameter"]["computed_here"] is False
+    assert document["coarse_step_measurement"] is None
+
+
+def test_a_val_sweep_that_supports_another_step_than_the_receipted_one_refuses_unstable():
+    """Phase 2's receipts bind one step: a sweep supporting another leaves them unproven."""
+
+    code = refusal_of(
+        lambda: build(
+            bounded_sweep=sweep_document(chosen_candidate_rad=COARSE_STEP_CANDIDATES[1]),
+            coarse_step_observations=coarse_step_observations(),
+            selected_weights_sha256=SHA_A,
+        )
+    )
+
+    assert code == CAL_SWEEP_UNSTABLE
+
+
+def test_a_bounded_sweep_without_a_receipted_candidate_refuses_the_coarse_step():
+    code = refusal_of(
+        lambda: build(
+            coarse_step_observations=coarse_step_observations(),
+            selected_weights_sha256=SHA_A,
+        )
+    )
+
+    assert code == CAL_SWEEP_UNSTABLE
+
+
+def test_a_val_sweep_of_another_model_is_refused_with_the_sweeps_own_code():
+    code = refusal_of(
+        lambda: build(
+            bounded_sweep=sweep_document(chosen_candidate_rad=COARSE_STEP_CANDIDATES[0]),
+            coarse_step_observations=coarse_step_observations(weights_sha256="9" * 64),
+            selected_weights_sha256=SHA_A,
+        )
+    )
+
+    assert code == CAL_SWEEP_EVIDENCE_CONTRADICTORY
+
+
+def test_a_val_sweep_whose_digest_is_not_its_body_is_refused():
+    code = refusal_of(
+        lambda: build(
+            bounded_sweep=sweep_document(chosen_candidate_rad=COARSE_STEP_CANDIDATES[0]),
+            coarse_step_observations=coarse_step_observations(digest=False),
+            selected_weights_sha256=SHA_A,
+        )
+    )
+
+    assert code == CAL_SWEEP_EVIDENCE_CONTRADICTORY
+
+
+def test_a_val_sweep_that_missed_a_candidate_is_refused_as_partial():
+    code = refusal_of(
+        lambda: build(
+            bounded_sweep=sweep_document(chosen_candidate_rad=COARSE_STEP_CANDIDATES[0]),
+            coarse_step_observations=coarse_step_observations(
+                steps=COARSE_STEP_CANDIDATES[:-1]
+            ),
+            selected_weights_sha256=SHA_A,
+        )
+    )
+
+    assert code == CAL_SWEEP_EVIDENCE_PARTIAL
+
+
+def test_a_reported_startup_readback_of_the_coarse_step_is_checked_and_recorded():
+    document = build(
+        bounded_sweep=sweep_document(chosen_candidate_rad=COARSE_STEP_CANDIDATES[0]),
+        coarse_step_observations=coarse_step_observations(),
+        selected_weights_sha256=SHA_A,
+        startup_readbacks={
+            "coarse_step_rad": {
+                "observed_value": COARSE_STEP_CANDIDATES[0],
+                "read_from": "head_search_v2.json",
+            }
+        },
+    )
+
+    readback = document["parameters"]["coarse_step_rad"]["startup_readback"]
+    assert readback["verified"] is True
+    assert readback["read_from"] == "head_search_v2.json"
+
+    code = refusal_of(
+        lambda: build(
+            bounded_sweep=sweep_document(chosen_candidate_rad=COARSE_STEP_CANDIDATES[0]),
+            coarse_step_observations=coarse_step_observations(),
+            selected_weights_sha256=SHA_A,
+            startup_readbacks={"coarse_step_rad": {"observed_value": 0.5}},
+        )
+    )
+    assert code == CAL_EFFECTIVE_VALUE_MISMATCH
+
+
+def test_the_coarse_step_is_not_computed_from_a_declared_number():
+    """The value comes from the swept evidence, never from the candidate phase 2 happened to receipt."""
+
+    document = build(
+        bounded_sweep=sweep_document(chosen_candidate_rad=COARSE_STEP_CANDIDATES[0]),
+        coarse_step_observations=coarse_step_observations(),
+        selected_weights_sha256=SHA_A,
+    )
+
+    block = document["parameters"]["coarse_step_rad"]
+    assert block["selection_formula"]
+    assert block["observed_distribution"]["measured_candidate_steps"] == list(
+        COARSE_STEP_CANDIDATES
+    )
+    assert block["safety_margin"]["half_fov_rad"] == HORIZONTAL_FOV_RAD / 2.0
+    assert [reference["path"] for reference in block["input_evidence"]] == [
+        "head-camera-geometry.json",
+        COARSE_STEP_OBSERVATIONS_PATH,
+    ]

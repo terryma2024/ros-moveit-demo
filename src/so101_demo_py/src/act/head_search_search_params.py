@@ -34,8 +34,11 @@ documents the caller passes; this phase measures nothing itself (plan section 0:
 neck on its own).
 
 Phase 6 also owns ``coarse_step_rad``. Its final value needs the selected model's val sweep and lock
-evidence (plan section 2 row 6) and phase 2 has already measured the candidate, so this module computes
-the five parameters above and records that owner gap explicitly instead of inventing the sixth value.
+evidence (plan section 2 row 6), which is measured by ``head_search_coarse_step_measurement``; when the run
+declares that raw sweep, this phase checks it against the sealed geometry and the selected model's weights,
+takes the value it chose, and requires it to be the very candidate step phase 2 receipted - a step the
+receipts do not vouch for would leave every neck target unproven, which refuses with `CAL_SWEEP_UNSTABLE`.
+Without a declared sweep the phase records the gap explicitly instead of inventing the sixth value.
 """
 
 from __future__ import annotations
@@ -51,15 +54,30 @@ from so101_demo.act.head_search_calibration_bundle import (
     PARAMETER_EVIDENCE_KEYS,
 )
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search_coarse_step_measurement import (
+    CAL_SWEEP_EVIDENCE_CONTRADICTORY,
+    CAL_SWEEP_EVIDENCE_MISSING,
+    CAL_SWEEP_EVIDENCE_PARTIAL,
+    CalibrationCoarseStepRefused,
+    validate_head_search_coarse_step_measurement,
+)
+from so101_demo.act.head_search_coarse_step_measurement import (
+    PARAMETER as COARSE_STEP_PARAMETER,
+)
+from so101_demo.act.head_search_coarse_step_measurement import (
+    UNIT as COARSE_STEP_UNIT,
+)
 from so101_demo.act.head_search_operating_point import CAL_SPLIT_LEAK
 
 SCHEMA_VERSION = 1
 KIND = "head_search_calibration_search_parameters"
 PHASE = "search_parameters"
 
-#: this phase's own refusals, plus the two codes it reuses: phase 3's split leak for a calibration frame
-#: offered to the held-out fine-correction numbers, and phase 8's effective-value code for a startup
-#: readback that disagrees with the value this phase computed
+#: this phase's own refusals, plus the codes it reuses: phase 3's split leak for a calibration frame
+#: offered to the held-out fine-correction numbers, phase 8's effective-value code for a startup readback
+#: that disagrees with the value this phase computed, and the raw val sweep's own three codes - phase 6
+#: owns `coarse_step_rad`, so it owns the refusals that measurement can raise, re-raised under this
+#: phase's class with the same code rather than leaking another module's exception type
 CAL_TIMEOUT_UNBOUNDED = "CAL_TIMEOUT_UNBOUNDED"
 CAL_DEADBAND_OSCILLATES = "CAL_DEADBAND_OSCILLATES"
 CAL_SWEEP_UNSTABLE = "CAL_SWEEP_UNSTABLE"
@@ -69,6 +87,9 @@ REFUSAL_CODES = (
     CAL_DEADBAND_OSCILLATES,
     CAL_SWEEP_UNSTABLE,
     CAL_VERTICAL_BOUNDS_UNPROJECTED,
+    CAL_SWEEP_EVIDENCE_MISSING,
+    CAL_SWEEP_EVIDENCE_PARTIAL,
+    CAL_SWEEP_EVIDENCE_CONTRADICTORY,
     CAL_SPLIT_LEAK,
     CAL_EFFECTIVE_VALUE_MISMATCH,
 )
@@ -133,16 +154,17 @@ TOTAL_FORMULA = (
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
-#: the phase-6 parameter design section 7.1 assigns here but whose final value needs the selected
-#: model's val sweep and lock evidence (plan section 2 row 6); this module records the gap, it does not
-#: invent a number for it
+#: the phase-6 parameter design section 7.1 assigns here whose final value needs the selected model's val
+#: sweep and lock evidence (plan section 2 row 6). Phase 6 owns the value, but the measurement belongs to
+#: `head_search_coarse_step_measurement`: a caller that declares no sweep records the gap here rather than
+#: inventing a number
 UNCOMPUTED_PARAMETER = {
-    "name": "coarse_step_rad",
+    "name": COARSE_STEP_PARAMETER,
     "computed_here": False,
     "detail": (
         "phase 6 also owns coarse_step_rad; its final value needs the selected model's val sweep and "
-        "lock evidence and the candidate phase 2 already measured, so phase 6 records it outside "
-        "`parameters` rather than inventing it"
+        "lock evidence, so without a declared sweep phase 6 records it outside `parameters` rather than "
+        "inventing it"
     ),
 }
 
@@ -751,6 +773,65 @@ def _geometry_of(bounded_sweep) -> Mapping:
     return sealed
 
 
+def _coarse_step_parameter(
+    *, bounded_sweep, observations, selected_weights_sha256=None, startup_readback=None
+) -> tuple[dict, dict]:
+    """The sixth parameter this phase owns: the step the declared val sweep supports and its evidence.
+
+    The measurement and its rules live in `head_search_coarse_step_measurement`, which validates the raw
+    sweep against the sealed geometry, matches the detections itself and refuses missing, partial or
+    contradictory evidence. What this phase adds is the ownership check the runtime contract implies: the
+    bounded sweep phase 2 receipted is the sweep every neck target of this run binds to, so a val sweep
+    that supports a *different* step leaves those receipts vouching for a step the run does not use - that
+    is refused with this phase's own `CAL_SWEEP_UNSTABLE` rather than shipped.
+    """
+
+    geometry = bounded_sweep.get("geometry") if isinstance(bounded_sweep, Mapping) else None
+    if not isinstance(geometry, Mapping):
+        raise _refuse(
+            CAL_SWEEP_UNSTABLE,
+            "the bounded sweep records no sealed geometry, so the val sweep cannot be checked against the "
+            "one the run sealed",
+        )
+    try:
+        measurement = validate_head_search_coarse_step_measurement(
+            geometry=geometry,
+            observations=observations,
+            selected_weights_sha256=selected_weights_sha256,
+            startup_readback=startup_readback,
+        )
+    except CalibrationCoarseStepRefused as error:
+        # the parameter is this phase's, so the refusal is too: same code, this phase's class
+        raise _refuse(error.code, error.detail) from error
+    block = measurement["parameter_evidence"][COARSE_STEP_PARAMETER]
+    if tuple(block) != PARAMETER_EVIDENCE_KEYS:
+        raise ValueError(
+            f"the val sweep's evidence block is not the one phase 8 requires: {list(block)}"
+        )
+    if block["unit"] != COARSE_STEP_UNIT:
+        raise ValueError(
+            f"the val sweep records the unit {block['unit']!r}, not {COARSE_STEP_UNIT!r}"
+        )
+    if not _finite(block["value"]) or float(block["value"]) <= 0.0:
+        raise ValueError("the val sweep chose no positive finite coarse step")
+    receipted = (
+        bounded_sweep.get("chosen_candidate_rad") if isinstance(bounded_sweep, Mapping) else None
+    )
+    if not _finite(receipted):
+        raise _refuse(
+            CAL_SWEEP_UNSTABLE,
+            "the val sweep supports a coarse step, but the bounded sweep records no receipted candidate "
+            "step for it to match: every neck target's sweep-check receipt binds the step the run uses",
+        )
+    if abs(float(receipted) - float(block["value"])) > 1e-12:
+        raise _refuse(
+            CAL_SWEEP_UNSTABLE,
+            f"the val sweep supports the coarse step {block['value']!r} but phase 2 receipted "
+            f"{float(receipted)!r}: the sweep-check receipts would vouch for a step this run does not use",
+        )
+    return dict(block), measurement
+
+
 def validate_head_search_calibration_search_parameters(
     *,
     bounded_sweep,
@@ -760,17 +841,21 @@ def validate_head_search_calibration_search_parameters(
     workspace_projection,
     fine_correction_episodes,
     held_out_splits,
+    coarse_step_observations=None,
+    selected_weights_sha256=None,
     startup_readbacks=None,
     detection_extremes=None,
     output_path=None,
 ) -> dict:
-    """Produce phase 6's document: the five parameters, each with the evidence block phase 8 consumes.
+    """Produce phase 6's document: the parameters it owns, each with the evidence phase 8 consumes.
 
     The fine-correction numbers are computed first because the timeout is guarded by them, and their
     split isolation is checked before any of the five is built, so a calibration frame offered to the
     held-out numbers refuses the phase with phase 3's own `CAL_SPLIT_LEAK`. Every refusal stops the
-    phase before a value is produced. When `output_path` is given the phase document is written there
-    and nowhere else; without it the phase writes nothing at all.
+    phase before a value is produced. When the run declares the raw val sweep, its chosen
+    ``coarse_step_rad`` joins them with its own evidence block and the ownership check above; without one
+    the phase records the deliberately uncomputed parameter instead. When `output_path` is given the phase
+    document is written there and nowhere else; without it the phase writes nothing at all.
     """
 
     if startup_readbacks is not None and not isinstance(startup_readbacks, Mapping):
@@ -812,14 +897,26 @@ def validate_head_search_calibration_search_parameters(
         "max_fine_corrections": max_fine_corrections,
         "max_fine_total_rad": max_fine_total_rad,
     }
+    measurement = None
+    names = list(PARAMETERS)
+    if coarse_step_observations is not None:
+        block, measurement = _coarse_step_parameter(
+            bounded_sweep=bounded_sweep,
+            observations=coarse_step_observations,
+            selected_weights_sha256=selected_weights_sha256,
+            startup_readback=readback(COARSE_STEP_PARAMETER),
+        )
+        parameters[COARSE_STEP_PARAMETER] = block
+        names = [COARSE_STEP_PARAMETER, *PARAMETERS]
     document = {
         "schema_version": SCHEMA_VERSION,
         "kind": KIND,
         "phase": PHASE,
-        "parameter_names": list(PARAMETERS),
-        "parameters": {name: parameters[name] for name in PARAMETERS},
+        "parameter_names": names,
+        "parameters": {name: parameters[name] for name in names},
         "parameters_complete": True,
-        "uncomputed_parameter": dict(UNCOMPUTED_PARAMETER),
+        "uncomputed_parameter": None if measurement is not None else dict(UNCOMPUTED_PARAMETER),
+        "coarse_step_measurement": measurement,
         "motion_commanded": False,
     }
     if output_path is not None:

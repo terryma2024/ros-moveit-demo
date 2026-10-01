@@ -50,6 +50,11 @@ from so101_demo.act.head_search_calibration_run import (
     execute_calibration_run,
 )
 from so101_demo.act.head_search_candidate_freeze import freeze_candidate
+from so101_demo.act.head_search_coarse_step_measurement import (
+    CAL_SWEEP_EVIDENCE_CONTRADICTORY,
+    CAL_SWEEP_EVIDENCE_PARTIAL,
+    CAL_SWEEP_UNSTABLE,
+)
 from so101_demo.act.head_search_operating_point import record_selection_rule
 from so101_demo.act.head_search_search_params import CAL_TIMEOUT_UNBOUNDED
 from so101_demo.act.head_search_timing_params import CAL_FRESHNESS_EXCEEDED
@@ -148,6 +153,9 @@ DECLARED_PARAMETERS = {
 
 #: the phase-6 measurements this file declares (plan section 2 row 6). The coverage proof phase 6
 #: consumes is deliberately not here: it is the document phase 2 produces in the run itself.
+#: the sentinel that makes `_inputs` build the run's raw val sweep when the caller declares none
+COARSE_STEP_OBSERVATIONS = "the fixture's own val sweep"
+
 SEARCH_TIMING = {
     "path": "/evidence/search-timing.json",
     "sha256": canonical_sha256({"n": "search-timing"}),
@@ -254,6 +262,128 @@ ALSO_RECORDED = {
     "three_consecutive_frame_lock_rule": ("three consecutive frames lock", "lock-rule"),
     "tracker_algorithm": ("iou-tracker-v1", "tracker"),
 }
+
+
+#: the raw val sweep the run declares for its sixth parameter (plan section 2 row 6, design 7.1): every
+#: generated candidate step, on four val scenes, at the bounded stops of every anchor of the sealed
+#: geometry. The stops are the repository's own planner, because the phase checks them against it.
+COARSE_STEP_SCENES = (
+    (410000, "scene-004100000", "one_cup_distractors", 1),
+    (410001, "scene-004100001", "no_cup", 0),
+    (410002, "scene-004100002", "two_cups", 2),
+    (410003, "scene-004100003", "cup_near_bottle", 1),
+)
+COARSE_STEP_OBSERVATIONS_PATH = "/evidence/coarse-step-observations.json"
+COARSE_STEP_GEOMETRY_PATH = "/evidence/head-camera-geometry.json"
+
+
+def _coarse_step_observations(*, geometry_body=None, weights_sha256=WEIGHT_SHA256) -> dict:
+    """The raw sweep of the fixture's geometry: one record per candidate, val scene, anchor and stop."""
+
+    from so101_demo.act.head_search_calibration_geometry import generate_coarse_step_candidates
+    from so101_demo.act.head_search_domain import bounded_search_stops
+
+    geometry = GEOMETRY_BODY if geometry_body is None else geometry_body
+    anchors_rad = {
+        name: float(entry["neck_start_rad"]) for name, entry in geometry["in_frame_matrix"].items()
+    }
+    candidates = []
+    for step in generate_coarse_step_candidates(
+        geometry["horizontal_fov_rad"],
+        sealed_candidate_rad=geometry["coarse_step_candidate_rad"],
+    ):
+        anchors = []
+        for name, anchor_rad in anchors_rad.items():
+            plan = bounded_search_stops(
+                anchor_rad=anchor_rad,
+                required_domain_rad=geometry["required_search_domain_rad"],
+                safe_interval_rad=geometry["lock_valid_neck_rad"],
+                horizontal_fov_rad=geometry["horizontal_fov_rad"],
+                coarse_step_rad=step,
+            )
+            anchors.append(
+                {
+                    "anchor": name,
+                    "anchor_rad": anchor_rad,
+                    "targets_rad": [float(target) for target in plan.targets_rad],
+                }
+            )
+        scenes = []
+        for scene_id, scene_group_id, scenario, visible in COARSE_STEP_SCENES:
+            stops = []
+            for anchor in anchors:
+                for index, target in enumerate(anchor["targets_rad"]):
+                    # the sweep's own truth names the cup body it saw, so the phase can track which
+                    # cup was missed rather than only how many detections there were
+                    cups = (("plastic_cup", 100.0, 100.0), ("plastic_cup_b", 200.0, 120.0))[:visible]
+                    truth = [
+                        {"x": x, "y": y, "body": body, "visible_px": 8000}
+                        for body, x, y in cups
+                    ]
+                    stops.append(
+                        {
+                            "anchor": anchor["anchor"],
+                            "stop_index": index,
+                            "stop_rad": target,
+                            "truth": truth,
+                            "detections": [
+                                _detection(x + 0.2, y + 0.2, 0.9 - 0.05 * position)
+                                for position, (_body, x, y) in enumerate(cups)
+                            ],
+                            "image_sha256": canonical_sha256({"scene": scene_id, "stop": target}),
+                        }
+                    )
+            scenes.append(
+                {
+                    "scene_id": scene_id,
+                    "scene_group_id": scene_group_id,
+                    "scenario": scenario,
+                    "dataset_visible_instances": visible,
+                    "passes": [{"pass_index": 0, "stops": stops}],
+                }
+            )
+        candidates.append(
+            {"coarse_step_rad": float(step), "anchors": anchors, "scenes": scenes}
+        )
+    document = {
+        "schema_version": 1,
+        "kind": "head_search_coarse_step_val_sweep",
+        "phase": "coarse_step_measurement",
+        "domain": "head",
+        "split": "val",
+        "match_radius_px": MATCH_RADIUS_PX,
+        "passes": 1,
+        "geometry": {
+            "path": COARSE_STEP_GEOMETRY_PATH,
+            "sha256": canonical_sha256({"n": "sealed-geometry-file"}),
+            "seal_sha256": canonical_sha256(
+                {key: value for key, value in geometry.items() if key != "seal_sha256"}
+            ),
+            "horizontal_fov_rad": geometry["horizontal_fov_rad"],
+            "lock_valid_neck_rad": list(geometry["lock_valid_neck_rad"]),
+            "required_search_domain_rad": list(geometry["required_search_domain_rad"]),
+            "anchors_rad": dict(anchors_rad),
+        },
+        "model": {
+            "candidate_id": CANDIDATE_ID,
+            "weights_sha256": weights_sha256,
+            "min_confidence": HIGH_POINT["min_confidence"],
+            "tracking_iou": HIGH_POINT["tracking_iou"],
+        },
+        "dataset": {
+            "manifest_path": "/evidence/head-dataset/dataset-manifest.json",
+            "manifest_sha256": canonical_sha256({"n": "head-dataset-manifest"}),
+            "split": "val",
+            "scene_count": len(COARSE_STEP_SCENES),
+            "scene_limit": None,
+        },
+        "candidates": candidates,
+        "path": COARSE_STEP_OBSERVATIONS_PATH,
+    }
+    document["sha256"] = canonical_sha256(
+        {key: value for key, value in document.items() if key != "sha256"}
+    )
+    return document
 
 
 def _module():
@@ -529,8 +659,11 @@ def _inputs(
     safe=(-2.0, 2.0),
     bundle_inputs=None,
     search_timing=SEARCH_TIMING,
+    coarse_step_observations=COARSE_STEP_OBSERVATIONS,
     frame_age_measurements=FRAME_AGE_MEASUREMENTS,
 ) -> CalibrationPhaseInputs:
+    if coarse_step_observations is COARSE_STEP_OBSERVATIONS:
+        coarse_step_observations = _coarse_step_observations()
     geometry = _seal(GEOMETRY_BODY if geometry_body is None else geometry_body)
     return CalibrationPhaseInputs(
         production_search_config=_search_config(bounded=bounded, required=required, safe=safe),
@@ -552,6 +685,7 @@ def _inputs(
         deadband_candidates=DEADBAND_CANDIDATES,
         workspace_projection=WORKSPACE_PROJECTION,
         fine_correction_episodes=FINE_CORRECTION_EPISODES,
+        coarse_step_observations=coarse_step_observations,
         # phase 7's measurements
         frame_age_measurements=frame_age_measurements,
         skew_measurements=SKEW_MEASUREMENTS,
@@ -604,8 +738,10 @@ def test_the_eight_phases_are_the_designs_and_no_phase_is_left_unimplemented():
     assert CAL_SAFE_INTERVAL_MISMATCH == "CAL_SAFE_INTERVAL_MISMATCH"
 
 
-def test_the_run_walks_the_phases_in_order_and_stops_at_bundle_generation(tmp_path):
-    result = _run(tmp_path)
+def test_a_run_that_declares_no_coarse_step_sweep_stops_at_bundle_generation(tmp_path):
+    """Every phase runs; the one parameter without evidence keeps the bundle incomplete, as before."""
+
+    result = _run(tmp_path, coarse_step_observations=None)
 
     root = tmp_path / "run-01"
     assert result.status == "FAILED"
@@ -642,10 +778,59 @@ def test_the_run_walks_the_phases_in_order_and_stops_at_bundle_generation(tmp_pa
         assert not (root / absent).exists(), absent
 
 
-def test_the_bundle_refuses_because_phase_six_leaves_coarse_step_rad_uncomputed(tmp_path):
-    """The honest failure: the only parameter no owner has measured keeps the bundle incomplete."""
+def test_the_run_completes_the_eight_phases_and_writes_the_bundle(tmp_path):
+    """With the selected model's val sweep declared, the sixth parameter has an owner and phase 8 runs.
+
+    This is the gap HS-295/HS-297 left open, closed at the library level: phase 6 chooses
+    `coarse_step_rad` from the raw sweep, the bundle carries all seventeen parameters with their
+    evidence, and the run reports SUCCEEDED with a bundle a promotion could be approved against.
+    """
 
     result = _run(tmp_path)
+    root = tmp_path / "run-01"
+
+    assert result.status == "SUCCEEDED"
+    assert result.phases_run == DESIGN_PHASES
+    assert result.first_failing_phase is None
+    assert result.failure_code is None
+    status = _status(root)
+    assert status["status"] == "SUCCEEDED"
+    assert {path.name for path in root.iterdir()} == {
+        "calibration-inputs.json",
+        "geometry-measurements.json",
+        "perception-calibration.json",
+        "model-comparison.json",
+        "model-selection-verdict.json",
+        READBACK_NAME,
+        "search-calibration.json",
+        "timing-calibration.json",
+        BUNDLE_NAME,
+        MANIFEST_NAME,
+        RUN_STATUS_NAME,
+    }
+    search = _read(root, "search-calibration.json")
+    # the sixth parameter is computed, and the gap marker is gone rather than left behind
+    assert search["uncomputed_parameter"] is None
+    measured = set(search["parameters"]) | set(_read(root, "timing-calibration.json")["parameters"])
+    # the eleven values phases 6 and 7 measured here plus the six the run declared = the seventeen
+    assert measured | DECLARED_PARAMETERS == set(BUNDLE_PARAMETERS)
+    block = search["parameters"]["coarse_step_rad"]
+    assert block["value"] == 0.2, "the largest generated candidate of the fixture's 0.4 rad field of view"
+    assert block["unit"] == "rad"
+    assert [reference["path"] for reference in block["input_evidence"]] == [
+        COARSE_STEP_GEOMETRY_PATH,
+        COARSE_STEP_OBSERVATIONS_PATH,
+    ]
+    bundle = _read(root, BUNDLE_NAME)
+    assert set(bundle["parameters"]) == set(BUNDLE_PARAMETERS)
+    assert bundle["parameters"]["coarse_step_rad"] == block
+    assert bundle["runtime_identity"]["detector_weights_sha256"] == WEIGHT_SHA256
+
+
+def test_the_bundle_refuses_when_a_run_declares_no_coarse_step_sweep(tmp_path):
+    """The honest failure that remains: no declared sweep, no owner for the sixth parameter."""
+
+    result = _run(tmp_path, coarse_step_observations=None)
     root = tmp_path / "run-01"
 
     search = _read(root, "search-calibration.json")
@@ -667,6 +852,40 @@ def test_the_bundle_refuses_because_phase_six_leaves_coarse_step_rad_uncomputed(
         "search-calibration.json",
         "timing-calibration.json",
     ]
+
+
+def test_a_declared_sweep_of_another_model_refuses_phase_six(tmp_path):
+    """The run hands phase 6 the selected model's digest: a sweep of other weights cannot be used."""
+
+    other = _coarse_step_observations(weights_sha256=canonical_sha256({"seed": "another-model"}))
+    result = _run(tmp_path, coarse_step_observations=other)
+    root = tmp_path / "run-01"
+
+    assert result.status == "FAILED"
+    assert result.phases_run == DESIGN_PHASES[:5]
+    assert result.first_failing_phase == "search_parameters"
+    assert result.failure_code == CAL_SWEEP_EVIDENCE_CONTRADICTORY
+    assert not (root / "search-calibration.json").exists()
+    assert not (root / BUNDLE_NAME).exists()
+    assert _status(root)["evidence_produced"][-1] == READBACK_NAME
+
+
+def test_a_coarse_step_the_receipts_do_not_vouch_for_refuses_phase_six(tmp_path):
+    """Phase 2 receipts one step; a sweep that supports another would leave every receipt unproven."""
+
+    observations = _coarse_step_observations()
+    # the largest candidate's val evidence is removed from every scene, so the sweep supports the next
+    for scene in observations["candidates"][0]["scenes"]:
+        scene["passes"][0]["stops"] = []
+    observations["sha256"] = canonical_sha256(
+        {key: value for key, value in observations.items() if key != "sha256"}
+    )
+
+    result = _run(tmp_path, coarse_step_observations=observations)
+
+    assert result.status == "FAILED"
+    assert result.first_failing_phase == "search_parameters"
+    assert result.failure_code in (CAL_SWEEP_EVIDENCE_PARTIAL, CAL_SWEEP_UNSTABLE)
 
 
 def test_a_failing_phase_six_leaves_seven_and_eight_unrun(tmp_path):
@@ -775,7 +994,8 @@ def test_the_seven_phases_are_the_library_modules_and_not_each_others_copies(tmp
         search["parameters"]["search_timeout_s"]["observed_distribution"]["max_stable_stop_points"]
         == stops
     )
-    assert set(search["parameters"]) == set(search["parameter_names"]) - {"coarse_step_rad"}
+    assert set(search["parameters"]) == set(search["parameter_names"])
+    assert "coarse_step_rad" in search["parameters"], "phase 6 owns the sixth parameter"
     assert search["motion_commanded"] is False
     # phase 7 produced the five values and its own frame-contract item, and commanded no motion
     timing = _read(root, "timing-calibration.json")
@@ -807,7 +1027,10 @@ def test_every_neck_target_binds_one_generation_one_plan_and_one_safe_interval(t
         assert receipt["measurement_plan_sha256"] == PLAN_SHA
         assert receipt["safe_interval_rad"] == list(SAFE_INTERVAL)
         assert receipt["motion_commanded"] is False
-    assert result.status == "FAILED", "the bundle refuses while coarse_step_rad is uncomputed"
+    assert result.status == "SUCCEEDED", (
+        "every receipt binds one generation, one plan and one safe interval, and the coarse step "
+        "they vouch for is the one phase 6 chose"
+    )
 
 
 def test_the_run_takes_exactly_one_role_calibration_measurement_flight(tmp_path):
@@ -846,7 +1069,7 @@ def test_a_second_resource_binding_is_refused(tmp_path):
     second = _run(tmp_path, binder=binder, run_root=tmp_path / "run-02")
 
     assert binder.binding["bound_at_entry"] is True
-    assert first.first_failing_phase == "bundle_generation"
+    assert first.status == "SUCCEEDED"
     assert second.phases_run == ()
     assert second.first_failing_phase == "input_validation"
     assert second.failure_code == CAL_BINDING_REBOUND
@@ -1008,7 +1231,7 @@ def test_the_orchestration_offers_no_resume_or_continuation_entry(tmp_path):
     status = _status(tmp_path / "run-01")
     assert status["resume_supported"] is False
     assert status["checkpoint"] is False
-    assert result.status == "FAILED", "the run still fails honestly, now at the bundle"
+    assert result.status == "SUCCEEDED", "a completed run is still never resumable"
 
 
 def test_an_uncoded_phase_error_is_not_dressed_up_as_a_design_refusal(tmp_path):

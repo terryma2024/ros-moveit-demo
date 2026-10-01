@@ -1,9 +1,11 @@
-"""The formal head search calibration CLI: run, verify-promoted-config, qualify, serve-teleop.
+"""The formal head search calibration CLI: run, measure-coarse-step, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
 trajectory precondition and the run status live (plan rule 4). Every subcommand refuses a run root that
-already exists, so there is no way to resume or continue a stage.
+already exists, so there is no way to resume or continue a stage. `measure-coarse-step` is the one
+measurement flight the run cannot take itself - the run declares documents, it does not render - so it is
+its own installed entry, validated here and measured by `so101_demo.act.head_search_coarse_step_measurement`.
 """
 
 from __future__ import annotations
@@ -30,16 +32,22 @@ if TYPE_CHECKING:  # pragma: no cover - the run module is imported where it is u
 #: a run whose declared inputs are missing or unreadable is refused before any phase, by name
 HEAD_SEARCH_RUN_INPUTS_INCOMPLETE = "HEAD_SEARCH_RUN_INPUTS_INCOMPLETE"
 
+#: a measurement flight whose inputs are missing or unreadable is refused before it renders anything
+HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE = "HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE"
+
 #: the measurement documents phases 6 and 7 consume (plan section 2 rows 6 and 7), each with the flag it
 #: is declared under and its shape: `document` is one JSON object the phase cites by path and sha256,
-#: `records` is the JSON list of measured records the phase itself builds its evidence from. The run
-#: reads these files and never invents a measurement; a run that omits one is refused at this entry.
+#: `records` is the JSON list of measured records the phase itself builds its evidence from. The raw
+#: coarse-step val sweep is the fifteenth: the run never measures it, it declares the sweep the installed
+#: `measure-coarse-step` entry produced with the selected model. The run reads these files and never
+#: invents a measurement; a run that omits one is refused at this entry.
 RUN_PHASE_SIX_MEASUREMENTS = (
     ("search_timing", "--search-timing", "document"),
     ("camera_measurements", "--camera-measurements", "document"),
     ("deadband_candidates", "--deadband-candidates", "records"),
     ("workspace_projection", "--workspace-projection", "document"),
     ("fine_correction_episodes", "--fine-correction-episodes", "records"),
+    ("coarse_step_observations", "--coarse-step-observations", "document"),
 )
 RUN_PHASE_SEVEN_MEASUREMENTS = (
     ("frame_age_measurements", "--frame-age-measurements", "document"),
@@ -109,6 +117,109 @@ RUN_OPTIONAL_DIRECTORY_FLAGS = (
     "head_dataset_root",
     "task_dataset_root",
 )
+
+#: the `measure-coarse-step` entry: the sealed geometry, the sealed head dataset and its profile, the
+#: selected model's weights and frozen candidate, and the brand-new directory the measurement owns
+MEASUREMENT_REQUIRED_FLAGS = (
+    ("geometry_seal", "--geometry-seal"),
+    ("head_dataset", "--head-dataset"),
+    ("dataset_config", "--dataset-config"),
+    ("weights", "--weights"),
+    ("frozen_candidate", "--frozen-candidate"),
+    ("output_dir", "--output-dir"),
+)
+
+
+def _measurement_parser() -> argparse.ArgumentParser:
+    """The `measure-coarse-step` entry: it declares inputs and calls one library function.
+
+    This is the measurement flight the run cannot take itself (the run declares documents, it does not
+    render): the installed program rebuilds the sealed head val scenes, walks the bounded stops of every
+    generated candidate step with the selected model, and writes the raw observations, the decision and
+    the receipt. Nothing is computed here beyond parsing and validating what the caller declared.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-coarse-step",
+        description=(
+            "Measure the coarse-step val sweep once, into a brand-new output directory, and choose "
+            "coarse_step_rad from the head val split"
+        ),
+    )
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument("--head-dataset", type=Path, help="the sealed head dataset manifest")
+    parser.add_argument("--dataset-config", type=Path, help="the dataset profile it was rendered from")
+    parser.add_argument("--weights", type=Path, help="the selected model's weights file")
+    parser.add_argument("--frozen-candidate", type=Path, help="the selected frozen candidate document")
+    parser.add_argument("--output-dir", type=Path, help="the brand-new directory the sweep owns")
+    parser.add_argument("--scene-limit", type=int, help="measure only the first N val scenes")
+    parser.add_argument("--passes", type=int, default=1, help="independent passes over every stop")
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--split", default="val")
+    parser.add_argument("--domain", default="head")
+    return parser
+
+
+def _measure_coarse_step(arguments: list[str]) -> int:
+    """Validate the declared measurement inputs, then hand the flight to the library module."""
+
+    parsed = _measurement_parser().parse_args(arguments)
+    missing = [
+        flag for name, flag in MEASUREMENT_REQUIRED_FLAGS if getattr(parsed, name) is None
+    ]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in MEASUREMENT_REQUIRED_FLAGS
+        if name != "output_dir" and not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_coarse_step_measurement import measure_coarse_step_val_sweep
+
+    try:
+        result = measure_coarse_step_val_sweep(
+            geometry_seal_path=parsed.geometry_seal,
+            dataset_manifest_path=parsed.head_dataset,
+            dataset_config_path=parsed.dataset_config,
+            weights_path=parsed.weights,
+            frozen_candidate_path=parsed.frozen_candidate,
+            output_dir=parsed.output_dir,
+            split=parsed.split,
+            domain=parsed.domain,
+            scene_limit=parsed.scene_limit,
+            passes=parsed.passes,
+            device=parsed.device,
+            command=_command_line(arguments, subcommand="measure-coarse-step"),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    print(
+        f"COARSE_STEP_MEASURED {receipt['chosen_coarse_step_rad']} "
+        f"scenes={receipt['scene_count']} candidates={receipt['candidate_count']} "
+        f"passes={receipt['passes']} output_dir={parsed.output_dir}"
+    )
+    return 0
 
 
 def _run_parser() -> argparse.ArgumentParser:
@@ -367,9 +478,10 @@ def _gpu_device(value: str):
     return int(value) if value.isdigit() else value
 
 
-def _command_line(arguments: Sequence[str]) -> str:
-    return "ros2 run so101_demo_py so101_head_search_calibration run " + " ".join(
-        shlex.quote(str(item)) for item in arguments
+def _command_line(arguments: Sequence[str], *, subcommand: str = "run") -> str:
+    return (
+        f"ros2 run so101_demo_py so101_head_search_calibration {subcommand} "
+        + " ".join(shlex.quote(str(item)) for item in arguments)
     )
 
 
@@ -432,6 +544,9 @@ def main(argv: list[str] | None = None) -> int:
     # `run` declares the inputs of the eight phases, so its entry is the run module's and not a stub
     if arguments[:1] == ["run"]:
         return _run(arguments[1:])
+    # the one measurement the run cannot take itself is its own installed entry, never a script
+    if arguments[:1] == ["measure-coarse-step"]:
+        return _measure_coarse_step(arguments[1:])
     parsed = qualification_parser().parse_args(arguments)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":

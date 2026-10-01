@@ -23,12 +23,13 @@ What the entry owns, and why (plan sections 0, 1 and 2b):
 * a phase that refuses **stops the run immediately**. The first failing phase, its code, the command, the
   exit code and the evidence already produced are written to `run-status.json` as `FAILED`, and no later
   phase runs;
-* the run **never reports success while a value has no owner**. Phase 6 measures five of its six
-  parameters and records `coarse_step_rad` as deliberately uncomputed until the selected model's val
-  sweep and lock evidence exists (plan section 2 row 6, ledger HS-295). Phase 8 therefore refuses the
-  bundle with `CAL_BUNDLE_INCOMPLETE` before it writes anything, and the run ends `FAILED` at
-  `bundle_generation` rather than producing a bundle that pretends to be complete. The refusal is the
-  design's own gap made visible, not a stub: every other phase has its module and its evidence.
+* the run **never reports success while a value has no owner**. Phase 6 owns six parameters: the five it
+  computes from its declared measurements and `coarse_step_rad`, chosen from the raw val sweep the run
+  declares by `head_search_coarse_step_measurement` (plan section 2 row 6). A run that declares no sweep
+  leaves that parameter deliberately uncomputed, and phase 8 then refuses the bundle with
+  `CAL_BUNDLE_INCOMPLETE` before writing anything rather than producing one that pretends to be complete.
+  A raw sweep whose evidence is missing, partial or contradictory refuses phase 6 itself, with that
+  module's own code, and a step the phase-2 receipts do not vouch for refuses with `CAL_SWEEP_UNSTABLE`.
 
 An uncoded exception from a phase is not a design outcome: it propagates (with the earlier evidence left
 on disk for forensics) rather than being dressed up as a `FAILED` run with an invented code.
@@ -207,13 +208,15 @@ class CalibrationPhaseInputs:
     bundle_inputs: Mapping | None = None
     #: phase 6's measurements: the p99 settle/frame times and the control period it bounds the timeout
     #: with, the camera whose angular resolution turns the centre jitter into pixels, the searched
-    #: deadband candidates, the projected legal pick workspace and the held-out validation episodes the
-    #: fine-correction budgets are measured on
+    #: deadband candidates, the projected legal pick workspace, the held-out validation episodes the
+    #: fine-correction budgets are measured on, and the raw val sweep of the selected model that the
+    #: coarse step is chosen from (plan section 2 row 6)
     search_timing: Mapping | None = None
     camera_measurements: Mapping | None = None
     deadband_candidates: Sequence[Mapping] = ()
     workspace_projection: Mapping | None = None
     fine_correction_episodes: Sequence[Mapping] = ()
+    coarse_step_observations: Mapping | None = None
     #: phase 7's measurements: the frame age and skew distributions, the 10 Hz frame contract, the
     #: controller submissions, the MuJoCo timestep, the stationary velocities, the feedback quantisation
     #: and period, the controller's stopped tolerance and the stop/revoke proofs
@@ -565,6 +568,10 @@ def _phase_runners(
             workspace_projection=phase_inputs.workspace_projection,
             fine_correction_episodes=phase_inputs.fine_correction_episodes,
             held_out_splits=_held_out_splits(phase_inputs.selection_rule),
+            # the coarse step is chosen from the val sweep of the model phase 4 selected, and only that
+            # model's weights may have produced the sweep the value is read out of
+            coarse_step_observations=phase_inputs.coarse_step_observations,
+            selected_weights_sha256=_selected_frozen_candidate(context).get("weight_sha256"),
             startup_readbacks=phase_inputs.startup_readbacks,
             output_path=context.run_root / SEARCH_NAME,
         )
