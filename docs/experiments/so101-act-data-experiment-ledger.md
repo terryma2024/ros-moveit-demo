@@ -46384,3 +46384,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   model's include - each by a run that named it, never by guessing.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD 93d073aa6; goal active.
+
+
+## CP-2456 — The source scene is byte-identical to the frozen witness, and has the include
+
+- Measured: the frozen `inputs/scene_model/scene.xml` and the source
+  `src/so101_demo_py/assets/mujoco/act/scene.xml` share the digest `4db48e35df9e91fc6868...`, and the source's
+  directory contains `so101.xml` (the include's target) and `so101.urdf` beside it. So the include failure of CP-2455
+  is purely a property of the freeze copying one file per role - `freeze_inputs` writes
+  `Path(role) / Path(entry["path"]).name`, which cannot express an include closure.
+- That makes the honest route provable rather than a compromise: the launch points `mujoco_scene` at the **source**
+  scene, whose directory has the closure, and records that it is **byte-identical to the frozen witness** - the same
+  sha256 - so "the episode runs what the freeze verified" is preserved as a verified equality instead of being quietly
+  weakened. The frozen copy keeps its role as the hash witness inside the manifest.
+- The alternative - teaching the freeze to copy include closures - remains the right longer-term change for any scene
+  that has one, and is recorded here as such rather than as done. For this milestone the equality proof is sufficient,
+  explicit, and cheap to re-check on every run.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 69fae20bd;
+  goal active.
