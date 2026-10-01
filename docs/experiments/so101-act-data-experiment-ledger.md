@@ -51989,3 +51989,33 @@ physical half with `source_stamps` removed. Everything else - the two distinct r
 
 Recorded rather than written in this round because the remaining context is one call's worth: the next round writes it
 from this recipe, and if the arithmetic is off by a key the recorder will say so by name.
+
+
+## CP-2725 — The probe measures zero rows, and the reason is one offset
+
+A probe that drives the capture with a stub recorder and prints the audit's key set reports:
+
+```
+audit keys: 0
+```
+
+So with `on_reference(reference(stamp))` fed at the **same** stamps as the frames, **no row reaches the recorder at all**.
+And the reason is in the row the capture queues:
+
+```python
+        self._pending.append({"observation": observation, "audit": audit,
+                              "acquisitions": (head, wrist), "target_s": round(at_s + self.dt_s, 6), ...})
+```
+
+A row created at `at_s` targets **`at_s + dt_s`** - the next instant - and `_service_pending` releases it only when *that*
+instant's reference is ready. Feeding references at 1.0, 1.1 and 1.2 therefore releases nothing (the rows target 1.1, 1.2
+and 1.3), which is why every earlier attempt produced too few rows: `EPISODE_TIME_GAP` when it needed a grid, and
+`EPISODE_AUDIT_SCHEMA` in the round before this, where the single row that did arrive was checked against a union my
+harness had not balanced.
+
+The fix is one offset: feed the reference for `stamp + 0.1` - or, equivalently, one extra reference past the last frame -
+and the rows will be written in order. With that, the recipe of CP-2724 is complete, and the failure codes this stretch
+has been collecting (time gap, audit schema, scope mismatch) all reduce to facts about when a row becomes writable and
+what it must then carry.
+
+Test reverted; worktree clean at 35 entries.
