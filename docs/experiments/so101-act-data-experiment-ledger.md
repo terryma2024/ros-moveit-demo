@@ -47073,3 +47073,20 @@ marker (CP-2480) and the deployment verifier states what it does and does not cl
 - That combination - fixture plus probe in the same round - is the single remaining action for F5's step two.
 - F1, F14, F3, F12 and F11 closed; F13's scene item awaiting its Codex checkpoint; E1's input side green end to end;
   the execution side waits on the container-free broker decision (CP-2481/2482). HEAD 393b9f77c; goal active.
+
+
+## CP-2490 — The probe answers: the seal's own predicate returns False
+
+- Applied CP-2485's wrapper probe (verified live and inert: 74 passed, nine prints) and ran the runner-backed fixture
+  alone. The output names it in two lines: `WIN-CALLSITE seal False` and `PROBE seal refused: AUDIT_WINDOW_INVALID`.
+  So the refuser is **`_window_matches_observed` as called by the seal**, not the readback's own check - the question
+  CP-2371/2374 left open is now closed.
+- That also means one of the predicate's clauses I have not printed is failing on this fixture, because CP-2370's probe
+  showed the four comparisons it does print (schedule against acquisitions, labelled rows against the cutoff, physics
+  against both endpoints, window edges against the camera extremes) all consistent. The next probe is therefore
+  internal to the predicate: print each clause's own verdict on this fixture - or, cheaper, bisect by printing the
+  verdict of `_window_ok` and of each `return False` branch in turn - until the failing one names itself.
+- Housekeeping done in the same round: the module was restored from `/tmp/p536.py` (marker count zero, no dirty
+  entry), the fixture was withdrawn so the tree stays green, and the audit suite is back to 74 passed.
+- F1, F14, F3, F12 and F11 closed; F13's scene item awaiting its Codex checkpoint; E1's input side green end to end;
+  the execution side waits on the container-free broker decision. HEAD 8a4e5d6ec; goal active.
