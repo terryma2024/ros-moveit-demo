@@ -48519,3 +48519,25 @@ prose. Every record asserts `sequence(parent) < sequence(self)` from the single 
 presence) beside the digest recomputation so a rewritten audit fails as a truncated one does.
 
 With that, revision 3 answers all three of the review's corrections and is ready to be re-reviewed.
+
+
+## CP-2564 — E2's real section, and two rules the dispatch plan states
+
+Reading E2 in the dispatch plan rather than guessing its identifiers:
+
+- its section is `Task E2：边界采样、共用 QC/verifier 和终态` (line 60), so the seam is **boundary sampling** plus the
+  shared QC, verifier and terminal wiring - not a helper named `start_sampling` or `first_frame`, which is why the grep
+  for those found nothing;
+- E2 must connect **all object-result calls** into E1/E2, covering the real Worker, the container shard protocol, the
+  qualification contract, ACT rollout and route comparison, **without implementing containers**;
+- E2 carries its own **Codex checkpoint** on the exact diff, the E1/E2 tests, and the real producer/default-factory
+  wiring evidence, and it must stop for new safety approval or resources rather than improvising;
+- line 129 has K2 modifying `episode_audit.py`'s scene closed schema, writer/serializer and **`verify_episode_audit()`** -
+  but the repository's verifier is **`verify_audit_manifest()`**, as the source, my own passing test and the reviewer's
+  first correction all agree. So the plan's wording is the error, not the reviewer's note;
+- and line 133 states the task-list rule the user just invoked: update the visible list **once** when the revision
+  starts, keeping completed items and adding the K1/K2/E1/E2/E3 boundaries and completion conditions, and **thereafter
+  update only the status of existing items at the end of each turn**.
+
+That last point is the standing instruction for the list I updated this round, and it is why the update touched statuses
+rather than reshaping entries.
