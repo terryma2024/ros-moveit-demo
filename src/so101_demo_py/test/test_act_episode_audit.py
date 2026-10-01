@@ -1421,7 +1421,7 @@ def test_a_window_naming_an_unacquired_instant_is_refused_as_a_window(tmp_path):
         writer.seal({**window, "source_schedule": {"head": [1.0, 1.15, 1.2], "wrist": [1.0, 1.1, 1.2]}})
 
 
-def test_win(tmp_path):
+def test_the_minimal_window_form_seals_and_verifies_by_recomputation(tmp_path):
     """T3-F5: the suite's own sealable fixture seals and verifies, with the minimal window form."""
 
     writer, window = complete_audit(tmp_path)
