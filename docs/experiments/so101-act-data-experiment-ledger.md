@@ -48917,3 +48917,27 @@ Its last line is already a correction in progress: "**Explicitly declare the man
 6's section 6 described the manifest's keys but, in the reviewer's judgement, not explicitly enough to be implemented
 without ambiguity. If that is where the verdict lands, revision 7's change is local: give the manifest's keys and types
 the same table treatment the five record kinds get, rather than a sentence.
+
+
+## CP-2587 — Revision 6: FAIL with four corrections, one of them a fact I invented
+
+The verdict (2442 lines, real `EXIT=0`, tokens 56,524): **FAIL**, four corrections, each precise:
+
+1. "**Replace §3's stale `ACT_EPISODE_AUDIT_K2` declaration and all five rows' `schema_version = 2` with
+   `record_schema_version = 1`**" - section 6 introduced the new namespace and I never went back to section 3, so the
+   document declares two different versions for the same records. Again the same failure shape: the fix landed in the
+   new section and not in the old one.
+2. "**Reconcile the clock table with its null rule: G needs a declared nullable instant field; R's `received_at_s` must
+   permit null**" - my own rule ("instant iff `clock_source` non-null") is not applied to G, which has no declared
+   instant at all, and I declared `R.received_at_s` **non-nullable**, which contradicts the rule the same document
+   states.
+3. "**Correct the event envelope to `{sequence, kind, identity, sim_time_s, monotonic_ns, payload}`. The repository has no
+   envelope `schema_version` field**" - a **factual** correction: revision 6's section 6 invented an envelope
+   `schema_version` and omitted the envelope's `sequence`.
+4. "**Explicitly declare the manifest's exact six keys and types**" - `kind: str`, `schema_version: int`,
+   `scope_sha256: 64-hex string`, `identity: dict`, ... - i.e. the manifest deserves the same table treatment as the
+   five record kinds rather than a sentence.
+
+So revision 7's brief is exact and small, and the pattern across revisions 5, 6 and now 7 is consistent: my *new*
+sections are right and my *old* ones are left behind, which is precisely what a reviewer reading the whole artefact
+catches and a writer patching in place does not.
