@@ -42164,3 +42164,37 @@ phase 6/7/8 未跑、无 bundle/manifest、**无 `--resume` 路径**。
 
 **Task 13 内部进度**：§0 + phase **1/2/3/4/5/6/7/8 的模块均已存在**（累计新用例 **220**）。**下一块**是把 phase 6/7/8 接进
 `head_search_calibration_run.py` 的编排，并让"`coarse_step_rad` 未计算"这一已知缺口**以 `CAL_BUNDLE_INCOMPLETE` 如实暴露**。
+
+## HS-297 — phase 6/7/8 接入编排：`run` 走完八个 phase，在 phase 8 如实拒绝（差一项 `coarse_step_rad`）
+
+**提交** `f219baf3c`（4 文件，+677/−69；普通 `git commit`，钩子 rc=0；树干净）：
+
+**`run` 现在的完整路径**：入口前置（有界轨迹，**不发运动**）→ 独占认领 root → **单次**资源绑定 →
+phase 1 输入/准入/绑定 → phase 2 几何+覆盖 → phase 3 工作点 → phase 4 进程内复用既有 gate → phase 5 readback →
+**phase 6**（产出 `search-calibration.json`，5 值 + `uncomputed_parameter: coarse_step_rad`）→
+**phase 7**（产出 `timing-calibration.json`，5 值 + `also_recorded.frame_contract_10_hz`）→
+**phase 8**：因 **`coarse_step_rad` 无任何 owner**，`assemble_calibration_bundle` 在**写盘之前**以 **`CAL_BUNDLE_INCOMPLETE`** 拒绝 →
+run 落 **FAILED**、`first_failing_phase=bundle_generation`、`evidence_produced` **8 个文件**、**无 bundle/manifest**，只写 `run-status.json`。
+
+`UNIMPLEMENTED_PHASES` 与 `CAL_PHASE_UNIMPLEMENTED` **已删除**（有测试钉住其不存在）；无 resume 路径；
+缺任一 phase 6/7 测量输入时在 CLI **更早**拒绝 `HEAD_SEARCH_RUN_INPUTS_INCOMPLETE`（不认领 root、不跑任何 phase）。
+
+**被替换的期望（它主动声明，我按同一标准接受）**：旧断言钉"走完前 5 个 phase 后在 `search_parameters` 以 `CAL_PHASE_UNIMPLEMENTED` 失败"——
+那是 phase 6/7 模块尚不存在时的真相，也就是本次要移除的桩行为。新断言**更强**：7 个 phase 完成、8 份证据、
+phase 8 的拒绝码、无 bundle/manifest、且"17 项中恰有 16 项有 owner、只差 `coarse_step_rad`"。
+
+**验证链**：RED **22 failed / 5 passed**（编排）+ **4 failed / 10 passed**（CLI，`unrecognized arguments`）→
+GREEN **27 passed** + **28 passed**（提交后三文件复跑 55 passed, rc=0）→ 回归 **253 passed, rc=0**（10 文件：220 旧例 + 5 新例 + CLI/calibration）
+→ 全套件 **175 failed / 5821 passed / 152 skipped / 86 errors**，与基线**节点级 `diff` 为空（261 相同）、+5 正好新增、0 新增失败**；
+已知 flake 本轮未出现，且失败集里**没有任何 calibration/head_search 节点**。
+
+**它声明的推断（待评审）**：① phase 6/7 的测量输入以 **14 个新的必填 CLI flag** 声明（两个是 JSON 列表、其余对象）；
+② phase 6 的 coverage proof 只能取自**本次** phase 2 文档，`held_out_splits` 取自 selection rule；
+③ phase 8 的参数证据：geometry/perception 来自声明块、search/timing 来自活文档；同一测量值被两个 owner 声明 → 普通 `ValueError`（有测试钉住）；
+④ `also_recorded` = 声明 4 项 + phase 7 的 frame contract；⑤ 新增可选 `startup_readbacks` 透传 phase 6/7，缺省记 `verified:false`、**不伪造**；
+⑥ 它**必须**同时改第 4 个文件 `test_head_search_calibration_cli.py`，否则该文件自身的 run 用例会因新增必填输入而失败（只补夹具 + `omit` 支持，未削弱断言）；
+⑦ `SUCCEEDED` 分支保留，但在 `coarse_step_rad` 的 val sweep/lock 证据到位前**不可达**——**今天任何 run 都如实失败**。
+
+**Task 13 现在的状态**：八个 phase 的模块与编排**全部就位**（累计 **225** 个新用例）；**唯一缺口是 `coarse_step_rad` 的
+"获选模型 val sweep/lock 证据"**——补上它，`run` 就能真正产出 bundle，随后进入**你要求的 17 值精确审批**暂停点。
+证据：`scratch/hs297/` 与两个 8-worker run dir，列为删除候选，未删除。
