@@ -41649,3 +41649,38 @@ best-epochs60.pt = ef833f9c990292f5…  ✓ 与旧版 C 权重一致
 **模型卡如实写明"由项目所有者选定、非 gate 晋升"**：它同时列出两个 revision 的 sha256/plan、两版指标对照、
 参考候选（A、B）的数值、以及那句 `EVALUATION_F1_MARGIN` 拒绝原文，并声明**该豁免只针对 F1-margin 这一条**，
 `TASK_RETENTION_MARGIN = 0.01`、no-cup 假检门等**全部未动**，机器裁决仍记 `selection: null / promoted: false`。
+
+## HS-278 — Task 13 的"17 值"到底是哪 17 个：权威清单、产出规程与实施顺序（读自设计 §7/§8）
+
+**17 项参数（设计 §7.1，逐项都有校准方法与失败条件）**：
+`horizontal_fov_rad`、`lock_valid_neck_rad`、`coarse_step_rad`、`search_timeout_s`、
+`min_confidence`、`tracking_iou`、`min_bbox_aspect`、`min_area_px2`、
+`center_deadband_px`、`vertical_bounds_px`、`max_fine_corrections`、`max_fine_total_rad`、
+`max_age_s`、`max_skew_s`、`submit_lead_s`、`stop_velocity_rad_s`、`stop_latency_s`。
+
+**产出规程（设计 §7 与 line 25，硬性）**：
+
+> "先冻结模型，再发布完整的 17 项参数 bundle。" / "校准必须由**仓库内正式安装的程序**完成。
+> **禁止用 agent 临时脚本生成最终参数**。"
+
+所以我上一轮提的"方案 2（用脚本按现有配置凑出 17 值交给审批）"**在设计上是禁止的**——最终参数只能来自仓库内正式安装的
+`so101_head_search_calibration`（§8.1 要求新增正式入口）。而该入口的六个 phase 目前是**空壳**（HS-233）。**结论：只能走
+"实现正式校准程序"这条路**，没有捷径可走，也没有"标注来源即可"的替代。
+
+**依赖顺序（设计 §7.2）**：相机与安全几何 → 每个候选的感知 operating point 校准与冻结 → 冻结候选评测与模型选择 →
+获选感知参数原样纳入并验证 → 搜索与精调参数 → freshness/提交/停车参数 → 完整 bundle。
+
+**已经具备的部分**（本 campaign 已产出，可被正式程序直接引用而非重测）：
+- `horizontal_fov_rad`、`lock_valid_neck_rad`：Task 11 的生产相机几何 root（seal `7d963fdc…`）里已有实测值；
+- `min_confidence`、`tracking_iou` 的一部分：本 campaign 已在 head val 与 calibration episodes 上做过**先声明后测量**的
+  联合选点（HS-248/265），并已冻结进候选文档；
+- 其余 12 项（`coarse_step_rad`、`search_timeout_s`、`min_bbox_aspect`、`min_area_px2`、`center_deadband_px`、
+  `vertical_bounds_px`、`max_fine_corrections`、`max_fine_total_rad`、`max_age_s`、`max_skew_s`、`submit_lead_s`、
+  `stop_velocity_rad_s`、`stop_latency_s`）需要**闭环运行时**（有界扫描停点、精调、stop/revoke、frame freshness）才能测量——
+  那正是六个空壳 phase 要实现的东西。
+
+**实施顺序（下一轮可开工的最小第一步）**：先做**模型无关的几何与安全几何**（`horizontal_fov_rad`、`lock_valid_neck_rad`、
+以及 `coarse_step_rad` 的候选枚举）——它们不依赖闭环运行时，且设计明确说这些"可以在模型选择前测量"；随后接
+operating point 的正式联合搜索（把本 campaign 的临时脚本逻辑**搬进仓库内的正式入口**，因为设计禁止临时脚本产出最终参数）。
+
+**当前选型（用户裁决）**：C2a 为最终模型，两域同用，工作点 0.25/0.5；权重与数据已在 HF 更新并校验（HS-276/277）。
