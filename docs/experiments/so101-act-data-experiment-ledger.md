@@ -55180,3 +55180,27 @@ was not handed, the container-free route refusing a stub broker - stated here by
 
 Written into the handover as the second half of the acceptance: `verify-e3.sh` checks the shape, this runs the episode,
 and K1's forward half plus the E3 negatives are read against what comes back.
+
+
+## CP-2853 — The scope document has a producer, and it was never the gap it looked like
+
+Checking the one thing the wiring still needed that I had not looked for: the seam takes the audit's scope **document**
+while `Recorder.finish` takes the **path**, and the writer's check is closed
+(`_SCOPE_FIELDS = {kind, schema_version, mode, scene_id, seed, inputs_sha256}`, `_SCOPE_MODES`). That producer already
+exists:
+
+```
+collection_scope.py:23   SCOPE_KIND, SCOPE_SCHEMA_VERSION, SCOPE_FIELDS
+:29                      class CollectionMode(str, Enum)
+:41                      def require_scope(mode, *, head_ready, nonhead_ready, ...)
+:62                      def build_collection_scope(mode, *, scene_id, seed, inputs_sha256) -> dict
+```
+
+so the wiring calls `build_collection_scope(...)` with the frozen inputs' own `mode`, `scene_id`, `seed` and
+`inputs_sha256` rather than inventing anything. `require_scope` already takes `head_ready`/`nonhead_ready` - the non-Head
+gate this very task runs under - so the scope is also where "this is the non-Head episode" is expressible.
+
+Its callers are tests only (`test_act_first_episode_scope.py`, the recorder's v2-seal test): the same "written to its
+contract, tested, not yet called in production" shape as the rest of this stretch's findings - but a producer rather than a
+gap, and now named in the handover so the wiring reaches for it instead of hand-building a scope that the writer would
+refuse.
