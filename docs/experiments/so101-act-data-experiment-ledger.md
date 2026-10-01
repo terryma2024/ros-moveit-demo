@@ -55116,3 +55116,28 @@ sooner or later).
 
 That is the last decision the handover had left implicit. Everything else it already carried: what to hand over, what the
 wiring must respect, the extraction's inputs and the physical audit's thirteen keys, and the acceptance script.
+
+
+## CP-2850 — The acceptance script runs, and says what it cannot prove
+
+Written at CP-2844 and never executed until now, which is a gap worth admitting: an acceptance that has not been run is a
+claim rather than a check. It runs:
+
+```
+script rc=0
+== tempdir inside the scratch root ==
+== links of the software chain, each an end-to-end test on production classes ==
+chain rc=0
+  1. K1 forward - the producer being the production one end to end (its sampler contract is already proven).
+  2. E3        - one production episode under the frozen inputs after a FULL_RESTART, with an independent
+                 process's QC verdict and a real coordinator commit and readback.
+```
+
+First attempt failed for a trivial reason - `$TASK_ROOT` is set by `env.zsh`, which I sourced inside the `zsh -c` while
+using the variable outside it - and the fix is the one the running instructions already state: resolve the environment
+before the command that needs it. With `env.zsh` sourced in the outer shell, the script checks its scratch root, runs the
+six files carrying the chain's end-to-end tests under pytest-xdist, exits with the suite's own code, and prints the two
+things only a live run can prove.
+
+So the acceptance is now a check rather than a claim - and the honest summary of this stretch's last several rounds is
+that the verifying half is finished and exercised, and what remains is one wiring step and one live run.
