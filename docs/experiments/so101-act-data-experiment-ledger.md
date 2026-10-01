@@ -55602,3 +55602,24 @@ It now also runs `test_dynamic_execute`, `test_dual_cup_entrypoints`, `test_dyna
 `test_parallel_batch_coordinator` - every suite that touches the wiring, and the ones whose stubs my signature change
 broke earlier. Rerun: `acceptance rc=0`, `638 passed`, `chain rc=0`, against roughly 230 before. The script lives under the
 plan's `handover/` rather than in the repository, so this note is the durable record of what it now covers.
+
+
+## CP-2866 — The recording path is wired, tested in pieces, and never yet exercised end to end
+
+Said plainly because the first live run is the first time it will be. Every piece has a test and every suite around it is
+green: `open_point_episode` and its holder, `begin_episode`, `record_instant`, `end_episode`, `RecordingWorldObserver`,
+`physical_audit_from_execution`, the port's declaration, the specification field, the argv flag and the child's read of
+the scope file. But no test drives `run_dynamic_execute` from beginning to end with a recorder attached and asserts that an
+episode comes out - `test_dynamic_execute.py` is unit-level throughout, and the only end-to-end exercise is the live run.
+
+I considered building that harness and did not, and the reason matters more than the decision: it needs a fake `_runtime`
+covering every factory `_dynamic_execute_runtime` exposes, and a fake that does not match the real interfaces is exactly the
+mistake this stretch has made eight times - `Pose.values` where the real type nests it under `pose_world`, `root` and
+`_frozen` borrowed from another file, a guard threshold I invented without measuring. A harness written from assumptions
+would have gone green and told us nothing about the run, which is worse than knowing the path is unexercised. So it is
+recorded as unexercised instead.
+
+What that means for the run: the first failure, if there is one, is most likely to be at a seam rather than in a piece -
+the scope file the child reads, the port that carries its path, or the publication order between the hook and the sample.
+The triage table in `handover/RUN-IT.md` names those by their refusals, so the first run's output should say which one
+rather than requiring another hunt.
