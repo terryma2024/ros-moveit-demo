@@ -44029,3 +44029,42 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
 - derivation behind CP-2332; F5's regression fixed with its first step landed and the second specified; HEAD
 - d45d378c5; goal paused.
+
+## CP-2340 - Consolidated hand-off: what is closed, what remains, and the two rulings it waits on
+
+- THE EIGHTH VERDICT'S SEVEN FINDINGS, final state:
+-   * T3-F1 CLOSED and T3-F14 CLOSED by the verdict itself (CP-2307): the frame representation/order fixes and the
+-     isinstance-plus-EXECUTE gate scoped to ACT execution commits.
+-   * T3-F3 CLOSED by this stretch: the declared initial epoch exempt from the transition tie with its control
+-     re-based (CP-2311), the release flags stated rather than coerced or defaulted (CP-2312), and the release
+-     event emitted after the verification it belongs to (CP-2313).
+-   * T3-F12 CLOSED by this stretch: the records normalised at the boundary that reads them (CP-2317), the pose
+-     carrier stating the registered cup measurement (CP-2318), and the replacement observation travelling from
+-     boundary.search into the port's document (CP-2337).
+-   * T3-F13 three of four: the observer's verdict fences the store (CP-2320), the feedback collection requires one
+-     record per controller (CP-2324), and the delayed-callback fence is two-sided - the epoch identity that filled
+-     the caches (CP-2326) and the measured source stamp (CP-2325) - with the producer-side residual stated. The
+-     fourth item, scene production, waits on the owner's CP-2285 ruling.
+-   * T3-F11: the seal-versus-readback divergence is fixed (CP-2314). The endpoint derivation is written, proven
+-     correct twice and handed off at CP-2329/2331/2332 with four sites named, three values measured, and the
+-     control that reframed its finish line: the coverage control has no acquisitions, so a formal window cannot
+-     pass there at all, and which gate owns that control is the contract question CP-2332 records.
+-   * T3-F5: the epoch regression this ledger introduced is fixed (CP-2308). Its per-kind history rule and its
+-     runner-backed fixture share one fixture surgery, now half done: the port's evidence carries both ratified
+-     records (CP-2339), and the fixture itself is specified to the line in CP-2338 with every part in place
+-     (AlignedPort at file level CP-2302, the minter half and the request fence CP-2257).
+
+- THE TWO RULINGS STILL OUTSTANDING, both contract decisions and both the owner's:
+-   1. CP-2285: may the caller that owns the clock stamp the scene record's simulation instant when it stamps it
+-      at the same instant it derives the gate (the port's docstring), or must the read itself carry it (the
+-      segment's comment and the verdict's hedge)?
+-   2. CP-2332: does AUDIT_FORMAL_COVERAGE_INCOMPLETE or AUDIT_WINDOW_INVALID own the "coverage is incomplete"
+-      control, whose audits have no acquisitions and therefore cannot satisfy any formal window?
+
+- WHAT IS NOT TASK 3, and still the only path to the objective itself: the owner's nine input values (CP-2232,
+- with rgb_skew's pair implied by the code at CP-2234 and one candidate selection for resource_thresholds), plan
+- items 5-8 (production composition and installed CLI, freeze/build/integration gates, one real FULL_RESTART
+- closure, negative copies and delivery), and a ninth review once F5 and F11 close.
+
+- THE STATE OF THE TREE: HEAD 064128de5, every gate green, no half-applied edit anywhere, the 35-entry dirty
+- status untouched, and the ledger recording each attempt including the ones that failed.
