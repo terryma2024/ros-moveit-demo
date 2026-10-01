@@ -49577,3 +49577,25 @@ explicitly ("At index 6 diff: ('k2_apply', None) != ('release', None)").
 So K2 stands complete as measured: the protocol table passed its checkpoint after eight revisions, and its
 implementation landed as three schema additions (geometry provenance, task-level sequence, the three record kinds) plus
 the carriage that emits them. That is F13's fourth item.
+
+
+## CP-2619 — E2's two sampling sites are pinned in the runner's flow
+
+`run(request)` (295) has the landmarks the design names:
+
+- **`beginning = self.port.begin(request)` at 308** - the run's reset/begin boundary, before the phase loop, so nothing
+  has dispatched the arm or the gripper yet: that is the design's "after the real reset and before the arm-gripper
+  dispatch";
+- **`for phase in self.PHASES:` from 335**, with `PHASES` beginning SEARCH, APPROACH, **CLOSE** - i.e. the gripper
+  dispatch is the CLOSE phase, so any point before the loop satisfies the "pre-dispatch" half;
+- **`self._stop("PHASE_PREFIX_COMPLETE", request)` at 383** and
+  **`self._stop("FULL_COMPLETE_INCOMPLETE_EVIDENCE", request)` at 391** - the run's ending paths, which is the design's
+  "after normal completion or a controller stop".
+
+So E2's wiring has two exact places to go, and both are already exercised by the release-boundary tests through the
+fake port: sample the initial endpoint after `begin` returns, and the final one on the way out through `_stop` or the
+loop's normal end. Neither needs a new port method - the evidence the samples need is the same scope-checked dict the
+runner already validates - which keeps the wiring on the same footing as K2's carriage.
+
+The runner also gains nothing it does not already have: `_event` is available, the audit is in hand, and the design's
+"pre-arm-gripper-dispatch" wording is satisfied by the position rather than by a new flag.
