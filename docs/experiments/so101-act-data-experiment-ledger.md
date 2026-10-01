@@ -45915,3 +45915,26 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   manifest's `runtime_policy` binding.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; run's guards and
   identity are verified and its three composition calls are wired. HEAD c9308bee5; goal active.
+
+
+## CP-2432 — Correction: the hard stops belong in the amendment's runtime YAML, not the batch config
+
+- Both runtime contracts are closed dataclasses - `ParallelRuntimeConfig` (v1, contracts.py:378) declares
+  `max_points_per_worker_upper_bound` among its fields and `ParallelRuntimeConfigV2` (1025) does not, and **neither**
+  declares a `hard_stops` section. So `parallel_batch_v3.yaml` was the wrong vehicle for the two stops CP-2411 added:
+  its schema is closed by design, and the parser's refusal was correct rather than a seam to widen.
+- The right document was already in the tree: the design's section 5.1 YAML - the one this task created as
+  `config/act/endpoint_pose_development_runtime_v1.yaml` - **explicitly declares** `hard_stops` with `rtf_min: 0.90`
+  and `disk_free_min_bytes: 53687091200`, and it is already bound into the frozen set as the `runtime_policy` entry
+  and into `inputs_sha256`. So the fix is not a schema version bump: it is to take the two stops from that document -
+  which `_inspect_resource_thresholds` should read beside the start guard and the recorder watermarks - and to revert
+  the addition to the batch configuration.
+- Order for the next pass: revert `hard_stops` from `parallel_batch_v3.yaml` (keeping the collection binding's digest
+  in step, which CP-2413 showed how to check), point `_inspect_resource_thresholds` at the amendment runtime document
+  for the two stops, re-run `inspect` (expecting zero blockers again), then re-run the frozen `prepare` and the `run`
+  whose composition wiring is already in the working tree.
+- Honest note on the tree: the three-call composition increment is written and rebuilds, but it is **not committed**
+  yet - this round's reading corrected its premise before it was recorded as a change. It will be committed together
+  with the corrected resource route.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 0e9017c8f;
+  goal active.
