@@ -642,8 +642,10 @@ def _window_matches_observed(window: dict, row_times, acquisitions, physics_time
     # T3-F11: the endpoints are compared with the physics history they claim to summarise — the command is
     # issued before the physics moves and the end must cover the last row
     if physics_times:
-        if (window["first_command_s"] > min(physics_times) + _TOLERANCE_S
-                or window["physics_end_s"] < max(physics_times) - _TOLERANCE_S):
+        # T3-F11 (eighth verdict): the endpoints are DERIVED from the physics history rather than merely enclosing
+        # it - a window claiming 1.2 while every row ends at 1.1 was accepted by an inequality and is not now
+        if (abs(window["first_command_s"] - min(physics_times)) > _TOLERANCE_S
+                or abs(window["physics_end_s"] - max(physics_times)) > _TOLERANCE_S):
             return False
     schedule = window["source_schedule"]
     if set(window["streams_required"]) - set(schedule):

@@ -881,7 +881,9 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
             complete.append_acquisition(minter.mint(
                 camera, session_id="s", reset_epoch=1, stamp_s=stamp,
                 received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO))
-    assert complete.seal(_window(outcome="no_label", label_cutoff_s=None)).is_file()
+    # this sub-case's rows all sit at 1.1, so its window states that rather than borrowing the shared literal
+    assert complete.seal(_window(outcome="no_label", label_cutoff_s=None,
+                                 physics_end_s=1.1)).is_file()
     # the diagnostic mode keeps its previous behaviour, which is what the plan separates
     diagnostic = EpisodeAuditWriter(tmp_path / "diagnostic", scope(), identity(),
                                     {"inputs_sha256": "a" * 64})
