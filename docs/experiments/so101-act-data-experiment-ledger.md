@@ -55204,3 +55204,40 @@ Its callers are tests only (`test_act_first_episode_scope.py`, the recorder's v2
 contract, tested, not yet called in production" shape as the rest of this stretch's findings - but a producer rather than a
 gap, and now named in the handover so the wiring reaches for it instead of hand-building a scope that the writer would
 refuse.
+
+
+## CP-2854 — The run in progress is on the container-free route, and that is a choice my own file declares
+
+The coordinator is running the live episode now (`nonhead-first-episode-live.k3Tq8wRs`, `launch5.log` 682 MB and still
+growing at 14:10), and its earlier attempt failed exactly where CP-2543 predicted:
+
+```
+importlib.metadata.PackageNotFoundError: No package metadata was found for torch
+...
+so101_demo.runtime.parallel_processes.SupervisorError: OWNED_PROCESS_ABSENT
+```
+
+with `run/coordinator/aggregate_results.json` showing `points.task_start.status = "UNRUN"`, `execution_complete: false`.
+The cause is in my own file, declared openly:
+
+```
+act_first_episode.py:101   "The default verifier ... demands detector weights, a grounded-SAM root and a specific broker image"
+:136      "does_not_claim": ["detector weights", "grounded-SAM root", "broker image"]
+:141      def _broker_command(composition):   # "the default route runs them inside the image"
+:264      f"broker_image=ABSENT (headless MuJoCo-only stack; no broker container exists to name)"
+:287      catalog_sha256=..., broker_image="ABSENT",
+:312-313  ProductionBatchComposition(spec, broker_command_builder=_broker_command, container_brokers=False)
+```
+
+So the container-free route exists **because the amendment excluded containers** (CP-2472), and it says so in the provenance
+it writes. The coordinator's decision at CP-2760 - **reuse the existing broker image** - supersedes that: with the image, the
+broker runs where torch and the perception stack already are (`so101-parallel-perception:...`, `010dca70ce3c`), and the
+torch boundary disappears.
+
+The switch is therefore a real edit to my file rather than a workaround: pass `container_brokers=True` (the default) and
+let the composition build the docker command from the spec's own image and weights, or keep the explicit builder and have
+it produce the container command. What it cannot do is stay on the route that declares `broker_image="ABSENT"` while using
+a host that has no torch - which is precisely what the run in progress is doing.
+
+Recorded before editing because the change touches the spec's provenance fields as well as the composition call, and it is
+the coordinator's decision that authorises it.
