@@ -50114,3 +50114,36 @@ the worktree and no behaviour is mocked, because the check reads only that one d
 With that, seven of the plan's eight negatives are covered or asserted, and the remaining one - "safety stop but the
 endpoints match" - is a question about what the QC may claim rather than about what it computes, which the design
 settles in its own words: the seal's status is a claim, and the independent verdict is what a fresh process recomputes.
+
+
+## CP-2645 — E2's checklist, and the correct reading of "safety stop but the endpoints match"
+
+E2's eight negatives stand as follows, each with the code that carries it:
+
+1. **missing endpoint** - three named absences (`ENDPOINT_PHYSICS_STREAM_ABSENT`, `ENDPOINT_POSES_ABSENT`,
+   `ENDPOINT_POSE_NOT_DERIVABLE`);
+2. **wrong cup/frame** - partly: a source that cannot answer is named rather than answered wrongly, and the body/scene
+   the pose comes from is the frozen one;
+3. **old reset** - refused by the runner's scope check (`PHASE_EVIDENCE_INVALID`), committed as 884cd8258;
+4. **future/expired** - refused as the deadline's own code (`TASK8_DEADLINE_EXPIRED`), committed as fa927e2b3;
+5. **best frame before termination** - the final endpoint is the **last** pose, not a flattering one, and the verdict
+   says FAIL rather than accepting the matching earlier frame, committed as 58dbd7f19;
+6. **target rewritten afterwards** - the verdict follows the **frozen inputs**, so rewriting the rows cannot move it,
+   committed as d987f7b62;
+7. **safety stop with matching endpoints** - see below;
+8. **diagnostic turned formal** - refused with rc 2 and both modes named, committed as 91a665d15.
+
+The seventh deserves its own statement rather than a test, because it is a question about **what may be claimed** rather
+than about what is computed. If a run stops for safety and its endpoint poses happen to match the frozen targets, then
+the endpoint QC is **correct** to pass them - the endpoints did match - and it would be **wrong** to report that as "the
+episode succeeded". That is precisely why the independent document carries two things: the seal's own claim
+(`status`/`qc_passed`, which the recorder derives from the run's outcome) **and** the fresh process's endpoint verdict
+beside it. The design's three states - files only, legal seal and QC, committed - exist so that a reader can tell those
+apart, and the amendment's rule that a report "may say endpoint poses passed and may not say grasp quality verified"
+applies with equal force to saying "the run succeeded".
+
+E2's safety half is the runner's codes, all preserved verbatim (CP-2639): identity, deadline, full-restart, mode,
+`HUMAN_OR_RECOVERY_INTERVENTION`, `HOLDING_UNKNOWN`, `BILATERAL_CONTACT_MISSING`, `SET_DOWN_EVIDENCE_INVALID`,
+`RELEASE_UNSUPPORTED`, `DETACH_NOT_CONFIRMED`. Its quality half is the measurement contract, which the first-episode
+chain does not import (CP-2641/2642, committed as ef6b13a16). With that, E2's checklist is complete as a set of measured
+properties and stated readings.
