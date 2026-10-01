@@ -49500,3 +49500,28 @@ question.
 
 This is the same finding as the geometry and the ordering: the repository already has more of the mechanism than the
 review's list implied, and the work is the difference.
+
+
+## CP-2616 — The three boundaries are in `_set_down` and `_release_preflight`
+
+`_set_down(request, reset_epoch, release_epoch, after_step)` calls `self.port.set_down(request)` and validates a fixed
+key set, the scope, a **strictly advancing** `physics_step`, `holding_state == "HOLDING"` and eleven booleans that
+together say the cup is supported, the controller stopped, planning attached and the sensors alive. It returns the new
+step.
+
+`_release_preflight(request, reset_epoch, release_epoch, after_step)` calls `self.port.release_preflight(request)`,
+validates its own key set, scope and step advance, requires `HOLDING` with `cup_supported`, `fresh` and
+`planning_attached` - and then performs the two MoveIt interactions that make it the interesting boundary:
+`detach_moveit(request)` must return **True** and `planning_attached(request)` must then return **False**.
+
+So the protocol's A/Q/R map onto real calls that already exist:
+
+- **A (apply)** - the planning-scene interaction, i.e. the `detach_moveit` call that changes what MoveIt holds;
+- **Q (query)** - `planning_attached(request)`, which is literally a query about the scene answered by the consumer;
+- **R (receipt)** - the evidence dict the port returns, whose `physics_step` the runner already validates as advancing.
+
+That is where K2's three events belong, and the payload keys the schema now accepts are exactly the facts these calls
+produce: an apply identity and instant and acceptance for A, a query identity, instant and byte counts for Q, a receipt
+identity, instant and clock source with its uncertainty for R. The remaining work is writing those three `_event` calls
+and the small amount of plumbing that gives each one its identity - a bounded change to one file, on a path that the
+tests already exercise through `AlignedPort`.
