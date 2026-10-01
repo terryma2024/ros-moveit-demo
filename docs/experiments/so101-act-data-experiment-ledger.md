@@ -52697,3 +52697,30 @@ value to guess.
 What this round establishes is narrow and worth keeping: the adapter is right, the reference key is right, the values the
 binding needs are right, and the row count the tail sees (one) is a fact about how many rows were released before
 `finish` rather than a mistake in the adapter. The next read is the failure's own text.
+
+
+## CP-2754 — The answer: the fifth argument is the sequence of the reference *at* the row's instant plus one step
+
+```
+act/continuous_capture.py:280: ValueError: AUDIT_BINDING_REFERENCE_INVALID
+```
+
+Line 280 is `_reject`'s re-raise of a latched failure, so the origin is the `bind_row` call my adapter makes - and the
+value it printed explains the refusal:
+
+```
+BIND row sim_time_s: 1.2 reference_time_s: 1.3 -> target: 1.3 seq: 1
+```
+
+The `reference_time_s: 1.3` there is the **row audit dictionary's** field (the reference the capture associated with the
+row), not the audit's reference **record**. The record under sequence 1 is the one for instant 1.1 - the map measured in
+CP-2751 was `{1: 1.1, 2: 1.2, 3: 1.3, 4: 1.4}` - and the check requires the named record's `reference_time_s` to equal
+`sim_time_s + 0.1`, which for this row is 1.3. So the sequence should have been **3**, not `index + 1` = 1.
+
+So the adapter must resolve the sequence **by the reference's own time**, not by the row's position: find the reference
+record whose `reference_time_s == round(sim_time_s + 0.1, 6)` and pass its sequence. That is the last value, and it is
+the one thing about this binding I had not derived from data - twice guessing at it (a float, then an ordinal) instead of
+looking up what the audit actually keys by.
+
+The uncommitted work now contains a genuine production fix (the acquisitions appended from the frames), the adapters and
+alignments, and this correction - and the chain is one lookup away from proving E2's corrections 2 and 3 end to end.
