@@ -54121,3 +54121,27 @@ pre-existing failures, while `test_act_task8.py` is, so the four negatives belon
 
 With that, correction 5's work is located rather than guessed: one fixture to reuse, ten negatives to write across the
 three groups, and the three `test_act_episode_qc.py` corrections that are its other half.
+
+
+## CP-2809 — The fixture's shape: a thin wrapper over a base that builds a passing document
+
+```python
+    def evidence(self, phase, request):
+        return self._aligned(super().evidence(phase, request))
+    def run_phase(self, phase, request):
+        return self._aligned(super().run_phase(phase, request))
+    def release_preflight(self, request):
+        return self._aligned(super().release_preflight(request))
+```
+
+So `test_act_release_boundary.py`'s fixture is a **wrapper**: the base class builds the documents and this subclass aligns
+the session and attempt identities onto them (`_aligned`). The ten predicate negatives can be written the same way - take
+the document for the phase, flip exactly one field, and assert the specific code - without inventing a fixture, because the
+base already produces a passing document for each phase.
+
+The next read is the base class's own `evidence(phase, request)`: where it lives and which fields it fills, since that
+decides the exact spelling of each negative (the field names are visible at CP-2806's three groups, but the base is what
+says which of them a passing document already satisfies - a negative can only flip a field that the fixture sets to the
+satisfying value).
+
+With that, correction 5 is one fixture, ten small negatives and three test corrections, and every piece of it is located.
