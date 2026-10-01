@@ -49353,3 +49353,21 @@ write: the file is untouched and the suites still report the unmodified **80 pas
 With these anchors the five-step edit is fully pinned: add the key to the four sets, extend each of **three**
 subtractions (826 plain, 873 inside the union, 892 plain), set `task_sequence` after each of the three `_next` calls
 (857, 884, 904), and handle the acquisition producer at 756 with `_next_task()`. No string in the edit is now guessed.
+
+
+## CP-2609 — K2's ordering addition landed complete on the second attempt
+
+Committed as **c1a08882d**, width gate green at **242 passed** and the audit/QC suites unchanged at 80. The second
+attempt differed from the first in exactly the way CP-2606 diagnosed: the acquisition producer was moved with the other
+three, because it builds its record by reading `_ACQUISITION_FIELDS` off the frame object and so cannot be left to
+supply a writer-assigned key.
+
+What is in the tree now: a single `_task_sequence` counter, bumped by `_next_task()` wherever a per-stream number is
+handed out - the three source appends and the acquisitions - with each record carrying the value beside its per-stream
+`sequence`, which stays untouched because other consumers order within streams and the tests assert it. The property
+this buys is the one the passed protocol asks for: any two records can be ordered from the records alone, without
+trusting a clock, a stamp, or the order files happened to be written.
+
+So K2's implementation now has two of its three pieces in: the geometry provenance (67e12c918) and the ordering
+sequence (c1a08882d). The third - the new record kinds, which the passed table defines key by key - is the only
+genuinely new document left, and `verify_audit_manifest` is where its validation belongs.
