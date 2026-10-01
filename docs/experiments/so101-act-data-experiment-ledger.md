@@ -53157,3 +53157,32 @@ The next read is decisive and small: how `result_store` constructs the path it h
 composes `episode_root / "audit-manifest.json"` by convention or takes a base directory from somewhere - and whether
 `episode_audit` has a named accessor for "the manifest of a writer rooted here". Whichever the repository already treats
 as canonical is the one the test should use, and the other is the one to correct.
+
+
+## CP-2772 — The writer's location is canonical, so the verifier's resolution is the side to correct
+
+```python
+        target = self.root / "audit" / "audit-manifest.json"      episode_audit.py:979
+```
+
+That is the audit writer's own `seal`, and it settles CP-2771's question: the repository's canonical location for an
+episode's raw audit is **`<writer root>/audit/audit-manifest.json`**, with the writer's root being the episode's own
+directory. The verifier's convention - `<workspace>/sealed/episode/audit-manifest.json`, one level higher - is therefore
+the off-by-one, and it is the side to correct: `result_store`'s resolution should compose the path through `audit/`.
+
+That also means the directory-ownership tangle of CP-2769/CP-2770 dissolves once the resolution is right:
+
+- the **recorder** creates and owns the episode root (the store only names it, and the recorder is the component that
+  insists on creating it);
+- the **audit writer** roots at that same episode directory, creating `<episode root>/audit/` for its streams and its
+  manifest - which is what it does anyway;
+- the **verifier** resolves the manifest at `<episode root>/audit/audit-manifest.json`, one level below where it was
+  looking;
+- and the recorder's `finish` reads `audit_manifest.parent / "episode.json"` = `<episode root>/audit/episode.json`, which
+  is where the writer puts it.
+
+So one off-by-one was making three rules look mutually unsatisfiable, and the fix is in the verifier's path composition -
+not in how many components may create a directory.
+
+I have not applied it in this round: the read that shows exactly where `result_store` composes that path is the next step,
+and it is a `grep` for how it builds the base it hands to `verify_episode_seal`.
