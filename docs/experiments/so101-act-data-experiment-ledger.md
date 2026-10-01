@@ -43761,3 +43761,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Order for the next pass: append the gripper record at those five sites first (the suite stays green, since the
 - rule is not yet re-applied), then re-apply the transcribed both-kinds rule, then run the four suites.
 - F1 and F14 closed; F3 closed; F13 one of four with this item staged to five sites; HEAD bcd3382e6; goal paused.
+
+## CP-2324 - F13's both-kinds rule landed, fixtures first
+
+- The feedback collection check now requires exactly one record per controller: sorted(entry controller) must equal
+- sorted(_FEEDBACK_CONTROLLERS), which refuses an arm-only collection and one that repeats a kind - the two shapes
+- the verdict named. The three arm-only literals gained their gripper records in the previous commit, so this rule
+- landed on green fixtures in the same order that worked for F1's names rule and F13's dimension rule.
+- Four attempts on the rule itself, all reverted, and each failure was the edit rather than the semantics: a missed
+- anchor, an insertion outside the if-expression, a split any(...) call, and finally the transcription CP-2321
+- recorded - split the line closing both any() and if(), insert the condition between them. GREEN 204 passed.
+- F13's remainder: the delayed-callback fence (the verdict calls the retained stamp bookkeeping, not a fence) and
+- scene production, which waits on the owner's CP-2285 ruling.
+- F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
+- F12 two of three; F13 two of four; HEAD 47ca6aff1; goal paused.
