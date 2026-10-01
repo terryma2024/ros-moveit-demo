@@ -51496,3 +51496,24 @@ That closes the reading phase for this test: outcome schema (CP-2693), passing-e
 inventory (CP-2699), writer signature (CP-2700), and now the document shapes. The next round writes the test rather
 than reading another shape - and if it fails, it will fail on something the test can be told about, not on a guess about
 a signature.
+
+
+## CP-2702 — The sealing test's two obstacles: who owns the root
+
+Two attempts, two refusals, and both are about the same question - which class owns the directory:
+
+- **`FileNotFoundError`** when the writer was given `<root>/audit`: the recorder reads `episode.json` and `source.json`
+  from `audit_manifest.parent`, so the manifest has to sit where those files are, not one level below;
+- **`FileExistsError`** at my construction line when both were given the same fresh `root`, in either order - so the
+  recorder and the writer disagree about who creates it.
+
+That second one is the real obstacle and it is a rule I have not read: which of the two creates the root, which refuses
+a pre-existing one, and whether the writer is meant to be given the recorder's root or its parent. My test assumed the
+answer twice and was wrong twice, so the test is reverted rather than adjusted again, and the worktree is back to the
+user's 35 entries.
+
+The reading that settles it is small and specific: the recorder's constructor's first lines (what it creates and what it
+refuses) and the audit writer's (the same). Both are single functions, and with them the test becomes mechanical - which
+is the point at which it is worth writing, not before. This is the fourth shape in this test that had to be read rather
+than assumed, and the pattern is consistent enough now to state plainly: for this repository, the constructor is part of
+the interface.
