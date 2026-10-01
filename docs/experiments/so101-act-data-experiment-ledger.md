@@ -44908,3 +44908,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   the input/CLI suite with its negatives.
 - F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
   table is written. HEAD 6e881d42f; goal active.
+
+
+## CP-2382 — E1's control file landed: thirteen controls, JUnit and rc recorded
+
+- `test/test_act_endpoint_pose_acceptance.py` holds the plan's verbatim case plus: the axis boundary at 0.15 rad
+  (8 degrees passes, 20 fails), yaw about the cup's own axis ignored, the XY-versus-Z separation (a Z-only shift
+  fails through the Z field while XY stays true), four bad poses (boolean coordinate, quaternion norm 0.5, six
+  values, NaN) and five bad policies (wrong kind, schema_version 2, rule_version v2, an extra threshold key, a
+  boolean threshold) - every refusal by name.
+- Run with the plan's exact command shape and `--junitxml` in a fresh scratch under the evidence root: **13 passed**,
+  rc=0, pointer `logs/task3-e1-endpoint-pose.run` with its rc file beside it.
+- E1's remaining plan items: the policy role in both real input registries; `load_development_runtime` and the
+  `user_empirical_default` approval with a real effective-config artifact and hash; `prepare --runtime-policy`; the
+  freezer's keyword-only `runtime_policy`; `--mode`/`--endpoint-policy` with the old-call behaviour preserved; and
+  the input/CLI suite with its negatives (NaN/Inf/bool/unknown field, reversed watermarks, wrong config hash,
+  in-episode hot change refused, formal mode still refused without Head/activation).
+- F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
+  table is written. HEAD e4ed7e93c; goal active.
