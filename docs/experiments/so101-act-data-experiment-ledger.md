@@ -55462,3 +55462,29 @@ the classes and the assembly exist, and the drive that would call them does not.
 **Next**: read `RosMujocoCupSceneObserver` and `RosDynamicMujocoExecution` for what they accept and what their receipts
 carry, then build `PointEpisode` inside `run_dynamic_execute` - using the same `_runtime` seam the module already documents
 as its test seam, so the regression test can inject a fake runtime and fail before the real one exists.
+
+
+## CP-2862 — The remaining implementation, as steps that each start with a failing test
+
+`run_dynamic_execute` now accepts `episode_recorder` (`75f1e351e`), done RED-first: the test asserting the parameter was
+written and run before the parameter was, and failed. The rest of the recording follows the same shape, one step at a
+time, each with its own failing test first:
+
+1. **Start.** At the top of `run_dynamic_execute`, once `options.session_id` and the reset epoch are known, call
+   `episode_recorder.start(identity, episode_root, scope, ...)`. The RED test injects a recording stub through the
+   `episode_recorder` parameter and asserts `start` was called with the session id and the epoch the options carry.
+2. **Per instant.** Where the state machine advances - the shared state machine is
+   `application/dynamic_execute.build_dynamic_actions` - observe through the port the function already builds
+   (`truth_observer = runtime.cup_scene_observer(...)`, `dynamic_runtime.py:495`, whose type is
+   `ports/cup_scene_observation.CupSceneObservationPort`) and compose the row with
+   `physical_audit_from_observation` (`7cd9fdeb2`), plus the joint reader, the cup-pose sample and the phase. The RED test
+   drives one instant and asserts one row, using a fake observation rather than a robot.
+3. **Finish.** Before returning, `episode_recorder.finish(end_s, window={...})` with the run's end boundary - and the
+   window is required or the capture does not seal (CP-2831's lesson, learned the hard way on the harness path).
+4. **The parent stops recording.** The three call sites wired into `parallel_worker_runtime` should stop opening an
+   episode, so the same episode is not written from both sides of the process boundary; the code stays, the call does not.
+5. **Then the run.** `kill 3111252`, re-run, and the acceptance scripts have an episode to read.
+
+**State at this checkpoint**: the launch is still up (3h32m) and no new run has been started, so the endpoint is still
+gated on the coordinator's two actions rather than on this side's code. The two scripts that will read the episode
+(`handover/verify-e3.sh`, and the frozen-input `run`) are unchanged and were last green at CP-2850.
