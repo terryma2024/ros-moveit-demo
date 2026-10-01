@@ -44087,3 +44087,126 @@ Step 1 的独占所有权门**今天可以跑**（本轮已跑，rc=0）；Step 
 `$EV/head-qualification-ownership-20261001T132741Z.provenance.txt`（第一次失败尝试的 provenance；该次未创建根）；工作树 `scratch/hs315/`（`run-tests.sh`、`run-ownership-gate.sh`、`pyshim/`、`logs/`（含 `qualify-help.txt`、`serve-teleop-help.txt`、`run-help.txt`、`red.txt`、`green.txt`、`regression.txt`、`gate-run-*.{out,err}`、`ps/gpu/tmux-{before,after}.txt`）、`tmp-red/`、`tmp-green/`、`tmp-regression/`、`tmp-real-20261001T132757Z/`）；
 `$EV/scratch/pytest-xdist8-hs315-demo-suite-final.886da551`、`$EV/scratch/pytest-xdist8-hs315-demo-suite.{eaaf779c,9db1f3d7}`。以上**均为删除候选，未删除**；HS-300..314 的产物只读引用，未改动。
 工作树 `git status --porcelain`：` M src/so101_demo_py/src/cli/head_search_calibration.py`、` M src/so101_demo_py/test/test_head_search_calibration_cli.py`、`?? src/so101_demo_py/src/act/head_search_ownership.py`、`?? src/so101_demo_py/test/test_act_head_search_ownership.py`、`?? runs/`（既有未跟踪）、` M docs/experiments/so101-act-data-experiment-ledger.md`（本条目）。功能改动提交 **`ec8cc3ded`**（message `feat: task 14 exclusive-ownership gate and qualification gap audit (RED->GREEN)`，4 文件 +1307/−2）；本条目为紧随其后的 docs 提交。
+
+## HS-316 — Task 14 Step 3「40 个串行场景」有安装了的生产者：40 项逐个闭环、逐场景 journal 与诚实聚合（38 passed / 2 failed / 0 refused），零错误锁定、40/40 帧节拍连续、40/40 停止证明成立
+
+**新增模块与安装版入口（本轮的「frozen install 之前不存在、必须新增」之处）**：`src/so101_demo_py/src/act/head_search_scenarios.py`
+（`so101_demo.act.head_search_scenarios`）+ `so101_head_search_calibration measure-scenarios`。这是**附加源码改动**：冻结 root
+`$EV/head-toolchain-20261001T130437Z`（commit `956b5b74b`、config `dfa0af9b…`、17 值 canonical `3c787fd7…`、权重 `2afd5506…`）
+**不含**该模块与入口，因此真实运行把 worktree 源码树经既有 `so101_demo` shim 放在 `PYTHONPATH` 最前，其余包、config、asset 与
+console script 本体全部来自冻结 root（`ros2 pkg prefix so101_demo_py` 断言落在冻结 root，provenance 记录
+`installed_hs316_module=ABSENT`、`installed_hs316_entry=0`）。冻结 root 下**未写入任何文件**。
+
+### (a) 本轮关闭的清点项：gap audit 第 6 行
+
+`reviews/task14-gap-audit.md` 第 6 行从 **MISSING** 改为 **RUNNABLE**，并新增 §7。第 4 行的 `scenarios` phase 有生产者，但
+phase runner 仍是 HS-233 stub（`run_head_search` 只写 phase 名与 receipt，不执行任何东西），第 2/5/7/8/10–13 行未动。
+
+### (b) API 与拒绝码
+
+- 纯函数：`qualification_scenarios`（读**受跟踪**的 `head-search-scenario-partitions-v1.json` 的 `qualification` 列表，声明序返回
+  seed/scene_group_id/condition_class/anchor）、`expected_terminals`（逐类期望 terminal，直接取自 plan Task 14 Step 3 原句：单杯类
+  → `TARGET_LOCKED`、`two_cups` → `TARGET_AMBIGUOUS`、`no_cup` → `TARGET_NOT_FOUND`）、`requires_interruption`、
+  `declared_cup_count`、`check_frame_cadence`、`settle_proof`、`stop_proof`、`hold_stop_samples`。
+- 闭环：`run_scenario(*, controller_config, plant, detector, coarse_corridor_rad, fine_corridor_rad, scenario,
+  stop_velocity_rad_s, interruption=…, interruption_frame=…, max_frames=…, evidence=…, clock=…)` → 逐场景 journal entry；
+  生产版控制器 `HeadSearchController` 自己的 bounded plan、freshness/skew 门、三帧锁定规则；目标越界一律拒绝、**从不 clamp**。
+- 生产者：`write_head_search_scenarios(...)` → `scenarios.json` + `scenario-journal.jsonl`（40 行）+ `scenarios/<seed>.json`（40 份逐场景证据）
+  + `measurement-receipt.json` + 门自己写的 `exclusive-ownership.json`。
+- **整轮拒绝**（在任何场景开始前）：`CAL_SCENARIO_OWNERSHIP_REFUSED`（独占所有权门拒绝）、`CAL_SCENARIO_RUNTIME_UNVERIFIED`
+  （runtime of record 身份不成立：`weight_sha256_declared` ≠ 声明权重、`allow_cpu_fallback` ≠ false、`source-commit`/config/values 摘要不符）、
+  `CAL_SCENARIO_RUN_ROOT_EXISTS`、`CAL_SCENARIO_SPLIT_LEAK`（非 qualification split 的 seed）。
+- **逐场景诚实拒绝/判定**：`PASSED` / `FAILED` / `REFUSED`，码为 `CAL_SCENARIO_CUP_NOT_FOUND`、`…_TARGET_AMBIGUOUS`、
+  `…_NOT_CENTERED`、`…_BUDGET_EXHAUSTED`、`…_UNEXPECTED_LOCK`（该锁的类不得锁 → 错误锁定）、`…_COVERAGE_INCOMPLETE`
+  （未完整覆盖就报 negative）、`…_NO_VERDICT`、`…_DETECTOR_FAILED`、`…_OUT_OF_CORRIDOR`、`…_FRAME_CADENCE`、`…_STOP_UNPROVEN`、
+  `…_INTERRUPTION_UNPROVEN`。逐场景失败/拒绝**记录而非中断整轮**：run 必须走完 40 项。
+
+### (c) 两个必须记录的方法学判断（推断，照录）
+
+1. **`default` anchor 的起点在 sweep 走廊之外**：seal 的 `in_frame_matrix.default.neck_start_rad = 0.1 rad`，
+   而 `required_search_domain_rad = [-0.17559216195018026, 0.08047101126546086]`。HS-302 的走廊（required domain ∩
+   `lock_valid_neck_rad`）若也用来约束 anchor 起点，就会拒绝 plan 自己的 `default` restart anchor 以及 40 项中的 14 项。
+   本轮把 **anchor 起点**约束在 seal 的 `lock_valid_neck_rad`（即「锁有效的区间」，与 fine-correction 生产者给 fine 路径用的同一区间），
+   **仅对 sweep 的 plan 停点**保留 HS-302 的交集。三个 anchor 的 `bounded_search_stops` 目标相同
+   （`[0.080471, -0.175592]`，`coverage_complete=True`）。RED 实验：`2 failed`（先把 anchor 起点按交集约束）→ GREEN。
+2. **两个停止阈值、两种含义**：控制器自身 settle 规则用 `motion.settle_velocity_rad_s = 0.05`；晋级的
+   `values.stop_velocity_rad_s = 0.04136050464213824` 是 phase 7 的 *stop criterion* 常量，由本 flight **不启动**的 ROS 反馈路径
+   （`RosControllerPort.stopped()`）消费。本轮因此**两者都记录**：每个被命令停点的 `settle_proof`（控制器自己的 settle 规则），
+   以及在终点停位上做的 **held `stop_proof`**——把脖子保持在停位，每次 hold 取一个原始反馈样本，第三个**连续**合格样本
+   （|v| ≤ 晋级 `stop_velocity_rad_s`）完成证明，不合格样本清零重计。journal 明确写出这些样本来自 MuJoCo plant 的速度回读、
+   本 flight `ros_nodes_started: false`，**不是** phase 7 的 ROS 反馈路径。第一次变体
+   `qualification-scenarios-20261001T135203Z` 用 settle 瞬时速度对晋级阈值比较，35/40 被 `CAL_SCENARIO_STOP_UNPROVEN` 拒绝
+   （保留为被取代证据，未删）；两位点证明设计取代之。
+
+### (d) 唯一真实运行
+
+命令（安装版 console script，rc=0，脚本 wall 25 s，document `elapsed_s=23.869720697402954`）：
+
+```
+$FINAL_RUN/install/so101_demo_py/lib/so101_demo_py/so101_head_search_calibration measure-scenarios \
+  --scene $FINAL_RUN/install/.../assets/mujoco/act/head_search_scene.xml \
+  --geometry-seal $EV/head-camera-probe11-20260930T101722Z/head-camera-geometry.json \
+  --production-search-config $FINAL_RUN/install/.../config/mujoco/act/head_search_v2.json \
+  --controller-config $FINAL_RUN/install/.../config/mujoco/ros2_controllers.yaml \
+  --frozen-candidate $CAMPAIGN/reselected-c2a/frozen-c.json \
+  --weights $CAMPAIGN/candidate-c2a/head-task-mixed-taskweighted/weights/best.pt \
+  --dataset-config $FINAL_RUN/install/.../config/perception/head_camera_yolo_seg.yaml \
+  --scenario-partitions $FINAL_RUN/install/.../config/act/head-search-scenario-partitions-v1.json \
+  --output-dir $CAMPAIGN/qualification-scenarios-20261001T135407Z --evidence-root $EV --final-run $FINAL_RUN \
+  --device cuda --generator-commit 956b5b74b… --max-frames 16 \
+  --expected-source-commit 956b5b74b… --expected-production-config-sha256 dfa0af9b… \
+  --expected-values-sha256 3c787fd7… --expected-weights-sha256 2afd5506… \
+  --expected-package-prefix $FINAL_RUN/install/so101_demo_py
+```
+
+`$CAMPAIGN` = `$EV/head-yolo-models-20260930T120608Z`；`$EV` = `/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m`。
+
+| 项 | 值 |
+| --- | --- |
+| run root | `$CAMPAIGN/qualification-scenarios-20261001T135407Z/`（`scenarios.json` sha256 `a74d2019…`、`scenario-journal.jsonl` `613d9860…`（40 行）、`measurement-receipt.json` `72906525…`、`exclusive-ownership.json` `c89a7db6…`、`scenarios/` 40 份；document `sha256` `ca2caae5…`） |
+| 场景数 | **40**（十个条件类 × 四个未见 seed；seeds `900000…900039`） |
+| anchor 实拆分 | `default` 14 / `left` 13 / `forward` 13（与分区文档一致，**不是** 40/3） |
+| 结果 | **passed 38 / failed 2 / refused 0** |
+| terminal 分布 | `TARGET_LOCKED` 30、`TARGET_AMBIGUOUS` 5、`TARGET_NOT_FOUND` 5 |
+| 逐类 | nominal 4/4、left_anchor 4/4、forward_anchor 3/4（1 个 `TARGET_AMBIGUOUS`）、distractor_present 3/4（1 个 `TARGET_NOT_FOUND`）、two_cups 4/4（全 ambiguous）、no_cup 4/4（全 not found 且完整覆盖）、low_light 4/4、partial_occlusion 4/4、fast_interruption 4/4、reacquire_after_stop 4/4 |
+| 失败项 | `900002`（forward_anchor / anchor forward）→ `TARGET_AMBIGUOUS`；`900013`（distractor_present / anchor left）→ `TARGET_NOT_FOUND`（完整覆盖后的干净 negative） |
+| 错误锁定 | **0**（`zero_wrong_locks: true`，`wrong_locks: []`） |
+| 10 Hz 帧合约 | 40/40 `continuous: true`；duplicate 0、backward 0、too-fast 0、未声明 gap 0；合法 settle 超时 gap 41 个；单区间 min 0.1 s（= 声明 frame period）、max 0.352 s；achieved rate 3.378–10.0 Hz（中位 6.41）——10 Hz 是**上限**（不快于声明周期、且必须等 settle），不是下限 |
+| 停止证明 | 40/40 `stop_proof.proven: true`，全部 `longest_consecutive_run = 3`，`sample_count = 3`（held 样本） |
+| 精细修正 | 每场景 0–2 次（30 个锁定场景全部有值），累计 0.0–0.36271653351616884 rad，全部在晋级 `max_fine_corrections=2` / `max_fine_total_rad=0.6961197054865531` 内 |
+| 中断类 | 8 个（fast_interruption 4 + reacquire_after_stop 4）全部两 attempt（首个 attempt 3 帧后注入 stale 帧、`INPUT_STALE` fail-closed、停位得到证明、锁计数清零，第二 attempt 换新 attempt_id 且 detector reset 后重新锁定并 `TARGET_LOCKED`） |
+| 证明的身份 | `source_commit 956b5b74b…`、`production_config_sha256 dfa0af9b…`、`values_sha256 3c787fd7…`（17 值）、`weight_sha256_declared == observed == 2afd5506…`、`allow_cpu_fallback false`、`cuda_device cuda:0`、`device cuda` |
+| 前置门 | `EXCLUSIVE_OWNERSHIP_OK`（producer 自己的第一步；另有三次 stack-free `check-ownership` 预检 rc=0：`head-qualification-scenarios-ownership-{20261001T135053Z,20261001T135140Z,20261001T135357Z}`） |
+| **未宣称** | `scenarios.json` 的 `qualification_verdict` 为 `null`，并写出 owner = `head_search_qualification` 的 `aggregate` phase。本轮**不**实现也不宣称 `HEAD_SEARCH_QUALIFIED` |
+
+运行前置 preflight：一次真实闭环单场景（seed 900000，真实 MuJoCo + 真实 C2a detector、CUDA-only），
+`outcome=PASSED`、`TARGET_LOCKED`、3 帧、cadence 10.0 Hz、`preflight_elapsed_s ≈ 0.18–0.24`；它**不**占用任何
+qualification run root（产物落在 `scratch/hs316/preflight-<UTC>/`）。
+
+### (e) 仍然缺失、因此无法给出真正资格裁决的部分
+
+1. `production_smoke` phase：没有 ROS 版实时搜索 journal 的安装了的生产者，也没有消费它的聚合器（gap audit 第 5、8 行）；
+2. 三个 `FULL_RESTART` anchor phase（第 7 行）；
+3. `act/head_search_qualification.py` 的 `aggregate` phase 仍是 HS-233 stub（第 4 行），其 Step 5 两份文档仍是摘要聚合（第 8 行）；
+4. Step 1「资格期间」确认单 YOLO 实例 / CUDA / 权重 / 17 值 readback（第 2 行，依赖 3）；
+5. Teleop 验收栈与 `e2e/head-camera.spec.ts`（第 10–13 行）。
+   本轮的 40 场景因此只是 Step 3 的证据，**不是**资格本身；按计划，真正的 Task 14 资格运行必须从**新的 toolchain root** 出发
+   （本模块与本入口是附加源码改动，冻结 root 不得改写）。
+
+### (f) 验证
+
+| 项 | run dir / 命令 | rc | 计数 |
+| --- | --- | --- | --- |
+| 新模块 RED→GREEN | `src/so101_demo_py/test/test_act_head_search_scenarios.py`（65 例，5 次 RED 记录见 `scratch/hs316/logs/red-green.txt`） | 0 | 65 passed |
+| CLI RED→GREEN | `test_head_search_calibration_cli.py`（新增 5 例） | 0 | 81 passed |
+| 阶段回归（HS-288..315 + 新文件，35 文件，`-n 8`） | `HS316_TMPDIR=scratch/hs316/tmp-regression bash scratch/hs316/run-tests.sh -q -n 8 $(cat scratch/hs316/regression-files.txt)` | 0 | **915 passed**（HS-315 的 816 + 新增 65 + 5 + 既有 ownership 29） |
+| 全量 demo 套件（8 workers，baseline run-dir 布局） | `$EV/scratch/pytest-xdist8-hs316-demo-suite.6305f7d5` | 1 | **175 failed / 6401 passed / 152 skipped / 86 errors**，261 节点，与最新基线 `pytest-xdist8-hs315-demo-suite-final.886da551`（175/6331/152/86）**逐节点 diff = 0 行**；passed +70 = 本模块 65 + CLI 5。`tempfile.gettempdir()` 落于该 run dir 的 `tmp/`，CPU 与 workers 记入 `interpreter-and-cpu.json`（`-n 8`） |
+
+**本轮证据与生命周期**：`$CAMPAIGN/qualification-scenarios-20261001T135407Z{,.provenance.txt,.console.log}`
+（**最终、唯一真实运行**）、`$CAMPAIGN/qualification-scenarios-20261001T135203Z{,…}`（第一次变体，被取代但保留）、
+`$EV/head-qualification-scenarios-ownership-{20261001T135053Z,20261001T135140Z,20261001T135357Z}/{exclusive-ownership.json}`
+（三次 stack-free 预检门 receipt）、`$EV/scratch/pytest-xdist8-hs316-demo-suite.6305f7d5/`（全量套件）、
+工作树 `scratch/hs316/`（`preflight.sh`、`run-scenarios.sh`、`run-tests.sh`、`regression-files.txt`、`run-dir.txt`、
+`preflight-<UTC>/one-scenario.json` ×2、`logs/{red-green.txt,regression.txt,real-run.txt,preflight-*.txt}`、
+`tmp-{red,green,regression,real}/`）、`$EV/reviews/task14-gap-audit.md`（第 6 行改判 + 新增 §7）。
+以上**均为删除候选，未删除**；HS-300..315 的产物只读引用，未改动。工作树 `git status --porcelain`：见本轮提交后的 `?? runs/`（既有未跟踪）。

@@ -1,4 +1,4 @@
-"""The formal head search calibration CLI: check-ownership, run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, measure-selection-rule, measure-operating-point, verify-promoted-config, qualify.
+"""The formal head search calibration CLI: check-ownership, run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, measure-selection-rule, measure-operating-point, measure-scenarios, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
@@ -20,7 +20,7 @@ here and produced by `so101_demo.act.head_search_coarse_step_measurement`,
 `measure-operating-point` are phase 3's two inputs: the first writes the rule record before any
 measurement can exist, the second measures the frames that rule consumes and has the installed phase 3
 select every candidate's point (`so101_demo.act.head_search_operating_point_measurement`).
-`measure-admission` produces the run's `--admission` from the six sealed inputs the run declares - the
+`measure-scenarios` is Task 14 Step 3's flight: it runs the declared qualification seeds one at a time through the producer controller's closed loop, journals every outcome - including the ones that fail or refuse - and writes the aggregate that claims no verdict. `measure-admission` produces the run's `--admission` from the six sealed inputs the run declares - the
 flat measurement plan the installed controller is constructed with, the six-field
 `CalibrationMeasurementAdmission` for `role=calibration`, and the receipt that records every refusal the
 runtime contract fixes - and `measure-bundle-inputs` produces the declared geometry and perception
@@ -315,6 +315,25 @@ FINE_CORRECTION_REQUIRED_FLAGS = (
     ("dataset_config", "--dataset-config"),
     ("scenario_partitions", "--scenario-partitions"),
     ("output_dir", "--output-dir"),
+)
+
+
+#: the `measure-scenarios` entry: the nine declared inputs of the qualification scenarios. The scene, the
+#: seal, the production configuration, the controller configuration, the frozen candidate, the selected
+#: weights, the dataset profile and the tracked partitions are the sealed inputs the closed loop closes
+#: over; `--evidence-root` is the registered campaign root the ownership gate checks, and `--final-run` is
+#: the frozen runtime of record whose identity the run must hold.
+SCENARIO_REQUIRED_FLAGS = (
+    ("scene", "--scene"),
+    ("geometry_seal", "--geometry-seal"),
+    ("production_search_config", "--production-search-config"),
+    ("controller_config", "--controller-config"),
+    ("frozen_candidate", "--frozen-candidate"),
+    ("weights", "--weights"),
+    ("dataset_config", "--dataset-config"),
+    ("scenario_partitions", "--scenario-partitions"),
+    ("output_dir", "--output-dir"),
+    ("evidence_root", "--evidence-root"),
 )
 
 
@@ -911,6 +930,190 @@ def _measure_fine_correction_episodes(arguments: list[str]) -> int:
         f"max_cumulative_fine_correction_rad="
         f"{max((sum(record['fine_corrections_rad']) for record in succeeded), default=0.0)!r} "
         f"output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _scenario_parser() -> argparse.ArgumentParser:
+    """The `measure-scenarios` entry: the sealed inputs, the campaign root and the declared subset.
+
+    This is Task 14 Step 3's flight: the forty declared qualification scenarios, one at a time, each in its
+    own prepared scene, from its own declared anchor, with the production controller's bounded sweep and
+    its own fine corrections, and with the selected model closing the loop. Nothing is computed here
+    beyond parsing and validating what the caller declared.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-scenarios",
+        description=(
+            "Run the declared qualification scenarios one at a time in the closed loop, journal every "
+            "outcome honestly and write the scenarios document, its journal and its receipt"
+        ),
+    )
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the scenarios step")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument(
+        "--production-search-config", type=Path, help="the promoted production search configuration"
+    )
+    parser.add_argument(
+        "--controller-config", type=Path, help="the sealed controller configuration (the control period)"
+    )
+    parser.add_argument("--frozen-candidate", type=Path, help="the selected frozen candidate document")
+    parser.add_argument("--weights", type=Path, help="the selected model's weights file")
+    parser.add_argument(
+        "--dataset-config", type=Path, help="the head dataset profile every scenario is prepared from"
+    )
+    parser.add_argument(
+        "--scenario-partitions", type=Path, help="the tracked source of the head-search seed partitions"
+    )
+    parser.add_argument("--output-dir", type=Path, help="the brand-new run root the documents own")
+    parser.add_argument(
+        "--evidence-root", type=Path, help="the registered campaign root the ownership gate checks"
+    )
+    parser.add_argument(
+        "--final-run", type=Path, help="the frozen runtime of record whose identity the run must hold"
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        action="append",
+        help="run only these declared qualification seeds; repeat once per seed",
+    )
+    parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
+    parser.add_argument(
+        "--generator-commit",
+        default="unrecorded",
+        help="the commit the dataset profile is used at (it changes no scene)",
+    )
+    parser.add_argument("--max-settle-s", type=float, default=None, help="the per-stop settle budget")
+    parser.add_argument(
+        "--settle-consecutive-steps", type=int, default=None, help="the consecutive quiet control steps"
+    )
+    parser.add_argument("--max-frames", type=int, default=None, help="the per-attempt frame budget")
+    parser.add_argument(
+        "--interruption-frame",
+        type=int,
+        default=None,
+        help="the frame index at which the declared interrupted classes are stopped fail-closed",
+    )
+    parser.add_argument(
+        "--expected-source-commit", help="the frozen runtime's source commit the identity must match"
+    )
+    parser.add_argument(
+        "--expected-production-config-sha256",
+        help="the promoted config digest the identity must match",
+    )
+    parser.add_argument("--expected-values-sha256", help="the 17 values' digest the identity must match")
+    parser.add_argument(
+        "--expected-weights-sha256", help="the detector weights digest the identity must match"
+    )
+    parser.add_argument(
+        "--expected-package-prefix", help="the `ros2 pkg prefix so101_demo_py` the gate must observe"
+    )
+    return parser
+
+
+def _measure_scenarios(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the closed-loop scenarios to the library."""
+
+    parsed = _scenario_parser().parse_args(arguments)
+    missing = [flag for name, flag in SCENARIO_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    # the campaign root the gate checks is a directory; every other declared input is a file
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in SCENARIO_REQUIRED_FLAGS
+        if name != "output_dir"
+        and not (
+            Path(getattr(parsed, name)).is_dir()
+            if name == "evidence_root"
+            else Path(getattr(parsed, name)).is_file()
+        )
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a qualification run "
+            f"is never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_scenarios import (
+        DEFAULT_INTERRUPTION_FRAME,
+        DEFAULT_MAX_FRAMES,
+        SETTLE_CONSECUTIVE_STEPS,
+        write_head_search_scenarios,
+    )
+
+    optional: dict = {"max_frames": DEFAULT_MAX_FRAMES, "settle_consecutive_steps": SETTLE_CONSECUTIVE_STEPS}
+    for key in ("max_settle_s", "settle_consecutive_steps", "max_frames", "interruption_frame"):
+        if getattr(parsed, key) is not None:
+            optional[key] = getattr(parsed, key)
+    expected: dict = {}
+    for key, attribute in (
+        ("source_commit", "expected_source_commit"),
+        ("production_config_sha256", "expected_production_config_sha256"),
+        ("values_sha256", "expected_values_sha256"),
+        ("weight_sha256_declared", "expected_weights_sha256"),
+    ):
+        value = getattr(parsed, attribute)
+        if value:
+            expected[key] = value
+    try:
+        result = write_head_search_scenarios(
+            scene_path=parsed.scene,
+            geometry_seal_path=parsed.geometry_seal,
+            production_search_config_path=parsed.production_search_config,
+            controller_config_path=parsed.controller_config,
+            frozen_candidate_path=parsed.frozen_candidate,
+            weights_path=parsed.weights,
+            dataset_config_path=parsed.dataset_config,
+            scenario_partitions_path=parsed.scenario_partitions,
+            output_dir=parsed.output_dir,
+            evidence_root=parsed.evidence_root,
+            final_run=parsed.final_run,
+            seeds=parsed.seed,
+            device=parsed.device,
+            generator_commit=parsed.generator_commit,
+            expected_runtime=expected or None,
+            expected_package_prefix=parsed.expected_package_prefix,
+            command=_command_line(arguments, subcommand="measure-scenarios"),
+            **optional,
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    for record in receipt["records"]:
+        if record["outcome"] == "PASSED":
+            continue
+        print(
+            f"{record['outcome_code']}: the scenario {record['seed']} "
+            f"({record['condition_class']}, anchor {record['anchor']}) {record['outcome'].lower()} "
+            f"({record.get('outcome_detail')})",
+            file=sys.stderr,
+        )
+    print(
+        f"HEAD_SEARCH_SCENARIOS_MEASURED scenarios={receipt['scenario_count']} "
+        f"passed={receipt['passed_count']} failed={receipt['failed_count']} "
+        f"refused={receipt['refused_count']} "
+        f"anchors={json.dumps(receipt['anchor_split'], sort_keys=True)} "
+        f"zero_wrong_locks={receipt['zero_wrong_locks']} "
+        f"cadence_all_continuous={receipt['cadence_all_continuous']} "
+        f"stop_proofs_all_proven={receipt['stop_proofs_all_proven']} "
+        f"output_dir={result['output_dir']}"
     )
     return 0
 
@@ -2738,6 +2941,10 @@ def main(argv: list[str] | None = None) -> int:
     # the production controller's own sweep and corrections, and the selected model closing the loop
     if arguments[:1] == ["measure-fine-correction-episodes"]:
         return _measure_fine_correction_episodes(arguments[1:])
+    # Task 14 Step 3's forty serial scenarios are their own installed flight: the closed loop per declared
+    # qualification seed, the per-scenario journal, and the honest aggregate that claims no verdict
+    if arguments[:1] == ["measure-scenarios"]:
+        return _measure_scenarios(arguments[1:])
     # the legal pick workspace's projection is the sixth: it reads the scene's camera pose and projects,
     # loading no detector, no renderer and no GPU
     if arguments[:1] == ["measure-workspace-projection"]:

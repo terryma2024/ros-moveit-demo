@@ -2965,3 +2965,195 @@ def test_check_ownership_refuses_a_reused_gate_root_and_an_unreadable_runtime(
         == 2
     )
     assert not (tmp_path / "fresh").exists(), "a refused identity must not leave a half-claimed root"
+
+
+SCENARIO_PARTITIONS = {
+    "schema_version": 1,
+    "document": "head-search-scenario-partitions/v1",
+    "condition_classes": [
+        "nominal",
+        "left_anchor",
+        "forward_anchor",
+        "distractor_present",
+        "two_cups",
+        "no_cup",
+        "low_light",
+        "partial_occlusion",
+        "fast_interruption",
+        "reacquire_after_stop",
+    ],
+    "anchors": ["default", "left", "forward"],
+    "calibration": [700000, 700001],
+    "held_out_evaluation": [800000, 800001],
+    "qualification": [
+        {
+            "seed": 900000 + index,
+            "scene_group_id": f"scene-{900000 + index:09d}",
+            "condition_class": [
+                "nominal",
+                "left_anchor",
+                "forward_anchor",
+                "distractor_present",
+                "two_cups",
+                "no_cup",
+                "low_light",
+                "partial_occlusion",
+                "fast_interruption",
+                "reacquire_after_stop",
+            ][index],
+            "anchor": ["default", "left", "forward"][index % 3],
+        }
+        for index in range(10)
+    ],
+}
+
+
+def _scenario_inputs(tmp_path: Path) -> dict:
+    """The nine declared inputs of the qualification scenarios: the episode fixture plus two."""
+
+    inputs = _fine_correction_inputs(tmp_path)
+    partitions = tmp_path / "head-search-scenario-partitions-v1.json"
+    partitions.write_text(json.dumps(SCENARIO_PARTITIONS), encoding="utf-8")
+    evidence = tmp_path / "evidence"
+    evidence.mkdir(exist_ok=True)
+    inputs["partitions"] = partitions
+    inputs["evidence_root"] = evidence
+    return inputs
+
+
+def _scenario_arguments(inputs: dict, output: Path, *extra: str) -> list:
+    return [
+        "measure-scenarios",
+        "--scene",
+        str(inputs["scene"]),
+        "--geometry-seal",
+        str(inputs["seal"]),
+        "--production-search-config",
+        str(inputs["production"]),
+        "--controller-config",
+        str(inputs["controllers"]),
+        "--frozen-candidate",
+        str(inputs["frozen"]),
+        "--weights",
+        str(inputs["weights"]),
+        "--dataset-config",
+        str(inputs["dataset_config"]),
+        "--scenario-partitions",
+        str(inputs["partitions"]),
+        "--output-dir",
+        str(output),
+        "--evidence-root",
+        str(inputs["evidence_root"]),
+        *extra,
+    ]
+
+
+def _patch_scenario_flight(monkeypatch, *, status="PASSED"):
+    """Stub the flight's heavy seams, so the CLI case needs no MuJoCo, detector, GPU or gate."""
+
+    from so101_demo.act import head_search_scenarios as scenarios
+
+    seen: dict = {}
+
+    def fake(**kwargs):
+        seen.update(kwargs)
+        rows = [
+            {
+                "seed": seed,
+                "condition_class": "nominal",
+                "anchor": "default",
+                "outcome": status,
+                "outcome_code": None if status == "PASSED" else "CAL_SCENARIO_CUP_NOT_FOUND",
+            }
+            for seed in kwargs.get("seeds") or [900000, 900001]
+        ]
+        document = {
+            "scenario_count": len(rows),
+            "passed_count": sum(1 for row in rows if row["outcome"] == "PASSED"),
+            "failed_count": sum(1 for row in rows if row["outcome"] == "FAILED"),
+            "refused_count": sum(1 for row in rows if row["outcome"] == "REFUSED"),
+            "anchor_split": {"default": len(rows)},
+            "zero_wrong_locks": True,
+            "cadence_all_continuous": True,
+            "stop_proofs_all_proven": True,
+            "records": rows,
+            "sha256": "0" * 64,
+        }
+        # the real receipt is the aggregate plus the identity: the CLI reads the aggregate off it
+        return {
+            "document": document,
+            "receipt": {**document, "kind": "head_search_qualification_scenarios_receipt"},
+            "output_dir": kwargs["output_dir"],
+        }
+
+    monkeypatch.setattr(scenarios, "write_head_search_scenarios", fake)
+    return seen
+
+
+def test_measure_scenarios_needs_its_declared_inputs(capsys) -> None:
+    assert main(["measure-scenarios"]) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+
+
+def test_measure_scenarios_refuses_a_missing_input_and_an_existing_output(
+    tmp_path: Path, capsys
+) -> None:
+    inputs = _scenario_inputs(tmp_path)
+    missing = _scenario_arguments(inputs, tmp_path / "run")
+    missing[missing.index("--scene") + 1] = str(tmp_path / "absent.xml")
+    assert main(missing) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+
+    existing = tmp_path / "already-there"
+    existing.mkdir()
+    assert main(_scenario_arguments(inputs, existing)) == 2
+    assert "never resumed" in capsys.readouterr().err
+
+
+def test_measure_scenarios_hands_the_flight_to_the_library(tmp_path: Path, monkeypatch, capsys) -> None:
+    inputs = _scenario_inputs(tmp_path)
+    seen = _patch_scenario_flight(monkeypatch)
+    output = tmp_path / "run-root"
+
+    assert main(_scenario_arguments(inputs, output, "--seed", "900000", "--seed", "900001")) == 0
+    assert seen["seeds"] == [900000, 900001]
+    assert seen["evidence_root"] == inputs["evidence_root"]
+    assert seen["device"] == "cuda"
+    assert "so101_head_search_calibration measure-scenarios" in seen["command"]
+    assert "--seed 900000 --seed 900001" in seen["command"]
+    printed = capsys.readouterr().out
+    assert "HEAD_SEARCH_SCENARIOS_MEASURED" in printed
+    assert "scenarios=2" in printed
+    assert "passed=2" in printed
+
+
+def test_measure_scenarios_reports_the_librarys_refusal_and_returns_two(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+
+    from so101_demo.act import head_search_scenarios as scenarios
+
+    inputs = _scenario_inputs(tmp_path)
+
+    def refuse(**kwargs):
+        raise CalibrationInputsRefused(
+            scenarios.CAL_SCENARIO_OWNERSHIP_REFUSED,
+            "the exclusive-ownership gate refused the run with DETECTOR_OWNER_ACTIVE",
+        )
+
+    monkeypatch.setattr(scenarios, "write_head_search_scenarios", refuse)
+    assert main(_scenario_arguments(inputs, tmp_path / "run-root")) == 2
+    assert scenarios.CAL_SCENARIO_OWNERSHIP_REFUSED in capsys.readouterr().err
+
+
+def test_measure_scenarios_prints_every_failed_and_refused_scenario(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    inputs = _scenario_inputs(tmp_path)
+    _patch_scenario_flight(monkeypatch, status="FAILED")
+
+    assert main(_scenario_arguments(inputs, tmp_path / "run-root")) == 0
+    printed = capsys.readouterr()
+    assert "CAL_SCENARIO_CUP_NOT_FOUND" in printed.err
+    assert "failed=2" in printed.out
