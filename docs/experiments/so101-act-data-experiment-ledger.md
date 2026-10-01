@@ -51142,3 +51142,32 @@ produced them, not one uniform record.
 That is the shape correction 1 asks for, and it replaces my `ACT_ENDPOINT_QC` document with its invented `claim` and
 `endpoint` fields. Now that both halves - the common schema and the prescribed entry keys - have been read rather than
 guessed, the next round can write it.
+
+
+## CP-2688 — The reshape, mechanical: what replaces my invented document
+
+My function returns, at present:
+
+```python
+    return {"kind": "ACT_ENDPOINT_QC", "schema_version": 1,
+            "episode_root": str(root), "episode_manifest_sha256": _manifest_digest(manifest_path),
+            "claim": {"status": manifest.get("status"), "qc_passed": manifest.get("qc_passed")},
+            "endpoint": verdict}
+```
+
+and the prescribed shape (CP-2673 for the entry, CP-2687 for the common schema) replaces it with:
+
+- top level: **`rule_version: "endpoint_pose_v1"`**, **`status`** (the endpoint verdict's), **`checked_monotonic_s`**
+  (this process's own monotonic clock - honest, because a fresh process really does check at its own time),
+  **`cleanup_state`** (from the seal it just verified), and **`checks`**;
+- inside `checks`, one entry **`endpoint_pose`** whose closed keys are the design's: **`status`**, **`policy_sha256`**,
+  **`initial_sequence`**, **`final_sequence`**, **`initial_pose`**, **`final_pose`**, **`initial_target`**,
+  **`final_target`**.
+
+So the edit is a return shape, not a redesign: the two things my document had - the seal's claim and the fresh verdict -
+are still both present, because the seal's own `status`/`qc_passed` stay in the episode the report points at, and the
+verdict becomes the report's own `status` plus its `checks.endpoint_pose` entry. The `policy_sha256` and the two
+`*_sequence` fields are the ones the checkpoint said my document lacked, and they come from what
+`endpoint_records_from_audit` already computes plus the frozen policy the inputs name.
+
+The next round writes it against the existing tests, which will need their assertions moved to the new shape.
