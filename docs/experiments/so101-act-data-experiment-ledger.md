@@ -48732,3 +48732,21 @@ looked like from the inside.
 That is the third time in this stretch that a stalled-looking observation resolved into "still working" once the actual
 process state was read, and it is why the discipline is to check the session and the marker rather than infer from
 deltas: a log that grows slowly is not a log that has stopped.
+
+
+## CP-2576 — Revision 4's review is not progressing; it appears to wait on a collaboration event
+
+Two rounds of observation now: the log's last line is `collab: Wait`, the line count has not moved (502), and while
+twelve codex processes are alive and the pane has not returned to a shell prompt, nothing new is being written. The two
+earlier reviews in this same window ran to completion - 6332 and 2677 lines, each ending with a real `EXIT=` - so this
+run differs from them rather than being the same thing slower.
+
+The plain reading of `collab: Wait` is that the reviewer is waiting on a collaboration or approval event, and in a
+non-interactive `codex exec` in a tmux window there may be nothing that can deliver it. That is consistent with the
+process still being alive while its output stops.
+
+The honest options, none of which I should take without saying so first: (a) leave it and treat revision 4's review as
+outstanding, reporting the protocol as answered-but-unreviewed; (b) terminate that session and re-run the same review
+request, on the chance that the wait is incidental; or (c) have the coordinator look at the `dst:k2-review` window
+directly, since it is the one place the pending question would be visible. I am reporting the state rather than
+guessing, and the next round will re-check before choosing.
