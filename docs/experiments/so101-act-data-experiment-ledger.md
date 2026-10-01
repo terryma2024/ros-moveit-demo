@@ -46601,3 +46601,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   now "call the composer" rather than "build a request".
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 37988c478; goal active.
+
+
+## CP-2467 — The composer route is macOS-only, so it is not this task's route
+
+- Read the enum: `ExecutionProfile` (contracts.py:2114) is documented as "the closed set of approved **macOS**
+  execution profiles" and has exactly three members - `MPS_W2_FIRST_PASS`, `MPS_W1_FULL_RESTART_RETRY`,
+  `MPS_W1_FIRST_PASS` - with `W1_PLATFORM_COMBINATIONS` naming `("mps", "mps", "darwin_private_path_unix", "cgl")` and
+  the comment that "W1 is a platform claim". The campaign module that showed the composer recipe is a **macOS W2/W1**
+  campaign, and its constants are string-typed MPS profile names.
+- So CP-2465's plan - reuse the campaign composer - does **not** apply here: this task runs MuJoCo on ai-station
+  (Linux/NVIDIA) and the closed profile set has no entry for it. That is a correction worth having found by reading
+  rather than by trying, and it means the single-episode run must satisfy the coordinator's own contract directly:
+  the object it read `selected_point_ids` from is the adaptive/campaign-shaped request, and the honest next step is to
+  read **the coordinator's** code path for a single non-adaptive run to see which request it accepts there - or, if it
+  accepts none without a campaign profile, to state that plainly as the protocol gap rather than force a macOS profile
+  onto a Linux run.
+- Either answer is useful and neither is a workaround: the first yields the request type to build, the second names a
+  genuine boundary of the parallel-batch vehicle for this milestone.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD b15c1f1c4; goal active.
