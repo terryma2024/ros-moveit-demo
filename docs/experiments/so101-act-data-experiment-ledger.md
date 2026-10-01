@@ -54167,3 +54167,26 @@ is settled: the phases and predicates (CP-2806), the codes and their current cov
 Two things worth keeping in view while writing them: each negative flips exactly one field of a passing document, and
 `test_act_task8.py` must not be touched - its same-named `FakePort` belongs to the family with the pre-existing
 `AttributeError` failures, which is a separate line of work the coordinator has been offered.
+
+
+## CP-2811 — The fixture takes per-field overrides, which is exactly what ten negatives need
+
+```
+test_act_release_boundary.py:42    def _evidence(self, phase, epoch, **overrides):
+```
+
+`FakePort` builds a phase's evidence document through a private builder that accepts `**overrides`. So a predicate negative
+is a single call - take the passing document for the phase, override exactly the one field the predicate reads, assert the
+specific code - with no new fixture and no hand-built dictionaries. The constructor knobs (`cup_supported`, `detach`,
+`stale_set_down`, `release_phase_epoch`) cover the predicates that are properties of the port, and `**overrides` covers the
+rest of the document's fields.
+
+That completes the location work for correction 5. Everything it needs is now known:
+
+- the ten predicates and their three phase groups (CP-2806);
+- their codes, and how little of them is asserted today - `BILATERAL_CONTACT_MISSING` at zero occurrences (CP-2807);
+- the file to write in, whose own `FakePort` is the base (CP-2810), and the wrapper pattern (`AlignedPort`, CP-2809);
+- and a builder that takes one override per call (this entry).
+
+The negatives themselves are mechanical from here, and the reason to write them remains what it was: the code is right and
+nothing states what it guarantees.
