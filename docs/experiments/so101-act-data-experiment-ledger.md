@@ -54074,3 +54074,27 @@ The checklist to satisfy, one test per line and one negative per line:
 The three `test_act_episode_qc.py` corrections the checkpoint names (`:16`, `:50`, `:142`) are the other half: the QC-side
 tests whose fixtures assert a quality verdict where the rule is now that quality is not a precondition, so they need the
 same treatment - each predicate stated rather than implied.
+
+
+## CP-2807 — The gap quantified: the phase predicates are almost entirely unasserted
+
+Counting the error codes the three phase groups raise, across every test module:
+
+- **`HOLD_NOT_CONFIRMED`** appears **once** - `test_act_supervisor.py:89`, where a reason list is compared;
+- the modules that mention `PickPlaceError` or its codes at all are `test_act_endpoint_boundaries.py`,
+  `test_act_release_boundary.py`, `test_act_supervisor.py` and `test_act_task8.py` - the last being the family whose
+  pre-existing `AttributeError`s this stretch measured and reported but did not touch.
+
+So of the ten predicates CP-2806 listed, essentially none has a test that fails the phase for **that** predicate alone: the
+aggregate is exercised at most once, through a single assertion in another component's test. Which is correction 5's
+subject, and it also explains why the checkpoint called it a "predicate-by-predicate safety checklist" rather than a bug:
+nothing is wrong with the code, and nothing states what it guarantees.
+
+The tests to write therefore belong beside the runner's own tests, one negative per predicate, each flipping exactly one
+field of an otherwise-passing evidence document and asserting the specific code. The fixture that builds a passing
+evidence document is the thing to find first - it is the same shape as the chain test's helper, and the runner's own
+module will name what it requires (`_EVIDENCE_GATES` is already visible in the code at :212).
+
+Also recorded for planning: `test_act_task8.py` is the family with the pre-existing failures (61-62 across the module-wide
+gate, `AttributeError` on `PickPlaceSearchBoundary`), which the coordinator has been offered as a separate line of work and
+which must not be confused with anything this stretch changes.
