@@ -48904,3 +48904,16 @@ That corrects the instrument rather than the conclusion: from here, "is the revi
 the log's mtime against the current time, with the process count and the absence of `EXIT=` as corroboration. The line
 count is still useful for noticing when a run has *finished*, because the marker is a line - but it is a poor liveness
 signal, and both of this stretch's false "flat" readings came from treating it as one.
+
+
+## CP-2586 — Silence resolved into work again, and the verdict asks about the manifest's exact schema
+
+The log moved from 2426 to **2441 lines** with an **age of six seconds** - so the conditional re-run did not fire, and
+the "silent for a minute" reading was, for the third time in this stretch, a gap between a reviewer's long reads rather
+than a stop. The threshold I set (four minutes with no write, no `EXIT=`) is what kept the decision honest: it is a
+statement about evidence, not about patience.
+
+Its last line is already a correction in progress: "**Explicitly declare the manifest's exact s...**" - i.e. revision
+6's section 6 described the manifest's keys but, in the reviewer's judgement, not explicitly enough to be implemented
+without ambiguity. If that is where the verdict lands, revision 7's change is local: give the manifest's keys and types
+the same table treatment the five record kinds get, rather than a sentence.
