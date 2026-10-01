@@ -53136,3 +53136,24 @@ Which of the three is right is a question about ownership of the episode directo
 live path will have to answer too - with the difference that in the live path there is also a worker and a coordinator
 above these three. That is the next thing to settle, and it is worth settling deliberately rather than by whichever
 arrangement happens to make one test pass.
+
+
+## CP-2771 — The two paths differ by exactly one directory, and which side is wrong is now decidable
+
+The arithmetic, from facts already measured:
+
+- the **audit writer** puts the manifest at **`<its root>/audit/audit-manifest.json`** - the first test reads exactly that
+  path successfully (CP-2761), so there is no doubt about it;
+- the **verifier's convention** looks for **`<workspace>/sealed/episode/audit-manifest.json`** - measured from the
+  `FileNotFoundError` it raised (CP-2768);
+- and `<workspace>/sealed/episode` is the store's own `episode_root`.
+
+So the two differ by **one directory**: the verifier expects the manifest one level higher than the writer places it. Which
+means the conflict CP-2769/CP-2770 described is not three rules fighting over a directory but **one off-by-one between two
+components' conventions** - and off-by-ones between conventions are exactly the kind of thing that should be settled by
+reading which one the rest of the repository assumes, not by moving files until a test passes.
+
+The next read is decisive and small: how `result_store` constructs the path it hands to `verify_episode_seal` - whether it
+composes `episode_root / "audit-manifest.json"` by convention or takes a base directory from somewhere - and whether
+`episode_audit` has a named accessor for "the manifest of a writer rooted here". Whichever the repository already treats
+as canonical is the one the test should use, and the other is the one to correct.
