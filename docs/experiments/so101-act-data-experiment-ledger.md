@@ -51422,3 +51422,25 @@ is an extension of an existing file rather than a new harness, and it can reuse 
 fakes. This is the second time in this stretch that a "nothing uses this" conclusion was really "nothing under the
 directory I searched uses this" (the earlier one being the overlay-versus-source confusion), and the remedy is the same
 in both cases: name the scope when making the claim.
+
+
+## CP-2699 — The capture test's harness, and the one thing the sealing test must swap
+
+`test_act_continuous_capture.py` provides everything the end-to-end sealing test needs except a real seal:
+
+- **`FakeRecorder`** with `append(observation, action, audit)` appending to a list - so in this harness the capture is
+  driven but **nothing is ever sealed**;
+- **`physical_audit(at_s)`** - with `mujoco_truth: {"cup_xyz_m": [...]}`, the physical stamps, contacts and the stopped
+  controller state;
+- **`reference(at_s, *, accepted, positions)`** for the controller-reference stream;
+- **`build(*, deadline_s, clock, sampler_pixels, audit_writer, pending_capacity)`** constructing
+  `ContinuousEpisodeCapture(recorder=FakeRecorder(), sampler=FakeSampler(...), guard=AcquisitionGuard(),
+  physical_audit=physical_audit, audit_writer=..., deadline_s=..., monotonic=..., pending_capacity=...)`;
+- **`feed(capture, minter, *, camera, stamp_s, pixels, session, reset_epoch)`** and **`AcquisitionMinter`** to mint and
+  deliver frames.
+
+So the sealing test reuses all of that and changes exactly one thing: the recorder. With a real `EpisodeRecorder`, a
+real `EpisodeAuditWriter` as `audit`, and a `scope`, the capture's `finish(window=..., outcome=...)` seals the audit and
+binds both into the episode (0ca35cc93) - and then the endpoint QC can read that episode through
+`verify_audit_manifest`, which is the proof correction 2 needs. `build()` has no `audit=`/`scope=` parameters yet, so
+the new test constructs its capture directly or extends the helper.
