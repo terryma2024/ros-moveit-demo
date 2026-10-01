@@ -43575,3 +43575,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F3's other half from the verdict, still to do: the release emission runs before _verify_phase() and coerces and
 - defaults its flags, so it must move after verification and stop inventing a missing no_fingertip_contact.
 - F1 and F14 closed; F3/F5/F11/F12/F13 narrowed; F5's regression fixed at CP-2308; HEAD 34e8c5c8a; goal paused.
+
+## CP-2310 - F3's tie exemption: the control must step the events, not the identity
+
+- Second attempt: the module exemption plus re-basing the control by declaring release_epoch 0 in its written
+- episode.json. That produced AUDIT_METADATA_INVALID instead - the readback cross-checks that identity against the
+- rest of the sealed document, so lowering it breaks a different fence rather than moving the unnamed step.
+- The right re-base, now unambiguous: leave the identity at identity() (declared epoch 1) and rewrite the control's
+- EVENTS so the stream steps to an epoch later than 1 with no release event naming it. Its event rewrite lives below
+- the lines read this round (the block that also re-signs events.jsonl), which is the one read the next attempt
+- needs before landing the exemption again.
+- Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
+- F1 and F14 closed; F5's regression fixed (CP-2308); F3's exemption staged twice and its control's re-base
+- localized; F11/F12/F13 narrowed; HEAD c6c8b6c4a; goal paused.
