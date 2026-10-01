@@ -41551,3 +41551,25 @@ train-c2 rc=2
 
 **下一选项**：`epochs` 60 → 120（C2-a）。它与 `checkpoint_score` 同属逐候选计划键，**是否也被"共享"校验拦住尚未知**——
 用同样便宜的办法先试：契约副本改一行，若被拒会立即返回，若通过则正式跑。
+
+## HS-274 — C2-a 通过校验并开跑：`epochs` 是逐候选的，`checkpoint_score` 不是
+
+```
+契约副本（与原始契约仅 epochs 一行不同）：epochs: 120 | checkpoint_score: 0.5*head+0.5*task
+      9/120      9.39G   box_loss … Instances 49  640      ← 校验通过，训练已进入第 9 个 epoch
+```
+
+所以实现的边界现在很清楚：
+
+| 想动的键 | 能否只改 C？ | 依据 |
+| --- | --- | --- |
+| `checkpoint_score` | **否** | `CANDIDATE_CHECKPOINT_SCORE_INVALID: B and C share the two-domain score`（HS-273） |
+| `epochs` | **是** | 本次副本仅改该行即通过校验并开跑 |
+| `domain_train`（配比） | **否** | 单整数 + 集合选择，1:2 配比不可表达（HS-270） |
+
+**C2-a 正在跑**（`epochs 60 → 120`，其余全部不变，基模仍是 `f281d252…`，契约以副本传入，输出到
+`$MODEL_RUN/candidate-c2a`，不覆盖 `candidate-c`）。判据沿用 HS-272 声明的五条（先声明后测量）。
+
+**一次自造失误（记录）**：C2-a 第一次启动时我用了**上一轮改过 `checkpoint_score` 的副本**做基底，于是它以同一个
+`CANDIDATE_CHECKPOINT_SCORE_INVALID` 立即失败——**修法是从原始契约出发只改 `epochs`**，并用 `diff` 证明"仅一行不同"后才重跑。
+教训：契约副本必须**从仓库原始文件出发**，不能在上一份实验副本上叠加，否则变量不止一个、而且会以别的错误掩盖真实原因。
