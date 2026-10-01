@@ -46780,3 +46780,27 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   after which the implementation list for the single-episode runner is complete.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 5cac7a723; goal active.
+
+
+## CP-2476 — Section 6 in the design's own words: three states, and a claim is not a proof
+
+- **6.1**: reuse `EpisodeRecorder`'s rows, dual PNGs, provenance, fsync and non-overwritable seal, and
+  `ActCollectionResultStore`'s interfaces; the existing observation/audit/provenance/result schemas are closed, so no
+  diagnostic field may be slipped in while still calling it the original schema; raw pixel digests are computed at the
+  acquisition boundary from a fixed RGB shape/dtype/byte order and are never reverse-generated from the saved PNGs.
+- **6.2**: the fresh process receives only the read-only sealed episode, the bound run configuration and the raw audit
+  - no Worker memory and no live connection - and it checks the file set, count, sizes and SHA256 with every PNG fully
+  decoded for shape and dtype; rows against the two frames one-to-one on a complete 10 Hz grid with unique
+  per-stream acquisition ids and strictly increasing source sequence/stamp; every action against the actual controller
+  reference at `t+0.1s` with the command accept/revoke ordering, refusing future feedback; and **both formal and
+  diagnostic modes recompute the start and end poses by the shared amendment**. Run safety stops, authorization and a
+  normal terminal state are independent conditions, and - the sentence that matters most for this milestone - the
+  seal's `status`/`qc_passed` is **only a claim awaiting verification, never a substitute for the computation**.
+- **6.3**: the seal stays immutable and `committed:false` is not rewritten; the Coordinator confirms the sealed
+  result, the QC and the current state through the result verifier, giving **three distinct states** - files only, a
+  legal seal with QC, and committed by the Coordinator - of which **only the third** satisfies this milestone.
+- Also read: the sweep catalogue is pinned by `_CATALOG_SHA256 = "c74915477bfe..."`, so the real twenty-point
+  catalogue is a specific file whose path the CLI module does not name; finding it (or recording that it is absent
+  from this worktree) is the next read, and it decides CP-2475's option one against option two.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD eeb97f01c; goal active.
