@@ -44591,3 +44591,43 @@ dataset manifest = `66dc46d3…`；C2a 权重 = `2afd5506…`；**已批准旧 b
 工作树 `scratch/hs320/`（`env`/`common`/`measurement-paths` 脚本、`build-toolchain{,-2}.sh`、`stage-inputs.sh`、`make-derived-config.py`、各 producer runner、`run-calibration.sh`、`verify.sh`、`run-tests.sh`、`pyshim/`、
 `pre-state/`、`probe-*`、`ruff-head/`、`regeneration-findings.md`、`verify*.txt`、`tmp/`）。以上**均为删除候选，未删除**；HS-300..321 的产物只读引用，未改动。
 工作树 `git status --porcelain`：`?? runs/`（既有未跟踪，Ultralytics 校验输出）+ 本条目所在的账本提交。
+
+## HS-323 — 诊断（未改任何配置/文档/代码）：两个飞行器无法在晋级后的 `max_age_s` 下重产，原因是它们**各自的第一帧**没有预热；生产路径**未被证伪为违反**
+
+**提交**：仅本条目（docs）。**未改** `head_search_v2.json`、**未改**任何测量文档、**未改**任何源码、**未晋级**、未跑 Task 14。诊断报告 = `$EV/reviews/max-age-harness-diagnosis.md`（本条目只指向它，不复述全部数据）。运行 provenance：worktree HEAD `058f9a0bd`、安装包 `$EV/head-toolchain-20261001T162030Z`（`source-commit.txt` = `4a751678a…`，探针打印的导入模块路径即该 root 的 `site-packages`）、sealed 配置 `3fb9f276…`（未改）、`MUJOCO_GL=egl`、`ROS_DOMAIN_ID=0`、每次运行前后 `ps` 与 `nvidia-smi --query-compute-apps` 均为空、全程一个 CUDA 检测器。
+
+**(a) 三条年龄计算（同一把钟 `time.monotonic`，同一处比较 `act/search.py:171-176` 的 `now - received_wall_s <= max_age_s`；差别只在"received"打在哪）**：
+
+| 循环 | received 戳 | 传给 `tick` 的 `now` | 年龄里因此包含 |
+| --- | --- | --- | --- |
+| 产出该参数的 `head_search_timing_measurement.py:1077-1088` | `renderer.render()` **之后** | `detector.predict()` 之后 | 只有检测器调用（文档里 `inference_s == age_s` 逐位相同） |
+| `head_search_deadband_measurement.py:535-543,576` | `plant.render_frame()` 之后 | 检测器调用之后 | 同上（渲染在年龄之外） |
+| `head_search_fine_correction_episodes.py:625-640,675` | 同上 | 同上 | 同上 |
+| 生产 `adapters/act/ros_search.py:82,139-140,188,220-221` | **ROS 消息到达**（image/CameraInfo/joint） | tick 自己的起点（消费 tick 用 `now+elapsed`） | 收帧→消费：排队 + 守护线程里的检测器 + tick 量化 |
+
+即：两个飞行器的年龄**既不是**自己的一秒节拍（它们没有周期循环，逐帧按需产出）、**也不是**渲染（渲染戳在 received 之前）、**也不是**传输（进程内无话题，`transport_measured: false`），而是**检测器调用**。
+
+**(b) 实测分布（throwaway 探针，不写任何文档）**：`scratch/hs323/age_probe.py`（记录型 clock + `HeadSearchController.tick` 包装）驱动安装版 `run_lock_trial` / `run_fine_correction_episode`：
+
+| 飞行 | 结果 | 第 0 帧年龄 | 第 1..n 帧年龄 |
+| --- | --- | --- | --- |
+| deadband 0.5 px（sealed 配置） | rc=2 拒绝 `CAL_TIMING_SWEEP_UNSETTLED`（状态 `INPUT_STALE`） | **36.722 ms**（detect 36.554 / inference 35.105） | —（第 0 帧即拒绝） |
+| fine seed 800000（sealed 配置） | rc=2 拒绝 `CAL_FINE_EPISODE_NO_VERDICT`（同一状态） | **33.493 ms**（inference 31.862） | — |
+| deadband 0.5 px（A/B：只改 `values.max_age_s`→0.05，控制件 sha256 `865f1b6c…`，与 HS-322 的 `probe-cfg-maxage.json` 逐字节相同） | `TARGET_LOCKED` | **35.808 ms** | 6.624 / 5.510 / 5.383 / 5.386 |
+| deadband 3.0 px（同 A/B） | `TARGET_LOCKED` | **37.157 ms** | 6.676 / 5.750 / 5.410 |
+| fine 800000（同 A/B） | `TARGET_LOCKED` | **32.713 ms** | 6.354 / 5.659 / 5.512 |
+
+HS-322 自己的 A/B 产物（`scratch/hs320/probe-maxage/deadband-candidates.json`，sha256 `6a59762d…`，45 帧）复算同结论：`decision − received` 最小 5.216 ms、均值 6.380 ms、**最大 36.049 ms 且正是第一个候选的第 0 帧**，其余帧全 ≤ 6.68 ms。**机制（OBSERVED）**：`scratch/hs323/logs/warmup-probe.log` —— 构造冷启动 1882 ms，`zeros640` 5.305 ms 且 **boxes=0 / masks=False**，第一张真帧 34.223 ms 且 **boxes=1 / masks=True**，其后 5.391 / 4.666 / 4.181 ms。即检测器构造函数的预热（`yolo_seg.py:230-231` 对全零图 `_predict`）**根本不走检测/掩码路径**；第一个真出框的 predict 多付约 30 ms。产出该参数的兄弟循环正是自己多做了一帧"渲染+判定"预热（`warmup.performed=true, detections=1, wall_s=1.1603, warmup_samples_excluded=true`，`declared_because` 明写"第一次推理付 CUDA 上下文与检测器初始化的一次性代价，把它算进分布就是在描述启动而不是运行中的流水线"），两个飞行器没有这一步，于是这笔启动代价落在**它们被测量的第 0 帧**里，控制器如实回 `INPUT_STALE`。
+
+**(c) 生产路径是否违反晋级后的值：证据范围内是"没有"；唯一会违反的地方**未被测量**，不是被否定。**
+
+1. **直接测量（生产路径，已在盘上）**：HS-318 的 restart receipt 用的就是生产 `RosSearchAdapter` + `HeadSearchController` + 真三节点栈 + 真 CUDA 检测器，逐帧记录了门限比较的同一个量（`head_search_restarts.py:2387-2389`：`frame_age_s = wall_s − frame["received_wall_s"]`）。三份 receipt 的 `timing.thresholds.max_age_s` 都是 `0.014736005008453503`，`exceeded_thresholds` 全为 `[]`；合并 **n=40**：min 0.075 ms、p50 2.233 ms、nearest-rank p90 8.622 ms、**max 11.825 ms**（`qualification-restarts-20261001T152045Z/default`，sha256 `7e03163d…`）。这些帧因**另一个**（已被 HS-321 修好的）frame 身份缺陷被拒（receipt 的 `declared_frame_id=head_camera_optical_frame` vs `published_frame_id=head_camera_frame`），不影响年龄本身的有效性；`left`/`forward` 产 0 帧。
+2. **定义**：晋级值就是同一量的 p99.9（25 帧，3.434–4.736 ms，nearest-rank，`sweep-timing-c2a-20261001T085532Z/frame-age-measurements.json`，sha256 `ccbac3f0…`）+ 10 ms，参考循环还剔除了预热帧 —— 这样构造的值不可能被"它测的那条流水线"违反，只能被它**故意排除掉的那一帧**违反。
+3. **传输测量自己的数字**（`skew-measurements-20261001T111219Z/skew-measurements.json`，sha256 `9ef5c928…`）：它是**戳偏斜**测量而非年龄测量 —— `p99_9 = max_skew_s = 0.008000000000002672`（300 样本）、`clock_resolution_s = 0.0019999999999988916`、`time_base=ros_sim_time`、`cuda_used=false`、`detector_loaded=false`、`motion_commanded=false`。所以它对年龄预算贡献为空（frame-age 文档自己写着 `transport_measured: false`），而这不构成违反来源：相机插件是**先渲染后发布**（`camera_publish_rate: 10.0`），传输发生在门限起钟（收到消息）**之前**。
+4. **残余不确定性**：那 40 个生产样本 `detections` 全为 0（即与全零预热同一条"无框无掩码"分支，5.3 ms 那条），**生产路径"第一张真的出框的帧"从未被测量**；而 §(b) 证明的机制对生产检测器同样成立（生产建的是同一个 `YoloSegDetector`、同样 `imgsz=640`，binding 断言 `image_size_px != 640` 即拒，`head_search_binding.py:177-178`；`detector.py:75`），所以那张帧的年龄很可能 **~31–37 ms > 14.736 ms**，会在冷启动时触发**一次** `INPUT_STALE`（产线循环靠重试容忍：`pick_place_search_segment.run` 的 `if "found" not in decision: continue`）。要关掉它，需要的是**生产路径**的测量，不是改配置。
+
+**(d) 应该改什么、归谁**：**配置一个字都不改**（把 `max_age_s` 恢复成 0.05 正是 HS-296 公式明确拒绝的动作："改流水线，不提阈值"；0.05 s = 1.5 个整帧周期，从来不是实测界）。**归属 = 两个飞行器的一次预热帧（harness fix）**：`head_search_deadband_measurement.py` 与 `head_search_fine_correction_episodes.py` 各自在测量帧之前渲染并判定一帧（与 `head_search_timing_measurement.py` 完全相同的先例，其 `declared_because` 已写明理由），把该帧作为 warmup 记录在分布旁并排除。这是真实的生产者缺陷（不是阈值问题）。因为它改测量代码，一旦动手就需要 RED→GREEN + 阶段回归 + 8 worker 全量门禁与节点级 delta；**本轮是诊断，未动手**。
+
+**本轮推断（待评审）**：① 那 ~30 ms 一次性代价被定位到"进程内第一个真的出框/出掩码的 predict"（零图 predict 无框无掩码、首真帧 34.2 ms、次真帧 4.2–5.4 ms 为证），但**未**定位到具体 kernel；② "生产检测器同样缺这一步预热"由代码读得（同一 `YoloSegDetector`、同一 `imgsz=640`、同一全零 `_predict`），本轮**未**在生产栈上跑出那张帧；③ 生产 40 样本的取样面窄（单一 anchor、静态无检测、40 帧里 19 个不同 sim 戳），故 (c) 的答案是"证据范围内没有违反 + 指明唯一未测的违反点"，不是"已证明永不违反"。
+
+**证据与生命周期**：新增 `$EV/reviews/max-age-harness-diagnosis.md`（本轮唯一持久产物）；工作树 `scratch/hs323/`（`env.sh`、`age_probe.py`、A/B 控制件 `ab-maxage-0.05.production-search-config.json`（`865f1b6c…`）、`logs/{deadband-sealed,deadband-ab,deadband-ab-c3,fine-sealed,fine-ab,warmup-probe}.log`、`logs/deadband-sealed.provenance.txt`、`tmp/`）为诊断产物，**均为删除候选，未删除**；HS-300..322 的产物只读引用，未改动（`scratch/hs320/probe-maxage/deadband-candidates.json` 只做只读复算）。工作树 `git status --porcelain`：`?? runs/`（既有未跟踪）+ 本条目所在的账本提交。
