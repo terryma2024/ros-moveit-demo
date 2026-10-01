@@ -51383,3 +51383,25 @@ So the two corrections have an order, and it is not the order I was working in:
 My half-written test is reverted again, and the worktree is back to the user's 35 entries. The next round goes to
 correction 2's producer side - the capture that seals its audit (CP-2671) and the path that must hand the manifest and
 scope to the recorder - which is now known to unblock both corrections at once.
+
+
+## CP-2697 — Correction 2's producer side is wired; what remains is the driver and its test
+
+Putting the last three findings together gives a clear account of where correction 2 stands:
+
+- the **recorder's `finish`** already implements the v2 binding - it verifies the audit manifest, copies what it needs
+  from `source.json`, and requires `audit_manifest` and `scope` **together or not at all** (`EPISODE_SEAL_AUDIT_INCOMPLETE`
+  if exactly one arrives, with the reason in its own comment);
+- the **capture** (committed as 0ca35cc93) now seals the audit it has been writing into and finishes the recorder with
+  both, whenever it is given `window` and `outcome`;
+- and **`ContinuousEpisodeCapture` has no users anywhere in `src/`** (CP-2670), so nothing drives it - which is why a
+  recorder-produced episode still has no audit for the QC to read (CP-2696).
+
+So the producer side is **wired but not driven**: the missing piece is the path that constructs a capture with a sampler,
+a physical audit, an audit writer and a scope, runs it, and finishes it with an outcome and a window. That is precisely
+the live episode path E3 describes, and it is also what correction 3's test is waiting for.
+
+Two things follow for the next rounds. First, an end-to-end test of the sealing - a capture driven to a seal, then the
+episode read by the endpoint QC - is the honest way to prove correction 2 rather than asserting that the code path
+exists. Second, that test needs the capture's collaborators and its `start`/`append` API read first, since its
+constructor signature is known (CP-2671) but its driving sequence is not.
