@@ -46528,3 +46528,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   run reaches a full execution or a clearly named next layer.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 685e47d9a; goal active.
+
+
+## CP-2463 — Where the attribute lives, and where its reader is not
+
+- `selected_point_ids: tuple[str, ...]` is defined in `parallel_batch/adaptive_contracts.py:153` - an **adaptive**
+  request, not the four-field application `BatchRequest` - and the versioned siblings are `BatchRequestV2`
+  (contracts.py:1265) and `BatchRequestV3` (contracts.py:1555). The grep over `parallel_batch/*.py` found the
+  attribute only in its own definition, so the consumer that raised the AttributeError lives outside that package,
+  most plausibly in the CLI module that wraps the coordinator or in the artifacts module.
+- So the next read is narrow and decisive: find which object the failing call actually receives (the traceback's call
+  site), then build that type - the adaptive request if the coordinator's single-episode path is adaptively shaped, or
+  the V2/V3 request if it is the sweep shape reduced to one point. Either way the point this task already builds maps
+  into `selected_point_ids` naturally, since it is exactly one point id.
+- The pattern of this stretch holds: each refusal names a contract, the named contract is read, and the construction
+  becomes a transcription. Four layers have been cleared this way in the fourth piece alone (guard, run mode, trusted
+  pose, and now the request type), and the tree's uncommitted work stops precisely here.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 1f2f8ef50; goal active.
