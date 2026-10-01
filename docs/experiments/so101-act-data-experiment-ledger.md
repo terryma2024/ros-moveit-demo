@@ -46564,3 +46564,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   reading the contract the refusal named rather than by adapting the consumer.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD f91714507; goal active.
+
+
+## CP-2465 — The recipe is a composer call, and the run should reuse it
+
+- The campaign CLI's construction is not a hand-built request at all: it first
+  `resolve_execution_route(schema_version=config.schema_version, execution_profile=spec.execution_profile,
+  batch_kind=spec.batch_kind, worker_count=config.worker_count)` and then calls
+  `spec.composer(config=..., config_path=..., campaign_id=..., batch_id=...,
+  selected_point_ids=tuple(arguments.point_id) or spec.default_point_ids, evidence_root=...)`. So a profile spec knows
+  how to compose a run for the configuration schema in hand, and `selected_point_ids` is one of the composer's
+  arguments - which is exactly why the coordinator expected it and my four-field request did not have it.
+- That settles the fourth piece's shape: the single-episode `run` should call that **same composer** with one point id
+  rather than hand-building a request - the production composition route again, one level up. With that, the objects the
+  run already builds (journal, sealed-result adapter with `RunMode.EXECUTE` and the seven-value target, coordinator)
+  become the composer's own work, and the frozen config, provenance and one-point catalogue are what it is handed.
+- Next read: the profile spec and `resolve_execution_route` - which execution profile and batch kind correspond to a
+  single diagnostic episode, and what the composer returns - after which the run is a transcription of a call this
+  repository already makes in its campaign path.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 31ae4076b; goal active.
