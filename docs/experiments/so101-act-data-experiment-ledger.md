@@ -51517,3 +51517,21 @@ refuses) and the audit writer's (the same). Both are single functions, and with 
 is the point at which it is worth writing, not before. This is the fourth shape in this test that had to be read rather
 than assumed, and the pattern is consistent enough now to state plainly: for this repository, the constructor is part of
 the interface.
+
+
+## CP-2703 — The diagnosis, from the line number: attempt 1 was right about order and wrong about the path
+
+The `FileExistsError` was raised at **line 744, `audit = EpisodeAuditWriter(root, scope, identity, inputs)`** - the
+writer, on a root the recorder had just created one line above. And that identifies both attempts exactly:
+
+- **attempt 1** had the order right - writer first, recorder second - and failed only because I looked for the manifest
+  at `root / "audit" / "audit-manifest.json"` while the writer puts it at `root / "audit-manifest.json"`;
+- **attempt 2** "fixed" the wrong thing by reversing the order, which produced a new error and hid the old one.
+
+So the correct form is: **the audit writer takes `root` first** (it creates `<root>/audit/` and refuses a root that
+already exists), **then the recorder takes the same `root`** (which tolerates it, and needs `episode.json` and
+`source.json` beside the manifest), and the manifest is at **`<root>/audit-manifest.json`**.
+
+That is a two-line correction to the version I already wrote, and this time it is derived from the failure's own line
+number rather than from a guess about ordering. The test is reverted and the worktree is clean at 35 entries; the next
+round rewrites it in this form.
