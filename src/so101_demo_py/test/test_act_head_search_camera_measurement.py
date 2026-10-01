@@ -95,8 +95,8 @@ def _controller_config(**overrides) -> dict:
         "min_confidence": 0.4,
         "max_fine_corrections": 4,
         "max_fine_total_rad": 0.4,
-        "frame_id": "head_camera_optical_frame",
-        "ray_origin_frame_id": "base_link",
+        "frame_id": "head_camera_frame",
+        "ray_origin_frame_id": "head_camera_frame",
         "required_search_domain_rad": list(CORRIDOR_RAD),
         "lock_valid_neck_rad": [-3.0, 3.0],
     }
@@ -842,8 +842,8 @@ def _sealed_inputs(tmp_path):
         "weight_sha256": "b" * 64,
         "tracker": {"iou_threshold": 0.3},
         "camera": {
-            "frame_id": "head_camera_optical_frame",
-            "ray_origin_frame_id": "base_link",
+            "frame_id": "head_camera_frame",
+            "ray_origin_frame_id": "head_camera_frame",
         },
         "motion": {"goal_tolerance_rad": 0.05, "settle_velocity_rad_s": 0.05},
         "values": {

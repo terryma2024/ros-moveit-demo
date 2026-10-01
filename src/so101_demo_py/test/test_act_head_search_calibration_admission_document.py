@@ -141,8 +141,8 @@ def _production_config(**overrides) -> dict:
         "values": values,
         "motion": {"goal_tolerance_rad": 0.05, "settle_velocity_rad_s": 0.05},
         "camera": {
-            "frame_id": "head_camera_optical_frame",
-            "ray_origin_frame_id": "base_link",
+            "frame_id": "head_camera_frame",
+            "ray_origin_frame_id": "head_camera_frame",
             "name": "head_camera",
             "width": WIDTH_PX,
             "height": HEIGHT_PX,
@@ -412,5 +412,5 @@ def test_the_derivation_reads_the_geometry_through_the_installed_loader(tmp_path
     assert plan["min_area_px2"] == 64.0
     assert plan["settle_velocity_rad_s"] == 0.05
     assert plan["goal_tolerance_rad"] == 0.05
-    assert plan["frame_id"] == "head_camera_optical_frame"
-    assert plan["ray_origin_frame_id"] == "base_link"
+    assert plan["frame_id"] == "head_camera_frame"
+    assert plan["ray_origin_frame_id"] == "head_camera_frame"

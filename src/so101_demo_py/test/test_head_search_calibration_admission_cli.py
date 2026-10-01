@@ -73,8 +73,8 @@ def _production_config() -> dict:
         },
         "motion": {"goal_tolerance_rad": 0.05, "settle_velocity_rad_s": 0.05},
         "camera": {
-            "frame_id": "head_camera_optical_frame",
-            "ray_origin_frame_id": "base_link",
+            "frame_id": "head_camera_frame",
+            "ray_origin_frame_id": "head_camera_frame",
             "name": "head_camera",
             "width": 640,
             "height": 480,

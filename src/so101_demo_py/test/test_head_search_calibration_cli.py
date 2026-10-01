@@ -326,8 +326,8 @@ def _run_arguments(
         "min_confidence": 0.4,
         "max_fine_corrections": 4,
         "max_fine_total_rad": 0.4,
-        "frame_id": "head_camera_optical_frame",
-        "ray_origin_frame_id": "base_link",
+        "frame_id": "head_camera_frame",
+        "ray_origin_frame_id": "head_camera_frame",
     }
     if bounded:
         search_config["required_search_domain_rad"] = list(
@@ -981,8 +981,8 @@ def _timing_inputs(tmp_path: Path) -> dict:
                 "schema_version": 2,
                 "camera": {
                     "name": "head_camera",
-                    "frame_id": "head_camera_optical_frame",
-                    "ray_origin_frame_id": "base_link",
+                    "frame_id": "head_camera_frame",
+                    "ray_origin_frame_id": "head_camera_frame",
                 },
                 "motion": {"settle_velocity_rad_s": 0.05, "goal_tolerance_rad": 0.05},
                 "tracker": {"name": "bytetrack", "iou_threshold": 0.3},
@@ -1151,8 +1151,8 @@ def _deadband_inputs(tmp_path: Path) -> dict:
                 "weight_sha256": hashlib.sha256(weights.read_bytes()).hexdigest(),
                 "camera": {
                     "name": "head_camera",
-                    "frame_id": "head_camera_optical_frame",
-                    "ray_origin_frame_id": "base_link",
+                    "frame_id": "head_camera_frame",
+                    "ray_origin_frame_id": "head_camera_frame",
                 },
                 "motion": {"settle_velocity_rad_s": 0.05, "goal_tolerance_rad": 0.05},
                 "tracker": {"name": "bytetrack", "iou_threshold": 0.3},
@@ -1284,7 +1284,7 @@ def test_the_deadband_detector_wrapper_drives_the_production_head_detector() -> 
         head,
         session_id="session",
         attempt_id="attempt",
-        frame_id="head_camera_optical_frame",
+        frame_id="head_camera_frame",
     )
     image = np.zeros((480, 640, 3), dtype=np.uint8)
 

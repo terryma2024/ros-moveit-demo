@@ -1,10 +1,10 @@
 {
   "allow_cpu_fallback": false,
   "camera": {
-    "frame_id": "head_camera_optical_frame",
+    "frame_id": "head_camera_frame",
     "height": 480,
     "name": "head_camera",
-    "ray_origin_frame_id": "base_link",
+    "ray_origin_frame_id": "head_camera_frame",
     "width": 640
   },
   "candidate_identity_sha256": "9c8a213ed9dcbc75a697e9fe6f10003be221901a938daad4e3afde1e18f91bcc",

@@ -132,8 +132,8 @@ def _production(tmp_path, **overrides):
             "name": "head_camera",
             "width": 640,
             "height": 480,
-            "frame_id": "head_camera_optical_frame",
-            "ray_origin_frame_id": "base_link",
+            "frame_id": "head_camera_frame",
+            "ray_origin_frame_id": "head_camera_frame",
         },
         "motion": {"settle_velocity_rad_s": 0.05, "goal_tolerance_rad": 0.05},
         "tracker": {"name": "bytetrack", "iou_threshold": 0.3},
@@ -466,8 +466,8 @@ def test_the_controller_config_is_built_from_the_sealed_documents(tmp_path):
     assert config["lock_valid_neck_rad"] == pytest.approx(list(LOCK_INTERVAL_RAD))
     assert config["settle_velocity_rad_s"] == pytest.approx(0.05)
     assert config["goal_tolerance_rad"] == pytest.approx(0.05)
-    assert config["frame_id"] == "head_camera_optical_frame"
-    assert config["ray_origin_frame_id"] == "base_link"
+    assert config["frame_id"] == "head_camera_frame"
+    assert config["ray_origin_frame_id"] == "head_camera_frame"
 
 
 def test_a_fov_that_disagrees_with_the_seal_is_contradictory(tmp_path):

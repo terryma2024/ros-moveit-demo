@@ -44406,3 +44406,66 @@ coverage complete 义务，其余一律非 pass；⑤ Teleop 验收的 `qualific
 
 **随后的路径**：Task 13 **从 Step 1 重做**（全新 run root）→ 新 bundle → **再次请你精确批准（呈现全部 17 值+证据+身份）** → 新晋级记录 →
 新 commit-stamped 冻结运行时 → **Task 14 整段重跑**。
+
+## HS-321 — 执行已批准的 frame 身份变更集（修订 3）；变更记录 = `$EV/reviews/frame-identity-fixture-classification.md`
+
+**变更已声明**：本次变更的**变更记录就是** `$EV/reviews/frame-identity-fixture-classification.md`（本条目指向它）。
+该文件同时是全仓**逐处**分类表：`head_camera_optical_frame` 30 处、`base_link` 34 处（本仓）+ 85 处（`third_party/mujoco_ros2_control` 子模块，**另一个 git 仓库**），共 149 行，一行一处；
+最宽范围（`--no-ignore --hidden`：5394 / 5584 处）按规则核对为"已跟踪 / 子模块 / 被 `.gitignore` 命中"三者之一，**非跟踪非子模块非忽略 = 0**（`scratch/hs319/search/unexplained-*.txt` 皆空）。
+
+**搜索命令与命中数（不加任何截断——这是对上一轮 `head -4` 误判的纠正）**：
+
+```
+rg -n --no-heading -F 'head_camera_optical_frame'   #  30 处 / 15 文件
+rg -n --no-heading -F 'base_link'                   # 119 处 / 28 文件（含子模块 85）
+git grep -n -F 'head_camera_optical_frame'          #  30 处 / 15 文件（与 rg 对跟踪树逐字一致）
+git grep -n -F 'base_link'                          #  34 处 /  9 文件（本仓）
+```
+
+**分类结论**：42 处正常路径（22 处 optical + 20 处 base_link）**全部**改为 `head_camera_frame`；**故意的错配 = 0 处**——
+两个名字都没有出现在任何"故意错配"的一侧，因此没有任何拒绝断言落在被改的行里，也就无从削弱。树里真正的错配夹具用的是各自的哨兵值
+（`wrong_frame`、`other_base`/`new_base`、`other_camera`、`camera`/`base`/`head_optical`），五个文件**全部未动**，其拒绝断言逐字保留
+（`test_macos_camera_topic_probe_behavior.py:181` 的 `unexpected frame_id: wrong_frame`、`test_parallel_batch_perception.py:226` 的
+`assert not h.latch.accept(...)` 等）。**判断项**：`base_link` 作为证据映射**键标签**（生产 `task8_measurement_client.py:187-188`
+及其两个测试镜像）不参与任何 frame gate / TF 查询 / 配置校验，属批准集之外 → 保留并登记为下一轮另行批准的残留下沉；
+`test_head_search_calibration_cli.py:1287` 虽无对标签的断言，仍按正常路径归类并纠正。
+
+**改动（13 文件 / 42 值，全部等长行替换，行号不变）**：① `head_search_v2.json:4,7` 两键 → `head_camera_frame`；
+② `head_search_scenarios.py:1966` 硬编码 → `head_camera_frame`；③ 11 个测试文件的 20 处 optical 夹具 + 19 处配对 ray-origin；
+④ 无阈值、无值、无 seal、无 URDF link、无插件 frame、无 TF 别名改动。
+
+**RED -> GREEN（用生产代码本身，不放宽任何断言）**：
+- **配置（行为改变，真 RED）**：探针 `scratch/hs319/probe-frame-identity.py` 只用生产代码（`validate_head_search_binding` +
+  真 `HeadSearchController.tick`），把**插件真正发布的** `head_camera_frame`（`mujoco_plugins.yaml:15` = URDF `so101.urdf:645`）
+  喂给提升版配置构建的 search config。改动前 `INPUT_STALE`、`frame_consumed=False`、rc=1；改动后 `SEARCH_CUP`、`frame_consumed=True`、rc=0。
+  这就是 HS-318 三个真实 `FULL_RESTART` 零消费的同一判据（`search.py:179`）。
+- **生产硬编码（配对 RED）**：`scratch/hs319/probe-scenario-detector-frame.py` 以 `detector_factory=None` 驱动**真入口**
+  `write_head_search_scenarios`，只把 `build_production_head_detector` 换成记录器（该分支需要 CUDA/权重，回归集里的每个用例都注入
+  `detector_factory`，所以**既有测试根本到不了这一行**）。旧字面量下同一次运行声明两个 frame
+  （detector `head_camera_optical_frame` vs frames `head_camera_frame`）→ `one_run_one_frame_identity=False`、rc=1；改后为 `True`、rc=0。
+- **夹具（读通断言是承重的）**：先只改 `test_act_head_search_timing_measurement.py` 与
+  `test_act_head_search_calibration_admission_document.py` 的**输入文档**、不动断言 → **RED 2 failed / 41 passed, rc=1**
+  （`assert 'head_camera_frame' == 'head_camera_optical_frame'`）；再改断言 → **GREEN 43 passed, rc=0**。
+  这两处此前是"在错标签上通过"：它们钉住的是"推导会复制 `camera.frame_id`"这一性质，而不是真实 frame 名。
+
+**门禁**：改动前 39 文件回归 **4 failed / 1064 passed**（4 个与 frame 无关的既有失败：`PickPlaceRunner._verify_phase` 签名与
+`_PHASE_EVIDENCE_KEYS`）；只改生产后同 4 个、无新增；再加配置后同 4 个、无新增（证明既有套件对**本缺陷完全盲**）；
+夹具纠正后仍 **4 failed / 1064 passed, rc=1**，与基线 `nodes-failures.txt` 逐节点相同。全量 `src/so101_demo_py/test`
+（8 workers，baseline run-dir 布局，`$EV/scratch/pytest-xdist8-hs319-demo-suite.ORZY2PwE`）
+**175 failed / 6490 passed / 152 skipped / 86 errors，rc=1，89.43 s**；对最新基线
+`pytest-xdist8-hs318-demo-suite-committed.f8a1TzN8` 的**节点级 diff 全为零**（`node-delta-vs-hs318.txt`：
+passed 6490/6490、failure 175/175、error 86/86、skipped 152/152，`only_in_new = only_in_baseline = 0`）。
+调用按本轮要求用 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` + 显式 `-p xdist -p anyio`，收集与基线**逐数一致**
+（6893/6905 collected、12 deselected、10 collection errors），所以 delta 可比。运行后 `ps` 无 ros2/MuJoCo 残留、未启动 `ros2 daemon`。
+
+**证据**：`scratch/hs319/{search/,logs/,probe-frame-identity.py,probe-scenario-detector-frame.py,make-classification.py,run-tests.sh,run-fullsuite.sh,env.sh,regression-files.txt}`；
+`$EV/scratch/hs319/{tmp-*,tmp-fullsuite-*}`；`$EV/scratch/pytest-xdist8-hs319-demo-suite.ORZY2PwE/`。以上**均为删除候选，未删除**。
+
+**一次必须如实记录的抖动（与本次改动无关）**：最终回归第一次复跑出现第 5 个失败
+`test_act_head_search_stop_measurement.py::test_confirm_stop_needs_three_consecutive_qualifying_feedback`，
+断言是 `assert proof["pacing_faithful"] is False` —— 取决于**墙钟节拍**（`window_real_time_factor`）。证据：该文件**不在**本次改动集
+（`git diff --name-only` 无 `stop_measurement`）；该用例单独串行跑 **1 passed in 0.26 s**；同一 39 文件回归复跑回到
+**4 failed / 1064 passed**（`scratch/hs319/logs/green4-final-regression-rerun.log`）；全量 8 worker 套件里它也是通过的（节点 diff = 0）。
+因此判为并行负载下的抖动，不计入回归结论，但保留首次失败日志 `scratch/hs319/logs/green3-final-regression.log` 不删。
+
+**下一步（未做，需另行批准）**：Task 13 从 Step 1 重做（全新 run root）→ 新 bundle → 重新呈现全部 17 值+证据+身份取得对新摘要的批准 → 新晋级记录 → Task 14 整段重跑。

@@ -438,8 +438,8 @@ def _search_config(*, bounded: bool = True, required=(-0.35, 0.35), safe=(-2.0, 
         "min_confidence": 0.4,
         "max_fine_corrections": 4,
         "max_fine_total_rad": 0.4,
-        "frame_id": "head_camera_optical_frame",
-        "ray_origin_frame_id": "base_link",
+        "frame_id": "head_camera_frame",
+        "ray_origin_frame_id": "head_camera_frame",
     }
     if bounded:
         # the bounded trajectory contract of plan section 0: one declared required domain and one safe

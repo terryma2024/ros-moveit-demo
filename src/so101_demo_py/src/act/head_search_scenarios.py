@@ -1963,7 +1963,7 @@ def write_head_search_scenarios(
             weights_path=weights,
             operating_point=operating_point,
             production=production,
-            frame_id="head_camera_optical_frame",
+            frame_id="head_camera_frame",
             device=device,
             attempt_id=f"{SCENARIO_SESSION_ID}-detector",
             session_id=SCENARIO_SESSION_ID,

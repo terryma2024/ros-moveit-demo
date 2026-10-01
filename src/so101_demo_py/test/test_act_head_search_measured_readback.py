@@ -56,8 +56,8 @@ CONFIGURATION = {
     "min_confidence": 0.4,
     "max_fine_corrections": 4,
     "max_fine_total_rad": 0.4,
-    "frame_id": "head_camera_optical_frame",
-    "ray_origin_frame_id": "base_link",
+    "frame_id": "head_camera_frame",
+    "ray_origin_frame_id": "head_camera_frame",
     "required_search_domain_rad": [-0.17559216195018026, 0.08047101126546086],
     "lock_valid_neck_rad": [-6.283175307179587, 6.283175307179587],
 }
