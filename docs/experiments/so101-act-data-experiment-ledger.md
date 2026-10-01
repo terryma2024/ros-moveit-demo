@@ -44187,3 +44187,22 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Per CP-2344's plan, this stretch stops investing in F11 and F5's step two until the two rulings arrive.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11 as described; F5's regression
 - fixed, step one landed, step two handed off with its probe recipe; HEAD 43f360a28; goal paused.
+
+## CP-2347 - The whole input binding is one function over one document
+
+- Read this round: first_episode_inputs.py exposes exactly one binding entry point, freeze_inputs(candidates_path,
+- output) -> Path at line 377. Everything the admission gate later checks - the twelve roles, the per-role gates,
+- the manifest's kind and fsync - comes from the candidates document it consumes and the output it writes, so the
+- owner's nine values do not need a code change anywhere: they fill the candidate document's required_values for the
+- four blocked roles and freeze_inputs turns them into the frozen inputs the per-role gates read.
+- That is what makes the remaining owner action a one-pass step rather than a project: fill path_policy's
+- path_step_s and path_clearance_m, placement_qc's five values, rgb_skew's max_age_s and max_skew_s (the code
+- implies 0.1 for both, CP-2234), and select one of the two approved resource_thresholds candidates; then run
+- freeze_inputs once. The nine values, their roles, the one selection and the code-implied pair are all recorded in
+- CP-2232 through CP-2236.
+- Nothing else in the objective's path waits on Task 3: plan items 5-8 (production composition and installed CLI,
+- the freeze/build/integration gates, one real FULL_RESTART closure, negative copies and delivery) follow from a
+- bound input set, and the ninth review follows F5 and F11 closing.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+- its derivation behind CP-2332; F5's regression fixed with step one landed and step two handed off; HEAD
+- aa0c0c9f5; goal paused.
