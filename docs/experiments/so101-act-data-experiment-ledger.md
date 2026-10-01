@@ -49252,3 +49252,17 @@ K2's addition is therefore a single **task-level sequence** carried on every rec
 ones, which stay as they are because other consumers order within streams and tests assert them. That is an addition
 rather than a rework: one new field, assigned by the writer, validated by the reader, and used by the ordering and
 descent checks the protocol specifies.
+
+
+## CP-2604 — One assignment point, so the task-level sequence stays a localized change
+
+`_next(kind)` at `episode_audit.py:980` is the audit's **only** sequence allocator, and its callers are exactly the
+append paths: `:857` for events, `:884` for references, `:904` for physics, with acquisitions assigned through the same
+helper. So the task-level counter the protocol asks for does not need to be threaded through the writer: `_next` can bump
+it as it hands out the per-stream number, and each append records it beside the per-stream field it already sets.
+
+That keeps K2's ordering addition to one helper, four assignment lines and whatever the reader validates - an addition
+in the same sense as the geometry provenance was: a field that travels with every record, produced where the records are
+already produced, and read by the ordering and descent checks the protocol specifies.
+
+Its body is printed beside this entry, so the next round writes the edit against the real code rather than a guess.
