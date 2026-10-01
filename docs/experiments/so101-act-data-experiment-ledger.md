@@ -46060,3 +46060,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   the four suites is the decisive check, and the guards from this round stay uncommitted until it passes.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 1fcd91f87;
   goal active.
+
+
+## CP-2440 — Settled: the overlay is in sync, and the real bug is my widening of a closed set
+
+- `diff -q` says the plan root's `pypath/so101_demo/act/first_episode_inputs.py` is **identical** to the worktree
+  source and already carries `user_empirical_default` (six occurrences), so CP-2439's "stale overlay" reading was
+  wrong and CP-2438's attribution was right: this is my regression.
+- The mechanism, now exact: `read_inputs_manifest`'s first check is `set(document) != _MANIFEST_FIELDS` (line 218, the
+  line the traceback named). I widened `_MANIFEST_FIELDS` with `mode`, `endpoint_policy` and `runtime_policy`, but
+  `freeze_inputs` only writes those when its three keyword-only arguments are supplied - so every **old-style call**
+  (exactly what the eight fixtures make) produces a manifest without them and is now refused. That is a direct breach
+  of the plan's rule that a call predating the amendment keeps its contract.
+- The correct fix is therefore not to move assertions: the base fields stay **required** and the three amendment
+  bindings become **optional** - the closed contract becomes "these must be present, no others may be" rather than
+  "exactly this set" - which preserves both the old calls and the new bindings, and keeps rejecting an unknown field.
+- Recorded plainly because the attribution moved three times in as many rounds (CP-2438 mine, CP-2439 overlay,
+  CP-2440 mine again): the measurement that settled it was the one-line `diff`, and the lesson is to run it before
+  theorising about which copy is loaded.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 21b32246c;
+  goal active.
