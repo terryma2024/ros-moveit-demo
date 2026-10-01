@@ -44659,3 +44659,21 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's divergence fixed with its
   alignment landed and its derivation waiting on the K1 window knowledge; F5's regression fixed, step one landed,
   step two past the coverage gate with the window next; HEAD 55cc7029d; goal active.
+
+
+## CP-2370 — The window predicate's own probe is rehearsed; the hybrid's window is one run from diagnosis
+
+- Instrumented `_window_matches_observed` to print its arguments and each fact the readback compares, ran it against
+  the existing window negative, and read: schedule `head [1.0, 1.15, 1.2] / wrist [1.0, 1.1, 1.2]`, acquisitions
+  `head [1.0, 1.1, 1.2] / wrist [1.0, 1.1, 1.2]`, labelled `[1.0]`, physics `[1.1, 1.1, 1.1]` (5 rows), outcome
+  `complete`, start 1.0, end 1.2, cutoff 1.0, first_command 1.1, physics_end 1.1.
+- So the instrumentation names, in one line, every value the predicate compares: the per-stream schedule against the
+  acquisitions held, the labelled rows against the cutoff, the physics history against both endpoints, and the window
+  edges against the observed extremes. The self-consistent fixture's own numbers confirm which of them are consistent
+  there, and the same print against the runner-backed fixture will name the one that is not.
+- The module was restored immediately (zero dirty entries). Following the pattern that has now worked three times
+  (CP-2359 rehearsal, CP-2360 run, CP-2365 the local that settled coverage), the next round pastes this probe plus the
+  hybrid fixture and reads one line.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
+  K1's legal-window construction now available to it; F5's regression fixed, step one landed, step two past the
+  coverage gate with its window one instrumented run away; HEAD dd0558a1b; goal active.
