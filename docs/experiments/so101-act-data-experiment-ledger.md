@@ -44868,3 +44868,50 @@ HS-322 自己的 A/B 产物（`scratch/hs320/probe-maxage/deadband-candidates.js
 **提交**：`fce9e272e`（`feat: production smoke journal through the owned stack (RED->GREEN)`，9 个文件：2 新增（新模块 + 新测试）+ 4 源码改动 + 2 测试改动 + 本条目所在的账本；普通 `git commit`）。
 
 **证据（全部保留，未删除）**：`$CAMPAIGN/production-smoke-20261002T050000Z/`（本轮 of record）与八次被取代尝试 `…T{010000,021500,023000,024500,030000,033000,040000,043000}Z*`（每一次的拒绝都是其后那处修复的证据）；`$EV/head-qualification-smoke-ownership-20261002T050000Z/exclusive-ownership.json`；`$EV/head-qualification-smoke-agg-20261002T060000Z/qualification-verdict.json`（最新 root）与 `$EV/head-qualification-smoke-agg-20261002T061500Z/qualification-verdict.json`（控制）及各自 ownership receipt；`$EV/scratch/pytest-xdist8-hs326-demo-suite.DyTKU26R`（全量 + `node-delta-vs-hs325.txt`）；`<worktree>/scratch/hs326/{env.sh,run-tests.sh,run-fullsuite.sh,real-run.sh,aggregate.sh,regression-files.txt,logs/,pyshim}`。审计更新：`$EV/reviews/task14-gap-audit.md` §11。工作树 `git status --porcelain`：6 个修改 + 2 个新增（源码/测试）+ 测试运行留下的未跟踪 scratch（`broker-27c83b/`、`broker-997d39/`、`ipc/`、`runs/`）——**未删除、未提交**，与 HS-325 留下的 `?? runs/` 同类。开工前观察到 HS-325 遗留的孤儿进程 `ros_child --socket-root scratch/hs325/tmp-probe/probe-r6hsqjdg`（pid 3755080，ppid 1，state S，0% CPU，无 ROS 节点、无 GPU），**不是本轮产物，未处理**，仅记录。
+
+## HS-327 — 诊断（**未改任何配置/测量文档/源码、未晋级、未重产 bundle**）：颈部保留拒绝收到的码是 `DENY_CLOSED`，而关门的是**第一条 goal 自己的** `DENY_DIGEST_MISMATCH`（CDR 载荷末尾 28 字节是序列化器从不写入的堆内存）；`/joint_states` 生产者恰好 100 Hz、RTF 1.00，是**订阅端 QoS 历史（`KEEP_LAST(5)`）**把交付压到 26.7–33 Hz
+
+**目标与边界**：只做诊断，输出是用户对 pending bundle 第二次精确批准的证据。开工前用 HS-315 的 ownership gate（`$EV/head-qualification-hs327-ownership-20261001T184450Z/exclusive-ownership.json`，rc=0，进程表/ROS graph/GPU/tmux/evidence root 全空）；运行面 = `$T = $EV/head-toolchain-20261001T170212Z`（commit `d8d1b5f8b`，`source-commit.txt`）、python 源码经 `scratch/hs327/pyshim` 指向本 worktree（与 HS-326 同一个 shim 装置：冻结安装早于 HS-326 的三处 python 修复）、C++ 侧编译 `src/so101_mujoco_support/src/controller_reservation_protocol.cpp` 对冻结头（头与源在该 commit 后逐字节未变）、`MUJOCO_GL=egl`；**全程 MuJoCo、不装检测器、不开 CUDA**（每次运行前后 `nvidia-smi --query-compute-apps` 为空），5 次独立起栈每次都被证明拆干净（各 probe JSON 的 `after.processes/nodes/gpu_compute_apps` 全空）。**未改** `head_search_v2.json`（`3fb9f276…` 前后相同）、**未改**任何测量文档、**未改**任何源码、未跑 Task 14 任何 phase、未跑测试门禁（本轮无源码改动）。诊断报告 = `$EV/reviews/reservation-and-joint-rate-diagnosis.md`（本条目只给结论与数字，细节以该文件为准）。
+
+### (a) (A) 哪个 `DENY_*` 会触发，为什么
+
+线上响应只有**一个状态字节**（`SOGA`，`ACK=0/REJECT=1`），`BoundReserveStatus` 从不出进程、controller 对拒绝**不打日志**，所以只用三层证据：① 用**冻结的** admission 代码离线喂客户端**逐字节**的那一帧，读它自己的返回值；② 线上交换的**原始回包**；③ 用 `SOIA` 身份查询读 gate 自己的状态（`EXCLUSIVE` 回 `SOID`+op1，已关门回 `SOID`+op0 = `534f49440100`）。
+
+| 证据 | 值 |
+|---|---|
+| 同一 goal 的 CDR 摘要（8 次序列化） | **7 个互不相同**：`010f57d9…`（py run1）、`d9d5fb6c…`（py run2 = 该帧的 wire digest）、`3ed947d0…`（C++ 干净堆）、`0e2132fd…`（live probe1）、`4c701116…`/`763d886c…`（同一脚本两个进程）、`7475923e…`（截断试验） |
+| 差异不是内容 | 两个 188 B 载荷 `deserialize` 出的消息**相等**，差异只在偏移 176–179、186–187；载荷**内容到第 160 字节结束**（截到 160 再反序列化仍等于原消息） |
+| 假设 (i) 的前提被**否定** | python 载荷把尾部 28 B 清零后 = `3ed947d0a497353b7907f8f42e467752a30547b177ddde907b2258f18a197213`，与 C++ `rclcpp::Serialization` 在干净堆上的输出**同摘要** → rclpy 与 rclcpp 的内容序列化**逐字节一致**，不同的是**从未被写入的内存** |
+| `reserve_bound` 的摘要检查是**恒真**的 | 把 `goal_cdr` 末 28 B 全改 `0xCC`、`target_digest` 取该篡改载荷的 sha256 的帧被真 gate **ACCEPTED**，且从 gate 自己的摘要缓冲 dump 出的字节与篡改载荷 `cmp` **完全一致**（尾部全 `0xCC`）：摘要缓冲复用了刚释放的入站 CDR 缓冲 |
+| 线上链条（`scratch/hs327/out/live-probe-20261001T185144Z.json`） | `SOGR` arm ACK（gen `63614751644038757`）→ `SOIA` 身份 `inc-3702540a…`/`boot-4115d05c…` → **r1 保留 ACK** → **该保留授权的 action goal `accepted=False`**（controller 拒了它自己刚保留的 goal）→ **第二条保留之前**的 `SOIA` 已经 **REFUSED**（gate 已关）→ **r2 保留 REFUSED**：`RESTART_RESERVATION_REFUSED: the neck controller rejected the bound reservation for the goal 76357b98…`（与 HS-326 记录的终态文本同型）→ 重新 arm 到 gen+1（身份恢复）→ **同一载荷 r3 ACK** → r4（第二条并存保留）REFUSED；`transport_retries=[]` |
+| 判别实验（排除过期） | 生产 400 ms 窗口：保留 ACK 后 **0.114 s** 收到 `accepted=False`（在窗口内）；`claim_window_ns=10 s`：**0.275 s** 收到 `accepted=False`（过期检查**不可能**触发）→ `admit_bound_action` 的检查表里 generation/role/incarnation/boot 由同代 `SOIA` 排除、保留条目存在（r1 ACK 过）、deadline 未到 ⇒ **只剩摘要比较** ⇒ 该 goal 被 **`DENY_DIGEST_MISMATCH`** 拒，走 `drop_and_close()` **关门** |
+| 因此 r2 的码 | gate 此时已 `CLOSED` ⇒ `reserve_bound` 顶部返回 **`DENY_CLOSED`**（客户端两种都只看到一个 REJECT，这正是 HS-326 两个假设无法从 journal 分辨的原因） |
+| 记录里那条拒绝是**第二条**颈部命令 | journal 有 **2 个**被消费帧（`frames` 0/1，同为 `SAFE_OBSERVE`/目标 0.1），traceback 在 `command_neck → port.send → reserve`，而 `reserve` 是该码**唯一**抛出点；若首条就拒，tick 循环只会留下 1 帧。首条因此保留成功且 goal 被**静默**拒绝（`command_neck` 从不读 `port.accepted(gid)`） |
+
+**结论与归属**：拒绝码 = **`DENY_CLOSED`**，肇因码 = **`admit_bound_action` 的 `DENY_DIGEST_MISMATCH`**；这是**controller 侧真实缺陷，不是 smoke 误用协议**（`ReservedControllerPort.send` 保留的正是它随后发出的字节、同一 goal UUID；HS-326 的三处修复都正确且是到达该路径的必要条件）。**Owner = `src/so101_mujoco_support`**（`ControllerGoalAdmission::compute_goal_digest` 对"再序列化"取摘要、`reserve_bound` 的摘要检查靠缓冲复用恒真、`admit_bound_action` 的摘要无法成立）；Batch 3 protocol audit 里冻结的"digest = sha256(goal CDR)"绑定就是要重开的设计件。上游近因是这类消息的序列化长度比内容多 28 B 且那 28 B 从不写入（rclpy/rclcpp/`rmw_serialize`，即 Fast DDS CDR），应向 RMW/`rosidl` 报，但 admission **本就不该依赖再序列化逐字节相等**。**要改什么（本轮未改）**：把保留绑到能跨过 action 一跳的东西（把**收到的** CDR 字节或一个不透明 nonce 交给 admission；或比较与序列化器无关的规范化字段编码），并在保留逐字节检查的前提下不要让 `admit_bound_action` 仅因摘要不符就关门。
+
+### (b) (B) `/joint_states` 的机制：配置 / 生产 / 交付
+
+| 量 | 值 | 证据 |
+|---|---|---|
+| 配置 | **100 Hz**（`joint_state_broadcaster.ros__parameters.update_rate: 100`）；`/controller_manager` 的 `update_rate = 500`（线上读参） | `$T` 配置、`live-probe-…T185144Z.json` |
+| **生产** | **仿真时间里恰好 100 Hz 且无缺口**：`KEEP_LAST(500)` 读者 20 s 窗口收到 **1969** 条，**1968/1968** 个间隔都精确等于 10 ms（`delivered_rate_hz_sim = 100.0`）；`RELIABLE KEEP_LAST(100)` 读者 2050 条、间隔全 10 ms | `qos-deep-…json`、`qos-reliable-…json` |
+| 生产者栅格 | **8 个读者**（run3 四个 + run4 四个）里每个间隔都是 **10 ms 的整数倍**、且**没有一个低于** 10 ms ⇒ 生产者周期恰 10 ms、丢的是整条消息 | `rate-*.json`、`qos-*.json` |
+| 仿真器 | MuJoCo `timestep=0.002 s`（500 步/仿真秒）；`/clock` 每个 `mj_step` 发一次（`mujoco_simulation.cpp:2179`），收到的 clock 间隔都是该步长的倍数（run3：780 个间隔里 634 个恰 2 ms，min=median=2 ms；run2 直方图 2/6/8/14/16/26/122/146 ms） | `live-probe3` `clock_in_process`、`live-probe2` |
+| **实时因子** | **1.00**（run3 `bare`：19.960 s 仿真 / 20.009 s 墙钟；run4 `deep`：19.680/20.31；HS-326 相机窗 4.976/4.364） | `live-probe3/4`、HS-326 journal |
+| **达成率（生产档）** | **33.0 Hz**（`bare`，只订阅该话题）、**26.7 Hz**（`prod`）、**27.9 Hz**（`prod+cam`）、25.3–26.1 Hz（同节点再挂 `/clock`）；中位间隔仍是 10 ms，最大空档 1.24–1.45 s | `live-probe3/4` matrix |
+| 判别实验 | 同一栈、同一 20 s 窗、同一机器：`KEEP_LAST(5)` → 532 条/26.72 Hz；`KEEP_LAST(500)` → **1969 条/100.0 Hz 零丢**；`RELIABLE KEEP_LAST(100)` → 2050 条/100.0 Hz；`prod+cam` 的相机话题 205 帧 ≈ 10 Hz 无损 | `live-probe4` matrix |
+
+**结论与归属**：差距**不是** broadcaster 的配置速率（生产侧恰好 100 Hz、深队列零丢），**不是**仿真器步频/RTF（500 步/仿真秒、RTF 1.00），**不是**传输（同一传输在同一个窗口把同一条流 100% 交给另一个配置的读者，10 Hz 相机话题无损）；**是订阅端 QoS 历史**：生产档 `qos_profile_sensor_data` 是 `KEEP_LAST(5)`，读者 take 循环一滞后，reader 缓存就把没取走的样本覆盖掉，丢失按整条 10 ms 消息量化、以最长 ~1.45 s 的停顿形式出现。**take 循环为什么滞后本轮未定位**（rclpy executor 调度与 DDS reader 线程唤醒都仍是候选）。**Owner = 消费方订阅档**（`ros_neck.py:33`、`ros_execution.py:48`、`ros_search.py`；飞行节点对 `/joint_states` 有 3 个同档订阅）。**要改什么（本轮未改）**：给必须看 100 Hz 的消费方加深/修正 `/joint_states` 订阅档，和/或不要把颈部路径的新鲜度门绑在按 10 Hz 契约测出的那个数上。
+
+### (c) 两个发现是否让晋级的 `max_age_s` 存疑
+
+**(A) 不存疑**（保留协议状态缺陷，与该值无关）。**(B) 存疑**：晋级值 `0.014736005008453503 s` 在 pending bundle 里写的是 `nearest_rank_p99_9(decision − received) + 10 ms`、对象是 **10 Hz 相机帧契约**（25 样本、观测最大/p99.9 帧龄 4.736 ms、上限 1.5 帧周期）；而**同一份 pending bundle 的 `startup_readback.also_observed` 自己就记着** `neck_port.max_age` 与 `stop_criterion.max_age` 等于同一个数（`head_search_restarts.py:2066/:2075`、`ros_neck.py:41,69`）。在交付出来的关节状态流上（均值间隔 ~37 ms、空档到 1.45 s）该门只能在"刚收到一条"的瞬间满足：HS-326 记到的两个钟龄（26 ms 与 8 ms vs 14.736 ms）是这条分布（p99 超过 100 ms）的边缘，不是偶发。含义：该值对它被测量的那个相机帧消费方仍是正确绑定（HS-323 也确认生产帧路径不违反它），但**作为颈部路径的关节状态新鲜度门不充分**；要么改消费方 QoS，要么给颈部路径一个按交付出的关节状态流测量的独立门（新的标定输入，而不是改这一个数）。
+
+**本轮推断（待评审）**：① "摘要缓冲复用了入站 CDR 缓冲"由 0xCC 实验直接证明（dump 与篡改载荷逐字节相同），但"线上 `admit` 侧缓冲一定不复用"**未**在 C++ 里重现（探针里的连续调用反而总会复用；线上 action 路径的堆历史无法离线复刻）——线上那一跳的结论由"10 s 窗口下仍被拒 + 检查表逐项排除"给出；② take 循环滞后的具体机制未定位（见 (b)）；③ `/joint_state_broadcaster` 自己的声明参数没读到（`/joint_state_broadcaster/get_parameters` 返回空，`/controller_manager` 正常），所以"配置 100 Hz"由配置件 + **生产出来的** 10 ms 栅格两路确认，而不是线上读参。
+
+**受保护产物**：pending bundle `$CAMPAIGN/head-search-calibration-20261001T160314Z/head-search-calibration-bundle.json` **开工与收工均 `0563bada4fa6c8017ccc3b91118069412508269261338411f736c1bce5d04c01`**；已批准 bundle `e21899c22cb15774bfe06e9f995c85fc20797a61bda08560c6f48044a8767974` 未变；`head_search_v2.json` `3fb9f27646b6e314fc30fe2892f6b1c3d44b068f4c6614df8f7de3c5add2ffd9` 前后相同；未跑 `verify-promoted-config`、未写任何 approval 字段、未晋级。
+
+**提交**：仅本条目（docs）。**未改**任何配置、测量文档或源码，故不跑 RED→GREEN 与阶段/全量门禁（本轮无源码改动）。
+
+**证据（全部保留，未删除）**：新增 `$EV/reviews/reservation-and-joint-rate-diagnosis.md`（本轮唯一持久产物）与 `$EV/head-qualification-hs327-ownership-20261001T184450Z/exclusive-ownership.json`；工作树 `scratch/hs327/`（`env.sh`、`stamp.txt`、`make-frame.py`、`build-probe.sh`、`live-probe.py`/`live-probe2.py`/`live-probe3.py`/`live-probe4.py`、`rate-probe.py`、`qos-probe.py`、`pyshim/`、`probe/{reservation_probe.cpp,serialize_determinism.cpp,admit_mismatch.cpp}` 及三个编译产物、`out/{manifest.json,goal-neck.cdr,frame-*.bin,frame-*.json,*.reserialized.cdr,rate-*.json,qos-*.json,live-probe*.json}`、`logs/{probe-offline*.txt,probe-aliasing.txt,serialize-determinism.txt,probe-admit-mismatch.txt,live-probe*-*.txt}`、`live-work{2,3,4}/`、`live-work/`、`tmp/`）。以上**均为删除候选，未删除**；HS-300..326 的产物只读引用，未改动。工作树 `git status --porcelain`：`?? broker-27c83b/`、`?? broker-997d39/`、`?? ipc/`、`?? runs/`（HS-325/326 既有未跟踪，未动）。收工时 `ps` 无任何 mujoco/ros2_control_node/spawner/探针残留、`nvidia-smi --query-compute-apps` 为空、`ros2 node list --no-daemon` 为空。
