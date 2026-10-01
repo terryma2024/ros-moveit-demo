@@ -51647,3 +51647,27 @@ The layout the evidence supports: **the writer first with `root`**, the manifest
 and **the recorder afterwards with the same `root`**. The one thing still unexplained - the `FileExistsError` that
 started this - will be met with a printed full path rather than a truncated one, and if it does not appear, that is
 itself the answer.
+
+
+## CP-2709 — The full path, and the real question: neither order works
+
+The error, untruncated at last:
+
+```
+E   FileExistsError: [Errno 17] File exists: '.../test_a_capture_driven_to_its_s0/episode'
+```
+
+So `tmp_path / "episode"` already existed when something tried to create it - and since the writer ran first and creates
+that directory happily (CP-2706), the class that refused is the **recorder**, with its own `mkdir(exist_ok=False)`.
+
+That also explains CP-2707's misleading result: the recorder there failed with `EPISODE_PROVENANCE_INVALID` **before**
+reaching its directory creation, so it looked indifferent to an existing root when it is not. With a valid provenance -
+which the test now has - it refuses the writer's root.
+
+So the situation is: **the writer refuses a root that exists; the recorder refuses a root that exists; and both need the
+manifest's parent to be the recorder's own directory.** Neither order works, which means the two classes do not actually
+share a root in the real design - and the next read is the recorder's constructor to see what it does with its argument
+(and whether it, like the writer, creates the directory itself or expects to be pointed at one it may share).
+
+My test is reverted again and the worktree is clean at 35 entries. Four attempts, and the value of them is now a precise
+question about two constructors rather than a vague one about ordering.
