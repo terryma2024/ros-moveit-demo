@@ -2032,6 +2032,8 @@ def test_measure_workspace_projection_hands_the_flight_to_the_library(
                 "point_count": 120,
                 "union_px": [191.699852915671, 272.6768492617673],
                 "intersection_px": [192.79306238636892, 266.49194356287984],
+                "chosen_step_rad": 0.6560533740603397,
+                "step_source": "phase_2_selection_rule",
             }
         }
 
@@ -2048,11 +2050,20 @@ def test_measure_workspace_projection_hands_the_flight_to_the_library(
     printed = capsys.readouterr().out
     assert "WORKSPACE_PROJECTION_PRODUCED top_px=191.699852915671" in printed
     assert "poses=3" in printed and "points=120" in printed
+    assert "step=0.6560533740603397 (phase_2_selection_rule)" in printed
+    assert seen["coarse_step_rad"] is None, "the step is phase 2's own choice unless it is declared"
     assert seen["scene_path"] == inputs["--scene"]
     assert seen["geometry_seal_path"] == inputs["--geometry-seal"]
     assert seen["geometry_contract_path"] == inputs["--geometry-contract"]
     assert seen["output_dir"] == output
     assert "measure-workspace-projection" in seen["command"]
+
+    # a run that holds its own plan declares the step it was receipted at, and the entry passes it on
+    output_declared = tmp_path / "measurement-declared"
+    arguments_declared = [*arguments[:-2], "--coarse-step-rad", "0.3", "--output-dir", str(output_declared)]
+    assert main(arguments_declared) == 0
+    assert seen["coarse_step_rad"] == 0.3
+    assert seen["output_dir"] == output_declared
 
 
 def test_measure_workspace_projection_reports_the_library_refusal(

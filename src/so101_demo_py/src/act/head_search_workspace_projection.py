@@ -17,11 +17,13 @@ Where every number comes from (nothing here is invented):
   beside the one it computed, refusing a disagreement rather than projecting a different workspace.
 * **the poses**: the bounded plan's stop points that lie inside the sealed `required_search_domain_rad`,
   per sealed anchor, plus each anchor's own start angle when that start is inside the domain. The plan is
-  phase 2's `bounded_search_stops`. Phase 2 chooses its coarse step from the sealed field of view's
-  generated candidates, and that choice is **not declared anywhere**, so the pose set is computed for
-  every generated candidate and refused with `CAL_PROJECTION_POSE_SET_AMBIGUOUS` if any two disagree: a
-  projection whose pose set depends on an undeclared choice is not evidence. An anchor start outside the
-  required domain is recorded as excluded, never clamped.
+  phase 2's `bounded_search_stops`, at the coarse step phase 2's own selection rule chooses (the largest
+  generated candidate whose sweep covers the required domain from every anchor - the step phase 2
+  receipts and phase 6 accepts). A caller holding that plan may declare it instead; a declared step then
+  has to be a generated candidate and to cover the domain, or the pose set would be one no plan of this
+  geometry could have, which refuses with `CAL_PROJECTION_POSE_SET_AMBIGUOUS`. Every candidate's
+  in-domain stop set is recorded and `poses_are_step_independent` says whether the choice mattered. An
+  anchor start outside the required domain is recorded as excluded, never clamped.
 * **the camera pose**: `head_camera_geometry.camera_pose_from_seal`, the sealed mount model (the neck
   rotates the mount about the world z axis through the sealed `camera_mount_origin_m`), and the scene
   itself is read through MuJoCo at every projected pose so the sealed model and the model the runtime
@@ -65,11 +67,17 @@ from so101_demo.act.head_camera_geometry import (
     workspace_matrix_points,
 )
 from so101_demo.act.head_search_calibration_geometry import (
+    SELECTION_RULE,
+    choose_coarse_step_candidate,
     generate_coarse_step_candidates,
     read_geometry_document,
 )
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_domain import HeadSearchDomainError, bounded_search_stops
+from so101_demo.act.head_search_domain import (
+    HeadSearchDomainError,
+    bounded_search_stops,
+    coverage_is_complete,
+)
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SCHEMA_VERSION = 1
@@ -139,9 +147,10 @@ RECORDED_LIMITATIONS = (
     "the pose set is the bounded plan's in-domain stop points plus the in-domain anchor starts; the fine "
     "correction path can hold the neck at angles between them, so the aimed band is recorded beside the "
     "pose extents instead of being absorbed into them",
-    "phase 2's choice of coarse-step candidate is not declared anywhere, so the pose set is computed for "
-    "every generated candidate and refused with CAL_PROJECTION_POSE_SET_AMBIGUOUS when they disagree; "
-    "every candidate's own in-domain stop set is recorded in pose_set.candidate_steps",
+    "the pose set is the bounded plan of the step phase 2's own selection rule chooses, or of the step "
+    "the caller declared (which has to be a generated candidate that covers the required domain); every "
+    "candidate's own in-domain stop set is recorded in pose_set.candidate_steps and "
+    "pose_set.poses_are_step_independent says whether the choice changed the projected poses at all",
     "top_px/bottom_px are the union over the visited poses; the intersection over the poses (the rows "
     "every visited pose can produce) is recorded beside them and is a strictly stronger claim that can "
     "reject a legal observation at a pose where part of the workspace reaches outside it",
@@ -294,13 +303,19 @@ def projection_poses(
     anchors_rad: Mapping[str, float],
     horizontal_fov_rad: float,
     sealed_candidate_rad=None,
+    declared_step_rad=None,
 ) -> dict:
-    """The poses the search visits inside the required domain, and the candidate-step invariance check.
+    """The poses the search visits inside the required domain, with every candidate step's verdict.
 
-    Every generated coarse-step candidate phase 2 could have chosen is planned, and the in-domain stop
-    set has to be the same for all of them: the pose set is evidence only if it does not depend on a
-    choice nobody declared. The returned poses are sorted by angle, deduplicated within
-    `POSE_DEDUP_TOLERANCE_RAD`, and carry the kinds and the anchors that command them.
+    The plan whose stops are projected is the one phase 2's own selection rule chooses - the largest
+    generated coarse-step candidate whose bounded sweep covers the required domain from every anchor -
+    which is exactly the step phase 2 receipts and phase 6 accepts. A caller that holds that plan may
+    declare it with `declared_step_rad` instead; a declared step then has to be one of the generated
+    candidates and to cover the domain, because a step phase 2 could not have receipted is not the plan
+    the search walks. Every candidate's in-domain stop set is recorded, and
+    `poses_are_step_independent` says whether the choice changed the pose set at all. The returned poses
+    are sorted by angle, deduplicated within `POSE_DEDUP_TOLERANCE_RAD`, and carry the kinds and the
+    anchors that command them.
     """
 
     domain = _interval("required_search_domain_rad", required_domain_rad)
@@ -329,16 +344,42 @@ def projection_poses(
             "walks cannot be reproduced",
         )
 
-    records = []
-    sets: list[list[float]] = []
-    for step in candidates:
-        stops: list[tuple[str, float, int]] = []
+    choice = _re_raised(
+        choose_coarse_step_candidate,
+        horizontal_fov_rad=fov,
+        required_search_domain_rad=domain,
+        safe_interval_rad=safe,
+        anchors_rad=anchors,
+        sealed_candidate_rad=None if sealed_candidate_rad is None else float(sealed_candidate_rad),
+    )
+    chosen_by_rule = float(choice["chosen_candidate_rad"])
+    if declared_step_rad is None:
+        chosen, step_source = chosen_by_rule, "phase_2_selection_rule"
+    else:
+        declared = float(declared_step_rad)
+        if not any(abs(declared - float(candidate)) <= POSE_DEDUP_TOLERANCE_RAD for candidate in candidates):
+            raise _refuse(
+                CAL_PROJECTION_POSE_SET_AMBIGUOUS,
+                f"the declared coarse step {declared} is none of the candidates phase 2 generates from the "
+                f"sealed field of view {list(candidates)}, so the poses it produces are not a plan phase 2 "
+                f"could have receipted",
+            )
         for name, anchor in anchors.items():
             plan = _plan(
-                anchors_name=name, anchor=anchor, domain=domain, safe=safe, fov=fov, step=step
+                anchors_name=name, anchor=anchor, domain=domain, safe=safe, fov=fov, step=declared
             )
-            for index, target in enumerate(plan.targets_rad):
-                stops.append((name, float(target), index))
+            if not coverage_is_complete(plan, required_domain_rad=domain):
+                raise _refuse(
+                    CAL_PROJECTION_POSE_SET_AMBIGUOUS,
+                    f"the declared coarse step {declared} does not cover the required domain from anchor "
+                    f"{name!r}, so it is not the plan the search walks",
+                )
+        chosen, step_source = declared, "declared"
+
+    records = []
+    sets: dict[float, list[float]] = {}
+    for step in candidates:
+        stops = _plan_targets(anchors=anchors, domain=domain, safe=safe, fov=fov, step=step)
         inside = [
             (name, target, index)
             for name, target, index in stops
@@ -346,28 +387,19 @@ def projection_poses(
             <= target
             <= domain[1] + POSE_DEDUP_TOLERANCE_RAD
         ]
-        sets.append(sorted(target for _name, target, _index in inside))
+        sets[float(step)] = sorted(target for _name, target, _index in inside)
         records.append(
             {
                 "coarse_step_rad": float(step),
                 "source": "sealed" if float(step) == float(sealed_candidate_rad or 0.0) else "generated",
-                "in_domain_stops_rad": sets[-1],
-                "stop_count": len(sets[-1]),
+                "in_domain_stops_rad": sets[float(step)],
+                "stop_count": len(sets[float(step)]),
             }
         )
-    reference = sets[0]
-    agrees = all(_same_angles(reference, values) for values in sets)
-    for record, values in zip(records, sets, strict=True):
-        record["pose_set_agrees"] = _same_angles(reference, values)
-    if not agrees:
-        detail = "; ".join(
-            f"{record['coarse_step_rad']}: {record['in_domain_stops_rad']}" for record in records
-        )
-        raise _refuse(
-            CAL_PROJECTION_POSE_SET_AMBIGUOUS,
-            f"the in-domain stop set depends on which coarse-step candidate phase 2 chose, so the projected "
-            f"poses are not evidence: {detail}",
-        )
+    reference = sets[chosen]
+    for record in records:
+        record["pose_set_agrees"] = _same_angles(reference, sets[record["coarse_step_rad"]])
+    independent = all(record["pose_set_agrees"] for record in records)
 
     excluded: list[dict] = []
     poses: list[dict] = []
@@ -384,7 +416,7 @@ def projection_poses(
                 }
             )
     for name, target, index in _plan_targets(
-        anchors=anchors, domain=domain, safe=safe, fov=fov, step=float(candidates[0])
+        anchors=anchors, domain=domain, safe=safe, fov=fov, step=chosen
     ):
         if domain[0] - POSE_DEDUP_TOLERANCE_RAD <= target <= domain[1] + POSE_DEDUP_TOLERANCE_RAD:
             _merge_pose(poses, target, kind="plan_stop", anchor=name, stop_index=index)
@@ -403,6 +435,15 @@ def projection_poses(
         "required_search_domain_rad": [domain[0], domain[1]],
         "safe_interval_rad": [safe[0], safe[1]],
         "horizontal_fov_rad": fov,
+        "step_source": step_source,
+        "chosen_step_rad": chosen,
+        "phase_2_choice": {
+            "rule": SELECTION_RULE,
+            "chosen_candidate_rad": chosen_by_rule,
+            "chosen_index": choice["chosen_index"],
+            "candidates": list(choice["candidates"]),
+        },
+        "poses_are_step_independent": bool(independent),
         "candidate_steps": records,
         "dedup_tolerance_rad": POSE_DEDUP_TOLERANCE_RAD,
         "poses": poses,
@@ -788,6 +829,7 @@ def build_head_search_workspace_projection(
     geometry_contract_path,
     scene_reader: SceneCameraPort,
     document_path=None,
+    coarse_step_rad=None,
     command=None,
 ) -> dict:
     """Build the document phase 6 declares, from the seal, the contract and the scene.
@@ -810,6 +852,7 @@ def build_head_search_workspace_projection(
         anchors_rad=geometry["anchors_rad"],
         horizontal_fov_rad=geometry["horizontal_fov_rad"],
         sealed_candidate_rad=geometry["sealed_coarse_step_candidate_rad"],
+        declared_step_rad=coarse_step_rad,
     )
     projections = [
         {**project_pose(inputs=inputs, pose_rad=pose["pose_rad"], reader=scene_reader), **pose}
@@ -904,6 +947,10 @@ def build_head_search_workspace_projection(
         "poses": projections,
         "pose_set": {
             "rule": poses["rule"],
+            "step_source": poses["step_source"],
+            "chosen_step_rad": poses["chosen_step_rad"],
+            "phase_2_choice": poses["phase_2_choice"],
+            "poses_are_step_independent": poses["poses_are_step_independent"],
             "candidate_steps": poses["candidate_steps"],
             "dedup_tolerance_rad": poses["dedup_tolerance_rad"],
             "pose_count": poses["pose_count"],
@@ -1065,6 +1112,7 @@ def write_head_search_workspace_projection(
     geometry_contract_path,
     output_dir,
     scene_reader: SceneCameraPort | None = None,
+    coarse_step_rad=None,
     command=None,
 ) -> dict:
     """Produce the workspace projection document and its receipt into a brand-new directory.
@@ -1092,6 +1140,7 @@ def write_head_search_workspace_projection(
             geometry_contract_path=geometry_contract_path,
             scene_reader=reader,
             document_path=document_path,
+            coarse_step_rad=coarse_step_rad,
             command=command,
         )
     finally:
@@ -1113,6 +1162,9 @@ def write_head_search_workspace_projection(
         "aimed_px": list(document["aimed_projection"]["band_px"]),
         "pose_count": document["pose_set"]["pose_count"],
         "poses_rad": [pose["pose_rad"] for pose in document["poses"]],
+        "chosen_step_rad": document["pose_set"]["chosen_step_rad"],
+        "step_source": document["pose_set"]["step_source"],
+        "poses_are_step_independent": document["pose_set"]["poses_are_step_independent"],
         "projected_point_records": sum(len(pose["points"]) for pose in document["poses"]),
         "point_count": document["workspace"]["sample_count"],
         "image_width_px": document["image_width_px"],

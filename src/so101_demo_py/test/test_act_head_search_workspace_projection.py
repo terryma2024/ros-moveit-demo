@@ -37,6 +37,7 @@ from so101_demo.act.head_camera_geometry import (
     camera_pose_from_seal,
     project_point,
 )
+from so101_demo.act.head_search_calibration_geometry import SELECTION_RULE
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 from so101_demo.act.head_search_search_params import compute_vertical_bounds_px
 from so101_demo.act.head_search_workspace_projection import (
@@ -293,27 +294,95 @@ def test_projection_poses_are_the_bounded_stops_inside_the_required_domain(tmp_p
     assert _pose(poses["poses"], domain[1])["kinds"] == ["plan_stop"]
     assert all(pose["visited_by"] for pose in poses["poses"])
     assert poses["excluded_poses"] == []
-    assert poses["candidate_steps"][0]["pose_set_agrees"] is True
     assert len(poses["candidate_steps"]) > 1, "phase 2's own candidates are all checked"
+    # the step is the one phase 2's selection rule chooses: the largest candidate above the domain width
+    assert poses["step_source"] == "phase_2_selection_rule"
+    assert poses["chosen_step_rad"] == pytest.approx(seal["horizontal_fov_rad"] / 2.0)
+    assert poses["chosen_step_rad"] == pytest.approx(poses["phase_2_choice"]["chosen_candidate_rad"])
+    assert poses["phase_2_choice"]["rule"] == SELECTION_RULE
+    assert all(record["pose_set_agrees"] for record in poses["candidate_steps"])
+    assert poses["poses_are_step_independent"] is True
 
 
-def test_projection_poses_refuse_a_pose_set_that_depends_on_the_candidate_step(tmp_path) -> None:
+def test_projection_poses_record_which_candidate_steps_would_project_a_different_pose_set(
+    tmp_path,
+) -> None:
     scene = _scene(tmp_path)
     contract_path = _contract_path(tmp_path, scene)
     seal = json.loads(_seal_path(tmp_path, scene, contract_path).read_text(encoding="utf-8"))
 
+    poses = projection_poses(
+        seal=seal,
+        required_domain_rad=[-1.0, 1.0],
+        safe_interval_rad=seal["lock_valid_neck_rad"],
+        anchors_rad={"left": 0.0},
+        horizontal_fov_rad=seal["horizontal_fov_rad"],
+        sealed_candidate_rad=seal["coarse_step_candidate_rad"],
+    )
+
+    # a required domain wider than the steps lets the smaller candidates add stops inside it, and the
+    # plan that is projected is still the one phase 2's rule chooses
+    assert poses["poses_are_step_independent"] is False
+    assert any(record["pose_set_agrees"] is False for record in poses["candidate_steps"])
+    assert poses["step_source"] == "phase_2_selection_rule"
+    assert poses["chosen_step_rad"] == max(record["coarse_step_rad"] for record in poses["candidate_steps"])
+    assert poses["chosen_step_rad"] == pytest.approx(seal["horizontal_fov_rad"] / 2.0)
+    chosen = next(
+        record
+        for record in poses["candidate_steps"]
+        if record["coarse_step_rad"] == poses["chosen_step_rad"]
+    )
+    assert poses["pose_count"] == len(chosen["in_domain_stops_rad"]) + 1
+
+
+def test_projection_poses_use_a_declared_step_that_phase_2_could_have_receipted(tmp_path) -> None:
+    scene = _scene(tmp_path)
+    contract_path = _contract_path(tmp_path, scene)
+    seal = json.loads(_seal_path(tmp_path, scene, contract_path).read_text(encoding="utf-8"))
+    domain = seal["required_search_domain_rad"]
+    common = {
+        "seal": seal,
+        "required_domain_rad": domain,
+        "safe_interval_rad": seal["lock_valid_neck_rad"],
+        "anchors_rad": {"left": 0.0, "forward": 0.012},
+        "horizontal_fov_rad": seal["horizontal_fov_rad"],
+        "sealed_candidate_rad": seal["coarse_step_candidate_rad"],
+    }
+
+    by_rule = projection_poses(**common)
+    declared = projection_poses(**common, declared_step_rad=0.3)
+
+    assert declared["step_source"] == "declared"
+    assert declared["chosen_step_rad"] == pytest.approx(0.3)
+    assert declared["chosen_step_rad"] in [
+        record["coarse_step_rad"] for record in declared["candidate_steps"]
+    ]
+    # both steps are wider than this fixture's domain, so the projected poses are the same
+    assert [pose["pose_rad"] for pose in declared["poses"]] == pytest.approx(
+        [pose["pose_rad"] for pose in by_rule["poses"]]
+    )
+    assert declared["poses_are_step_independent"] is True
+
+
+def test_projection_poses_refuse_a_declared_step_phase_2_could_not_have_chosen(tmp_path) -> None:
+    scene = _scene(tmp_path)
+    contract_path = _contract_path(tmp_path, scene)
+    seal = json.loads(_seal_path(tmp_path, scene, contract_path).read_text(encoding="utf-8"))
+    domain = seal["required_search_domain_rad"]
+
     with pytest.raises(CalibrationWorkspaceProjectionRefused) as error:
         projection_poses(
             seal=seal,
-            required_domain_rad=[-1.0, 1.0],
+            required_domain_rad=domain,
             safe_interval_rad=seal["lock_valid_neck_rad"],
             anchors_rad={"left": 0.0},
             horizontal_fov_rad=seal["horizontal_fov_rad"],
             sealed_candidate_rad=seal["coarse_step_candidate_rad"],
+            declared_step_rad=0.25,
         )
 
     assert error.value.code == CAL_PROJECTION_POSE_SET_AMBIGUOUS
-    assert "coarse-step candidate" in error.value.detail
+    assert "none of the candidates" in error.value.detail
 
 
 def test_projection_poses_record_an_anchor_whose_start_is_outside_the_domain(tmp_path) -> None:
@@ -445,6 +514,9 @@ def test_the_document_carries_the_keys_phase_6_reads(tmp_path) -> None:
     assert document["sealed_evidence"]["geometry_contract"]["sha256"] == _digest(
         tmp_path / "head-camera-geometry-contract-v1.json"
     )
+    assert document["pose_set"]["chosen_step_rad"] > 0.0
+    assert document["pose_set"]["step_source"] == "phase_2_selection_rule"
+    assert document["pose_set"]["poses_are_step_independent"] is True
 
 
 def test_a_document_built_without_a_path_names_none(tmp_path) -> None:

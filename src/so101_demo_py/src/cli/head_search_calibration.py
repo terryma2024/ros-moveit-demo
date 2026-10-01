@@ -446,6 +446,16 @@ def _workspace_projection_parser() -> argparse.ArgumentParser:
         "--geometry-contract", type=Path, help="the contract that declares the legal pick workspace box"
     )
     parser.add_argument("--output-dir", type=Path, help="the brand-new directory the document owns")
+    parser.add_argument(
+        "--coarse-step-rad",
+        type=float,
+        default=None,
+        help=(
+            "the coarse step the run's own bounded plan was receipted at; without it the step is the one "
+            "phase 2's selection rule chooses, and a declared step has to be a generated candidate that "
+            "covers the required domain"
+        ),
+    )
     return parser
 
 
@@ -469,6 +479,7 @@ def _measure_workspace_projection(arguments: list[str]) -> int:
             geometry_seal_path=parsed.geometry_seal,
             geometry_contract_path=parsed.geometry_contract,
             output_dir=parsed.output_dir,
+            coarse_step_rad=parsed.coarse_step_rad,
             command=_command_line(arguments, subcommand="measure-workspace-projection"),
         )
     except CalibrationInputsRefused as error:
@@ -479,7 +490,8 @@ def _measure_workspace_projection(arguments: list[str]) -> int:
         f"WORKSPACE_PROJECTION_PRODUCED top_px={receipt['top_px']!r} "
         f"bottom_px={receipt['bottom_px']!r} poses={receipt['pose_count']} "
         f"points={receipt['point_count']} union={receipt['union_px']} "
-        f"intersection={receipt['intersection_px']} output_dir={parsed.output_dir}"
+        f"intersection={receipt['intersection_px']} step={receipt['chosen_step_rad']!r} "
+        f"({receipt['step_source']}) output_dir={parsed.output_dir}"
     )
     return 0
 
