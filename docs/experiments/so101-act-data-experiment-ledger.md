@@ -48687,3 +48687,18 @@ Its schema is now one document rather than a description of one: every record's 
 **`schema_version = 2`**, the five `kind` literals are the same everywhere (`k2_source`, `k2_geometry`, `k2_apply`,
 `k2_query`, `k2_receipt`), and the event schema adds exactly the three that are events. The review is running
 (`reviews/k2-protocol-recheck4.log`).
+
+
+## CP-2573 — The interface needs the root, because the manifest's files are relative
+
+Designing `endpoint_records_from_audit(audit, inputs)` against what `verify_audit_manifest` actually returns turns up
+one concrete requirement: the manifest's `files` entries are **relative** paths (they are validated as "safe relative
+path"s, per the readback's own docstring), so the verified document alone cannot be re-read - the caller must supply the
+sealed audit's **root** as well, or the manifest must be returned alongside it.
+
+That is a two-argument-versus-three question, and it is the kind of detail best settled before writing the module rather
+than after: the plan names the interface as `(audit, inputs)`, so the honest reading is that `audit` is the **pair** -
+the verified manifest plus the directory it was verified against - which is also what the fresh-process QC naturally
+has, since it was handed the sealed episode's location to begin with.
+
+The revision-4 review is still running (`tail -1` empty, 238 lines and growing).
