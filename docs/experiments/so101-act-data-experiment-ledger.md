@@ -44068,3 +44068,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 
 - THE STATE OF THE TREE: HEAD 064128de5, every gate green, no half-applied edit anywhere, the 35-entry dirty
 - status untouched, and the ledger recording each attempt including the ones that failed.
+
+## CP-2341 - F5's step two measured feasible: the runner produces a real history, only the minter half is missing
+
+- The probe (a real PickPlaceRunner against a formal writer, using the upgraded port and AlignedPort/request,
+- withdrawn in the same run) returned two facts that turn step two into a transcription:
+-   * the runner's physics stream carries ALL FOUR registered kinds (contact, pose, retract, support) across TEN rows
+-     at ten DIFFERENT instants (0.1 through 1.0) - a real history, not the one-instant summary the preset fixture
+-     builds, and therefore something F5's per-kind rule and F11's endpoint derivation can both accept;
+-   * the seal is then refused with AUDIT_FORMAL_COVERAGE_INCOMPLETE, which is the minter half missing: coverage
+-     also needs camera acquisitions and one accepted reference carrying a complete raw group.
+
+- So _runner_backed_formal is exactly: mint head/wrist acquisitions over the instants the run will use, append one
+- accepted reference with the legacy raw group, run the runner for events and physics, then derive the window from
+- the ten times the audit now holds (first_command_s = min, physics_end_s = max, label_cutoff_s from the labelled
+- rows) - and seal. Every value that derivation needs is now measured rather than assumed.
+
+- This is the last entry of this session's work; the next pass writes that fixture, and the ledger carries the
+- recipe, the numbers and every failed attempt that led to them.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
+- derivation behind CP-2332; F5's regression fixed with step one landed, step two measured feasible here; HEAD
+- 16dcc0bd7; goal paused.
