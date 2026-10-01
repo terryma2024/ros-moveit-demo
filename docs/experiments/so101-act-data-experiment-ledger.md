@@ -43931,3 +43931,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F13 three of four with its scene item behind CP-2285; F11's divergence fixed and its
 - derivation behind CP-2332's contract choice; F5's regression fixed with its two items behind the same surgery;
 - F12 two of three with this route chosen; HEAD 5ee4a02d8; goal paused.
+
+## CP-2334 - F12's insertion point: the SEARCH document is built at search_port.py:724
+
+- Two reads narrowed route (a): sequence_phase is the REVERSE direction - the port calls it for the phases other
+- than SEARCH, as its own docstring says - so the replacement cannot be built there. The SEARCH document is built
+- inside the port at search_port.py:724, which calls _search_evidence(observed, request), and that function reads
+- observed.controller_feedback at 440.
+- So the replacement has to exist before line 724: either in the port's public method that contains that call
+- (which would need the boundary's records passed in), or by the port's own caller, which the remaining grep must
+- name - the segment's call to the port does not appear under the names searched, so it is one read away.
+- This is the last unknown in F12's third item; the route and the reason are settled, and the edit is a
+- dataclasses.replace at whichever of those two places owns the observation when the SEARCH document is built.
+- F1 and F14 closed; F3 closed; F13 three of four (CP-2285 pending); F11's derivation behind CP-2332's contract
+- choice; F5's regression fixed with two items behind the same surgery; F12 two of three with the insertion point
+- localized to one read; HEAD 413428b10; goal paused.
