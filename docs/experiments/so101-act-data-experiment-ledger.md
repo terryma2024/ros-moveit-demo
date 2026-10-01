@@ -55396,3 +55396,26 @@ be checked against the frozen one and where a mismatch is a refusal rather than 
 Nothing here needs the coordinator's physical side beyond what `PickPlaceRosEvidence` already owns; where that class is
 the convenient holder it can be used, but it is not required - every collaborator is constructible from the model, the
 frozen set, and the run's own ports.
+
+
+## CP-2860 — The seam closed on this side; one attribute and two actions remain
+
+The recording wiring is in the production path end to end, committed piece by piece with its suites green:
+`c135e39d1` (per-episode state), `0d1f8e7f6` and `3ef81cdc4` (`PointEpisode`, and the outcome it refuses to invent),
+`822aa8d1a` (`EpisodeSink`), `6dfb928c3`/`101489a72`/`a156a66d9` (the `open_episode` port, its call at the point gate,
+and its CLI implementation), `74d75333b` (every frame offered where the pixels are), `5a7095096` (the seal at the
+terminal capture), `baf7650ca` and `df3557f59` (the thirteen names and the readback built from frozen expectations),
+`58ba117bc` (the extraction consuming the run's sources). Along the way three self-inflicted fabrications were removed:
+a hardcoded scope seed that happened to match the frozen one, synchronizer tolerances taken from constructor defaults
+that happened to match `runtime_policy.rgb_sync`, and a scope built from a digest of zeros.
+
+What remains is not code on this side. The run's physical side owns five observers - `world`, `scene`, `contacts`, `rgb`,
+`broker` - because they must live for the whole run and be fed by callbacks, and hands them over as
+`runtime_ports.physical_sources` beside `runtime_ports.episode_sink`. `PickPlaceRosEvidence` already constructs `scene`
+and `contacts` (`pick_place_sources.py:55,59`); `world` is a `MuJoCoObserver` that nothing constructs yet. Until that
+attribute is set the extraction refuses by name, which is the intended behaviour rather than a gap: a partial physical
+audit would make the row look complete.
+
+The handover note carries the table of pieces, the attribute to set, and the two actions - `kill 3111252`, then re-run -
+so that the coordinator can act on it between other work. The objective's endpoint is unchanged: a real MuJoCo run, a
+recorded episode, an independent QC PASS and a real coordinator commit.
