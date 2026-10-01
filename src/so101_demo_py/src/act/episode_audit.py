@@ -1152,9 +1152,12 @@ def _formal_coverage_ok(audit: Path) -> bool:
     initial = None
     for name in ("audit-manifest.json", "episode.json"):
         try:
-            initial = json.loads((audit / name).read_bytes())["identity"]["release_epoch"]
-            break
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError):
+            document = json.loads((audit / name).read_bytes())
+            # the manifest nests its identity under "identity"; episode.json IS the identity, so both shapes count
+            initial = (document.get("identity") or document).get("release_epoch")
+            if type(initial) is int:
+                break
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, AttributeError):
             continue
     if type(initial) is not int:
         initial = 0
