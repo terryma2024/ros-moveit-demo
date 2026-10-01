@@ -80,3 +80,31 @@ def test_a_single_pose_is_not_enough_for_two_endpoints(tmp_path):
                                                   "endpoint_policy": load_endpoint_policy(POLICY)})
     print("QC4", verdict)
     assert verdict["errors"] == ["ENDPOINT_POSE_NOT_DERIVABLE"] and verdict["poses"] == 1
+
+
+def test_the_verdict_follows_the_frozen_targets_not_the_rows(tmp_path):
+    """The plan's "target rewritten afterwards": the QC reads the frozen inputs, so rewriting the audit changes nothing
+    that the endpoint verdict depends on."""
+
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    audit = {"manifest": verify_audit_manifest(path), "root": path.parent}
+    physics = audit["root"] / "physics.jsonl"
+    pose = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    rows = physics.read_text().splitlines()
+    physics.write_text("\n".join(rows + [__import__("json").dumps(
+        {"kind": "support", "sim_time_s": 1.0, "release_epoch": 1,
+         "observation": {"simulation_time_s": 1.0, "simulation_step": 10, "cup_pose_world": pose}}),
+        __import__("json").dumps(
+        {"kind": "retract", "sim_time_s": 1.3, "release_epoch": 1,
+         "observation": {"simulation_time_s": 1.3, "simulation_step": 13, "cup_pose_world": pose}})]) + "\n")
+    policy = load_endpoint_policy(POLICY)
+    far = [9.0, 9.0, 9.0, 0.0, 0.0, 0.0, 1.0]
+    accepted = endpoint_records_from_audit(audit, {"initial_target": pose, "final_target": pose,
+                                                   "endpoint_policy": policy})
+    refused = endpoint_records_from_audit(audit, {"initial_target": far, "final_target": far,
+                                                  "endpoint_policy": policy})
+    print("QC5 frozen-match:", accepted["status"], "| frozen-mismatch:", refused["status"])
+    assert accepted["status"] == "PASS" and accepted["endpoint_passed"] is True
+    assert refused["status"] == "FAIL" and refused["endpoint_passed"] is False
+    assert accepted["initial_pose"] == refused["initial_pose"] == pose
