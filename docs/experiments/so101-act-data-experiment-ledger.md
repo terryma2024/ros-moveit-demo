@@ -49934,3 +49934,28 @@ which requires reading the group structure rather than guessing which keys go to
 
 That is the next read, and it is the fourth time in this test alone that the honest step has been to read the literal
 rather than to adjust the input until it is accepted - the discipline the whole stretch keeps re-learning.
+
+
+## CP-2637 — The five refusals in the physics append, and the one my row fails
+
+Reading the append's own lines (919-930) rather than guessing at the stream validator:
+
+```python
+            item = _closed(record, _PHYSICS_FIELDS - {"sequence", "task_sequence"}, "AUDIT_SCHEMA_INVALID").copy()
+            if item["kind"] not in _PHYSICS_KINDS or not isinstance(item["observation"], dict): raise ...
+            _finite(item["sim_time_s"], "AUDIT_SCHEMA_INVALID", nonnegative=True)
+            epoch = _integer(item["release_epoch"], "AUDIT_SCHEMA_INVALID")
+            ...
+            if not _physics_observation_typed(item["observation"], kind=item["kind"]): raise ...
+            if item["observation"]["simulation_time_s"] != item["sim_time_s"]: raise ...
+```
+
+So five things must hold: the record's keys exactly (minus the two the writer assigns), a `kind` inside
+`_PHYSICS_KINDS` (which does contain `support`, `contact`, `pose` and `retract`), a finite non-negative `sim_time_s`, an
+integer `release_epoch`, the observation matching **its kind's own rule**, and the observation's `simulation_time_s`
+equal to the record's.
+
+My row satisfies the first four and the last; it fails **`_physics_observation_typed(observation, kind="support")`** -
+the per-kind rule - which is therefore the one thing left to read. That is a single function, and reading it is what
+turns this test green; the earlier guesses at group structure were about the reference stream's alternatives
+(`optional_any=(_REFERENCE_RAW_FIELDS, _REFERENCE_FRAME_FIELDS)` at 1255) rather than about physics at all.
