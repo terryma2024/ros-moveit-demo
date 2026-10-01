@@ -43572,3 +43572,149 @@ regression-files.txt、logs/、pyshim、tmp*）。以上**均为删除候选，�
 **17 值 bundle 状态**：**未产出**（本轮不尝试）。phase 3 的两个输入已齐并已在真实 `run` 上通过入口；剩余 `--admission`、`--bundle-inputs`。
 
 **本轮证据与生命周期**：`$CAMPAIGN/selection-rule-20261001T114155Z{,.console.log,.provenance.txt}`、`$CAMPAIGN/operating-point-20261001T114155Z/`（测量文档 + receipt + 6 份 phase-3 选点文档 + `static-reference/`）、`$CAMPAIGN/head-search-calibration-20261001T114326Z{,.console.log,.provenance.txt}`（run root 本身不存在）、`$EV/head-toolchain-20261001T114016Z`、`$EV/scratch/pytest-xdist8-hs310-{final.ca92fc1e,suite.acf8060d}`、`$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-310 节）、工作树 `scratch/hs310/`（env/common/runner 脚本、plan-check、check-frames、read-rules、red/、logs/、pyshim、tmp*）。以上**均为删除候选，未删除**；HS-300..309 的产物只读引用，未改动。
+
+## HS-311 — `--admission` 与 `--bundle-inputs` 有安装了的生产者：**端到端 `run` 首次 `SUCCEEDED`**，写出 17 值 `head-search-calibration-bundle.json`
+
+**提交**（均为普通 `git commit`，rc=0）：`868ad27f6`（feat，首个 RED→GREEN：admission 文档生产者 + bundle-inputs 生产者 + 两个 CLI 入口，
+7 文件）、`236ea2fbb`（feat，episode-records 生产者 + 入口）、`b9c0fc47b`（fix，`--episode-records` 是目录）。工具链
+`$EV/head-toolchain-20261001T121911Z`（source commit `b9c0fc47b`，6 包，build rc=0，85 s）；另有 `…T121042Z`（`868ad27f6`）、
+`…T121901Z` 邻域的两个被取代 root（见"生命周期"）。工作树源码 = 安装代码（`--symlink-install`：`$T/build/so101_demo_py/so101_demo`
+符号链接到本 worktree 的 `src/so101_demo_py/src`，`source-commit.txt` = HEAD；两处都提供只读核对）。
+
+**新增安装入口**（都在既有 console script 上，无新 entry point）：
+`measure-admission`（`so101_demo.act.head_search_calibration_admission_document`）与
+`measure-bundle-inputs`（`so101_demo.act.head_search_calibration_bundle_inputs`），另有第三个在真实 run 上暴露出来的缺口生产者
+`measure-episode-records`（`so101_demo.act.head_search_episode_records`）。
+
+**(a) `--admission`：真文档，不是 fixture**
+
+生产者读**同一份六个受控依赖**（run 声明的六个 flag），先按 phase 1 自己的 `validate_sealed_inputs` 逐字节校验，再从其中的
+sealed geometry（经 phase 2 自己的 `load_sealed_geometry`/`read_geometry_document`）与 production config 派生**平面测量计划**，
+用 **run 自己的 `check_trajectory_contract`** 判定其可采纳，然后写三份文件：
+
+| 文件 | 内容 |
+| --- | --- |
+| `measurement-plan.json` | 安装版 controller 构造所用的**平面配置**（20 键）：11 个搜索值（来自声明的 production config `values`）+ `motion` 两项 + camera 两个 frame id + session/attempt/search_start_rad + **seal 的** `horizontal_fov_rad`/`lock_valid_neck_rad`/`required_search_domain_rad`。sealed fov 还要与 sealed camera 内参独立重算值一致（`2*atan(tan(fovy/2)*w/h)`，容差 1e-9） |
+| `admission.json` | **恰好六个字段**（run 的 `_phase_inputs` 要求 set 相等）：`generation` = **全新 run root 的名字**（root 已存在即拒绝，故 generation 不可复用）、`status=CALIBRATION_REQUIRED`、`measurement_plan_sha256` = 上面那份计划的 canonical 摘要、`safe_interval_rad` = seal 的 `lock_valid_neck_rad`、`controller_generation=null`、`broker_generation=null` |
+| `admission-receipt.json` | 安装版 phase 1 的整份文档（六依赖 manifest + `admitted:true` 的 `role=calibration` 决策 + **一次**资源绑定 `{bound_at_entry:true, cpu_cores:8, gpu_device:0, generation, plan, interval}`）+ run 自己的 trajectory receipt（`coverage_complete:true`，`config_sha256` 与计划摘要逐字相同）+ **逐个执行过**的拒绝：`release`/`recorder`（`CAL_ADMISSION_REFUSED`）、外来 role `act`、第二次 flight（`SECOND_FLIGHT_REFUSED`）、第二次绑定（`CAL_BINDING_REBOUND`）+ 命令/工具链/六个输入的 path+sha256 |
+
+**两个 `null` 是有理由的缺席，不是发明的 token**：本轮 run 的任何 phase 都**不发 neck target**（phase 2 的 sweep-check receipt 记
+`motion_commanded:false`），也没有 broker session 参与，因此不存在可引用的 controller incarnation / broker generation；receipt 的
+`controller_incarnation` 字段逐字记录这一点。真实产出：`$CAMPAIGN/admission-20261001T122047Z/{measurement-plan.json,admission.json,admission-receipt.json}`
+（计划摘要 `4532f712…` 这一版由 `…T121310Z` 首次产出；成功 run 用的那份见下表）。
+
+**(b) `--bundle-inputs`：六个证据块 + 真·生效值 readback**
+
+`measure-bundle-inputs` 读 sealed geometry、production config、phase-3 选择文档、frozen candidate、选中模型权重（+可选测量文档），写
+`bundle-inputs.json`（`parameter_evidence.{geometry_coverage,perception_operating_point}.parameters` 六个块，每块含 phase 8 要求的
+八个 key；`also_recorded` 四个声明项——第五项 10 Hz frame contract 留给 phase 7；`runtime_identity` 十二字段）与
+`bundle-inputs-receipt.json`。**readback 是构造出来的，不是复述**：
+
+| 参数 | 记录值 | 观测来源（构造出来的生产组件） | 观测值 | verified |
+| --- | --- | --- | --- | --- |
+| `horizontal_fov_rad` | 1.3121067481206794 | `HeadSearchController(...).plan.horizontal_fov_rad` | 同值 | **true** |
+| `lock_valid_neck_rad` | `[-6.283175307179587, 6.283175307179587]` | 同 controller 的 `plan.safe_interval_rad` | 同值 | **true** |
+| `min_confidence` | 0.25 | `HeadSearchController(...).config['min_confidence']`（构造用记录值覆盖声明的 0.4） | 0.25 | **true** |
+| `min_area_px2` | 64.0 | 同 controller 的 `config['min_area_px2']` | 64.0 | **true** |
+| `tracking_iou` | 0.5 | `HeadRgbDetector(...).tracking_iou`（经 `build_bound_head_detector` 在**选中模型 C2a** 的私有快照上构造，`runtime_device=cuda`） | 0.5 | **true** |
+| `min_bbox_aspect` | 0.5 | `HeadRgbDetector(...).min_bbox_aspect` | 0.5 | **true** |
+
+真实运行 `$CAMPAIGN/bundle-inputs-20261001T122047Z`：`unverified=[]`、`cpu_fallback=false`、`motion_commanded=false`；detector 记录
+`constructed:true, device.requested=cuda, device.runtime=cuda, detector_class=so101_demo.adapters.perception.yolo_seg.YoloSegDetector,
+weights_sha256=2afd5506…`。四个 also-recorded 项也都 `verified:true`：两项 motion 容差读自构造出的 controller；**三帧锁定规则是行为观测**
+（把构造出的 controller 驱动到判据：第 3 个连续死区帧 `TARGET_LOCKED`，两帧不锁，序列里出现一帧死区外后 5 帧仍不锁）；**tracker 算法记的是
+运行中的那个**（`HeadRgbDetector` 的贪心 IoU 关联），并在 readback 里并列记录声明项 `tracker.name="bytetrack"` 与"它不是这条安装路径跑的算法"——
+`head_search_v2.json` 的 `tracker.name` 属于"只出现在配置里、没有 production component 读它"的值，按设计 §7.1 不能作为运行事实记录。
+`min_confidence`/`tracking_iou`/`min_bbox_aspect`/`min_area_px2` 的 `observed_distribution` 是 18 格真实搜索网格 + 选中格的逐 split 指标，
+`safety_margin` 是 0 假检/0 漏检/p95 bbox 中心偏差/与 sealed 生产值一致性等实测数字。**一次诚实失败也留证**：第一次真实运行
+（`bundle-inputs-20261001T121321Z`）因权重路径是符号链接被 `build_bound_head_detector` 拒绝（`HEAD_SEARCH_WEIGHTS_INVALID`），
+生产者按承诺写 `verified:false` + 原因，未伪造观测值；换成普通文件副本后六项全绿。
+
+**(c) 真实端到端 `run`：`SUCCEEDED`，bundle 产出**
+
+`$CAMPAIGN/head-search-calibration-20261001T122047Z`，rc=0，**789 s**，console `RUN_SUCCEEDED …`。八个 phase 全部落文档，
+`run-status.json` = `SUCCEEDED`（`audit_only:true`、`checkpoint:false`），phase 4 的 gate 选中 **C（C2a）**（理由 "C holds the best head cells
+in both measurement families within the margin"），phase 5 readback `values_unmodified:true` / `selection_identity_matches:true`。
+
+**17 值**（`head-search-calibration-bundle.json`，17/17 齐）：`horizontal_fov_rad` = 1.3121067481206794；`lock_valid_neck_rad` =
+[-6.283175307179587, 6.283175307179587]；`coarse_step_rad` = 0.6560533740603397；`search_timeout_s` = 0.7089213519976479；
+`min_confidence` = 0.25；`tracking_iou` = 0.5；`min_bbox_aspect` = 0.5；`min_area_px2` = 64.0；`center_deadband_px` = 3.0；
+`vertical_bounds_px` = [191.699852915671, 272.6768492617673]；`max_fine_corrections` = 2；`max_fine_total_rad` = 0.6961197054865531；
+`max_age_s` = 0.014736005008453503；`max_skew_s` = 0.010000000000001563；`submit_lead_s` = 0.004；`stop_velocity_rad_s` = 0.04136050464213824；
+`stop_latency_s` = 0.07012353999540209。前 6 项（几何+感知）`startup_readback.verified=true`，后 11 项由 phase 6/7 如实写 `verified:false`
+（run 没有 readback 输入 flag，安装版 phase 6/7 的缺省行为就是"记录为未验证"而不是发明读数）——两段都照录，不粉饰。
+
+| 产物 | file sha256 | canonical（自摘要）sha256 |
+| --- | --- | --- |
+| `head-search-calibration-bundle.json`（86896 B） | `e21899c22cb15774bfe06e9f995c85fc20797a61bda08560c6f48044a8767974` | `f85b78f6d1b31aa538671d527b57be1934b43f5d60588760fbc0993f378d88ee` |
+| `manifest.json`（15182 B） | `a2987a0f0f49beb5883719023fdd5254715ccada3ee16f29a25d96a7968891f7` | `7fd231106f658282589784efb3d1d8493fdc4612652f5dac08aad6a7becbf0aa` |
+| `run-status.json` | `12d35ac43dec7a14e13bb63ad3a8433d6ee8ae10faf77c3cfc37b4a23efa966d` | `884c7fa0becfbd5e932b81bcb4d8a5d1180199c7b41da6322c76cacf39a76077` |
+
+其余 phase 文档（file/canonical sha256）：`calibration-inputs.json` `0063140b…`/`0d703f29…`；`geometry-measurements.json` `ebbbf5bd…`/`1d75f7e5…`；
+`perception-calibration.json` `12d63fe6…`/`31808ef1…`；`perception-calibration-readback.json` `5d1888a1…`/`740a9f0a…`；`model-comparison.json`
+`dd376014…`/`e9891307…`；`model-selection-verdict.json` `c7ceab33…`/`b1343600…`；`search-calibration.json` `e1201d55…`/`9570f355…`；
+`timing-calibration.json` `2bf9cfe8…`/`14a28cef…`。**未晋级**：sealed `head_search_v2.json` 摘要仍为 `d3c4ef9b…`，未跑 `verify-promoted-config`，
+未写任何 approval 字段。
+
+**真实 run 依次暴露、并各自独立修复的五个缺口**（全部先 RED 后 GREEN 或先留证再修，无一放宽校验）：
+
+1. **sealed 输入不得是符号链接**：`--symlink-install` 使 toolchain share 里的 `head-search-scenario-partitions-v1.json` 与
+   `head_camera_yolo_seg.yaml` 成为指向 build 树的符号链接，phase 1 的 `CAL_INPUT_UNSEALED`（"not a plain sealed path"）如实拒绝。
+   处置：在 `$CAMPAIGN/staged-inputs-20261001T121306Z/` **复制成普通文件**（字节与摘要不变：`7973f61a…`、`9ad9b934…`），并写
+   `.staging-receipt.txt` 记录源路径→目标路径 + 摘要 + `test ! -L` 通过。**未修改任何原件**。
+2. **run 的 `--production-search-config` 必须是平面 controller 配置**：HS-309/310 传的是派生的**嵌套** sealed 生产配置，安装版
+   `HeadSearchController` 会以 `FIELDS_INVALID` 拒绝（`check_trajectory_contract` → `CAL_TRAJECTORY_CONTRACT_UNSATISFIED`）。
+   处置：由 `measure-admission` 从"声明的 production config + sealed geometry"派生平面计划并作为该 flag 声明（见 (a)）；两处上下文
+   （run docstring 与 `test_head_search_calibration_cli.py` 的既有 fixture）本来就要求平面形状。
+3. **phase 4 需要完整的候选集**：只声明 `frozen-c.json` 时 gate 以 `EVALUATION_CANDIDATE_SET_INVALID`（expected ('A','B','C')）拒绝。
+   处置：按 gate 语义声明 `frozen-a/b/c.json` 三个（weights 目录同理需要 `A.pt/B.pt/C.pt` 普通文件副本，摘要与 frozen 文档逐值相同：
+   `f281d252…`/`86c17b58…`/`2afd5506…`）。第一次失败 run 的 root 保留为证（`…T121310Z`，phase 1–3 文档 + `run-status.json` FAILED）。
+4. **phase 4 的 `--episode-records` 是目录**：gate 用 `_episode_frames` 逐个 `*.json` 读"每 seed 一份、含 detections/latency 的 frames"，
+   而 run 的入口把它当**文件**校验（`RUN_OPTIONAL_FILE_FLAGS`），目录会被 `HEAD_SEARCH_RUN_INPUTS_INCOMPLETE: no such input` 拒掉 ——
+   这是入口的输入类型缺陷，独立提交 `b9c0fc47b` 修（移到 `RUN_OPTIONAL_DIRECTORY_FLAGS`，附 RED→GREEN 用例：目录通过、缺失目录仍按名拒绝）。
+   目录内容由新生产者 `measure-episode-records` 从**安装版 phase-3 测量文档**逐帧原样重排（20 seed × 3 角度 × 2 域 = 120 帧，
+   `frames_sha256` 逐 seed 记录、`computed:false`），并用 gate 自己的 `_episode_frames` 在测试里读回验证。
+5. **权重不得是符号链接**：`weights-c2a/C.pt` 是符号链接，`build_bound_head_detector`/`verify_weights` 都拒绝。处置同上：普通文件副本
+   （`staged-inputs-…/weights/{A,B,C}.pt`，摘要与 frozen 文档一致）。
+
+`run` 的 `--feedback-measurements` 路径在 HS-309/310 的脚本里写错（`feedback-measurements-2026…` 应为 `feedback-2026…`）；真实运行时由入口的
+"no such input" 报出并更正。**两次失败 run 的 root 都保留**，`run-status.json` 如实记录首次失败 phase/码/命令/退出码/已产证据（设计 §8.2 首次被真实执行验证）。
+
+**门禁**：RED（父提交树 + 本轮六个新测试文件，`git archive HEAD` 到 `scratch/hs311/pristine` 并用独立 shim 指向它）：
+`test_act_head_search_calibration_admission_document.py` rc=2 / 1 collection error（ModuleNotFoundError）、
+`test_head_search_calibration_admission_cli.py` **8 failed**、`test_act_head_search_calibration_bundle_inputs.py` rc=2 / 1 collection error、
+`test_head_search_calibration_bundle_inputs_cli.py` **6 failed**、`test_act_head_search_episode_records.py` rc=2 / 1 collection error、
+`test_head_search_calibration_episode_records_cli.py` **6 failed**；`--episode-records` 目录用例在修前 `1 failed`。GREEN：**14 / 8 / 20 / 6 / 11 / 6**
+全 rc=0（日志在 `scratch/hs311/logs/{red,green}-*.log`）。回归（HS-288..310 的 26 个 phase/CLI/calibration 文件 + 本轮 6 个新文件，`-n 8`）
+**792 passed, rc=0**。全量 `src/so101_demo_py/test`（8 workers，基线 run-dir 布局 `$EV/scratch/pytest-xdist8-hs311-suite.fa18958f`）
+**tests 6278 passed / 175 failed / 152 skipped / 86 errors, rc=1, 77 s**，与基线 `pytest-xdist8-hs310-suite.acf8060d` **节点级 diff 0 行（261 节点相同）、0 新增失败**，
++66 passed 恰为本轮新增用例（14+8+20+6+11+6 新文件 + 既有 CLI 文件新增 1 例）；失败集中 **0 个** head_search/calibration 节点；24 逻辑 CPU / 8 workers；
+`tempfile.gettempdir()` 落在 run dir 的 `tmp`。运行与测试后 `ps` 无 ros2/MuJoCo/pytest 残留、`nvidia-smi --query-compute-apps` 为空、`ros2 daemon status` = not running。
+
+**本轮声明的推断（待评审，逐条照录）**：① **generation = 全新 run root 的名字**（root 已存在即拒绝），理由是设计把每个 generation 绑到不可复用的
+generation root，而本 run 的 run root 就是它；receipt 记 `generation_origin=run_root_name`、`run_root_existed=false`；未向任何 Task-8 fixture 借 token。
+② `controller_generation`/`broker_generation` 记 `null` 并写明理由（本 flight 无 neck target、无 broker），因为安装版
+`CalibrationMeasurementAdmission` 对这两项不做校验、契约只要求"同一 generation/plan/interval"。③ 测量计划取"安装版 controller 的平面配置"，
+理由是 run docstring "+`check_trajectory_contract`+既有 CLI fixture"三处都这样定义它，且其 canonical 摘要与 trajectory receipt 的 `config_sha256` 逐字相同。
+④ `--production-search-config` 用派生的平面计划而非 HS-309/310 传的嵌套件（见缺口 2）。⑤ 两处 sealed/config 输入与三份权重 staged 成普通文件副本
+（字节/摘要不变），因为 phase 1、`build_bound_head_detector`、`verify_weights` 都明确拒绝符号链接；原件未改。⑥ `tracker_algorithm` 记运行中的
+`HeadRgbDetector` 贪心 IoU 关联而不是配置声明的 bytetrack（后者只被配置声明、无 production 消费者），差异在 readback 里并列留证。
+⑦ `min_bbox_aspect`/`min_area_px2` 的值与 frozen candidate 是否声明无关：frozen 文档只封 `min_confidence` 与 `tracker.iou`，这两个几何下限来自
+phase-3 选择文档的选中格；phase 5 对"frozen 未声明"的记录方式是明示 not declared（HS-292 既定）。⑧ `runtime_identity` 的 12 个字段里，
+`camera_id` 取声明的 production camera 并要求等于 seal 测的相机、`camera_intrinsics_sha256` 取 sealed camera block 的 canonical 摘要，
+其余 9 项（prefix/console script/torch/ultralytics/CUDA/driver/MuJoCo/tracker/web bundle）读自进程与安装树；web bundle 摘要是对已安装
+`share/so101_teleop/web` 全部文件的（相对路径, 内容摘要）序列求和。⑨ episode-records 目录是**重排**而非重测（`computed:false`、逐帧原样、
+逐 seed 自摘要），因为安装版 phase-3 飞行测的正是这些帧。⑩ 11 项 measured 参数的 `verified:false` 未去补 readback：run 没有该 flag，
+补它需要新增 CLI 输入，超出本轮范围，故照安装版行为记录。⑪ `runs/`（Ultralytics 校验输出，605 个目录）是 phase 4 gate 在 CWD 的副产物，
+untracked、未纳入提交，列为删除候选。
+
+**17 值 bundle 状态**：**已产出**（上表摘要）。**未晋级**、未跑 `verify-promoted-config`、未写 approval、sealed 配置字节未变。
+
+**本轮证据与生命周期**：`$CAMPAIGN/admission-20261001T1220{43,47}Z{,.console.log,.provenance.txt}`、
+`bundle-inputs-20261001T122047Z{,.console.log,.provenance.txt}`、`episode-records-20261001T122043Z{,.console.log,.provenance.txt}`、
+`staged-inputs-20261001T121306Z{,.staging-receipt.txt}`、run root `head-search-calibration-20261001T122047Z`（含 bundle/manifest/run-status 及全部 phase 文档）
+与被取代的 `admission-20261001T121310Z`/`admission-20261001T121433Z`/`bundle-inputs-20261001T12132{1,3}Z`/`bundle-inputs-20261001T121434Z`、
+两次失败 run root `head-search-calibration-20261001T1213{10,43}Z`（各含 phase 1–3 文档 + FAILED `run-status.json`）、`admission-20261001T121248Z.console.log`（符号链接拒绝）、
+工具链 `$EV/head-toolchain-20261001T121042Z`、`$EV/head-toolchain-20261001T121911Z`、`$EV/scratch/pytest-xdist8-hs311-suite.fa18958f`、
+`$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-311 节）、工作树 `scratch/hs311/`（env/common/runner 脚本、pyshim、pristine、logs、tmp*、regression-files.txt）、
+工作树 `runs/`（Ultralytics 输出，605 目录）。以上**均为删除候选，未删除**；HS-300..310 的产物只读引用，未改动。
