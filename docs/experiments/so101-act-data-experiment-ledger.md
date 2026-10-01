@@ -49331,3 +49331,25 @@ So the complete edit is now fully specified, with no guessing left:
 5. initialise the counter beside `self._sequence`.
 
 Five steps, one file, and the two suites run immediately afterwards - which is what the previous attempt lacked.
+
+
+## CP-2608 — The three `_closed` calls verbatim, which is what the patch needed
+
+```
+756:        _closed(record, _ACQUISITION_FIELDS, "AUDIT_SCHEMA_INVALID")
+826:            item = _closed(record, _EVENT_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
+873:            item = _closed(record, (_REFERENCE_FIELDS | packed | raw_present) - {"sequence"},
+892:            item = _closed(record, _PHYSICS_FIELDS - {"sequence"}, "AUDIT_SCHEMA_INVALID").copy()
+857:            item["sequence"] = self._next("events")
+884:            item["sequence"] = self._next("references")
+904:            item["sequence"] = self._next("physics")
+```
+
+The patch aborted on the references line because it is a **union expression** - `(_REFERENCE_FIELDS | packed |
+raw_present) - {"sequence"}` - rather than the plain subtraction the other two use, so the literal I searched for did
+not exist. That is the same class of mistake as CP-2490 and CP-2582's first attempt, and the assert caught it before any
+write: the file is untouched and the suites still report the unmodified **80 passed**.
+
+With these anchors the five-step edit is fully pinned: add the key to the four sets, extend each of **three**
+subtractions (826 plain, 873 inside the union, 892 plain), set `task_sequence` after each of the three `_next` calls
+(857, 884, 904), and handle the acquisition producer at 756 with `_next_task()`. No string in the edit is now guessed.
