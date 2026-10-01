@@ -43064,3 +43064,130 @@ pyshim、run/consumption 脚本、tmp）。以上**均为删除候选，未删�
 
 **运行后进程**：`ps`（mujoco/yolo/ultralytics/detector/ros2 run/so101_head_search 全空）、
 `nvidia-smi --query-compute-apps` 空、未启动任何 `ros2` daemon（`pgrep -a -f "ros2 daemon"` 仅匹配到检查命令自身）。
+
+## HS-306 — `workspace_projection` 生产者落地：合法拾取工作区投进 sealed head camera，安装版 phase 6 算出 `vertical_bounds_px=[191.699852915671, 272.6768492617673]`，stand-in 退出安装路径
+
+**提交**：`070b91472`（feat，5 文件 +2050/−6，普通 `git commit`，rc=0，含 4 个新文件改动与
+`head_camera_geometry.workspace_matrix_points` 的公开别名）；`495e655be`（fix，4 文件 +191/−44，普通
+`git commit`，rc=0，第一次真实运行触发的位姿集修正，见下）。工具链 `head-toolchain-20261001T103639Z`
+（由 `495e655be` 构建，build rc=0，37.9 s；另保留 `head-toolchain-20261001T103306Z`，由 `070b91472`
+构建、仅供被拒运行使用）。
+
+**(a) 合法拾取工作区在哪里声明、缺什么（全部只读取证）**
+
+| 问题 | 结论 |
+| --- | --- |
+| 工作区声明处 | `src/so101_demo_py/config/act/head-camera-geometry-contract-v1.json`（安装于 `share/so101_demo_py/config/act/`）：`workspace_x_m [-0.115, -0.035]`、`workspace_y_m [-0.39, -0.25]`、`workspace_z_m [0.165, 0.166]`、`workspace_step_m 0.02`。**不是** `config/mujoco/`（任务书里的路径在本树不存在） |
+| 采样规则 | 代码 `head_camera_geometry._workspace_matrix_points`：每轴**两端点都取**，再取三个声明高度（low/mid/high）→ 5×8×3 = **120**，与 seal 的 `workspace_matrix.samples = 120` **逐位相同**，故工作区本身无缺失；本轮只把该私有规则以公开名 `workspace_matrix_points()` 暴露给新模块（`head_camera_geometry.py` 内新增 13 行，无行为变化） |
+| seal 缺的是投影本身 | `workspace_matrix.key_samples` 只有 5 条，其中仅 2 条 `required_domain_endpoint` 带 `u/v`，且 `u = 320`（"相机对准该点"的构造），不构成 v 带；`samples: 120` 只是计数 |
+| 能否在**不发明几何**的前提下投影 | 能：seal（相机定义、mount origin/xyaxes、`required_search_domain_rad`、`lock_valid_neck_rad`、`coarse_step_candidate_rad`）+ contract（工作区盒）+ sealed scene（相机位姿）三者已足以复现 seal 自己的投影口径。预检用 `camera_pose_from_seal` + `project_point` 复算 seal 的两条 key sample，`delta = (0.000e+00, 0.000e+00)`（完全一致），并与 MuJoCo `cam_xpos`/`cam_xmat` 逐位比对 max\|Δpos\|=0.0、max\|Δaxes\|=2.22e-16 |
+
+**(b) 生产者与声明的规则**：库 `so101_demo.act.head_search_workspace_projection`，安装入口
+`so101_head_search_calibration measure-workspace-projection --scene … --geometry-seal … --geometry-contract …
+[--coarse-step-rad R] --output-dir …`。读 seal 走标定自己的 `read_geometry_document`（`seal_sha256` 必须
+是 body 的 canonical digest），读 contract 走几何模块自己的 loader，然后逐项**拒绝**而不是择优：scene 字节
+（seal `source_digests.scene_sha256` = contract `accepted_scene_sha256` = 实际文件）、相机定义与
+`fov_tolerance_rad`、水平 FOV、工作区样本数（= seal `workspace_matrix.samples`）、以及**工作区盒自身方位角
+跨度 = seal `required_search_domain_rad`**（同一条 `atan2(x, -y)` 公式）。每个位姿先读场景里的相机位姿并与
+sealed mount model 比对，再逐点用 `head_camera_geometry.project_point` 投影；文档给出每个点位姿、`u`、`v`、
+`in_frame`、`point_rad`、投影函数名，以及每位姿的相机位置/三轴矩阵。
+
+设计未固定的两件事，本轮**显式声明并记录**：
+
+* **位姿集**：`required_search_domain_rad` 内的 bounded plan 停点 + 落在域内的 anchor 起始角；域外 anchor
+  起始角**排除不夹取**（本轮 `default` 的 0.1 rad 被排除）。计划步长取 **phase 2 自己的选择规则**（覆盖全域
+  的最大生成候选），本 seal 得 `0.6560533740603397` = 半 FOV，**与 HS-298 真实 val sweep 量出的
+  `chosen_coarse_step_rad` 逐位相同**；每个候选的域内停点集都记录（0.3/0.328/0.656 均 6 个停点且与所选一致，
+  0.164/0.082/0.041 分别为 9/15/26 个故 `pose_set_poses_are_step_independent=false`，表在文档里）。调用方
+  若持有 run 自己的计划可 `--coarse-step-rad` 声明，声明值必须是生成候选且覆盖全域，否则
+  `CAL_PROJECTION_POSE_SET_AMBIGUOUS`。
+* **边界规则**：`top_px`/`bottom_px` = 各位姿范围在**访问位姿上的并集**（合法工作区在图像里的包络：任一位姿、
+  任一合法样本的行都落在其中，锁的三帧判定不会因此漏掉正确杯子）；**交集**（每位姿都能产生的行）与
+  **对准带**（每个样本在自己方位角上、`u = width/2` 的行，即三帧锁真正看到的那条带）并列记录，并记录它们
+  是否被并集/交集覆盖。本几何：并集 `[191.699852915671, 272.6768492617673]`、交集
+  `[192.79306238636892, 266.49194356287984]`、对准带 `[191.43279284501511, 266.4651342678581]`——对准带顶部
+  比并集顶部高 **0.267 px**，文档如实写 `covered_by_union=false`，因为那些行属于"停点之间"的位姿（细校正
+  路径可以停在那里），这正是记录的限制之一。图像安全边距**不是**本文档字段：phase 6 拿 camera
+  measurements 的 `safety_margin_px` 来交，本文档不读、不默认、不交。
+
+**RED → GREEN（合成夹具，工作树源码 + `scratch/hs306/pyshim`；无 ROS、无 MuJoCo、无检测器、无 GPU）**
+
+| 步骤 | 命令 | 结果 |
+| --- | --- | --- |
+| RED | `pytest -q test_act_head_search_workspace_projection.py` | **rc=2，1 个 collection error**：`ModuleNotFoundError: No module named 'so101_demo.act.head_search_workspace_projection'`，边界正确（`logs/red-module.log`） |
+| GREEN | 同上 | **21 passed, rc=0**（0.24 s） |
+| CLI RED | `pytest -q -k workspace_projection test_head_search_calibration_cli.py` | 首次 **1 failed / 3 passed**（`assert seen["command"].startswith(...)` 未计入 `ros2 run so101_demo_py ` 前缀），随后 GREEN 4 passed；`--coarse-step-rad` 加入后再 GREEN |
+| GREEN（修正后，模块+CLI） | 两文件 | **72 passed, rc=0**（1.41 s，`logs/green-module-and-cli.log` 为 70 passed 的上一版） |
+| 回归（HS-288..305 的 22 个 phase 文件 + 新模块测试 = 23 文件，`-n 8`，基线环境配方） | `bash scratch/hs306/baseline-invocation.sh hs306-regression2 …` | **618 passed, 0 failed, 0 error, rc=0**（4.0 s，`$EV/scratch/pytest-xdist8-hs306-regression2.6d02979d`） |
+| 全量 `src/so101_demo_py/test`（`-n 8`，24 逻辑 CPU，基线调用式） | `bash scratch/hs306/baseline-invocation.sh hs306-final2 src/so101_demo_py/test` | **tests 6517 / 175 failed / 6104 passed / 152 skipped / 86 errors, rc=1, 52 s**（`$EV/scratch/pytest-xdist8-hs306-final2.6c489d6c`）；与基线 `pytest-xdist8-hs305-final.21b65b4c`（6490/175/6077/152/86）**节点级 diff：新增 0、消失 0**（261 节点），`passed +27` 恰为本轮新增测试数（25 模块 + 4 CLI − 2 被替换） |
+
+**(c) 一次真实运行**（安装版入口，工具链 `head-toolchain-20261001T103639Z`，`$C` =
+`head-yolo-models-20260930T120608Z`）：
+
+```
+ros2 run so101_demo_py so101_head_search_calibration measure-workspace-projection \
+  --scene $T/install/so101_demo_py/share/so101_demo_py/assets/mujoco/act/head_search_scene.xml \
+  --geometry-seal $EV/head-camera-probe11-20260930T101722Z/head-camera-geometry.json \
+  --geometry-contract $T/install/so101_demo_py/share/so101_demo_py/config/act/head-camera-geometry-contract-v1.json \
+  --output-dir $C/workspace-projection-20261001T103725Z
+rc=0  wall 1 s（elapsed_s=0.1805098056793213）
+WORKSPACE_PROJECTION_PRODUCED top_px=191.699852915671 bottom_px=272.6768492617673 poses=3 points=120
+  union=[191.699852915671, 272.6768492617673] intersection=[192.79306238636892, 266.49194356287984]
+  step=0.6560533740603397 (phase_2_selection_rule)
+```
+
+* 产物：`$C/workspace-projection-20261001T103725Z/{workspace-projection.json,measurement-receipt.json}`，
+  文件 sha256 `e96f3cefea0615bde18613351f9c35fe4d701dc1f45e803d70fff1e0beed9dda`、
+  `2ca89cd27688adc961aa773f4bc1f19c86fb42a1fec986606ed88e6e77711e9f`；文档自摘要
+  `3c47f11f7a6bf6fafe498cf63d1d4ae8bad71ca052187a73cbaf0fdac5202a9b`。同目录 `consumption-check.log`，
+  同级 `…20261001T103725Z.{console.log,provenance.txt}`。120 样本 × 3 位姿 = 360 条点记录；MuJoCo
+  `3.12.0`；`detector_loaded=false`、`cuda_used=false`、`ros_nodes_started=false`（**本轮不用检测器**：投影是
+  几何，不需要权重、CUDA 或渲染，已按要求说明并保持无检测器）。
+* 每位姿范围（每个位姿 120/120 点在画面内）：plan stop `-0.17559216195018024` rad（三个 anchor 都到）
+  **v∈[191.699852915671, 272.6768492617673]**；anchor start `0.0` rad（`left`/`forward`）
+  **[192.79306238636892, 266.49194356287984]**；plan stop `+0.08047101126546086` rad（三个 anchor）
+  **[192.56730084972838, 270.13780091903214]**；`default` 的 0.1 rad 记为
+  `outside_required_search_domain` 排除。
+* **第一次真实运行被拒**（`workspace-projection-20261001T103357Z`，rc=2，工具链
+  `head-toolchain-20261001T103306Z`）：`CAL_PROJECTION_POSE_SET_AMBIGUOUS`，因为本轮最初假定 phase 2 的粗步长
+  "无人声明"、要求所有生成候选的域内停点集相同。事实是它**有声明**（覆盖全域的最大生成候选），故 `495e655be`
+  改为调用 phase 2 自己的 `choose_coarse_step_candidate`，并把该拒绝码只留给"调用方声明的、phase 2 不可能
+  receipt 的步长"。被拒运行目录与被取代的工具链根都保留。
+
+**(d) 安装版消费核查**（`consumption-check.log` 在运行目录内；phase 6 实物路径断言为
+`$T/install/so101_demo_py/lib/python3.12/site-packages/so101_demo/act/head_search_search_params.py`）：
+
+* `compute_vertical_bounds_px(camera=<HS-305 的 camera-measurements.json>, workspace_projection=<本文件>)` =
+  **`vertical_bounds_px = [191.699852915671, 272.6768492617673]`**，`top_clip_px=0.0`、`bottom_clip_px=0.0`、
+  `detections_used=false`，`input_evidence[0]` 按 path+sha256 引用本投影文档（自摘要已由安装版
+  `canonical_sha256` 复算一致）。
+* 同一调用换成 HS-305 的 stand-in（引用已提升的 `head_search_v2.json` `values.vertical_bounds_px [110,370]`）
+  得 **`[120.0, 360.0]`**：**stand-in 上沿高 71.699853 px、下沿低 87.323151 px**（`stand_in_minus_real_px`）。
+* **stand-in 已不在安装路径**：`grep -rl "workspace-projection-stand-in\|workspace_projection_stand_in"
+  $T/install/` → 0 命中；安装版 phase-6 模块与 CLI 源文件里 `stand.in` → 0 命中；run 的
+  `--workspace-projection` 输入契约未变（`RUN_PHASE_SIX_MEASUREMENTS` 第 56 行原样），只是现在有了生产者。
+  stand-in 文件本身作为 HS-303/305 的历史证据保留，仅用于本次对比调用。
+
+**本轮声明的主要推断（待评审）**：① 边界规则取**并集**（并列出交集与对准带）：设计既未定位姿集也未定边界
+规则，取并集的理由是"锁必须在搜索实际停留的任一位姿上接受正确杯子的中心"，交集是更强主张、可能拒掉合法观测，
+且 0.267 px 的"对准带顶部在并集之上"说明这些量确实不同，故并列记录而不是二选一；② 位姿集用 phase 2 的选择规则
+而不是封存 `coarse_step_candidate_rad`（0.3）：两者在本几何给同一 6 个停点，且规则值与 HS-298 实测值逐位一致；
+③ 工作区点 = cup 摆放位姿（z=0.165 的 free-joint 位置）而非渲染轮廓，因此该带是**摆放带**；设计没有要求轮廓带，
+而从渲染框/检测回填正是 phase 6 结构性拒绝的做法（`CAL_VERTICAL_BOUNDS_UNPROJECTED`），故如实写入
+`recorded_limitations` 而非自行加宽；④ 每个位姿都要求场景相机位姿与 sealed mount model 一致（容差 1e-9）后才
+投影，实测 2.22e-16；⑤ 工作区盒的方位角跨度必须等于 seal 的 `required_search_domain_rad`，这把"要投影的盒子"
+钉在 seal 上（否则换一个盒子也能算出一个数）；⑥ `workspace_matrix_points` 从私有函数加了一个公开别名（不复制
+规则），避免第二个采样实现与 seal 漂移；⑦ `--coarse-step-rad` 是可选声明，真实运行**没有**用它，走的是规则路径；
+⑧ 未执行任何 `run` 全流程，未重签几何 seal、未改任何封存文件、未改生产配置（`head_search_v2.json` 的
+`vertical_bounds_px [110,370]` 仍是旧值，本轮只提供真实投影文档，晋升由后续轮次决定）。
+
+**本轮证据与生命周期**：保留 `$T` = `head-toolchain-20261001T103639Z`（**最终**，由 `495e655be` 构建）与
+`head-toolchain-20261001T103306Z`（被取代，由 `070b91472` 构建）；`$C/workspace-projection-20261001T103725Z{,.console.log,
+.provenance.txt}`（含 `consumption-check.log`）与 `$C/workspace-projection-20261001T103357Z{,.console.log,.provenance.txt}`
+（被拒运行，空目录）；`$EV/scratch/pytest-xdist8-hs306-{regression.9b8ccd2c,regression2.6d02979d,final.74fa73b5,final2.6c489d6c}`；
+`$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-306 节）；工作树 `scratch/hs306/`（pyshim、env.sh、
+run-tests.sh、baseline-invocation.sh、regression-files.txt、recon/projection/consumption 脚本、logs/、tmp*）。
+以上**均为删除候选，未删除**；HS-288..305 的产物只读引用。
+
+**运行后进程**：`ps`（ros2/move_group/rviz/gz/gazebo/mujoco/yolo/ultralytics/detector 全空）、
+`nvidia-smi --query-compute-apps` 空、未启动任何 `ros2` daemon（`pgrep -a -f "ros2 daemon"` 仅匹配检查命令自身）。
