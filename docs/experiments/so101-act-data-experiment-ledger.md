@@ -54351,3 +54351,35 @@ Two things to establish first: which class the live path uses as its producer (t
 and whether a real MuJoCo render is required or whether the physics-summary half alone can be produced for the purpose -
 the endpoint QC reads poses from physics rows, so a producer of those may be enough to make the forward half real without
 a renderer.
+
+
+## CP-2818 — The capture has no production caller at all, and its sampler contract is one method
+
+Two facts, both measured, and together they say what the objective's remaining work actually is:
+
+```
+src/act/continuous_capture.py:48        class ContinuousEpisodeCapture:
+test/test_act_seal_and_downgrade.py:79      capture = ContinuousEpisodeCapture(       # mine, the chain test
+test/test_act_continuous_capture.py:64      capture = ContinuousEpisodeCapture(
+test/test_act_continuous_capture.py:758     capture = ContinuousEpisodeCapture(
+
+src/act/continuous_capture.py:395       observation, source_audit = self.sampler.sample_with_audit(...)
+```
+
+**The capture is used only by tests.** Nowhere in `src/` - not in the CLI, not in the worker, not in the first-episode path
+- is a `ContinuousEpisodeCapture` constructed. So the chain this stretch closed end to end on real components is, in
+production, still a class nobody instantiates.
+
+**And what it needs from a producer is one method**: `self.sampler.sample_with_audit(...)`, called at `:395`, returning an
+`(observation, source_audit)` pair. That is the whole sampler contract - which is why the `FakeSampler` in the unit tests is
+so small, and why a real one is a bounded piece of work rather than an interface to design.
+
+Which also merges K1's forward half with E3: both need the same missing thing - **a production caller that constructs the
+capture with a real producer and drives it**. For K1 the point is that the producer is real rather than a fixture; for E3
+the point is that the whole thing runs under the frozen inputs, after a `FULL_RESTART`, through the recorder and into a
+real coordinator commit. They are one piece of work seen from two ends, and it is the piece that stands between this
+milestone and its objective.
+
+Worth stating plainly for the record: everything this stretch proved is proved on real components **except that no
+production path assembles them**. That is not a flaw in any of the classes - each does what its contract says - it is the
+same "no layer performs this step" family that produced nine fixes already, at the largest scale yet.
