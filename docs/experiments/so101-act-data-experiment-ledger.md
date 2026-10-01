@@ -44303,3 +44303,20 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F11's derivation) are one shared fixture upgrade away, and F11's half of it is behind the CP-2332 ruling.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed;
 - F5's regression fixed with step one landed; HEAD e886d2fb3; goal active.
+
+## CP-2352 - Task A's probe: five of seven coverage clauses satisfied, two cut off
+
+- The probe (instrumented _formal_coverage_ok printing its clauses, the runner-backed fixture rebuilt as CP-2342
+- describes, one run, both files restored afterwards) printed:
+-   physics 10, events 11, references 1, phases ALL NINE (ALIGN, APPROACH, CLOSE, FINAL_CHECK, MICRO_LIFT,
+-   RADIAL_RETREAT, RELEASE, SEARCH, TRANSPORT), kinds ALL FOUR (contact, pose, retract, support), then
+-   observed_... - truncated by the print's own width.
+- So the completion set and order, the per-kind presence, and the non-empty streams are all SATISFIED, and the
+- seal still refuses with AUDIT_FORMAL_COVERAGE_INCOMPLETE. That leaves exactly two clauses, both hidden behind the
+- truncation: whether any physics row carries BOTH the scene record and the feedback, and whether the accepted
+- reference carries a complete raw group.
+- The next run costs nothing new: the same probe with its print widened (or split across two lines) names which of
+- the two it is. The fixture, the instrumentation and the recipe are all in this entry and CP-2342.
+- Reverted; the audit suite is green and nothing half-applied remains.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed;
+- F5's regression fixed with step one landed and step two two clauses from diagnosis; HEAD 7e17f4d36; goal active.
