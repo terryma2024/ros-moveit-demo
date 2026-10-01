@@ -73,14 +73,12 @@ def sealed_episode(tmp_path, *, outcome, end_s=1.3, episode_root=None):
     # reset_epoch 2, and the recorder requires the audit to agree with it (CP-2734)
     # the recorder creates its own root and refuses one that exists, so it must not be pointed at the writer's: the
     # recorder reaches the audit through audit_manifest.parent, which is the writer's root (CP-2769)
-    recorder = EpisodeRecorder(audit_root, session_id="session-1", attempt_id="attempt-1",
-                               reset_epoch=2, provenance=PROVENANCE)
-    audit = EpisodeAuditWriter(audit_root, SCOPE, IDENTITY, {"inputs_sha256": "a" * 64})
-
-    capture = ContinuousEpisodeCapture(
-        recorder=recorder, sampler=RecorderSampler(), guard=AcquisitionGuard(),
-        physical_audit=recorder_physical_audit, audit=audit,
-        scope=str(audit_root / "audit" / "source.json"), deadline_s=120.0, monotonic=lambda: 0.0)
+    # assembled by the production seam rather than by hand, so this test exercises the same wiring E3 will use
+    capture = assemble_episode_capture(
+        sampler=RecorderSampler(), physical_audit=recorder_physical_audit, guard=AcquisitionGuard(),
+        identity=IDENTITY, provenance=PROVENANCE, inputs={"inputs_sha256": "a" * 64},
+        episode_root=audit_root, scope=SCOPE,
+        scope_path=str(audit_root / "audit" / "source.json"), deadline_s=120.0, monotonic=lambda: 0.0)
     minter = AcquisitionMinter()
     capture.start("session-1", "attempt-1", 2, 1.0)
     # N rows need N+1 instants of frames: a row is released only once the observed sim clock has passed its target
@@ -92,7 +90,8 @@ def sealed_episode(tmp_path, *, outcome, end_s=1.3, episode_root=None):
         capture.drain()
     capture.finish(end_s, window={"start_s": 1.0, "end_s": end_s, "label_cutoff_s": end_s},
                    outcome=outcome)
-    return audit_root / "audit" / "audit-manifest.json", recorder.root / "seal.json"
+    # the recorder owns audit_root and writes its seal there, so the episode seal is that directory's seal.json
+    return audit_root / "audit" / "audit-manifest.json", audit_root / "seal.json"
 
 
 def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_path):
