@@ -43992,3 +43992,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - the contract choice CP-2332 records - and F13's scene production behind CP-2285.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed; F5's regression fixed;
 - HEAD 8fd763d8a; goal paused.
+
+## CP-2338 - F5's hybrid: two steps, and the fixture's structure quoted for the copy
+
+- _self_consistent_formal, read in full: mint head and wrist acquisitions at 1.0/1.1/1.2; append one accepted
+- reference with the legacy raw group; append four physics rows (support, pose, contact, retract) ALL at sim_time
+- 1.1, the pose one carrying the scene record and the two-controller feedback; append NINE phase_completes minted
+- from FORMAL_PHASES at step 1 plus one release event; bind_row(0, 1.0, head, wrist, 1); return writer, _window().
+- That is the shortcut the verdict names: the completions are named by the fixture, not produced by a run, and all
+- four kinds sit at one instant, which is why F5's per-kind rule and F11's endpoint derivation both refuse it.
+
+- The hybrid therefore has TWO steps, in this order:
+-   1. give the release-boundary suite's port a ratified physical_observation - the scene record and the feedback
+-      records the audit admits - because the runner writes its physics rows from that port's evidence, and
+-      coverage requires at least one row carrying both records (CP-2296 measured this as the blocker);
+-   2. then write _runner_backed_formal: the same acquisitions/reference half, but running
+-      PickPlaceRunner(AlignedPort(), audit=writer).run({**request(), attempt_id: port.names['attempt_id']}) for
+-      the events and physics, with a window derived from the rows the audit actually holds.
+
+- Step 1 is a focused change in one test file's port; step 2 is the fixture. Together they replace the preset
+- summary with an episode that produced its own history, which is the verdict's sentence.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
+- derivation behind CP-2332; F5's regression fixed with its two items behind these two steps; HEAD 3b8b7e734;
+- goal paused.
