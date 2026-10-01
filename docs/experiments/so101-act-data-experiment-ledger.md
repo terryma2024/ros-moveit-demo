@@ -48599,3 +48599,21 @@ runner asserted at run time. The sentence about checksums is also the reason the
 evaluation itself: a digest proves the bytes are unchanged, not that the run's own claim about its endpoints is true.
 
 The review of K2 revision 3 is still running (`tail -1` empty).
+
+
+## CP-2568 — What the readback returns, and that it runs the same predicate as the seal
+
+`verify_audit_manifest` ends at 1066 with **`return manifest`**, and its own checks say what that document holds:
+`manifest["identity"]` and `manifest["window"]` must be dicts (1044), the formal window is passed through
+`_window_ok(manifest["window"], mode="formal")` (1045), and - the important one - the readback calls
+**`_window_matches_observed(manifest["window"], ...)`** (1056), the same predicate the seal calls. So the independent
+verifier does not merely re-hash: it re-runs the window judgement on the re-read document, which is why the F5 work of
+the last rounds mattered to both sides at once.
+
+For E2's interface this settles the input's shape: `endpoint_records_from_audit(audit, inputs)` receives the **manifest**
+the readback returns - `kind`, `identity`, `window`, `files` and the rest - and the **rows and acquisitions are re-read
+from the files that manifest lists**, in the fresh process, rather than being passed in by the runner. The endpoint
+records are then derived from those re-read rows plus the frozen `inputs`, with `evaluate_endpoint_pose` (E1) doing the
+arithmetic, so the QC's verdict rests on recomputed evidence at both ends.
+
+The review of K2 revision 3 is still running (`tail -1` empty).
