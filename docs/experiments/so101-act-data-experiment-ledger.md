@@ -45956,3 +45956,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   working tree can both be re-run.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 93dbf7be2;
   goal active.
+
+
+## CP-2434 — Step two's exact patch, and why it is a parameter rather than a merge
+
+- `resource_policy_identity(runtime_bytes, collection_bytes)` reads the runtime document's `start_guard` (validated
+  against `_RESOURCE_KEYS`), the runtime document's `hard_stops` (against `_RESOURCE_HARD_STOP_KEYS`, then exposed as
+  `rtf_hard_stop` and `disk_hard_stop`), and the collection document's `recorder` (capacity/high/recovery ordering,
+  `lossless is True`, `sample_rate_hz == 10`). It also reports `runtime_config_sha256`, computed from the runtime
+  **bytes** it was given.
+- That last detail is why the two stops cannot simply be merged into a synthesised runtime document: the merged bytes
+  would change the digest the identity reports, misstating the file's own hash. So the honest patch is a keyword-only
+  parameter - a path to the amendment's development runtime document - from which the function reads `hard_stops` when
+  the batch runtime does not carry them, leaving `runtime_config_sha256` computed from the batch file's bytes exactly
+  as now. `_inspect_resource_thresholds` passes that path (the source tree's
+  `config/act/endpoint_pose_development_runtime_v1.yaml`), and its candidate set keeps pointing at the batch runtime
+  and the collection config, both source-controlled.
+- With that, the single remaining blocker should clear, `inspect` returns to zero, and the frozen set is built with
+  the stops in the document the design names - after which the working tree's composition increment can be committed
+  together with this change and the `run` re-attempted.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 9114cfaee;
+  goal active.
