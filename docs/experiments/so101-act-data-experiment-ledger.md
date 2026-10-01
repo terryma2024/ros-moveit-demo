@@ -46621,3 +46621,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   genuine boundary of the parallel-batch vehicle for this milestone.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD b15c1f1c4; goal active.
+
+
+## CP-2468 — The request the composition actually reads: BatchRequestV2's seven fields
+
+- The reader is in the composition itself, not the coordinator: `mujoco_parallel_batch.py:2845` iterates
+  `self.spec.request.selected_point_ids`, which is why the four-field application request raised the AttributeError.
+  The macOS profile question (CP-2467) is separate - `resolve_execution_route`/`ExecutionProfile` belong to the
+  campaign path, and the composition never asks for a profile - so CP-2467's correction narrows the route rather than
+  closing it.
+- `BatchRequestV2` (contracts.py:1265) is exactly seven fields: `batch_id: str`, `run_mode: RunMode`,
+  `selected_point_ids: tuple[str, ...]` (non-empty and unique, ids validated), `worker_count: int` (positive, within
+  the frozen maximum), `evidence_root: Path`, `batch_kind: BatchKindV2`, and `schema_version: int = 2` pinned to 2.
+  So the request this run must build is a one-point V2 request with `run_mode=RunMode.EXECUTE` and
+  `worker_count=1` - both values already established this session - and the only field left to read is the
+  `BatchKindV2` member that describes a full, fresh run (`FULL_RESTART` by the plan's language).
+- With that, the fourth piece's construction is fully specified: the V2 request, the frozen config and provenance, the
+  one-point catalogue, the seven-value target, and the composition instantiated with a one-worker specification.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 54da125dd; goal active.
