@@ -45295,3 +45295,27 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   been run with its argv recorded.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 079ac9932;
   goal active.
+
+
+## CP-2402 — The installed CLI is runtime-verified, and the shadowing that hid it is recorded
+
+- `act_first_episode` now exists and runs: `ACT_FIRST_EPISODE` points at
+  `<worktree>/install/so101_demo_py/lib/so101_demo_py/act_first_episode`, and with an explicit
+  `PYTHONPATH=<worktree>/install/so101_demo_py/lib/python3.12/site-packages` its rc contract is measured, not assumed:
+  `--help` exits 0 and prints the three subcommands; `inspect --source-root . --ledger l.md --output ...` exits 2
+  with "inspect is not implemented yet; no candidate registry was invented"; `prepare --nope` exits 2 through
+  argparse naming the required flags; `preflight --inputs /tmp/nope ...` exits 1 with the missing
+  `inputs-manifest.json`. The proof line is `logs/task3-cli-runtime-proof.txt`.
+- Two environment facts worth keeping, both measured: the first build failed for a **missing underlay** (the five
+  MuJoCo/so101 dependencies are in the workspace's `src` but unbuilt in this worktree), so the working recipe is to
+  source the main worktree's `install/setup.zsh` and ignore those five by name; and running the entry needs the
+  explicit `PYTHONPATH` because the **main worktree's `build/` shadows** this worktree's package - without it,
+  `so101_demo` resolved to `/home/matianyi/Projects/ros-moveit-demo/build/so101_demo_py/so101_demo/__init__.py` and
+  `load_entry_point` raised `StopIteration` from the older metadata. Deleting the source-tree and install egg-info
+  and rebuilding was necessary but not sufficient; the shadowing was the remaining cause.
+- With this, CP-2399's withdrawn claim is replaced by a measured one, and the plan's E3 sequence has its executable.
+  Still owed for E1: `inspect`'s candidate discovery, the `user_empirical_default` approval and the immutable
+  effective-config artifact, the policy role in both real input registries, and `test_act_first_episode_inputs.py`
+  with the plan's positives and safety negatives.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD f321259f7;
+  goal active.
