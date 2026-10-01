@@ -50002,3 +50002,23 @@ post-release contact - **are not among these codes**, which locates them where t
 QC/validation side, judged against the frozen targets and policy, and removed as a **precondition for success** rather
 than as a safety gate. That is the shape of the checklist E2 has to record: this list of safety codes preserved
 verbatim, and the quality items named as things a report may measure but may not require.
+
+
+## CP-2640 — The quality terms live in seven modules, and one of them is a contract
+
+The search puts the quality vocabulary in seven files:
+
+- **`act/task8_measurement_contract.py`** - a "measurement contract", the most likely home of the quality gate;
+- **`act/task8_production_composition.py`** - the production composition, which may enforce that contract as a
+  precondition;
+- **`act/episode_audit.py`** - where the audit's own schemas live, so some of the vocabulary is schema naming;
+- **`act/endpoint_pose_acceptance.py`** - this amendment's own module, where "quality" appears in the docstring's
+  promise that a report "may not say grasp quality verified";
+- `act/first_episode_inputs.py` and `parallel_batch/{contracts,perception}.py` - inputs and the batch contracts.
+
+So the amendment's claim - that quality stops being a **precondition for success** while remaining something a report
+may measure and must not overstate - maps onto a concrete question for the next read: whether
+`task8_measurement_contract.py`'s checks are consulted as a gate by the production composition, and if so, where the
+gate can be relaxed to a measurement without weakening any safety check.
+
+That is the last substantial piece of E2, and it is a read of two files rather than a design question.
