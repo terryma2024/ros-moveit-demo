@@ -49638,3 +49638,22 @@ make the test measure nothing, since the whole point is that a real audit receiv
 So the next edit is small and honest: construct the audit for this test with an identity derived from its request (the
 suite's `scope()` plus an identity built from the request's own fields), then assert the ordering the design's sampling
 wording requires.
+
+
+## CP-2622 — The boundary test now constructs a real audit, and the missing file is physics.jsonl
+
+Four iterations, each moving the failure one layer closer to the truth, and every one of them mine rather than the
+code's: the identity had to come from the request (not the audit suite's), the **lease** had to carry the same attempt
+id, the root had to be left for the writer to create (it refuses a pre-existing directory, the same "new root"
+discipline the composition enforces), and the parent had to exist the way the suite's own helper arranges it.
+
+The failure now is a `FileNotFoundError` whose full text names the file:
+`.../test_the_first_cup_pose_preced0/formal/physics.jsonl`. So the audit was constructed and the run executed, but **no
+physics rows were written** - while the same runner and fake port do produce events under the release-boundary suite's
+`RecordingAudit`. That means the runner's physics path did not execute for this audit, and the next read is its guard:
+`_physics` checks `if self.audit is None` (as `_event` does) and the runner may also return early through
+`stop_after`/lifecycle. Either way the datum is now specific enough to read rather than guess at.
+
+Worth recording plainly: this is the fifth round in which a test of mine has been red for my own construction reasons
+rather than for the property it measures. Each has been fixed by reading the literal (the suite's helper, the writer's
+refusals, the error's full path) rather than by relaxing an assertion.
