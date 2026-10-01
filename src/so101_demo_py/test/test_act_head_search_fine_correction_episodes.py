@@ -68,6 +68,66 @@ VERTICAL_BOUNDS_PX = (110.0, 370.0)
 #: the seal's required search domain and its lock-valid interval
 REQUIRED_DOMAIN_RAD = (-0.17559216195018026, 0.08047101126546086)
 LOCK_VALID_RAD = (-6.283175307179587, 6.283175307179587)
+#: every top-level key `build_fine_correction_episodes` wrote before HS-324 declared the warm-up frame: the
+#: warm-up block is added to this set and no key of it is dropped (the digest covers the new block too)
+PRE_WARMUP_FINE_CORRECTION_DOCUMENT_KEYS = (
+    "anchors",
+    "budget_censored",
+    "budget_definition",
+    "coarse_corridor_rad",
+    "command",
+    "control_period_s",
+    "control_period_source",
+    "controller_budget",
+    "controller_thresholds",
+    "correction_definition",
+    "corridor_definition",
+    "cuda_used",
+    "dataset_config",
+    "detector_loaded",
+    "detector_operating_point",
+    "device",
+    "digest_convention",
+    "episode_count",
+    "episodes",
+    "fine_corridor_rad",
+    "frame_period_s",
+    "frame_rate_hz",
+    "frozen_candidate",
+    "geometry_seal",
+    "hardware_motion_commanded",
+    "kind",
+    "lock_frames_required",
+    "locked_outside_required_domain_count",
+    "measured_here",
+    "measurement_budget",
+    "motion_commanded",
+    "mujoco_neck_commanded",
+    "path",
+    "phase",
+    "production_search_config",
+    "records",
+    "records_semantics",
+    "refused_count",
+    "required_domain_excursions",
+    "ros_nodes_started",
+    "runtime_identity",
+    "scene_definition",
+    "scene_path",
+    "scene_preparation",
+    "scene_sha256",
+    "schema_version",
+    "sha256",
+    "simulation_timestep_s",
+    "split_declaration",
+    "succeeded_count",
+    "success_definition",
+    "time_base",
+    "tracking_detail",
+    "tracking_measured",
+    "transport_measured",
+    "weights",
+)
 
 PARTITIONS = {
     "schema_version": 1,
@@ -231,7 +291,7 @@ def _clock(start=1000.0, step=0.001):
     return clock
 
 
-def episode(*, plant, detector=None, coarse=None, fine=None, config=None, **kwargs):
+def episode(*, plant, detector=None, coarse=None, fine=None, config=None, clock=None, **kwargs):
     return run_fine_correction_episode(
         controller_config=_controller_config() if config is None else config,
         plant=plant,
@@ -243,7 +303,7 @@ def episode(*, plant, detector=None, coarse=None, fine=None, config=None, **kwar
         split=HELD_OUT_SPLIT,
         scenario="one_cup_distractors",
         anchor="left",
-        clock=_clock(),
+        clock=_clock() if clock is None else clock,
         **kwargs,
     )
 
@@ -360,7 +420,9 @@ def test_a_locked_episode_records_one_correction_whose_magnitude_is_the_cups_bea
     # the controller's own counters agree with the reduction, which is what makes the count checkable
     assert result["controller_fine_count"] == 1
     assert result["controller_fine_angle_rad"] == pytest.approx(0.0588, abs=1e-9)
-    assert plant.frames_rendered == len(result["frames"])
+    # the loop rendered a frame per iteration plus its declared warm-up frame, and commanded the plant
+    assert plant.frames_rendered == len(result["frames"]) + 1
+    assert result["warmup"]["performed"] is True
     assert plant.commands[0] == 0.0
 
 
@@ -506,6 +568,147 @@ def test_a_settle_time_that_is_not_the_simulation_clocks_refuses_the_episode():
         episode(plant=plant)
 
     assert refused.value.code == CAL_TIMING_TIME_BASE_UNVERIFIED
+
+
+# --- the declared warm-up frame (HS-324) --------------------------------------------------------
+
+
+#: the promoted `max_age_s` (HS-296: p99.9 of the frame age + 10 ms) that refused this episode's frame 0
+PROMOTED_MAX_AGE_S = 0.014736005008453503
+#: the one-off cost HS-323 measured for the process's first detection-bearing predict (31-37 ms)
+FIRST_DETECTION_COST_S = 0.035
+
+
+class StepClock:
+    """A monotonic clock the fixture can advance, so a detector call can pay a declared one-off cost."""
+
+    def __init__(self, start: float = 1000.0, step: float = 0.001) -> None:
+        self.now = float(start)
+        self.step = float(step)
+
+    def __call__(self) -> float:
+        self.now += self.step
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += float(seconds)
+
+
+class OneOffDetectionCostDetector:
+    """The production detector's measured one-off cost (HS-323 section 2.2).
+
+    `YoloSegDetector`'s constructor warms the model up on a zeros image, which carries no box and no mask
+    and costs 5.3 ms; the first predict that really resolves a detection costs 34.2 ms and every later one
+    4.2-5.4 ms. `paid_on_detection_call` selects which detection-bearing call pays that cost, so a fixture
+    can put it on the warm-up frame or inside a measured frame.
+    """
+
+    def __init__(
+        self,
+        plant: FakePlant,
+        clock: StepClock,
+        *,
+        cost_s: float = FIRST_DETECTION_COST_S,
+        paid_on_detection_call: int = 1,
+    ) -> None:
+        self.plant = plant
+        self.clock = clock
+        self.cost_s = float(cost_s)
+        self.paid_on_detection_call = int(paid_on_detection_call)
+        self.calls = 0
+        self.detection_calls = 0
+        self.paid = False
+
+    def reset(self) -> None:
+        """The production reset clears the attempt's own state; it never re-colds a warm model."""
+
+        self.calls = 0
+
+    def __call__(self, image, stamp_ns):
+        self.calls += 1
+        column = _project(float(image["yaw_rad"]), self.plant.cup_yaw_rad)
+        if column - 30.0 < 0.0 or column + 30.0 > WIDTH_PX:
+            return []
+        self.detection_calls += 1
+        if not self.paid and self.detection_calls == self.paid_on_detection_call:
+            self.paid = True
+            self.clock.advance(self.cost_s)
+        return [
+            {
+                "xyxy": (column - 30.0, PRINCIPAL_Y_PX - 30.0, column + 30.0, PRINCIPAL_Y_PX + 30.0),
+                "confidence": 0.9,
+                "class_id": 0,
+                "track_id": "head-cup-0",
+            }
+        ]
+
+
+def test_the_warm_up_frame_is_performed_and_recorded_before_the_measured_frames():
+    clock = StepClock()
+    plant = FakePlant(cup_yaw_rad=-0.0588)
+    detector = OneOffDetectionCostDetector(plant, clock)
+
+    result = episode(
+        plant=plant,
+        detector=detector,
+        config=_controller_config(max_age_s=PROMOTED_MAX_AGE_S),
+        clock=clock,
+    )
+
+    warmup = result["warmup"]
+    assert set(warmup) == {"performed", "detections", "wall_s", "declared_because"}
+    assert warmup["performed"] is True
+    assert warmup["detections"] == 1  # a real frame with a box, not the constructor's zeros
+    assert warmup["wall_s"] >= FIRST_DETECTION_COST_S
+    assert warmup["declared_because"] == module.WARMUP_POLICY
+    # the warm-up is the detection-bearing call before the first measured frame, and it is not measured
+    assert detector.detection_calls == len(result["frames"]) + 1
+    assert result["detection_frames"] == len(result["frames"])
+    assert [frame["frame_index"] for frame in result["frames"]] == list(range(len(result["frames"])))
+
+
+def test_the_warm_up_frame_is_excluded_from_the_measured_ages_under_the_promoted_max_age():
+    """HS-323: this is the fixture whose first measured frame refused both flights (`INPUT_STALE`)."""
+
+    clock = StepClock()
+    plant = FakePlant(cup_yaw_rad=-0.0588)
+    detector = OneOffDetectionCostDetector(plant, clock)
+
+    result = episode(
+        plant=plant,
+        detector=detector,
+        config=_controller_config(max_age_s=PROMOTED_MAX_AGE_S),
+        clock=clock,
+    )
+
+    ages = [
+        frame["decision_monotonic_s"] - frame["received_monotonic_s"] for frame in result["frames"]
+    ]
+    assert result["succeeded"] is True
+    assert result["terminal_status"] == "TARGET_LOCKED"
+    assert result["fine_corrections"] >= 1
+    assert detector.paid is True
+    assert 0.0 < min(ages) and max(ages) <= PROMOTED_MAX_AGE_S
+    assert result["warmup"]["wall_s"] >= FIRST_DETECTION_COST_S > max(ages)
+
+
+def test_a_one_off_cost_inside_a_measured_frame_is_still_refused_by_the_freshness_gate():
+    """The fix declares and excludes a warm-up frame; it never widens `max_age_s`."""
+
+    clock = StepClock()
+    plant = FakePlant(cup_yaw_rad=-0.0588)
+    detector = OneOffDetectionCostDetector(plant, clock, paid_on_detection_call=2)
+
+    with pytest.raises(CalibrationFineCorrectionRefused) as refused:
+        episode(
+            plant=plant,
+            detector=detector,
+            config=_controller_config(max_age_s=PROMOTED_MAX_AGE_S),
+            clock=clock,
+        )
+
+    assert refused.value.code == CAL_FINE_EPISODE_NO_VERDICT
+    assert "INPUT_STALE" in refused.value.detail
 
 
 # --- the count the controller itself reports -----------------------------------------------------
@@ -659,6 +862,28 @@ def test_the_document_digest_covers_every_field_but_itself(tmp_path):
         {key: value for key, value in document.items() if key != "sha256"}
     )
     assert len(document["sha256"]) == 64
+
+
+def test_the_document_gains_the_warm_up_block_without_losing_a_key(tmp_path):
+    """HS-324: the whole key set this producer wrote before the warm-up was declared, plus the block."""
+
+    document = _document(tmp_path)
+
+    assert set(document) == set(PRE_WARMUP_FINE_CORRECTION_DOCUMENT_KEYS) | {
+        "warmup",
+        "warmup_samples_excluded",
+    }
+    assert set(document["warmup"]) == {"performed", "detections", "wall_s", "declared_because"}
+    assert document["warmup"]["performed"] is True
+    assert document["warmup"]["detections"] == 1
+    assert document["warmup"]["declared_because"] == module.WARMUP_POLICY
+    assert document["warmup_samples_excluded"] is True
+    # the block is the first flight's own warm-up, and every flight declares the one it performed
+    assert document["warmup"] == document["episodes"][0]["warmup"]
+    assert all(episode["warmup"]["performed"] is True for episode in document["episodes"])
+    assert document["warmup"] not in [
+        frame for episode in document["episodes"] for frame in episode["frames"]
+    ]
 
 
 def test_the_document_refuses_an_episode_of_a_split_the_caller_did_not_declare(tmp_path):
@@ -847,6 +1072,18 @@ def test_the_producer_writes_the_document_the_receipt_and_every_episode(tmp_path
     assert receipt["ros_nodes_started"] is False
     assert receipt["mujoco_neck_commanded"] is True
     assert receipt["hardware_motion_commanded"] is False
+
+
+def test_the_producer_records_the_warm_up_frame_it_excluded(tmp_path, monkeypatch):
+    result = _producer(tmp_path, monkeypatch)
+
+    document = result["document"]
+    receipt = result["receipt"]
+
+    assert receipt["warmup"] == document["warmup"]
+    assert receipt["warmup"]["performed"] is True
+    assert receipt["warmup"]["detections"] == 1
+    assert document["warmup_samples_excluded"] is True
 
 
 def test_the_producer_refuses_a_scene_the_sealed_geometry_does_not_pin(tmp_path, monkeypatch):

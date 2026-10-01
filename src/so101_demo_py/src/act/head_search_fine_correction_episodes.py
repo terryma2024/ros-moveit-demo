@@ -106,8 +106,13 @@ from so101_demo.act.head_search_deadband_measurement import (
     _frame_summary,
     _plant_request,
     build_production_head_detector,
+    declared_warmup,
     detector_operating_point,
     motion_corridor_rad,
+    perform_warmup_frame,
+)
+from so101_demo.act.head_search_deadband_measurement import (
+    WARMUP_POLICY as _DEADBAND_WARMUP_POLICY,
 )
 from so101_demo.act.head_search_mujoco_measurements import read_mujoco_timestep
 from so101_demo.act.head_search_search_params import LOCK_FRAMES
@@ -144,6 +149,10 @@ PHASE = "fine_correction_episodes"
 
 ARTIFACT = "fine-correction-episodes.json"
 RECEIPT_ARTIFACT = "measurement-receipt.json"
+
+#: the warm-up both closed-loop producers declare and exclude: the deadband measurement's own policy text,
+#: so the three producers that pay the one-off start-up cost declare it in the same words
+WARMUP_POLICY = _DEADBAND_WARMUP_POLICY
 
 #: the split whose seeds may bound the fine-correction numbers, and the split that may never do so
 HELD_OUT_SPLIT = "held_out_evaluation"
@@ -560,7 +569,9 @@ def run_fine_correction_episode(
     is commanded; the settle rule and the simulation time base are the timing module's own; and the
     correction count and magnitudes are checked against the controller's own counters before they are
     returned. A verdict that is not a lock is returned as a recorded failure, and anything that stops the
-    episode from reaching a verdict at all is a refusal.
+    episode from reaching a verdict at all is a refusal. One frame is rendered and detected before the
+    measured ones and declared as the episode's warm-up (`WARMUP_POLICY`): it is excluded from every frame,
+    age and reduction this episode records.
     """
 
     from so101_demo.act.search import HeadSearchController
@@ -621,6 +632,19 @@ def run_fine_correction_episode(
         )
 
     command(target, kind="plan")
+    # the one-off cost of the process's first detection-bearing predict belongs to the start-up, not to the
+    # episode: pay it on a frame that is declared and excluded, and reset the detector so the measured
+    # frames begin the attempt state they would have begun without it
+    try:
+        warmup = perform_warmup_frame(plant=plant, detector=detector, clock=clock)
+    except CalibrationDeadbandMeasurementRefused as error:
+        raise _refuse(
+            CAL_FINE_EPISODE_DETECTOR_FAILED,
+            f"the detector failed on the warm-up frame of the episode {episode_id!r} ({error.detail}), so "
+            f"this episode is not a measurement and no correction count is recorded for it",
+        ) from error
+    if callable(reset):
+        reset()
     while len(frames) < max_frames:
         frame_wall = clock()
         image = plant.render_frame()
@@ -807,6 +831,7 @@ def run_fine_correction_episode(
         ],
         "stops": stops,
         "frames": frames,
+        "warmup": warmup,
         "terminal_status": verdict,
         "found": bool(terminal.get("found")),
         "succeeded": bool(succeeded),
@@ -960,7 +985,10 @@ def build_fine_correction_episodes(
     cup's position and its terminal verdict, so a reviewer can recompute each record rather than trust
     it. The split is recorded in full - the split name, the seeds, the partitions' digest and the
     calibration seeds that were *not* used - so the isolation rule phase 6 re-checks is checkable from
-    the document alone.
+    the document alone. `warmup` declares the frame each episode rendered and detected before its measured
+    ones and `warmup_samples_excluded` records that it is in none of the frames, ages or reductions above;
+    the block is the first episode's own warm-up, the one that paid the process's one-off start-up cost,
+    and every episode's own block sits in `episodes`.
     """
 
     if isinstance(episodes, (str, bytes)) or not isinstance(episodes, Sequence) or not episodes:
@@ -1063,6 +1091,8 @@ def build_fine_correction_episodes(
             "fine_corrections_rad one positive magnitude per correction. An episode that did not lock "
             "carries succeeded=false with a null count and no magnitudes, never a zero"
         ),
+        "warmup": dict(episodes[0].get("warmup") or declared_warmup(performed=False)),
+        "warmup_samples_excluded": True,
         "episodes": [dict(episode) for episode in episodes],
         "anchors": anchors_seen if anchors is None else [str(anchor) for anchor in anchors],
         "controller_thresholds": {
@@ -1690,6 +1720,7 @@ def write_head_search_fine_correction_episodes(
         "succeeded_count": document["succeeded_count"],
         "refused_count": document["refused_count"],
         "records": document["records"],
+        "warmup": dict(document["warmup"]),
         "refused_episodes": [
             {
                 "episode_id": record["episode_id"],

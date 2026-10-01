@@ -54,6 +54,54 @@ ROTATION_OPTICAL_TO_BASE = (
 #: the yaw-to-pixel gain of that camera's forward axis in base, px per rad near the optical axis
 GAIN_PX_PER_RAD = 0.8 * FOCAL_PX
 VERTICAL_BOUNDS_PX = (110.0, 370.0)
+#: every top-level key `build_deadband_candidates` wrote before HS-324 declared the warm-up frame: the
+#: warm-up block is added to this set and no key of it is dropped (the digest covers the new block too)
+PRE_WARMUP_DEADBAND_DOCUMENT_KEYS = (
+    "anchors",
+    "candidates_px",
+    "command",
+    "control_period_s",
+    "control_period_source",
+    "controller_thresholds",
+    "corridor_rule",
+    "cuda_used",
+    "detector_loaded",
+    "detector_operating_point",
+    "device",
+    "digest_convention",
+    "frame_cadence",
+    "frame_period_s",
+    "frame_rate_hz",
+    "frozen_candidate",
+    "geometry_seal",
+    "hardware_motion_commanded",
+    "kind",
+    "lock_frames_required",
+    "lock_rule",
+    "measured_here",
+    "motion_commanded",
+    "motion_corridor_rad",
+    "mujoco_neck_commanded",
+    "path",
+    "phase",
+    "production_search_config",
+    "records",
+    "records_semantics",
+    "reversal_definition",
+    "ros_nodes_started",
+    "runtime_identity",
+    "scene_path",
+    "scene_sha256",
+    "schema_version",
+    "sha256",
+    "simulation_timestep_s",
+    "time_base",
+    "tracking_detail",
+    "tracking_measured",
+    "transport_measured",
+    "trials",
+    "weights",
+)
 
 
 def _controller_config(**overrides) -> dict:
@@ -203,7 +251,7 @@ def _clock(start=1000.0, step=0.001):
     return clock
 
 
-def trial(*, deadband_px, plant, detector=None, corridor=(-0.3, 0.3), config=None, **kwargs):
+def trial(*, deadband_px, plant, detector=None, corridor=(-0.3, 0.3), config=None, clock=None, **kwargs):
     plant = plant
     detector = FakeDetector(plant) if detector is None else detector
     return run_lock_trial(
@@ -212,7 +260,7 @@ def trial(*, deadband_px, plant, detector=None, corridor=(-0.3, 0.3), config=Non
         plant=plant,
         detector=detector,
         corridor_rad=corridor,
-        clock=_clock(),
+        clock=_clock() if clock is None else clock,
         **kwargs,
     )
 
@@ -315,8 +363,10 @@ def test_a_correct_loop_converges_in_one_correction_and_locks_without_reversing(
     assert result["direction_reversals"] == 0
     assert result["longest_locked_run_frames"] >= LOCK_FRAMES
     assert len(result["frames"]) >= LOCK_FRAMES
-    # the loop really rendered a frame per iteration and commanded the plant at least twice
-    assert plant.frames_rendered == len(result["frames"])
+    # the loop really rendered a frame per iteration plus its declared warm-up frame, and commanded
+    # the plant at least twice
+    assert plant.frames_rendered == len(result["frames"]) + 1
+    assert result["warmup"]["performed"] is True
     assert plant.commands[0] == 0.0
     assert plant.commands[1] == pytest.approx(-0.0588, abs=1e-9)
 
@@ -409,6 +459,151 @@ def test_the_loop_refuses_when_it_never_reaches_a_verdict_inside_its_frame_budge
         trial(deadband_px=2.0, plant=plant, detector=detector, max_frames=2)
     assert refusal.value.code == CAL_TIMING_SWEEP_UNSETTLED
     assert "2" in refusal.value.detail
+
+
+# --- the declared warm-up frame (HS-324) --------------------------------------------------------
+
+
+#: the promoted `max_age_s` (HS-296: p99.9 of the frame age + 10 ms) that refused this trial's frame 0
+PROMOTED_MAX_AGE_S = 0.014736005008453503
+#: the one-off cost HS-323 measured for the process's first detection-bearing predict (31-37 ms)
+FIRST_DETECTION_COST_S = 0.035
+
+
+class StepClock:
+    """A monotonic clock the fixture can advance, so a detector call can pay a declared one-off cost."""
+
+    def __init__(self, start: float = 1000.0, step: float = 0.001) -> None:
+        self.now = float(start)
+        self.step = float(step)
+
+    def __call__(self) -> float:
+        self.now += self.step
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += float(seconds)
+
+
+class OneOffDetectionCostDetector:
+    """The production detector's measured one-off cost (HS-323 section 2.2).
+
+    `YoloSegDetector`'s constructor warms the model up on a zeros image, which carries no box and no mask
+    and costs 5.3 ms; the first predict that really resolves a detection costs 34.2 ms and every later one
+    4.2-5.4 ms. `paid_on_detection_call` selects which detection-bearing call pays that cost, so a fixture
+    can put it on the warm-up frame or inside a measured frame.
+    """
+
+    def __init__(
+        self,
+        plant: FakePlant,
+        clock: StepClock,
+        *,
+        cost_s: float = FIRST_DETECTION_COST_S,
+        paid_on_detection_call: int = 1,
+        cup_yaw_rad=None,
+    ) -> None:
+        self.plant = plant
+        self.clock = clock
+        self.cost_s = float(cost_s)
+        self.paid_on_detection_call = int(paid_on_detection_call)
+        self.cup_yaw_rad = plant.cup_yaw_rad if cup_yaw_rad is None else float(cup_yaw_rad)
+        self.calls = 0
+        self.detection_calls = 0
+        self.paid = False
+
+    def reset(self) -> None:
+        """The production reset clears the attempt's own state; it never re-colds a warm model."""
+
+        self.calls = 0
+
+    def __call__(self, image, stamp_ns):
+        self.calls += 1
+        column = _project(float(image["yaw_rad"]), self.cup_yaw_rad)
+        if column - 50.0 < 0.0 or column + 50.0 > WIDTH_PX:
+            return []
+        self.detection_calls += 1
+        if not self.paid and self.detection_calls == self.paid_on_detection_call:
+            self.paid = True
+            self.clock.advance(self.cost_s)
+        return [
+            {
+                "xyxy": (column - 50.0, PRINCIPAL_Y_PX - 50.0, column + 50.0, PRINCIPAL_Y_PX + 50.0),
+                "confidence": 0.9,
+                "class_id": 0,
+                "track_id": "cup",
+            }
+        ]
+
+
+def test_the_warm_up_frame_is_performed_and_recorded_before_the_measured_frames():
+    clock = StepClock()
+    plant = FakePlant(cup_yaw_rad=-0.0588)
+    detector = OneOffDetectionCostDetector(plant, clock)
+
+    result = trial(
+        deadband_px=18.0,
+        plant=plant,
+        detector=detector,
+        config=_controller_config(max_age_s=PROMOTED_MAX_AGE_S),
+        clock=clock,
+    )
+
+    warmup = result["warmup"]
+    assert set(warmup) == {"performed", "detections", "wall_s", "declared_because"}
+    assert warmup["performed"] is True
+    assert warmup["detections"] == 1  # a real frame with a box, not the constructor's zeros
+    assert warmup["wall_s"] >= FIRST_DETECTION_COST_S
+    assert warmup["declared_because"] == module.WARMUP_POLICY
+    # the warm-up is the detection-bearing call before the first measured frame, and it is not measured
+    assert detector.detection_calls == len(result["frames"]) + 1
+    assert result["detection_frames"] == len(result["frames"])
+    assert [frame["frame_index"] for frame in result["frames"]] == list(range(len(result["frames"])))
+
+
+def test_the_warm_up_frame_is_excluded_from_the_measured_ages_under_the_promoted_max_age():
+    """HS-323: this is the fixture whose first measured frame refused both flights (`INPUT_STALE`)."""
+
+    clock = StepClock()
+    plant = FakePlant(cup_yaw_rad=-0.0588)
+    detector = OneOffDetectionCostDetector(plant, clock)
+
+    result = trial(
+        deadband_px=18.0,
+        plant=plant,
+        detector=detector,
+        config=_controller_config(max_age_s=PROMOTED_MAX_AGE_S),
+        clock=clock,
+    )
+
+    ages = [
+        frame["decision_monotonic_s"] - frame["received_monotonic_s"] for frame in result["frames"]
+    ]
+    assert result["terminal_status"] == "TARGET_LOCKED"
+    assert result["longest_locked_run_frames"] >= LOCK_FRAMES
+    assert detector.paid is True
+    assert 0.0 < min(ages) and max(ages) <= PROMOTED_MAX_AGE_S
+    assert result["warmup"]["wall_s"] >= FIRST_DETECTION_COST_S > max(ages)
+
+
+def test_a_one_off_cost_inside_a_measured_frame_is_still_refused_by_the_freshness_gate():
+    """The fix declares and excludes a warm-up frame; it never widens `max_age_s`."""
+
+    clock = StepClock()
+    plant = FakePlant(cup_yaw_rad=-0.0588)
+    detector = OneOffDetectionCostDetector(plant, clock, paid_on_detection_call=2)
+
+    with pytest.raises(CalibrationDeadbandMeasurementRefused) as refusal:
+        trial(
+            deadband_px=18.0,
+            plant=plant,
+            detector=detector,
+            config=_controller_config(max_age_s=PROMOTED_MAX_AGE_S),
+            clock=clock,
+        )
+
+    assert refusal.value.code == CAL_TIMING_SWEEP_UNSETTLED
+    assert "INPUT_STALE" in refusal.value.detail
 
 
 # --- the candidate record and the corridor ------------------------------------------------------
@@ -561,6 +756,29 @@ def test_the_document_declares_the_frame_cadence_the_trials_really_ran_at(tmp_pa
     assert intervals[0] is None
     assert all(value is None or value > 0.0 for value in intervals)
     assert any(value is not None for value in intervals)
+
+
+def test_the_document_gains_the_warm_up_block_without_losing_a_key(tmp_path):
+    """HS-324: the whole key set this producer wrote before the warm-up was declared, plus the block."""
+
+    document = _document(tmp_path)
+
+    assert set(document) == set(PRE_WARMUP_DEADBAND_DOCUMENT_KEYS) | {
+        "warmup",
+        "warmup_samples_excluded",
+    }
+    assert set(document["warmup"]) == {"performed", "detections", "wall_s", "declared_because"}
+    assert document["warmup"]["performed"] is True
+    assert document["warmup"]["detections"] == 1
+    assert document["warmup"]["declared_because"] == module.WARMUP_POLICY
+    assert document["warmup_samples_excluded"] is True
+    # the block is the first flight's own warm-up, and every flight declares the one it performed
+    assert document["warmup"] == document["trials"][0]["warmup"]
+    assert all(
+        trial["warmup"]["performed"] is True and trial["warmup"]["detections"] == 1
+        for trial in document["trials"]
+    )
+    assert document["warmup"] not in [frame for trial in document["trials"] for frame in trial["frames"]]
 
 
 def test_the_document_refuses_a_trial_whose_deadband_was_not_declared(tmp_path):
@@ -729,6 +947,18 @@ def test_the_producer_writes_the_document_the_receipt_and_every_trial(tmp_path, 
     assert receipt["detector_operating_point"] == {"min_confidence": 0.25, "iou": 0.5}
     assert receipt["ros_nodes_started"] is False
     assert receipt["hardware_motion_commanded"] is False
+
+
+def test_the_producer_records_the_warm_up_frame_it_excluded(tmp_path, monkeypatch):
+    _patch_scene_declaration(monkeypatch, tmp_path)
+    result = _producer(tmp_path)
+
+    receipt = json.loads((tmp_path / "out" / module.RECEIPT_ARTIFACT).read_text(encoding="utf-8"))
+
+    assert receipt["warmup"] == result["document"]["warmup"]
+    assert receipt["warmup"]["performed"] is True
+    assert receipt["warmup"]["detections"] == 1
+    assert result["document"]["warmup_samples_excluded"] is True
 
 
 def test_the_producer_reads_the_detector_operating_point_from_the_frozen_candidate(tmp_path, monkeypatch):

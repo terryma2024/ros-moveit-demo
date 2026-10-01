@@ -153,6 +153,15 @@ FRAME_CADENCE = (
     "frame_interval_sim_s (null for a trial's first frame, which has no predecessor), and frame_rate_hz "
     "names the frame contract this measurement paces itself against rather than a rate it achieved"
 )
+WARMUP_POLICY = (
+    "one frame is rendered and detected before the measured frames begin, at the same plant state as the "
+    "first measured frame: the production detector's own constructor warm-up runs on a zeros image that "
+    "carries no box and no mask, so the first predict that really resolves a detection pays the one-time "
+    "CUDA and mask initialisation instead - inside the very age HeadSearchController's freshness gate "
+    "compares against max_age_s. The warm-up is recorded next to the frames instead of being hidden in "
+    "them, the detector is reset after it so the measured frames begin the attempt state they would have "
+    "begun without it, and every frame in the measurement is a frame the flight really measured"
+)
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -462,6 +471,40 @@ def _frame_summary(*, index, anchor, frame, decision, detections) -> dict:
     }
 
 
+def declared_warmup(*, performed: bool, detections=None, wall_s=None) -> dict:
+    """The declared warm-up block: the same four keys the timing measurement records, and nothing else.
+
+    `performed` says whether a warm-up frame was really rendered and detected, `detections` how many
+    detections that frame carried (so a warm-up that resolved nothing cannot be mistaken for one that paid
+    the one-off cost), `wall_s` how long it took, and `declared_because` why it is excluded rather than
+    hidden in the distribution.
+    """
+
+    return {
+        "performed": bool(performed),
+        "detections": None if detections is None else int(detections),
+        "wall_s": None if wall_s is None else float(wall_s),
+        "declared_because": WARMUP_POLICY,
+    }
+
+
+def perform_warmup_frame(*, plant, detector, clock=time.monotonic) -> dict:
+    """Render and detect one frame before the measured frames, and declare it as the warm-up.
+
+    The frame is rendered at the same plant state as the flight's first measured frame, so the detection it
+    pays the one-off cost for is the detection that frame would have produced. It is not appended to the
+    flight's frames, not ticked to the controller and not counted in any reduction of them; the flight
+    resets the detector after it, which is what makes the exclusion exact rather than approximate.
+    """
+
+    started = clock()
+    image = plant.render_frame()
+    detections = _detections(detector, image, int(plant.frame_stamp_ns))
+    return declared_warmup(
+        performed=True, detections=len(detections), wall_s=clock() - started
+    )
+
+
 def run_lock_trial(
     *,
     controller_config: Mapping,
@@ -481,7 +524,9 @@ def run_lock_trial(
     to it and settles, the head camera renders, the detector finds the cup, and the controller consumes
     that frame and its feedback to emit the next target. Every commanded target is checked against the
     motion corridor before it is commanded, the settle rule and the simulation time base are the timing
-    module's own, and the trial's lock run and reversals are reduced from the recorded frames.
+    module's own, and the trial's lock run and reversals are reduced from the recorded frames. One frame is
+    rendered and detected before the measured ones and declared as the trial's warm-up (`WARMUP_POLICY`):
+    it is excluded from every frame, age and reduction this trial records.
     """
 
     from so101_demo.act.search import HeadSearchController
@@ -531,6 +576,12 @@ def run_lock_trial(
         _corridor_check(angle_rad=float(plant.yaw_rad), corridor_rad=(low, high), what="settled neck angle")
 
     command(target)
+    # the one-off cost of the process's first detection-bearing predict belongs to the start-up, not to the
+    # trial: pay it on a frame that is declared and excluded, and reset the detector so the measured frames
+    # begin the attempt state they would have begun without it
+    warmup = perform_warmup_frame(plant=plant, detector=detector, clock=clock)
+    if callable(reset):
+        reset()
     while len(frames) < max_frames:
         frame_wall = clock()
         image = plant.render_frame()
@@ -638,6 +689,7 @@ def run_lock_trial(
         "simulation_timestep_s": float(timestep),
         "stops": stops,
         "frames": frames,
+        "warmup": warmup,
         "terminal_status": verdict,
         "found": bool(terminal.get("found")),
         "neck_yaw_rad": terminal.get("neck_yaw_rad"),
@@ -722,7 +774,10 @@ def build_deadband_candidates(
     trials themselves are kept beside them with every frame, stop, correction and terminal verdict, so a
     reviewer can recompute each record rather than trust it. The document never carries a value that was
     not measured: a candidate without a trial, and a trial of a candidate that was not declared, are both
-    caller errors.
+    caller errors. `warmup` declares the frame each trial rendered and detected before its measured ones
+    and `warmup_samples_excluded` records that it is in none of the frames, ages or reductions above; the
+    block is the first trial's own warm-up, the one that paid the process's one-off start-up cost, and
+    every trial's own block sits in `trials`.
     """
 
     candidates = declared_candidates(candidates_px)
@@ -769,6 +824,8 @@ def build_deadband_candidates(
             "one record per declared candidate, worst case over the anchors it was trialled on: the "
             "smallest longest_locked_run_frames and the largest direction_reversals any anchor produced"
         ),
+        "warmup": dict(trials[0].get("warmup") or declared_warmup(performed=False)),
+        "warmup_samples_excluded": True,
         "trials": [dict(trial) for trial in trials],
         "anchors": records,
         "controller_thresholds": {
@@ -1365,6 +1422,7 @@ def write_head_search_deadband_measurement(
         "anchor_names": [request["anchor"] for request in requests],
         "trial_count": len(trials),
         "records": document["records"],
+        "warmup": dict(document["warmup"]),
         "motion_corridor_rad": [float(bound) for bound in corridor],
         "lock_frames_required": LOCK_FRAMES,
         "simulation_timestep_s": timestep,
