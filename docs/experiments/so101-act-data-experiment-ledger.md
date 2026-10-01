@@ -53847,3 +53847,31 @@ reading it from the episode's own first endpoint row, or by handing the verifier
 That is the last thing standing between correction 4 and an implementation, and it is a parameter's shape rather than a
 design question. Worth noting for the record how it was settled: by reading whether the identity already travels, which is
 the same question the runtime policy answered with `runtime_policy_sha256`.
+
+
+## CP-2799 — The two paths freeze different things, and correction 4 belongs to the first-episode path
+
+```python
+    inputs = {                                          # mujoco_parallel_batch.py:1297
+        "points": ..., "config": config_path, "catalog_sha256": catalog_sha,
+        "broker_image": ..., "yolo_weights": ..., "yolo_weights_sha256": ...,
+        "grounded_root": ..., "grounded_manifest_sha256": ...,
+    }
+```
+
+The parallel-batch CLI freezes points, config, catalog, image and the perception weights - **and no endpoint policy**. The
+ACT first-episode path, by contrast, freezes an `endpoint_policy` block (`rule_version`, `thresholds`, `sha256`, CP-2798).
+So the two paths freeze different things by design, and the class that performs the endpoint judgement can only be
+constructed on the path that froze what it needs.
+
+That locates correction 4 precisely, and it is not where I first looked: the composition that builds the port for
+**E3's** episode is the one constructed in **`act_first_episode.py`** - my own container-free wiring - from a spec whose
+inputs manifest carries the endpoint policy. So the wiring is: that path reads the frozen policy, resolves the initial
+target per episode, and gives the port both, so the coordinator's ACT gate fires on a real ACT episode.
+
+Which also explains the reviewer's phrasing: the "default factory" produces a generic port for the parallel-batch path
+(which freezes no endpoint policy and whose adapter rightly keeps its own paths), while the ACT path must produce the one
+that judges endpoints.
+
+Recorded rather than implemented because the round's context is spent; the change is small and now fully specified:
+construct the judging port with the frozen policy and the spec's final target, and resolve the initial target per episode.
