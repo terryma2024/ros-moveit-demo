@@ -754,6 +754,7 @@ class ParallelWorkerRuntime:
         consumer_ready: Callable[[Any], bool] | None = None,
         capture_rgb: Callable[[Path, float], SourceStampedCapture] | None = None,
         open_episode: Callable[[Any], Any] | None = None,
+        episode_scope_path: str | None = None,
         capture_numeric_evidence: Callable[
             [Any, Any, Path, float], NumericEvidenceReceipt
         ]
@@ -808,10 +809,10 @@ class ParallelWorkerRuntime:
             "capture_numeric_evidence"
         )
         # the episode being recorded for a point, opened by whoever holds the frozen inputs and the episode's own root
-        # the scope document the parent wrote for this point's episode, if it wrote one: the consumer it spawns is
-        # given this path rather than the frozen values, because a scope assembled from a second reading is how a
-        # document and the run it describes drift apart (CP-2862). None means no episode is recorded.
-        self.episode_scope_path = None
+        # the scope document the parent wrote for this episode, if it wrote one: the consumer it spawns is given
+        # this path rather than the frozen values, because a scope assembled from a second reading is how
+        # a document and the run it describes drift apart (CP-2862). None means no episode is recorded.
+        self.episode_scope_path = None if episode_scope_path is None else str(episode_scope_path)
         # (the CLI, which also knows the scope values and where the audit pair goes). Optional: a runtime that does not
         # record is still a valid runtime, which is why this is not among REQUIRED.
         self._open_episode = open_episode
