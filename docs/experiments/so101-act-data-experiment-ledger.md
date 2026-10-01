@@ -47808,3 +47808,30 @@ So the two-line edit is exact:
 with `state_root` and `accelerator` at their defaults. The composition then holds every piece it has asked for in
 sequence, and the next refusal - if the run reaches one - will name itself exactly as the six before it have: the input
 guard, the run mode, the trusted seven-value pose, the versioned request, the start-guard policy and the guard class.
+
+
+## CP-2527 — The composition builds: nine layers cleared, and the drive is the caller's
+
+The `run` subcommand now reaches its own deliberate `rc=2` with the line
+`act_first_episode: composition built (ProductionBatchComposition) for nonhead-...` - meaning
+`ProductionBatchComposition(spec, broker_command_builder=_broker_command)` **succeeded**. Nine layers were cleared to
+get there, each one named by a refusal from the run itself:
+
+1. the run's new-root guard (`already exists`);
+2. `WRONG_RUN_MODE` - the collection mode is not a `RunMode`;
+3. `TRUSTED_FINAL_TARGET_REQUIRED` - the target is a seven-value pose with a unit quaternion;
+4. `selected_point_ids` - the composition reads the **versioned** request, not the application one;
+5. `START_GUARD_UNAVAILABLE` - `start_guard=None` is not allowed;
+6. `'StartGuardPolicy' object has no attribute 'require_before_spawn'` - the composition wants a **guard**;
+7. `PROBE_STATE_ROOT_UNSET: SO101_TASK_ROOT` - the guard's coordinator needs a state root, given explicitly;
+8. `DIRECTORY_CONFLICT` - the allocator insists on owning a root that does not exist yet;
+9. `KeyError: '<batch id>'` at `catalog[point_id]` - `selected_point_ids` must name a **real catalogue id**, so the
+   point is `task_start`, which the approved twenty-point file actually declares.
+
+Underneath, the machinery is visibly standing up: `run/ipc`, `run/workers`, `run/coordinator`, `run/broker-inputs` and
+`run/resource_manifest.json` are all created before the deliberate stop.
+
+The composition itself exposes only `__init__`, `_initialize` and private helpers - consistent with its docstring,
+"connect reviewed batch components; no result is synthesized by this layer" - so the **drive** belongs to the caller.
+The next read is therefore how `run_cli`'s batch runner drives a built composition to completion, and then `run` does
+the same for one episode.
