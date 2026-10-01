@@ -54813,3 +54813,28 @@ The earlier one is the capture's own: `capture.finish(...)` seals the audit and 
 the scope it knows about, and that call is where a v2 seal is first verified. So the next step is not another alignment
 guess - it is running the test with `--tb=long` and reading **which line** raises, which the last round's `--tb=short`
 never showed. That is the one piece of instrumentation this question has needed since CP-2833, and it costs a single run.
+
+
+## CP-2835 — The capture's finish succeeds, so the incomplete pair is the store's call
+
+Running E3's arrangement as far as `capture.finish(...)` - with the lease-aware physical audit and a window - the capture
+seals without complaint:
+
+```
+PROBE before finish
+PROBE finish ok
+```
+
+So the recorder's side of the v2 contract is satisfied: the capture hands it the manifest and the scope, and the seal is
+written. Which means round 922's `EPISODE_SEAL_AUDIT_INCOMPLETE` came from the **store's** `verify_episode_seal` after all,
+even though that test set `store.audit_manifest` and `store.scope` from `episode_audit_pair(store.episode_root)`
+immediately before calling it.
+
+The probe also cost three attempts to start, for a reason worth recording because it is the same class of mistake this
+stretch keeps making: the imports an appended test needs were checked with a substring search over the whole file, and
+`CoordinatorJournal` appears in the test body - so the check reported it present and the import was never added, twice.
+Checking for the import *line* rather than the bare name is what fixed it, and that is a two-second fix that cost two
+rounds when done the other way.
+
+With `finish` proven, the next step is one line further: extend the same probe through `store.seal(...)` and read where it
+raises, which is now the only unknown left in E3's software loop.
