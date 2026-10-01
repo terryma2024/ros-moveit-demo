@@ -49525,3 +49525,31 @@ produce: an apply identity and instant and acceptance for A, a query identity, i
 identity, instant and clock source with its uncertainty for R. The remaining work is writing those three `_event` calls
 and the small amount of plumbing that gives each one its identity - a bounded change to one file, on a path that the
 tests already exercise through `AlignedPort`.
+
+
+## CP-2617 — Everything the three calls need, and the honest clock answer
+
+`_RELEASE_KEYS` is nine keys - `holding_state`, `cup_supported`, `fresh`, `planning_attached`, `session_id`,
+`attempt_id`, `reset_epoch`, `release_epoch`, `physics_step` - and contains **no timestamp**. `_event`'s body explains
+why that is not a problem:
+
+```python
+        self.audit.append_source("events", {
+            "kind": kind, "identity": dict(self._event_identity), "sim_time_s": None,
+            "monotonic_ns": int(self.clock_ns()) or 1,
+            "payload": payload if payload is not None else (...)})
+```
+
+The envelope already carries **`monotonic_ns` from the runner's own `clock_ns`**, and `sim_time_s` is `None` with the
+comment that a sim time "is recorded only when the source actually supplies one, never invented". And the payload is
+used **verbatim** when the caller supplies it - "a caller that owns the kind's schema supplies the payload" - which is
+exactly what K2's three kinds are.
+
+So the calls are honest and small: A, Q and R take their instants from the same monotonic clock the envelope uses, and
+since that clock is neither the published step time nor the synchronisation pair, the protocol's own rule applies -
+`clock_source` and the instant stay **null** rather than a value promoted from a different clock. That is the same
+discipline the envelope already follows for `sim_time_s`, applied one level down, and it means the records say "this
+instant was not observable from a publication" instead of inventing one.
+
+Next round writes the three calls on that basis: `k2_apply` after the `detach_moveit` interaction, `k2_query` around
+`planning_attached`, and `k2_receipt` from the returned evidence - each with the payload keys the schema now admits.
