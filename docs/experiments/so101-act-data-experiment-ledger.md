@@ -44015,3 +44015,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
 - derivation behind CP-2332; F5's regression fixed with its two items behind these two steps; HEAD 3b8b7e734;
 - goal paused.
+
+## CP-2339 - F5's hybrid, step one landed: the port's evidence carries both ratified records
+
+- FakePort._evidence's physical_observation now states a planning_scene_observation and a two-controller
+- controller_feedback beside its flat world fields, both joined to the row by round(0.1 * self.step, 4) - the same
+- instant the row carries, which is the join the audit enforces. That is the blocker CP-2296 measured by execution
+- and CP-2338 scheduled as step one. GREEN 204 passed, wider gate recorded.
+- Step two is the fixture itself: _runner_backed_formal runs PickPlaceRunner(AlignedPort(), audit=writer) with the
+- request whose attempt is the writer's, keeps the acquisitions and the accepted reference from the minter half,
+- and derives its window from the rows the audit actually holds - replacing the nine minted phase_completes that
+- the self-consistent fixture still uses.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
+- derivation behind CP-2332; F5's regression fixed with its first step landed and the second specified; HEAD
+- d45d378c5; goal paused.
