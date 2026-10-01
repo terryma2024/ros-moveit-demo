@@ -43893,3 +43893,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed, its derivation handed off with four
 - sites named and three measured; F5's regression fixed and its two items waiting on the same surgery; F12 two of
 - three; HEAD c0ea81491; goal paused.
+
+## CP-2332 - F11/F5's shared surgery: the coverage control has no acquisitions at all
+
+- Seventh attempt, same single failure, and it produced the datum that explains why every window the control could
+- seal was refused: test_a_formal_audit_may_not_seal_without_source_coverage builds its three audits with physics
+- and references only - no acquisitions - while a formal window's source schedule names head and wrist and the
+- predicate compares those endpoints against the acquisitions the audit holds. With none, no window can satisfy it,
+- so this control cannot express "coverage is incomplete" through a formal window at all.
+- That reframes the finish line rather than extending it: either the control builds a camera-consistent audit and
+- then removes coverage (acquisitions minted, window derived from them, one required stream missing), or its
+- expected error changes from AUDIT_FORMAL_COVERAGE_INCOMPLETE to AUDIT_WINDOW_INVALID because the window gate now
+- legitimately speaks first. Both are one-pass edits once the choice is made, and the choice is a contract decision
+- about which gate owns that control.
+- Handed off here, with everything the next worker needs in CP-2328 through CP-2332: the derivation, the four
+- sites, the three measured values and this datum. Reverted; green, nothing half-applied.
+- F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed and its derivation handed off here; F5's
+- regression fixed with its two items behind the same surgery; F12 two of three; HEAD caa97c23e; goal paused.
