@@ -50968,3 +50968,33 @@ Two further facts from this round: the serial gate shows the same `F` marks as t
 `.....F..................F..` at the time of writing), confirming CP-2677 that the failures are not parallel-specific;
 and the failing test's docker command is itself evidence that the container route is a live, exercised path in this
 repository - worth remembering when the user decides the broker question.
+
+
+## CP-2681 — The fix's shape: the spec is written before the command is built, so the flag must be explicit
+
+The three facts that decide the repair:
+
+```python
+        self._uses_production_broker_container = broker_command_builder is None      # 2682
+        self._broker_command_builder = broker_command_builder                        # 2776
+...
+            "config_path": ("/runtime/runtime-config.yaml" if self._uses_production_broker_container
+                            else str(config_copy)),                                      # 3002
+...
+        if self._broker_command_builder is not None:                                 # 3109
+            command = self._broker_command_builder(self)                             # 3110
+```
+
+The spec is written at 3002, the builder is not called until 3110, so the flag **cannot** be derived from the built
+command where it is needed. And "a custom builder exists" is not the same question as "the broker runs in a container" -
+the failing test proved that by supplying a **docker** builder and expecting the container path.
+
+So the correct shape is an explicit declaration rather than an inference: the composition takes a parameter stating
+whether its brokers run in containers, defaulting to **True** (the repository's long-standing route, and the one the
+test expects), and the container-free CLI path sets it **False** because that is exactly what it is doing. `config_path`
+then follows that declaration, and the host copy is named only where a host broker genuinely runs.
+
+That is a two-line change to the composition plus one line at the caller, it makes the default match the contract the
+existing tests encode, and it removes the inference (`builder is None`) that produced this regression in the first place.
+Recorded here rather than applied, because the round is out of room - and because the next round should apply it with
+the test as its witness, not from memory.
