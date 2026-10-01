@@ -1221,7 +1221,7 @@ class ParallelWorkerRuntime:
         if lease is None:
             raise RuntimeError("execute consumer command requires a lease identity")
         _key, point_root = self._point_root(lease)
-        return tuple(
+        argv = tuple(
             (
                 sys.executable,
                 "-m",
@@ -1259,6 +1259,10 @@ class ParallelWorkerRuntime:
                 "observe_only",
             )
         )
+        if self.episode_scope_path is not None:
+            # the consumer is told where the scope document is, not what it says: one artefact, read once
+            argv = argv + ("--episode-scope", str(self.episode_scope_path))
+        return argv
 
     @staticmethod
     def _reset_epoch_integer(value):
