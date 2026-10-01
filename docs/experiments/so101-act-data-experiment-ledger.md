@@ -48157,3 +48157,19 @@ would be exactly the invented evidence this task forbids, so the honest options 
 
 Everything else on the route is done and green: the composition builds, the drive runs, the supervisor starts a
 process, the broker accepts its arguments, and every transport check passes against the frozen inputs.
+
+
+## CP-2544 — The container-free route is committed, and the tree holds only the user's work
+
+Committed the three files this route touched, by explicit path - never `-A`, because the working tree carries the
+user's thirty-five pre-existing entries and five of them are modified files that are not mine:
+`cli/act_first_episode.py` (the composition, the drive, the broker command with host substitutions and the deployment
+identity), `cli/parallel_perception_broker.py` (location flags name this deployment's paths; every substantive literal
+stays single), and `cli/mujoco_parallel_batch.py` (the broker spec's `config_path` names the host copy, guarded by
+`_uses_production_broker_container`). Width gate green at **236 passed**, and `git status --porcelain src` is back to
+35 entries, all of them the user's.
+
+So the approved route's work is durable up to the host boundary CP-2543 recorded: everything this host can do is done
+and verified, and the broker's remaining obstacle is a perception dependency the amendment excludes. With no answer yet
+to the three options, the next work is K2's protocol table rewrite, which CP-2536's review made concrete and which is
+entirely within this host's reach.
