@@ -48230,3 +48230,16 @@ those three helpers' expectations rather than guess again.
 
 The re-review is still running: this round's `tail -1` on `reviews/k2-protocol-recheck.log` is empty, which by the rule
 CP-2546 recorded means no completion marker, so the verdict is not in yet and the log keeps growing.
+
+
+## CP-2548 — _integer's exactness, and the review still running
+
+`_integer(value, code, *, minimum: int = 0)` refuses anything that is not **exactly** an `int` (`type(value) is not
+int`) and anything below `minimum`. Both literals the earlier direct test passed - `row_index=0` and
+`reference_sequence=1` - satisfy that, so the record's integer checks were not what raised `AUDIT_ROW_INVALID`; the
+scalar `_finite`, which validates `sim_time_s` with `nonnegative=True`, is the remaining candidate and is the next
+thing to read rather than guess (the module has both `_finite` and `_finite_vector`, and only the latter was printed
+this round).
+
+The re-review is still running: `tail -1` on `reviews/k2-protocol-recheck.log` is empty, so by CP-2546's rule there is
+no completion marker yet.
