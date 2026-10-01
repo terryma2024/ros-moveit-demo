@@ -53456,3 +53456,23 @@ CP-2771 identified from the other direction.
 Round state: four production changes and the chain test uncommitted, two temporary prints (one in the store, two in the
 test) to remove with the fix, correction 2's test passing throughout, and correction 3's a single path convention from its
 assertion.
+
+
+## CP-2784 — verify_audit_manifest takes the manifest path, so the failing path says what it was given
+
+`verify_audit_manifest(path: Path)` reads the manifest **at the path it is handed** - its docstring is about re-reading and
+recomputing, not about discovering anything - so the `FileNotFoundError` for `<sealed>/episode/audit-manifest.json` means
+that is the path it received. Two ways that can happen, and they are distinguishable by reading the block that calls it:
+
+- the caller passed `<sealed>/episode` (a directory, or a path one level up from the manifest), which `verify_episode_seal`
+  or the test's construction happens to produce;
+- or the block composes the manifest's name onto what it was given, in which case whatever was passed ends in `/audit`.
+
+Either way the conclusion is the same and narrow: the value travelling into the verification is the episode directory
+rather than the manifest inside `audit/`, and the writer's own `seal` puts the manifest at `<root>/audit/audit-manifest.json`
+(read at CP-2772). So the reconciliation is one segment, and the read that settles which side to change is the block's use
+of `audit_manifest` immediately before it calls `verify_audit_manifest`.
+
+Worth recording plainly: this chain has been at "one path" for several rounds, and each round has removed one candidate
+(ownership, publish phase, overlay, stale assignment, existence). What is left is the smallest version of the same
+question - which segment - and it is answerable by reading two adjacent lines rather than by another probe.
