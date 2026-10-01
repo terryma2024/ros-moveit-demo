@@ -46938,3 +46938,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   matches the endpoint rule, and this environment.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 32015f152;
   goal active.
+
+
+## CP-2484 — A third mechanical slip, caught and reverted within the same round
+
+- Instrumenting the seal's window call site, I inserted a comment **inside the argument list** of
+  `_window_matches_observed(...)`, which commented out the remaining arguments and left the module unparsable. It was
+  restored from the backup taken at the start of the round, `ast.parse` confirmed the module, the tree shows no dirty
+  entry for it, and the audit suite is green again.
+- Recorded for the same reason as CP-2429 and CP-2450: this stretch has now had three small mechanical slips - a
+  stray closing parenthesis, a `pkill` matching its own shell, and a comment placed inside a call's arguments - and in
+  all three the first action after noticing was to restore, verify and say so, rather than to paper over it. None
+  reached a committed state.
+- The instrumentation itself is still worth doing, and the way to do it is a `print` inside the predicate or a named
+  wrapper around each call, not a comment wedged between arguments: the goal remains to have one run name which of the
+  two call sites refuses the runner-backed fixture, since coverage is already known to pass there (CP-2368).
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up and healthy. HEAD 8e3d2bf17; goal active.
