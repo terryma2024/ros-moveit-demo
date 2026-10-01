@@ -45819,3 +45819,19 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   construction rather than filled with placeholders.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished with inspect, prepare and preflight all rc=0. HEAD 0de1dd3cb; goal active.
+
+
+## CP-2427 — TaskPoint is three fields, so the request is three lines
+
+- `TaskPoint` (`core/task_points.py:21`) is `id: str`, `label: str`, `cup_position_world_m: tuple[float, float,
+  float]`, and the file also defines `TaskPointList(schema_version, points)` - the document shape `--points` reads.
+  So one episode's request is three lines of construction from the frozen scenario: a point whose id is minted for
+  the run, whose label names the scenario, and whose `cup_position_world_m` is the scenario's frozen target position;
+  then `BatchRequest(batch_id=<minted>, simulation_session_id=<minted>, points=(point,),
+  evidence_root=<new LIVE_ROOT>)`.
+- Every structural question before writing the run is now answered: the four composition calls, the four request
+  fields, the three point fields, the frozen tree's file names, the three amendment bindings, and the two sweep-only
+  fields that stay absent by construction. What remains is the write itself, then the first run, which is expected to
+  fail in one named layer - and that failure is the next piece of evidence rather than a setback.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished with inspect, prepare and preflight all rc=0. HEAD 2f7cd598c; goal active.
