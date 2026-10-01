@@ -45365,3 +45365,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   pass's work, with its RED first.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's CLI verified
   end to end with `inspect` reporting these four roles as the only blockers. HEAD 287d09183; goal active.
+
+
+## CP-2405 — The approval migration is nine lines, not a rework
+
+- Sized before touching anything: `nonhead_calibration` appears **six** times in
+  `src/act/first_episode_inputs.py` and **three** times in `test/test_act_first_episode_scope.py`, and nowhere else
+  outside byte-compiled caches. So adding the `user_empirical_default` kind for `path_policy`, `placement_qc` and
+  `rgb_skew` - and moving the three test assertions with it - is a bounded edit with a known blast radius, which is
+  what makes it a single pass rather than a project.
+- The shape of that pass, in order: a RED that asserts a candidate carrying `user_empirical_default` is accepted for
+  those three roles and that `nonhead_calibration` is no longer demanded; `_APPROVALS` plus the three
+  `_ROLE_APPROVAL` entries extended; the three test occurrences updated to the new expectation; the two landed
+  configuration documents registered as the candidates (`path_policy` and `rgb_skew` reading the runtime document's
+  own sections, `placement_qc` reading its `safety_release.support_distance_max_m` as a safety input while the real
+  tabletop-support gate stays, `resource_thresholds` staying source-controlled against the newly generated effective
+  configuration); then `inspect` expected to report zero blockers and `prepare` run end to end.
+- Recorded so the next pass does not re-derive it. F1, F14, F3, F12 and F11 closed; F5's step two one traceback away;
+  F13's scene item awaiting K2; E1's CLI verified with `inspect` naming these four roles as the only blockers.
+  HEAD ed71dc1a2; goal active.
