@@ -45062,3 +45062,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2's protocol table written; F11's derivation
   still open and now correctly attributed to this rewrite; F5's step two one traceback away; E1's data, loaders,
   calculator and controls landed with the CLI the next transcription. HEAD 633033c29; goal active.
+
+
+## CP-2390 — K1's rewrite recipe, with the control's shape read line by line
+
+- `test_a_formal_audit_may_not_seal_without_source_coverage` spans 816..891 and has three sub-cases plus two extra
+  assertions: `empty` (a writer with no records, whose seal must refuse for coverage), `partial` (one pose row), and
+  `complete` (references, all four kinds and events through the preset path), then `no_label` and `diagnostic` seals
+  that must succeed. Its `complete` sub-case is the one the plan's K1 item targets: it seals `_window(...)` on an
+  audit with **no acquisitions at all**, which is why F11's endpoint derivation would attribute a window error where
+  this control means coverage.
+- The rewrite therefore needs exactly three things in that sub-case: mint head/wrist acquisitions through the real
+  `AcquisitionMinter`/`append_acquisition` API; derive the window from that audit's own rows and acquisitions using
+  CP-2376's construction (schedule at the minted instants, `collection_*` containing them, endpoints equal to the
+  physics extremes); and keep the coverage negative by removing **one** required record with the camera window left
+  consistent. The `empty` and `partial` cases keep their intent - they never reach the window comparison because
+  coverage refuses first, and that ordering is exactly what the plan says must not change silently.
+- The remaining lines of that span are printed alongside this entry, so the next edit is a transcription rather than
+  a re-read.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2's protocol table written; F11's derivation
+  waiting on this rewrite; F5's step two one traceback away; E1's data, loaders, calculator and controls landed with
+  the CLI as the next transcription. HEAD 26c857f3a; goal active.
