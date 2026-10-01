@@ -55358,3 +55358,41 @@ Half the round budget is gone at this checkpoint. The recording wiring is five o
 suites green - with only the extraction behind `physical_audit` still to write, deliberately raising
 `EPISODE_EXTRACTION_PENDING` until then. The objective's endpoint still needs the coordinator's own two steps (kill the
 stuck launch, re-run) because no episode can be recorded until a run produces one.
+
+
+## CP-2859 — The last block, specified to the line: nothing is left to guess
+
+Ten rounds of reading closed every unknown in the extraction. Recording the composition so it can be written mechanically:
+
+**What the readback wants** - only eight calls: `world.recent_with_receipts`, `scene.recent_frames_with_receipts`,
+`contacts.recent_frames_with_receipts`, `rgb.sample_with_audit`, and `broker.{stop_velocity, stopped,
+stationary_reference_proof, reference_state}`. Every one of them already exists in production:
+
+| collaborator | class | constructor needs |
+|---|---|---|
+| `world` | `MuJoCoObserver` (`backends/mujoco/observer.py:237`) | model |
+| `scene` | `SceneStateObserver` (`adapters/act/scene_state.py:13`) | `model_sha256`, `nq`, `nv`, `max_age_s` |
+| `contacts` | `RobotContactObserver` (`adapters/act/contact_evidence.py:33`) | `known_geoms`, `allowed_pairs`, `max_age_s`, `max_sim_gap_s` |
+| `rgb` | my `LiveSampler` over `RgbObservationSynchronizer` | `max_age_s`, `max_skew_s` |
+| `broker` | the broker port | its own |
+
+**Where every value comes from** - checked against the frozen manifest, not against the code that consumes it:
+
+* the model path: `scene_model = installed_root / "assets/mujoco/scene.xml"` (`cli/mujoco_parallel_batch.py:692`), already
+  validated to be a real file and not a symlink;
+* `expected_model_sha256` and `expected_mujoco_version`: `roles.scene_model.identity` (`3c876e7b…`, `"3.12.0"`);
+* `scene_sha256` for verifying the model before use: the same role (`4db48e35…`);
+* `max_age_s` / `max_skew_s`: `runtime_policy.rgb_sync` (`0.1` / `0.1`) - **not** the constructor defaults that agree
+  with them (CP-2858's second coincidence);
+* `support_distance_max_m`: `runtime_policy.safety_release` (`0.002`);
+* the scope's four: `mode`, `inputs_sha256`, and `roles.anchor_scene.identity.{scene_id, seed}` (already wired).
+
+**The path**: build them lazily inside the CLI's `_extract_physical_evidence`, so the model is loaded where its digest can
+be checked against the frozen one and where a mismatch is a refusal rather than a silently different robot; then
+`readback.capture(session_id, attempt_id, reset_epoch, after_step=...)` returns the dict whose keys `world`, `scene`,
+`contact`, `reference` and `source_stamps_s` supply seven of the thirteen names, and
+`physical_audit_from_captured(captured, ...)` (commit `baf7650ca`) gathers them with the run's own six.
+
+Nothing here needs the coordinator's physical side beyond what `PickPlaceRosEvidence` already owns; where that class is
+the convenient holder it can be used, but it is not required - every collaborator is constructible from the model, the
+frozen set, and the run's own ports.
