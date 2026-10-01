@@ -54938,3 +54938,28 @@ The handover note is written at
 It also records what is already proven, so that the wiring is visibly the only thing left: six end-to-end tests on
 production classes, and one thing no test can manufacture - the physics stream that only a live run writes
 (CP-2837/CP-2838).
+
+
+## CP-2840 — The real interfaces, checked so the coordinator changes nothing extra
+
+Reading the two production classes instead of assuming they match the seam's parameters:
+
+```
+pick_place_readback.py:59    class PickPlacePhysicalReadback:
+:86                              def capture(self, session_id, attempt_id, reset_epoch, *, ...)
+:200                             def capture_held_cup_handoff(...)
+:385                             def live_evidence_sample(self, *, identity, phase, physics_step, sim_time_s, ...)
+:406                             def capture_evidence_fields(self, captured, *, support_distance_max_m, raw_records, ...)
+
+physics_step_fence.py:18     class RosPhysicsStepFence:
+:57                              def _acknowledge(self, ack) -> None
+```
+
+So `PickPlacePhysicalReadback` is **not** directly callable as the seam's `physical_audit` - the per-instant call the
+capture makes maps onto `live_evidence_sample(...)`, and its `capture(...)` is the session the readback owns - and the
+fence acknowledges privately. Both are therefore **my side's adapters**, which is what the divided decision means in
+practice: the coordinator hands over the three objects as they are, and I write the two thin wrappers that present them
+to the seam.
+
+Recorded in the handover note as well, so the person doing the wiring reads it there rather than discovering it in a
+traceback.
