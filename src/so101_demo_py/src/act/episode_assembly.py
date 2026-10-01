@@ -22,7 +22,7 @@ from .recorder import EpisodeRecorder
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
            "ProductionProducer", "assemble_episode_capture", "begin_episode", "end_episode",
            "episode_audit_pair",
-           "record_instant", "end_episode", "RecordingWorldObserver",
+           "record_instant", "end_episode", "RecordingWorldObserver", "open_point_episode",
            "physical_audit_from_execution",
            "physical_audit_from_captured", "physical_audit_from_observation",
            "readback_from_frozen"]
@@ -252,6 +252,8 @@ class PointEpisode:
         from .synchronizer import RgbObservationSynchronizer
 
         self.identity = dict(identity)
+        # the callable the capture asks for a row, under the name the hook and the tests use
+        self._physical_audit = physical_audit
         self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s)
         self.capture = assemble_episode_capture(
             sampler=LiveSampler(self.synchronizer), physical_audit=physical_audit, identity=self.identity,
@@ -272,6 +274,9 @@ class PointEpisode:
     def set_physical_audit(self, audit: dict) -> None:
         """Publish the audit for the instant about to be sampled; the capture's own callable reads it."""
         self._audit = dict(audit)
+        holder = getattr(self, "_audit_holder", None)
+        if holder is not None:
+            holder["audit"] = dict(audit)
 
     def push(self, camera: str, *, stamp_s: float, pixels, received_monotonic_s: float | None = None) -> None:
         """Record one captured frame: mint its acquisition, hand it to the capture, and push it for sampling.
@@ -591,3 +596,35 @@ def physical_audit_from_execution(*, phase: str, reset_epoch: int, release_epoch
                              "source_stamp_ns": joint_state_source_stamp_ns,
                              "received_monotonic_s": joint_state_received_monotonic_s},
     }
+
+
+def open_point_episode(*, episode_root, session_id: str, attempt_id: str, reset_epoch: int, release_epoch: int,
+                       scene_id: str, seed: int, mode: str, scope, scope_path: str,
+                       inputs: dict, provenance: dict, guard=None, monotonic=None, max_age_s: float = 0.1,
+                       max_skew_s: float = 0.1) -> PointEpisode:
+    """Open the episode a run records into, with the row supplied by the process that owns the facts.
+
+    The circularity this exists to break: the capture asks its `physical_audit` for a row, and that callable has to be
+    fixed when the capture is built - but the rows are composed later, by the execution's own `_record`, which only
+    exists after this object does. So the callable closes over a holder that both sides share: the capture reads it,
+    `set_physical_audit` writes it, and reading it before anything has been published is a refusal by name rather than a
+    row of nulls.
+    """
+    holder: dict = {}
+
+    def physical_audit(_at_s):
+        audit = holder.get("audit")
+        if audit is None:
+            raise ValueError("EPISODE_AUDIT_MISSING: no row has been published for this instant yet")
+        return dict(audit)
+
+    episode = PointEpisode(
+        # the seven the writer's identity check insists on - the same set the scope carries, which is why they are
+        # arguments rather than something read back out of the scope document
+        identity={"session_id": session_id, "attempt_id": attempt_id, "reset_epoch": int(reset_epoch),
+                  "release_epoch": int(release_epoch), "scene_id": str(scene_id), "seed": int(seed),
+                  "mode": str(mode)},
+        provenance=provenance, inputs=inputs, episode_root=episode_root, scope=scope, scope_path=scope_path,
+        physical_audit=physical_audit, guard=guard, monotonic=monotonic, max_age_s=max_age_s, max_skew_s=max_skew_s)
+    episode._audit_holder = holder
+    return episode

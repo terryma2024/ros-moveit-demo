@@ -747,3 +747,22 @@ def test_the_executions_own_facts_compose_the_thirteen_names():
             evidence=Evidence(), contacts=[], joint_state_source_stamp_ns=None,
             joint_state_received_monotonic_s=None, joint_state_generation=0, attached=False,
             scene_readback=None, input_pose=Pose(), source_stamps_s={})
+
+
+def test_the_episode_object_reads_the_audit_its_own_process_publishes(tmp_path):
+    """RED first: the object a run builds must publish the row the hook composes, not one fixed at construction."""
+    from so101_demo.act.episode_assembly import open_point_episode
+
+    episode_root = tmp_path / "episode"
+    episode = open_point_episode(
+        episode_root=episode_root, session_id="session-1", attempt_id="attempt-1", reset_epoch=2, release_epoch=1,
+        scene_id="default", seed=0, mode="preselected_target_diagnostic",
+        scope=SCOPE, scope_path=str(episode_audit_pair(episode_root)[1]),
+        inputs={"inputs_sha256": "a" * 64}, provenance=PROVENANCE, monotonic=lambda: 0.0)
+    # before the hook publishes anything the capture has no audit, and says so by name rather than sampling junk
+    with pytest.raises(ValueError, match="EPISODE_AUDIT_MISSING"):
+        episode._physical_audit(1.0)
+    audit = dict.fromkeys(PhysicalAuditAdapter.KEYS, None)
+    audit["phase"] = "CLOSE"
+    episode.set_physical_audit(audit)
+    assert episode._physical_audit(1.0) == audit
