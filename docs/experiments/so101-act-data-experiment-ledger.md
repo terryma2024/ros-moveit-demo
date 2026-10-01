@@ -43588,3 +43588,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
 - F1 and F14 closed; F5's regression fixed (CP-2308); F3's exemption staged twice and its control's re-base
 - localized; F11/F12/F13 narrowed; HEAD c6c8b6c4a; goal paused.
+
+## CP-2311 - F3's first half landed: the declared initial epoch is exempt from the transition tie
+
+- Third attempt, and the read of the control's event rewrite made it mechanical: the module now reads the episode's
+- declared release_epoch from the manifest identity, exempts that epoch from transition naming, and keeps fencing
+- every later epoch. The control steps its events to epoch 2 - later than the declared 1 - so its unnamed step is a
+- real transition again, and the tie refuses it as the control intends.
+- Why the two earlier attempts failed, for the record: the first applied the exemption without moving the control,
+- whose step WAS the exempted epoch; the second lowered the identity instead of the events and hit
+- AUDIT_METADATA_INVALID because the readback cross-checks that identity against the sealed document.
+- GREEN 204 passed, wider gate recorded with the commit.
+- F3's second half remains, as the verdict words it: the release emission runs before _verify_phase() and coerces
+- and defaults its flags, so it must move after verification and stop inventing a missing no_fingertip_contact.
+- F1 and F14 closed; F5's regression fixed; F3 half closed; F11/F12/F13 narrowed; HEAD 73415aee1; goal paused.
