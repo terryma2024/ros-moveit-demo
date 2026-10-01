@@ -48408,3 +48408,22 @@ and the second is a correction of a fact I asserted rather than a matter of judg
 brief: an ordering rule alongside the parent references, the repository's real clock mechanism named instead of the one
 I assumed, and a schema section that defines the version, the exact nested keys and types, and the event kinds rather
 than listing that they must be defined.
+
+
+## CP-2558 — The clock mechanism the reviewer named, read in the source
+
+The review's second correction was that the `/clock` mapping revision 2 assumed does not exist as described, and it
+pointed at `publish_clock()` in `third_party/mujoco_ros2_control`. Reading it:
+
+- `mujoco_simulation.cpp:2179` calls **`publish_clock();`** from the step callback, immediately after
+  `publish_control_state()` and `refresh_data_snapshot()` - so the clock is published **once per physics step**, which
+  is what makes a step's time observable to the rest of the system at all;
+- `:2424` defines `void MujocoSimulation::publish_clock()`;
+- and `physics_loop()` holds the synchronisation pair
+  `std::chrono::time_point<mj::Simulate::Clock> syncCPU; mjtNum syncSim = 0;` - the CPU-versus-simulation synchronisation
+  point the loop uses to keep the two timelines related.
+
+So the honest description for revision 3 is not "the published `/clock` mapping" but **a clock published per step,
+whose relation to the consumer's clock is maintained by the simulator's own CPU/sim synchronisation**, and any protocol
+must name which of those two it relies on and what uncertainty it carries. That is the same class of correction the
+reviewer made about `verify_audit_manifest()`: a fact I asserted about this repository, which the source settles.
