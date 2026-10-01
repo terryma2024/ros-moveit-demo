@@ -25,6 +25,11 @@ def pick_place_scene_geometry(base: TaskGeometry, readback: dict, *,
             raise ValueError("task geometry")
         world, scene, contact = (readback[name] for name in ("world", "scene", "contact"))
         scope = (session_id, reset_epoch)
+        # the source-side facts this geometry is derived from, carried on the result rather than discarded
+        derived_from = {"session_id": world.simulation_session_id, "reset_epoch": world.reset_epoch,
+                        "simulation_step": world.simulation_step,
+                        "sim_time_s": getattr(world, "sim_time_s", None),
+                        "stamp_ns": getattr(world, "stamp_ns", None)}
         if ((world.simulation_session_id, world.reset_epoch) != scope
                 or (scene["simulation_session_id"], scene["reset_epoch"]) != scope
                 or (contact["simulation_session_id"], contact["reset_epoch"]) != scope
@@ -41,7 +46,7 @@ def pick_place_scene_geometry(base: TaskGeometry, readback: dict, *,
             list(world.object_state.orientation_xyzw), "task8.physical_cup_pose",
         )
         cup = replace(base.object("plastic_cup"), pose=pose)
-        return replace(base, objects=(*base.objects[:2], cup))
+        return replace(base, objects=(*base.objects[:2], cup), source=derived_from)
     except (AttributeError, KeyError, TypeError, ValueError) as error:
         raise PickPlaceSceneError("TASK8_SCENE_PHYSICAL_READBACK_INVALID") from error
 
