@@ -53056,3 +53056,28 @@ the function name is what finds them.
 
 Uncommitted work now holds three production fixes (acquisitions from frames; bindings where rows are recorded; the pair
 supplied to v2 verification at all three sites), the chain test and its adapter, and one path left to align.
+
+
+## CP-2768 — The verifier resolves the audit by a convention, and that answers CP-2766's question
+
+The failing path, in full:
+
+```
+<tmp>/w00/attempts/point-1/attempt-1/sealed/episode/audit-manifest.json
+```
+
+So the verifier does not use an attribute I set on it: it resolves the audit **by convention**, at
+`<workspace>/sealed/episode/audit-manifest.json` - beside the sealed result, inside the worker's workspace. That is
+CP-2766's open question answered from the code's own behaviour rather than from a design choice: the resolution is a
+convention, and my chain test's audit (at `<audit-root>/audit/audit-manifest.json`, where the writer put it) is simply
+not where the verifier looks.
+
+Two consequences. First, the test's arrangement has to match the convention: the episode's audit belongs at
+`<workspace>/sealed/episode/`, which means the audit writer's root is chosen relative to the store's episode root rather
+than independently - and the recorder must then reach the manifest through `audit_manifest.parent`, which it already
+does. Second, and worth saying plainly: **this is the arrangement the live path must use too**, because the verifier is
+the component that will check E3's episode - so getting the test right here is also settling where a real episode's audit
+lives.
+
+With that, the chain has one arrangement left rather than one contract: the same set of documents, in the locations the
+components' own conventions name.
