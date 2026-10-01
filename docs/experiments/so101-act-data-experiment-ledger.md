@@ -47835,3 +47835,16 @@ The composition itself exposes only `__init__`, `_initialize` and private helper
 "connect reviewed batch components; no result is synthesized by this layer" - so the **drive** belongs to the caller.
 The next read is therefore how `run_cli`'s batch runner drives a built composition to completion, and then `run` does
 the same for one episode.
+
+
+## CP-2528 — The nine cleared layers are committed
+
+Committed `cli/act_first_episode.py` with the run subcommand building the production composition (be0f21c9e), after the
+width gate: the scope, endpoint-pose, artifact and audit suites pass together at **236 passed**, rc=0, with the JUnit
+recorded. So the work of nine cleared layers - the guard, the run mode, the trusted pose, the versioned request, the
+start-guard policy, the guard class, its state root, the allocator's root and the catalogue point id - is now in the
+repository rather than only in the working tree, and the tree is back to nothing of mine being uncommitted.
+
+What remains for the approved route is the drive: the composition exposes only `__init__`, `_initialize` and private
+helpers, so the caller starts and supervises it - which is what `run_cli`'s batch runner does for a sweep, and what
+`run` must do for one episode. The next read is that runner.
