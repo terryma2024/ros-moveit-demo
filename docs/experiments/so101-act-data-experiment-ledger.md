@@ -53629,3 +53629,36 @@ calls the QC with `manifest_path.parent` (the directory the manifest is in) and 
 
 That closes the last of the chain's questions with a one-argument correction in code I wrote, found by printing the value
 at the callee after every caller-side path had been read and every other explanation measured away.
+
+
+## CP-2791 — The chain closes: both of E2's corrections pass end to end
+
+```
+EPISODE QC: INCOMPLETE | checks: ['endpoint_pose']
+DOWNGRADE status: FAILED | endpoint: INCOMPLETE
+2 passed in 0.24s
+```
+
+The last argument was the one CP-2790 identified: `endpoint_qc_document` appends the manifest's name to the base it is
+given, so the verifier must hand it the episode's `audit/` directory rather than the episode root. With that - and the
+four production changes this chain found along the way - **both tests pass**:
+
+- **correction 2**: a real `ContinuousEpisodeCapture`, holding a real `EpisodeRecorder` and a real `EpisodeAuditWriter`,
+  driven through four instants of frames and references, seals an episode whose audit the endpoint QC then reads back and
+  judges, returning the design's prescribed report (`rule_version`, `status`, `checks.endpoint_pose`);
+- **correction 3**: an episode that **claims** `PASSED` gets a verdict of `INCOMPLETE` from the fresh process - not PASS -
+  and the verifier returns **`FAILED`**, because the coordinator reads exactly that field as the terminal status.
+
+The production fixes this chain surfaced, each a step no layer performed before it was driven end to end:
+
+1. the audit's acquisition stream is written from the frames (`_mint`);
+2. row bindings are produced where rows are recorded (`_service_pending`), with the tail's offers skipped for rows that
+   never became recorded rows;
+3. the store supplies the v2 audit pair at all three of its verification call sites, and the verifier takes the pair like
+   the store does;
+4. the audit writer accepts an existing episode directory (ownership belongs to the recorder);
+5. and the endpoint QC is given the directory the manifest actually sits in.
+
+Remaining to finish this piece: remove three temporary prints (store, callee, test), run the gate, and commit the five
+changes together. Then E2's corrections 4 and 5, K1's forward half, and E3 - which the coordinator's decision of CP-2760
+has unblocked by approving reuse of the existing broker image.
