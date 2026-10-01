@@ -62,6 +62,54 @@ def store_for(tmp_path):
     return ActCollectionResultStore(workspace, lease(), clock=lambda: 15.0)
 
 
+class ProductionProducer:
+    """The production producer behind the sampler interface the capture calls (CP-2825).
+
+    It owns a real `RgbObservationSynchronizer` - the class the live path uses - and exposes the one affordance the test
+    harness writes to (`stamps[camera]`, as `feed` does). `sample_with_audit` pushes whatever has been recorded for the
+    four streams the synchronizer requires and then delegates, so what the capture reads back comes from the production
+    class rather than from a fixture.
+    """
+
+    STREAMS = ("head", "wrist", "arm", "neck")
+
+    def __init__(self, *, max_age_s=0.1, max_skew_s=0.1):
+        from so101_demo.act.synchronizer import RgbObservationSynchronizer
+
+        self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s)
+        self.stamps = {stream: [] for stream in self.STREAMS}
+        self._pushed = 0
+        self._latest = None
+
+    def sample_with_audit(self, session_id, attempt_id, at_s):
+        import numpy as np
+
+        if self._pushed == 0:
+            self.synchronizer.reset(session_id)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        # every stream must hold a stamp within max_age_s of the instant, and the stamps must agree within max_skew_s,
+        # or causal_sample refuses with INPUT_STALE (CP-2824)
+        while self._pushed < max(len(self.stamps[s]) for s in self.STREAMS):
+            for stream in self.STREAMS:
+                # the harness records stamps only for the cameras it feeds, and causal_sample refuses over an empty
+                # buffer - so a stream with nothing recorded for this instant carries the instant itself (CP-2824)
+                recorded = self.stamps[stream]
+                stamp = float(recorded[self._pushed]) if self._pushed < len(recorded) else self._latest
+                if stamp is None:
+                    continue
+                value = frame if stream in ("head", "wrist") else ([0.0] * 6 if stream == "arm" else 0.0)
+                self.synchronizer.push(stream, session_id, stamp, value,
+                                       received_monotonic_s=self.synchronizer.monotonic())
+                self._latest = stamp
+            self._pushed += 1
+        observation, audit = self.synchronizer.sample_with_audit(session_id, attempt_id, at_s)
+        # the recorder's channel is closed at sixteen keys: the production sampler also reports source_received_wall_s
+        # and neck_yaw_rad, which are its own business and not part of what an episode row records, so what the capture
+        # is handed is narrowed to the key it reads from a source audit (mirroring _RECORDER_LOCAL_KEYS on the other
+        # side of the same seam)
+        return observation, {key: value for key, value in audit.items() if key in ("source_stamps",)}
+
+
 def sealed_episode(tmp_path, *, outcome, end_s=1.3, episode_root=None):
     """Drive one real capture to its seal, with references one instant ahead of each row (CP-2725)."""
 
@@ -75,7 +123,7 @@ def sealed_episode(tmp_path, *, outcome, end_s=1.3, episode_root=None):
     # recorder reaches the audit through audit_manifest.parent, which is the writer's root (CP-2769)
     # assembled by the production seam rather than by hand, so this test exercises the same wiring E3 will use
     capture = assemble_episode_capture(
-        sampler=RecorderSampler(), physical_audit=recorder_physical_audit, guard=AcquisitionGuard(),
+        sampler=ProductionProducer(), physical_audit=recorder_physical_audit, guard=AcquisitionGuard(),
         identity=IDENTITY, provenance=PROVENANCE, inputs={"inputs_sha256": "a" * 64},
         episode_root=audit_root, scope=SCOPE,
         scope_path=str(audit_root / "audit" / "source.json"), deadline_s=120.0, monotonic=lambda: 0.0)
