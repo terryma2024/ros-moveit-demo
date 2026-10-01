@@ -52413,3 +52413,33 @@ difference lies - most likely the reference's own instant, which `reference(at_s
 
 One read of `_reference_state` settles it, and then three rows will be written, the grid will hold, and the seal will
 succeed - which is the whole of what these two tests still lack.
+
+
+## CP-2741 — The release rule, and with it the whole answer
+
+```python
+        entry = self._references.get(target)
+        if entry is None:
+            return "waiting"
+        if not entry["accepted"]:
+            return "void"
+        if self._observed_sim_s is None or self._observed_sim_s <= target + _TOLERANCE_S:
+            # accepted, but the instant has not passed: its acceptance could still be revoked
+            return "waiting"
+```
+
+A reference is **accepted** for a row's target instant, and the row still waits until the **observed simulation clock has
+passed that instant** - because until then the acceptance could still be revoked. That is a deliberate, well-reasoned
+rule, and it explains the probe exactly: after frames at 1.0 and a reference for 1.1, `_observed_sim_s` is 1.0, so the row
+minted at grid 1.0 waits; after frames at 1.1 and a reference for 1.2, `_observed_sim_s` is 1.1, so that row waits too;
+and only when the frames at 1.2 arrive does `_observed_sim_s` reach 1.2, pass the first row's target of 1.1, and let it be
+written - which is why the third drain was the first to write anything.
+
+So writing N rows takes frames at **N+1** instants: each row's release needs a later observation to have moved the clock
+past its target. That is the last fact this chain needed, and it is a flow fact rather than a value: feed frames at 1.0,
+1.1, 1.2 and 1.3, with references at 1.1, 1.2 and 1.3, and the three rows are written in order, the grid holds, and the
+seal succeeds.
+
+Worth recording what this rule is for, since it is the kind of thing that looks like an obstacle until it is read: a
+reference that is accepted "early" may still be revoked before its instant, so the capture refuses to label a row on the
+strength of an acceptance the sim clock has not yet ratified. The test's job is to give it a clock that moves.
