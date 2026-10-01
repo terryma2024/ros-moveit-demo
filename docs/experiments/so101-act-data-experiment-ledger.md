@@ -55623,3 +55623,31 @@ What that means for the run: the first failure, if there is one, is most likely 
 the scope file the child reads, the port that carries its path, or the publication order between the hook and the sample.
 The triage table in `handover/RUN-IT.md` names those by their refusals, so the first run's output should say which one
 rather than requiring another hunt.
+
+
+## CP-2867 — The official gate has a precondition I was not setting, and it cost sixteen failures
+
+The coordinator asked for the whole-package gate to be green. Working it down from 79, three mechanical fixes took it to
+38 - a module-level function pasted into the middle of a class body (41 failures), a keyword that had to be popped before
+a forward to an initialiser with no **kwargs, and an attribute that only existed when the real initialiser ran. The
+remaining 38 did not move when the worker count dropped from 8 to 4, which ruled out load and left a deterministic cause.
+
+That cause was mine, and it was not in the code: `test_controller_reservation_client.py` reads `SO101_IPC_SOCKET_BASE` and
+says so in its own comment - *"under the official gate it uses the repository's short-IPC base (the same
+SO101_IPC_SOCKET_BASE strategy the production launcher uses); locally it falls back to the scratch-derived base"*. The
+registered evidence root's prefix is 66 characters, pytest nests its own temporary tree below whatever `TMPDIR` points at,
+and one case nests three levels further - past AF_UNIX's 108-character limit. Setting a short private base
+(`/tmp/so101-debug-actdata/ipc`, 28 characters, mode 700, which satisfies the test's own INVALID and NOT_PRIVATE checks)
+removes sixteen failures at once, and the client family leaves the failure list entirely.
+
+**79 -> 38 -> 21.** The gate command is therefore:
+
+```
+TMPDIR=<scratch>/tmp TMP=<scratch>/tmp TEMP=<scratch>/tmp \
+SO101_IPC_SOCKET_BASE=/tmp/so101-debug-actdata/ipc \
+  <test-venv>/bin/python -m pytest src/so101_demo_py/test -q -p no:cacheprovider -n min(8,CPUs) --dist loadfile
+```
+
+Recorded because it is the same lesson as the `use_sim_time` hunt and the stale-copy hunt: the first question is not "is
+the code right" but "am I running what the gate says to run". Sixteen failures looked like broken concurrency and were a
+missing environment variable.
