@@ -45022,3 +45022,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   data files, both loaders and the calculator landed with twenty-one controls; F5's step two one traceback from its
   fix; F11's derivation one clean edit behind K1's landed alignment; F13's scene item behind K2.
 - HEAD 726c88dab; goal active.
+
+
+## CP-2388 — Hand-off state verified: clean tree, green suites, nothing half-applied
+
+- Checked before stopping for this round: HEAD as committed, the 35-entry dirty status unchanged (the user's
+  pre-existing work), and the three suites that matter most for the hand-off - the endpoint-pose controls (21),
+  the audit suite (with K1's two new negatives) and the generic artifact suite - green together. Nothing of this
+  stretch is uncommitted and no probe or fixture remains in the tree.
+- The one action that needs a fresh context is the transcription CP-2387 records: `src/cli/act_first_episode.py` in
+  the house style (`_Parser`, `build_parser()`, `main(argv=None) -> int`), the three subcommands over the landed
+  loaders and the existing `freeze_inputs`, and the `console_scripts` line
+  `act_first_episode = so101_demo.cli.act_first_episode:main`, then the install and the plan's directed RED/GREEN
+  with real argv, rc and JUnit under a fresh scratch.
+- Everything else stands as recorded: F1/F14/F3/F12 closed; K1's negatives landed; K2's protocol table awaiting its
+  checkpoint; E1's data, loaders, calculator and twenty-one controls landed; F5's step two one traceback away;
+  F11's derivation one clean edit away; F13's scene item behind K2.
+- HEAD 42a9b06de; goal active.
