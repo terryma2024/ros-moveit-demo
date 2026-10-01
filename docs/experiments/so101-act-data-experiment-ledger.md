@@ -54890,3 +54890,26 @@ exists".
 The test is reverted so the tree is green (`8 passed`), and the three refusals this direction has produced in a row -
 a `None` pose, then a schema refusal - say the same thing: this is the boundary the real run provides and the harness only
 approximates.
+
+
+## CP-2838 — No component appends physics rows, so the stream is the run's own
+
+Searching both places a physics row could be written from: `episode_audit.py` mentions "physics" only in its observation
+type checker (`:344`) and in the window matcher (`:653`), and `continuous_capture.py` only in a summary field
+(`physics_end_s`, `:242`). **Neither has an append API for the stream.** The audit writer declares the stream among its
+files (`self.files.streams()`, sealed and inventoried like the rest) but nothing in the capture path writes rows into it.
+
+Which closes the question CP-2837 opened, and it closes it the same way: the physics stream is produced by the run, not by
+the capture - the capture records rows, the audit writer keeps the documents, and whoever drives the episode writes the
+physics observations. That is consistent with everything else: the endpoint rule reconstructs poses from that stream, so
+the stream is the run's own account of where the cup was, and a harness approximating it would be approximating the very
+evidence the QC exists to check.
+
+For the objective this is the decisive statement of what remains: **every link of the software chain is proven** - lossless
+recording, an independent process's verdict, the downgrade, the real coordinator's commit, and now the seam and the
+production producer that assemble them - and **the one thing that cannot be manufactured in a test is the episode itself**.
+That needs the live run, which needs the physical side to hand over the producer's parts (CP-2822), which needs one
+sentence from the coordinator.
+
+Recorded so the next rounds spend themselves on the objective rather than on harness approximations of evidence that the
+QC is designed to distrust.
