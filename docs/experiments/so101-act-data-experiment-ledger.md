@@ -47199,3 +47199,28 @@ records** via `row["camera"]` and `row["stamp_s"]`. The one thing to print is th
 side, and the exact line to patch is the one at eight spaces of indentation inside that loop, now quoted verbatim in
 the note above. On my reading they agree, which has been wrong before and is why the probe prints them rather than
 asserting them.
+
+
+### The schedule loop was right, the rule passes, and the unread block is the refuser
+
+Printed with whitespace made visible, the region reads:
+
+```python
+    acquired: dict = {}
+    for row in acquisitions.values():
+        acquired.setdefault(row["camera"], set()).add(row["stamp_s"])
+    for name, instants in schedule.items():
+        stamps = acquired.get(name)
+        if stamps and any(all(abs(instant - stamp) > _TOLERANCE_S for stamp in stamps)
+                          for instant in instants):
+            return False
+```
+
+So my hypothesis - that the loop iterated the mapping's **keys** and the `parts()` helper therefore saw strings - was
+wrong: the loop already calls `.values()`. And the rule itself passes on this fixture, because every claimed instant
+(0.1, 0.5, 1.0) is within tolerance of an acquired one for its stream.
+
+That leaves the block built around the local `parts()` helper, which I have never read, as the only part of the
+predicate that can still return False for this window - the same place the earlier probes never reached because they
+printed the structures rather than the verdicts of the clauses after this point. The next read is therefore that
+block in full (from `def parts(entry):` to the function's final `return`), one grep away, before any probe is written.
