@@ -50759,3 +50759,28 @@ So the first of the reviewer's corrections is not one call but a short sequence,
 
 Every one of those four facts - the audit object, the absent seal, the tail paths' meaning, and the absent scope - came
 from reading, and the two mistakes this stretch made by writing first are why that order is now the rule.
+
+
+## CP-2673 — The design's prescribed QC report, read at last
+
+The design document says it in one line (121):
+
+> **"QC 报告保持顶层共同 schema，通过已版本化 `rule_version=endpoint_pose_v1` 和 `checks.endpoint_pose` 记录结果。`checks.endpoint_pose` closed keys 为
+> `status, policy_sha256, initial_sequence, final_sequence, initial_pose, final_pose, initial_target...`"**
+
+So the shape the checkpoint demanded is precise and was written down before I invented a different one:
+
+- the report **keeps the top-level common schema** rather than being a new document kind;
+- the versioned result travels under **`rule_version = endpoint_pose_v1`**;
+- and the endpoint answer lives at **`checks.endpoint_pose`**, whose **closed** keys are `status`, `policy_sha256`,
+  **`initial_sequence`**, **`final_sequence`**, `initial_pose`, `final_pose` and the two targets.
+
+Two things follow. First, my `ACT_ENDPOINT_QC` document with its `claim`/`endpoint` pair is **not** the prescribed shape
+and has to be replaced by this one - which also explains the reviewer's phrase "including rule/policy hashes, endpoint
+sequences and targets": `policy_sha256` and the two `*_sequence` fields are exactly what my document lacks. Second, the
+sequences are required, so the QC must report **which** records it judged - the endpoint rows' identifiers - rather than
+only their poses, which ties this correction to K2's task-level sequence in a way worth noting.
+
+This is the third time in E2 that the answer was already written in the design and I built something else: the pose key,
+the report shape, and the "no quality precondition" reading. The pattern is mine, and the remedy is the one this ledger
+keeps prescribing: read the prescription before writing the artefact.
