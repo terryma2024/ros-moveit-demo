@@ -43921,3 +43921,73 @@ sealed 输入与 run 目录未动。③ Task 14 的 `qualify` 调用串（plan T
 `plan-literal-command.probe.txt`）、`$EV/scratch/pytest-xdist8-hs313-{demo-suite.49a67e21,teleop-suite.572167b6,teleop-rerun.37e51279,teleop-single-1.9f9ce060,teleop-single-2.2317976c,teleop-single-3.93747f4b}`、
 工作树 `scratch/hs313/`（`common.sh`、`run-verify.sh`、`run-plan-literal-probe.sh`、`toolchain-root.txt`、`promotion-dir.txt`、`timestamp.txt`、`tmp/`）。
 以上**均为删除候选，未删除**；HS-300..312 的产物只读引用，未改动。工作树最终 `git status --porcelain` 仅 `?? runs/`（既有未跟踪）。
+
+## HS-314 — Task 13 Step 5：从晋级提交构建**最终冻结 runtime**（commit 戳记 + 机器写断言，build rc=0），安装版门禁逐个运行并记录 rc，身份 12 项与测量文档清点成文，写出 Task 14 交接
+
+**提交**：本条目**未随任何代码/config 提交**；工作树 diff 仅本账本追加（计划 Step 5 本身没有 git 步骤，Task 14 Step 7 才拥有账本收尾提交）。**未修改**晋级配置、sealed 几何、frozen 候选、dataset、pending run 目录；**未重跑**任何测量；**未启动**任何 ROS/MuJoCo/stack，**未创建任何 CUDA detector**（本轮唯一 import 级动作是读 `torch`/`ultralytics`/`mujoco` 版本号，脚本显式记 `cuda_context_created=false`）。开工前后 `ps` 无 ros2/MuJoCo/pytest 残留、`nvidia-smi --query-compute-apps` 为空。
+
+### (a) 最终冻结 runtime：`head-toolchain-20261001T130437Z`
+
+| 项 | 值 |
+| --- | --- |
+| `$FINAL_RUN` | `$EV/head-toolchain-20261001T130437Z` |
+| `source-commit.txt` | `956b5b74bfc2581a6222970c924ac0fd4e5e93e0`（`git rev-parse HEAD`，branch `codex/so101-act-data-0917a`，**含**晋级提交 `d688ee619` 与其账本提交） |
+| build rc | **0**（`build.rc` = 0、`status` = `DONE`、`assertions.rc` = `assertions_rc=0`；`/usr/bin/time` real 2min16s） |
+| 构建的 6 个包 | `mujoco_ros2_control_msgs`、`so101_teleop`、`mujoco_ros2_control_plugins`、`mujoco_ros2_control`、`so101_mujoco_support`、`so101_demo_py` |
+| 配方 | `$FINAL_RUN/build.sh`，`T=` 行**指向本 root 自身**（不是已替换脚本的拷贝，HS-196/HS-264 两次记过这个错）；colcon 选择/ignore、`--symlink-install --executor sequential`、`-DPython3_EXECUTABLE=/data/work/venvs/so101-v5-t004-perception/bin/python3` 与 HS-308..312 的 `scratch/hs308/build-toolchain.sh` **逐字相同**（`--packages-up-to so101_demo_py so101_teleop mujoco_ros2_control_plugins`、`--packages-ignore mujoco_vendor mujoco_3d_lidar mujoco_ros2_control_tests mujoco_ros2_control_demos`），即 HS-311/312/313 实际消费的那个运行时闭包 |
+| 断言（机器写） | `assertions.txt`：`source_commit=`、`build_rc=0`、`install_setup.zsh exists=yes`、三项 `ros2 pkg prefix`（demo/teleop/mujoco_ros2_control）；`console_scripts_so101_demo_py_count=73`（7 个计划点名脚本 **present=yes** 全中，列表见 `so101_demo_py.executables`）、`console_scripts_so101_teleop_count=8`；8 个 `installed_artifact` 全 `present=yes`（含 `so101_head_search_calibration`、`so101_head_search_smoke`、`so101_unified_web_server.py`、web `index.html`、晋级配置、相机 profile、scenario partitions、`ros2_control_node`）；`installed_promoted_config_sha256` == `source_promoted_config_sha256` == `dfa0af9b…` |
+| 自洽性（实测） | 只 source `/opt/ros/jazzy/setup.bash` + `$FINAL_RUN/install/setup.bash`（**不** source 共享 underlay）时，三个 `ros2 pkg prefix` 全部落在冻结 root 内、73 个 demo 入口可见 → 计划 Task 14 的字面 source 方式可用 |
+| 冻结粒度（实测） | 安装树 1710 个普通文件 / 784 个符号链接；符号链接指 `install/` → 本 root 自己的 `build/`（编译产物），**唯一例外**是 teleop web bundle 文件（`share/so101_teleop/web/index.html` → worktree `src/so101_teleop/web/dist/index.html`）。演示包 Python 模块、console script、`share/…/config` 都是**构建时的字节拷贝**（例：安装版 `so101_demo/act/search.py` sha256 `5ec44168…` == 源码 == 获批 bundle 记录值）。即：改 worktree web 源会**悄悄改变**冻结 web bundle，改生产配置源**不会**悄悄改变冻结副本 |
+| 身份记录 | `$FINAL_RUN/step5-identity.json` + `.txt`（用**安装版**的 `installed_environment()` / `runtime_identity()` 组装，非手抄） |
+| 测量文档清点 | `$FINAL_RUN/step5-measurement-inventory.txt`（run-of-record 全树摘要 1848 行 + 六项 sealed 输入 + `also_recorded` 全部 `input_evidence` + 外部证据根） |
+
+**第一次尝试（保留为证据，已被取代）**：`$EV/head-toolchain-20261001T130309Z`，`build rc=1`、`status=FAILED`，失败在包发现阶段而非编译：`ERROR:colcon:colcon build: Duplicate package names not supported: so101_demo_py / so101_mujoco_support / so101_teleop`，重复源是 HS-312 留在 worktree 的完整纯净副本 `scratch/hs312/pristine/src/*`（`scratch/hs311/pristine` 只拷了 `src/` 模块目录、无 `package.xml`，所以此前的构建不受影响）。处理方式是**只加一个空文件** `scratch/COLCON_IGNORE`（untracked、位于已被 `.git/info/exclude` 排除的 `scratch/` 内，不改动任何既有证据字节），使 colcon 不再发现该副本；**colcon 命令本身一字未改**，然后在新 root 重跑。按仓库规则这属于 **package-selection/环境失败，不是源码回归**，因此不计作 build RED。
+
+### (b) 安装版门禁（对 `$FINAL_RUN`，串行，日志在 `scratch/hs314/gates/`）
+
+| 门禁 | 命令 | rc | 关键输出 |
+| --- | --- | --- | --- |
+| **head-search smoke**（写 `coverage-proof.json` 的 console script） | `ros2 run so101_demo_py so101_head_search_smoke --scenario no_cup --anchor default --geometry-seal $EV/head-camera-probe11-20260930T101722Z/head-camera-geometry.json --evidence-root $EV/head-search-smoke-20261001T130757Z` | **0** | `coverage-proof.json` 存在（594 B，sha256 `9231ad96…`）：`coverage_complete=true`、`status="OK"`、`seal_sha256=7d963fdc…`、2 个有界停点 `[0.08047101126546086, -0.17559216195018024]` 恰好覆盖 `required_domain_rad [-0.17559216195018026, 0.08047101126546086]`；`stop_count=2`、`statuses=[TARGET_NOT_FOUND, TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL]`。**注意**：该 smoke 的 `coarse_step_rad=0.3` 来自 seal，不是晋级的 `0.656…`（计划 Task 11 的调用不传 config），且 `--scenario` 被接受但不使用（HS-179） |
+| 计划字面 demo 门禁 | `colcon test --packages-select so101_demo_py --return-code-on-test-failure --executor sequential --pytest-args test` | 1 | **无法收集**（0.8 s，无任何用例运行）：`pluggy._manager.PluginValidationError: Plugin 'launch_testing' for hook 'pytest_pycollect_makemodule' … Argument(s) {'path'} … can not be found in the hookspec` |
+| demo 门禁 + 本 campaign 既有插件绕行 | 同上，追加 `-n 8 -p no:launch_ros -p no:launch_testing` | 1 | `build/so101_demo_py/pytest.xml`：**6713 tests / 313 failed / 76 errors / 152 skipped**（229.8 s）。**与 Step 4 源码基线不是逐节点相同**：183 共同 / 206 仅安装版 / 78 仅基线（见下） |
+| 计划字面 teleop 门禁 | `colcon test --packages-select so101_teleop --return-code-on-test-failure --executor sequential` | 1 | ctest **237 个用例全灭**：`--pytest-args` 到不了 `ament_add_pytest_test` 生成的 pytest 调用，`LastTest_*.log` 里是同一个 `launch_testing` 插件校验错误 |
+| teleop 门禁 + `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` | 同上，环境变量置 1（可真正传到每个 pytest 调用） | 1 | **1241 passed / 37 failed / 43 skipped**；37 个失败节点与 Step 4 基线 `pytest-xdist8-hs313-teleop-rerun.37e51279` **逐节点相同（共同 37、仅安装版 0、仅基线 0）**；原因族为已知的 bridge/socket 路径问题（`IPC_SOCKET_PATH_TOO_LONG`、`BRIDGE_CHILD_EXITED`，即 HS-288/289 的 AF_UNIX 路径长度问题） |
+| test-result 读回 | `colcon test-result --test-result-base $FINAL_RUN/build --verbose` | 1 | `Summary: 6949 tests, 194 errors, 431 failures, 152 skipped`（= 上面 demo `pytest.xml` 与 teleop ctest xUnit 的汇总） |
+
+**替代说明（照录）**：① 计划的 `head_colcon`（`$HEAD_PYTHON $HEAD_COLCON`）在本环境**不可执行**——perception venv 解释器没有 `colcon_core`（与 HS-288/313 记的 `head_test` 同一限制），故用 `/usr/bin/colcon` + perception site-packages 进 `PYTHONPATH`，这正是既有构建配方本身的做法；② 两个绕行运行只额外加了关闭不兼容 `launch_testing` 插件的 pytest 参数/环境变量，否则安装版门禁**根本无法收集**；③ demo 门禁按仓库门禁补 `-n 8`，teleop 门禁保持计划原样。以上属**环境/插件不兼容，不是源码回归**。
+
+**安装版 demo 门禁多出的失败是什么（以及不是什么）**：抽样证据显示全部是环境性的——`FileNotFoundError: …/install/so101_demo_py/lib/python3.12/site-packages/config/act/task8-calibration-measurement-contract-v2.json`（用例把 `config/` 相对**安装 site-packages** 解析，而配置装在 `share/so101_demo_py/config/`；68 例 `test_act_task8_measurement_formulas.py` + 15 例 `test_act_task8_calibration_aggregator.py`）、`KeyError: 'TMPDIR'`（parallel-batch / controller-reservation 三个模块 16+22+67 例）、以及 17 个基线收集错误模块中 12 个在 colcon 环境里能导入。**`test_act_head_search_*` / `test_head_search_*` / head-camera 命名模块的失败状态在基线与安装版之间零变化**（逐模块表见 `scratch/hs314/gates/demo-node-diff.txt`）。该环境差异的根因**本轮未定位**，如实记为未决，而**不**记为晋级回归。
+
+### (c) Step 5 身份清单（全部机器读出）
+
+| 类别 | 值 |
+| --- | --- |
+| 最终 root / source commit | `$EV/head-toolchain-20261001T130437Z` / `956b5b74bfc2581a6222970c924ac0fd4e5e93e0` |
+| package prefix | demo `$FINAL_RUN/install/so101_demo_py`、teleop `$FINAL_RUN/install/so101_teleop`、mujoco `$FINAL_RUN/install/mujoco_ros2_control` |
+| console script | demo 73 个（含 `validate_head_camera_geometry`、`generate_yolo_seg_dataset`、`train_yolo_seg`、`verify_head_search_dataset`、`evaluate_head_search_yolo_candidates`、`so101_head_search_smoke`、`so101_head_search_calibration`）；teleop 8 个（含 `so101_unified_web_server.py`）；完整列表 `$FINAL_RUN/{so101_demo_py,so101_teleop}.executables` |
+| 晋级配置摘要 | `dfa0af9b721aa7d810e6302e5f4bd32fd5d8db0379b69743add8f3d4689c25cd`（源码与安装副本一致；canonical `values` 块 `3c787fd7…`）；晋级提交 `d688ee619` |
+| 获批 bundle | file sha256 `e21899c22cb15774bfe06e9f995c85fc20797a61bda08560c6f48044a8767974`（86896 B）== 批准目标；canonical `f85b78f6d1b31aa538671d527b57be1934b43f5d60588760fbc0993f378d88ee`；17 个 `parameter_names` |
+| 获批模型（C2a 权重） | 路径 `$CAMPAIGN/candidate-c2a/head-task-mixed-taskweighted/weights/best.pt`，sha256 `2afd550694abfbe6d1c37922c9ea0b4a0f8567bef94cf4c4ec85d4b50c0cc82a`（本轮重哈希；== 晋级配置 `weight_sha256` == bundle `runtime_identity.detector_weights_sha256`） |
+| CUDA/driver/版本 | `cuda 13.0`（torch `2.13.0+cu130`）、driver `595.84`、GPU `NVIDIA GeForce RTX 5080 16303 MiB`、`mujoco 3.12.0`、`ultralytics 8.4.115`、`numpy 2.5.2`、python `/data/work/venvs/so101-v5-t004-perception/bin/python`（3.12.3） |
+| 相机身份 | `camera_id=head_camera`、`camera_intrinsics_sha256=f5472d759732b6cf2e8ac37206f14b18bf1478a783555188549bdbf9c163d67a`（== bundle 记录值）、640×480、`head_camera_optical_frame`、生产相机 profile `head_camera_yolo_seg.yaml` sha256 `9ad9b934db013641747c60eee4ce8dd75cc1fdfd5e4ddeda963a18824b473bbf`；seal 文件 sha256 `0db2eb4c…`、canonical `3a5ece62…` |
+| tracker（**实际运行**） | `so101_demo.adapters.act.detector.HeadRgbDetector` 自身的**贪心 IoU 关联**，参数 `values.tracking_iou = 0.5`；配置声明的 `tracker.name="bytetrack"` / `iou_threshold 0.3` **在生产代码里没有任何消费者**（`grep -rn bytetrack src/ --include=*.py` 只命中 bundle-inputs 的一句注释）。与 HS-312 推断⑥一致 |
+| web bundle 身份 | `457b8197580bd30e2a372f143f85aa32615e768e93d13f4ec7beab2a82d2e73c`（**等于**获批 bundle 里记录的 `web_bundle_id`），按安装版 `_web_bundle_digest()` 对 `share/so101_teleop/web` 全部文件（相对路径, 内容摘要）序列求和 |
+| `runtime_identity` | 12 字段全在 `$FINAL_RUN/step5-identity.json`；`cuda_context_created=false` |
+
+### (d) Task 14 交接
+
+`$EV/handoff/task14-handoff.md`（sha256 `8dbb801b8d4ae989d1c581548ed166f73ab8194c0068a431d4f41cf7ea15c7ef`，25483 B），章节：1 冻结 runtime、2 晋级配置（含 17 值表）、3 获批 bundle/回执、4 十二项运行时身份、5 实际运行的 tracker、6 测量文档位置、7 Step 5 安装版门禁结果、8 demo 门禁多出失败的归因边界、9 Task 14 将运行什么及必须自行调和的 plan/代码漂移、10 Task 14 必须遵守的约束、11 继承的未决项、Step 5 证据索引。
+
+**交接里点名的漂移（本轮实测 `--help`，未改代码）**：Task 14 的 `qualify`（计划 `--bundle/--approval-receipt/--production-config/--episode-partitions/--profile/--serial/--anchors` vs 安装版 `--run-root/--promoted-config/--evidence-root`）、`serve-teleop`（计划 8 个 flag vs 安装版 `--run-root/--bridge-socket-root/--report`，无 `--report` 时 `HEAD_SEARCH_QUALIFIED_REQUIRED` rc=2）、以及"生产 smoke 由 qualifier 拥有"的假设；安装版 `qualify` 实际只按 `evidence_root/*.json` 的 sha256 摘要发布 `HEAD_SEARCH_QUALIFIED` 报告，**不启动 stack、不跑 40 场景、不做 FULL_RESTART**。Step 3 的 `verify-promoted-config` 漂移已由 HS-313 处理。
+
+### (e) 本轮声明的推断（待评审，逐条照录）
+
+① **"campaign root" 取 `$EV`**（注册证据根 `/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m`）：该根下已有既有 `handoff/` 目录与 `handoff/head-search-c-task-domain-precision-handoff.md`，故交接写在该约定位置；账本里的 `$CAMPAIGN` 指其下 `head-yolo-models-20260930T120608Z`。
+② **构建配方取 HS-308..312 的变体**（多选 `mujoco_ros2_control_plugins`、只 ignore 4 个包）而非 HS-307 的 3 包变体或计划 Step 5 的无 ignore 字面式：理由是 6 包闭包正是 HS-311/312/313 实际运行校准与 verify 的 root（T121042Z/T121911Z 同样 6 包），最终冻结 runtime 必须自带 Task 14 要跑的 MuJoCo 栈而不是从共享 underlay 解析；计划字面式（无 ignore）在本树同样得到这 6 包。
+③ **`scratch/COLCON_IGNORE`** 视为不改动证据的发现层卫生修复（空文件、untracked、位于 git 排除的 `scratch/`），而不是修改 HS-312 的副本；若评审认为应改用 `--paths` 之类的调用级方案，则本轮 build 命令需重跑（但不影响已冻结 root 的字节与摘要）。
+④ `--scenario` 被接受但未使用、安装版 smoke 只证明**计划覆盖**（相对 seal），不证明 live no-cup 结果；这与 HS-179 的既有 finding 一致，本次再次实测到。
+⑤ 安装版 `qualify` 是**证据摘要聚合器**（读 `evidence_root/*.json` 摘要并发布闭环报告），40 场景/三 restart 的**生产者身份本轮未定位**；"`run_qualification run --lifecycle FULL_RESTART --count … --evidence-root …` 可能是那个生产者"**只是推断，未验证**，交给 Task 14。
+⑥ 安装版 demo 门禁与源码基线的差异归因于安装布局路径解析与 `TMPDIR` 处理，**根因未定位**；`test_act_task8_calibration_aggregator.py` 的 15 例虽名字含 calibration，但属 Task-8 ACT 校准，与 Head Search 无关。
+⑦ 本轮**未提交**账本改动（计划 Step 5 没有 git 步骤，Task 14 Step 7 才收尾提交），因此 `git status --porcelain` 会显示该账本文件为已修改。
+
+**本轮证据与生命周期**：`$EV/head-toolchain-20261001T130437Z/`（最终冻结 root：`build.sh`、`source-commit.txt`、`build.console.log`、`build.rc`、`build.provenance.txt`、`assertions.txt`、`assertions.rc`、`status`、两个 `.executables`、`step5-identity.{json,txt}`、`step5-measurement-inventory.txt`、`build/`、`install/`、`build-log/`、`test-log-*`）、`$EV/head-toolchain-20261001T130309Z/`（第一次尝试，rc=1，重复包发现错误，被取代但保留）、`$EV/head-search-smoke-20261001T130757Z/{coverage-proof.json,head-search-plan-default.json}`、`$EV/handoff/task14-handoff.md`、`$EV/scratch/head-test-{smoke-o1AMrnmG,demo-ordinary-*,teleop-*,demo-ordinary-workaround-*,teleop-workaround-*,teleop-noautoload-*}/`（每份含 `interpreter-and-cpu.json` 与指向该 run 下 `tmp/` 的 TMPDIR 证明）、工作树 `scratch/hs314/`（`toolchain-root.txt`、`timestamp.txt`、`run-installed-gates.sh`、`run-installed-gates-workaround.sh`、`record-identity.py`、`run-record-identity.sh`、`gates/` 含 4 份 console log、rc、facts 与 `demo-node-diff.txt`）、工作树 `scratch/COLCON_IGNORE`（新增空文件）。以上**均为删除候选，未删除**；HS-300..313 的产物只读引用，未改动。工作树 `git status --porcelain`：`?? runs/`（既有未跟踪）+ `M docs/experiments/so101-act-data-experiment-ledger.md`（本条目）。
