@@ -62,3 +62,60 @@ def load_endpoint_policy(path: Path) -> dict:
         "rule_version": RULE_VERSION,
         "thresholds": {key: _positive_finite(thresholds[key], key) for key in THRESHOLD_UNITS},
     }
+
+
+def _pose(value, label: str) -> tuple:
+    """A pose is seven finite reals: xyz plus an xyzw quaternion whose norm is within 1e-3 of one."""
+
+    if not isinstance(value, (list, tuple)) or len(value) != 7:
+        raise ValueError(f"ENDPOINT_POSE_INVALID: {label} is not an xyz_xyzw pose")
+    numbers = []
+    for index, item in enumerate(value):
+        if isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item):
+            raise ValueError(f"ENDPOINT_POSE_INVALID: {label}[{index}] is not a finite real")
+        numbers.append(float(item))
+    x, y, z, qx, qy, qz, qw = numbers
+    norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+    if norm == 0 or abs(norm - 1.0) > 1e-3:
+        raise ValueError(f"ENDPOINT_POSE_INVALID: {label} quaternion norm is {norm}")
+    return (x, y, z), (qx / norm, qy / norm, qz / norm, qw / norm)
+
+
+def _axis(quaternion: tuple) -> tuple:
+    """The cup's own axis: the body-local +Z rotated by the quaternion, so a yaw about it changes nothing."""
+
+    qx, qy, qz, qw = quaternion
+    # R * (0, 0, 1) for an xyzw quaternion
+    return (2 * (qx * qz + qw * qy), 2 * (qy * qz - qw * qx), 1 - 2 * (qx * qx + qy * qy))
+
+
+def _angle_between(left: tuple, right: tuple) -> float:
+    dot = max(-1.0, min(1.0, sum(a * b for a, b in zip(left, right))))
+    return math.acos(dot)
+
+
+def evaluate_endpoint_pose(initial_pose, final_pose, initial_target, final_target, policy: dict) -> dict:
+    """The shared pure calculator: two poses against two frozen targets, answering only endpoint questions.
+
+    It performs no IO and touches no live port. It states what the endpoint rule can answer - the two poses match
+    the two targets within the frozen thresholds - and nothing about grasp quality, release or stability, which is
+    the amendment's whole point: a report may say "endpoint poses passed" and may not say "grasp quality verified".
+    """
+
+    thresholds = dict(policy["thresholds"])
+    if set(thresholds) != set(THRESHOLD_UNITS):
+        raise ValueError("ENDPOINT_POLICY_INVALID: thresholds are not the closed five-field schema")
+    start_xyz, start_q = _pose(initial_pose, "initial_pose")
+    end_xyz, end_q = _pose(final_pose, "final_pose")
+    start_target_xyz, start_target_q = _pose(initial_target, "initial_target")
+    end_target_xyz, end_target_q = _pose(final_target, "final_target")
+
+    errors = {
+        "initial_position_tolerance_m": math.dist(start_xyz, start_target_xyz),
+        "initial_axis_tolerance_rad": _angle_between(_axis(start_q), _axis(start_target_q)),
+        "final_xy_tolerance_m": math.dist(end_xyz[:2], end_target_xyz[:2]),
+        "final_z_tolerance_m": abs(end_xyz[2] - end_target_xyz[2]),
+        "final_axis_tolerance_rad": _angle_between(_axis(end_q), _axis(end_target_q)),
+    }
+    passed = {key: errors[key] <= thresholds[key] for key in THRESHOLD_UNITS}
+    return {"status": "PASS" if all(passed.values()) else "FAIL", "errors": errors, "passed": passed}
