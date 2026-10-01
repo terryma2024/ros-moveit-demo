@@ -52790,3 +52790,20 @@ should finally agree.
 
 Measured one more time for the record: two rows recorded, one row pending, one binding produced - which is precisely the
 mismatch the seal reported.
+
+
+## CP-2758 — Binding at record time is in place, and the count still differs
+
+With the binding produced where the row is recorded (`_service_pending`, right after the recorder accepts it), the inner
+cause is still `EPISODE_SEAL_ROWS_MISMATCH` - so the two counts still disagree, and the most likely reason is now the
+*other* side: the tail also binds the row that stayed pending, which means three bindings against two recorded rows.
+
+That fits the check's own wording, which the earlier reading recorded as "every recorded row must be bound to the
+acquisitions it consumed, at the same instant" - a requirement with a direction, but a seal that compares sets is as
+likely to demand equality as containment. The very next line of that check says which, and it is the thing to read rather
+than to guess at.
+
+What is now in place, uncommitted and each verified as far as it goes: the acquisition stream fed from the frames, the
+binding produced at record time, the recorder's closed channel respected, and the chain test's five alignments with its
+adapter - which, between them, closed `EPISODE_SCOPE_INVALID`, `EPISODE_SEAL_AUDIT_EPISODE_MISMATCH`, `EPISODE_TIME_GAP`,
+`EPISODE_AUDIT_SCHEMA`, `AUDIT_BINDING_UNKNOWN` and `AUDIT_BINDING_REFERENCE_INVALID` in turn. One comparison remains.
