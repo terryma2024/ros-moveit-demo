@@ -205,7 +205,9 @@ def test_the_audit_receives_the_events_the_run_actually_produced():
         # T3-F3(c): the release event names the epoch the controller entered, emitted before that phase's own
         # phase_complete; its payload is the release schema, so this projection sees no phase or reason for it
         [entry for phase in PickPlaceRunner.PHASES
-         for entry in (((("release", None),) if phase == "RELEASE" else ())
+         for entry in (((("k2_apply", None), ("k2_query", None), ("k2_receipt", None)) if phase == "RELEASE"
+                        else ())
+                       + ((("release", None),) if phase == "RELEASE" else ())
                        + (("phase_complete", phase),))]
         + [("run_complete", "FULL_COMPLETE")])
     # the release event carries the ratified release schema, which has no physics_step, so only the events

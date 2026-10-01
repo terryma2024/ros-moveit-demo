@@ -268,8 +268,20 @@ class PickPlaceRunner:
             raise PickPlaceError("RELEASE_UNSUPPORTED")
         if self.port.detach_moveit(request) is not True:
             raise PickPlaceError("DETACH_NOT_CONFIRMED")
+        # K2's apply record: the planning-scene interaction that changed what MoveIt holds. The instant stays null
+        # because no publication covered it, which is the protocol's own rule rather than a value from another clock.
+        self._event("k2_apply", "detach_moveit", evidence["physics_step"],
+                    payload={"apply_event_id": "detach_moveit:" + str(evidence["attempt_id"]),
+                             "applied_at_s": None, "accepted": True})
         if self.port.planning_attached(request) is not False:
             raise PickPlaceError("DETACH_NOT_CONFIRMED")
+        # K2's query and its receipt: the query is the question asked of the consumer, the receipt is the answer
+        self._event("k2_query", "planning_attached", evidence["physics_step"],
+                    payload={"query_id": "planning_attached:" + str(evidence["attempt_id"]),
+                             "query_at_s": None, "request_bytes": 0, "response_bytes": 1})
+        self._event("k2_receipt", "release_preflight", evidence["physics_step"],
+                    payload={"receipt_id": "release_preflight:" + str(evidence["attempt_id"]),
+                             "received_at_s": None, "clock_source": None, "uncertainty_s": None})
         return evidence["physics_step"]
 
     def _stop(self, reason: str, request: dict) -> None:

@@ -485,6 +485,10 @@ def _payload_typed(payload) -> bool:
             if type(value) is not int or value < 0:
                 return False
         elif key in _EVENT_FLOATS:
+            # a float may be null: the protocol records no instant when no publication covered the record, and the
+            # schema expresses that as null rather than a value promoted from another clock
+            if value is None:
+                continue
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 return False
             if not math.isfinite(value) or (key != "uncertainty_s" and value < 0):
