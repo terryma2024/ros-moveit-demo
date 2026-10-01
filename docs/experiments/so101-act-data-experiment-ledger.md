@@ -52148,3 +52148,26 @@ Which makes the resolution follow from the evidence rather than from convenience
 That is the second time in this stretch that a passing test turned out to assert a permissive stand-in rather than a
 contract (the first was `FakeRecorder` itself, which is why the extra `source_received_wall_s` key went unnoticed for so
 long). The remedy is the same both times: assert what the real component requires.
+
+
+## CP-2731 — The strip is right and exactly one assertion needs updating
+
+Applying the capture's strip **alone** - no test edit - and running both files:
+
+```
+FAILED test_act_continuous_capture.py::test_a_slow_phase_joins_each_row_to_its_accepted_future_reference
+```
+
+One failure, and it is the very test whose line 116 reads the identifiers from the dictionary its fake recorder
+received. So the diagnosis of CP-2727/2728 holds and the fix is right: the capture should not put the acquisition
+identifiers into the channel the recorder validates, and one existing assertion has to move with it.
+
+That also explains the previous round's confusion: the "3 failed" and the `EPISODE_SCOPE_INVALID` came from **my step-2
+replacement**, not from the strip - I replaced the assertion with one that imported `_AUDIT_KEYS` into the test and
+compared whole key sets, and in doing so changed something the test's own episode did not satisfy. Reverting was right, and
+the useful outcome is this narrowing: one strip, one assertion, one test.
+
+So the next attempt is smaller than the last: apply the strip, change line 116 to assert what the real recorder requires
+(its closed set, or simply that the identifiers are absent from that channel), unmark the two chain tests, and run the
+three files together - with the lesson from this round: change one thing at a time, and read the failure list rather than
+the count.
