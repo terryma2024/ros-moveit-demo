@@ -49303,3 +49303,31 @@ producer too.
 
 Next round: do it in one complete edit - the four source appends **and** the acquisition append - and run the two suites
 before anything else.
+
+
+## CP-2607 — The acquisition path's exact shape, and therefore the complete edit
+
+```python
+    def append_acquisition(self, frame) -> None:
+        self._require_open()
+        record = {field: getattr(frame, field) for field in _ACQUISITION_FIELDS}
+        record["shape"] = list(record["shape"])
+        _closed(record, _ACQUISITION_FIELDS, "AUDIT_SCHEMA_INVALID")
+```
+
+That is why last round failed: this producer builds its record by **reading every field in `_ACQUISITION_FIELDS` off
+the frame object**, so adding a key to that set makes it demand the key from a frame that has no such attribute - and
+unlike the three source appends, its `_closed` call uses the **full** set with no subtraction.
+
+So the complete edit is now fully specified, with no guessing left:
+
+1. in all four field sets, add `task_sequence` beside `sequence`;
+2. in the three source appends, subtract both when calling `_closed` and set `task_sequence` from the allocator (as the
+   failed attempt already did correctly);
+3. in `append_acquisition`, exclude the key when reading the frame -
+   `for field in _ACQUISITION_FIELDS - {"task_sequence"}` - and set it from the allocator;
+4. give the allocator a small helper, `_next_task()`, that bumps and returns the task-level counter; `_next` calls it,
+   and the acquisition path calls it directly, so every record gets a number from the same counter;
+5. initialise the counter beside `self._sequence`.
+
+Five steps, one file, and the two suites run immediately afterwards - which is what the previous attempt lacked.
