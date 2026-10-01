@@ -8,13 +8,14 @@ import math
 from pathlib import Path
 
 import pytest
+from head_search_qualification_fixtures import ANCHORS, build_fixture
+from head_search_qualification_fixtures import digest as fixture_digest
+from so101_demo.act.head_search_aggregate import GATES
 from so101_demo.cli.head_search_calibration import (
     HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE,
     HEAD_SEARCH_RUN_INPUTS_INCOMPLETE,
     main,
 )
-from head_search_qualification_fixtures import ANCHORS, build_fixture, digest as fixture_digest
-from so101_demo.act.head_search_aggregate import GATES
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 
@@ -3162,9 +3163,8 @@ def test_measure_scenarios_hands_the_flight_to_the_library(tmp_path: Path, monke
 def test_measure_scenarios_reports_the_librarys_refusal_and_returns_two(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-
     from so101_demo.act import head_search_scenarios as scenarios
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 
     inputs = _scenario_inputs(tmp_path)
 
@@ -3189,3 +3189,267 @@ def test_measure_scenarios_prints_every_failed_and_refused_scenario(
     printed = capsys.readouterr()
     assert "CAL_SCENARIO_CUP_NOT_FOUND" in printed.err
     assert "failed=2" in printed.out
+
+
+# --- Task 14 Step 4: the three FULL_RESTART anchor phases (HS-318) -----------------------------------
+
+
+def _restart_inputs(tmp_path: Path) -> dict:
+    """The declared inputs of `measure-restarts`: the fine-correction fixture plus the rest."""
+
+    inputs = _fine_correction_inputs(tmp_path)
+    final_run = tmp_path / "head-toolchain"
+    final_run.mkdir()
+    inputs["final_run"] = final_run
+    seal = json.loads(Path(inputs["seal"]).read_text(encoding="utf-8"))
+    seal["in_frame_matrix"] = {
+        "default": {"neck_start_rad": 0.1, "centre_angle_rad": 0.23109066719589708},
+        "left": {"neck_start_rad": 0.0, "centre_angle_rad": -0.0587558227157227},
+        "forward": {"neck_start_rad": 0.0, "centre_angle_rad": 0.18822150530477078},
+    }
+    seal["workspace_matrix"] = {
+        "key_samples": [
+            {"kind": "anchor", "anchor": "default", "point_m": [0.02, -0.28, 0.165]},
+            {"kind": "anchor", "anchor": "left", "point_m": [-0.08, -0.28, 0.165]},
+            {"kind": "anchor", "anchor": "forward", "point_m": [0.02, -0.36, 0.165]},
+        ]
+    }
+    Path(inputs["seal"]).write_text(json.dumps(seal), encoding="utf-8")
+    urdf = tmp_path / "so101.urdf"
+    urdf.write_text("<robot/>", encoding="utf-8")
+    inputs["urdf"] = urdf
+    inputs["plugins"] = inputs["controllers"]
+    inputs["reservation_root"] = tmp_path / "ipc"
+    inputs["reservation_root"].mkdir()
+    inputs["workdir"] = tmp_path / "workdir"
+    inputs["workdir"].mkdir()
+    inputs["ownership"] = tmp_path / "exclusive-ownership.json"
+    inputs["ownership"].write_text(
+        json.dumps(
+            {
+                "operation": "QUALIFICATION_OWNERSHIP_CHECK",
+                "status": "EXCLUSIVE_OWNERSHIP_OK",
+                "refusals": [],
+                "planned_run_root": str(tmp_path / "restart-run"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    return inputs
+
+
+def _restart_arguments(inputs: dict, output: Path, *extra: str) -> list:
+    return [
+        "measure-restarts",
+        "--run-root",
+        str(output),
+        "--ownership-receipt",
+        str(inputs["ownership"]),
+        "--final-run",
+        str(inputs["final_run"]),
+        "--production-config",
+        str(inputs["production"]),
+        "--approved-bundle",
+        str(inputs["production"]),
+        "--geometry-seal",
+        str(inputs["seal"]),
+        "--scene",
+        str(inputs["scene"]),
+        "--urdf",
+        str(inputs["urdf"]),
+        "--plugin-config",
+        str(inputs["plugins"]),
+        "--controller-config",
+        str(inputs["controllers"]),
+        "--weights",
+        str(inputs["weights"]),
+        "--frozen-candidate",
+        str(inputs["frozen"]),
+        "--reservation-root",
+        str(inputs["reservation_root"]),
+        "--workdir",
+        str(inputs["workdir"]),
+        *extra,
+    ]
+
+
+def _patch_restart_flight(monkeypatch, *, status="PASS"):
+    """Stub the two heavy seams: the runtime readback and the per-anchor flight itself."""
+
+    from so101_demo.act import head_search_restarts as restarts
+
+    seen: dict = {}
+
+    def fake_runtime(final_run, production_config=None):
+        return {
+            "final_run": str(final_run),
+            "source_commit": "9" * 40,
+            "setup_bash_present": True,
+            "production_config": str(production_config),
+            "production_config_sha256": "d" * 64,
+            "values_count": 17,
+            "values_sha256": "3" * 64,
+            "allow_cpu_fallback": False,
+            "cuda_device": "cuda:0",
+            "weight_path": "/evidence/weights/best.pt",
+            "weight_sha256_declared": "2" * 64,
+            "weight_sha256_observed": "2" * 64,
+        }
+
+    def fake(**kwargs):
+        seen.update(kwargs)
+        anchor = kwargs["anchor"]
+        row = {
+            "anchor": anchor,
+            "declared_anchor": dict(kwargs["declared"]),
+            "stack": {
+                "nodes": list(restarts.STACK_OWNED_NODES),
+                "processes": [
+                    {"pid": 11, "argv": "lib/mujoco_ros2_control/ros2_control_node"},
+                    {"pid": 12, "argv": "lib/robot_state_publisher/robot_state_publisher"},
+                ],
+                "gpu_compute_apps": [],
+            },
+            "camera": {
+                "frame_rate_hz": 10.0,
+                "declared_rate_hz": 10.0,
+                "frames": 40,
+                "measured_rate_hz": 10.0,
+                "rate_error_hz": 0.0,
+                "duplicate_count": 0,
+                "backward_count": 0,
+                "matches_declared": True,
+            },
+            "clock": {"advancing": True, "delta_s": 3.0},
+            "detector": {
+                "loaded": True,
+                "count": 1,
+                "device": "cuda",
+                "runtime_device": "cuda:0",
+                "allow_cpu_fallback": False,
+                "weights_sha256": "2" * 64,
+            },
+            "search": {
+                "terminal_status": "TARGET_LOCKED",
+                "coverage_complete": True,
+                "wrong_locks": 0,
+            },
+            "lock": {"consecutive_frames": 3},
+            "frames": [
+                {
+                    "index": index,
+                    "frame_sim_s": 100.0 + index * 0.1,
+                    "received_monotonic_s": index * 0.1,
+                    "frame_age_s": 0.002,
+                    "source_skew_s": 0.004,
+                    "inference_s": 0.02,
+                    "detections": 1,
+                    "lock_count": index,
+                }
+                for index in range(12)
+            ],
+            "stop": {"proven": True, "qualifying_samples": 3},
+            "teardown": {
+                "previous_stack_stopped": True,
+                "controller_owner_stopped": True,
+                "children_exited": True,
+                "graph_clear": True,
+                "gpu_released": True,
+            },
+            "elapsed_s": 42.0,
+            "started_at_utc": "2026-10-01T15:00:00Z",
+            "finished_at_utc": "2026-10-01T15:00:42Z",
+        }
+        if status != "PASS":
+            row["search"] = {"terminal_status": "TARGET_NOT_FOUND", "coverage_complete": True,
+                             "wrong_locks": 0}
+        return row
+
+    monkeypatch.setattr(restarts, "read_runtime_of_record", fake_runtime)
+    monkeypatch.setattr(restarts, "run_anchor_restart", fake)
+    return seen
+
+
+def test_measure_restarts_refuses_missing_inputs_and_an_existing_root(
+    tmp_path: Path, capsys
+) -> None:
+    inputs = _restart_inputs(tmp_path)
+    missing = _restart_arguments(inputs, tmp_path / "restart-run")
+    missing[missing.index("--scene") + 1] = str(tmp_path / "absent.xml")
+    assert main(missing) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+
+    existing = tmp_path / "already-there"
+    existing.mkdir()
+    assert main(_restart_arguments(inputs, existing)) == 2
+    assert "never resumed" in capsys.readouterr().err
+
+
+def test_measure_restarts_runs_the_three_anchors_and_writes_three_receipts(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    inputs = _restart_inputs(tmp_path)
+    seen = _patch_restart_flight(monkeypatch)
+    run_root = tmp_path / "restart-run"
+    rc = main(_restart_arguments(inputs, run_root))
+
+    assert rc == 0
+    assert seen["anchor"] == "forward"
+    assert seen["anchors"][0]["anchor"] == "default"
+    assert seen["device"] == "cuda"
+    printed = capsys.readouterr().out
+    assert "HEAD_SEARCH_RESTARTS_MEASURED" in printed
+    assert "status=PASS" in printed
+    from so101_demo.act import head_search_restarts as restarts
+
+    for anchor in restarts.ANCHORS:
+        document = json.loads(
+            (run_root / anchor / restarts.ARTIFACT_BY_ANCHOR[anchor]).read_text(encoding="utf-8")
+        )
+        assert document["anchor"] == anchor
+        assert document["kind"] == "head_search_full_restart_receipt"
+        assert document["lifecycle"] == "FULL_RESTART"
+        assert document["gates"] == {
+            "graph": "PASS",
+            "detector": "PASS",
+            "search": "PASS",
+            "lock": "PASS",
+            "timing": "PASS",
+            "stop": "PASS",
+        }
+        assert (run_root / anchor / "stdout.log").is_file()
+        assert (run_root / anchor / "stderr.log").is_file()
+    aggregate = json.loads((run_root / restarts.AGGREGATE_ARTIFACT).read_text(encoding="utf-8"))
+    assert aggregate["anchors"] == list(restarts.ANCHORS)
+    assert aggregate["status"] == "PASS"
+
+
+def test_measure_restarts_returns_two_when_an_anchor_refuses(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    inputs = _restart_inputs(tmp_path)
+    _patch_restart_flight(monkeypatch, status="REFUSED")
+    rc = main(_restart_arguments(inputs, tmp_path / "restart-run"))
+    assert rc == 2
+    printed = capsys.readouterr()
+    assert "RESTART_SEARCH_UNPROVEN" in printed.err or "RESTART_SEARCH_UNPROVEN" in printed.out
+
+
+def test_measure_restarts_reports_the_librarys_refusal_and_returns_two(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    from so101_demo.act import head_search_restarts as restarts
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+
+    inputs = _restart_inputs(tmp_path)
+    _patch_restart_flight(monkeypatch)
+
+    def refuse(**kwargs):
+        raise CalibrationInputsRefused(
+            restarts.RESTART_OWNERSHIP_REFUSED,
+            "the exclusive-ownership gate refused with STACK_OWNER_ACTIVE",
+        )
+
+    monkeypatch.setattr(restarts, "write_head_search_restarts", refuse)
+    assert main(_restart_arguments(inputs, tmp_path / "restart-run")) == 2
+    assert restarts.RESTART_OWNERSHIP_REFUSED in capsys.readouterr().err

@@ -1,4 +1,4 @@
-"""The formal head search calibration CLI: check-ownership, run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, measure-selection-rule, measure-operating-point, measure-scenarios, verify-promoted-config, qualify.
+"""The formal head search calibration CLI: check-ownership, run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, measure-selection-rule, measure-operating-point, measure-scenarios, measure-restarts, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from so101_demo.act import head_search_ownership as ownership
+from so101_demo.act.head_search_ownership import process_ancestry
 from so101_demo.act.head_search_qualification import (
     HEAD_SEARCH_QUALIFIED,
     qualification_parser,
@@ -336,6 +337,206 @@ SCENARIO_REQUIRED_FLAGS = (
     ("output_dir", "--output-dir"),
     ("evidence_root", "--evidence-root"),
 )
+
+
+#: the `measure-restarts` entry: Task 14 Step 4's three independent FULL_RESTART anchor phases. The owner
+#: presents Step 1's own receipt, the frozen runtime of record, the promoted configuration and bundle, and
+#: the sealed inputs the production composition is started from; `--run-root` is the brand-new campaign
+#: root whose three anchor directories hold the receipts, `--reservation-root` is the registered root's
+#: short `ipc/` namespace the frozen AF_UNIX reservation sockets live in, and `--workdir` is scratch.
+RESTART_REQUIRED_FLAGS = (
+    ("ownership_receipt", "--ownership-receipt"),
+    ("run_root", "--run-root"),
+    ("final_run", "--final-run"),
+    ("production_config", "--production-config"),
+    ("approved_bundle", "--approved-bundle"),
+    ("geometry_seal", "--geometry-seal"),
+    ("scene", "--scene"),
+    ("urdf", "--urdf"),
+    ("plugin_config", "--plugin-config"),
+    ("controller_config", "--controller-config"),
+    ("weights", "--weights"),
+    ("frozen_candidate", "--frozen-candidate"),
+    ("reservation_root", "--reservation-root"),
+    ("workdir", "--workdir"),
+)
+
+
+def _restart_parser() -> argparse.ArgumentParser:
+    """The `measure-restarts` entry: one restart per declared anchor, each with its own teardown proof."""
+
+    from so101_demo.act.head_search_restarts import ANCHORS as RESTART_ANCHORS
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-restarts",
+        description=(
+            "Run exactly one independent FULL_RESTART per anchor (default, left, forward): take the Step 1 "
+            "ownership receipt, start the one production composition, prove its graph, camera rate, "
+            "simulation clock and one CUDA detector, run one bounded anchor search through the production "
+            "transport, prove the stop, then stop the stack and prove it is gone before the next anchor"
+        ),
+    )
+    parser.add_argument("--run-root", type=Path, help="the brand-new run root the three receipts own")
+    parser.add_argument(
+        "--ownership-receipt", type=Path, help="Step 1's exclusive-ownership receipt for this run root"
+    )
+    parser.add_argument("--final-run", type=Path, help="the frozen runtime of record")
+    parser.add_argument("--production-config", type=Path, help="the promoted production search config")
+    parser.add_argument("--approved-bundle", type=Path, help="the approved calibration bundle")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the stack steps")
+    parser.add_argument("--urdf", type=Path, help="the ACT URDF the stack's robot description is built from")
+    parser.add_argument("--plugin-config", type=Path, help="the production MuJoCo plugin configuration")
+    parser.add_argument("--controller-config", type=Path, help="the sealed controller configuration")
+    parser.add_argument("--weights", type=Path, help="the selected model's weights file")
+    parser.add_argument("--frozen-candidate", type=Path, help="the selected frozen candidate document")
+    parser.add_argument(
+        "--reservation-root",
+        type=Path,
+        help="the registered root's short ipc/ namespace the AF_UNIX reservation sockets live in",
+    )
+    parser.add_argument("--workdir", type=Path, help="the scratch directory the phase writes into")
+    parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
+    parser.add_argument(
+        "--anchors",
+        default=",".join(RESTART_ANCHORS),
+        help="the anchors to run, in order; the plan fixes default,left,forward",
+    )
+    parser.add_argument(
+        "--max-settle-s", type=float, default=None, help="the per-stop settle budget of the cadence check"
+    )
+    parser.add_argument(
+        "--expected-source-commit", help="the frozen runtime's source commit the identity must match"
+    )
+    parser.add_argument(
+        "--expected-production-config-sha256", help="the promoted config digest the identity must match"
+    )
+    parser.add_argument("--expected-values-sha256", help="the 17 values' digest the identity must match")
+    parser.add_argument(
+        "--expected-weights-sha256", help="the detector weights digest the identity must match"
+    )
+    parser.add_argument(
+        "--expected-package-prefix", help="the `ros2 pkg prefix so101_demo_py` the gate must observe"
+    )
+    return parser
+
+
+def _measure_restarts(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the three anchor restarts to the library."""
+
+    parsed = _restart_parser().parse_args(arguments)
+    missing = [flag for name, flag in RESTART_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a restart declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    # the run root is the one declared input that must NOT exist, and the scratch directory is created by
+    # the phase itself: everything else is a sealed input the caller has to present
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in RESTART_REQUIRED_FLAGS
+        if name not in ("run_root", "workdir") and not Path(getattr(parsed, name)).exists()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.run_root.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.run_root} exists; a qualification run "
+            f"is never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+    anchors = [name for name in str(parsed.anchors).split(",") if name]
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_restarts import (
+        read_runtime_of_record,
+        run_anchor_restart,
+        write_head_search_restarts,
+    )
+
+    production = json.loads(parsed.production_config.read_text(encoding="utf-8"))
+    values = production.get("values") if isinstance(production.get("values"), Mapping) else {}
+    if not values:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.production_config} declares no values "
+            f"block",
+            file=sys.stderr,
+        )
+        return 2
+    seal = json.loads(parsed.geometry_seal.read_text(encoding="utf-8"))
+    try:
+        runtime = read_runtime_of_record(parsed.final_run, parsed.production_config)
+        expected: dict = {}
+        for key, attribute in (
+            ("source_commit", "expected_source_commit"),
+            ("production_config_sha256", "expected_production_config_sha256"),
+            ("values_sha256", "expected_values_sha256"),
+            ("weight_sha256_declared", "expected_weights_sha256"),
+        ):
+            value = getattr(parsed, attribute)
+            if value:
+                expected[key] = value
+        for key, wanted in sorted(expected.items()):
+            if runtime.get(key) != wanted:
+                raise CalibrationInputsRefused(
+                    "RESTART_RUNTIME_UNVERIFIED",
+                    f"{key}: the run declares {wanted!r} and the frozen runtime reads "
+                    f"{runtime.get(key)!r}",
+                )
+        result = write_head_search_restarts(
+            run_root=parsed.run_root,
+            ownership_receipt=parsed.ownership_receipt,
+            runtime=runtime,
+            approved_bundle_sha256=hashlib.sha256(parsed.approved_bundle.read_bytes()).hexdigest(),
+            seal=seal,
+            workdir=parsed.workdir,
+            values=values,
+            anchors=anchors,
+            producer={
+                "entry": "so101_head_search_calibration measure-restarts",
+                "argv_sha256": hashlib.sha256(
+                    " ".join(_command_line(arguments, subcommand="measure-restarts").split()).encode()
+                ).hexdigest(),
+                "command": _command_line(arguments, subcommand="measure-restarts"),
+            },
+            run_anchor=lambda **kwargs: run_anchor_restart(
+                urdf_path=parsed.urdf,
+                scene_path=parsed.scene,
+                plugin_config_path=parsed.plugin_config,
+                controller_config_path=parsed.controller_config,
+                production_config_path=parsed.production_config,
+                weights_path=parsed.weights,
+                frozen_candidate_path=parsed.frozen_candidate,
+                reservation_root=parsed.reservation_root,
+                values=values,
+                seal=seal,
+                production=production,
+                device=parsed.device,
+                excluded_pids=process_ancestry(),
+                **kwargs,
+            ),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    for anchor in result["aggregate"]["anchors"]:
+        document = result["documents"][anchor]
+        print(
+            f"restart_{anchor}: status={document['status']} gates={json.dumps(document['gates'], sort_keys=True)} "
+            f"elapsed_s={document.get('elapsed_s')} receipt={result['receipts'][anchor]}"
+        )
+    print(
+        f"HEAD_SEARCH_RESTARTS_MEASURED anchors={','.join(result['aggregate']['anchors'])} "
+        f"status={result['aggregate']['status']} run_root={result['run_root']}"
+    )
+    return 0 if result["aggregate"]["status"] == "PASS" else 2
 
 
 #: the `measure-camera` entry: the sealed scene the frames are rendered in, the sealed geometry whose
@@ -1052,7 +1253,6 @@ def _measure_scenarios(arguments: list[str]) -> int:
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
     from so101_demo.act.head_search_scenarios import (
-        DEFAULT_INTERRUPTION_FRAME,
         DEFAULT_MAX_FRAMES,
         SETTLE_CONSECUTIVE_STEPS,
         write_head_search_scenarios,
@@ -2946,6 +3146,10 @@ def main(argv: list[str] | None = None) -> int:
     # qualification seed, the per-scenario journal, and the honest aggregate that claims no verdict
     if arguments[:1] == ["measure-scenarios"]:
         return _measure_scenarios(arguments[1:])
+    # Task 14 Step 4's three restarts are their own installed flight: one owned stack per anchor, the
+    # production admission for every neck goal, and a teardown the phase proves before the next anchor
+    if arguments[:1] == ["measure-restarts"]:
+        return _measure_restarts(arguments[1:])
     # the legal pick workspace's projection is the sixth: it reads the scene's camera pose and projects,
     # loading no detector, no renderer and no GPU
     if arguments[:1] == ["measure-workspace-projection"]:
