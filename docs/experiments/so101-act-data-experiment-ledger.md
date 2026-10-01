@@ -50998,3 +50998,22 @@ That is a two-line change to the composition plus one line at the caller, it mak
 existing tests encode, and it removes the inference (`builder is None`) that produced this regression in the first place.
 Recorded here rather than applied, because the round is out of room - and because the next round should apply it with
 the test as its witness, not from memory.
+
+
+## CP-2682 — After the fix: two failures remain, and they are not the config_path one
+
+The gate over the two suites reports **2 failed, 220 passed in 95.82s**, and the failure list is the important part:
+
+- `test_physical_composition_prepares_and_supervises_one_external_broker` - **gone from the list**, so the fix for my
+  regression works;
+- `test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once` and
+  `test_broker_exit_restarts_fresh_generation_while_leases_remain_paused` - the two that remain, both about broker
+  startup and restart rather than about the spec's config path.
+
+A serial run of the file's broker/composition tests confirms them and gives the shared assertion:
+`test_parallel_batch_cli.py:3171: AssertionError: assert False is True` (2 failed, 36 passed, 81 deselected).
+
+And a check I ran because the traceback pointed there: the plan root's `pypath` overlay copy of
+`mujoco_parallel_batch.py` is **in sync** - same size (179120), same mtime, and it already contains `container_brokers`
+three times - so these two failures are being measured against my current code, not a stale copy. The next read is line
+3171 and the condition it asserts.
