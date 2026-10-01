@@ -52463,3 +52463,27 @@ body writes the row-binding record at `episode_audit.py:791`. That is the last p
 
 The uncommitted edits in the chain-test file now include all four alignments (coordinates, identity, frames' epoch, and
 this N+1 flow), each applied with an assertion after it, and each having moved the failure strictly forward.
+
+
+## CP-2743 — The binding method and the adapter the test needs
+
+```python
+        self._append("acquisitions", record)
+    def bind_row(self, row_index, sim_time_s, head_id, wrist_id, reference_sequence) -> None:
+```
+
+So the audit writer's row-binding entry point takes five values - the row index, its instant, the two acquisition
+identifiers and the reference sequence - and it appends the acquisition records itself before binding. That is the method
+the capture's `audit_writer` callback has to reach, and the callback's own signature is
+`self.audit_writer(row["observation"], row["audit"])` (two arguments, at `continuous_capture.py:466`), so the test cannot
+pass `bind_row` directly: it needs a small adapter that derives the five values from the observation and the audit it is
+handed.
+
+That adapter is the last piece of the chain, and it is a test-side concern rather than a defect: the production path
+would supply its own implementation of that callback, exactly as the container-free route supplied its own broker command.
+With bindings written, the seal's `record_count` and its bindings agree, `EPISODE_SEAL_ROWS_MISMATCH` disappears, and both
+of E2's corrections are proven end to end on real components.
+
+The uncommitted edits in the chain-test file now stand at five alignments, each asserted after application, each having
+moved the failure one level deeper - from `EPISODE_SCOPE_INVALID` through `EPISODE_SEAL_AUDIT_EPISODE_MISMATCH`,
+`EPISODE_TIME_GAP`, `EPISODE_SEAL_ROWS_MISMATCH` and now to this.
