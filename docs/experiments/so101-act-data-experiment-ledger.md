@@ -44411,3 +44411,19 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
 - its derivation behind CP-2332; F5's regression fixed with step one landed and step two ten booleans from
 - diagnosis; HEAD 522bc8c27; goal active.
+
+## CP-2358 - Integrity check at the hand-off head, and the one action left for a fresh context
+
+- Checked because this stretch instrumented and reverted the same files many times: the four files touched by
+- probes - episode_audit.py, test_act_episode_audit.py, ros_broker.py, pick_place_search_boundary.py - show ZERO
+- dirty entries, HEAD is 088806046, and the audit, release-boundary and search-port suites pass (121 passed,
+- xdist 8, NVMe scratch). So every probe was genuinely restored and nothing half-applied survives.
+- The one action left on F5's step two is the ten-boolean print CP-2357 enumerates: instrument
+- _formal_coverage_ok to print each term and guard verbatim, re-add the runner-backed fixture as CP-2342
+- describes, run it once - and the run names the clause that refuses. Both lists (CP-2356 for the final
+- expression's six terms, CP-2357 for the four guards) are written down, so the write is mechanical.
+- Everything else waits on the owner: CP-2285 and CP-2332 for F13 and F11, and the nine input values for the
+- objective's own path through items 5-8.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+- its derivation behind CP-2332; F5's regression fixed with step one landed and step two ten booleans from
+- diagnosis; HEAD 088806046; goal active.
