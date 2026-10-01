@@ -362,6 +362,7 @@ def run_dynamic_execute(
         )
         return 1
 
+    from ..act.episode_assembly import begin_episode
     from ..application.cup_pose_preflight import (
         validate_cup_scene,
         validate_mujoco_scene_identity,
@@ -509,6 +510,13 @@ def run_dynamic_execute(
             expected_session_id=options.session_id,
             expected_reset_epoch=options.expected_reset_epoch,
         )
+        # The episode begins here, and deliberately not earlier: the reset has just been validated against the run's
+        # own session and epoch, so `initial` is a state the run accepts and its receipt time is the instant the
+        # episode started at. Opening the episode before that validation would mean creating one for a reset that is
+        # about to be rejected - an abandoned episode root, and a seal over a run that never began (CP-2862).
+        episode_start_s = None
+        if begin_episode(episode_recorder, options, start_s=initial.simulator_received_monotonic_s):
+            episode_start_s = float(initial.simulator_received_monotonic_s)
         task_scene = runtime.task_scene_port(
             node,
             "mujoco",
