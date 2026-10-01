@@ -386,7 +386,11 @@ def _physics_observation_typed(observation, *, kind: str) -> bool:
             if (not isinstance(value, list) or not value
                     or any(not _feedback_ok(entry) for entry in value)
                     or any(entry["sim_time_s"] != observation["simulation_time_s"]
-                           for entry in value)):
+                           for entry in value)
+                           # T3-F13 (eighth verdict): an arm-only collection, or one repeating a kind, was accepted;
+                           # the action has two controllers, so exactly one record for each is the coverage required
+                           or sorted(entry["controller"] for entry in value)
+                           != sorted(_FEEDBACK_CONTROLLERS)):
                 return False
         elif key in ("truncated", "diagnostic_hazard_breached"):
             if type(value) is not bool:
