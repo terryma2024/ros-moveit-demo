@@ -52759,3 +52759,34 @@ recorder's, and that is the whole of this refusal - a row was recorded that no b
 The next read is `_tail_paths` itself: what it iterates, and at what point in `finish` it runs relative to the rows that
 `finish`'s own `_service()` releases. Everything else in the chain is now aligned: scope, identity, grid, acquisitions,
 bindings and their reference keys all pass, and the only remaining difference is how many rows each side counted.
+
+
+## CP-2757 — The answer: the tail binds the pending rows, and the seal wants the recorded ones
+
+```python
+    def _tail_paths(self) -> list:
+        paths = []
+        for row in self._pending:
+            if self.audit_writer is None:
+                continue
+            try:
+                paths.append(self.audit_writer(row["observation"], row["audit"]))
+```
+
+`_tail_paths` iterates **`self._pending`** - the rows that were never written, the evidence that did not become a row -
+while the seal requires every **recorded** row to be bound to the acquisitions it consumed. The two sets are disjoint, so
+binding only the pending rows can never satisfy `EPISODE_SEAL_ROWS_MISMATCH`; the recorder and the audit are counting
+different things.
+
+That makes this the fifth production wiring gap of the same family: `append_acquisition` had no caller until this round,
+`Recorder.finish`'s v2 binding had no caller until 0ca35cc93, and now the row binding is produced for exactly the rows the
+seal does not ask about. In each case the components were each written to a contract and nothing drove them together, so
+the seam was invisible.
+
+The fix follows from the reading: the binding belongs where a row is recorded - in `_service_pending`, right after
+`self.recorder.append(...)` succeeds and the row is moved to `_completed` - with the tail's own binding kept for the
+pending evidence it was written for. That is a production change of a few lines, and with it the seal's rows and bindings
+should finally agree.
+
+Measured one more time for the record: two rows recorded, one row pending, one binding produced - which is precisely the
+mismatch the seal reported.
