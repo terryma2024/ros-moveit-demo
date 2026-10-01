@@ -970,3 +970,26 @@ def test_the_scene_preparer_signature_accepts_every_key_the_producer_passes():
     assert parameters["seed"].kind is inspect.Parameter.KEYWORD_ONLY
     assert request["cup_count"] == 1
     assert request["split"] == HELD_OUT_SPLIT
+
+
+def test_the_episode_records_the_cup_the_preparation_left_and_how_far_the_loop_moved_it():
+    """A preparation that is not contact-free moves the cup; the episode has to say so."""
+
+    plant = FakePlant(cup_yaw_rad=-0.0588)
+    plant.prepared_cup_position_m = [0.063, -0.270, 0.165]
+    plant.cup_position_m = [0.157, -0.358, 0.168]
+    result = episode(plant=plant)
+
+    assert result["cup_prepared_m"] == [0.063, -0.270, 0.165]
+    assert result["cup_position_m"] == [0.157, -0.358, 0.168]
+    assert result["cup_drift_m"] == pytest.approx(
+        math.dist([0.063, -0.270, 0.165], [0.157, -0.358, 0.168])
+    )
+    assert result["cup_drift_m"] > 0.1
+
+
+def test_an_episode_whose_plant_reports_no_cup_position_records_no_drift():
+    result = episode(plant=FakePlant(cup_yaw_rad=-0.0588))
+
+    assert result["cup_prepared_m"] is None
+    assert result["cup_drift_m"] is None

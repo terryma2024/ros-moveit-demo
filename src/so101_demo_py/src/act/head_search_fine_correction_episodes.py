@@ -65,6 +65,13 @@ that merely did not succeed are recorded, not refused):
 * a document in which no episode locked (:data:`CAL_FINE_EPISODE_NO_SUCCESS`), because then no
   correction count exists to bound.
 
+The prepared scene is stepped, and the preparation is not guaranteed contact-free (the dataset profile
+places the cup and the bottle by jitter and the recorder rendered without ever stepping): one held-out seed
+of this campaign has its cup separated from the bottle by the solver in the first control period and pushed
+out of the head camera's view. Every episode therefore records the cup's prepared position, its position at
+the end of the loop and the distance between them, so such an episode is visible as a scene that moved
+rather than as a search that found nothing.
+
 An episode that *did* run to a verdict and did not lock - the cup was never found, the frame held two
 cups, or the cup could not be centred - is recorded with ``succeeded: false``, its failure code and
 ``fine_corrections: null``. A number is never written for an episode that did not lock, and the count of
@@ -439,6 +446,24 @@ def _fine_corridor_check(*, angle_rad: float, corridor_rad, what: str) -> None:
         raise _refuse(CAL_FINE_EPISODE_OUT_OF_CORRIDOR, error.detail) from error
 
 
+def _cup_drift_m(prepared, final) -> float | None:
+    """How far the loop's own stepping moved the cup from where the preparation left it.
+
+    The prepared scene is not necessarily contact-free (the dataset profile places the cup and the bottle
+    by jitter and the recorder rendered without stepping), so the solver can separate two bodies in the
+    first control periods. That is a property of the scene and not of the search, so every episode records
+    the cup's prepared position, its position at the end of the loop and the distance between them: an
+    episode whose cup was pushed out of the camera's view has to say so rather than look like a search that
+    simply did not find it.
+    """
+
+    if prepared is None or final is None:
+        return None
+    if len(prepared) != 3 or len(final) != 3:
+        return None
+    return math.sqrt(sum((float(a) - float(b)) ** 2 for a, b in zip(prepared, final)))
+
+
 def required_domain_excursion_rad(angle_rad: float, required_domain_rad) -> float:
     """How far outside the required search domain an angle lies; 0.0 when it is inside.
 
@@ -805,6 +830,10 @@ def run_fine_correction_episode(
         "success_definition": SUCCESS_DEFINITION,
         "corridor_definition": CORRIDOR_DEFINITION,
         "cup_position_m": getattr(plant, "cup_position_m", None),
+        "cup_prepared_m": getattr(plant, "prepared_cup_position_m", None),
+        "cup_drift_m": _cup_drift_m(
+            getattr(plant, "prepared_cup_position_m", None), getattr(plant, "cup_position_m", None)
+        ),
         "arm_drift_rad": getattr(plant, "arm_drift_rad", None),
         "wall_time_s": time.time() - started,
         "sim_time_s": float(plant.time_s),
@@ -1217,6 +1246,7 @@ class MujocoEpisodePlant(MujocoClosedLoopPlant):
         self._start_rad = float(request["start_rad"])
         self._prepared_qpos = None
         self._arm_joints: list[int] = []
+        self._prepared_cup_position_m = list(self.cup_position_m)
         self.apply_prepared_scene(request.get("scene_state"))
 
     def apply_prepared_scene(self, state) -> None:
@@ -1248,6 +1278,7 @@ class MujocoEpisodePlant(MujocoClosedLoopPlant):
             if int(self._model.actuator_trntype[actuator]) == int(mujoco.mjtTrn.mjTRN_JOINT)
             and int(self._model.actuator_trnid[actuator, 0]) != self._neck
         ]
+        self._prepared_cup_position_m = list(self.cup_position_m)
         for actuator in range(self._model.nu):
             if int(self._model.actuator_trntype[actuator]) != int(mujoco.mjtTrn.mjTRN_JOINT):
                 continue
@@ -1260,6 +1291,12 @@ class MujocoEpisodePlant(MujocoClosedLoopPlant):
                 value = min(max(value, low), high)
             self._data.ctrl[actuator] = value
         mujoco.mj_forward(self._model, self._data)
+
+    @property
+    def prepared_cup_position_m(self) -> list[float] | None:
+        """Where the preparation left the cup, before the loop stepped the scene at all."""
+
+        return None if self._prepared_cup_position_m is None else list(self._prepared_cup_position_m)
 
     @property
     def arm_drift_rad(self) -> float | None:
