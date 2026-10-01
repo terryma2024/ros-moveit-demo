@@ -49478,3 +49478,25 @@ side - where the audit writer is already in hand - reading what the port bound r
 That is the next piece of work, and it is bounded by three questions I can answer by reading: which method on the runner
 holds the port's bound evidence, where the apply/query/receipt boundaries fall in its flow, and which of the port's
 `bind_*` results carry the identity each record needs.
+
+
+## CP-2615 — The carriage helper already exists, so K2's emission is call sites
+
+`pick_place_runner.py` is 410 lines and its shape answers all three questions at once:
+
+- the world-facing interface is the **`PickPlaceExecutionPort` Protocol** (19) with `begin`, `run_phase`, `set_down`,
+  `release_preflight`, `detach_moveit`, `planning_attached`, `run_retreat_segment` and `safe_stop` - so the runner does
+  not talk to MoveIt directly, it talks to a port that can be stubbed;
+- **`_event(kind, detail, physics_step, *, payload=None)`** (145) already writes events, and its body is
+  `self.audit.append_source("events", {...})` with an optional payload;
+- **`_physics(phase, evidence)`** (124) likewise writes the physics rows, and `_verify_phase` (194), `_set_down` (238)
+  and `_release_preflight` (255) are the flow's boundaries.
+
+So the carriage K2 needs is not new plumbing: it is **calling the existing `_event`** with the three new kinds at the
+apply, query and receipt boundaries, with payloads whose keys the schema already accepts. What remains to determine is
+where those three boundaries fall in the flow - which of `_set_down`, `_release_preflight` and the phase runner
+correspond to apply, query and receipt - and that is one more read of the runner's own methods rather than a design
+question.
+
+This is the same finding as the geometry and the ordering: the repository already has more of the mechanism than the
+review's list implied, and the work is the difference.
