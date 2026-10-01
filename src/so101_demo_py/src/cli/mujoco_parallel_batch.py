@@ -2410,6 +2410,12 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         runtime_kwargs = runtime_ports.kwargs()
         runtime_kwargs["reserve_workspace"] = results.reserve_workspace
         runtime_kwargs["pose_receive_timeout_s"] = config.executing_hard_timeout_s
+        # the scope document this worker's episode belongs to, if the specification names one (CP-2862): the path
+        # travels in the specification because that is how every other fact from outside the worker arrives here,
+        # and a worker whose specification omits it records nothing, exactly as before.
+        _scope_path = document.get("episode_scope_path")
+        if _scope_path is not None:
+            runtime_kwargs["episode_scope_path"] = str(_scope_path)
         # A stable slot replacement is represented by the next private Worker
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources
