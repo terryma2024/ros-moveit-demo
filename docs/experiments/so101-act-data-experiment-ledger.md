@@ -52443,3 +52443,23 @@ seal succeeds.
 Worth recording what this rule is for, since it is the kind of thing that looks like an obstacle until it is read: a
 reference that is accepted "early" may still be revoked before its instant, so the capture refuses to label a row on the
 strength of an acceptance the sim clock has not yet ratified. The test's job is to give it a clock that moves.
+
+
+## CP-2742 — The N+1 flow cleared the grid, and the seal moved to the row bindings
+
+With frames at 1.0, 1.1, 1.2 and 1.3 and references at each `stamp + 0.1`, the grid rule is satisfied - `EPISODE_TIME_GAP`
+is gone - and the seal now refuses with **`EPISODE_SEAL_ROWS_MISMATCH`**, which is a later and narrower complaint: the
+recorded rows exist, but the audit's **row-bindings** do not match them.
+
+That is consistent with everything read so far. The capture writes rows through the recorder, and separately offers each
+row to an **`audit_writer` callback** - `self.audit_writer(row["observation"], row["audit"])` at
+`continuous_capture.py:466` - which is the function that produces the audit's `row-bindings.jsonl`. My chain tests never
+supplied one, so the audit had frames and references but no bindings, and the seal is right to refuse: a labelled row
+must be bound to the acquisitions it consumed, at the same instant.
+
+So the fix is one constructor argument, and the name of the method it should point at is the next read - the def whose
+body writes the row-binding record at `episode_audit.py:791`. That is the last piece of the chain: with bindings written,
+`record_count` and the bindings agree, and the seal should complete.
+
+The uncommitted edits in the chain-test file now include all four alignments (coordinates, identity, frames' epoch, and
+this N+1 flow), each applied with an assertion after it, and each having moved the failure strictly forward.
