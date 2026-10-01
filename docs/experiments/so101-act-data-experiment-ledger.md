@@ -41480,3 +41480,34 @@ yolo_training.py:151-152          同两个键
 
 **这条修正本身是个记录点**：HS-269 的方案是在**未核验可表达性**时写下的，靠"先读代码再跑"才发现——与本次一贯的做法一致，
 也说明我上一轮把代价估小了。
+
+## HS-271 — 纠正 HS-269/HS-270 的代价判断：`epochs` 与 `checkpoint_score` 是**逐候选**字段，只需重训 C
+
+把两个元组读全之后，结构是明确的：
+
+```
+计划文档键（逐候选，可各自不同）：model, class_names, classes, imgsz, epochs, batch, workers, seed,
+  deterministic, device, allow_cpu_fallback, amp, optimizer, patience, plots, shuffle, checkpoint_score,
+  validation_domains, dataset_domains, promotable, domain_train, domain_val
+
+#: everything that must be identical between B and C, in the order it is hashed
+HYPERPARAMETER_KEYS = (task, imgsz, batch, workers, seed, deterministic, amp, optimizer, patience, shuffle)
+```
+
+**`epochs`、`checkpoint_score`、`domain_train`、`domain_val` 都不在 `HYPERPARAMETER_KEYS` 里**——它们是逐候选的计划字段。
+因此：
+
+1. **C2-b（`checkpoint_score` 改为 `0.25*head + 0.75*task`）与 C2-a（`epochs` 60→120）只需重训 C，B 不必重训。**
+   我在 HS-269/HS-270 里写的"改契约会让 B 也必须重训、代价翻倍"**是错的**：那只适用于 `HYPERPARAMETER_KEYS` 里的键。
+2. HS-270 关于**可表达性**的那一半仍然成立：`domain_train` 是单个整数、`dataset_domains` 是集合，
+   所以 1:2 这种配比依旧改不动（要改结构就得改代码）。
+
+**修正后的代价（C2-b，单个变量）**：
+① 建一个新 toolchain root（配置属源码，~1 分钟）；
+② 重训 **C 一个**模型（实测单次约 10–15 分钟）；
+③ 重录 episodes（~1 分钟）；
+④ gate：C2 是新权重 → 它的 200 个 head 场景格必须重算（缓存按权重 sha 失效，约 4–13 分钟），A/B 命中缓存。
+**总计约 20–30 分钟**，而不是我上一轮说的"翻倍"。这仍然产生新候选身份、仍需授权，但代价已从"半程重做"降为"一次单模型实验"。
+
+**这是我连续第二次靠"先读代码"修正自己的估算**（前一次 HS-270 修的是可表达性，这次修的是代价与影响面）——
+两次都没有花掉 GPU 时间，也都写进了账本。
