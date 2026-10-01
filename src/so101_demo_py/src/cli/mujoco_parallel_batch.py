@@ -2419,13 +2419,29 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         # a fabricated one would make the endpoint verdict meaningless.
         from so101_demo.act.collection_scope import build_collection_scope
         from so101_demo.act.episode_assembly import (EpisodeSink, PhysicalAuditAdapter, PointEpisode,
-                                                     episode_audit_pair)
+                                                     episode_audit_pair, physical_audit_from_captured,
+                                                     readback_from_frozen)
         _episode_sink = EpisodeSink()
         runtime_ports.episode_sink = _episode_sink
 
+        # the run's physical side owns the observers (world, scene, contacts, rgb, broker) and sets them here once it
+        # has built them, the same way the sink is handed over. Until it does, the extraction refuses by name rather
+        # than returning a half-filled audit - a partial physical audit is worse than a missing one, because the row
+        # would look complete.
         def _extract_physical_evidence(_at_s):
-            raise NotImplementedError(
-                "EPISODE_EXTRACTION_PENDING: the per-instant values live_evidence_sample needs are not extracted yet")
+            sources = getattr(runtime_ports, "physical_sources", None)
+            if sources is None:
+                raise NotImplementedError(
+                    "EPISODE_EXTRACTION_PENDING: no physical sources yet - the run's observers are its own to build "
+                    "and hand over as runtime_ports.physical_sources")
+            readback = readback_from_frozen(
+                scene_model=scene_model, world=sources.world, scene=sources.scene, contacts=sources.contacts,
+                rgb=sources.rgb, broker=sources.broker, frozen=_frozen)
+            captured = readback.capture(session_id=spec.request.batch_id, attempt_id=lease.attempt_id,
+                                        reset_epoch=int(getattr(lease, "lease_generation", 1)))
+            return physical_audit_from_captured(
+                captured, reset_epoch=int(getattr(lease, "lease_generation", 1)), release_epoch=1,
+                release_event=False, release_time_s=0.0, phase="CLOSE", controller_state={})
 
         def _open_episode(lease):
             _key, point_root = runtime_ports._point_root(lease) if hasattr(runtime_ports, "_point_root") else (None, None)
