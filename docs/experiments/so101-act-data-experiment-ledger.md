@@ -41511,3 +41511,25 @@ HYPERPARAMETER_KEYS = (task, imgsz, batch, workers, seed, deterministic, amp, op
 
 **这是我连续第二次靠"先读代码"修正自己的估算**（前一次 HS-270 修的是可表达性，这次修的是代价与影响面）——
 两次都没有花掉 GPU 时间，也都写进了账本。
+
+## HS-272 — 执行 C2-b（按用户的自动决策规则采用我推荐的方案）：只改 `checkpoint_score` 重训 C
+
+**唯一变量**：`checkpoint_score` 由 `0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95`
+改为 **`0.25*head_val_mask_map50_95+0.75*task_val_mask_map50_95`**（保留门考的是 task 域，而原打分两域等权，
+可能根本没选中 task 更好的那个 checkpoint）。epochs/batch/seed/deterministic/amp/optimizer/patience/domain_* 全部不变，
+基模仍是钉住的 `f281d252…`。
+
+**做法（不碰仓库、不碰冻结产物）**：契约以**副本**形式传给 `--training-contract`
+（`$MODEL_RUN/contracts/head_search_yolo_training-task-weighted.yaml`），因此**无需新建 toolchain root**、仓库配置零改动；
+输出写到 **`$MODEL_RUN/candidate-c2`**（新目录），**不覆盖** `candidate-c`，`--run-name head-task-mixed-taskweighted`。
+候选 id 仍为 C（合法的 CANDIDATE_IDS），身份差异由 `plan_sha256` 承载。
+
+**先声明后测量的判据（全部满足才算通过）**：
+1. `static task mask mAP` 与最好者之差 **≤ 0.01**（现状 0.0105）；
+2. `static head mask mAP` **≥ 0.7434 − 0.005**；
+3. 两域 episode recall/F1 **不低于**现状（现均 1.000）；
+4. `no_cup_false_candidates == 0`；
+5. 同参数重跑 gate（`compare7` 同口径 + 新权重），`promoted` 变 true **或**明确证否并记录。
+
+**证否含义**：若 task 差距消失但 head 明显下降 → 说明两域存在真实的权衡（H-c 方向）；若两者都不动 → 选点假设被否证，
+转 C2-a（epochs）。**失败也照实记录。**
