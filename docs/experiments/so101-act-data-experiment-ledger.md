@@ -47674,3 +47674,22 @@ running read-only git commands must not be mistaken for one producing files.
 
 The worktree's dirty count is unchanged at 35 entries, so the constraint holds: the review is reading, and nothing in
 the tree has moved because of it. No further polling until the marker appears; the verdict will be collected then.
+
+
+## CP-2519 — The pinned catalogue is accepted, so the spec's points side is solved
+
+Called `_catalog` on the pinned file directly:
+`src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml` is **accepted**, returning twenty points and
+the digest `c74915477bfea979...` - the very value `_CATALOG_SHA256` pins - with ids beginning
+`task_start`, `cup_test_forward_5cm`, `cup_test_left_5cm`. So the catalogue check that looked like a wall at CP-2474 is
+in fact satisfied by using the approved file, and `task_start` is a legitimate member of `selected_point_ids`.
+
+That gives the single-episode specification its points side with no invention: `points_path` is that file,
+`catalog`/`catalog_sha256` come from `_catalog`, and `selected_point_ids=("task_start",)` selects exactly one of the
+twenty - a real one-point episode ridden through the real Coordinator/Worker/Recorder, which is the design's section 4
+requirement rather than a simplification of it. The remaining spec fields were all traced earlier: the V2 request
+(CP-2468/2470), the frozen runtime config and provenance (CP-2459/2460), the seven-value target, the deployment
+provenance verifier (CP-2479) and now the catalogue.
+
+Next: write the specification and instantiate `ProductionBatchComposition(spec, broker_command_builder=_broker_command)`
+in `_run`, then drive it and let the run name the next layer.
