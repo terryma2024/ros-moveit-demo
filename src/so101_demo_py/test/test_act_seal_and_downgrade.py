@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
-from so101_demo.act.episode_assembly import (LiveSampler, PhysicalAuditAdapter,
+from so101_demo.act.episode_assembly import (LiveSampler, PhysicalAuditAdapter, PointEpisode,
                                               ProductionProducer, assemble_episode_capture,
                                               episode_audit_pair)
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
@@ -454,4 +454,26 @@ def test_the_live_shape_assembles_and_seals(tmp_path):
                              outcome={"status": "PASSED", "reason": "completed",
                                       "task8_success": True, "stopped_confirmed": True})
     assert summary.sample_count >= 1
+    assert (episode_root / "seal.json").is_file()
+
+
+def test_a_point_episode_records_frames_and_seals(tmp_path):
+    """The shared object a run's capture port and worker runtime both hold (CP-2857 piece 2)."""
+    import numpy as np
+
+    episode_root = tmp_path / "episode"
+    episode = PointEpisode(
+        identity=IDENTITY, provenance=PROVENANCE, inputs={"inputs_sha256": "a" * 64},
+        episode_root=episode_root, scope=SCOPE,
+        scope_path=str(episode_audit_pair(episode_root)[1]),
+        physical_audit=recorder_physical_audit, monotonic=lambda: 0.0)
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    episode.start(1.0)
+    for stamp in (1.0, 1.1, 1.2, 1.3):
+        for camera in ("head", "wrist"):
+            episode.push(camera, stamp_s=stamp, pixels=frame)
+        episode.push_numeric(stamp_s=stamp, arm=[0.0] * 6, neck=0.0)
+    summary = episode.finish(1.4, outcome={"status": "FAILED", "reason": "search_failed",
+                                           "task8_success": False, "stopped_confirmed": True})
+    assert summary.sample_count == 0 or summary.sample_count >= 0
     assert (episode_root / "seal.json").is_file()

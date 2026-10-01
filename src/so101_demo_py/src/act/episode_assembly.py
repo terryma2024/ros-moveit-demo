@@ -19,7 +19,7 @@ from .continuous_capture import ContinuousEpisodeCapture
 from .episode_audit import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
-__all__ = ["LiveSampler", "PhysicalAuditAdapter", "ProductionProducer",
+__all__ = ["LiveSampler", "PhysicalAuditAdapter", "PointEpisode", "ProductionProducer",
            "assemble_episode_capture", "episode_audit_pair"]
 
 
@@ -225,3 +225,84 @@ class LiveSampler:
     def source_received_monotonic_s(self) -> dict:
         """The receipt times of the last sample, by stream - for the extraction, not for a row (CP-2842)."""
         return dict(self.last_source_audit.get("source_received_wall_s") or {})
+
+
+class PointEpisode:
+    """The per-point object a run's capture port and its worker runtime both hold.
+
+    A run captures RGB in one object (the `capture_rgb` port) while the episode's coordinates and lifecycle live in
+    another (the worker runtime), so the two need something shared to record through. This is it: it owns the
+    synchronizer the frames are pushed into, the capture assembled around that synchronizer, and the identity the row
+    audit and the seal need - and offers the three things the two sides ask of it.
+
+    `push` is what the capture port calls with the pixels and the simulation stamp it already has - the stamp the
+    capture receipt calls `source_stamp_monotonic_s`, which the runtime requires to be `ros_sim` and which is therefore
+    simulation time rather than wall time. `start` and `finish` are what the worker runtime calls at the episode's
+    boundaries; `finish` needs the window, or the capture does not seal at all.
+    """
+
+    def __init__(self, *, identity: dict, provenance: dict, inputs: dict, episode_root, scope,
+                 scope_path: str, physical_audit, guard=None, deadline_s: float = 120.0,
+                 monotonic=None, max_age_s: float = 0.1, max_skew_s: float = 0.1) -> None:
+        from .synchronizer import RgbObservationSynchronizer
+
+        self.identity = dict(identity)
+        self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s)
+        self.capture = assemble_episode_capture(
+            sampler=LiveSampler(self.synchronizer), physical_audit=physical_audit, identity=self.identity,
+            provenance=provenance, inputs=inputs, episode_root=episode_root, scope=scope,
+            scope_path=scope_path, guard=guard, deadline_s=deadline_s,
+            **({} if monotonic is None else {"monotonic": monotonic}))
+        # the synchronizer refuses a push whose session does not match the one it was reset for, so the reset is part
+        # of beginning an episode rather than something the caller has to remember
+        self.synchronizer.reset(self.identity["session_id"])
+        self._minter = None
+        self._started = False
+        self._start_s = 0.0
+        self._latest_s = None
+
+    def push(self, camera: str, *, stamp_s: float, pixels, received_monotonic_s: float | None = None) -> None:
+        """Record one captured frame: mint its acquisition, hand it to the capture, and push it for sampling.
+
+        The three steps happen here rather than at either caller because this is where the pixels, the stamp and the
+        capture are all in reach - re-reading a written PNG would need a decoder and would put the frame behind its own
+        acquisition.
+        """
+        from .acquisition import AcquisitionMinter
+
+        if self._minter is None:
+            self._minter = AcquisitionMinter()
+        frame = self._minter.mint(
+            camera, session_id=self.identity["session_id"], reset_epoch=self.identity["reset_epoch"],
+            stamp_s=float(stamp_s), received_monotonic_ns=int(float(stamp_s) * 1e9) + 1, pixels=pixels)
+        self.capture.on_acquisition(frame, pixels)
+        self.synchronizer.push(camera, self.identity["session_id"], frame.stamp_s, pixels,
+                               received_monotonic_s=received_monotonic_s)
+        self._latest_s = frame.stamp_s
+
+    def push_numeric(self, *, stamp_s: float, arm=None, neck=None) -> None:
+        """Push the numeric evidence an instant needs.
+
+        `causal_sample` runs over **every** stream buffer and refuses with `INPUT_STALE` when one of them holds no
+        stamp within `max_age_s` (CP-2824), so the two non-camera streams the sampler reads - `arm` for the joint state
+        and `neck` for the yaw - have to be fed alongside the frames even though no acquisition is minted for them.
+        """
+        session_id = self.identity["session_id"]
+        if arm is not None:
+            self.synchronizer.push("arm", session_id, float(stamp_s), list(arm),
+                                   received_monotonic_s=self.synchronizer.monotonic())
+        if neck is not None:
+            self.synchronizer.push("neck", session_id, float(stamp_s), float(neck),
+                                   received_monotonic_s=self.synchronizer.monotonic())
+
+    def start(self, start_s: float) -> None:
+        """Begin the episode at the run's own start instant."""
+        self.capture.start(self.identity["session_id"], self.identity["attempt_id"],
+                           self.identity["reset_epoch"], float(start_s))
+        self._start_s = float(start_s)
+        self._started = True
+
+    def finish(self, end_s: float, *, outcome: dict):
+        """Seal the episode: the window is `[the gate's instant, this boundary]`, and without it there is no seal."""
+        return self.capture.finish(float(end_s), window={"start_s": self._start_s, "end_s": float(end_s),
+                                                         "label_cutoff_s": float(end_s)}, outcome=outcome)
