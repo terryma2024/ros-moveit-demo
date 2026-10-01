@@ -49825,3 +49825,37 @@ That closes E2's gap without inventing anything: read the scene row and the phys
 component to prove the held cup, and take the translation plus quaternion as the `xyz_xyzw` pose E1's calculator wants.
 It also removes `cup_pose_world` from my module - a key I had invented before checking, which the schema rightly refused
 (CP-2627), and whose absence is now explained rather than merely observed.
+
+
+## CP-2632 — `prove` is a live proof, not a sealed-audit derivation
+
+Both public entries have the same shape:
+
+```python
+    def prove(self, scene: dict, physics_step: dict, *,
+              scene_received_monotonic_s: float, now_monotonic_s: float,
+              max_age_s: float, minimum_bilateral_force_n: float,
+              maximum_compression_distance_m: float) -> list[list[float]]:
+        """Use the private, source-verified model for a fresh exact-step proof."""
+
+def held_cup_attachment(model, scene, physics_step, *, <the same six>) -> list[list[float]]:
+    """Verify a supplied model's content before proving one held-cup step."""
+```
+
+Two things follow, and the second is decisive. The return is a **list of lists** rather than one transform, so it is
+attachment evidence rather than a pose. And the six keyword arguments are **freshness and contact thresholds** -
+including **`now_monotonic_s`**, the wall clock at the moment of the call.
+
+A fresh process reading a sealed episode **cannot supply `now_monotonic_s` honestly**: the episode is over, and a
+freshness check against the present would either refuse everything or be a fabricated number, which is exactly what this
+task forbids. So `prove` is the right component for the **live** run - which is what its docstring says, "a fresh
+exact-step proof" - and the **wrong** one for a sealed-audit QC.
+
+What is reusable is the piece underneath: `_body_transform(data, body)` at 16, i.e. `mj_forward` plus `data.xpos[body]`
+and the rotation, which turns a configuration into a transform with **no live inputs at all**. That is what the QC
+should use - load the scene's model, forward-kinematics the recorded `model_qpos`, and take the transform - while the
+live proof stays where it belongs, in the run.
+
+This is the third time in this stretch that a component looked reusable and turned out to be the live half of a pair
+(the palette, the broker's flags, and now this); each time, reading the signature settled it before any wiring was
+written.
