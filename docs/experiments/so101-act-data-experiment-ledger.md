@@ -54865,3 +54865,28 @@ can go without it: every other link (lossless recording, independent judgement, 
 and this one awaits the episode only a live run produces.
 
 The test is reverted so the tree stays green (`8 passed`), and nothing of mine is uncommitted.
+
+
+## CP-2837 — The cup pose belongs to the physics stream, not to a row's audit
+
+Trying to give the episode a readable cup pose through `physical_audit` - the natural first guess, since CP-2836 showed
+the QC reads poses from the run's rows - is refused at once:
+
+```
+E   ValueError: EPISODE_AUDIT_SCHEMA
+```
+
+because the recorder's channel is closed at sixteen keys, and `cup_position_world_m` plus
+`cup_orientation_world_xyzw` are not among them (the same closed channel that produced the `_RECORDER_LOCAL_KEYS` fix and
+the `source_received_wall_s` finding, now from a third direction). So the pose does not travel with a row's audit at all:
+it travels in the run's **physics stream**, which is a different document the audit writer keeps beside its rows.
+
+That is the last piece of E3's shape, and it is a real one rather than a test detail: a live run writes physics rows as it
+goes, and those rows are what the endpoint rule reconstructs poses from. The harness can produce them - the audit writer
+appends them, and the chain test's helper already has the machinery - but doing it faithfully means writing the same
+`physics.jsonl` a MuJoCo summary produces, which is the line between "the software chain is proven" and "a real episode
+exists".
+
+The test is reverted so the tree is green (`8 passed`), and the three refusals this direction has produced in a row -
+a `None` pose, then a schema refusal - say the same thing: this is the boundary the real run provides and the harness only
+approximates.
