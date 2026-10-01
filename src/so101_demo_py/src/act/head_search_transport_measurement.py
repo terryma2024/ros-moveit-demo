@@ -707,7 +707,7 @@ class RosTopicSkewCapture:
 
         rgb_qos = QoSProfile(depth=32, reliability=ReliabilityPolicy.RELIABLE)
         rclpy.init(args=None)
-        node = Node(self.node_name, parameter_overrides=[Parameter("use_sim_time", True)])
+        node = Node(self.node_name, parameter_overrides=[Parameter("use_sim_time", value=True)])
         buffers: dict[str, list] = {"head_image": [], "camera_info": [], "joint_state": []}
         clock_readings: list[float] = []
         tf_buffer = Buffer()
@@ -944,8 +944,13 @@ def leave_nothing_running() -> list[str]:
 
     import subprocess as _subprocess
 
+    pattern = (
+        "lib/mujoco_ros2_control/ros2_control_node"
+        "|lib/robot_state_publisher/robot_state_publisher"
+        "|controller_manager/spawner"
+    )
     listing = _subprocess.run(  # noqa: S603 - a fixed read-only process listing
-        ["pgrep", "-a", "-f", "ros2_control_node|robot_state_publisher|controller_manager"],
+        ["pgrep", "-a", "-f", pattern],
         capture_output=True,
         text=True,
         check=False,
@@ -954,7 +959,11 @@ def leave_nothing_running() -> list[str]:
     return [
         line
         for line in listing.stdout.splitlines()
-        if line.strip() and not line.split(maxsplit=1)[0] == mine
+        if line.strip()
+        and line.split(maxsplit=1)[0] != mine
+        and "apport" not in line
+        and "pgrep" not in line
+        and "grep" not in line
     ]
 
 
