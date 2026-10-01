@@ -53899,3 +53899,29 @@ endpoint policy must construct a port the coordinator's gate recognises, and one
 
 Each of the four is a small edit, and the third is the only one with a design choice left in it. The next round makes
 them, starting with the constructor and the port choice, which is where the behaviour is decided.
+
+
+## CP-2801 — Correction 4's first step is in, and the two interfaces differ in exactly one method
+
+`ProductionBatchComposition._initialize` now accepts and stores `endpoint_inputs` (`62dc47267`), with no behaviour change:
+the default is `None` and the port is still built as before, so the CLI and artifact suites are green at **222 passed**.
+
+The interface comparison the next step needs:
+
+```
+artifacts.py:716    def verify(self, lease, location, run_mode)                      # SealedResultAdapter
+result_store.py:336 def verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode) -> dict
+artifacts.py:744    def discover(self, lease, workspace)                            # no counterpart
+```
+
+**The `verify` signatures match exactly** - which is the method the coordinator's ACT gate calls when the port is the ACT
+class - and the only method the composition drives that the ACT verifier lacks is **`discover`**. So the swap is not a
+rewrite: either the ACT verifier gains a `discover` with the adapter's semantics (a deterministic lookup under the
+worker root, restricted to the journal's reserved execution parent), or the composition keeps the adapter and the endpoint
+judgement is delegated to the ACT verifier it constructs alongside.
+
+The first is smaller and matches the coordinator's rule exactly ("selected by the result contract the port implements"),
+because then one port implements the ACT contract and the gate fires on it. The second would need the gate's `isinstance`
+to see an `ActCollectionResultVerifier`, which a delegation wrapper is not.
+
+That is the decision the next round makes, and it is now a one-method question rather than an interface tangle.
