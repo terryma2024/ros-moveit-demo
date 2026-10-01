@@ -41287,3 +41287,21 @@ task 域 truth: n=120  median=4502px  min=2607  max=5322      ← 两域已不�
 **仍然存在的边界（未变）**：10 个条件类里 4 个（`low_light`/`partial_occlusion`/`fast_interruption`/`reacquire_after_stop`）
 渲染上与普通一杯场景无差别；训练数据中的干扰物/靠瓶场景在 episode 中不存在；`match_radius_px` 沿用默认 8.0；有效独立样本
 ≈20 个场景/域。
+
+## HS-263 — A/B/C 指标与问题落成文档，并移交 gpt-6.1-sol 排查 C 的 task 域多报
+
+**交接文档**：`$HEAD_EVIDENCE/handoff/head-search-c-task-domain-precision-handoff.md`（112 行），含
+①要回答的问题（C 在 task 域 episode F1 0.7407 → precision ≈ 0.5882，按 60 帧 60 真值换算约 60 TP + 42 FP，
+而 A/B 各约 60 检出 0 FP；C 的 p95 仅 1.18 px → 问题是**多余检出**而非定位偏差）；②完整指标表；
+③数字的 provenance（compare5.sh、`episodes6`、truth 语义、match_radius 默认 8 px、条件映射是声明假设）；
+④**已排除的四个 recorder 缺陷**（不写 truth / 按 geom 分组 / 跨相机复用分割图 / 检出键 cx-cy），避免重复踩；
+⑤五条竞争假设 H1–H5（后处理阈值、NMS-IoU 重复框、训练配方（task 数据集含 300 干扰物 + 300 靠瓶场景）、truth 口径、
+以及 task 域 episode 用 head_search_scene 渲染而 A 的任务数据集用另一个 MJCF 的**口径质疑**）；⑥环境配方；
+⑦硬性约束（MuJoCo only、单 CUDA 检测器、不改冻结产物与仓库源码、不放宽门禁、不推送、不接触真机）；⑧期望产出。
+
+**执行者**：tmux 会话 `codex-c-f1`（`codex -a never -s danger-full-access -m gpt-6.1-sol`，cwd = 本 worktree），
+已收到"先读文档、再按文档执行"的指令，产出写到 `$HEAD_EVIDENCE/reviews/c-task-domain-f1/findings.md`。
+既有会话 `codex-review28` 仍在（Task 11 复审车辆），本次未复用、未关闭。
+
+**移交时状态**：无其他 stack 在跑（gate 的 compare5 已结束，无可执行进程）；`selection: null`、
+`retained_model: "C"`、`promoted: false` 未变；仓库工作树干净。
