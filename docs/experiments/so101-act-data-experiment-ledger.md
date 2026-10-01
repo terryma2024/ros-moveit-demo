@@ -48582,3 +48582,20 @@ recomputation path - `producer -> Writer -> seal -> fresh-process QC` - whose fi
 quality-absent episode is **not** refused by conditions that were written when the quality fields were expected.
 
 The review of K2 revision 3 is still running (`tail -1` empty).
+
+
+## CP-2567 — The readback contract endpoint_records_from_audit will build on
+
+`verify_audit_manifest(path: Path) -> dict` (episode_audit.py:1010) states its own guarantees: "The inventory is
+**required**, not trusted: every expected stream and metadata file must be listed with a safe relative path, its size and
+its digest, so a manifest that omits a stream cannot leave that stream unchecked. Each stream is then re-validated
+semantically with the same closed schemas and relationships the writer enforced, **because a checksum only proves the
+bytes did not change.**"
+
+That is exactly the foundation E2's interface needs. `endpoint_records_from_audit(audit, inputs)` takes the **verified**
+document this function returns - fresh process, recomputed, inventory enforced and each stream semantically
+re-validated - and derives the endpoint records from those rows plus the frozen `inputs`, rather than from anything the
+runner asserted at run time. The sentence about checksums is also the reason the QC side must recompute the endpoint
+evaluation itself: a digest proves the bytes are unchanged, not that the run's own claim about its endpoints is true.
+
+The review of K2 revision 3 is still running (`tail -1` empty).
