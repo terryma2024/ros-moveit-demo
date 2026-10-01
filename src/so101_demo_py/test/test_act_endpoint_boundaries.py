@@ -60,3 +60,22 @@ def test_an_expired_deadline_is_refused_before_any_phase(tmp_path):
     runner = PickPlaceRunner(FakePort(), audit=None)
     with pytest.raises(PickPlaceError, match="TASK8_DEADLINE_EXPIRED"):
         runner.run({**boundary_request(), "deadline_ns": 0})
+
+
+def test_evidence_from_an_older_reset_is_refused(tmp_path):
+    """E2's negative list: evidence that belongs to another reset epoch cannot stand in for this attempt's."""
+
+    from so101_demo.act.pick_place_runner import PickPlaceError
+
+    class StaleResetPort(FakePort):
+        """Reports evidence stamped with the previous reset, which the runner's scope check must refuse."""
+
+        def run_phase(self, phase, request):
+            evidence = dict(super().run_phase(phase, request))
+            evidence["reset_epoch"] = evidence["reset_epoch"] - 1
+            return evidence
+
+    with pytest.raises(PickPlaceError) as refusal:
+        PickPlaceRunner(StaleResetPort(), audit=None).run(boundary_request())
+    print("STALE", refusal.value)
+    assert "PHASE_EVIDENCE_INVALID" in str(refusal.value)
