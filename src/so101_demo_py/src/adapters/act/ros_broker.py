@@ -267,6 +267,13 @@ class RosBrokerDriver:
             # F13 (CP-2123): the measured arrays come from the `/joint_states` callback, which keeps its own
             # receipt in `self._received`; a fresh epoch or reference must not make stale measurements look
             # current either.
+            # T3-F13 (eighth verdict): the measured source stamp was retained but never consumed, so a delayed
+            # callback from before a reset could sit beside fresh receipt ages and be read as current. A record
+            # whose arm measurement is not from the instant it is for is not this instant's measurement.
+            measured_stamp=getattr(self,'_joint_stamp',None)
+            if (measured_stamp is not None
+                    and abs(measured_stamp-when)>self.max_age):
+                raise RuntimeError('CONTROLLER_FEEDBACK_STALE')
             joints_received=getattr(self,'_received',None)
             if joints_received is None or not 0<=self.monotonic()-joints_received<=self.max_age:
                 raise RuntimeError('FEEDBACK_STALE')
