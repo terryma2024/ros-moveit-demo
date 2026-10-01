@@ -694,7 +694,15 @@ class RosTopicSkewCapture:
         self.node_name = node_name
 
     def capture(self) -> dict:
-        """Subscribe, wait for the paired frames, and return them with the clock readings observed."""
+        """Subscribe, pair the frames exactly as the production search does, and time nothing else.
+
+        The pairing follows `RosSearchAdapter`: the CameraInfo of a frame has to carry **that frame's own
+        stamp** (the camera plugin stamps both messages from one snapshot; the production consumer raises
+        `INPUT_CAMERA_INFO_INVALID` on anything else), and the joint state is the latest one at or before
+        the image stamp inside the pairing window. A frame whose pair is incomplete is never paired with a
+        neighbouring source's stamp: the capture waits for the pair and drops the frame if the source has
+        moved past it, recording the drop.
+        """
 
         import rclpy
         from rclpy.node import Node
@@ -717,8 +725,7 @@ class RosTopicSkewCapture:
             return node.get_clock().now().nanoseconds * 1e-9
 
         def keep(kind: str, stamp_s: float, message) -> None:
-            received = time.monotonic()
-            buffers[kind].append((stamp_s, (message, received)))
+            buffers[kind].append((stamp_s, (message, time.monotonic())))
             clock_readings.append(now_s())
 
         def on_image(message) -> None:
@@ -752,64 +759,82 @@ class RosTopicSkewCapture:
         node.create_subscription(CameraInfo, PRODUCTION_HEAD_CAMERA["info_topic"], on_info, rgb_qos)
         node.create_subscription(JointState, JOINT_STATE_TOPIC, on_joints, qos_profile_sensor_data)
 
+        samples: list[dict] = []
+        dropped_camera_info = 0
+        dropped_joint_state = 0
+        cursor = 0
         deadline = time.monotonic() + self.timeout_s
-        while time.monotonic() < deadline and len(buffers["head_image"]) < self.frames:
-            rclpy.spin_once(node, timeout_sec=0.1)
-
-        images = list(buffers["head_image"])
-        samples = []
-        for index, (stamp_s, (message, received_at)) in enumerate(images[: self.frames]):
-            try:
-                info, info_received = causal_sample(
-                    buffers["camera_info"], stamp_s, self.pair_window_s
+        while time.monotonic() < deadline and len(samples) < self.frames:
+            rclpy.spin_once(node, timeout_sec=0.05)
+            images = buffers["head_image"]
+            infos = {round(stamp, 9): value for stamp, value in buffers["camera_info"]}
+            newest_info = buffers["camera_info"][-1][0] if buffers["camera_info"] else None
+            newest_joint = buffers["joint_state"][-1][0] if buffers["joint_state"] else None
+            while cursor < len(images) and len(samples) < self.frames:
+                stamp_s, (message, received_at) = images[cursor]
+                pair = infos.get(round(stamp_s, 9))
+                if pair is None:
+                    if newest_info is not None and stamp_s < newest_info:
+                        dropped_camera_info += 1
+                        cursor += 1
+                        continue
+                    break
+                try:
+                    joints, joint_received = causal_sample(
+                        buffers["joint_state"], stamp_s, self.pair_window_s
+                    )
+                except ValueError:
+                    if newest_joint is not None and stamp_s < newest_joint:
+                        dropped_joint_state += 1
+                        cursor += 1
+                        continue
+                    break
+                info, info_received = pair
+                tf_record = {"resolved": False, "stamp_s": None, "error": None}
+                try:
+                    transform = tf_buffer.lookup_transform(
+                        TF_PARENT_FRAME,
+                        message.header.frame_id or PRODUCTION_HEAD_CAMERA["frame_name"],
+                        Time.from_msg(message.header.stamp),
+                    )
+                    tf_record = {
+                        "resolved": True,
+                        "parent_frame": TF_PARENT_FRAME,
+                        "child_frame": transform.child_frame_id,
+                        "stamp_s": (
+                            transform.header.stamp.sec + transform.header.stamp.nanosec * 1e-9
+                        ),
+                        "error": None,
+                    }
+                except Exception as error:  # noqa: BLE001 - a failed lookup is recorded, not raised
+                    tf_record = {
+                        "resolved": False,
+                        "parent_frame": TF_PARENT_FRAME,
+                        "child_frame": message.header.frame_id,
+                        "stamp_s": None,
+                        "error": str(error),
+                    }
+                samples.append(
+                    skew_sample(
+                        index=len(samples),
+                        image={
+                            "stamp_s": stamp_s,
+                            "received_monotonic_s": received_at,
+                            "frame_id": message.header.frame_id,
+                        },
+                        camera_info={
+                            "stamp_s": info.header.stamp.sec + info.header.stamp.nanosec * 1e-9,
+                            "received_monotonic_s": info_received,
+                        },
+                        joint_state={
+                            "stamp_s": joints.header.stamp.sec + joints.header.stamp.nanosec * 1e-9,
+                            "received_monotonic_s": joint_received,
+                        },
+                        tf=tf_record,
+                        clock_reading_s=now_s(),
+                    )
                 )
-                joints, joint_received = causal_sample(
-                    buffers["joint_state"], stamp_s, self.pair_window_s
-                )
-            except ValueError:
-                continue
-            tf_record = {"resolved": False, "stamp_s": None, "error": None}
-            try:
-                transform = tf_buffer.lookup_transform(
-                    TF_PARENT_FRAME,
-                    message.header.frame_id or PRODUCTION_HEAD_CAMERA["frame_name"],
-                    Time.from_msg(message.header.stamp),
-                )
-                tf_record = {
-                    "resolved": True,
-                    "parent_frame": TF_PARENT_FRAME,
-                    "child_frame": transform.child_frame_id,
-                    "stamp_s": transform.header.stamp.sec + transform.header.stamp.nanosec * 1e-9,
-                    "error": None,
-                }
-            except Exception as error:  # noqa: BLE001 - a failed lookup is recorded, not raised
-                tf_record = {
-                    "resolved": False,
-                    "parent_frame": TF_PARENT_FRAME,
-                    "child_frame": message.header.frame_id,
-                    "stamp_s": None,
-                    "error": str(error),
-                }
-            samples.append(
-                skew_sample(
-                    index=index,
-                    image={
-                        "stamp_s": stamp_s,
-                        "received_monotonic_s": received_at,
-                        "frame_id": message.header.frame_id,
-                    },
-                    camera_info={
-                        "stamp_s": info.header.stamp.sec + info.header.stamp.nanosec * 1e-9,
-                        "received_monotonic_s": info_received,
-                    },
-                    joint_state={
-                        "stamp_s": joints.header.stamp.sec + joints.header.stamp.nanosec * 1e-9,
-                        "received_monotonic_s": joint_received,
-                    },
-                    tf=tf_record,
-                    clock_reading_s=now_s(),
-                )
-            )
+                cursor += 1
         node.destroy_node()
         rclpy.shutdown()
         stamps = [sample["sources"]["head_image"]["stamp_s"] for sample in samples]
@@ -820,10 +845,16 @@ class RosTopicSkewCapture:
             "capture": {
                 "frames_requested": self.frames,
                 "frames_paired": len(samples),
-                "frames_received": len(images),
+                "frames_received": len(buffers["head_image"]),
+                "frames_dropped_without_camera_info": dropped_camera_info,
+                "frames_dropped_without_joint_state": dropped_joint_state,
                 "window_sim_s": window,
                 "achieved_rate_hz": (len(samples) - 1) / window if window > 0 else None,
                 "pair_window_s": self.pair_window_s,
+                "pairing_rule": (
+                    "the frame's own CameraInfo stamp (the production INPUT_CAMERA_INFO_INVALID rule) "
+                    "and the latest joint state at or before the image stamp inside the pairing window"
+                ),
                 "timeout_s": self.timeout_s,
             },
         }
