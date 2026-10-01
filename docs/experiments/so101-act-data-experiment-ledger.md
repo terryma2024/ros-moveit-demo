@@ -43626,3 +43626,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F13's delayed-callback fencing - the scene-production item still awaits the owner's CP-2285 ruling.
 - F1 and F14 closed; F5's regression fixed and its two other halves open; F3 closed by this stretch's work;
 - F11/F12/F13 narrowed; HEAD dc5fe5fab; goal paused.
+
+## CP-2314 - F11's seal and readback now supply the same arguments
+
+- The writer's _window_matches_rows omitted the physics times, so CP-2268's endpoint comparison only ever ran on
+- readback - the divergence the eighth verdict names. It now reads the same physics rows the readback reads and
+- passes them, so the two boundaries judge the identical window identically. GREEN 204 passed.
+- What F11 still owes, in the verdict's own words: the endpoint check must DERIVE the endpoints from their source
+- histories rather than accept enclosure (physics_end_s 1.2 passes while every row ends at 1.1), and CP-2272's
+- relation must be turned around - the acquired instants the covered window requires must appear in the schedule -
+- because the direction implemented (claimed -> acquired) restates the check that was already there and lets a
+- short schedule through.
+- F1 and F14 closed; F3 closed by this stretch; F11 one of three; F5's regression fixed with its two halves open;
+- F12/F13 narrowed; HEAD 00b9e511a; goal paused.
