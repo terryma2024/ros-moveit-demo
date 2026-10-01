@@ -49001,3 +49001,26 @@ derived from a summary-only one - and the honest form of that statement belongs 
 design's boundary claim is not overstated.
 
 The test currently fails at that line, which is the correct state for a RED whose subject has just been measured.
+
+
+## CP-2591 — The pose contract in E1's own words, and what the QC must therefore do
+
+`endpoint_pose_acceptance.py:66` states it plainly:
+
+```python
+def _pose(value, label: str) -> tuple:
+    """A pose is seven finite reals: xyz plus an xyzw quaternion whose norm is within 1e-3 of one."""
+```
+
+So the endpoint rule consumes **poses**, not points - which is why a summary row's `cup_position_world_m` cannot satisfy
+it, however correctly it is read. The QC's job therefore splits cleanly in two, and both halves are honest:
+
+- when the audit's rows carry a full configuration (`model_qpos`, as the registered live sample does), the QC derives an
+  `xyz_xyzw` pose from it and hands it to E1;
+- when they carry only the position (the MuJoCo summary rows), the QC reports a **named absence** - the pose is not
+  derivable from this source - rather than promoting a point to a pose and letting the endpoint rule answer a question
+  about orientation it was never given.
+
+The RED test then asserts both: a summary-only episode yields the named absence (not a refusal dressed as a verdict),
+and a live-sample episode yields a real endpoint verdict. The current failure at `_pose` is the correct state for this
+moment - the test measured exactly where the boundary is.
