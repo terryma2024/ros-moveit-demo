@@ -41201,3 +41201,30 @@ declined to produce one because the incumbent mixed model C gives up 0.011 task-
 of measurement can change that - only a decision about the campaign's purpose (comparison *or* promotion), or a new training campaign
 for C (HS-254 option 2), can. That has been the state for seven consecutive rounds (HS-254 through HS-259), and it is recorded here as
 the blocker rather than re-described as a finding.
+
+## HS-260 — truth 修复并重新录制（`episodes6`）：truth 按 body 取、检出键改为 x/y
+
+**症状**：episode 三项指标（recall / F1 / bbox-centre p95）对三个候选、两个 domain 全为 0。
+
+**根因（两层，OBSERVED）**：
+
+1. 录制器从不写 `truth`（240/240 帧缺失）。gate 的匹配循环内层遍历 `truth`，为空时**静默**算成 TP=0、FP=全部检出 → P/R/F1=0、p95=0；同时 task 域 recall 的保留检查也因两侧都为 0 而形同不存在。
+2. 检出字典的键是 `cx`/`cy`，而算法读 `detection["x"]`/`["y"]` → 即使补了 truth 也匹配不上。
+
+**修复与验证**：
+
+| 项 | 内容 |
+|---|---|
+| truth 语义 | 每个**可见**杯子 **body** 一个条目，中心 = 该 body 全部可见像素的质心；附带 `visible_px`、`body`、`body_id` |
+| 关键修正 | 首版按 **geom** 分组，把 26 个 geom 的杯子数成 13 个实例（1 杯场景 `truth_per_frame=13`）→ 改为按 body 分组后 **1 杯 = 1 实例**（OBSERVED） |
+| 检出键 | `{x, y, conf}`，与 consumer 一致 |
+| fail-closed | 录制器逐帧校验 `truth` 必须是列表 |
+
+**录制结果**（`episodes6/`，source commit `753561290a0c`，overlay `$TOOLCHAIN_RUN/install/so101_demo_py`，MuJoCo-only、无 ROS 节点、无 Gazebo）：
+
+```
+calibration 20 files rec6 rc=0 | held_out_evaluation 20 files rec6 rc=0
+scenario->truth 计数：two_cups=2（24 帧）、no_cup=0（24 帧）、其余 8 类各=1（各 24 帧）
+检出：A 115/116、B 120/120、C 165/162（与修复前相同，说明只改了记录形状）
+检出键：['conf','x','y']
+```
