@@ -51811,3 +51811,22 @@ with every camera", which is consistent with everything else this stretch has re
 next attempt feeds both cameras at each instant, and if that still refuses, the clock becomes the suspect.
 
 Test reverted, worktree clean at 35 entries.
+
+
+## CP-2718 — Candidate 2 is false: the harness already feeds both cameras, so the clock is the suspect
+
+```python
+def frames_at(capture, minter, stamps, *, pixels=ZERO):
+    for stamp in stamps:
+        feed(capture, minter, camera="head", stamp_s=stamp, pixels=pixels)
+        feed(capture, minter, camera="wrist", stamp_s=stamp, pixels=pixels)
+```
+
+So the harness does exactly what the audit suite's commentary describes - one frame per camera per instant - and my test
+was not missing that. The remaining candidate is the capture's clock, which I pinned to `lambda: 0.0`: if the times the
+recorder records come from the capture's monotonic source rather than from the frames' stamps, three instants at 1.0,
+1.1 and 1.2 become three instants at 0.0 and the grid rule refuses them.
+
+The read that settles it is one grep: what the capture passes as `at_s` when it calls `physical_audit` and what the
+sampler's observations carry. If the answer is the monotonic clock, the fix is a clock that advances with the frames
+rather than with the calls - which the harness's `clock=` parameter can supply once I know the unit it must advance in.
