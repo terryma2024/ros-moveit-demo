@@ -56,7 +56,7 @@ def _episode_recorder(arguments, options):
         return None
     import json
 
-    from ..act.episode_assembly import open_point_episode
+    from ..act.episode_assembly import episode_audit_pair, open_point_episode
 
     document = json.loads(Path(scope_path).read_bytes())
     return open_point_episode(
@@ -64,7 +64,9 @@ def _episode_recorder(arguments, options):
         attempt_id=getattr(options, "attempt_id", None) or options.session_id,
         reset_epoch=int(options.expected_reset_epoch), release_epoch=int(document.get("release_epoch", 1)),
         scene_id=str(document["scene_id"]), seed=int(document["seed"]), mode=str(document["mode"]),
-        scope=document, scope_path=str(scope_path),
+        # two different pairs, deliberately: `scope` is the run's document, read from the file the parent wrote, while
+        # `scope_path` is where this episode's own audit source goes - one per episode, not one per run
+        scope=document, scope_path=str(episode_audit_pair(Path(options.evidence_root))[1]),
         inputs={"inputs_sha256": str(document["inputs_sha256"])},
         provenance={"source_commit": getattr(options, "source_commit", "UNRECORDED_SOURCE")})
 
