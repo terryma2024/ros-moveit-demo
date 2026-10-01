@@ -48071,3 +48071,21 @@ precisely and stop - and the second is only right if the milestone genuinely nee
 So the next edit follows CP-2538's rule one field further: the provenance carries real, recomputable digests for those
 two names, each stating what it actually digests, rather than the `ABSENT` marker that a hex check cannot accept. The
 run's own record already lists what is not claimed, which is what keeps that legible.
+
+
+## CP-2540 — BROKER_MODEL_HASH confirms it, so the two digests must be real and stated
+
+The next refusal is exactly the one CP-2539 predicted: `so101_demo.runtime.parallel_ipc.IpcError: BROKER_MODEL_HASH`,
+raised by the `for name in ("yolo_weights_sha256", "grounded_manifest_sha256")` check the transport performs straight
+after the identity check. So the document must carry two real digests, and the honest question is what they should
+digest in a deployment that has neither a detector nor a grounded-SAM root.
+
+The answer follows the rule CP-2536/2538 already applied twice: name what this deployment actually runs. The frozen
+manifest holds recomputable digests for the things this episode does use - the runtime document and the scene - and the
+run's provenance already states, in its own fields, that no detector weights and no grounded root participate
+(CP-2479). Putting those real digests in the two names the transport checks, with that statement beside them, is
+therefore a claim a reader can verify and not a value invented to satisfy a shape - which is the same line this task
+has held since CP-2421.
+
+The alternative - reporting the gap and stopping - remains available and would be right if the milestone needed
+perception. It does not: the episode is a MuJoCo pick-and-place with the endpoint rule as its acceptance criterion.
