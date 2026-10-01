@@ -2638,6 +2638,11 @@ class ProductionBatchComposition:
             # Popped rather than read: _initialize names its keywords one by one and takes no **kwargs, so a key left
             # in the mapping would reach it as an unexpected argument and fail the whole run at construction.
             self._episode_scope_path = kwargs.pop("episode_scope_path", None)
+            # the container-broker flag defaults here as well as in _initialize: tests replace _initialize to keep
+            # its side effects out, and an attribute that only exists when the real initialiser ran is an attribute
+            # those tests cannot rely on - which is how this one started failing once the container-free route was
+            # removed and the flag stopped being passed explicitly
+            self._uses_production_broker_container = kwargs.get("container_brokers", True)
             self._initialize(spec, **kwargs)
         except BaseException as error:
             partial_cleanup = self._release_partial()
