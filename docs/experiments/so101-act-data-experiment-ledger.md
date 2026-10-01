@@ -49716,3 +49716,27 @@ So E2's terminal wiring is: the independent endpoint verdict must be **computed 
 records and placed where the Coordinator's verification can see it - beside the seal's claim rather than replacing it,
 so that "a legal seal/QC" and "committed" remain distinguishable, as the design's three states require. That is the next
 edit, and it is on the QC/result side rather than in the runner.
+
+
+## CP-2627 — A real gap: the audit has no seven-value pose key, and my QC reads one
+
+Appending the pose rows through the writer refused them at `episode_audit.py:927` with `AUDIT_SCHEMA_INVALID`, and the
+reason is structural rather than a mistake in the test: `_PHYSICS_OBSERVATION_FIELDS` admits `cup_position_m`,
+`cup_position_world_m`, `model_qpos`, the contact groups and the MuJoCo summary fields - and **no seven-value pose
+key**. So `cup_pose_world`, the key I taught `endpoint_pose_keys` to read, is a key no producer writes and the schema
+would refuse if one tried.
+
+That exposes a genuine gap between my QC module and the audit, and it has two honest resolutions:
+
+1. **derive the pose from `model_qpos`** - the field the registered live sample actually carries, which is the whole
+   configuration and from which an end-effector or cup pose can be computed by forward kinematics; or
+2. **add the pose key to the schema** the way K2's other additions were made, so a producer that has a pose can record
+   it directly.
+
+Which one is right depends on what the live producer actually has: `model_qpos` is present by design (the comment at
+`_PHYSICS_OBSERVATION_FIELDS` says the registered live sample carries the real source records), while a ready-made pose
+key is not. So option 1 is the one the repository's evidence supports, and it means the QC needs the same forward
+kinematics the scene geometry derivation already performs - not a new invention, but a reuse to be located.
+
+That is the next read, and it is a better question than the one I was asking: not "why does my test fail" but "where does
+this repository already turn a configuration into a pose".
