@@ -44583,3 +44583,42 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
   its derivation now unblocked by K1 = B; F5's regression fixed with step one landed and step two's seal-side blockers
   (CP-2362/2363/2365) fixed; HEAD 1dabdc489; goal active.
+
+
+## CP-2367 — The implementation plan read in full: order, K1/K2 specifics, and the labelling discipline
+
+- **Order**: finish F5's open part plus the K1/K2 regressions first, then E1, E2, E3; the production runtime
+  acceptance folds into E3's single closure rather than a stack per finding.
+- **K1 = B, concretely**: rewrite `test_a_formal_audit_may_not_seal_without_source_coverage` to mint head/wrist
+  acquisitions through the real writer/acquisition API, derive the window from that data, and prove the positive
+  seal **and** a fresh-process readback; keep the negative camera/window-consistent and remove **only** a required
+  reference/event/physics record so it reaches the coverage gate (deleting camera frames while keeping the old
+  schedule would manufacture a double invalidity); add a separate window-mismatch negative. Coverage is checked
+  **before** the window, so F11's change must not silently move the error attribution. Coverage missing reports
+  `AUDIT_FORMAL_COVERAGE_INCOMPLETE`, window wrong reports `AUDIT_WINDOW_INVALID`, negatives must not commit, and
+  **changing only the expected error does not close the finding**.
+- **K2 = B, concretely**: build a justified snapshot correlation along the real apply -> readback chain (derived
+  scene's source physics stamp/step, apply identity, the actual query/readback, the verified world/attached content,
+  or an existing synchronised-snapshot/clock fence), verifying the ROS sim-clock mapping and never mixing monotonic.
+  Forbidden: copying raw.sim_time into a later scene response to manufacture equality, reading the clock at receipt,
+  or treating `scene_revision` (a local read counter) as an update sequence. Fail closed without justification; if
+  no implementable production correlation exists, report the precise protocol gap rather than claiming a field fixes
+  it. The audit's scene schema, writer/serializer, `verify_episode_audit()` and every consumer change **with** K2, not
+  after E2, behind a versioned correlation record with a small protocol table checked at a Codex checkpoint; no
+  invented MoveIt-native revision; the independent verifier rebuilds source->apply->query->content; positive proof
+  must come from the real port and real events, and runtime closure needs the E3 run with a real rc0 - mocks and
+  fixtures cannot close F13.
+- **E3's command sequence** is given verbatim in the plan (inspect -> prepare with `--mode
+  preselected_target_diagnostic --endpoint-policy --runtime-policy` -> preflight, each rc checked; then the installed
+  `run ... --lifecycle FULL_RESTART`, then fresh-process `qc`, `verify-commit`, `check-export`, then isolated-copy
+  negatives with recomputed copy hashes only).
+- **Labelling discipline**: this amendment covers the original Task1's quality inputs, Task3's audit/terminal quality,
+  Task4's object QC, Task6's freeze and Task7's acceptance; **Task2 (continuous sampling), Task5 (default production
+  wiring) and Task8 (commit/use evidence) remain to be done**. Each item is marked 已修复 / 合同替代 / 仍开放, and a
+  contract substitution may never be written as a code fix; lease/release epoch, reference/acquisition causality,
+  production feedback, raw history/coverage, immutable seal and a real commit stay **open, independently verifiable**
+  findings.
+- **Goal**: active; the user-side resume is already in place, so no model-side self-resume is attempted.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (K2 is its route now); F11's divergence fixed with its
+  alignment landed and its derivation waiting on K1's rewrites; F5's regression fixed with step one landed and step
+  two's seal-side blockers fixed; HEAD a8e81b065; goal active.
