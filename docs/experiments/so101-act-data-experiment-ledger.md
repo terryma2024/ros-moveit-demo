@@ -48243,3 +48243,21 @@ this round).
 
 The re-review is still running: `tail -1` on `reviews/k2-protocol-recheck.log` is empty, so by CP-2546's rule there is
 no completion marker yet.
+
+
+## CP-2549 — Every check in bind_row passes my literals, so the refusal came from somewhere else
+
+The scalar validator is `_finite(value, code, *, nonnegative: bool = False)`: it refuses `bool`, refuses anything that is
+not `int` or `float`, refuses non-finite values, and - when `nonnegative` - refuses negatives. `1.0` satisfies all of
+that. Together with CP-2548's `_integer` (which `0` and `1` satisfy) and `_closed` over exactly the five keys the
+record builds, **every check `bind_row` performs passes the arguments the earlier direct test supplied**. So its
+`AUDIT_ROW_INVALID` did not come from `bind_row` at all.
+
+The likeliest explanation is the one CP-2504 taught when the traceback's frames mattered: the record-building lines I
+read at CP-2508 (`record = {"row_index": _integer(...), "sim_time_s": _finite(...), "reference_sequence":
+_integer(...)}`) are the shape `bind_row` builds, but a sibling method - `append_row`, whose `def` line is printed
+beside this entry - builds the same shape and may be what actually raised. The next attempt should therefore run the
+fixture and read the traceback's `file:line` pairs in full rather than a snippet of surrounding source, which is how
+CP-2504 turned a contradiction into two file measurements.
+
+The re-review is still running (`tail -1` empty).
