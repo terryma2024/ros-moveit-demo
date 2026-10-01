@@ -47256,3 +47256,20 @@ so the rule passes with room to spare - and the acquisitions must be minted at t
 "claimed instant must be observed" rule needs them and because the design's readback checks the grid completeness.
 So the next round's fixture differs from CP-2489's in exactly two places: the minting loop's stamps and the
 `source_schedule` lists.
+
+
+### CP-2495 — The 10 Hz grid did not clear it, so CP-2494's conclusion was wrong too
+
+Ran the fixture on the 10 Hz grid (ten instants 0.1 apart, minted and scheduled identically, so every gap is 0.1 and
+the cadence rule's threshold is 0.25): the seal still returns `AUDIT_WINDOW_INVALID`. So the cadence-gap clause was
+**not** the refuser, my arithmetic notwithstanding, and CP-2494's confident conclusion joins CP-2438/2439/2440 and
+CP-2474 as an attribution that reading alone got wrong.
+
+That is now four times this stretch has had to revise an attribution, and the pattern is consistent: the readings that
+held were the ones a **run** produced (`WIN-CALLSITE seal False`), and the ones that failed were the ones I reasoned
+from source text. The next probe must therefore print the **verdicts of the clauses themselves** rather than their
+inputs - one line before each `return False` in `_window_matches_observed`, which is a handful of lines and the only
+honest way left to name the refuser.
+
+The fixture has been withdrawn (tree back to the user's 35 entries, audit suite at 74 passed), and the 10 Hz version is
+recorded above in full for the next round to re-apply alongside that probe.
