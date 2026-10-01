@@ -2446,6 +2446,13 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
                                   ("scene_id", _anchor.get("scene_id")), ("seed", _anchor.get("seed"))):
                 if _value is None:
                     raise RuntimeError(f"EPISODE_SCOPE_VALUE_MISSING: {_name}")
+            # the synchronizer's two knobs are the frozen set's own rgb_sync policy, not the defaults they happen to
+            # match: the sampler must refuse a frame for the reason the frozen set gives, not because a constant in a
+            # constructor agreed with it by coincidence
+            _rgb_sync = _frozen.get("runtime_policy", {}).get("rgb_sync", {})
+            for _name in ("max_age_s", "max_skew_s"):
+                if _rgb_sync.get(_name) is None:
+                    raise RuntimeError(f"EPISODE_SCOPE_VALUE_MISSING: rgb_sync.{_name}")
             return PointEpisode(
                 identity={"session_id": spec.request.batch_id, "attempt_id": lease.attempt_id,
                           "reset_epoch": int(getattr(lease, "lease_generation", 1)), "release_epoch": 1},
@@ -2453,7 +2460,8 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
                 inputs={"inputs_sha256": _frozen["inputs_sha256"]}, episode_root=episode_root,
                 scope=build_collection_scope(str(_frozen["mode"]), scene_id=str(_anchor["scene_id"]),
                                              seed=int(_anchor["seed"]), inputs_sha256=str(_frozen["inputs_sha256"])),
-                scope_path=str(scope_path), physical_audit=PhysicalAuditAdapter(_extract_physical_evidence))
+                scope_path=str(scope_path), physical_audit=PhysicalAuditAdapter(_extract_physical_evidence),
+                max_age_s=float(_rgb_sync["max_age_s"]), max_skew_s=float(_rgb_sync["max_skew_s"]))
 
         runtime_kwargs["open_episode"] = _open_episode
         broker_proxy = _WorkerBrokerProxy(
