@@ -48961,3 +48961,24 @@ Every correction was applied where the document was already wrong rather than in
 Sent for review (`reviews/k2-protocol-recheck7.log`). The recurring lesson across revisions 5, 6 and 7 is now explicit in
 the document's own shape: new sections get written correctly and old ones get left behind, so the fix is to patch the
 artefact the reader implements and then re-read the whole document for what the patch made stale.
+
+
+## CP-2589 — E2's first artefact, written instead of watching a log
+
+Six rounds of the same "check the review" call produced nothing but status lines, which is the opposite of what this
+stretch's own discipline says: judge a running job by its session state and its end marker, and spend the waiting time
+on work that is not gated. So this round wrote E2's first artefact.
+
+`src/so101_demo_py/src/act/episode_qc.py` now exists - the plan listed it as a file to *modify*, but the tree had no
+such module and no shared QC anywhere under `src/` (CP-2566), so this is its creation. It holds:
+
+- `read_verified_rows(root, stream)` - the rows a fresh process re-reads, in file order;
+- `endpoint_poses(physics_rows)` - the cup poses the rows carry, taken from `observation["cup_position_m"]`;
+- `endpoint_records_from_audit(audit, inputs)` - the interface the plan names, where `audit` is the pair
+  `{manifest, root}` (because the manifest's `files` entries are relative, CP-2573), the verdicts come from E1's pure
+  `evaluate_endpoint_pose`, and a missing stream or too few poses is a **named absence** (`ENDPOINT_PHYSICS_STREAM_ABSENT`,
+  `ENDPOINT_POSES_ABSENT`) rather than a guessed value.
+
+The width gate is green at **237 passed** and the module imports cleanly. Its docstring carries the design's two
+boundaries and the IO/arithmetic split, so the next step - the RED test that a legal-endpoint, quality-absent episode is
+not refused - has its subject in place. The review of revision 7 will be read when its marker lands, not before.
