@@ -43679,3 +43679,14 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - cup_position_world_m and registered cup/model measurements, which pose admission requires.
 - F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
 - F12 one of three; F13 narrowed; HEAD d5df29703; goal paused.
+
+## CP-2318 - F12's pose carrier states the registered cup measurement
+
+- The SEARCH document's physical_observation now carries cup_position_world_m, taken from the world readback's
+- object_state.position_world - the same source and the same shape micro_lift.py:67 uses for that measurement, so
+- the carrier is admissible as a pose observation rather than a truncated one. GREEN 238 passed.
+- F12's last item from the verdict: carry a replacement immutable observation through every
+- segment/verifier/port return instead of caching the records beside it. That needs the segment's return and the
+- verifier chain to thread the replacement, which is the structural half and the next work.
+- F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
+- F12 two of three; F13 narrowed; HEAD 15c3a5ea8; goal paused.
