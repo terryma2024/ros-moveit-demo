@@ -47756,3 +47756,21 @@ the guard joins the catalogue, the policy and the container-free broker as a pie
 Six layers of this integration have now been cleared by running it and reading the refusal rather than by reading the
 source: the input guard, the run mode, the trusted seven-value pose, the versioned request, the start-guard policy and
 now the guard class itself.
+
+
+## CP-2524 — accelerator=None is the schema-v3 NVML guard, which is this platform
+
+Read the factory in full. Its signature ends `..., state_root: Path | None = None, accelerator: object | None = None)
+-> EpochStartGuard`, and its docstring says the installed composition uses "one task-level state root, one shared lock"
+and that `accelerator` "selects the Darwin/MPS admission check. It is left `None` for schema v3, whose guard remains
+the NVML-backed snapshot guard." Our runtime document is schema v3 and this host is Linux with NVML, so `accelerator`
+stays `None` - the factory's own default - and the state root defaults to `None` as well, meaning the guard can be
+built with the policy alone.
+
+That closes the guard layer's recipe: in `run`, build the guard through that factory with `StartGuardPolicy()` (whose
+defaults are the approved values) and pass it as `start_guard=...`, exactly where `StartGuardPolicy` was passed before.
+The composition then has everything it asked for in sequence: the versioned request, the frozen config and provenance,
+the catalogue, the container-free broker builder and now a real guard.
+
+The function's name is printed beside this entry, so the next round's edit is a transcription: one import, one call,
+one re-run, and whichever layer refuses next will name itself as all six before it have.
