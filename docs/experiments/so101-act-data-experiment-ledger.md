@@ -50574,3 +50574,28 @@ Two things are worth keeping. First, the recipe - `zsh -c` with the source order
 without it the numbers measure the harness rather than the code. Second, the narrower nine-suite gate was not wrong to
 exist: it covered the files under change and it stayed green throughout, which is what a working gate should do; what was
 wrong was treating it as a statement about the package rather than about the files it named.
+
+
+## CP-2665 — E2's checkpoint: FAIL, with five corrections each naming file and line
+
+The verdict is FAIL, and every correction is actionable - three of them are substantive rather than editorial:
+
+1. **`episode_qc.py:135`** - "Implement the prescribed common QC report and `checks.endpoint_pose`, including
+   rule/policy hashes, endpoint sequences and targets." So the QC must produce the **design's prescribed report shape**,
+   not the `ACT_ENDPOINT_QC` document I invented; the reviewer names the field (`checks.endpoint_pose`) and the contents
+   (rule and policy hashes, the endpoint sequences and the targets).
+2. **`result_store.py:351`** - "Resolve and supply the seal-bound audit manifest and scope to verification. **A v2
+   episode currently fails with `EPISODE_SEAL_AUDIT_INCOMPLETE`**." That is a real bug in the path this work touched: the
+   v2 episode cannot verify because the seal-bound audit manifest and scope are not supplied to it.
+3. **`result_store.py:357`** with **`coordinator.py:800`** - "Make the independent verdict **affect terminal status** and
+   persist through commit." So carrying the verdict beside the status (what I did) is not enough: it has to change the
+   outcome.
+4. **`mujoco_parallel_batch.py:2731`** with **`result_store.py:308`** - "Complete the requested production and consumer
+   wiring."
+5. **`pick_place_runner.py:217`** with **`test_act_quality_is_not_a_precondition.py:27`** - "Complete the
+   predicate-by-predicate ..." checklist, plus test corrections at `test_act_episode_qc.py:16`, `:50` and `:142`.
+
+So E2 is not complete, my reading of what "wiring" meant was too small (carrying a verdict is not the same as letting it
+decide), and the document shape I invented is not the one the design prescribes. All five corrections are recorded here
+with their locations, and the next work is to take them in order - starting with the bug in (2), because a v2 episode
+that cannot verify is the more serious of the two substantive findings.
