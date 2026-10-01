@@ -47458,3 +47458,22 @@ value the physics branch expects differs from what I guessed.
 The correct values are in the suite: lines 63 and 68 append physics rows through the same call and pass, so one grep of
 those two records gives the exact shape - which is the last thing needed before the fifteen-line direct test of CP-2502
 can run and return the predicate's verdict.
+
+
+### CP-2507 — The exact physics-row recipe, verbatim from the suite
+
+Both kind sets are now known: `SOURCE_KINDS = ("events", "references", "physics")` for `append_source`'s first
+argument, and `_PHYSICS_KINDS = ("support", "contact", "pose", "retract")` for the **record's** own `kind`. And the
+record's `observation` is itself a closed document - the suite's rows carry seven fields:
+`simulation_time_s`, `simulation_step`, `left_contact_count`, `right_contact_count`, `table_contact`,
+`maximum_normal_force_n` and `cup_position_world_m` (with `supported` added for the support kind). My hand-written
+minimal observation omitted most of them, which is why the writer refused it with the same code it uses for an unknown
+kind.
+
+So the fifteen-line direct test of CP-2502 can now be written with no guesses at all: build the writer through
+`_formal_writer`, mint head and wrist acquisitions at 0.1 through 1.0, append **one** physics row copied from the
+suite's seven-field shape, `bind_row(0, 1.0, ...)`, then call `writer._window_matches_rows(window)` with the CP-2495
+window and print the verdict - False sends the next step to CP-2497's inert read-style probe, True sends it to the
+runner's row/binding interaction.
+
+Tree state unchanged: 35 dirty entries (the user's), no probe markers, audit suite 74 passed.
