@@ -2436,13 +2436,23 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
             # the identity, the provenance and the frozen inputs are still to be filled from the run's own frozen
             # set; until the extraction lands, opening an episode is only exercised by tests, and the audit it would
             # need is refused at the sample rather than faked
+            # the scope's four values come from the frozen set itself: the mode and the inputs digest from the
+            # manifest's top level, the scene and the seed from the anchor scene role's identity - which is where the
+            # frozen set actually records them. A missing one is a refusal, not a default: a fabricated seed would
+            # make the episode's own provenance a lie.
+            _frozen = read_inputs_manifest(inputs)
+            _anchor = _frozen.get("roles", {}).get("anchor_scene", {}).get("identity", {})
+            for _name, _value in (("mode", _frozen.get("mode")), ("inputs_sha256", _frozen.get("inputs_sha256")),
+                                  ("scene_id", _anchor.get("scene_id")), ("seed", _anchor.get("seed"))):
+                if _value is None:
+                    raise RuntimeError(f"EPISODE_SCOPE_VALUE_MISSING: {_name}")
             return PointEpisode(
                 identity={"session_id": spec.request.batch_id, "attempt_id": lease.attempt_id,
                           "reset_epoch": int(getattr(lease, "lease_generation", 1)), "release_epoch": 1},
-                provenance={}, inputs={}, episode_root=episode_root,
-                scope=build_collection_scope("preselected_target_diagnostic",
-                                             scene_id=str(getattr(lease, "point_id", "scene-1")),
-                                             seed=0, inputs_sha256="0" * 64),
+                provenance={"source_commit": _frozen.get("source_commit"), "source_root": _frozen.get("source_root")},
+                inputs={"inputs_sha256": _frozen["inputs_sha256"]}, episode_root=episode_root,
+                scope=build_collection_scope(str(_frozen["mode"]), scene_id=str(_anchor["scene_id"]),
+                                             seed=int(_anchor["seed"]), inputs_sha256=str(_frozen["inputs_sha256"])),
                 scope_path=str(scope_path), physical_audit=PhysicalAuditAdapter(_extract_physical_evidence))
 
         runtime_kwargs["open_episode"] = _open_episode
