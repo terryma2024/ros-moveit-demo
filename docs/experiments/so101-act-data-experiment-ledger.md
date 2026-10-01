@@ -47848,3 +47848,21 @@ repository rather than only in the working tree, and the tree is back to nothing
 What remains for the approved route is the drive: the composition exposes only `__init__`, `_initialize` and private
 helpers, so the caller starts and supervises it - which is what `run_cli`'s batch runner does for a sweep, and what
 `run` must do for one episode. The next read is that runner.
+
+
+## CP-2529 — The drive works, and the tenth layer is the broker's own CLI
+
+The drive is wired exactly as the batch path does it - `_run_with_shutdown_signals(composition.run)`, then
+`outcome_document(summary)` written as `aggregate_results.json` - and the run went all the way to starting the broker:
+the composition built, the drive ran, the supervisor launched the command my `broker_command_builder` returned, and the
+broker **exited 2**. So the tenth layer is the broker's own argument parser: the flags I guessed
+(`--evidence-root`, `--runtime-ipc-root`, `--input-root`, `--batch-id`) are not the ones it accepts.
+
+That is the expected shape of this integration by now - the run names the layer, the layer's contract is read, and the
+fix is one edit - and the broker's real flag list is printed beside this entry. Once the builder matches it, the
+supervisor should see a healthy broker, and the composition has everything it needs to drive the episode: coordinator,
+journal, one worker, a broker built without a container, and the frozen inputs.
+
+For the record, the run's own evidence lives under the LIVE_ROOT: `run-output.txt` carries this attempt's stdout and
+stderr, and the composition had already created `run/ipc`, `run/workers`, `run/coordinator`, `run/broker-inputs` and
+`run/resource_manifest.json`.
