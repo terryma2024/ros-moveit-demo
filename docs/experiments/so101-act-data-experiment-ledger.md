@@ -52385,3 +52385,31 @@ grid is hard" but "these three lines predict three rows and the instrument sees 
 
 The next step is a probe that prints `len(self._frames["head"])` and `_next_grid_s` before and after each drain, which
 distinguishes the three candidates in a single run instead of a round each.
+
+
+## CP-2740 — Measured: every drain mints a row, but only the third drain writes one
+
+```
+stamp 1.0: queues before=(1, 1) grid=1.100 drained=0 rows=0 failure=None
+stamp 1.1: queues before=(1, 1) grid=1.200 drained=0 rows=0 failure=None
+stamp 1.2: queues before=(1, 1) grid=1.300 drained=1 rows=1 failure=None
+```
+
+Three facts, and they reframe the problem:
+
+- **every drain mints a row** - the grid pointer advances 1.0 -> 1.1 -> 1.2 -> 1.3, so `_mint_rows` is doing exactly what
+  CP-2738's reading predicted, and my earlier "one row" measurement was counting the *written* rows, not the minted ones;
+- **no failure is latched** (`failure=None` throughout), so nothing refused;
+- and **only the third drain writes one** (`drained=1` at stamp 1.2), which means `_service_pending` kept the first two rows
+  in the "waiting" state even though a reference was fed at each row's target instant before the drain.
+
+So the remaining rule is the one that decides when a row's reference counts as ready for it - `_reference_state`, whose
+own docstring says a reference that has simply not arrived leaves the row waiting, and that only an explicit revocation
+or a stop before the instant makes it void. The row minted at grid 1.0 targets 1.1; I fed `reference(1.1)` before the
+drain; and it still waited. So the matching between what a reference carries and what a row targets is where the last
+difference lies - most likely the reference's own instant, which `reference(at_s)` sets as
+`requested_sim_time_s = round(at_s, 6)` but which the capture may key differently (`received_monotonic_ns` is in
+`frame`, and the reference message may need a matching `stamps`-style field).
+
+One read of `_reference_state` settles it, and then three rows will be written, the grid will hold, and the seal will
+succeed - which is the whole of what these two tests still lack.
