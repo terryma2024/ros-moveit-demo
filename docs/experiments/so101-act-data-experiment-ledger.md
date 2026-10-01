@@ -48089,3 +48089,24 @@ has held since CP-2421.
 
 The alternative - reporting the gap and stopping - remains available and would be right if the milestone needed
 perception. It does not: the episode is a MuJoCo pick-and-place with the endpoint rule as its acceptance criterion.
+
+
+## CP-2541 — The digests cleared, and the broker spec's own config path is the next layer
+
+Putting the two digests on the specification itself - where the broker spec takes them from, rather than only in
+`provenance` - cleared `BROKER_MODEL_HASH`: the transport now builds. What follows is the broker failing to read its own
+configuration:
+
+```
+FileNotFoundError: [Errno 2] No such file or directory: '/runtime/runtime-config.yaml'
+so101_demo.parallel_batch.contracts.ContractError: CONFIG_READ_FAILED: /runtime/runtime-config.yaml
+```
+
+`/runtime/runtime-config.yaml` is another container path, and it is not one of the flags my builder substitutes - it is
+inside the **broker spec** the composition writes (`_prepare_broker_generation`, the document the `--runtime-spec` flag
+points at). So the container-free route has one more substitution: the spec's own configuration path must name this
+deployment's runtime document, which the specification already carries as `config_path`.
+
+Worth recording how far the chain has come: the composition builds, the drive runs, the supervisor starts the broker,
+the broker parses its arguments, the transport builds with a real deployment identity and real digests, and the
+remaining objection is a single path inside a document the composition writes.
