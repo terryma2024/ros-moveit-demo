@@ -544,6 +544,52 @@ def test_confirm_stop_needs_three_consecutive_qualifying_feedback() -> None:
     assert proof["latency_s"] > 0.0
     # every sample the window saw is recorded, so a single exceedance can be checked later
     assert len(proof["feedback_samples"]) == 4
+    # the window's own realised real-time factor says whether its monotonic interval is a real-time one
+    assert proof["window_real_time_factor"] == pytest.approx(
+        proof["sim_latency_s"] / proof["latency_s"]
+    )
+    assert proof["pacing_faithful"] is False
+
+
+def test_a_stop_proof_window_that_ran_at_real_time_is_marked_faithful() -> None:
+    """A window that advanced its simulation clock at the monotonic clock's rate is a real-time proof."""
+
+    class _PacedPlant(_ScriptedPlant):
+        def __init__(self) -> None:
+            super().__init__([0.4, 0.01, 0.01, 0.01, 0.01])
+            self.monotonic = 0.0
+
+        def step_control_cycle(self) -> None:
+            # the plant advances its simulation clock and the monotonic clock together, as a paced loop does
+            super().step_control_cycle()
+            self.monotonic += self.control_period_s
+
+    plant = _PacedPlant()
+    clock = stop.MeasurementClock(monotonic=lambda: plant.monotonic)
+    transport = stop.ControllerFeedbackTransport()
+    from so101_demo.adapters.act.ros_execution import RosControllerPort
+
+    port = RosControllerPort(
+        transport,
+        None,
+        stop.MONITORED_JOINTS,
+        stop_velocity_rad_s=0.05,
+        max_age_s=0.05,
+        monotonic=clock,
+    )
+    proof = stop.confirm_stop(
+        plant=plant,
+        port=port,
+        transport=transport,
+        clock=clock,
+        hold_rad=0.4,
+        stop_budget_s=1.0,
+        index=0,
+        reason="controller_revoke",
+        period_s=plant.feedback_period_s,
+    )
+    assert proof["window_real_time_factor"] == pytest.approx(1.0, abs=1e-9)
+    assert proof["pacing_faithful"] is True
 
 
 def test_confirm_stop_refuses_a_window_without_three_consecutive_qualifying_samples() -> None:

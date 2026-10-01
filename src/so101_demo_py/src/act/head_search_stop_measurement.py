@@ -246,6 +246,15 @@ DEFAULT_REVOKE_OFFSETS_S = (0.01, 0.03, 0.06, 0.10, 0.15, 0.50)
 DEFAULT_STOP_BUDGET_S = 1.0
 DEFAULT_REALTIME = True
 _GRID_TOLERANCE_S = 1e-9
+#: how far a proof window's realised real-time factor may sit from one and still be a real-time
+#: measurement: the monotonic interval only bounds the stop path when the plant kept the clock
+PACING_TOLERANCE = 0.1
+PACING_FAITHFUL_RULE = (
+    "the window's realised real-time factor `sim_latency_s / latency_s`: the plant is paced to the "
+    "monotonic clock, so a window that advanced its simulation clock at the monotonic clock's rate "
+    "is a real-time stop proof, and one that caught up after falling behind is recorded with its own "
+    "factor rather than presented as if the two clocks agreed"
+)
 
 
 class CalibrationStopMeasurementRefused(CalibrationInputsRefused):
@@ -931,6 +940,8 @@ def build_stop_proofs(*, path, records, flight: Mapping, command=None) -> dict:
             "third_confirming_receive_sim_s": float(record["third_confirming_receive_sim_s"]),
             "latency_s": float(record["latency_s"]),
             "sim_latency_s": float(record["sim_latency_s"]),
+            "window_real_time_factor": record["window_real_time_factor"],
+            "pacing_faithful": bool(record["pacing_faithful"]),
             "confirming_sample_indices": list(record["confirming_sample_indices"]),
             "third_confirming_sample_index": int(record["third_confirming_sample_index"]),
             "sample_count": len(record["feedback_samples"]),
@@ -976,6 +987,12 @@ def build_stop_proofs(*, path, records, flight: Mapping, command=None) -> dict:
             "rank": max(1, math.ceil(P99_9 * len(latencies))),
         },
         "single_exceedance_rule": SINGLE_EXCEEDANCE_RULE,
+        "pacing_faithful_rule": PACING_FAITHFUL_RULE,
+        "pacing_faithful_tolerance": PACING_TOLERANCE,
+        "pacing_faithful_proof_count": sum(1 for sample in samples if sample["pacing_faithful"]),
+        "off_schedule_sample_indices": [
+            sample["index"] for sample in samples if not sample["pacing_faithful"]
+        ],
         "declared_production_latency_s": flight["declared_production_latency_s"],
         "exceedance_count": len(exceedances),
         "exceeding_sample_indices": [sample["index"] for sample in exceedances],
@@ -1164,6 +1181,8 @@ def confirm_stop(
             f"qualifying samples out of {len(samples)}, and a proof that never confirmed is not written",
         )
     latency = float(confirming["receive_monotonic_s"]) - float(request_monotonic)
+    sim_latency = float(confirming["receive_sim_s"]) - request_sim
+    factor = None if latency <= 0.0 else sim_latency / latency
     return {
         "index": index,
         "reason": reason,
@@ -1178,7 +1197,9 @@ def confirm_stop(
         "third_confirming_receive_monotonic_s": float(confirming["receive_monotonic_s"]),
         "third_confirming_receive_sim_s": float(confirming["receive_sim_s"]),
         "latency_s": latency,
-        "sim_latency_s": float(confirming["receive_sim_s"]) - request_sim,
+        "sim_latency_s": sim_latency,
+        "window_real_time_factor": factor,
+        "pacing_faithful": factor is not None and abs(factor - 1.0) <= PACING_TOLERANCE,
         "confirming_sample_indices": list(qualifying_indices[-3:]),
         "third_confirming_sample_index": int(confirming["index"]),
         "feedback_samples": samples,
@@ -2152,6 +2173,8 @@ def write_stop_proofs(
             "revoke_offsets_s": document["revoke_offsets_s"],
             "declared_production_latency_s": document["declared_production_latency_s"],
             "exceedance_count": document["exceedance_count"],
+            "pacing_faithful_proof_count": document["pacing_faithful_proof_count"],
+            "off_schedule_sample_indices": document["off_schedule_sample_indices"],
             "exceeding_sample_indices": document["exceeding_sample_indices"],
             "anchor_names": [request["anchor"] for request in inputs["requests"]],
             "proofs": [
