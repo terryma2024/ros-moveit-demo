@@ -858,6 +858,12 @@ def _mujoco_stack_actions(
                 "--param-file",
                 controllers,
             ],
+            # the controller manager this talks to runs on the simulation clock, so this must too: with the default
+            # (system time) its activation handshakes and `--controller-manager-timeout` are measured against a
+            # different clock than the one the manager runs on, and the controllers never settle. It is also what the
+            # TF listener in `graceful_shutdown_move_group` was reporting: nodes on two clocks make the simulation
+            # time look like it jumps backwards.
+            parameters=[{"use_sim_time": True}],
             output="both",
         )
         for controller in (_CONTROLLERS + ("neck_controller",) if act_profile else _CONTROLLERS)
@@ -871,7 +877,8 @@ def _mujoco_stack_actions(
     scene_setup = Node(
         package="so101_demo_py",
         executable="scene_setup",
-        parameters=[{"readiness_timeout_s": float(timeout)}],
+        # its readiness timeout is a duration on the same simulation clock everything else here uses
+        parameters=[{"use_sim_time": True, "readiness_timeout_s": float(timeout)}],
         output="both",
     )
     return _MujocoStackActions(
