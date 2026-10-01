@@ -43789,3 +43789,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F13's last item is scene production, which waits on the owner's CP-2285 ruling.
 - F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
 - F12 two of three; F13 three of four; HEAD 5dc860d21; goal paused.
+
+## CP-2326 - F13's delayed-callback fence is two-sided now
+
+- _joints records _joint_epoch from the live epoch identity and controller_feedback refuses a record whose
+- _joint_epoch differs from the current identity, so a value produced before a reset cannot be read as the new
+- epoch's measurement. Together with the measured-stamp bound (CP-2325) the fence now covers both the identity
+- and the timing of the arm measurement. GREEN 215 passed.
+- Stated honestly, as CP-2325 promised: a callback that arrives AFTER a reset and carries a stamp matching the new
+- epoch is admitted, because nothing in the ROS message ties an arm measurement to the epoch that produced it. That
+- is a producer-side property, and it is recorded rather than papered over.
+- F13's only remaining item is scene production, which waits on the owner's CP-2285 ruling.
+- F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
+- F12 two of three; F13 three of four with the third two-sided; HEAD 34d55aafc; goal paused.
