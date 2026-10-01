@@ -46181,3 +46181,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   produces.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end (inspect, prepare, preflight rc=0; four suites 236 passed). HEAD ca3220771; goal active.
+
+
+## CP-2446 — The approved entry is the headless ACT execution stack
+
+- `src/so101_demo_py/launch/so101_mujoco_act_execution_stack.launch.py` is a seven-line wrapper whose docstring reads
+  "Headless ACT simulation stack; command authority stays in the unified child", and it delegates to
+  `so101_demo.runtime.launch_composition.build_act_execution_stack_launch_description()`. So the approved way to bring
+  up what a production episode needs is `ros2 launch so101_demo_py so101_mujoco_act_execution_stack.launch.py` - one
+  command, headless, with the composition living in the runtime package rather than in the launch file.
+- Sibling entries exist (`so101_mujoco_act.launch.py`, `so101_mujoco.launch.py`,
+  `so101_mujoco_pick_place.launch.py`, and the Gazebo pair), which is why the reconnaissance rule matters: exactly one
+  of these may be up at a time, and none is up now.
+- The launch plan that follows therefore has its entry point: that command, started once, with its argv, environment
+  and logs written under the new LIVE_ROOT, its process tree recorded, and a stated way to stop it - after which the
+  run's fourth piece (one allocated worker spawned from a coordinator-written spec) has an environment to talk to.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD 30e67b1ed; goal active.
