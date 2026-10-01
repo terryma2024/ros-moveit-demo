@@ -1,0 +1,19 @@
+# SO-101 ACT development runtime defaults, section 5.1 of the endpoint-pose acceptance design.
+#
+# These are user-authorized empirical initial values so development can proceed without waiting for
+# measurement reports. They are not calibrated and do not represent live qualification. A CLI-specified
+# run configuration takes precedence over this installed file, an unknown field or an invalid unit/type is
+# refused rather than merged, and every run records the effective values with their hash.
+kind: ACT_ENDPOINT_DEVELOPMENT_RUNTIME
+schema_version: 1
+path_policy:
+  path_step_s: 0.002
+  path_clearance_m: 0.002
+rgb_sync:
+  max_age_s: 0.1
+  max_skew_s: 0.1
+safety_release:
+  support_distance_max_m: 0.002
+hard_stops:
+  rtf_min: 0.90
+  disk_free_min_bytes: 53687091200
