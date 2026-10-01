@@ -46508,3 +46508,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   re-runs, and commits once it reaches a full run or a clearly named next layer.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 5c8e002d2; goal active.
+
+
+## CP-2462 — The fourth layer: the coordinator wants a versioned request, not the application one
+
+- The seven-value pose cleared the trusted-target check, and the next refusal is
+  `AttributeError: 'BatchRequest' object has no attribute 'selected_point_ids'` - so the object the coordinator (or
+  the sealed-result adapter) reads is not the four-field application-layer `BatchRequest` this task built. The
+  `PreparedBatch.request` field's type is the union `BatchRequest | BatchRequestV2 | BatchRequestV3 | PoolRequest |
+  None`, and `selected_point_ids` does not appear in the four-field class, so the run needs one of the **versioned**
+  request types.
+- That is the same pattern as CP-2460 and CP-2462's predecessors: each refusal names a contract this task had not yet
+  read, and the fix is to build what the consumer actually reads rather than to adapt the consumer. The next read is
+  the V2/V3 request definitions - their fields, and how `selected_point_ids` relates to the point I already build -
+  after which the construction is a transcription again.
+- Progress worth recording from this run: the guard, the run-mode enum, the trusted seven-value pose and the frozen
+  points/provenance artefacts are all in place, and the refusals have moved past every one of them.
+- The fourth-piece work in the tree is still **uncommitted** and stops at this refusal; it will be committed once the
+  run reaches a full execution or a clearly named next layer.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 685e47d9a; goal active.
