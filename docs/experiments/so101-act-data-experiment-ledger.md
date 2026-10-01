@@ -51062,3 +51062,28 @@ should say `container_brokers=False` - the same declaration the container-free C
 That also completes the picture CP-2683 drew: one boolean cannot be inferred from "a builder exists", because two tests
 with builders want opposite things **for good reasons** - one runs a docker container, the other a host process. The
 explicit flag expresses both, and each caller now states which it is.
+
+
+## CP-2685 — The real error, and a misapplied test edit reverted
+
+With `--tb=short` the failure is unambiguous:
+
+```
+E   FileNotFoundError: [Errno 2] No such file or directory: '.../nonhead-tests.zcOYiD6...'
+    assert composition._wait_broker_ready() is True
+    raise CliError("BROKER_CONTAINER_ID_MISSING") from error
+E   so101_demo.cli.mujoco_parallel_batch.CliError: BROKER_CONTAINER_ID_MISSING
+```
+
+So the test is still taking the **container** path - it waits for a broker ready receipt and instead looks for a container
+id file that a fake host command never writes - which means my `container_brokers=False` declaration did **not** land on
+this test's composition. The anchor I matched (`supervisor=Supervisor(), broker_command_builder=lambda _owner:
+("broker",)`) evidently belongs to a **different** test in the same file, so the edit was misapplied.
+
+That edit has been reverted with `git checkout --` on the test file, and the worktree's `src` count is back to the
+user's 35 entries - so nothing of mine is left in a file I misjudged.
+
+Two things to carry forward: the failure's real error is `BROKER_CONTAINER_ID_MISSING`, not the `assert False is True`
+that `--tb=line` showed (the line form named the last frame, the short form named the cause); and the next attempt
+starts by locating **this** test's own `ProductionBatchComposition(` call rather than by matching a line that merely
+looked like it.
