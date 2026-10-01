@@ -43,7 +43,7 @@ class CaptureSummary:
 
 class ContinuousEpisodeCapture:
     def __init__(self, *, recorder, sampler, physical_audit, guard=None, audit_writer=None,
-                 audit=None,
+                 audit=None, scope=None,
                  dt_s: float = 0.1, max_source_age_s: float = 0.1, max_skew_s: float = 0.0,
                  deadline_s: float = ACT_TIMEOUT_S, monotonic=time.monotonic,
                  frame_capacity: int = 8, reference_capacity: int = 128,
@@ -67,6 +67,8 @@ class ContinuousEpisodeCapture:
         self.audit_writer = audit_writer
         # the raw controller reference history goes to the episode audit when one is wired
         self.audit = audit
+        #: the scope document the freezer wrote, the second half of a v2 seal's binding (CP-2667/2672)
+        self.scope = scope
         self.guard = guard if guard is not None else AcquisitionGuard()
         self.dt_s = dt_s
         self.max_source_age_s = max_source_age_s
@@ -183,7 +185,7 @@ class ContinuousEpisodeCapture:
             raise ValueError(self._failure)
         return self._service()
 
-    def finish(self, physical_end_s) -> CaptureSummary:
+    def finish(self, physical_end_s, *, window=None, outcome=None) -> CaptureSummary:
         if self._session_id is None:
             raise ValueError("CAPTURE_NOT_STARTED")
         if self._finished:
@@ -203,6 +205,12 @@ class ContinuousEpisodeCapture:
         # the tail is handed off before finalization is declared, so a refusing writer leaves the
         # capture retryable and reported with its own reason instead of finished
         paths = tuple(self._tail_paths())
+        # a v2 episode binds its raw audit and the scope it was collected under, so when those are supplied the
+        # audit is sealed here and the recorder is finished with both - and when they are not, nothing changes
+        if self.audit is not None and window is not None:
+            audit_manifest = self.audit.seal(window)
+            if self.recorder is not None and self.scope is not None and outcome is not None:
+                self.recorder.finish(outcome, audit_manifest=audit_manifest, scope=self.scope)
         self._finished = True
         return CaptureSummary(sample_count=self._written, label_cutoff_s=self.label_cutoff_s,
                               audit_files=paths)
