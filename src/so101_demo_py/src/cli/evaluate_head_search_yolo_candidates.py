@@ -394,8 +394,11 @@ def main(arguments: list[str] | None = None) -> int:
             )
         try:
             verdict = choose_candidate(*evaluations)
-        except Exception as error:  # the retention guard refuses instead of choosing
-            if "RETENTION_LOST" not in str(error):
+        except Exception as error:  # the selection rules refuse instead of choosing
+            # HS-275: write the refusal as an artefact for ANY selection refusal, not only the
+            # retention guard - the F1-margin refusal left no comparison behind, so its measured
+            # numbers existed only inside the message.
+            if "EVALUATION_" not in str(error):
                 raise
             # HS-251/252/255: record the refusal as a decision with evidence, then re-raise so the
             # exit status still reports failure. Nothing is promoted; the margin is untouched.
@@ -416,6 +419,7 @@ def main(arguments: list[str] | None = None) -> int:
                     for item in evaluations
                 },
                 "retention": {"margin": TASK_RETENTION_MARGIN, "refusal": str(error)},
+                "refusal": str(error),
             }
             (target / "model-comparison.json").write_text(
                 json.dumps(comparison, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -424,9 +428,7 @@ def main(arguments: list[str] | None = None) -> int:
                 "kind": "head-search-model-selection-verdict",
                 "selection": None,
                 "retained_model": "C",
-                "reason": ("no supportable selection: the retained mixed model gives up more than the "
-                           "retention margin on the task domain, so the frozen evidence supports "
-                           "neither keeping it nor promoting a challenger"),
+                "reason": ("no supportable selection: " + str(error)),
                 "retention": {"margin": TASK_RETENTION_MARGIN, "refusal": str(error)},
                 "promoted": False,
             }
