@@ -53328,3 +53328,25 @@ one line, and it ends a question that has now cost several rounds of inference f
 
 Uncommitted state is unchanged in substance: four production changes and the chain test, with correction 2's test passing
 throughout and correction 3's one path question from its assertion.
+
+
+## CP-2779 — Both paths are files, so the refusal is a later clause of the same block
+
+```
+MANIFEST: .../working/episode/audit/audit-manifest.json True
+SCOPE   : .../working/episode/audit/source.json          True
+```
+
+Printed from inside the store's own `seal`, immediately before it calls `verify_episode_seal`. So the `is_file()` check I
+had read (CP-2765) is satisfied, and `EPISODE_SEAL_AUDIT_INVALID` comes from a **later** clause of that same `if True:`
+block, which my earlier reading stopped short of. The block continues past the two `is_file()` tests, and whatever follows
+is what this refusal is about - most plausibly a comparison between the supplied artifacts and the digests the seal itself
+carries (`audit_manifest_sha256`, `scope_sha256`), which would be the same "the caller must supply what the seal means"
+principle one level further in.
+
+So the diagnosis has moved from "which path" to "which clause", and the remaining read is short: the rest of that block.
+Everything about locations, ownership and publish phases is now settled by measurement - the store sees the right files in
+the right phase - and what is left is one condition inside `verify_episode_seal`.
+
+This is the last of the chain's unknowns, and it is worth noting how it was found: not by reasoning about paths, but by
+printing the two values from inside the component that was refusing, which took one round after several spent inferring.
