@@ -49761,3 +49761,24 @@ pose has to be computed somewhere, and knowing *where* is the difference between
 
 Either way the question has moved from "my test is red" to a specific one about this repository's existing machinery,
 which is where the last several pieces of this work have been found.
+
+
+## CP-2629 — The reuse is real: the adapter holds the model, the cup joint and the gripper body
+
+`adapters/act/physics.py` (299 lines) is a path checker, and its constructor shows what it has in hand:
+
+- `model_path`, `protected_roots`, **`cup_joint`**, **`gripper_body`**, `path_step_s`, `path_clearance_m`;
+- `model_sha256(model)`, and a `self.model` it validates against;
+- `check_path(prefix, snapshot)` / `_check(...)`, whose first act is
+  **`qpos = vector(snapshot['model_qpos'], self.model.nq)`** - so it already turns the recorded configuration into the
+  model's own joint vector, in a worker process, with a timeout.
+
+So the material a pose derivation needs is present: a **loaded MuJoCo model** (which knows its own forward kinematics),
+the **cup joint** and the **gripper body** the pose would be expressed for, and the **configuration** the audit
+records. That makes E2's gap a reuse rather than an invention - the QC can ask this component (or a sibling that shares
+its model handling) for the pose, instead of the audit growing a pose key no producer writes.
+
+The remaining design decision is small and worth naming: whether the QC calls forward kinematics directly on a model it
+loads itself, or reuses this adapter's model handling. The first is fewer moving parts for a fresh process; the second
+keeps one model-loading path in the repository. Either way the question is now about an existing capability rather than
+about what to write from scratch.
