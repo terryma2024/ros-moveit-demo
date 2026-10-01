@@ -53186,3 +53186,30 @@ not in how many components may create a directory.
 
 I have not applied it in this round: the read that shows exactly where `result_store` composes that path is the next step,
 and it is a `grep` for how it builds the base it hands to `verify_episode_seal`.
+
+
+## CP-2773 — The verifier now takes the pair, and the remaining blocker is genuinely a production decision
+
+Fixing the verifier's construction - it was setting `audit_manifest`/`scope` to `None` in its own `__init__` and taking
+neither as a parameter, unlike the store - clears the audit-resolution problem: the pair now travels the way the store's
+does. What returns is `EPISODE_LOCATION_MISMATCH`, which is the directory-ownership knot in its final form:
+
+- the **store** requires the seal at `<workspace>/working/episode/seal.json`;
+- the **recorder** writes the seal at its own root and **creates that root with `exist_ok=False`**;
+- the **audit writer** must root at the same episode directory for the manifest to sit at
+  `<episode root>/audit/audit-manifest.json` (CP-2772's canonical location) - and **it too creates its root with
+  `exist_ok=False`**.
+
+So two components must both create one directory, and neither tolerates one that exists. Every arrangement I have tried
+in the test fails on one of the two refusals, and the reason is not the test: **one of the two classes has to accept an
+existing root by design**, or the owner has to be a third party that creates it before both. That is a production
+decision about who owns an episode's directory, and it is the same decision E3's live path must make - with a worker and
+a coordinator above these three.
+
+I am recording it rather than picking it silently, because the choice is visible in the interface: if the recorder owns
+the directory (it already refuses to reuse one), the audit writer must accept an existing root; if the writer owns it, the
+recorder must. Whichever is chosen, the other class's constructor changes, and every caller of it changes with it.
+
+State of the work: three production fixes and the chain test are uncommitted; the first chain test (correction 2) passes;
+the second (correction 3) is one ownership decision away, and the two refusals it alternates between are evidence of
+exactly that decision rather than of a missing value.
