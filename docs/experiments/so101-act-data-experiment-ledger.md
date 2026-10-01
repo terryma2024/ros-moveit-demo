@@ -43541,3 +43541,34 @@ sealed 六依赖互洽；**唯一缺口是四个 phase 输入的生产者**—�
 （run root 本身不存在）、`$EV/scratch/pytest-xdist8-hs309-final.08a6a164`、`$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-309 节）、
 工作树 `scratch/hs309/`（env.sh、make-c2a-config.py、run-calibration.sh、measurement-consumption-check.py、run-tests.sh、baseline-invocation.sh、
 regression-files.txt、logs/、pyshim、tmp*）。以上**均为删除候选，未删除**；HS-300..308 的产物只读引用，未改动。
+
+## HS-310 — phase 3 的两个输入有安装了的生产者：规则记录**先于**测量存在，520 帧真实测量（双域 × 三候选）被安装版 phase 3 接受，C2a 的 head 选点复现 (0.25, 0.5)；`run` 现在只差 `--admission --bundle-inputs`
+
+**提交** `3c1617532`（4 文件，+2418/−2；普通 `git commit`，钩子 rc=0）。父提交 `ff4576ef9`，工具链 `$EV/head-toolchain-20261001T114016Z`（source commit `3c1617532`），安装树与本 worktree 源码 `diff -rq` **无差异**。
+
+**(a) 规则生产者**：新子命令 `measure-selection-rule`（决策与写入在 `act/head_search_operating_point_measurement.py::record_selection_rule_documents`）。grid 取 HS-248 声明、HS-249 实测的 **18 格** `(min_confidence, tracker.iou)` = conf `0.25/0.35/0.45/0.51/0.60/0.70` × iou `0.5/0.6/0.7`，**声明顺序即 tie-break 链的最后一级**；两个几何值**不搜索**，固定为 sealed 生产配置自己的 `min_bbox_aspect=0.5`、`min_area_px2=64.0`（phase 5 的 readback 要逐值比对这四个数）。写 head/task 两份记录（phase 3 一次只按一个域选点，run 只声明 head 那份）。**"先于测量"由两侧独立保证**：入口要求 `--measurements-output-dir`（测量将占用的目录）**不存在**，存在即 `CAL_RULE_AFTER_MEASUREMENT`；phase 3 的 `_rule_parts` 再从另一侧拒绝 `measurements_admitted != 0` 的记录。
+真实运行（安装程序）：`rc=0`，0 s，`SELECTION_RULE_RECORDED points=18 splits=val,calibration domains=head,task rule_sha256=d2dd040fe8ce59a72dbeee0cd7d3eba14044ad10ba40052296e520ab3ba70689`（task `311bc23891997f8c7f20052287edb05540f61e64d788fe0976dbc7b098f02b50`）；phase 3 自己的 reader 读回两份均 ACCEPTED，provenance 记 `measurements_output_dir_existed=false`（当时测量目录确实不存在）。
+
+**(b) 测量生产者**：新子命令 `measure-operating-point`。规模 = head val 200 张 + task val 200 张 + **20 个 calibration seed × 3 个 neck 角**（sealed `required_search_domain_rad = [-0.17559216195018026, 0.08047101126546086]` 的两端与中点）× 2 个相机 = **520 帧 / 1560 次检测（3 候选）/ 26.3 s**。真值：episode 用**该相机自己**的分割像素均值（recorder 约定，HS-260/261）；val 用数据集自己发布的真值（有可见 mask 时取 mask 像素均值，否则取可见 mask 多边形的**面积形心**）。检出**只录一次**，录在 grid 的最低 conf（0.25）与最高 iou（0.7）——这正是生产 detector 自己的点（`YoloSegDetector._predict` 的 `conf=0.25` + Ultralytics 默认 NMS 0.7），故每个声明点都能从同一份记录重新施加（HS-265 的等价性）；渲染帧先按生产 `_predict` 的 `[:, :, ::-1]` 转 BGR 再预测。val 分割用 gate 自己的 `verify_split_manifest` 校验，并用 gate 自己的 `_measure_static` 在每个候选项**声明点**复测一格（`static_reference`：只作参照、`consumed_for_selection=false`）。文档 `operating-point-measurements.json`（sha256 `605a08a4…`，自摘要 `d598622f…`）先写盘、phase 3 后运行——phase 3 若拒绝，帧仍留证。
+
+**(c) 安装版 phase 3 的选点**（每域每候选一份 `phase3-selection-<domain>-<candidate>.json`）：
+
+| 候选 | head 选中 | head 网格 | task 选中（本轮只汇报，run 不消费） | no-cup 假检 |
+| --- | --- | --- | --- | --- |
+| A | `0.7 / 0.5`（idx 15） | f1 随 conf 上升 0.9294→0.9665 | `0.25 / 0.5` | 0（56 空场景帧） |
+| B | `0.25 / 0.5`（idx 0） | 18 格 f1 全 1.0 | `0.25 / 0.5` | 0 |
+| **C2a** | **`0.25 / 0.5`（idx 0）= HS-265/276 的选择记录** | 18 格 f1 全 1.0，链落在**最早声明点** | **`0.35 / 0.5`（idx 3）** | 0 |
+
+**必须报备的一处不一致**：task 域按本轮声明的规则（task val + task calibration 的合并 F1）C2a 选中 **0.35**，与 HS-276 记录的 C2a 身份"两域同点 0.25"**不同**。原因可读：C2a 的 task val F1 在 0.25 为 0.995（4 FP）、0.35 为 0.9975（3 FP），差 1 个假检（与 HS-265 对旧 C 的 0.35 结论同源）。run 只声明 head 域规则，故**不影响本次 run 的 phase 3/5**：head 选点 `0.25/0.5` 与 frozen-c.json 的 `operating_points.head` 逐值相同。C2a 的 head 选点复现选择记录 ✔。
+
+**(d) 独立交叉验证**（用本轮之前就存在的证据，不用本轮代码）：① 120/120 个 episode 帧与 `episodes7` **同一 seed/角/相机**的记录真值**最坏差 0.0 px**（`_prepare` 确定性 + 按相机分割真值逐位复现）；② 360 份 episode 检出清单中 **3 份计数不同**（全部是候选 A 的 head 帧），成因是上面的通道顺序修正（recorder 把 RGB 直接喂 predict，等于 BGR 入模）；③ head val 抽查 6 帧：与数据集发布的真值多边形差 **0.56 px**、与**新跑一次**的检测逐值 **0.0**；④ 112 个 `no_cup` 帧真值为空、`0.25/0.5` 下三候选假检均为 0；⑤ gate 自己在声明点的参照格（C2a head `mask_map50_95 = 0.986`、task `0.9639`；recall 1.0 / 0.995）落在 HS-249 的 val 网格（`0.98819 / 0.96510`）同一档。
+
+**（e）真实 `run`**：安装程序一次，`rc=2`，stderr `HEAD_SEARCH_RUN_INPUTS_INCOMPLETE: a run declares --admission --bundle-inputs`——比 HS-309 的四个少**恰好**两个，run root 仍未创建（`run_root_existed=false`）。即这两个输入**已经不再阻塞入口**，剩余缺口仍是 HS-309 逐条记录的 `--admission`（需要一次真实 generation）与 `--bundle-inputs`（需要一次生效值 readback；派生配置两个摘要进 bundle 的 schema 决策也仍欠）。
+
+**门禁**：RED（父提交树 + 本轮两份测试文件）：模块文件 `rc=2`、1 collection error（`ModuleNotFoundError: …head_search_operating_point_measurement`），CLI 文件 `7 failed, rc=1`；GREEN：模块 **22 passed rc=0**、CLI **72 passed rc=0**；回归（HS-288..309 的 25 个 phase/CLI/calibration 文件 + 本轮新文件，`-n 8`）**726 passed, rc=0**；全量 `src/so101_demo_py/test`（8 workers，基线 run-dir 布局 `$EV/scratch/pytest-xdist8-hs310-suite.acf8060d`）**tests 6625 / 175 failed / 6212 passed / 152 skipped / 86 errors, rc=1, 77 s**，与基线 `pytest-xdist8-hs309-final.08a6a164` **节点级 diff 0 行（261 节点相同）、0 新增失败**，失败集中 **0 个** head_search/calibration 节点；+29 passed 恰为本轮 22 + 7。24 逻辑 CPU / 8 workers。运行与测试后 `ps` 无 ros2/MuJoCo/pytest 残留（测试套件在 domain 126 上留下的 ros2 daemon 已 `kill` 并复核 `ros2 daemon status` = not running），`nvidia-smi --query-compute-apps` 为空。
+
+**它声明的推断（待评审，逐条照录）**：① grid 的两个几何值取 sealed 生产配置的 `min_bbox_aspect/min_area_px2`（而非 campaign 的"只搜 conf×iou、无几何下限"），理由是 phase 5 要求 bundle 的四个感知值与选中点**逐值相等**，且几何下限属于生产 postprocess；② 规则记录写两份（head/task）而 run 只声明 head 那份，因为 phase 3 一份规则只服务一个域；③ task 域在 0.35 的选点作为"同一条声明规则施加到 task 域"的汇报事实保留，不据此改动任何 frozen 文档；④ 渲染帧按生产 `_predict` 的 RGB→BGR 转换（与 campaign recorder 直接喂 RGB 的写法不同，其影响已在 (d)② 的 3 处计数差异中量化）；⑤ 本轮只测规则声明的两个 selection split（`val` + `calibration`），**未测 held-out**，故 `--held-out-measurements` 未声明、phase 3 的 `held_out_report.measured=false`；⑥ 每帧记录 `w/h`，让 `min_area_px2/min_bbox_aspect` 这两个下限真能施加（否则只能按置信度判定）；⑦ episode 的 scenario 沿用 recorder 的 `condition_classes[min(i//2, n-1)]`（partitions 只声明类别集合、不声明 seed→类别）；⑧ `_measure_static` 与 `_dataset_sums` 直接从 `cli/evaluate_head_search_yolo_candidates` import（"复用 gate 的测量代码"而非重写，HS-248/249 的 grid 用的就是这两个函数）；⑨ 文档摘要沿用 `canonical_sha256(body 去掉 sha256)` 口径；⑩ `--seed-limit` 本轮未使用（20 个 seed 全测）；⑪ 规则生产者的"测量目录必须不存在"作为排序证据，测量生产者则记录规则文件的 path+sha256，二者互不写对方的目录。
+
+**17 值 bundle 状态**：**未产出**（本轮不尝试）。phase 3 的两个输入已齐并已在真实 `run` 上通过入口；剩余 `--admission`、`--bundle-inputs`。
+
+**本轮证据与生命周期**：`$CAMPAIGN/selection-rule-20261001T114155Z{,.console.log,.provenance.txt}`、`$CAMPAIGN/operating-point-20261001T114155Z/`（测量文档 + receipt + 6 份 phase-3 选点文档 + `static-reference/`）、`$CAMPAIGN/head-search-calibration-20261001T114326Z{,.console.log,.provenance.txt}`（run root 本身不存在）、`$EV/head-toolchain-20261001T114016Z`、`$EV/scratch/pytest-xdist8-hs310-{final.ca92fc1e,suite.acf8060d}`、`$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-310 节）、工作树 `scratch/hs310/`（env/common/runner 脚本、plan-check、check-frames、read-rules、red/、logs/、pyshim、tmp*）。以上**均为删除候选，未删除**；HS-300..309 的产物只读引用，未改动。
