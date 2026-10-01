@@ -53608,3 +53608,24 @@ next round's first act.
 
 The round also corrects its own predecessor: CP-2788's deduction was based on truncated output, and the honest record of
 that is this entry rather than an edit to the other.
+
+
+## CP-2790 — Found it: the endpoint QC resolves the manifest one level above the audit directory
+
+```python
+def endpoint_qc_document(episode_root, inputs, *, manifest_name: str = "audit-manifest.json") -> dict:   # episode_qc.py:134
+```
+
+`endpoint_qc_document` takes a base directory and appends the manifest's name to it - so the base it is given must be the
+directory the manifest actually sits in, which by CP-2785's arithmetic is the episode's **`audit/`** directory. The
+caller in the verifier passes `episode_path.parent`, and `episode_path` is the episode **seal**
+(`<episode root>/seal.json`), so the base becomes the episode root and the manifest is looked for at
+**`<episode root>/audit-manifest.json`** - exactly the path CP-2789 measured as the one wrong value.
+
+So the chain's last defect is a caller passing a base one level too high, and it is mine: the wiring committed as 3a0577c8e
+(research: the verifier carries the endpoint verdict) calls `endpoint_qc_document(episode_path.parent, …)`. The fix is one
+argument - pass the audit directory (`episode_path.parent / "audit"`) - and it is consistent with the first test, which
+calls the QC with `manifest_path.parent` (the directory the manifest is in) and works.
+
+That closes the last of the chain's questions with a one-argument correction in code I wrote, found by printing the value
+at the callee after every caller-side path had been read and every other explanation measured away.
