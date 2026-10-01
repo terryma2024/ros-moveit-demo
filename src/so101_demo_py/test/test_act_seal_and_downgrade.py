@@ -366,3 +366,23 @@ def test_the_physical_audit_adapter_owes_exactly_thirteen_keys():
     incomplete = {key: None for key in PhysicalAuditAdapter.KEYS if key != "phase"}
     with pytest.raises(ValueError, match="PHYSICAL_AUDIT_INCOMPLETE"):
         PhysicalAuditAdapter(lambda at_s: incomplete)(1.0)
+
+
+def test_the_producer_pushes_the_runs_own_frames_when_it_has_them():
+    """A live run must push the frames it captured, not zeroes: the capture compares a row's pixels against its
+    acquisition (`ACQUISITION_PIXEL_MISMATCH`), so the frame source is injectable and defaults to zeroes only for a
+    harness (CP-2847)."""
+    import numpy as np
+
+    seen = []
+
+    def frames(stream, index):
+        seen.append((stream, index))
+        return np.full((480, 640, 3), 7, dtype=np.uint8)
+
+    producer = ProductionProducer(frames=frames)
+    for stream in producer.STREAMS:
+        producer.stamps[stream].append(1.0)
+    observation, _ = producer.sample_with_audit("session-1", "attempt-1", 1.0)
+    assert seen == [("head", 0), ("wrist", 0)]
+    assert int(observation["head"][0, 0, 0]) == 7

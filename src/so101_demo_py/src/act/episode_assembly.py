@@ -93,8 +93,13 @@ class ProductionProducer:
 
     STREAMS = ("head", "wrist", "arm", "neck")
 
-    def __init__(self, *, max_age_s: float = 0.1, max_skew_s: float = 0.1) -> None:
+    def __init__(self, *, max_age_s: float = 0.1, max_skew_s: float = 0.1, frames=None) -> None:
         from .synchronizer import RgbObservationSynchronizer
+        #: where a frame comes from for a stream at an index - the run's own camera frames when it has
+        #: them. The default synthesises zeroes, which is enough for a harness and wrong for a live run:
+        #: the capture compares each row's pixels against the acquisition it recorded
+        #: (`ACQUISITION_PIXEL_MISMATCH`), so a real episode must push the frames it actually captured.
+        self.frames = frames
 
         self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s)
         #: where a frame-feeding loop records the instants it has supplied, one list per stream
@@ -118,7 +123,7 @@ class ProductionProducer:
                 if stamp is None:
                     continue
                 if stream in ("head", "wrist"):
-                    value = frame
+                    value = frame if self.frames is None else self.frames(stream, self._pushed)
                 elif stream == "arm":
                     value = [0.0] * 6
                 else:
