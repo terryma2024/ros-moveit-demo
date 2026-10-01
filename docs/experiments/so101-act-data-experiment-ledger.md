@@ -48450,3 +48450,22 @@ So F5's step two is not "satisfy the predicate"; it is "either use the minimal w
 fixture uses, or supply the real observations the ten-field form asserts and let the predicate judge them". Both are
 legitimate, and the first is what the suite does deliberately: the minimal form is the one that makes no claims the
 audit cannot support.
+
+
+## CP-2560 — F5's step two is closed: seal and readback, committed
+
+The measured result, in one run: `SEALED True`, `VERIFY kind: ACT_EPISODE_AUDIT | files: 8`,
+`WINDOW {'start_s': 1.0, 'end_s': 1.2, 'label_cutoff_s': 1.0}`, `1 passed`. Committed as c2add6f9f with the audit suite
+green at **75 passed** (the 74 from before plus this test).
+
+What closed it was not satisfying the ten-field predicate but recognising the seal's conditionality: a window whose key
+set is exactly `_WINDOW_FIELDS` is checked by `_window_ok` and `_window_matches_rows`, and the minimal form the suite's
+sealing tests use is not. The fixture that does the rest is the suite's own `complete_audit()` - acquisitions at
+1.0/1.1/1.2, one accepted reference at 1.1, a `phase_complete` event, `support` and `retract` physics rows with full
+observations, and `bind_row(0, 1.0, head@1.0, wrist@1.0, 1)` - so the six coverage terms are satisfied by the same rows
+the suite has always used, and the readback verifies by recomputation rather than by trusting the seal's claim.
+
+The honest summary of the long chase: the fixture was wrong in one respect (a missing accepted reference, which
+`bind_row` requires at `round(sim_time_s + _GRID_S, 6)`), and the window was wrong in another (the full form asserts
+observations this fixture never made), and both were found by reading verbatim logs and the suite's own passing tests
+rather than by reasoning about source text - the same lesson this stretch recorded five times.
