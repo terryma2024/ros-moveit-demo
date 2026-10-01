@@ -51957,3 +51957,35 @@ overwrites itself (`reference_time_s`, `reference_source`, `reference_positions`
 That is the ninth fact this correction has surfaced, and it is the one that reframes the work: the test does not need a
 new fixture so much as a **recorder-compatible** one, because the existing harness's freedom to be loose is exactly what
 `FakeRecorder` allowed and the real recorder does not.
+
+
+## CP-2724 — The recipe for a recorder-compatible harness, ready to write
+
+Two small pieces turn the existing harness into one the real recorder accepts:
+
+```python
+class RecorderSampler(FakeSampler):
+    """The same sampler, minus the one key the recorder's closed audit set does not admit."""
+    def sample_with_audit(self, session_id, attempt_id, at_s):
+        observation, source = super().sample_with_audit(session_id, attempt_id, at_s)
+        return observation, {"source_stamps": source["source_stamps"]}
+
+
+def recorder_physical_audit(at_s):
+    """The physical half only: the recorder suite's audit minus what the sampler supplies."""
+    return {key: value for key, value in recorder_audit(at_s).items() if key != "source_stamps"}
+```
+
+The arithmetic that motivates them: the recorder's closed set is sixteen keys; the capture contributes
+`head_acquisition_id` and `wrist_acquisition_id`, overwrites `reference_time_s`, `reference_source` and
+`reference_positions` from the row's reference, and takes the rest as the union of the physical half and the sampler's
+`source_audit`. The harness's sampler supplies `source_stamps` **and** `source_received_wall_s`, and the second is not in
+the set - which is the whole of `EPISODE_AUDIT_SCHEMA` (CP-2723).
+
+So the test's own harness is: `RecorderSampler` instead of `FakeSampler`, and the recorder suite's `audit(at_s)` as the
+physical half with `source_stamps` removed. Everything else - the two distinct roots, the scope file being the audit's own
+`source.json`, the references that release each row, the drain, the `PASSED` outcome and the verifier with
+`endpoint_inputs` - is already derived from the facts in CP-2706 through CP-2723.
+
+Recorded rather than written in this round because the remaining context is one call's worth: the next round writes it
+from this recipe, and if the arithmetic is off by a key the recorder will say so by name.
