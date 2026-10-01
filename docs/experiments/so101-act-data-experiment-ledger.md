@@ -46420,3 +46420,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   which the episode itself, the Recorder evidence, the fresh-process QC and the coordinator commit follow in order.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD c589ea206; goal active.
+
+
+## CP-2458 — The spec is built from the composition's own authority, so option A is the route
+
+- `ProductionBatchComposition` constructs `WorkerResourceAllocator(...)` at 2685 and then, for **each** allocated
+  worker, issues tokens and builds the worker spec: `token_path = self.authority.issue(worker_id, generation)`,
+  `control_token_path = self.authority.issue(control_id, generation)`, the socket paths under
+  `self.authority.ipc_root`, an `AuthenticatedUnixServer` for the coordinator's side of that socket, and a
+  `worker_spec` carrying `schema_version`, `batch_id`, `run_mode`, `config_path`, `socket_path`, `token_path`,
+  `control_token_path` and the rest of CP-2444's fifteen fields.
+- So none of those fields can be invented by a caller: the authority that mints the tokens and owns the IPC root is
+  the composition's own state. That settles CP-2444's choice - **option A**: the single-episode run instantiates the
+  production composition with a specification describing **one** worker, and lets it perform this loop exactly as it
+  does for a sweep. Option B would have to reimplement the authority, the server and the launch sequence, which is
+  precisely the "second implementation" the plan forbids.
+- What the run therefore has to supply is a `PreparedBatch`-shaped specification for one worker: the frozen config and
+  points paths, the grounded root and its manifest hash, the catalog, provenance, manifest and their hashes read from
+  the frozen tree, `expected_final_cup_pose_world` from the scenario's target, an `evidence_root` under the new
+  LIVE_ROOT, and the run mode; the fields with no frozen source stay absent by construction rather than filled with
+  placeholders.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD d4e311a4f; goal active.
