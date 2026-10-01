@@ -54578,3 +54578,29 @@ helper then constructs that adapter instead of `RecorderSampler`, and every asse
 independent read-back, the endpoint QC, the downgrade - runs on a producer that is the production class.
 
 That is the last step of K1's forward half, and it is bounded: one adapter, one loop, four streams.
+
+
+## CP-2826 — E3's independence requirement, and the relative-path property it runs into
+
+E3 asks for an **independent** QC, and independence has a testable meaning: the process that seals an episode is not the
+process that grades it. Writing that test - seal in this process, a child interpreter loads the sealed audit and prints
+its verdict - ran into a property of the sealed audit itself:
+
+```
+AssertionError: m0/w00/attempts/point-1/attempt-1/working/episode/audit/audit-manifest.json
+```
+
+The manifest lists its files **by relative name** (`{"path": target.name, ...}`, written at
+`episode_audit.py`'s seal), so anything that reads a sealed audit resolves those names against the manifest's own
+directory. Handing a child process the manifest's path is not enough on its own: pytest's `tmp_path` is relative to the
+session's working directory, and the child's resolution of both the path it is given and the names inside the manifest has
+to agree with the parent's.
+
+Three attempts (absolute paths, a shared `cwd`) did not settle it, so the test is reverted and what it found is recorded
+instead. This is worth keeping for E3 rather than for the test: **a sealed episode is only self-describing relative to its
+own directory**, which matters the moment the grading happens somewhere else - a restarted process, a different worker, or
+the coordinator after a `FULL_RESTART`. The chain tests pass today because everything happens in one working directory;
+E3 is exactly the case where it may not.
+
+The tree is green at `5 passed`, nothing of mine is uncommitted, and the next attempt at this test should start from where
+the manifest's own file references resolve rather than from where the test's do.
