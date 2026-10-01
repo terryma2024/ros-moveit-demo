@@ -46987,3 +46987,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - Nothing else changed this round: the environment is up and healthy, the input side is green end to end, and the
   execution side waits on the container-free broker decision reported at CP-2481/2482.
 - F1, F14, F3, F12 and F11 closed; F13's scene item awaiting K2. HEAD d28032d0e; goal active.
+
+
+## CP-2487 — The K2 checkpoint is required, and this machine can run it
+
+- Checked the review environment the repository's rules require at a checkpoint: `codex` is installed at
+  `/home/matianyi/.local/bin/codex`, a tmux server is up with exactly one session, `dst: 1 windows (attached)` - the
+  session this task runs in - and `~/.codex` holds its app-server control, daemon and archived sessions. So the
+  machine has a usable Codex environment, and per the rules the checkpoint review is performed by starting or reusing
+  a Codex session in tmux on this host with GPT-6.1 Sol / High.
+- The checkpoint that is pending is K2's: the plan requires the small protocol table (CP-2375) to be checked by an
+  execution-host Codex checkpoint **before** the schema, writer, serializer and every consumer change together. That
+  review has not been run, so K2's implementation is correctly still waiting rather than proceeding on my own reading.
+- One question belongs to the user rather than to me: this task also carries the constraint not to disturb the user's
+  tmux setup, while the workflow prescribes launching a Codex session in tmux for the checkpoint. `dst` is the session
+  this task itself runs in and the only one present, so asking before opening a window in it is the cautious reading
+  of two rules that could otherwise collide - and the review is not something to skip.
+- F1, F14, F3, F12 and F11 closed; F5's step two one instrumented run away; E1's input side green end to end; the
+  environment is up and healthy. HEAD 0bcf4f666; goal active.
