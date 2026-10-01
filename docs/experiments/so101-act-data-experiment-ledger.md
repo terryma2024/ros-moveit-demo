@@ -41260,3 +41260,30 @@ task 域 truth: n=120  median=4502px  min=2607  max=5322      ← 两域已不�
 ```
 
 至此 recorder 的四个缺陷全部修掉：① 不写 truth；② truth 按 geom 而非按 body；③ truth 跨相机复用；④ 检出键 `cx/cy` 而非 `x/y`。
+
+## HS-262 — 四个 recorder 缺陷修完后的首次干净指标：retention 仍拒绝，但理由第一次是"真"的
+
+`episodes6`（按相机 truth）+ 修正后的 compare 运行结果：
+
+| 候选 | episode head (r / f1 / p95) | episode task (r / f1 / p95) | static head mAP | static task mAP |
+| --- | --- | --- | --- | --- |
+| A | 0.9167 / 0.9483 / 3.44px | **1.0 / 1.0 / 1.23px** | 0.7042 | **0.9737** |
+| B | **1.0 / 1.0 / 3.99px** | **1.0 / 1.0 / 1.88px** | 0.7410 | 0.9653 |
+| C（被保留） | **1.0 / 1.0 / 3.77px** | 1.0 / **0.7407** / 1.18px | **0.7434** | 0.9631 |
+
+裁决：`EVALUATION_TASK_RETENTION_LOST: the mixed model gives up 0.011 mask mAP on the task domain`；verdict 仍是
+`selection: null / retained_model: C / promoted: false`。
+
+**这次拒绝与之前有本质区别**：此前 task 域的 episode recall 全是 0，"task 域 recall 保留门"形同不存在；修好按相机取 truth 后，
+该门第一次真正生效并通过（三者 recall 都是 1.0，差值为 0），真正触发拒绝的只有**静态图像**那条：C 的 task mAP 0.9631 对最高
+0.9737，差 **0.0105 > 0.01**。
+
+**修好后新暴露的一个实质发现**：C 在 task 视角下 **recall 1.0 但 f1 0.7407** → 反推 precision ≈ **0.59**，即被保留模型在 task 域
+产生明显多余的检出；A、B 在该域 precision/recall 都是 1.0。这项此前完全被 truth 缺陷掩盖。
+
+**至此四个 recorder 缺陷全部修掉并各自复核**：① 不写 truth；② 按 geom 而非 body（1 杯数成 13）；③ 跨相机复用分割图
+（task 域 1.7% 是口径产物）；④ 检出键 `cx/cy` 而非 `x/y`。
+
+**仍然存在的边界（未变）**：10 个条件类里 4 个（`low_light`/`partial_occlusion`/`fast_interruption`/`reacquire_after_stop`）
+渲染上与普通一杯场景无差别；训练数据中的干扰物/靠瓶场景在 episode 中不存在；`match_radius_px` 沿用默认 8.0；有效独立样本
+≈20 个场景/域。
