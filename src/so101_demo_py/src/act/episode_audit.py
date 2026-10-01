@@ -1129,7 +1129,15 @@ def _formal_coverage_ok(audit: Path) -> bool:
     # must never decrease and every one of them must be an epoch a release event actually named
     named_epochs = {row["payload"].get("release_epoch") for row in events if row["kind"] == "release"}
     epochs = [row["release_epoch"] for row in physics]
-    if (any(type(epoch) is not int or epoch not in named_epochs for epoch in epochs)
+    # F5 (eighth verdict): the episode's own declared initial epoch is exempt from transition naming — only the
+    # epochs a release actually entered must be named — while the sequence itself never goes backwards
+    try:
+        initial = json.loads((audit / "audit-manifest.json").read_bytes())["identity"]["release_epoch"]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError):
+        initial = 0
+    if type(initial) is not int:
+        initial = 0
+    if (any(type(epoch) is not int or (epoch > initial and epoch not in named_epochs) for epoch in epochs)
             or any(later < earlier for earlier, later in zip(epochs, epochs[1:]))):
         return False
     observed = any(isinstance(row.get("observation"), dict)
