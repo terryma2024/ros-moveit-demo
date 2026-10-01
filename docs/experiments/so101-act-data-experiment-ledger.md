@@ -44320,3 +44320,23 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - Reverted; the audit suite is green and nothing half-applied remains.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed;
 - F5's regression fixed with step one landed and step two two clauses from diagnosis; HEAD 7e17f4d36; goal active.
+
+## CP-2353 - Task A's probe: the two truncated clauses should both hold, so the failure is likely the epoch relation
+
+- Reading the two clauses the truncation hid, against what the fixture and the port actually supply:
+-   * observed_row needs one physics row whose observation carries planning_scene_observation AND
+-     controller_feedback - and CP-2339 gave the port's evidence exactly those two, which the runner copies into
+-     every row it writes, so this clause should hold;
+-   * ref_group needs one accepted reference carrying the legacy raw group or the packed one - and the fixture
+-     appends joint_names, sim_stamp_ns, received_monotonic_ns and velocities together, so it should hold too.
+- If both hold, the refusal comes from a clause the probe did NOT print - and the only one left in that predicate is
+- the physics release-epoch relation this ledger added at CP-2292 and amended at CP-2308: every row's epoch must be
+- an epoch a release event named, exempting the episode's declared initial one. The runner advances its own epoch at
+- RELEASE and emits the event naming the new one, while the ROWS' release_epoch comes from the port's evidence, so
+- the two can disagree in exactly the way CP-2325/2326 fenced on the read side but never checked between streams.
+- The next probe is therefore identical plus one clause: print the epochs the physics rows declare, the epochs the
+- release events name, and the declared initial epoch from the manifest identity - three numbers that settle it in
+- one run.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+- its derivation behind CP-2332; F5's regression fixed with step one landed and step two one clause from diagnosis;
+- HEAD 7b242cfe4; goal active.
