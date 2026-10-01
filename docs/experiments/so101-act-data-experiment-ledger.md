@@ -53350,3 +53350,34 @@ the right phase - and what is left is one condition inside `verify_episode_seal`
 
 This is the last of the chain's unknowns, and it is worth noting how it was found: not by reasoning about paths, but by
 printing the two values from inside the component that was refusing, which took one round after several spent inferring.
+
+
+## CP-2780 — The whole block, and the one contradiction left in it
+
+```python
+            if not audit_manifest.is_file() or not scope.is_file():
+                raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+            if _hash(audit_manifest.read_bytes()) != document["audit_manifest_sha256"]:
+                raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
+            if _hash(scope.read_bytes()) != document["scope_sha256"]:
+                raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
+            verify_audit_manifest(audit_manifest)
+            with (audit_manifest.parent / "episode.json").open("rb") as stream:
+                audit_identity = json.loads(stream.read())
+            if (audit_identity.get("session_id") != document["session_id"] ...):
+                raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
+            audit_document = json.loads(audit_manifest.read_bytes())
+            if _hash(scope.read_bytes()) != audit_document["scope_sha256"]:
+                # the scope handed to verification must be the payload the audit was collected under
+```
+
+The chain is thorough: existence, then two digest agreements with the seal, then a full re-verification of the audit, then
+the audit's identity against the seal's, and finally the scope against the digest the audit itself recorded. Each clause is
+the same principle - a caller must supply what the seal means, and the components check it rather than trust it.
+
+And the contradiction that remains is narrow: the reported code is `EPISODE_SEAL_AUDIT_INVALID`, which is the **first**
+clause, while the print from inside the store showed both paths as files immediately before the call. Two explanations
+survive - the print and the call do not see the same values (the attributes may be re-read or shadowed between them), or
+the code I am reading is not the code that ran (the plan root's `pypath` overlay is a copy, and this stretch has been
+bitten by that before). The second is checkable in one command and, given the history, worth checking before another
+round of reading.
