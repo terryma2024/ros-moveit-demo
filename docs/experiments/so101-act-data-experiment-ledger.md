@@ -48385,3 +48385,26 @@ are then visible in its own output, and they are the original F5 question in pla
 
 So F5's step two now has both halves named and separated: the **binding** is solved, and the remaining work is to give
 the fixture the coverage the seal requires - after which the seal can be attempted for real and the readback follows.
+
+
+## CP-2557 — K2 revision 2: FAIL, with three concrete corrections
+
+The re-review's verdict, read from the lines before its true final `EXIT=0`: **FAIL**, token usage 76,143, and three
+required corrections:
+
+1. **Complete the causal protocol.** "S/G/A/Q/R are suitable boundaries, but **parent references prove referential
+   integrity, not causal ordering**" - so naming a parent is not enough; an ordering mechanism has to be required as
+   well.
+2. **Replace the nonexistent `/clock` mapping.** The reviewer cites `publish_clock()` in
+   `third_party/mujoco_ros2_control/...`, i.e. the mapping I described as "the published `/clock`" is not the mechanism
+   this repository actually has - a factual correction of the same kind it made about `verify_audit_manifest()` in
+   round one.
+3. **Actually freeze the schema.** "Section 4 lists requirements without defining them. Supply the version value; exact
+   nested keys, types and event kinds" - so revision 2's schema section is a statement of intent, not a frozen
+   specification.
+
+Two of the three corrections are about the boundaries and the schema, which is where revision 1 was also found wanting,
+and the second is a correction of a fact I asserted rather than a matter of judgement. So revision 3 has a precise
+brief: an ordering rule alongside the parent references, the repository's real clock mechanism named instead of the one
+I assumed, and a schema section that defines the version, the exact nested keys and types, and the event kinds rather
+than listing that they must be defined.
