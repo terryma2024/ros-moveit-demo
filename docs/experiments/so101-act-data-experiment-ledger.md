@@ -44109,3 +44109,17 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
 - derivation behind CP-2332; F5's regression fixed, step one landed (CP-2339), step two attempted here and handed
 - off with its three refusals; HEAD 35d6d38ee; goal paused.
+
+## CP-2343 - A fresh baseline at the hand-off head: fourteen suites, 446 passed
+
+- Run at HEAD 5c857850b with pytest-xdist, eight workers, its own NVMe scratch and a non-empty tempfile proof:
+- FOURTEEN suites - the audit, release boundary, task8, search port, controller reference observer, recorder,
+- continuous capture, live qualification, W8 qualification, the store's commit suite, the generic artifact suite,
+- parallel collection, supervisor and campaign admission - rc=0, **446 passed**, pointer in
+- logs/task3-baseline-round401.run with its rc file beside it.
+- Why it matters for a hand-off: every landed item in this stretch is covered by at least one of these suites, so
+- this single run is the evidence that the tree the next worker receives is coherent - not merely that each change
+- was green when it landed. It is also the widest of the stretch's runs.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
+- derivation behind CP-2332; F5's regression fixed, step one landed, step two handed off with its three refusals
+- and its probe recipe; HEAD 5c857850b; goal paused.
