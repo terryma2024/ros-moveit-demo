@@ -45503,3 +45503,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   to be confirmed by the identity comparison rather than assumed.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's artifact,
   discovery and resource route all landed. HEAD 7fd43bf96; goal active.
+
+
+## CP-2412 — The identity judgement read, and the next read named
+
+- `_read_verified(entry)` (line 272) is the function behind the new signal: it refuses a symlink or a missing file,
+  and it raises `INPUT_IDENTITY_MISMATCH` when `sha256(file) != entry["sha256"]` - i.e. when a **candidate's recorded
+  digest** no longer matches the bytes on disk. So `runtime_config` and `collection_config` are not mismatching
+  because of a broken path but because their candidate entries carry digests recorded before this round's edit to
+  `parallel_batch_v3.yaml`.
+- Where those entries come from is the one thing not yet read: the roles dictionary in `inspect_inputs` binds
+  `"collection_config": collection_role` and `"runtime_config": runtime_role`, and both variables are built a few
+  lines above it (the same region that binds `proposal_role` and `activation_role`). Those builders - or the document
+  they read - hold the recorded digests, and updating that record is the step that closes the signal, exactly as a
+  freeze is a new immutable input set rather than a merge.
+- Also confirmed by this read: the ledger must carry an absolute `evidence_root` (or `INPUT_LEDGER_INVALID`), and
+  candidate discovery resolves everything against that root - which is why the authorization artifact's absolute path
+  had to be named in CP-2409 and why the two YAML documents in the source tree cannot be candidates by themselves.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's artifact,
+  discovery and resource route landed, with the recorded identity the remaining item on that route. HEAD 67ecf350f;
+  goal active.
