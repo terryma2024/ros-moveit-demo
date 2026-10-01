@@ -43719,3 +43719,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - owner's CP-2285 ruling.
 - F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
 - F12 two of three; F13 one of four; HEAD 17094b51f; goal paused.
+
+## CP-2321 - F13's both-kinds rule: the insert point is inside the if-expression, after any() closes
+
+- Two attempts, both reverted. The first missed the anchor entirely (the block's text differs from the sed print in
+- whitespace), the second inserted by line and put the new condition OUTSIDE the if - a syntax error the suite
+- reported immediately - and the third split the second any(...) expression, breaking ten tests.
+- The block's shape, now read precisely: `if (not isinstance(value, list) or not value` then two any(...) clauses,
+- with the `for entry in value)):` line closing BOTH the second any and the if. So the new condition goes between
+- those two closers: the line becomes `for entry in value)`, then the T3-F13 comment and
+- `or sorted(entry["controller"] for entry in value) != sorted(_FEEDBACK_CONTROLLERS)`, then `):`.
+- That is the transcription for the next attempt, and the rule itself is one comparison: exactly one record per
+- controller, which refuses an arm-only collection and one that repeats a kind.
+- Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
+- F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
+- F12 two of three; F13 one of four with this item transcribed; HEAD c772a77f1; goal paused.
