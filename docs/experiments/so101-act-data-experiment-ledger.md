@@ -48636,3 +48636,19 @@ pose, and in what form - and that is one read of the physics record shape the su
 (`cup_position_world_m` in `observation`) plus whatever the endpoint policy expects (`xyz_xyzw`).
 
 The review of K2 revision 3 is still running (`tail -1` empty).
+
+
+## CP-2570 — The revision-3 review finished, and the audit does carry a pose
+
+Two results in one round. First, **the K2 revision-3 review is complete**: `tail -1` on
+`reviews/k2-protocol-recheck3.log` is **`EXIT=0`**, i.e. a completion marker at the end of the file, which is what
+CP-2546's corrected rule requires - so the verdict is readable and reading it is the next round's first action.
+
+Second, the pose question E2 was waiting on is answered by the schema itself: `_PHYSICS_OBSERVATION_FIELDS` admits, among
+the MuJoCo summary fields that "stay admissible for sources that only publish them",
+**`cup_position_m`** and **`model_qpos`** alongside `model_qvel`, the three contact groups, `truncated` and
+`diagnostic_hazard_breached`, with the comment noting that the **registered live sample (`act/contact_live.py`) carries
+the real source records**. So the audit's physics rows can carry the cup's position and the model configuration, which
+is what `endpoint_records_from_audit` needs to derive an endpoint record at each of the two boundaries the design names -
+post-reset/pre-arm-gripper-dispatch and post-completion/post-controller-stop - with the targets coming from the frozen
+inputs and `evaluate_endpoint_pose` doing the arithmetic.
