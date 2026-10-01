@@ -53306,3 +53306,25 @@ will mean for E3 - the verifier is handed the sealed location, which is what `se
 That also means the two chain tests are finally distinguished by exactly one real thing: the first exercises the episode
 directly (pre-publish), and the second exercises it through the store (post-publish), and each needs the pair named for the
 phase it is in.
+
+
+## CP-2778 — Both phases are now named, and the store's own verification still refuses the pair
+
+The test now hands each side the pair for its phase: the store the pre-publish one (it verifies before it publishes), and
+the verifier the published one under `sealed/`. That is the arrangement CP-2777 argued for, and with it the refusal is
+back to `EPISODE_SEAL_AUDIT_INVALID` - the `is_file()` check inside `verify_episode_seal` - raised by the **store's** call.
+
+Which puts the two measurements side by side and makes them look contradictory: CP-2777 printed the manifest and the scope
+as `True` immediately before `store.seal(episode_seal)`, and the store's own verification then reports one of them not a
+file. Three ways that can be true, and they are distinguishable with one print inside the store rather than by reasoning:
+
+- the store verifies at a point where the paths have already changed (i.e. after the rename, not before it as CP-2776
+  suggested from line numbers alone);
+- the attributes are not what `seal` reads (it may take its own arguments, or recompute);
+- or the pair that reaches `verify_episode_seal` is transformed on the way (`_safe`, a base directory, a join).
+
+The instrument is a print of the two paths as `seal` sees them, immediately before it calls `verify_episode_seal`. That is
+one line, and it ends a question that has now cost several rounds of inference from paths that were computed elsewhere.
+
+Uncommitted state is unchanged in substance: four production changes and the chain test, with correction 2's test passing
+throughout and correction 3's one path question from its assertion.
