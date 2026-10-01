@@ -325,7 +325,19 @@ def _run(arguments) -> int:
     # endpoints - the class the coordinator's ACT gate selects by the contract the port implements (CP-2798/2802)
     # the broker runs in its image, which is the route the coordinator approved (CP-2760): the composition's
     # own default builds that command from the spec, so the container-free builder is not passed here
-    composition = ProductionBatchComposition(spec, endpoint_inputs=_endpoint_inputs)
+    # The episodes of this run share one scope document: its values - mode, scene, seed, inputs digest - are the
+    # same for every episode, while each episode's own audit source is a different path under that episode's
+    # root. It is written here because this is the process that holds the frozen set; the composition only
+    # carries the path into the worker specifications (CP-2862).
+    from so101_demo.act.collection_scope import build_collection_scope
+
+    _scope_path = root / "episode-scope.json"
+    _scope_path.write_text(json.dumps(build_collection_scope(
+        str(manifest["mode"]), scene_id=str(manifest["roles"]["anchor_scene"]["identity"]["scene_id"]),
+        seed=int(manifest["roles"]["anchor_scene"]["identity"]["seed"]),
+        inputs_sha256=str(manifest["inputs_sha256"])), indent=2, sort_keys=True) + "\n")
+    composition = ProductionBatchComposition(spec, endpoint_inputs=_endpoint_inputs,
+                                            episode_scope_path=str(_scope_path))
     # the drive, exactly as the batch path does it: the composition runs itself, its summary becomes an outcome
     # document, and the document is written as the aggregate beside the run's own evidence
     from so101_demo.cli.mujoco_parallel_batch import _run_with_shutdown_signals, _write_json, outcome_document
