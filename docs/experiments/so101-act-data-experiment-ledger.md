@@ -43817,3 +43817,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Reverted (probe withdrawn); the audit suite is green (72 passed).
 - F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed with this item one probe from alignment;
 - F5's regression fixed; F12 two of three; HEAD 058912422; goal paused.
+
+## CP-2328 - F11's endpoint alignment is three known edits
+
+- Both probes have now measured the fixtures, and the picture is simple once both numbers are on the table:
+- the relabelled-coverage fixture's physics rows are [1.1, 1.2] (kinds support, retract), and the
+- self-consistent fixture's five rows are all at 1.1. There is exactly ONE window literal in the file -
+- _window() at lines 722-723 with first_command_s 1.0 and physics_end_s 1.2 - and both fixtures seal a window
+- derived from it, which is why every attempt to satisfy one broke the other.
+- The three edits, all values now measured rather than guessed:
+-   1. _window(): first_command_s 1.0 -> 1.1, so the shared helper describes the relabelled fixture's rows
+-      (physics_end_s 1.2 already matches them);
+-   2. _self_consistent_formal: give its own seal a window with first_command_s 1.1 and physics_end_s 1.1, since
+-      its five rows sit at 1.1 - the two fixtures legitimately differ, so they may not share one literal;
+-   3. re-apply the derivation (|endpoint - extreme| <= tolerance), which the first fixture already accepted.
+- Then the four suites. This is the transcription for the next attempt; three values, each measured this round.
+- F1 and F14 closed; F3 closed; F13 three of four; F11 one probe from done; F5's regression fixed; F12 two of
+- three; HEAD a18a65289; goal paused.
