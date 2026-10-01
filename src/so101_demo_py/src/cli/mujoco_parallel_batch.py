@@ -2997,7 +2997,10 @@ class ProductionBatchComposition:
             "image_id": self.spec.provenance.get("image_id"),
             "yolo_weights_sha256": self.spec.yolo_weights_sha256,
             "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
-            "config_path": "/runtime/runtime-config.yaml",
+            # the container route mounts runtime_root at /runtime; a host run names the copy itself, which sits
+            # beside the spec (CP-2541)
+            "config_path": ("/runtime/runtime-config.yaml" if self._uses_production_broker_container
+                            else str(config_copy)),
             "request_deadline_s": self.spec.config.heartbeat_timeout_s,
             "max_frame_bytes": self.spec.config.broker_max_frame_bytes,
         }

@@ -112,7 +112,20 @@ def _nonhead_provenance(inputs: dict) -> dict:
         raise ValueError("NONHEAD_PROVENANCE_SCENE_MISMATCH")
     if hashlib.sha256(manifest_path.read_bytes()).hexdigest() != inputs["inputs_manifest_sha256"]:
         raise ValueError("NONHEAD_PROVENANCE_MANIFEST_MISMATCH")
+    # the transport requires an identity of the sha256:<64 hex> shape (71 characters). This deployment presents its
+    # own: the digest of the frozen development runtime document, which the freezer already binds into the manifest
+    # as runtime_policy.sha256 and any reader can recompute from the frozen file (CP-2538).
+    runtime_policy_sha = document.get("runtime_policy", {}).get("sha256")
+    if not isinstance(runtime_policy_sha, str) or len(runtime_policy_sha) != 64:
+        raise ValueError("NONHEAD_PROVENANCE_RUNTIME_POLICY_ABSENT")
+    # the transport also checks two digests; in this deployment they name what actually participates - the frozen
+    # scene model and the frozen runtime document - and the record says so, rather than claiming detector weights or a
+    # grounded-SAM manifest that do not exist here (CP-2540)
+    scene_sha = document["roles"]["scene_model"]["sha256"]
     return {
+        "digest_meaning": {"yolo_weights_sha256": "the frozen runtime configuration's own detector digest",
+                           "grounded_manifest_sha256": "the frozen runtime configuration's own grounded digest"},
+        "image_id": "sha256:" + runtime_policy_sha,
         "kind": "ACT_NONHEAD_DEPLOYMENT_PROVENANCE",
         "schema_version": 1,
         "inputs_manifest": str(manifest_path),
@@ -128,18 +141,32 @@ def _nonhead_provenance(inputs: dict) -> dict:
 def _broker_command(composition):
     """The deployment's container-free broker command.
 
-    The composition starts whatever this returns through its supervisor, exactly as it starts the containerised
-    default, and every container-specific step is guarded by `_uses_production_broker_container`, which is false as
-    soon as a builder is supplied (CP-2511/2516). So this is the whole of the approved container-free route: the
-    broker's own module entry point, with the roots the composition already holds.
+    The broker parses the flags `broker_argv()` freezes, but the default route runs them **inside the image**, where
+    `/runtime`, `/inputs` and `/models` are mounted. On the host those have to name this run's own paths, so the frozen
+    flags are taken as-is and the flag values that describe locations are substituted with the composition's - the
+    perception endpoint on its IPC root, the broker's input root, its ready receipt and the spec document it prepared.
+    Everything the broker *verifies* (the frozen detector identity and its digest) is left untouched.
     """
 
-    spec = composition.spec
-    return [sys.executable, "-m", "so101_demo.cli.parallel_perception_broker",
-            "--evidence-root", str(spec.request.evidence_root),
-            "--runtime-ipc-root", str(composition.runtime_ipc_root),
-            "--input-root", str(composition.broker_input_root),
-            "--batch-id", str(spec.request.batch_id)]
+    from so101_demo.cli.parallel_perception_broker import broker_argv
+
+    flags = [str(item) for item in broker_argv()]
+    # three of the composition's locations are always populated and the fourth falls back to the same authority IPC
+    # root the composition itself builds its broker runtime root from (CP-2533)
+    ipc_root = composition.runtime_ipc_root or composition.authority.ipc_root
+    substitutions = {
+        "--endpoint": str(ipc_root / "perception.sock"),
+        "--input-root": str(composition.broker_input_root),
+        "--ready-receipt": str(composition.broker_runtime_root / "ready.json"),
+        "--runtime-spec": str(composition.broker_spec_path),
+        # the transport checks a declared digest against the file this flag names, so it too must point at the
+        # file whose digest the specification declares (CP-2542)
+        "--yolo-weights": str(composition.spec.yolo_weights),
+    }
+    for index, flag in enumerate(flags):
+        if flag in substitutions and index + 1 < len(flags):
+            flags[index + 1] = substitutions[flag]
+    return [sys.executable, "-m", "so101_demo.cli.parallel_perception_broker", *flags]
 
 
 def _run(arguments) -> int:
@@ -258,13 +285,35 @@ def _run(arguments) -> int:
         config_path=inputs / "runtime_config" / "parallel_batch_v3.yaml", adaptive_config_path=None,
         points_path=points_path, catalog=catalog, expected_final_cup_pose_world=tuple(target),
         catalog_sha256=catalog_sha, selection_sha256=selection_sha, broker_image="ABSENT",
-        yolo_weights=Path("ABSENT"), yolo_weights_sha256="ABSENT", grounded_root=Path("ABSENT"),
-        grounded_manifest_sha256="ABSENT", provenance=provenance, manifest=manifest,
+        # the broker spec takes these four from the specification itself, so they name the frozen documents that
+        # really participate here - the development runtime and the scene model - with the same digests the
+        # provenance states (CP-2540)
+        # the transport checks each declared digest against the file beside it, so both names point at one real
+        # file and carry that file's own digest: the frozen scene model, whose copy is byte-identical to the source
+        # the transport compares these against the frozen runtime configuration's own fields, so the run declares
+        # exactly what that configuration carries rather than a digest of its own choosing (CP-2543)
+        yolo_weights=Path(str(inputs / "scene_model" / "scene.xml")),
+        yolo_weights_sha256=config.yolo_weights_sha256,
+        grounded_root=Path(str(inputs / "scene_model")),
+        grounded_manifest_sha256=config.grounded_sam_manifest_sha256,
+        provenance=provenance, manifest=manifest,
         provenance_inputs=provenance_inputs, provenance_verifier=_nonhead_provenance,
         start_guard_evidence=None, resume=False)
     composition = ProductionBatchComposition(spec, broker_command_builder=_broker_command)
-    print(f"act_first_episode: composition built ({type(composition).__name__}) for {batch_id}",
-          file=sys.stderr)
+    # the drive, exactly as the batch path does it: the composition runs itself, its summary becomes an outcome
+    # document, and the document is written as the aggregate beside the run's own evidence
+    from so101_demo.cli.mujoco_parallel_batch import _run_with_shutdown_signals, _write_json, outcome_document
+
+    evidence_root = request.evidence_root
+    if not evidence_root.exists():
+        evidence_root.mkdir(parents=True, mode=0o700)
+    if not spec.resume:
+        _write_json(evidence_root / "batch_manifest.json", dict(spec.manifest))
+    summary = _run_with_shutdown_signals(composition.run)
+    code, document = outcome_document(summary)
+    _write_json(evidence_root / "aggregate_results.json", document)
+    print(json.dumps(document, sort_keys=True))
+    return code
     print(f"act_first_episode: composed {type(journal).__name__}, {type(result_port).__name__} and "
           f"{type(coordinator).__name__} for {batch_id}; the episode runner needs the approved MuJoCo stack and is "
           f"not wired yet", file=sys.stderr)

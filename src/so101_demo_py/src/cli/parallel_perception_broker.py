@@ -364,6 +364,11 @@ def _validate_runtime_concurrency(spec):
             raise ValueError("BROKER_RUNTIME_CONCURRENCY")
 
 
+#: the flags that name *where* something is, as opposed to *what* it is; a host run supplies its own
+LOCATION_FLAGS = frozenset({"--endpoint", "--input-root", "--ready-receipt", "--runtime-spec", "--yolo-weights",
+                            "--grounded-root"})
+
+
 def main(argv=None, *, transport=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == 'container':
@@ -383,6 +388,13 @@ def main(argv=None, *, transport=None):
             from so101_demo.runtime.parallel_perception_runtime import REQUESTED_DEVICES
 
             parser.add_argument(flag, required=True, choices=list(REQUESTED_DEVICES))
+            index += 2
+        elif flag in LOCATION_FLAGS:
+            # the locations name where this deployment's things are, so a host run supplies its own paths; the
+            # substantive values below stay single-literal, which is what the frozen list is really protecting
+            parser.add_argument(flag, type=Path if flag.endswith("root") or flag.endswith("weights")
+                                or flag.endswith("receipt") or flag.endswith("spec") else str,
+                                required=True)
             index += 2
         else:
             parser.add_argument(flag, required=True, choices=[frozen[index + 1]])
