@@ -92,6 +92,7 @@ setup(
     entry_points={
         "console_scripts": [
             "act_command_broker = so101_demo.cli.act_command_broker:main",
+            "act_first_episode = so101_demo.cli.act_first_episode:main",
             "act_preflight = so101_demo.cli.act_preflight:main",
             "act_resolve_training_requirements = so101_demo.cli.act_resolve_training_requirements:main",
             "act_capture_synchronized_rgb = so101_demo.cli.act_capture_synchronized_rgb:main",
