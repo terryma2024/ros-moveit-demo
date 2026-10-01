@@ -41750,3 +41750,21 @@ operating point 的正式联合搜索（把本 campaign 的临时脚本逻辑**�
 
 **过程记录**：该复审再次把 scratch 写到 `/root/runtime_plan_review`（证据根之外、我无权读取）；本条判决是我从会话面板回滚区恢复后落盘的。
 **下一版（revision 3）按上述五条重写后再送审；在通过前不写实现代码。**
+
+## HS-282 — revision 3 复审：两项 CLOSED、三项 PARTIAL（不是完整通过）
+
+复审（同会话，1m50s）逐条回应：**② 轨迹前置 CLOSED**、**④ 测试三条 CLOSED**；**①③⑤ PARTIAL**：
+
+1. **①** §2a 已改对，但**验收里仍有 `promote`**、**测试第 10 条仍在比"配置 digest ↔ bundle digest"** —— 两处残留必须清掉
+   （比对对象只能是"审批 ↔ bundle"；晋级只走 `apply_patch` + `verify-promoted-config`）；
+2. **③** 产物/受控依赖仍漏：**`settle_velocity_rad_s`、`goal_tolerance_rad`、连续三帧锁定规则、tracker 算法与 10 Hz frame contract**
+   —— 设计 §7.1 末段明说这些**虽不属于 17 项也必须记录**，我漏读了那句；
+3. **⑤** **必须恢复两个 source suite 的 `head_test -n 8` 命令原文**；我写的 `colcon test ... --pytest-args test` **缺 worker 参数**。
+
+**另一条过程事实（值得记下）**：它报告 **`verdict-rev3.md` 写不进去——"directory is read-only in this sandbox"**。
+也就是说，我先前要求它"把判决写到证据根"这个指令，在它的沙箱里**根本做不到**；所以它的 scratch 落在 `/root/...` 不是任性，
+而是它的可写范围所限。**修正做法**：我不再要求它写文件，改为**由我从会话面板恢复并落盘**（本文件即如此），
+并在 prompt 里只要求它在会话内按格式回答。
+
+**revision 4 待办**：清掉 ① 的两处残留、补 ③ 的五项非 17 参数的记录要求、恢复 ⑤ 的两条 `head_test -n 8` 原文命令。
+**通过前不写实现代码。**
