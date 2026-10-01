@@ -54439,3 +54439,33 @@ What is actually true, and worth stating precisely:
 
 So the missing wire is narrower than I wrote: it is the capture side only, and it has to be built where the episode path
 already holds a synchronizer - or given one from the adapter that builds it, without touching that file.
+
+
+## CP-2821 — The production class already holds three of the capture's four inputs
+
+```python
+        self.world = MujocoWorldObserver(...)                       # physics
+        self.rgb = RgbObservationSynchronizer(                      # <- the `sampler` the capture calls
+            max_age_s=max_wall_age_s, max_skew_s=max_source_skew_s)
+        self.rgb_adapter = RosObservationAdapter(node, self.rgb)    # <- what feeds it
+        self.physics_fence = RosPhysicsStepFence(node, session_id)  # <- the `guard`
+        self.readback = PickPlacePhysicalReadback(
+            self.world, self.scene, self.contacts, self.rgb, broker, ...)   # <- the `physical_audit`
+```
+
+`ContinuousEpisodeCapture`'s signature is `(*, recorder, sampler, physical_audit, guard=None, audit_writer=None, ...)`,
+and this one production class already holds **three of those four**:
+
+- **`self.rgb`** is a `RgbObservationSynchronizer`, whose `sample_with_audit(session_id, attempt_id, at_s)` is exactly the
+  `sampler` contract;
+- **`self.readback`** is a `PickPlacePhysicalReadback`, built from the world, scene, contact and rgb observers - the physics
+  summary the capture asks a `physical_audit` callable for;
+- **`self.physics_fence`** is a `RosPhysicsStepFence`, which is what a `guard` is for.
+
+So the missing wire is smaller than "assemble a chain": it is **a recorder and an audit writer**, handed to a capture built
+from what this class already owns. And the recorder side is the one the chain tests already prove - `EpisodeRecorder` plus
+`EpisodeAuditWriter`, both constructed from the episode's own root and identity, both already exercised end to end.
+
+That also removes the concern CP-2820 raised about the file being off limits: the change is not necessarily *in* this file.
+The class already exposes what the capture needs, so the capture can be constructed by whoever holds one of these - and if
+it must be built here, the edit is the addition of two objects to an existing constructor rather than new machinery.
