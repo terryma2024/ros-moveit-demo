@@ -44735,3 +44735,25 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
   this window contract now fully read; F5's regression fixed, step one landed, step two past the coverage gate and one
   line from sealing; HEAD 64db7aa28; goal active.
+
+
+## CP-2374 — F5's step two handed off: one level-up probe, everything else named
+
+- STATE, precisely: the runner-backed fixture reaches the seal, PASSES the coverage gate (CP-2368), and is refused
+  only by `AUDIT_WINDOW_INVALID`. Every rule I can read holds for it - `_window_ok`'s schema, per-stream schedules
+  (strictly increasing, inside the interval), `streams_required`, positive cadence, permitted gaps inside the
+  interval, the outcome set, and the ordering `start <= physics <= end` with `start <= first/cutoff <= physics` (all
+  three fields set to 1.0, the run's last physics instant, per CP-2373); and the window predicate's four printed
+  comparisons (schedule against acquisitions, labelled rows against the cutoff, physics against both endpoints,
+  window edges against the camera extremes) are all consistent by construction (CP-2370/2371).
+- THE ONE ACTION LEFT, and it is small: print `_window_ok`'s verdict beside the window predicate's arguments in the
+  same run as the fixture - CP-2371's level-up probe, roughly fifteen lines of instrumentation plus the fixture text
+  recorded in CP-2368/CP-2373. That separates "the window is malformed" from "the window does not match the audit",
+  which are the only two candidates left and which share one error code.
+- Labelling: F5's step two is **仍开放**. Everything it needed has been removed one clause at a time - the coverage
+  gate at CP-2368, three seal-side blockers at CP-2362/2363/2365, the identity's shape at CP-2365, the window's
+  ordering rule at CP-2373 - and the remaining work is one instrumented run plus the fix it names.
+- Withdrawn; green (audit plus the artifact suite) and the tree back to its 35-entry baseline.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
+  the window contract now fully read; F5's regression fixed, step one landed, step two 仍开放 as described;
+  HEAD d83fa9d0e; goal active.
