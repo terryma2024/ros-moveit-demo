@@ -45761,3 +45761,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   LIVE_ROOT.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished with inspect, prepare and preflight all rc=0. HEAD 6c938d893; goal active.
+
+
+## CP-2424 — The specification is the parallel sweep's; a single episode needs a reduced request
+
+- Checked the frozen tree for the remaining specification fields: there is **no** catalog, points or provenance file
+  among the twelve roles plus the manifest. That is the third such finding after `broker_image` and `yolo_weights`,
+  and together they give the pattern plainly: `PreparedBatch`'s twenty-two fields describe a **parallel sweep** - a
+  points catalogue, several workers, a detector, a broker image, fallback worker counts - while this milestone is a
+  **single non-Head MuJoCo episode**. Filling that surface for one episode would mean inventing most of it.
+- So CP-2421's route is confirmed and sharpened: the single-episode `run` composes the production pieces that a sweep
+  is made of - the episode runner, the audit writer it seals through, the Recorder, `SealedResultAdapter`,
+  `CoordinatorJournal.create` and `BatchCoordinator` - around **one** request built from the frozen inputs, rather
+  than populating a sweep specification. The evidence then still comes from the production components, which is what
+  the plan asks for, without any placeholder standing in for something that does not exist.
+- What that request needs from the frozen set, all of which exists: the mode and `FULL_RESTART`, the scenario's frozen
+  target pose for the endpoint rule, the three bindings, and an `evidence_root` under a new LIVE_ROOT; plus the config
+  paths and the grounded root/hash that the composition records for provenance.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished with inspect, prepare and preflight all rc=0. HEAD 089d8b781; goal active.
