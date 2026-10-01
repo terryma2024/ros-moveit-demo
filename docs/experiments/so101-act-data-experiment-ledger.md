@@ -41379,3 +41379,32 @@ C 的 task 点 0.35 属回顾性选择、held-out 已被看过）。
 并且"✓ Uploaded"不能替代对仓库内容的实际列举与哈希核对。**
 
 **可见性**：三个仓库均为 **private**（保守默认，可一键转 public）。
+
+## HS-267 — 重选工作点后：C 的 task 域 episode F1 由 0.7407 → 1.000，但 retention 拒绝**不变**
+
+运行：`compare7`（重冻结候选 A/B 0.25、**C 0.35** + `--weights-dir` + `episodes7` 重新录制，输出到新目录 `evaluation-reselected`）。
+
+| 候选 | episode head (r / f1) | episode task (r / f1) | static head mAP | static task mAP |
+| --- | --- | --- | --- | --- |
+| A | 0.917 / 0.948 | 1.000 / 1.000 | 0.7042 | **0.9737** |
+| B | 1.000 / 1.000 | 1.000 / 1.000 | 0.7410 | 0.9653 |
+| C（被保留） | 1.000 / 1.000 | **1.000 / 1.000** | **0.7434** | 0.9631 |
+
+裁决仍是 `EVALUATION_TASK_RETENTION_LOST: the mixed model gives up 0.011 mask mAP on the task domain`，
+`selection: null / retained_model: C / promoted: false`。
+
+**两个结论，一个是证实，一个是对我先前判断的纠正：**
+
+1. **证实**：C 的 task 域 episode F1 = 0.7407 **确实纯粹是工作点成因**——旧 recorder 把 head 域的点用到 task 帧上，
+   而 C 在 task 视角会把机械臂底座检成杯子（42 个框，置信度 0.251–0.338）。按**先声明后测量**的规则把 C 的
+   task 点定为 0.35 并**重新录制**后，检出量 162 → 60（一真值一框），F1 → 1.000。这不是事后筛旧记录，而是新测量。
+
+2. **纠正（HS-265 的说法有误）**：我在 HS-265 写过"C 的静态 task mAP 取决于工作点，所以换点可能让 retention 通过"——
+   **本次运行否证了它**：C 的静态 head/task mAP 在 0.25 与 0.35 下**完全相同**（0.7434 / 0.9631）。原因是
+   Ultralytics 的 `mask_map50-95` 是**对置信度积分**得到的，**与 `conf` 参数无关**。因此：
+   **retention 门（比较 mask mAP）在工作点上不可调**，那 0.0105 是**训练/数据性质**，只能靠改训练配方（配比、epochs、
+   `checkpoint_score`）解决。第二道门（task 域 episode recall 保留）本次三方都是 1.0，通过。
+
+**当前完整结论**：在**干净且两族齐全**的测量下，B、C 在 head 域两族都胜过 A（episode recall 1.0 对 0.9167；
+静态 mAP 0.741/0.743 对 0.704），但被保留模型 C 在 task 域静态 mAP 上比最好的候选低 0.0105 > 0.01，
+且该差距**与工作点无关**，所以 `promoted: false` 是**关于训练配方**的结论，而不是关于阈值或录制的结论。
