@@ -49024,3 +49024,17 @@ it, however correctly it is read. The QC's job therefore splits cleanly in two, 
 The RED test then asserts both: a summary-only episode yields the named absence (not a refusal dressed as a verdict),
 and a live-sample episode yields a real endpoint verdict. The current failure at `_pose` is the correct state for this
 moment - the test measured exactly where the boundary is.
+
+
+## CP-2592 — E2's live-sample half reaches PASS, and E1's `passed` disagrees with its `status`
+
+With two seven-value pose rows appended (the initial one at 1.0 and the final at 1.3, both equal to the frozen target),
+`endpoint_records_from_audit` returns **`status: "PASS"`** - so the whole chain works: the QC re-reads the sealed
+audit, derives the poses, and E1's pure calculator judges them against the frozen targets. The half that asserts the
+**named absence** for a summary-only episode also passes, which was the RED's original point.
+
+What fails is the second test's final assertion, `verdict.get("passed") is True`, while the printed verdict says
+`status: PASS` and lists the five tolerance names under `errors`. Two readings are possible - either E1's `passed` field
+means something other than "the verdict passed", or the QC's pass-through of `verdict["passed"]` is misreading E1's
+output - and the way to settle it is to read `evaluate_endpoint_pose`'s return rather than to adjust the assertion until
+it goes green, which would be exactly the kind of "make the test agree with the code" move this task forbids.
