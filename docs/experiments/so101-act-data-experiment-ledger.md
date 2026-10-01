@@ -49266,3 +49266,23 @@ in the same sense as the geometry provenance was: a field that travels with ever
 already produced, and read by the ordering and descent checks the protocol specifies.
 
 Its body is printed beside this entry, so the next round writes the edit against the real code rather than a guess.
+
+
+## CP-2605 — The whole ordering addition is about seven lines
+
+`_next` is two lines:
+
+```python
+    def _next(self, kind: str) -> int:
+        self._sequence[kind] += 1
+        return self._sequence[kind]
+```
+
+so the task-level counter is bump-one-more-line inside it, initialised once beside `self._sequence`, and read by the
+four append paths that already set their per-stream field. Roughly seven lines in one file, plus whatever the reader
+validates once the protocol's descent assertion is enforced.
+
+That makes K2's implementation, as measured rather than as listed: the geometry provenance (landed, 67e12c918), the
+task-level sequence (about seven lines, hook identified), and the new record kinds for the K2 events - which are the
+only genuinely new documents, and which the passed table defines key by key. The review's file list remains the map for
+who consumes these, but the tree has already absorbed more of it than the list's wording suggests.
