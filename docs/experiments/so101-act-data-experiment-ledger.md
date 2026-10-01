@@ -45340,3 +45340,28 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/lib/python3.12/site-packages`.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's CLI now
   inspect/prepare/preflight with inspect verified end to end. HEAD 9e3a90106; goal active.
+
+
+## CP-2404 — A real contract collision, and the plan already names its resolution
+
+- `first_episode_inputs.py`'s role table requires `nonhead_calibration` as the approval for exactly the three roles
+  the dispatch authorized with empirical values: `_ROLE_APPROVAL = {"contact_proposal": "disabled_proposal",
+  "contact_activation": "user_activation", "path_policy": "nonhead_calibration", "placement_qc":
+  "nonhead_calibration", "rgb_skew": "nonhead_calibration"}`, with every other role defaulting to
+  `source_controlled` and `_APPROVALS` accepting only those four.
+- The design's section 5.1 says the opposite for precisely those values: the effective configuration carries
+  `approval=user_empirical_default`, which "is bound to the user's authorization this round and **may not** be
+  written as `nonhead_calibration` or as a fabricated measurement/sample PASS". So the approval a candidate must
+  carry to satisfy the role table is the one the amendment forbids - the two contracts cannot both hold.
+- The plan resolves it in its own words: E1's fourth item says to add the `user_empirical_default` approval and an
+  independent effective-config hash, so the role table gains that kind for `path_policy`, `placement_qc` and
+  `rgb_skew` instead of demanding a calibration that this amendment exists to stop requiring. `resource_thresholds`
+  stays `source_controlled`, and the design's resource paragraph says its candidate is the newly generated effective
+  runtime/collection configuration with the two hard-stops made explicit - not one of the two historical candidates.
+- Scope of the edit, so it is not mistaken for a one-liner: `_APPROVALS` and `_ROLE_APPROVAL` must accept the new
+  kind, the existing tests that assert `nonhead_calibration` for these roles must move with it, and the candidates
+  must be the landed `config/act/endpoint_pose_acceptance_v1.yaml` and
+  `config/act/endpoint_pose_development_runtime_v1.yaml` documents rather than anything invented. That is the next
+  pass's work, with its RED first.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's CLI verified
+  end to end with `inspect` reporting these four roles as the only blockers. HEAD 287d09183; goal active.
