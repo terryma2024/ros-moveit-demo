@@ -49959,3 +49959,24 @@ My row satisfies the first four and the last; it fails **`_physics_observation_t
 the per-kind rule - which is therefore the one thing left to read. That is a single function, and reading it is what
 turns this test green; the earlier guesses at group structure were about the reference stream's alternatives
 (`optional_any=(_REFERENCE_RAW_FIELDS, _REFERENCE_FRAME_FIELDS)` at 1255) rather than about physics at all.
+
+
+## CP-2638 — E2's terminal wiring is in, and two schema readings removed code instead of adding it
+
+Committed as **123dc5637**, width gate green at **259 passed** - the seven suites with the new document test. (Its
+commit message says 264; the measured number is 259, and this entry is the correction.)
+
+Two findings did the work, and both came from reading the schema rather than adding to it:
+
+- the MuJoCo summary rows carry a pose as **`cup_position_world_m` + `cup_orientation_world_xyzw`**, in exactly the
+  `xyzw` order the endpoint policy wants - so `endpoint_poses` reads that pair first, and the forward-kinematics path I
+  wrote for the same purpose (`pose_from_configuration`) stays available for a source that publishes only `model_qpos`,
+  but is no longer needed for this one;
+- the **per-kind observation rule** requires a `support` row to carry `supported` (which my row lacked - the actual
+  reason for `AUDIT_SCHEMA_INVALID`), a `contact` row two contact counts and `table_contact`, and a `pose` or `retract`
+  row only `simulation_time_t`, `simulation_step` and `cup_position_world_m`. Hence the fixture writes `pose` and
+  `retract` rows, which is the smallest legal shape that carries a pose.
+
+The test then passes for the right reason: a fresh process reads the sealed episode through `verify_audit_manifest`, the
+document carries the seal's `qc_passed` **as a claim**, and the independent endpoint verdict sits **beside** it with
+`status: PASS` - the design's distinction between "a legal seal" and "the endpoints were judged by a fresh process".
