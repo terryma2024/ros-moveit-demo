@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import os
 import sys
+import time
 from pathlib import Path
 
 from so101_demo.act.endpoint_pose_acceptance import load_development_runtime, load_endpoint_policy
@@ -44,6 +47,16 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--endpoint-policy", required=True)
     prepare.add_argument("--runtime-policy", required=True)
     prepare.add_argument("--output", required=True)
+
+    run = subparsers.add_parser("run", help="execute one non-Head episode from a frozen input set")
+    run.add_argument("--inputs", required=True)
+    run.add_argument("--root", required=True)
+    run.add_argument("--mode", default="preselected_target_diagnostic", choices=MODES)
+    run.add_argument("--lifecycle", default="FULL_RESTART",
+                     choices=("FULL_RESTART", "REUSE_STACK", "RESET_WORLD"))
+    # the final cup target the endpoint rule compares against: it is the scenario's frozen quantity, and this CLI
+    # refuses rather than inventing one, because an invented target would make every later PASS meaningless
+    run.add_argument("--final-cup-pose")
 
     preflight = subparsers.add_parser("preflight", help="re-read a frozen input set")
     preflight.add_argument("--inputs", required=True)
@@ -80,6 +93,56 @@ def _preflight(arguments) -> int:
     return 0
 
 
+def _run(arguments) -> int:
+    """One episode: the production pieces composed around a single-point request.
+
+    Every value comes from the frozen set or from the caller; nothing is invented, and a missing frozen quantity is a
+    refusal rather than a default.
+    """
+
+    inputs = Path(arguments.inputs)
+    manifest = json.loads((inputs / "inputs-manifest.json").read_bytes())
+    if manifest.get("mode") != arguments.mode:
+        print(f"act_first_episode: the frozen set was prepared for {manifest.get('mode')!r}, "
+              f"not {arguments.mode!r}", file=sys.stderr)
+        return 2
+    if arguments.final_cup_pose is None:
+        print("act_first_episode: --final-cup-pose is required: the endpoint rule compares the cup against the "
+              "scenario's frozen target, and this CLI will not invent one", file=sys.stderr)
+        return 2
+    try:
+        target = tuple(float(part) for part in arguments.final_cup_pose.split(","))
+    except ValueError:
+        print("act_first_episode: --final-cup-pose must be three comma-separated numbers", file=sys.stderr)
+        return 2
+    if len(target) != 3 or any(not math.isfinite(value) for value in target):
+        print("act_first_episode: --final-cup-pose must be three finite numbers", file=sys.stderr)
+        return 2
+
+    from so101_demo.application.task_batch import BatchRequest
+    from so101_demo.core.task_points import TaskPoint
+    from so101_demo.parallel_batch.coordinator import BatchCoordinator
+    from so101_demo.parallel_batch.journal import CoordinatorJournal
+
+    root = Path(arguments.root)
+    if root.exists():
+        print(f"act_first_episode: {root} already exists; a run is a new evidence root", file=sys.stderr)
+        return 2
+    root.mkdir(parents=True, mode=0o700)
+    batch_id = f"nonhead-{arguments.mode}-{int(time.time())}"
+    point = TaskPoint(id=batch_id, label=arguments.mode, cup_position_world_m=tuple(target))
+    request = BatchRequest(batch_id=batch_id, simulation_session_id=batch_id, points=(point,),
+                           evidence_root=root.resolve())
+    log = root / "run.log"
+    with log.open("w") as stream:
+        stream.write(f"batch_id={batch_id}\nmode={arguments.mode}\nlifecycle={arguments.lifecycle}\n"
+                     f"final_cup_pose={target}\ninputs={inputs.resolve()}\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    print(root)
+    return 0
+
+
 def main(argv=None) -> int:
     arguments = build_parser().parse_args(sys.argv[1:] if argv is None else argv)
     if arguments.command == "inspect":
@@ -93,6 +156,8 @@ def main(argv=None) -> int:
         return _prepare(arguments)
     if arguments.command == "preflight":
         return _preflight(arguments)
+    if arguments.command == "run":
+        return _run(arguments)
     return 2
 
 
