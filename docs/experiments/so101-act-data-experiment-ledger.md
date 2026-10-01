@@ -46656,3 +46656,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   the frozen provenance copy, the `RunMode.EXECUTE` fix and the seven-value pose validation.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD a4eaf42ad; goal active.
+
+
+## CP-2470 — The versioned request passes every contract; the run reaches v1's deliberate boundary
+
+- With `BatchRequestV2` in place the run no longer raises: it composes the journal, the sealed-result adapter and the
+  coordinator, writes `points.json`, `inputs-manifest.json`, `run.log`, `coordinator/` and `worker-0/` under its own
+  new root, and then refuses **by name** at the point this version deliberately stops - "the episode runner needs the
+  approved MuJoCo stack and is not wired yet" - returning rc 2. So every contract on the way was satisfied: the guard,
+  the run-mode enum, the trusted seven-value pose, the manifest mode match, the V2 request's seven fields and the
+  frozen config parsed by `load_runtime_config_any_schema`.
+- Committed with the scope and endpoint-pose suites green (their run recorded in this round's log). The two slips on
+  the way - the misplaced in-body import that produced an `UnboundLocalError`, and the pre-created root the guard
+  rightly refused - are both recorded rather than smoothed over; neither reached a committed state broken.
+- The next increment is the drive itself: instantiate the production composition with this one-worker specification
+  and let it perform its own loop (allocate, issue tokens, write the worker spec, spawn the worker entry, stand up the
+  broker) now that the stack it talks to is up with `RobotSystem` activated. All the contracts involved have been read
+  this session, so that step is a transcription with a real rc to report.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 3c24f6f92; goal active.
