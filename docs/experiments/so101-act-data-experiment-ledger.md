@@ -44694,7 +44694,7 @@ HS-322 自己的 A/B 产物（`scratch/hs320/probe-maxage/deadband-candidates.js
 
 ## HS-325 — Task 14 Step 6 的 Teleop 验收第一次**真的跑起来**：`serve-teleop` 自持一套生产组合并证明拆除、补上 `e2e/head-camera.spec.ts`，途中修掉三个真实缺陷；bundle 字节未变
 
-**提交**：见本轮 commit（`feat: real teleop acceptance with teardown proof and the head-camera e2e spec (RED->GREEN)`，8 文件）。**未晋级**、**未改** `head_search_v2.json`（`3fb9f276…` 前后相同）、**未改任何测量文档**、**未重新生成 bundle**（待批准件 `0563bada…` 前后逐字节相同）、未跑 Task 14 的其它 phase、未重跑三次 restart。
+**提交**：`497d3fa9f`（`feat: real teleop acceptance with teardown proof and the head-camera e2e spec (RED->GREEN)`，10 个源码/测试/文档文件 + 本条目所在的账本，+3116/−11；普通 `git commit`）。**未晋级**、**未改** `head_search_v2.json`（`3fb9f276…` 前后相同）、**未改任何测量文档**、**未重新生成 bundle**（待批准件 `0563bada…` 前后逐字节相同）、未跑 Task 14 的其它 phase、未重跑三次 restart。
 
 **边界**：本轮只做"Teleop acceptance"这一段：`serve-teleop` 的真实化、缺失的 e2e spec、验收 receipt、聚合复跑。Step 6 计划要求的**起点**是一份"已关闭的 head-only report"；该文档只在九道 qualification 门全成立时才发布，而 `production_smoke` 与 `runtime_readback` 至今没有生产者、`anchor_restarts` 因 HS-318 receipt 里的 frame 身份缺陷被拒——所以验收**照跑**，并在 receipt 里如实记 `qualification_report.status = null`。
 
