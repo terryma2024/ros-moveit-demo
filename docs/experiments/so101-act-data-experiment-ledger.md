@@ -46955,3 +46955,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   two call sites refuses the runner-backed fixture, since coverage is already known to pass there (CP-2368).
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up and healthy. HEAD 8e3d2bf17; goal active.
+
+
+## CP-2485 — The wrapper probe is live and inert, and the tree stays instrumented for one round
+
+- Done the right way this time: `_window_matches_rows` now takes `verdict = _window_matches_observed(...)`, prints
+  `WIN-CALLSITE seal <verdict>` to stderr, and returns the verdict - the argument list is untouched (the mistake of
+  CP-2484), and `ast.parse` confirmed the module before anything ran.
+- Verified live and inert in one run: the audit suite is **74 passed** and the probe printed **nine** times, once per
+  test that seals a formal window. So the instrumentation neither changes behaviour nor hides, and it is ready for the
+  runner-backed fixture.
+- The tree is therefore deliberately left instrumented for exactly one more round, which is the round that adds the
+  fixture and reads which call site refuses. It will be restored from `/tmp/probe528.py` immediately after, with the
+  dirty entry checked, as every probe in this stretch has been.
+- What that run will say: if the seal's own verdict is `True` at the refusal, the objection is the readback's check
+  (its own call site), and if it is `False` the seal is the refuser - which is the last unknown in F5's step two now
+  that coverage is known to pass on that fixture (CP-2368).
+- F1, F14, F3, F12 and F11 closed; F13's scene item awaiting K2; the environment is up and healthy with 23 nodes and
+  an active broadcaster. HEAD 1794bceb6; goal active.
