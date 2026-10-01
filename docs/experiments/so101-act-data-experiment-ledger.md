@@ -45200,3 +45200,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   or the affected files run only by path.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation;
   E1's freezer now binds the policy and runtime with old behaviour preserved (b9536eebe). HEAD c9fe518f0; goal active.
+
+
+## CP-2397 — By-path verification of the freezer change: fifty-nine green
+
+- `test_act_first_episode_scope.py` and `test_act_endpoint_pose_acceptance.py`, run by path under the ordinary xdist
+  shape, pass together: **59 passed**, rc=0, with the scratch pointer in this round's log. So the freezer's new
+  keyword-only arguments break nothing, the scope suite's own controls still hold, and the endpoint-pose controls
+  ride beside them.
+- This also settles the CP-2396 remedy: the collection-time preconditions bite the directory/`-k` forms, while the
+  files themselves run by path. That is now the recorded way to verify input-side changes until the CLI exists and a
+  proper installed entry makes the full ordinary gate runnable.
+- E1's remaining work is unchanged and begins with the CLI: `src/cli/act_first_episode.py` in the house shape
+  (`_Parser`, `build_parser()`, `main(argv=None) -> int`) with `inspect`, `prepare`
+  (`--candidates --mode --endpoint-policy --runtime-policy --output`, calling the freezer this round extended) and
+  `preflight`; the `console_scripts` line `act_first_episode = so101_demo.cli.act_first_episode:main`; the install;
+  then the plan's directed RED/GREEN with real argv, rc and JUnit.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation.
+  HEAD a7a78ab86; goal active.
