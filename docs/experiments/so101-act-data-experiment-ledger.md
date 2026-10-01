@@ -42045,3 +42045,29 @@ Qoder `post-commit` 钩子**正常运行、rc=0、无阻断、无修改**，所�
 **Task 13 内部进度**：§0 前置 + phase 1/2/3/8 已完成（各 RED→GREEN、零新增失败）；**phase 4**（复用既有 gate + CLI 编排接线）、
 **phase 5**（获选参数原样验证）、**phase 6/7**（搜索参数、时序与停车参数，需要运行时）未开始。
 证据：`scratch/hs292/` + 两个 run dir，列为删除候选，未删除。
+
+## HS-293 — phase 5（获选参数原样验证）完成：31 个新用例 RED→GREEN，节点级零差异
+
+**提交** `339a478ed`（两个新文件，+982 行；`git status --porcelain` 为空；**普通 `git commit`，钩子 rc=0 无干扰**）：
+
+- `src/so101_demo_py/src/act/head_search_calibration_readback.py`（339 行）：`readback_selected_perception_values(...)`、
+  `compare_selected_perception_values(...)`、`verify_selected_candidate_identity(...)`；拒绝码 **`CAL_VALUE_MUTATED`**、**`CAL_SELECTION_MISMATCH`**；
+  `PERCEPTION_PARAMETERS` 为四项感知值；产出 `perception-calibration-readback.json`。
+- `src/so101_demo_py/test/test_act_head_search_calibration_readback.py`（643 行，**31 用例**，全合成夹具）。
+
+**验证链**：RED **rc=2, 1 collection error** → GREEN **31 passed, rc=0**（首次 30F/1P 是**夹具**把候选 id 写成 `C2a`，而 `freeze_candidate` 只接受 A/B/C；改夹具、**未削弱断言**；`ruff check/format` 干净）
+→ 回归六个文件 **111 passed (16+18+38+21+6+12)** → 全套件 **175 failed / 5716 passed / 152 skipped / 86 errors**，
+与基线 **节点级 `diff` 为空（261 个相同）、+31 正好新增、0 新增失败/错误**。
+
+**它声明的推断（待评审）**：① "phase-3 规则记录"取该文档的 `chosen_point`/`candidate_id`/`rule_sha256` 内嵌 `rule`，且规则摘要须覆盖自身正文；
+② **bundle 本身不带候选 id**，故身份 = `rule.candidate_id == frozen.candidate_id` 且
+`bundle.runtime_identity.detector_weights_sha256 == frozen.weight_sha256`；③ **精确相等**按 JSON 数值本身判定（`0.3 != 0.1+0.2`、
+`100 != 100.0` **均拒绝** —— 保守方向，有测试钉住）；④ frozen 文档按 `freeze_candidate` 形状，`operating_points.<domain>` 必须封 `min_confidence` 与 `tracker.iou`
+（缺失会被 gate 用默认 0.25/0.5 顶替，故直接拒绝），`min_bbox_aspect`/`min_area_px2` 声明则比、未声明则记 `frozen_candidate_declares_value:false`；
+⑤ 缺值报 `CAL_VALUE_MUTATED` 且 bundle 侧值为 None；非本类文档报普通 `ValueError`；⑥ 身份先验、再比数值（先对规则记录、后对 frozen 文档），
+frozen 与规则记录不一致也算 `CAL_VALUE_MUTATED`；⑦ 只摘要 phase-3 与 frozen 文档 + `rule_sha256`，**不引用 phase 8 之外的任何 digest**（有签名测试钉住）；
+⑧ 产物名 `perception-calibration-readback.json`（设计 §8.3 未规定 phase-5 产物名）。
+
+**Task 13 内部进度**：§0 + phase **1/2/3/5/8** 完成（累计 16+18+38+31+21 = **124 个新用例**，各自 RED→GREEN、全套件零新增失败）；
+**phase 4**（复用既有 gate + CLI 编排接线）、**phase 6/7**（搜索参数、时序与停车参数，需运行时）未开始。
+证据 `scratch/hs293/`（含 `hs293-SUMMARY.md`）列为删除候选，未删除。
