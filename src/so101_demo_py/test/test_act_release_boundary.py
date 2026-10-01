@@ -56,7 +56,31 @@ class FakePort:
                                                                       "FINAL_CHECK"),
                                            "maximum_normal_force_n": 0.5,
                                            "other_contact_geoms": ["table_collision"],
-                                           "cup_position_world_m": [0.02, -0.28, 0.165]}}
+                                           "cup_position_world_m": [0.02, -0.28, 0.165],
+                                           # T3-F5: the runner writes its physics rows from this evidence, and
+                                           # coverage requires one row carrying the scene record and the
+                                           # feedback, joined to the row by their own instant (CP-2296)
+                                           "planning_scene_observation": {
+                                               "scene_revision": 1, "attached_objects": [],
+                                               "world_object_ids": [], "is_diff": False,
+                                               "sim_time_s": round(0.1 * self.step, 4),
+                                               "source": "scene_port"},
+                                           "controller_feedback": [
+                                               {"controller": "arm",
+                                                "joint_names": ["1", "2", "3", "4", "5"],
+                                                "commanded_positions": [0.0] * 5,
+                                                "measured_positions": [0.0] * 5,
+                                                "measured_velocities": [0.0] * 5,
+                                                "status_sequence": 1,
+                                                "sim_time_s": round(0.1 * self.step, 4),
+                                                "source_sim_time_s": round(0.1 * self.step, 4)},
+                                               {"controller": "gripper", "joint_names": ["6"],
+                                                "commanded_positions": [0.0],
+                                                "measured_positions": [0.0],
+                                                "measured_velocities": [0.0],
+                                                "status_sequence": 1,
+                                                "sim_time_s": round(0.1 * self.step, 4),
+                                                "source_sim_time_s": round(0.1 * self.step, 4)}]}}
         record.update(overrides)
         return record
 
