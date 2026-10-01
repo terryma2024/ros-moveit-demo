@@ -47608,3 +47608,22 @@ working directory - is attached beside it).
 
 So the contract is one read from complete, and the difference between "one grep" and "printed beside the entry" is the
 lesson this stretch keeps re-learning: read the lines, not the neighbourhood.
+
+
+## CP-2515 — The contract: an argv the supervisor starts, and one last check on the container post-steps
+
+`_start_broker` ends with `return self.supervisor.start("broker", command)`, so whatever the builder returns is started
+by the supervisor the same way for a container or a plain process. Combined with CP-2511's
+`_uses_production_broker_container = broker_command_builder is None` and CP-2512's list of what the command is built
+from, the approved route's contract is complete and small:
+
+    def broker_command_builder(composition):
+        return [<the broker's own entry>, <its arguments from evidence_root, runtime_ipc_root, broker_input_root, uid>]
+
+passed to `ProductionBatchComposition(..., broker_command_builder=<that>)`, with everything container-specific
+(`_harden_broker_container_id`, `broker_container_id_path`, the docker inspect) belonging to `_uses_production_broker_container`
+being true.
+
+The one thing still to confirm is that those post-steps are guarded by that flag rather than run unconditionally; the
+grep for their call sites is printed beside this entry. If they are guarded, the container-free route needs nothing
+more than the builder; if one is not, it is the single place the approved work has to touch.
