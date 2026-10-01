@@ -5,6 +5,19 @@ Implements the eight fixed `run` phases (design §8.2) so `so101_head_search_cal
 378-byte `calibration-state.json` (ledger HS-233). Revision 1 was rejected by review (ledger HS-279); this revision
 answers its five findings and adds the runtime contract that revision 1 omitted (ledger HS-280).
 
+## 0. Precondition, gated before any neck motion (outside the eight phases)
+
+The production controller's current forward-cumulative `2*pi` motion does **not** satisfy the trajectory contract of the
+design. This is not a phase and not a validation-time check: it is a precondition of the whole calibration.
+
+- The bounded stop-point sequence replaces the cumulative sweep in the existing controller through **RED/GREEN**
+  (a failing test first, then the change, then that test passing plus the existing suite).
+- `run` checks the precondition **at CLI entry, before any neck target is sent** - before phase 1 completes, not before
+  phase 6. If the installed controller still exposes cumulative motion, `run` fails immediately with
+  `CAL_TRAJECTORY_CONTRACT_UNSATISFIED` and sends no motion at all.
+- No neck motion may be commanded by any phase, including phase 2's geometry sweep, until this precondition holds. The
+  geometry phase therefore reuses the sealed geometry values rather than re-sweeping until the precondition is met.
+
 ## 1. Hard rules (from the design; none are optional)
 
 1. **The installed program produces the values.** Design line 25 forbids ad-hoc scripts generating final parameters.
@@ -24,9 +37,7 @@ answers its five findings and adds the runtime contract that revision 1 omitted 
    produced, and stops immediately.
 6. **Per-parameter evidence**: value, unit, selection formula, input evidence + SHA256, observed distribution,
    safety margin, production owner, and the startup readback proving the value took effect (design §7.1).
-7. **Pre-requisite outside this plan's phases**: the production controller's current forward-cumulative `2*pi` motion
-   does **not** satisfy the trajectory contract and must be changed to the bounded stop-point sequence through
-   RED/GREEN before phases 6 and 7 can be validated. This is a change to existing code, gated first.
+7. **Approval and promotion mechanics are the plan's, not this document's invention** (see §2a).
 
 ## 2. Phase plan (fixed order, one artefact per phase)
 
@@ -41,10 +52,25 @@ answers its five findings and adds the runtime contract that revision 1 omitted 
 | 7 | timing and stop parameters | `act/head_search_timing_params.py` | `max_age_s`, `max_skew_s`, `submit_lead_s`, `stop_velocity_rad_s`, `stop_latency_s` with measured distributions | `CAL_FRESHNESS_EXCEEDED`, `CAL_STOP_LATENCY_EXCEEDED` |
 | 8 | bundle generation | `act/head_search_calibration_bundle.py` | `head-search-calibration-bundle.json` (17 values + evidence), `manifest.json`, `run-status.json`; **no approval state** | `CAL_BUNDLE_INCOMPLETE` |
 
-**Approval is not phase 8.** Promotion is a separate command (`promote`) that consumes the bundle plus
-`--approved-bundle-sha256` taken only from the user's approval message and writes `approval-receipt.json`
-(design §8.3). Phase 8 must leave the bundle in a state that a later `promote` can verify byte-for-byte; it must not
-record or assume approval.
+### 2a. Approval and promotion mechanics (fixed by the plan, not by this document)
+
+- **Approval is not part of phase 8.** Phase 8 only produces the bundle; it records no approval state.
+- Promotion is **one `apply_patch`** that copies the approved model identity, the 17 values and the controlled
+  dependencies into `head_search_v2.json`, followed by **`so101_head_search_calibration verify-promoted-config`**.
+  The plan does not introduce a new promotion command, and this document must not invent one.
+- The byte-for-byte check is **approval message vs bundle**: `APPROVED_BUNDLE_SHA256` (taken only from the user's
+  exact approval message) must equal `sha256sum "$CAL_RUN/head-search-calibration-bundle.json"`. The promoted config is
+  verified afterwards by `verify-promoted-config`, not used as the comparison target.
+- The config edit copies values and identities only: no recomputation, rounding, clamping or silent substitution.
+
+### 2b. Required output artifacts, identities and controlled dependencies
+
+| item | what must be recorded |
+| --- | --- |
+| artifacts | `head-search-calibration-bundle.json`, `manifest.json`, `run-status.json`, per-target **sweep-check receipts**, the **admission record** and the single **resource binding record**, and the per-parameter evidence blocks |
+| runtime identity | package prefix (`ros2 pkg prefix so101_demo_py`), console script path, detector weights sha256, torch/ultralytics/CUDA/driver versions, MuJoCo version, camera id and intrinsics digest, tracker id, web bundle id |
+| controlled dependencies | the sealed inputs actually read, each with sha256: dataset manifest, model manifest, geometry seal, scenario partitions, production config, camera config |
+| effective-value enforcement | for each of the 17 values, a startup readback proving the running process uses the recorded value; any mismatch fails the run (`CAL_EFFECTIVE_VALUE_MISMATCH`) instead of warning |
 
 ## 3. Parameter to phase map (all 17)
 
@@ -75,7 +101,13 @@ Required cases:
    sweep-check receipt raises `CAL_SWEEP_RECEIPT_MISSING`.
 6. **Installed end-to-end**: the phases are exercised through the installed console script
    (`ros2 pkg prefix so101_demo_py` assertion first), not by importing the module from the source tree.
-7. **Bundle determinism**: generating the bundle twice from identical inputs yields byte-identical output, and a
+7. **Held-out fine-tuning validation**: the fine-correction path is validated only on held-out evaluation
+   episodes; a run that validates it on calibration scenes fails (`CAL_HELDOUT_MISUSE`).
+8. **Sim-time submission**: every controller submission is checked against simulation time, and a submission whose
+   computed lead is not covered by `submit_lead_s` fails the phase.
+9. **Stop latency is a hard bound**: a single stop/revoke measurement exceeding `stop_latency_s` in the test set fails
+   the run (`CAL_STOP_LATENCY_EXCEEDED`); the threshold is never raised to accommodate a slow sample.
+10. **Bundle determinism**: generating the bundle twice from identical inputs yields byte-identical output, and a
    promoted config whose digest differs from `APPROVED_BUNDLE_SHA256` is refused before any write.
 
 ## 5. Acceptance (plan Task 13, Steps 1-5)
@@ -88,8 +120,11 @@ Required cases:
 3. **Step 3**: `promote` runs once with `APPROVED_BUNDLE_SHA256` taken only from the user's approval message, verifies
    byte-for-byte, and copies identities and values into `head_search_v2.json` without recomputing, rounding, clamping
    or substituting; the config edit is a single `apply_patch`.
-4. **Step 4**: the promotion is **committed** and the two source-level affected gates are rerun (the package test gate
-   and the source-level gate the plan names), with their exit codes recorded.
+4. **Step 4**: the promotion is **committed**, and **both complete source suites are rerun with eight workers each**:
+   `colcon test --packages-select so101_demo_py --pytest-args test` and
+   `colcon test --packages-select so101_teleop --pytest-args test` (each under the `pytest-xdist` gate with
+   `min(8, logical CPUs)` workers), with exit codes, JUnit output and skip counts recorded. Naming fewer suites, or a
+   targeted subset, does not satisfy this step.
 5. **Step 5**: the final frozen runtime is built from a **commit-stamped** fresh root, the installed gates pass
    (`prefix` and artefact checks), the run is recorded in the ledger with package, console script, model, CUDA,
    config, camera, tracker and web-bundle identities, and the Task 14 handoff names that root.
