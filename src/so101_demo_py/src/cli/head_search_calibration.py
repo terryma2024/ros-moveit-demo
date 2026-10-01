@@ -129,13 +129,16 @@ RUN_REQUIRED_FILE_FLAGS = (
     "bundle_inputs",
 ) + tuple(name for name, _flag, _shape in RUN_PHASE_MEASUREMENTS)
 
-#: the optional flags that name a file, and the ones that name an existing directory
-RUN_OPTIONAL_FILE_FLAGS = ("seal", "held_out_measurements", "episode_records")
+#: the optional flags that name a file, and the ones that name an existing directory. The gate of phase 4
+#: reads `--episode-records` as the directory of per-seed documents its own loader globs, so it is a
+#: directory here too: a file of that name never held an episode recording
+RUN_OPTIONAL_FILE_FLAGS = ("seal", "held_out_measurements")
 RUN_OPTIONAL_DIRECTORY_FLAGS = (
     "evidence_root",
     "weights_dir",
     "head_dataset_root",
     "task_dataset_root",
+    "episode_records",
 )
 
 #: the two `measure-selection-rule` inputs: the sealed production search configuration the grid and the

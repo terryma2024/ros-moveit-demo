@@ -688,6 +688,35 @@ def test_the_run_declares_the_coarse_step_sweep_as_its_fifteenth_measurement(tmp
     assert not (tmp_path / "run").exists()
 
 
+def test_the_run_takes_the_gates_episode_records_as_a_directory(tmp_path, capsys) -> None:
+    """Phase 4's gate reads `--episode-records` as a directory of per-seed documents, so the run does."""
+
+    from so101_demo.cli.head_search_calibration import (
+        RUN_OPTIONAL_DIRECTORY_FLAGS,
+        RUN_OPTIONAL_FILE_FLAGS,
+    )
+
+    assert "episode_records" in RUN_OPTIONAL_DIRECTORY_FLAGS
+    assert "episode_records" not in RUN_OPTIONAL_FILE_FLAGS
+    records = tmp_path / "episodes" / "calibration"
+    records.mkdir(parents=True)
+    (records / "seed-700000.json").write_text(
+        json.dumps({"seed": 700000, "frames": []}) + "\n", encoding="utf-8"
+    )
+    # the declared directory passes the entry's own path check; the synthetic candidate set then makes
+    # the gate refuse at phase 4, which is where this argument set always stops
+    arguments = _run_arguments(tmp_path)
+    assert main(arguments + ["--episode-records", str(records)]) == 2
+    printed = capsys.readouterr().err
+    assert "no such input" not in printed
+    assert not printed.startswith(HEAD_SEARCH_RUN_INPUTS_INCOMPLETE)
+    # a directory that is not there is still refused by name, before any root is claimed
+    assert main(arguments + ["--episode-records", str(tmp_path / "absent")]) == 2
+    printed = capsys.readouterr().err
+    assert printed.startswith(HEAD_SEARCH_RUN_INPUTS_INCOMPLETE)
+    assert "no such input" in printed
+
+
 def test_measure_coarse_step_needs_its_declared_inputs(tmp_path, capsys) -> None:
     assert main(["measure-coarse-step"]) == 2
     assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
