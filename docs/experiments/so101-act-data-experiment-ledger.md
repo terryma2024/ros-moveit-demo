@@ -41612,3 +41612,18 @@ train-c2 rc=2
 **gate 提速在本次再次生效**：A/B/C2a 的 head 场景格全部命中缓存，`compare9` 在**数十秒**内复现了同一拒绝，
 并（在 HS-275 的产物补丁之后）把 `model-comparison.json` 与 `model-selection-verdict.json` 落盘——此前
 `EVALUATION_F1_MARGIN` 这类拒绝**什么都不留**，数字只存在于错误消息里，那是我自己补丁的覆盖缺口，已修。
+
+## HS-276 — 用户裁决：C2a 定为最终使用模型（head 与 task 同用），并豁免 F1-margin
+
+**决定（用户明示）**：接受 C2a 在 head episode F1 上 1.0000 → 0.9833 的下降；**保留 C2a 为最终使用模型，head 与 task 两个域都用它**。
+
+**记录要点（按纪律，用户授权必须写明依据，且声明不豁免其他任何门）**：
+- 被豁免的**只有** `EVALUATION_F1_MARGIN` 这一条（"B 在 held-out head f1 上领先 C2a 0.017，故无可选型"）——用户判断该下降可接受；
+- **未豁免**：`TASK_RETENTION_MARGIN = 0.01`、no-cup 假检门、`EVALUATION_EPISODES_INCOMPLETE` 等所有其他判据；本决定不改变任何判据的数值；
+- 该决定**不把 C2a 变成"通过全部门"的模型**：它的 `model-selection-verdict.json` 仍如实写 `selection: null / promoted: false` 与真实拒绝原因。
+  账本与 HF 模型卡都按"用户选定"而非"gate 选出"来表述，避免后人误读。
+- C2a 的身份：权重 `2afd550694abfbe6…`、plan `e00db059e4ee1a8b…`、契约副本
+  `$MODEL_RUN/contracts/head_search_yolo_training-epochs120.yaml`（与仓库原始契约**仅 `epochs: 120` 一行不同**）、
+  工作点 **0.25（两域同点）**、基模 `f281d252…`。
+- 指标（`evaluation-c2a/`）：静态 head 0.7409 / task **0.9699**（与最好者差 0.0038，retention 门通过）；
+  episode head r 0.9833 / f1 0.9833、task r 1.0000 / f1 1.0000；`no_cup_false = 0`。
