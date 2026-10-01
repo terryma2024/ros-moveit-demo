@@ -50599,3 +50599,29 @@ So E2 is not complete, my reading of what "wiring" meant was too small (carrying
 decide), and the document shape I invented is not the one the design prescribes. All five corrections are recorded here
 with their locations, and the next work is to take them in order - starting with the bug in (2), because a v2 episode
 that cannot verify is the more serious of the two substantive findings.
+
+
+## CP-2666 — The v2 seal's audit binding has no supplier anywhere in src
+
+Reading the bug the reviewer named, rather than guessing at it:
+
+```python
+    def finish(self, outcome: dict, *, audit_manifest: Path | None = None,
+               scope: Path | None = None) -> Path:
+        if (audit_manifest is None) != (scope is None):
+            # a v2 seal names both the raw audit and the scope it was collected under, or neither
+            raise ValueError("EPISODE_SEAL_AUDIT_INCOMPLETE")
+```
+
+So the refusal means "exactly one of the two was supplied", and the comment states the v2 contract: a seal names **both**
+the raw audit and the scope it was collected under, **or neither**. A search for `audit_manifest` across `src/` returns
+only `recorder.py` itself - the import of `verify_audit_manifest`, the parameter, and the block that consumes it. **No
+caller anywhere passes either argument.**
+
+That is the bug: a v2 episode must bind its raw audit, and nothing in the live path supplies the pair, so the seal is
+completed without the binding and the result verifier's comparison against the episode then fails with
+`EPISODE_SEAL_AUDIT_INCOMPLETE`. The fix is therefore on the producing side, and it is well-defined: whoever drives an
+episode to its seal has both things in hand - the audit writer's sealed manifest and the scope document the freezer
+wrote - and must pass them to `finish(audit_manifest=..., scope=...)`.
+
+Recorded with its evidence so the next round starts from the diagnosis rather than re-deriving it.
