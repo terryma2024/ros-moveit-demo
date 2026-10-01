@@ -46973,3 +46973,17 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   that coverage is known to pass on that fixture (CP-2368).
 - F1, F14, F3, F12 and F11 closed; F13's scene item awaiting K2; the environment is up and healthy with 23 nodes and
   an active broadcaster. HEAD 1794bceb6; goal active.
+
+
+## CP-2486 — The probe is restored rather than left in the tree
+
+- Restored `episode_audit.py` from `/tmp/probe528.py`: the module parses, the `WIN-CALLSITE` marker count is zero, and
+  the file has no dirty entry. The probe was kept for exactly the round CP-2485 promised and no longer, because this
+  round's budget did not stretch to writing the runner-backed fixture that would have used it.
+- So F5's step two stands exactly where CP-2485 left it, minus the instrumented tree: the next pass writes the
+  fixture (CP-2376's derived window: the schedule at the acquired instants, `collection_*` containing the run, and the
+  endpoints equal to the physics extremes), re-applies the wrapper probe, runs that one test, and reads which call site
+  refuses. Coverage is already known to pass on that fixture (CP-2368), so the answer is the last unknown there.
+- Nothing else changed this round: the environment is up and healthy, the input side is green end to end, and the
+  execution side waits on the container-free broker decision reported at CP-2481/2482.
+- F1, F14, F3, F12 and F11 closed; F13's scene item awaiting K2. HEAD d28032d0e; goal active.
