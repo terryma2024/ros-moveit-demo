@@ -45181,3 +45181,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   safety negatives.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation.
   HEAD ed358f3b5; goal active.
+
+
+## CP-2396 — Two collection-time environment preconditions, and why the freezer change is not implicated
+
+- A `-k` filtered run over `src/so101_demo_py/test/` fails at COLLECTION, not in any test: with only the plan's
+  `env.zsh` sourced it raises `ament_index_python.packages.PackageNotFoundError: package 'so101_demo_py' not found,
+  searching: ['/opt/ros/jazzy']`, and with the worktree's `install/setup.zsh` sourced as well (8 prefix entries) it
+  raises `MEASUREMENT_CONTRACT_V2_INVALID` instead. Both are environment preconditions the session lacks, and the
+  plan is explicit that import or environment failures must not be counted as RED - so neither is evidence about the
+  change under test.
+- What this does not affect: the direct file-path runs this stretch used (the audit suite, the release boundary, the
+  generic artifacts suite, the endpoint-pose suite) all pass, because those modules do not need either precondition.
+  The freezer's signature change has no callers anywhere under `src/`, so it cannot have broken a caller; the valid
+  verification is a file-path run of the first-episode input files, which is the next round's first command.
+- Recorded so the next pass does not re-derive it: to run anything that imports the package through the ament index,
+  source the worktree overlay; and the measurement-contract precondition is separate from it and must be satisfied
+  or the affected files run only by path.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation;
+  E1's freezer now binds the policy and runtime with old behaviour preserved (b9536eebe). HEAD c9fe518f0; goal active.
