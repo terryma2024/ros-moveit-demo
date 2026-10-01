@@ -54296,3 +54296,32 @@ answer decides whether the fixture is feeding the runner a key it ignores (harml
 
 Both outcomes are worth writing down: this is the third time in this stretch that one name has meant two things across
 layers, and the first time the two meanings sit on either side of a schema boundary.
+
+
+## CP-2816 — Settled: the QC reads `cup_pose_world` by design, so none of the three sites needs correcting
+
+```python
+episode_qc.py:37    POSE_KEYS = ("cup_pose_world", "cup_pose_m", "endpoint_pose", "cup_pose")
+episode_qc.py:60        for key in POSE_KEYS:
+```
+
+and `endpoint_poses` reads the audit's own pair (`cup_position_world_m` plus `cup_orientation_world_xyzw`) **first**, then
+falls back to any of those four keys shaped as a seven-value pose - `cup_pose_world` first among them.
+
+So the second of CP-2815's three readings is the true one: the QC is **deliberately tolerant of both shapes** - the pair,
+which is what the audit admits and what the writer emits (CP-2635), and the single legacy key, which is what the
+application and adapter layers carry as `PoseEvidence`. The `:50` fixture writes the legacy shape on purpose and exercises
+the fallback; it is not feeding the runner something it ignores, and it is not leaning on an accident.
+
+That resolves correction 5's last item, and with it correction 5 as a whole:
+
+- **`:16`** - already the test the rule asks for ("a legal endpoint episode without quality fields is not refused");
+- **`:50`** - exercises a documented fallback, correct as written;
+- **`:142`** - asserts the prescribed report's closed key set, which is the contract rather than a violation of it;
+- and the **predicate half** - 36 negatives committed across the five gates this stretch found (CLOSE 1, hold 15, release
+  preflight 4, release phase 8, set-down 12), where before this work `BILATERAL_CONTACT_MISSING` had no test at all.
+
+The checkpoint's three line numbers turned out to point at one thing that was already right, one that was right for a
+reason worth knowing, and one that was right for a reason the checkpoint itself had written down. Checking each against the
+rule rather than correcting all three is what found that out - the same discipline as the twelve release cases that
+disagreed with each other until the third gate explained why.
