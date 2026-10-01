@@ -45120,3 +45120,26 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   after its protocol table), and E1/E2/E3 (the CLI transcription first). F1, F14, F3, F12 closed; F11 closed by
   this entry.
 - HEAD 21faf0ce3; goal active.
+
+
+## CP-2393 — `so101-dev` loaded, and the rules it binds the coming E3 work to
+
+- Loaded the repository's SO-101 skill before any real MuJoCo task action, as AGENTS.md requires. Recorded the
+  execution position with it: `pwd` inside the worktree, branch `codex/so101-act-data-0917a`, HEAD as committed and
+  the 35-entry dirty status that is the user's pre-existing work. Executing directly on ai-station, no self-SSH.
+- Rules that now bind E3 (and any live step before it): one minimal hypothesis per round with the finding labelled
+  OBSERVED/INFERRED/HYPOTHESIS; code provenance confirmed from the running process, the installed artifact and the
+  source tree, never from a summary; `DONE`, a MoveIt SUCCESS, an action returning success and a GUI showing motion
+  are four independent evidences, none substituting for another; the ordinary Python gate must run under
+  `pytest-xdist` with `min(8, logical CPUs)` workers, TMPDIR/TMP/TEMP pointing at a fresh `/data` NVMe scratch under
+  the registered evidence root, with CPU count, workers, scope, rc, JUnit and skips recorded; the ordinary gate
+  collects `src/so101_demo_py/test/` only and never the benchmark suite; a fix is only closed when the original
+  reproduction failed before and passes after, the regression saw RED then GREEN, the package was rebuilt and
+  re-sourced, and the layers relevant to the defect agree.
+- Scope note for this task: the plan is MuJoCo-only, so MuJoCo is the physical fact source for the milestone; the
+  skill's Gazebo/attachment boundary applies to the Gazebo path, and the five-consecutive-run bar belongs to live
+  acceptance rather than this single non-Head closure, which the plan defines as one run through Recorder, seal,
+  fresh-process QC and the actual Coordinator commit.
+- F1, F14, F3, F12 and F11 are closed; F5's step two is one traceback away; F13's scene item awaits K2's
+  implementation after its protocol table; E1's data, loaders, calculator and controls are landed with the CLI as the
+  next transcription. HEAD b288d055b; goal active.
