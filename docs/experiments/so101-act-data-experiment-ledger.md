@@ -47330,3 +47330,21 @@ the acquisitions, or mint the acquisitions to match the physics extremes.
 
 So F5's step two now has a named rule, a specific mismatch to check, and a one-line fix. The remaining work is the
 fixture (CP-2495's 10 Hz version) plus the inert read-style probe (CP-2497), both already recorded verbatim.
+
+
+### CP-2499 — The port fills the timestamp inside run_phase, not in bare evidence
+
+Probed the port directly: `AlignedPort()._evidence(phase, 1)` returns a dict for each of the nine phases, but
+`observation["simulation_time_s"]` is **None** in every one of them. Since the runner-backed fixture's
+`times = [json.loads(line)["sim_time_s"] for line in physics.jsonl]` was non-empty and numeric (the fixture computed
+`min(times)` and `max(times)` without raising), the timestamp must be filled by the port during `run_phase`, not by the
+bare evidence call - which is consistent with the runner reading the observation from the port's `run_phase` return.
+
+So the physics extreme question is still open, and now it is a one-line question with a known place to ask it: run the
+port through `run_phase` for the nine phases and print the observation's `simulation_time_s`, or - cheaper - have the
+fixture itself print `times` (the CP-2497 probe already prints `phys`, truncated to three entries; removing the
+truncation answers it in the same run as the fixture).
+
+With CP-2498's rule in hand, the fixture change is then exact: set `collection_start_s`/`collection_end_s` from the
+**acquisition** stamps (0.1 and 1.0 in the 10 Hz version), not from the physics times, unless the physics times turn
+out to share those extremes.
