@@ -50666,3 +50666,23 @@ belongs in its completion path, and that is a single named location rather than 
 With CP-2667 (no caller) and this (the place the caller belongs), the first of the reviewer's five corrections has a
 concrete plan: read `continuous_capture`'s completion path, pass the pair through, and prove it with a test that seals a
 v2 episode and verifies it - the very thing that currently fails with `EPISODE_SEAL_AUDIT_INCOMPLETE`.
+
+
+## CP-2669 — continuous_capture finishes the capture, not the recorder
+
+`continuous_capture`'s completion path is its own:
+
+- **`:186 finish(self, physical_end_s) -> CaptureSummary`** - the **capture's** finish, guarded by `self._finished`
+  (`:189`) and setting it (`:206`), with the retryable case reported "with its own reason instead of finished" (204);
+- and the summary's docstring at `:37` is a design statement worth keeping: **"What a finished capture can report. There
+  is deliberately no `committed` field."** - i.e. this layer may not claim a commit, which is the same discipline the
+  QC document follows for `qc_passed`.
+
+What it does **not** do is finish the episode recorder: its constructor takes `recorder`, stores it, and never calls
+`Recorder.finish(...)`. So the v2 sealing call is one level above this module - in whoever owns a capture and a recorder
+together - which is consistent with CP-2667's finding that nothing in `src/` calls it at all.
+
+That closes the investigation the reviewer's first correction opened: the missing piece is not an argument at a call
+site but a **sealing step that no layer performs**, and the place to add it is where a capture's summary becomes an
+episode's seal. The next round reads that higher level - the worker path that pairs a capture with a recorder - and adds
+the call with the audit manifest and the scope.
