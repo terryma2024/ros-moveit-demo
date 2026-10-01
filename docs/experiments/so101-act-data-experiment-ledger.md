@@ -43191,3 +43191,173 @@ run-tests.sh、baseline-invocation.sh、regression-files.txt、recon/projection/
 
 **运行后进程**：`ps`（ros2/move_group/rviz/gz/gazebo/mujoco/yolo/ultralytics/detector 全空）、
 `nvidia-smi --query-compute-apps` 空、未启动任何 `ros2` daemon（`pgrep -a -f "ros2 daemon"` 仅匹配检查命令自身）。
+
+## HS-307 — 清点项 #5 `fine_correction_episodes` 有源：20 个 held-out 种子逐个闭环，15 个锁定、每个恰好 1 次修正（累计 0.131–0.348 rad），安装版 phase 6 算出 `max_fine_corrections=2`、`max_fine_total_rad=0.6961197054865531`
+
+**提交**：`8975452cf`（feat，4 文件 +3065/−0，普通 `git commit`，rc=0）、`8f5f4f2f4`（fix，2 文件 +47/−24，
+普通 `git commit`，rc=0）、`3e3eaea59`（feat，2 文件 +66/−9，普通 `git commit`，rc=0）、`3df29cbac`（fix，
+2 文件 +86/−13，普通 `git commit`，rc=0）。**后两个 fix 是真实运行逼出来的**，见 (d)。
+工具链：`head-toolchain-20261001T105240Z`（由 `8975452cf` 构建，被取代）、`…T105513Z`（由 `8f5f4f2f4`）、
+`…T105659Z`（由 `3e3eaea59`，被取代）、**`head-toolchain-20261001T105945Z`（由 `3df29cbac`，最终，build rc=0）**。
+
+**(a) 缺口与本次测量的定义（先写进 `$EV/reviews/phase6-7-measurement-inventory.md`，再实现）**
+
+HS-299 清点第 5 行说 `episodes8`（20+20 文件）是开环的：每场景三个固定颈角、只有
+`frames[].{neck_rad,detections,truth,latency_ms}`，既无 `fine_corrections` 也无成功判据。phase 6 的两个数
+（`compute_max_fine_corrections` / `compute_max_fine_total_rad`，HS-296 定的公式：成功 held-out episode 的**最大
+修正次数 + 1 次恢复余量**、**最大累计修正 + 最大单次修正**）都是**闭环**属性，故本轮只做闭环测量。
+
+* **场景**：每个 held-out 种子按 recorder 自己的做法准备（`record_episodes7.py`：同一份 head profile、
+  `MuJoCoDatasetRenderer._prepare(np.random.default_rng(seed), DatasetScenario.for_cup_count(cups))`、同一套
+  `CLASSES[min(index // 2, len-1)]` → 杯数 0/1/2 的映射）。**预检实测复现**：20 个种子 × 3 个录制颈角 =
+  60 帧，用生产 head detector（frozen C2a 的 head 工作点）检测出的杯心列与 `episodes8` 保留值逐帧比对，
+  **中位差 0.2188 px、最大差 2.2032 px**，每种子每帧的检出**个数完全一致**（18 个单杯种子 1 个、2 个
+  `two_cups` 种子 2 个、2 个 `no_cup` 种子 0 个）。故本轮的 episode 看的就是 held-out 数据集的那些场景。
+* **闭环**：`run_fine_correction_episode` 是纯函数（plant/detector 注入），由**生产** `HeadSearchController`
+  逐帧驱动：它出 target → plant 把 sealed 场景的 `neck_yaw_joint` 步进到 declare 的 settle 规则成立 →
+  head 相机渲染 → 检测器找杯 → 该帧与 feedback 回喂控制器。**一次 fine correction 的判据是控制器自己的
+  `fine_count` 在本次 tick 里增加**（不是"target 变了"）：控制器的 `target = yaw + correction` 在残留误差
+  需要第二次修正时 target 可能与前一次相同，按"target 变了"计数会**漏记**。记录后与控制器自己的
+  `fine_count`/`fine_angle` 逐项核对（`verify_correction_consistency`），不一致即拒绝——"绝不编造修正次数"
+  因此是可核查的，而不是口头承诺。
+* **文档形状**：`records` 恰为 phase 6 读的 5 键（`episode_id`/`split`/`succeeded`/`fine_corrections`/
+  `fine_corrections_rad`）；拒绝的 episode 写 `succeeded:false`、`fine_corrections:null`、无任何 magnitude，
+  并在 `episodes` 里留完整证据（逐帧 h_err/中心/track/戳、逐停点、控制器计数、杯的准备位置与终位置、
+  越域量）。**特例**：一次**零修正就锁定**的成功 episode 会让 phase 6 以 `CAL_SWEEP_UNSTABLE` 拒绝整份文档
+  （`_episode_numbers` 要求 count ≥ 1），故生产者先以 `CAL_FINE_EPISODE_NO_CORRECTION_NEEDED` 拒绝整份文档，
+  而不是写一个 phase 6 读不了的数（已用真实安装版验证该拒绝路径：`zero_correction_refusal= CAL_SWEEP_UNSTABLE`）。
+* **隔离**：`records[].split` 全部写 `held_out_evaluation`，`split_declaration` 记 split 名、种子表、
+  partitions 的 path+sha256、`calibration_seeds_used: []`、隔离规则原文；`--seed 700000`（calibration）在
+  **创建输出目录之前**即以 `CAL_FINE_EPISODE_SPLIT_LEAK` 拒绝（真实安装版 phase 6 对同一份数据也以
+  `CAL_SPLIT_LEAK` 拒绝，两者一致）。
+
+**(b) 两个运动走廊（本轮的中心判断，最可能被评审推翻的一条）**
+
+| 走廊 | 区间 | 约束对象 | 依据 |
+| --- | --- | --- | --- |
+| coarse（HS-302 原规则） | `required_search_domain_rad ∩ lock_valid_neck_rad` = `[-0.17559216195018026, 0.08047101126546086]` | episode 的**起点**（sealed anchor）与**bounded sweep 的每个停点** | HS-302；越界即 `CAL_FINE_EPISODE_OUT_OF_CORRIDOR`，**永不 clamp** |
+| fine | seal 的 `lock_valid_neck_rad` = `±6.283175307179587` | **每次 fine correction 的 target 与每个 settle 后的颈角** | seal 自己声明"锁在此区间内才有效"；生产控制器的 plan 也按它 clamp 停点；phase 6 的 `max_fine_total_rad` 余量正是对它取 min |
+
+**为什么 fine 路径不能沿用 `required ∩ lock_valid`（实测，不是推理）**：预检把每个 held-out 种子的杯
+"居中所需的颈角"从渲染像素反解出来（`angle + atan((320-column)/(0.8*focal))`）：**16 个单杯种子全部落在
+`+0.1151 … +0.3414 rad`**，即全部**高于** required 域上界 `+0.08047101126546086`；2 个 `two_cups` 种子另有
+一个杯在 `−0.128 … −0.152 rad`（域内）但同时存在第二个候选（控制器判 `TARGET_AMBIGUOUS`）；2 个 `no_cup`
+种子没有杯。原因是 held-out 数据集把 cup A 放在 seal 的 **`default` anchor 杯位** `(0.02,−0.28,0.165)`
+（本树实测：`in_frame_matrix.default.centre_angle_rad = 0.23109066719589708`、`first_hit_body = plastic_cup`），
+而合法拾取工作区是 `x ∈ [−0.115,−0.035]`——这些场景的杯**本来就在合法工作区之外**。若把 HS-302 的严格
+交集也套在 fine 路径上，20 个 held-out 种子**没有一个**能产生锁定，文档无法产出；而生产控制器本身并不把
+fine correction 限制在 required 域（只受 `max_fine_total_rad` 约束）。因此本轮把 required 域**只**当作
+coarse sweep 的覆盖义务，fine 路径由 seal 的 `lock_valid_neck_rad` 约束，并把每个 episode 的越域量
+`required_domain_excursion_rad` **如实记进文档**（15 个成功 episode 全部越域：`0.0506 … 0.2673 rad`，
+文档计数 `locked_outside_required_domain_count = 15`）。**这是本轮的判断而非测量结论**：评审若认定 fine
+路径也必须留在 required 域内，则本轮结论应判为"该数据集无法测"，而不是"测得 2 / 0.696"。
+
+**(c) 一次真实运行（安装程序，rc=0，wall 22 s / 程序内 `elapsed_s` 11.703）**
+
+```
+T=$EV/head-toolchain-20261001T105945Z          # 由 3df29cbac 构建，build rc=0，安装模块 sha256=源码 285ef5af…
+ros2 run so101_demo_py so101_head_search_calibration measure-fine-correction-episodes \
+  --scene $T/…/assets/mujoco/act/head_search_scene.xml --geometry-seal $EV/head-camera-probe11-…/head-camera-geometry.json \
+  --production-search-config $R.production-search-config-c2a.json --controller-config $T/…/config/mujoco/ros2_controllers.yaml \
+  --frozen-candidate $CAMPAIGN/reselected-c2a/frozen-c.json --weights <C2a 真实文件> \
+  --dataset-config $T/…/config/perception/head_camera_yolo_seg.yaml \
+  --scenario-partitions $T/…/config/act/head-search-scenario-partitions-v1.json \
+  --output-dir $R --split held_out_evaluation --anchor left --device cuda \
+  --generator-commit 3df29cbac… --max-frames 16 --max-fine-corrections 8 --max-fine-total-rad 2.0
+rc=0  FINE_CORRECTION_EPISODES_MEASURED episodes=20 succeeded=15 refused=5 split=held_out_evaluation anchor=left
+      max_fine_corrections_observed=1 max_cumulative_fine_correction_rad=0.34805985274327655
+```
+
+`$R = $CAMPAIGN/fine-correction-episodes-20261001T110028Z`（`$CAMPAIGN` = `head-yolo-models-20260930T120608Z`）。
+
+* **20 个 held-out 种子全部跑完**（不是子集）：`held_out_evaluation` 分区共 20 个，全部声明、全部尝试；
+  15 个锁定，5 个如实拒绝：`800008`/`800009`（`two_cups` → 一帧两个候选 → `CAL_FINE_EPISODE_TARGET_AMBIGUOUS`）、
+  `800010`/`800011`（`no_cup` → 整场无检出 → `CAL_FINE_EPISODE_CUP_NOT_FOUND`）、
+  `800013`（`low_light` → 场景准备不保证无接触，solver 在第一个控制周期把杯从瓶边推开 **0.1366 m** 并推离
+  head 相机视野 → `CAL_FINE_EPISODE_CUP_NOT_FOUND`，文档的 `cup_prepared_m`/`cup_position_m`/`cup_drift_m`
+  把这件事写在明面上）。**没有任何一次 producer 级拒绝**（`CAL_FINE_EPISODE_*` 的文档级码一个都没触发）；
+  预算未成为约束（`budget_censored:false`，声明预算 8 次 / 2.0 rad，实测最大 1 次 / 0.348 rad）。
+* **每个成功 episode 恰好 1 次 fine correction，4 帧锁定**（起点在 `left` anchor 的 0.0 就能看见杯，
+  所以一次修正后连中三帧）：累计修正 **0.131320 … 0.348060 rad**（中位约 0.2529），锁定颈角
+  **+0.1310 … +0.3478 rad**，越域 **0.0506 … 0.2673 rad**；臂漂移 ≤ 4.4e−4 rad（每个非颈 actuator 都按
+  准备态位置保持），杯漂移 15 个成功 episode ≤ **1.18e−3 m**、其余 6e−5 m。
+* 文档 `fine-correction-episodes.json` file sha256 `095134b3c8697fce577021209b041c91c41b9d9be1b2682353010aab63f9b2d1`、
+  自摘要 `cbdaf9bb1372467516e0e5bc3c84be4e37bc292e6e5a916f660f1ae540c5a1dc`；`measurement-receipt.json`
+  `683b22318dca6a4d909f805d6fd98f856e9560c95060cfa39c22eb419efb2b01`（`status=MEASURED_WITH_REFUSED_EPISODES`）；
+  同级 `$R.{console.log,provenance.txt,production-search-config-c2a.json}`（配置 `dfe71656…`，与
+  HS-301/302/303 的派生配置**逐字节相同**，key 级 diff 仅 `weight_path`/`weight_sha256`）；
+  `$R/consumption-check.log`（`76d30056…`）。
+* 运行时身份（receipt/document）：`/usr/bin/python3` 3.12.3、MuJoCo 3.12.0、torch 2.13.0+cu130、
+  ultralytics 8.4.115、`cuda_available=true`、RTX 5080、驱动 595.84、`so101_demo` 模块 = 该工具链根、
+  `weights_sha256=2afd550694abfbe6…`（C2a）、`mujoco_neck_commanded=true`、`ros_nodes_started=false`、
+  `hardware_motion_commanded=false`、`transport_measured=false`、`tracking_measured=false`。
+* 重复性：同一提交、同一命令的两次连续真实运行（`…T105553Z` 与 `…T105739Z`）给出相同的 15/5 与相同的
+  逐 episode 修正次数，最大累计修正差 **1.5e−6 rad**（检测→settle 的浮点/GPU 非确定性），逐 episode 的
+  锁定角与越域量一致到 1e-3 rad 量级。
+
+**(d) 真实运行逼出来的三个缺陷（每个都先 RED 后 GREEN）**
+
+| # | 现象（真实运行，rc 与码） | 根因 | GREEN 证据 | 修复 |
+| --- | --- | --- | --- | --- |
+| 1 | 第 1 次 rc=1：`TypeError: prepare_episode_scene() got an unexpected keyword argument 'scenario'` | producer 把 `scenario`/`split` 一起传给 preparer，preparer 的签名没有它们（决策层测试注入的是自己的 preparer，走不到真签名） | 针对**修复前的安装模块**跑新用例：`AttributeError: … has no attribute 'scene_preparation_request'`（rc=1，1 failed），并直接取到原 TypeError 边界；修复后 44 passed rc=0 | `8f5f4f2f4`；把请求收敛成 `scene_preparation_request()` 一个函数，并用 `inspect.signature` 钉住 preparer 必须接受它构造的每个键 |
+| 2 | 第 2 次 rc=0，但文档里**每个** episode 都报 0.066–0.140 m 的杯漂移（含 15 个成功 episode） | `apply_prepared_scene` 在 `mj_forward` **之前**抓 `prepared_cup_position_m`，抓到的是基类按 seal anchor 摆的杯位而不是准备态的 | 新增真实 MuJoCo 用例（同 `DEADBAND_SCENE` fixture 的既有做法，只建模型不开 renderer）：RED = `Index | Obtained -0.08 | Expected 0.05`；GREEN = 1 passed；真实运行后 15 个成功 episode 漂移降到 ≤1.18e−3 m | `3df29cbac`；抓取移到 `mj_forward` 之后；顺带修 `nmat=0` 的场景（空 `mat_rgba` 不能广播进 (0,4) 数组，改为长度校验后跳过/拒绝） |
+| 3 | （同一提交内的两次运行之间无需修复，但记录）重复运行的微小差异 | 检测→settle 的浮点/GPU 非确定性 | 见 (c) 最后一条 | — |
+
+**(e) 安装版 phase 6 接受该文档，并给出两个值**（`$R/consumption-check.log`，两个模块都断言来自工具链安装树）
+
+* phase 2 的 bounded sweep 由**安装版 phase 2 自己的函数**从 seal 复算（`read_geometry_document` +
+  `choose_coarse_step_candidate` + `prove_required_domain_coverage`：chosen step `0.6560533740603397`、
+  三个 anchor 的两个停点 `[+0.08047101126546086, −0.17559216195018024]`、`safe_interval_rad = ±6.283175307179587`、
+  `coverage_complete:true`）——本轮没有保留的 phase-2 文档，而 phase 2 是纯几何相位（`motion_commanded:false`），
+  这一步在消费核查里被明写。
+* 文档按**安装版 CLI 自己的读法**（`cli.head_search_calibration._records`）读出 20 条 records，且
+  `records_are_the_documents_own:true`；`record_keys` 恰为 5 键。
+* `compute_max_fine_corrections(...)` = **`2`**（`max_needed_fine_corrections` 1 + 恢复余量 1；
+  `largest_single_correction_rad` 0.34805985274327655；`safety_margin.budget_rad` 0.6961…、
+  `safe_allowance_rad` 6.107583145229406、`headroom_rad` 5.411464…，`CAL_SWEEP_UNSTABLE` 未触发）。
+* `compute_max_fine_total_rad(...)` = **`0.6961197054865531`** = 最大累计 `0.34805985274327655`
+  + 最大单次 `0.34805985274327655`（15 个成功 episode 每次都只有一次修正，两个最大值同源）。
+* 同一次核查还跑了两个"应当拒绝"的对照：把一条 record 的 `split` 改成 `calibration` →
+  `CAL_SPLIT_LEAK`；把一条成功 record 的 `fine_corrections` 改成 0 → `CAL_SWEEP_UNSTABLE`。两者都如期触发。
+
+**验证链**
+
+| 步骤 | 结果 |
+| --- | --- |
+| RED（模块，文件不存在） | **rc=2，1 个 collection error**（`ImportError: cannot import name 'head_search_fine_correction_episodes'`），边界正确 |
+| RED（CLI，无新子命令） | **6 failed / 49 deselected, rc=1**（`invalid choice: 'measure-fine-correction-episodes'`）；跑完即从备份还原 CLI 源文件，sha256 与还原前一致 |
+| GREEN（模块） | **rc=0**：新模块测试 43 → 44（签名用例）→ 46（杯漂移）passed；CLI 6 passed；两文件合计 102 passed rc=0 |
+| GREEN（fix 2 回归） | 真实 MuJoCo 用例 RED（`Index | Obtained -0.08 | Expected 0.05`）→ GREEN 1 passed |
+| 回归（24 文件 = HS-288..306 各 phase + 新模块 + CLI，基线调用式，`-n 8`） | **670 passed / 0 failed / 0 error / 0 skipped, rc=0**（3.86 s；`scratch/hs307/logs/regression-final.log`） |
+| 全量 `src/so101_demo_py/test`（基线调用式，`-n 8`，24 逻辑 CPU，最终提交 `3df29cbac`） | **tests 6525 / 175 failed / 6157 passed / 152 skipped / 86 errors, rc=1**（75 s；`$EV/scratch/pytest-xdist8-hs307-final3.bfe79607`）；与基线 `pytest-xdist8-hs306-final2.6c489d6c`（6490/175/6104/152/86）**节点集 diff 0 行**（两侧均 261 节点）、`passed +53` 恰为本轮新增（新模块 46 + CLI 新增 7），失败集中 head_search 节点 0 个 |
+| `ruff check`（4 个改动/新增文件） | `All checks passed!` rc=0 |
+| 运行前后进程 | `ps`（mujoco/yolo/detector/ros2 run/so101_head_search 全空）、`nvidia-smi --query-compute-apps` 空、未启动任何 ros2 daemon |
+
+**本轮声明的主要推断（待评审）**：① **(b) 的两个走廊**是本轮最关键的判断，若评审要求 fine 路径也留在
+required 域内，则本数据集（杯位在 `default` 锚点、域外）无法测出任何修正，本轮结论应作废而非调整；
+② `succeeded` 的判据取生产控制器自己的 `found=True`/`TARGET_LOCKED`（三帧连续入 deadband），不另立判据；
+③ 一次 fine correction 的判据取控制器自己的 `fine_count` 增量（不是 target 变化），并以 `fine_count`/
+`fine_angle` 交叉核对；④ **零修正即锁定**的成功 episode 会让 phase 6 拒绝整份文档，故生产者选择整份拒绝
+（`CAL_FINE_EPISODE_NO_CORRECTION_NEEDED`）而不是写 0；⑤ 场景准备**不检查接触**（head profile 未开
+`require_nonpenetrating_scene`，recorder 也从不步进物理），因此 solver 可能在第一个控制周期把杯推开——
+本轮把 `cup_prepared_m`/`cup_position_m`/`cup_drift_m` 写进每条 episode，用测量而非猜测说明 `800013` 的拒绝；
+⑥ 非颈 actuator 在整个 episode 里被**保持**在准备态位置（否则会朝 ctrl 默认 0 漂移），每条记录
+`arm_drift_rad` 供核查；⑦ 检测器工作点取 frozen C2a 的 head 域（0.25 / iou 0.5），控制器的
+`min_confidence 0.4`、`min_bbox_aspect 0.5`、`vertical_bounds_px [110,370]`、`center_deadband_px 18` 仍是
+seal 生产配置自己的（**注意**：phase 6 算出的 `center_deadband_px` 是 3.0、`vertical_bounds_px` 是
+`[191.7, 272.68]`，本轮的 episode 用的是**当前生产声明值**，因为要测的正是"生产控制器需要几次修正"）；
+⑧ `--anchor left` 是唯一同时满足"起点在 HS-302 corridor 内"（`default` 的 0.1 在域外）与"扫得到 held-out
+场景的杯"（`forward` 的杯子居中在 0.1882，域外）的 sealed anchor；⑨ harness 的测量预算（8 次 / 2.0 rad）
+是**仪器上限**而非标定值，一旦成为约束即整份拒绝（`CAL_FINE_EPISODE_BUDGET_EXHAUSTED`），生产声明
+（4 次 / 0.4 rad）原样记在 `production_declaration` 旁；⑩ 无 ROS 图像话题、无跨进程传输，
+`transport_measured=false`；无多目标跟踪，`tracking_measured=false`。
+
+**本轮证据与生命周期**：保留工具链 4 个根（`…T105240Z`/`T105513Z`/`T105659Z` 被取代、**`T105945Z` 最终**）、
+三次真实运行 `$CAMPAIGN/fine-correction-episodes-{20261001T105441Z,20261001T105553Z,20261001T110028Z}`
+（第一次 rc=1 留证：空输出目录 + console + provenance + 派生配置；第二次 rc=0 但含杯漂移捕捉位置缺陷，
+被第三次取代）及各自的 `.console.log`/`.provenance.txt`/`.production-search-config-c2a.json`、
+`$EV/scratch/pytest-xdist8-hs307-{final.bf58cc85,final2.dbebe489,final3.*}`（门禁调用式）、
+`$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-307 状态节）、工作树 `scratch/hs307/`（env/
+run-tests/build-toolchain/run-fine-correction-episodes/consumption-check 脚本、preflight 复现探针、
+800013 杯位诊断、make-c2a-config、RED/GREEN/回归/全量日志、pyshim、tmp*）。以上**均为删除候选，未删除**；
+HS-288..306 的产物只读引用。
