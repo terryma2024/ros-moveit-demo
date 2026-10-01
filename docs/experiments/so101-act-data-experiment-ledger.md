@@ -50811,3 +50811,22 @@ for purely headless or Web-backend changes - which this work is, since nothing h
 Also restated by the skill and already honoured: one registered evidence root
 (`/data/work/so101-evidence/act-data/20260924-fbc25063-resume/`), a long-task ledger in the worktree (this file), no
 second stack, and no deletion of evidence without authorisation.
+
+
+## CP-2675 — The compliant gate shows three failures where the earlier sweep showed none
+
+The full gate - scope `src/so101_demo_py/test`, 32 CPUs, 8 xdist workers, `TMPDIR` verified inside this task's `/data`
+scratch - reached **99%** and printed **three failures** (`...........F....FF........`). The earlier full-directory
+sweep of CP-2664, same scope and same `zsh -c` recipe, had **zero**.
+
+Two candidate explanations, and the next read distinguishes them:
+
+- **my change**: the sealing sequence committed as 0ca35cc93 is the only source change between the two runs, and it
+  touched `ContinuousEpisodeCapture.finish`;
+- **the fixture scratch**: this run's scratch tree contains dozens of `claims-*` and `rr-*` directories, i.e. many
+  fixtures writing per-test state under one `TMPDIR`, which a parallel run can expose differently than a serial one.
+
+The honest position until the names are read is that this may well be a regression I introduced, and it is recorded that
+way rather than excused. What matters is that the gate which satisfies the repository's contract is the one that found
+it: the narrower nine-suite gate was green, and CP-2664's sweep was green, and only the fully shaped gate shows the
+three. That is the argument for running it in this shape from now on, made by the gate itself.
