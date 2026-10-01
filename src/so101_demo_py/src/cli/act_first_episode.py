@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 
 from so101_demo.act.endpoint_pose_acceptance import load_development_runtime, load_endpoint_policy
-from so101_demo.act.first_episode_inputs import freeze_inputs, inspect_inputs
+from so101_demo.act.first_episode_inputs import freeze_inputs, inspect_inputs, read_inputs_manifest
 
 MODES = ("formal", "preselected_target_diagnostic")
 
@@ -301,8 +301,17 @@ def _run(arguments) -> int:
         start_guard_evidence=None, resume=False)
     # this route runs the broker as a host process beside the run, so its spec names the host copy of the runtime
     # config rather than the container mount (CP-2680/2681)
+    # the frozen inputs carry the endpoint policy the QC compares against (they are bound into the inputs hash
+    # chain, which is why preflight can account for them), so the composition can build a port that judges
+    # endpoints - the class the coordinator's ACT gate selects by the contract the port implements (CP-2798/2802)
+    _frozen = read_inputs_manifest(inputs / "inputs-manifest.json")
+    _endpoint_inputs = None
+    if "endpoint_policy" in _frozen:
+        _endpoint_inputs = {"endpoint_policy": _frozen["endpoint_policy"],
+                            "final_target": list(spec.expected_final_cup_pose_world)}
     composition = ProductionBatchComposition(spec, broker_command_builder=_broker_command,
-                                             container_brokers=False)
+                                             container_brokers=False,
+                                             endpoint_inputs=_endpoint_inputs)
     # the drive, exactly as the batch path does it: the composition runs itself, its summary becomes an outcome
     # document, and the document is written as the aggregate beside the run's own evidence
     from so101_demo.cli.mujoco_parallel_batch import _run_with_shutdown_signals, _write_json, outcome_document
