@@ -71,6 +71,7 @@ design. This is not a phase and not a validation-time check: it is a preconditio
 | runtime identity | package prefix (`ros2 pkg prefix so101_demo_py`), console script path, detector weights sha256, torch/ultralytics/CUDA/driver versions, MuJoCo version, camera id and intrinsics digest, tracker id, web bundle id |
 | controlled dependencies | the sealed inputs actually read, each with sha256: dataset manifest, model manifest, geometry seal, scenario partitions, production config, camera config |
 | effective-value enforcement | for each of the 17 values, a startup readback proving the running process uses the recorded value; any mismatch fails the run (`CAL_EFFECTIVE_VALUE_MISMATCH`) instead of warning |
+| also recorded though outside the 17 (design §7.1, final paragraph) | `settle_velocity_rad_s`, `goal_tolerance_rad`, the **three-consecutive-frame lock rule**, the **tracker algorithm** and the **10 Hz frame contract**: each with its value or definition, its input evidence and the readback that proves the running system uses it |
 
 ## 3. Parameter to phase map (all 17)
 
@@ -107,8 +108,9 @@ Required cases:
    computed lead is not covered by `submit_lead_s` fails the phase.
 9. **Stop latency is a hard bound**: a single stop/revoke measurement exceeding `stop_latency_s` in the test set fails
    the run (`CAL_STOP_LATENCY_EXCEEDED`); the threshold is never raised to accommodate a slow sample.
-10. **Bundle determinism**: generating the bundle twice from identical inputs yields byte-identical output, and a
-   promoted config whose digest differs from `APPROVED_BUNDLE_SHA256` is refused before any write.
+10. **Bundle determinism and approval binding**: generating the bundle twice from identical inputs yields
+   byte-identical output, and an approval message whose `APPROVED_BUNDLE_SHA256` does not equal the **bundle** digest is
+   refused before any write. The comparison target is the bundle, never the promoted config.
 
 ## 5. Acceptance (plan Task 13, Steps 1-5)
 
@@ -117,14 +119,19 @@ Required cases:
    (`test ! -e "$CAL_RUN"`).
 2. **Step 2**: the approval pause presents the 17 values with units, formulas, distributions, margins, the selected
    model/camera/tracker identities and the first failure if any; nothing is modified during the pause.
-3. **Step 3**: `promote` runs once with `APPROVED_BUNDLE_SHA256` taken only from the user's approval message, verifies
-   byte-for-byte, and copies identities and values into `head_search_v2.json` without recomputing, rounding, clamping
-   or substituting; the config edit is a single `apply_patch`.
-4. **Step 4**: the promotion is **committed**, and **both complete source suites are rerun with eight workers each**:
-   `colcon test --packages-select so101_demo_py --pytest-args test` and
-   `colcon test --packages-select so101_teleop --pytest-args test` (each under the `pytest-xdist` gate with
-   `min(8, logical CPUs)` workers), with exit codes, JUnit output and skip counts recorded. Naming fewer suites, or a
-   targeted subset, does not satisfy this step.
+3. **Step 3**: `APPROVED_BUNDLE_SHA256` is taken only from the user's approval message and must equal the **bundle**
+   digest; the promotion is **one `apply_patch`** copying identities, the 17 values and controlled dependencies into
+   `head_search_v2.json` without recomputing, rounding, clamping or substituting, followed by
+   `so101_head_search_calibration verify-promoted-config`. No new promotion command is introduced.
+4. **Step 4**: the promotion is **committed**, then both complete source suites are rerun exactly as the plan writes
+   them - no substitution, no subset, no dropped worker argument:
+
+   ```zsh
+   head_test -n 8 src/so101_demo_py/test -q || exit 1
+   head_test -n 8 src/so101_teleop/test -q || exit 1
+   ```
+
+   Exit codes, JUnit output and skip counts are recorded for both.
 5. **Step 5**: the final frozen runtime is built from a **commit-stamped** fresh root, the installed gates pass
    (`prefix` and artefact checks), the run is recorded in the ledger with package, console script, model, CUDA,
    config, camera, tracker and web-bundle identities, and the Task 14 handoff names that root.
