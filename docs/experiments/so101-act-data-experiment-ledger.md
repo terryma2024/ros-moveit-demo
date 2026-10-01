@@ -42940,3 +42940,127 @@ controller-submissions-20261001T095736Z,stop-proofs-20261001T095740Z}`（旧 roo
 
 **运行后进程**：`ps`（mujoco/ros2 run/yolo/ultralytics）为空，`nvidia-smi --query-compute-apps` 为空，
 `ros2 daemon status` 报 daemon 未运行（本轮未启动任何 ros2 daemon）。
+
+## HS-305 — 两个"设计引用但无 artefact 声明"的字段按评审意见落地：`image_safety_margin_fraction`（A）与显式零 `quantisation_rad`（B），安装版 phase 6 算出 `vertical_bounds_px=[120,360]`、phase 7 算出 `stop_velocity_rad_s=0.04136050464213824`；几何 seal 无需重签
+
+**提交**：`a106078cb`（feat，9 文件 +658/−57，普通 `git commit`，rc=0；另含新文件
+`config/act/feedback-quantisation-declaration-v1.json`）。**评审输入**：修订案
+`docs/superpowers/specs/2026-10-02-so101-head-search-undeclared-fields-amendment.md`，评审结论逐字保存在
+`$EV/reviews/undeclared-fields-amendment/pane2.txt`（同一目录的 `pane.txt` 是更早的 revision-4 计划评审，
+与本次两个字段无关；两份都是评审会话的终端记录）：
+A = fraction + `ceil` 有效、绑定生产图像尺寸、校验范围、拒绝空交集；B = 本 MuJoCo 路径用**显式零**（feedback
+暴露 `qvel`，无编码器量化；"缺分辨率"本身不构成零的理由），并**更新两个**只接受正值的校验器；Seal =
+`camera_views.yaml` 是 viewer presets，必须用**真正的生产相机声明**，仅当其 declared inputs 变化时才刷新摘要
+并重签几何 seal。
+
+**(a) 先取证再动手：生产相机声明是谁、seal 的 declared inputs 是否含它**
+
+| 问题 | 结论（全部只读） |
+| --- | --- |
+| 生产相机声明 | `src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml`。自述为 "Head Search head-camera dataset: the production profile"，声明 `camera_name: head_camera`、`image_width: 640`、`image_height: 480`，并**单向**钉住 `geometry_seal.accepted_seal_sha256: 7d963fdc…`；实施计划的同一句也把它称作 "the production YAML [that] freezes `camera_name: head_camera`, `640x480`, … and the accepted geometry-seal digest"（`docs/superpowers/plans/2026-09-30-…-implementation.md` 第 237 行）。它在改动前摘要 `e53e7e906528353767543520c33e3536e24439d77d86e10445f657a786b8c665`，改动后 `9ad9b934db013641…` |
+| 被否决的候选 | `config/mujoco/camera_views.yaml` 只有 `presets`/`schema_version`（viewer 预设，评审明确排除）；`config/act/head-camera-geometry-contract-v1.json` 与 `assets/mujoco/act/so101.xml` 虽也是"相机声明"，但**它们是 seal 的 declared inputs** |
+| seal 的 declared inputs | `head-camera-geometry.json`（`seal_sha256 7d963fdcabfa132e…`）只有 `source_digests` 四个键：`scene_sha256` = `assets/mujoco/act/head_search_scene.xml`（`aea2df3b…`）、`camera_source_sha256` = `assets/mujoco/act/so101.xml`（`d8665bb9…`）、`contract_sha256` = `config/act/head-camera-geometry-contract-v1.json`（`f186eef1…`）、`coarse_step_candidate_rad` = 0.3（字面量，非摘要）。**`head_camera_yolo_seg.yaml` 不在其中**（seal 全文不含 `perception`/`yolo_seg` 字样），故在该文件加一个字段**不改变 seal 的任何 declared input** |
+| 若改的是 seal 输入会怎样 | 我**没有**这么做。若把 fraction 放进 contract 或 MJCF：改 MJCF 会让 contract 的 `accepted_camera_source_sha256`（`d8665bb9…`）与实际 `so101.xml` 不符，校验器以 `HEAD_CAMERA_SOURCE_DRIFT` 拒绝（HS-045 记录过同一机制的 scene 版本）；改 contract 则会让旧 seal 的 `source_digests.contract_sha256`（`f186eef1…`）与文件不再相符，旧 seal 自我失效。无论哪条，重签都意味着用冻结工具链重跑几何校验（新 `head-camera-geometry.json`、新 `seal_sha256`）→ 重指 `head_camera_yolo_seg.yaml`(+`_smoke`) 的 `accepted_seal_sha256` → 重渲染钉住 `geometry_seal_sha256` 的 800/200/200 数据集 → 重出同样钉住 seal 的 coarse-step/coverage 文档。本轮只记录该代价，未执行 |
+
+**(b) A 实现**（`head_search_camera_measurement.py`）：`read_declared_safety_margin(path, *, image_geometry)`
+现在识别两种声明。生产形式 `image_safety_margin_fraction`：
+`safety_margin_px = ceil(fraction * min(image_width_px, image_height_px))`，fraction 必须有限且落在 `(0, 0.5]`
+（否则 `CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE`）；声明自带的 `image_width`/`image_height`（或 `_px` 拼写）必须
+与 seal 一致，同时声明两种形式也拒绝（`CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY`）；两种键都没有仍是
+`CAL_CAMERA_SAFETY_MARGIN_UNDECLARED`。块内记录声明路径、sha256、`key`、`fraction`、`shorter_edge_px`、
+`derivation`（逐字 `ceil(0.25 * min(640.0, 480.0)) = 120 px`）。旧的直接像素形式原样保留、`declared_by`
+三元组不变（有测试钉住）。生产声明里新增 `image_safety_margin_fraction: 0.25` 及其依据注释：设计只固定"有
+安全边缘"而未给宽度，故取较短生产边（480 px）的 1/4 = 120 px，上下各留 120 px、图像高度一半供投影落点；0.25
+二进制精确，`ceil` 不受浮点扰动；**刻意不从**已提升的 `values.vertical_bounds_px [110,370]` 反推（用被约束的
+量定义约束是循环的，正是修订案否决的形态）。空交集：phase 6 原本已拒绝，本轮用派生出的真实 margin 重新钉住。
+
+**(c) B 实现**：新声明 `src/so101_demo_py/config/act/feedback-quantisation-declaration-v1.json`
+（`5e06d4ed1d775eb0…`，`quantisation_rad: 0.0` + `basis`：feedback 就是 MuJoCo 自己的 `mjData.qvel`，由
+`MujocoStopFlight.joint_velocity_vector` 经 `jnt_dofadr` 读取，路径上无编码器/计数/计数-角度换算；`author`、
+`date`、`review` 字段齐备）。**两个只接受正值的校验器都已更新**：①
+`head_search_stop_measurement.declared_quantisation` 用新的 `_nonnegative_number`（即既有
+`_positive_number(..., allow_zero=True)`），零值**必须**同时给出非空 `basis`，否则 `ValueError` 指明缺 basis
+（"裸零等于凭空发明"）；负值仍 `ValueError`；`path=None`/文件不存在仍返回 `null` + `CAL_FEEDBACK_QUANTISATION_UNDECLARED`。
+② `head_search_timing_params.compute_stop_velocity_rad_s` 的 `quantisation_rad` 由 `positive=True` 改为
+`nonnegative=True`：显式零被接受，`None`/缺失仍抛**原样**的
+`ValueError: the controller feedback declares no finite quantisation_rad`。拒绝码集合除 A 新增两个外未改。
+
+**RED → GREEN（合成夹具，工作树源码，`scratch/hs305/pyshim`）**：
+
+| 步骤 | 命令要点 | 结果 |
+| --- | --- | --- |
+| RED（A） | `pytest -q test_act_head_search_camera_measurement.py` | **rc=2，1 个 collection error**（`ImportError: cannot import name 'CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY'`），边界正确 |
+| RED（B） | `pytest -q test_act_head_search_stop_measurement.py test_act_head_search_timing_params.py` | **rc=1，5 failed / 63 passed**：零声明不可读、无 basis 不报错、producer 无零文档、config 声明不存在、phase 7 以 `declares a non-positive quantisation_rad` 拒绝零 —— 全部是目标边界 |
+| GREEN（定向） | 同上三文件 | **127 passed, rc=0** |
+| 回归（HS-288..304 的 21 个 phase 测试文件 + `test_head_search_calibration_cli.py`，共 22 文件，`-n 8`） | 同基线环境配方 | **591 passed, 0 failed, 0 error, rc=0**（4.31 s） |
+| `ruff check`（4 源文件 + 3 测试文件） | `ruff check …` | **All checks passed**；`ruff format --check`：camera 测试文件已格式化（我的新增行经 `ruff format` 修正），stop-measurement 测试文件与 HEAD 相同仍是 9 个既有 hunk（未新增偏差），timing 测试文件干净 |
+| 全量 `src/so101_demo_py/test`（基线调用式，`-n 8`，`$EV/scratch/pytest-xdist8-hs305-final.21b65b4c`） | `bash scratch/hs304/baseline-invocation.sh hs305-final src/so101_demo_py/test` | **175 failed / 6077 passed / 152 skipped / 86 errors, rc=1, 64 s**；与父基线 `pytest-xdist8-hs304-final.198b460f`（175/6056/152/86）**节点级 diff 0 行（261 节点）**；`passed +21` 恰为本轮新增测试数（12+6+3），失败集中 0 个 head_search/calibration 节点 |
+
+**一次真实运行各一份（安装程序；工具链 `$T` = `head-toolchain-20261001T102022Z`，由 `a106078cb` 构建，
+build rc=0，39 s；安装的四个模块与源码 sha256 逐一相同）**：`$C` = `head-yolo-models-20260930T120608Z`。
+
+```
+ros2 run so101_demo_py so101_head_search_calibration measure-feedback \
+  --controller-config $T/.../config/mujoco/act/ros2_controllers.yaml \
+  --quantisation-declaration $T/.../config/act/feedback-quantisation-declaration-v1.json \
+  --output-dir $C/feedback-20261001T102121Z
+rc=0  FEEDBACK_MEASUREMENTS_MEASURED period_s=0.01 feedback_rate_hz=100.0 quantisation_rad=0.0
+      receipt status=DECLARED fields_refused=[] （文件 42f01d4c…，自摘要 af4df757…）
+
+ros2 run so101_demo_py so101_head_search_calibration measure-camera \
+  --scene $T/.../assets/mujoco/act/head_search_scene.xml \
+  --geometry-seal $EV/head-camera-probe11-20260930T101722Z/head-camera-geometry.json \
+  --production-search-config $C/camera-measurements-20261001T102132Z.production-search-config-c2a.json \
+  --controller-config $T/.../config/mujoco/act/ros2_controllers.yaml \
+  --frozen-candidate $C/reselected-c2a/frozen-c.json \
+  --weights $C/candidate-c2a/head-task-mixed-taskweighted/weights/best.pt \
+  --safety-margin-declaration $T/.../config/perception/head_camera_yolo_seg.yaml \
+  --output-dir $C/camera-measurements-20261001T102132Z --anchor left --device cuda --frames-per-pose 12
+rc=0  wall 4 s  CAMERA_MEASUREMENTS_MEASURED centre_jitter_px=0.3110569103424543
+      centre_jitter_rad=0.0006377185486092241 poses=3 frames=36 rad_per_px=0.0020501667939385616
+      safety_margin_px=120.0
+      receipt status=SUCCEEDED fields_refused=[]（文件 9f4f84ce…，自摘要 518e4a0f…）
+      margin.declared_by = {key: image_safety_margin_fraction, path: …/head_camera_yolo_seg.yaml,
+        sha256: 9ad9b934db013641…, fraction: 0.25, shorter_edge_px: 480.0,
+        derivation: "ceil(0.25 * min(640.0, 480.0)) = 120 px", bound_to: the sealed head camera geometry}
+```
+
+`centre_jitter_px` 与 HS-303 的 0.31094426888056453 差 0.036%，仍落在渲染/检测位级（HS-303 自己的两次
+复现差 0.067%），非"重摇选值"。两次运行目录内各留 `consumption-check*.log`；每个运行目录另有同级
+`.console.log` / `.provenance.txt`（含运行前后 `ps` 与 `nvidia-smi --query-compute-apps`，两次均为空）。
+
+**安装版 phase 6/7 接受两份文档并给出数值（消费核查）**：
+
+| 调用（安装版模块，脚本打印 `INSTALLED_MODULE`） | 结果 |
+| --- | --- |
+| `compute_vertical_bounds_px(camera=<新 camera-measurements.json>, workspace_projection=<标注的 stand-in>)` | **接受：`vertical_bounds_px = [120.0, 360.0]`**（投影 `[110, 370]` ∩ 边缘 `[120, 360]`，`top_clip_px=bottom_clip_px=10.0`，`detections_used=false`）；`center_deadband_px = 1.0` 不变 |
+| 同一调用、投影改成 `[0, 100]` | **拒绝：`CAL_VERTICAL_BOUNDS_UNPROJECTED: the workspace projection [0.0, 100.0] does not reach inside the image safety margin [120.0, 360.0] of a 480.0 px image`**（空交集） |
+| `compute_stop_velocity_rad_s(stationary=HS-304 真实文档, feedback=<新 feedback-measurements.json>, controller=HS-304 真实文档)` | **接受：`stop_velocity_rad_s = 0.04136050464213824`** = 0.039360504642138236（静止 p99.9）+ **0.0**（声明的零量化）+ 0.002（声明容差），`envelope_terms=3`；三份输入按 path+sha256 引用 |
+| 同一调用、去掉 feedback 文档的 `quantisation_rad` 键 | **仍拒绝**：`ValueError: the controller feedback declares no finite quantisation_rad`（零只在被声明处被接受） |
+
+**本轮声明的主要推断（待评审）**：① "真正的生产相机声明"取 `head_camera_yolo_seg.yaml`：自述 production
+profile、声明 `camera_name`+`640x480`、被实施计划如此称呼，且**不是** seal 的 declared input，因此符合评审的
+Seal finding 与本任务 (a) 的停止条件不触发；`config/act/head-camera-geometry-contract-v1.json`/`so101.xml`
+未被改动，其重签代价已如实记录；② fraction 取值 **0.25** 是策略选择（设计未给宽度），依据写进 YAML 注释：
+较短生产边 1/4、二进制精确、且不从此量约束的 `vertical_bounds_px` 反推；③ 声明自带的图像尺寸若与 seal 不符即
+拒绝（而不是以 seal 为准静默覆盖），因为"不同图像的分数不是本相机的边距"；④ 零量化必须带 `basis` 文本，缺
+basis 按 caller error（`ValueError`）而非新拒绝码，以保持拒绝码集合不变；⑤ `basis` 同时写入块的顶层与
+`declared_by`，便于评审直接从文档读到"为什么是零"；⑥ phase-6 消费核查的 workspace projection 沿用 HS-303 的
+stand-in（已提升的生产 `values.vertical_bounds_px [110,370]`，按 path+sha256 引用 `head_search_v2.json`
+`d3c4ef9b…`），因为**该投影文档在树内仍无 producer**（`--workspace-projection` 是 run 的输入文档）——这是本轮
+未闭合的独立缺口，已写进 inventory；⑦ 工具链 build 脚本里我写错了一条断言路径（新声明在 share 树而非
+site-packages 的 `so101_demo/config/…`），`assertions.txt` 保留了这条 `ls: cannot access`；正确的安装位置随后
+单独核验（`$T/install/so101_demo_py/share/so101_demo_py/config/act/feedback-quantisation-declaration-v1.json`），
+build rc=0 不受影响；⑧ 未执行任何 `run` 全流程（phase 1 的六输入 seal、admission、后续 11 个参数仍有缺源），
+本轮只闭合这两个字段；⑨ 未重签几何 seal、未重渲染数据集、未改 `head_search_v2.json`。
+
+**本轮证据与生命周期**：保留 `$T` = `head-toolchain-20261001T102022Z`（**最终**，由 `a106078cb` 构建）；
+`$C/feedback-20261001T102121Z{,.console.log,.provenance.txt}`、
+`$C/camera-measurements-20261001T102132Z{,.production-search-config-c2a.json,.console.log,.provenance.txt,
+.workspace-projection-stand-in.json}`（两份 with 消费核查日志 `consumption-check-stop-velocity.log` /
+`consumption-check.log`）；`$EV/scratch/pytest-xdist8-hs305-final.21b65b4c`（全量门禁）；
+`$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-305 节）；工作树 `scratch/hs305/`（RED/GREEN/回归日志、
+pyshim、run/consumption 脚本、tmp）。以上**均为删除候选，未删除**；HS-300..304 的产物只读引用。
+
+**运行后进程**：`ps`（mujoco/yolo/ultralytics/detector/ros2 run/so101_head_search 全空）、
+`nvidia-smi --query-compute-apps` 空、未启动任何 `ros2` daemon（`pgrep -a -f "ros2 daemon"` 仅匹配到检查命令自身）。
