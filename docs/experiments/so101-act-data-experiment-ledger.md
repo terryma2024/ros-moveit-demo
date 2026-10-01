@@ -54604,3 +54604,34 @@ E3 is exactly the case where it may not.
 
 The tree is green at `5 passed`, nothing of mine is uncommitted, and the next attempt at this test should start from where
 the manifest's own file references resolve rather than from where the test's do.
+
+
+## CP-2827 — The coordinator commit path is already tested, so E3's remaining substance is narrower
+
+`test_act_result_commit.py` is the file for exactly the leg E3 names, and it drives the production objects:
+
+```
+:11    from so101_demo.act.recorder import EpisodeRecorder
+:12    from so101_demo.act.result_store import (...)
+:17    from so101_demo.parallel_batch.coordinator import BatchCoordinator
+:18    from so101_demo.parallel_batch.journal import CoordinatorJournal
+```
+
+with tests that read as a list of the properties E3 cares about - an exact lease seal verifying and discovering only the
+reserved workspace, an unsealed directory never being discovered or committed, a corrupt episode never becoming a
+business-failed result, and a worker result port requiring its decision to match the episode.
+
+So "the actual coordinator commit and readback" is not missing: it exists and is exercised, with `EpisodeRecorder`-produced
+episodes. What E3 adds on top is the two pieces this stretch built and the one it cannot:
+
+* the **endpoint judgement inside that path** - the port chosen by contract (correction 4), so a commit whose episode
+  fails the endpoint rule is downgraded rather than committed as success, which is what `test_act_seal_and_downgrade`'s
+  second test proves at the verifier level and E3 wants at the coordinator's;
+* the **production producer** - now real (`ProductionProducer`), with only the frame pixels and arm/neck values resting;
+* and the **physical** assembly that hands the producer's parts over, which is the one thing still waiting on the
+  coordinator's answer to CP-2822.
+
+Which makes the next test concrete rather than exploratory: seal an ACT episode through the seam and the production
+producer, commit it through a real `BatchCoordinator` with the ACT port, and assert the commit and the readback - plus the
+isolated negative (an episode the endpoint rule rejects must not be committed as a success). Every object that test needs
+is already proven by one of these two files.
