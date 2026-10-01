@@ -53684,3 +53684,37 @@ has to move every test that asserts it**, and the gate is what noticed - the sin
 that the change was safe, only that it worked for the one path I was staring at. Nothing is committed; the working tree
 holds the five changes and the two failures, and the next round reconciles the two tail tests with the new contract -
 reading what they assert and updating them with the reason, since the new behaviour is the one the seal demands.
+
+
+## CP-2793 — The two tail tests together name the right mechanism
+
+Read side by side, the two failures are not obstacles but a specification:
+
+```python
+    capture, minter = build(audit_writer=audit_writer)          # records every path it is given
+    ...
+    assert capture.drain() == 1
+    summary = capture.finish(1.4)
+    assert capture.pending_rows == 2
+    assert summary.audit_files == tuple(written) and len(written) == 2      # :284
+```
+
+```python
+    def refusing_writer(observation, audit):
+        raise ValueError("AUDIT_WRITE_FAILED")
+    capture, minter = build(audit_writer=refusing_writer)                   # :591
+```
+
+Both encode the same contract: **`audit_writer` is the tail's callback** - it is offered exactly the rows that stayed
+pending, and a refusal there is reported by later calls because the tail is what finalization waits on. My change called it
+for recorded rows too, which makes `written` three entries instead of two and moves the refusal earlier, and that is what
+the gate caught.
+
+So the fix is a **different mechanism, not a different expectation**: the binding a recorded row needs should go to the
+audit writer the capture already holds - `self.audit.bind_row(...)`, directly - while `audit_writer` keeps the tail-only
+meaning its own tests define. That also matches the shape of the code: `self.audit` is the episode's audit writer, and
+`audit_writer` is a per-row *callback* the caller may supply for the tail's evidence, which is why it takes the narrow
+`(observation, audit)` pair rather than the five arguments `bind_row` needs.
+
+With that separation both existing tests keep their contracts unchanged, and the chain test keeps passing because what it
+asserts is that the sealed episode's bindings satisfy the seal - not which callback produced them.
