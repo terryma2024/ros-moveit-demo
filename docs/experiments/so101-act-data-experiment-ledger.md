@@ -53974,3 +53974,31 @@ nothing states it, and a contract that is only implied is the kind this chain ha
 
 That is the last piece of correction 4. After it: correction 5, K1's forward half, and E3 - which the coordinator's
 decision has unblocked by approving reuse of the existing broker image.
+
+
+## CP-2804 — The two-way test's exact shape, and a second test worth adding beside it
+
+The existing test's scaffolding, read at `test_parallel_batch_cli.py:925-945`:
+
+```python
+    composition = ProductionBatchComposition(
+        spec, resource_probe=Probe(), claim_root=scratch / "claims",
+        worker_launcher=lambda owner, path: owner._run_worker_local(path),
+    )
+    ...
+    assert composition.results is not composition.result_verifier
+```
+
+So the two-way assertions extend that test, reusing the `spec` it has already built: the first asserts what it already
+constructs (`isinstance(composition.result_verifier, SealedResultAdapter)`, the generic path untouched), and the second
+constructs one more composition with `endpoint_inputs` and asserts `isinstance(..., ActCollectionResultVerifier)` - the
+class the coordinator's gate selects. The risk to watch is that a second construction needs its own `claim_root` (the
+composition writes a journal under it) and a fresh scratch subtree, since the first has already claimed its own.
+
+There is a second, smaller test worth adding at the same time, and it needs no scaffolding: `discover` was just added to
+the ACT verifier (CP-2801) and nothing exercises it. The chain test's own helpers already hold everything it needs - a
+store with `worker_roots`, a lease, and a sealed episode - so a test can assert its two directions directly: the reserved
+location yields a verified seal, and any other workspace yields `None`. That is the contract the composition relies on
+when it drives either port through the same call, and it is the only method of the new port that has no test at all.
+
+Both are small, both are additive, and between them correction 4 is closed with its contract stated rather than implied.
