@@ -44810,3 +44810,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   direction is the second: **the window describes the run**, which is also what K1's legal-window construction does.
 - Next write: the fixture with that window, one run, then `verify_audit_manifest` - F5's step two.
 - HEAD 03e2d96e2; goal active.
+
+
+## CP-2377 — F5's step two: the last two candidates and the three-line probe that separates them
+
+- `_window_ok`'s formal path is the `outcome == "complete"` branch, whose rules CP-2373 read in full and which the
+  hybrid satisfies; the sibling branches (`no_command`, `no_label`, the diagnostic else) do not apply. So the window
+  contract passes and the refusal is `_window_matches_observed`, whose four comparisons CP-2370/2371 measured as
+  consistent for the hybrid - which leaves exactly one thing unexcluded: **which call raises**. The test seals and
+  then verifies, and `AUDIT_WINDOW_INVALID` is raised at both call sites (the writer's `_window_matches_rows` and the
+  readback's own check), so the refusal may now be the readback rather than the seal, which every earlier probe
+  predates (they ran before the coverage gate was cleared at CP-2368).
+- The probe that ends it is three lines: wrap the seal call in `try/except` and print the traceback's line, then do
+  the same for `verify_audit_manifest`. Whichever line it prints names the call; from there the fix is one edit,
+  because every value either call compares is already recorded in this ledger (CP-2370 through CP-2376).
+- Labelling: F5's step two remains 仍开放. This stretch removed the coverage gate, three seal-side blockers, the
+  identity's shape and the window's own rules; the remaining work is that one traceback.
+- Withdrawn; green (audit plus the artifact suite) and the tree back to its 35-entry baseline.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (K2's protocol table is written, CP-2375); F11's
+  derivation still open with the window contract fully read; F5's regression fixed, step one landed, step two one
+  traceback from its fix; HEAD 0156657f7; goal active.
