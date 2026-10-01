@@ -13,6 +13,8 @@ from so101_demo.cli.head_search_calibration import (
     HEAD_SEARCH_RUN_INPUTS_INCOMPLETE,
     main,
 )
+from head_search_qualification_fixtures import ANCHORS, build_fixture, digest as fixture_digest
+from so101_demo.act.head_search_aggregate import GATES
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 
@@ -97,45 +99,114 @@ def test_verify_promoted_config_writes_an_approval_receipt(tmp_path: Path) -> No
     assert receipt["verified"] is True
 
 
-def test_qualify_refuses_an_existing_root_and_publishes_nothing_without_evidence(
-    tmp_path: Path,
-) -> None:
+def _qualify_argv(fixture, run_root: Path, *, omit: tuple[str, ...] = ()) -> list[str]:
+    """The installed `qualify` arguments for one fixture set, minus the gates named in `omit`."""
+
+    arguments = [
+        "qualify",
+        "--run-root",
+        str(run_root),
+        "--final-run",
+        str(fixture.paths["final_run"]),
+        "--promoted-config",
+        str(fixture.paths["production_config"]),
+        "--approved-bundle",
+        str(fixture.paths["approved_bundle"]),
+        "--ownership-receipt",
+        str(fixture.paths["ownership_receipt"]),
+        "--runtime-readback",
+        str(fixture.paths["runtime_readback"]),
+        "--production-smoke-root",
+        str(fixture.paths["production_smoke_root"]),
+        "--scenarios-root",
+        str(fixture.paths["scenarios_root"]),
+        "--teleop-acceptance-receipt",
+        str(fixture.paths["teleop_acceptance_receipt"]),
+        "--scenario-partitions",
+        str(fixture.partitions),
+    ]
+    for anchor in ANCHORS:
+        arguments += ["--restart-receipt", str(fixture.paths[f"restart_{anchor}"])]
+    for name in omit:
+        flag = "--" + name.replace("_", "-")
+        while flag in arguments:
+            position = arguments.index(flag)
+            del arguments[position : position + 2]
+    return arguments
+
+
+def test_qualify_refuses_an_existing_root_and_never_resumes_it(tmp_path: Path) -> None:
     run_root = tmp_path / "run"
     run_root.mkdir()
     # an existing root is a named refusal with exit code 2, not a traceback
     assert main(["qualify", "--run-root", str(run_root)]) == 2
-    fresh = tmp_path / "fresh"
-    with pytest.raises(ValueError, match="HEAD_SEARCH_QUALIFICATION_EVIDENCE_INCOMPLETE"):
-        main(["qualify", "--run-root", str(fresh)])
 
 
-def test_qualify_publishes_the_closed_report_with_evidence(tmp_path: Path) -> None:
-    run_root = tmp_path / "run"
-    promoted = tmp_path / "promoted"
-    _bundle(promoted)
-    evidence = tmp_path / "evidence"
-    evidence.mkdir()
-    for name in ("production_smoke", "scenarios", "restarts"):
-        (evidence / f"{name}.json").write_text(json.dumps({"name": name}), encoding="utf-8")
-    assert (
-        main(
-            [
-                "qualify",
-                "--run-root",
-                str(run_root),
-                "--promoted-config",
-                str(promoted / "head-search-bundle.json"),
-                "--evidence-root",
-                str(evidence),
-            ]
-        )
-        == 0
-    )
+def test_qualify_without_evidence_refuses_every_gate_by_name(tmp_path: Path, capsys) -> None:
+    """No evidence at all is a REFUSED verdict that names every gate; it is not a traceback."""
+
+    run_root = tmp_path / "fresh"
+    assert main(["qualify", "--run-root", str(run_root)]) == 2
+    verdict = json.loads((run_root / "qualification-verdict.json").read_text(encoding="utf-8"))
+    assert verdict["status"] == "HEAD_SEARCH_QUALIFICATION_REFUSED"
+    assert {reason["gate"] for reason in verdict["missing"]} == set(GATES)
+    assert not (run_root / "head-search-qualification.json").exists()
+    assert not (run_root / "head-search-qualified-report.json").exists()
+    stderr = capsys.readouterr().err
+    assert "HEAD_SEARCH_QUALIFICATION_REFUSED" in stderr
+    assert "HEAD_SEARCH_QUALIFICATION_EVIDENCE_INCOMPLETE" in stderr
+
+
+def test_qualify_publishes_the_plan_documents_only_with_the_declared_citations(
+    tmp_path: Path,
+) -> None:
+    fixture = build_fixture(tmp_path / "evidence", run_root=tmp_path / "qualification-run")
+    assert main(_qualify_argv(fixture, fixture.run_root)) == 0
     report = json.loads(
-        (run_root / "head-search-qualified-report.json").read_text(encoding="utf-8")
+        (fixture.run_root / "head-search-qualified-report.json").read_text(encoding="utf-8")
     )
     assert report["status"] == "HEAD_SEARCH_QUALIFIED"
-    assert set(report["evidence_sha256"]) == {"production_smoke", "scenarios", "restarts"}
+    assert report["bundle_sha256"] == fixture_digest(fixture.paths["approved_bundle"])
+    for phase in (
+        "production_smoke",
+        "scenarios",
+        "restart_default",
+        "restart_left",
+        "restart_forward",
+        "teleop_acceptance",
+    ):
+        assert report["citations"][phase]["root"], phase
+    qualification = json.loads(
+        (fixture.run_root / "head-search-qualification.json").read_text(encoding="utf-8")
+    )
+    sample = qualification["samples"][0]
+    assert sample["status"] == "PASS"
+    assert len(sample["values"]) == 17
+    assert len(sample["camera_measurements"]) == 4
+
+
+def test_qualify_refuses_and_names_a_single_missing_phase_root(tmp_path: Path, capsys) -> None:
+    """One missing gate is one named refusal and no pass documents, whatever else is present."""
+
+    fixture = build_fixture(tmp_path / "evidence", run_root=tmp_path / "qualification-run")
+    assert main(_qualify_argv(fixture, fixture.run_root, omit=("production-smoke-root",))) == 2
+    stderr = capsys.readouterr().err
+    assert "production_smoke" in stderr and "production_smoke_root" in stderr
+    assert not (fixture.run_root / "head-search-qualified-report.json").exists()
+    assert not (fixture.run_root / "head-search-qualification.json").exists()
+    verdict = json.loads((fixture.run_root / "qualification-verdict.json").read_text(encoding="utf-8"))
+    assert verdict["gates"]["production_smoke"]["status"] == "MISSING"
+    assert verdict["gates"]["scenario_journal"]["status"] == "HOLDS"
+
+
+def test_qualify_has_no_digest_only_surface_any_more(tmp_path: Path) -> None:
+    """The HS-233/HS-315 defect: a directory of hex digests used to be enough to publish a pass."""
+
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    (evidence / "production_smoke.json").write_text(json.dumps({"x": 1}), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        main(["qualify", "--run-root", str(tmp_path / "run"), "--evidence-root", str(evidence)])
 
 
 #: the synthetic run's sealed controlled dependencies, one real file each
@@ -597,45 +668,6 @@ def test_the_approval_receipt_is_immutable(tmp_path: Path) -> None:
     first = receipt.read_text(encoding="utf-8")
     assert main(arguments) == 2, "an approval must not be rewritten"
     assert receipt.read_text(encoding="utf-8") == first
-
-
-def test_qualification_evidence_must_be_hexadecimal(tmp_path: Path) -> None:
-    run_root = tmp_path / "run"
-    promoted = tmp_path / "promoted"
-    _bundle(promoted)
-    evidence = tmp_path / "evidence"
-    evidence.mkdir()
-    (evidence / "production_smoke.json").write_text(json.dumps({"x": 1}), encoding="utf-8")
-    good = main(
-        [
-            "qualify",
-            "--run-root",
-            str(run_root),
-            "--promoted-config",
-            str(promoted / "head-search-bundle.json"),
-            "--evidence-root",
-            str(evidence),
-        ]
-    )
-    assert good == 0
-
-    other = tmp_path / "other"
-    bad_evidence = tmp_path / "bad-evidence"
-    bad_evidence.mkdir()
-    (bad_evidence / "production_smoke.json").write_text("z" * 8, encoding="utf-8")
-    (bad_evidence / "scenarios.json").write_text(json.dumps({"y": 2}), encoding="utf-8")
-    with pytest.raises(ValueError, match="HEAD_SEARCH_QUALIFICATION_EVIDENCE_INCOMPLETE"):
-        main(
-            [
-                "qualify",
-                "--run-root",
-                str(other),
-                "--promoted-config",
-                str(promoted / "head-search-bundle.json"),
-                "--evidence-root",
-                str(bad_evidence / ".."),
-            ]
-        )
 
 
 def _digest(path: Path) -> str:

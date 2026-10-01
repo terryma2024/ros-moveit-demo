@@ -17,8 +17,6 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from so101_demo.perception_benchmark.contracts import canonical_sha256
-
 HEAD_SEARCH_QUALIFIED = "HEAD_SEARCH_QUALIFIED"
 RUNNING = "RUNNING"
 SUCCEEDED = "SUCCEEDED"
@@ -67,8 +65,53 @@ def qualification_parser() -> argparse.ArgumentParser:
             command.add_argument("--approved-bundle-sha256")
             command.add_argument("--promoted-config", type=Path)
         if name == "qualify":
-            command.add_argument("--promoted-config", type=Path)
-            command.add_argument("--evidence-root", type=Path)
+            # the aggregate phase's declared evidence, one flag per gate. Every path is optional here,
+            # and a path that is not given is a MISSING refusal in the verdict - never a default and
+            # never a digest scan of whatever happens to be lying in a directory
+            command.add_argument(
+                "--final-run", type=Path, help="the frozen toolchain root of record"
+            )
+            command.add_argument(
+                "--promoted-config",
+                type=Path,
+                help="the promoted production config whose 17 values the readback must match",
+            )
+            command.add_argument(
+                "--approved-bundle", type=Path, help="the approved calibration bundle"
+            )
+            command.add_argument(
+                "--ownership-receipt",
+                type=Path,
+                help="the Step 1 exclusive-ownership receipt guarding this run root",
+            )
+            command.add_argument(
+                "--runtime-readback",
+                type=Path,
+                help="the during-qualification 17-value and camera readback",
+            )
+            command.add_argument(
+                "--production-smoke-root", type=Path, help="the production smoke phase root"
+            )
+            command.add_argument(
+                "--scenarios-root", type=Path, help="the forty-scenario phase root"
+            )
+            command.add_argument(
+                "--restart-receipt",
+                type=Path,
+                action="append",
+                dest="restart_receipts",
+                help="one FULL_RESTART anchor receipt; repeat once per anchor",
+            )
+            command.add_argument(
+                "--teleop-acceptance-receipt", type=Path, help="the Teleop acceptance receipt"
+            )
+            command.add_argument(
+                "--scenario-partitions", type=Path, help="the declared scenario partitions"
+            )
+            command.add_argument("--expected-source-commit")
+            command.add_argument("--expected-production-config-sha256")
+            command.add_argument("--expected-values-sha256")
+            command.add_argument("--expected-weights-sha256")
         if name == "serve-teleop":
             command.add_argument("--bridge-socket-root", type=Path)
             command.add_argument("--report", type=Path)
@@ -140,49 +183,17 @@ def require_gate(report: Mapping[str, object], gate: str) -> None:
 
 
 def qualify_head_search(inputs: Mapping[str, object], run_root: Path) -> dict:
-    """Consume the complete evidence set and only then publish the closed head-only report."""
+    """The `aggregate` phase: the declared gates, and a refusal that names every missing item.
 
-    root = _require_new_root(run_root)
-    evidence = inputs.get("evidence")
-    if not isinstance(evidence, Mapping) or not evidence:
-        raise ValueError(
-            "HEAD_SEARCH_QUALIFICATION_EVIDENCE_INCOMPLETE: no evidence digests were given"
-        )
-    digests = {}
-    for name, digest in evidence.items():
-        text = str(digest)
-        if len(text) != 64 or any(
-            character not in "0123456789abcdef" for character in text.lower()
-        ):
-            raise ValueError(
-                f"HEAD_SEARCH_QUALIFICATION_EVIDENCE_INCOMPLETE: {name} is not a sha256 digest"
-            )
-        digests[str(name)] = text
-    _write(root, "calibration-state.json", {"state": RUNNING, "phase": "qualify"})
-    try:
-        return _publish_qualification(inputs, root, digests)
-    except Exception:
-        _write(root, "calibration-state.json", {"state": FAILED, "phase": "qualify"})
-        raise
+    The implementation is :mod:`so101_demo.act.head_search_aggregate`; this name stays because it is the
+    qualifier's own phase entry and the last element of :data:`RUN_PHASES`. There is no digest-only path
+    any more: a well-formed sha256 of nothing used to publish ``HEAD_SEARCH_QUALIFIED``, which is exactly
+    the HS-233 failure mode the declared gates replace.
+    """
 
+    from so101_demo.act.head_search_aggregate import aggregate_qualification
 
-def _publish_qualification(
-    inputs: Mapping[str, object], root: Path, digests: Mapping[str, str]
-) -> dict:
-    report = {
-        "status": HEAD_SEARCH_QUALIFIED,
-        "operation": "QUALIFICATION_RUN",
-        "run_root": str(root),
-        "runtime_id": str(inputs.get("runtime_id", "")),
-        "head_search_runtime_id": str(inputs.get("runtime_id", "")),
-        "bundle_sha256": str(inputs.get("bundle_sha256", "")),
-        "evidence_sha256": digests,
-        "evidence_sha256_set": canonical_sha256(digests),
-    }
-    _write(root, "head-search-qualification.json", report)
-    _write(root, "head-search-qualified-report.json", report)
-    _write(root, "calibration-state.json", {"state": SUCCEEDED, "phase": "qualify"})
-    return report
+    return aggregate_qualification(inputs, run_root)
 
 
 def serve_teleop(

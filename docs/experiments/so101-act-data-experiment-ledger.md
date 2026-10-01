@@ -44210,3 +44210,128 @@ qualification run root（产物落在 `scratch/hs316/preflight-<UTC>/`）。
 `preflight-<UTC>/one-scenario.json` ×2、`logs/{red-green.txt,regression.txt,real-run.txt,preflight-*.txt}`、
 `tmp-{red,green,regression,real}/`）、`$EV/reviews/task14-gap-audit.md`（第 6 行改判 + 新增 §7）。
 以上**均为删除候选，未删除**；HS-300..315 的产物只读引用，未改动。工作树 `git status --porcelain`：见本轮提交后的 `?? runs/`（既有未跟踪）。
+
+## HS-317 — Task 14 `aggregate` phase 落地：**声明的十道门**、缺证据即 `HEAD_SEARCH_QUALIFICATION_REFUSED`（逐项点名），真实运行给出诚实拒绝（missing=4 / violations=2，rc=2，未发布任何 pass 文档）
+
+**新增模块与安装版入口（本轮的「frozen install 之前不存在、必须新增」之处）**：
+`src/so101_demo_py/src/act/head_search_aggregate.py`（`so101_demo.act.head_search_aggregate`）+
+`so101_head_search_calibration qualify`（改写既有入口的参数面）。这是**附加源码改动**：冻结 root
+`$EV/head-toolchain-20261001T130437Z`（commit `956b5b74b`、config `dfa0af9b…`、17 值 canonical `3c787fd7…`、权重 `2afd5506…`）
+不含该模块，真实运行因此把 worktree 源码树经既有 `so101_demo` shim 放在 `PYTHONPATH` 最前，其余包、config、asset、console script 与
+本次两个新 toolchain root 之外的一切都来自冻结 root（`ros2 pkg prefix so101_demo_py` 断言落在冻结 root）。冻结 root 下**未写入任何文件**。
+
+### (a) 本轮关闭的清点项
+
+`reviews/task14-gap-audit.md`：第 4 行（`aggregate` phase）改为 **PARTIAL**、第 8 行（Step 5 两份文档）改为
+**RUNNABLE but REFUSED**，§4 结论加一段「as of HS-317」，新增 §8。第 8 行的原始缺陷——**任何格式正确的 hex 摘要都能发布
+`HEAD_SEARCH_QUALIFIED`**（HS-233/HS-315 记录的同一失败模式）——由本轮关闭：`--evidence-root` 这个「扫目录算摘要」的入口已删除。
+
+### (b) 声明门的清单（`GATES`，缺一即拒）
+
+九道 **qualification** 门 + 一道 **acceptance** 门，按 verdict 文档的固定顺序：
+
+| # | 门 | 消费的证据 | 今天的实测 |
+| --- | --- | --- | --- |
+| 1 | `exclusive_ownership` | Step 1 的 `EXCLUSIVE_OWNERSHIP_OK` receipt，其 `planned_run_root` **必须就是本次 run root**，且 `expected_runtime` 可读 | **HOLDS** |
+| 2 | `runtime_identity` | 冻结 root 从磁盘读出：commit 戳、晋级 config、17 值、sealed 权重、`allow_cpu_fallback=false`、`cuda_device=cuda:0`，并与 receipt 的 expected 逐字段比对 | **HOLDS** |
+| 3 | `approved_values_readback` | 资格期间 readback：17 个生效值 + 4 个 camera measurement，`run_root` 必须是本次 run root（防重放），加 approved bundle 的 17 值与冻结 config 的 `values_sha256` 一致 | **MISSING** |
+| 4 | `scenario_journal` | `scenarios.json`（**自身 canonical 摘要**校验）+ `scenario-journal.jsonl`（40 行、`JOURNAL_KEYS` 齐全）+ `scenarios/<seed>.json` ×40（逐场景证据，**用生产者自己的 `scenario_journal_entry` 重新投影后必须逐键等于 journal 行**）+ partitions 文档声明的 40 个 seed 集合相等 | **HOLDS**（40 seeds、40 行、40 份证据、摘要全符） |
+| 5 | `scenario_terminals` | 逐场景规则**独立重算**（不读生产者自己的 `outcome`）：terminal ∈ 该类声明的 terminal（locked / expected-not-found / expected-ambiguous 才 pass），`TARGET_NOT_FOUND` 还须 coverage complete，中断类须 fail-closed 停车 + 清 lock + 新 attempt 重新获取；并交叉要求 journal 行的 `outcome` 与重算结论一致 | **VIOLATED** |
+| 6 | `frame_cadence` | 逐行 `frame_cadence`：`continuous`、零 duplicate/backward/undeclared gap、`frame_period_s` 必须是 10 Hz | **HOLDS**（40/40） |
+| 7 | `stop_proofs` | 逐行 `stop_proof`：`proven`、连续合格样本 ≥ 3、样本数 ≥ 3 | **HOLDS**（40/40） |
+| 8 | `anchor_restarts` | 每个 anchor 恰好一份 `FULL_RESTART` receipt（default/left/forward 各一次），须含 teardown/reconstruction/单 CUDA detector/search-lock-timing-stop 六门全 PASS/runtime 与 bundle 身份 | **MISSING** |
+| 9 | `production_smoke` | smoke journal：producer → **sealed journal（字节摘要校验）** → aggregator 链、`TARGET_LOCKED`、10 Hz 连续、命令有界、三次样本停车、单 CUDA detector | **MISSING** |
+| 10 | `teleop_acceptance` | 独立 Teleop 验收 receipt：单 detector、Teleop factory count 0、controller stop + 两组进程退出 + graph clear、AF_UNIX 路径 ≤103 B、cleanup receipt（摘要校验）、`e2e/head-camera.spec.ts` PASSED + ≥6 张**磁盘上真实存在**的截图、所引 closed report 存在且摘要相符 | **MISSING** |
+
+缺证据（缺失/不可读）进 `missing`，逐项点名（`QUAL_AGGREGATE_*_MISSING`）；证据在但门不成立进 `violations`；两者都写进
+`qualification-verdict.json` 的 `blocking_reasons`，CLI 逐行打印并以 rc=2 退出。**未声明的 key 一律拒绝**（`HEAD_SEARCH_QUALIFICATION_EVIDENCE_INCOMPLETE`），
+因为拼错的声明若被忽略就等于静默跳过那道门。运行根仍是 no-resume：已存在即 `RUN_ROOT_ALREADY_EXISTS` rc=2。
+
+### (c) 两个必须记录的方法学判断（推断，照录）
+
+1. **verdict 与 closed report 不是同一份文档，这是 plan 自己的顺序。** Plan Step 5 校验 closed head-only report，Step 6
+   用**该 report** 启动 Teleop 验收栈；因此 report 必须先于它消费的 acceptance receipt 存在。本轮据此把 Step 5 两份文档绑在
+   九道 **qualification** 门上，把第十道 **acceptance** 门绑在 verdict、退出码与 `qualification_document_status` 上：
+   只差 acceptance 的 run 是 `REFUSED`（rc=2，`qualification_document_status=PUBLISHED`），而 report 里带
+   `qualification_verdict: REFUSED`。替代方案（让 report 依赖一份只能在 report 之后产生的 receipt）不可满足；把 acceptance
+   排除在门外则是本 phase 存在的意义所在的那种静默跳过。
+2. **`DECLARED_CONTRACTS` 是契约，不是测量。** restart receipt / smoke journal / Teleop acceptance receipt 今天**没有生产者**，
+   本轮把三者必须携带的字段逐条声明并逐条强制（verdict 的 `declared_contracts` 块原样照录），缺席时按名拒绝而不是猜。
+   同理，ownership 门只校验 receipt 的**声明内容**（operation/status/planned run root/expected runtime），**不**声称该观测是新鲜的：
+   重复运行必须像 plan Step 1 要求的那样重新取一份 receipt——本轮第二次、第三次运行就是这么做的。
+
+### (d) 真实运行（三次尝试；第三次为记录运行）
+
+| # | run root | ownership receipt | rc | 结果 |
+| --- | --- | --- | --- | --- |
+| 1 | `$EV/head-qualification-20261001T132757Z` | HS-315 的 receipt（planned root 正是它） | 2 | `REFUSED` missing=4 violations=2；**被取代**：approved bundle 已给出但 citation 为 null（读 readback 失败时提前返回，未先读 bundle） |
+| 2 | `$EV/head-qualification-20261001T140734Z` | 新取 `…ownership-20261001T140734Z`（rc=0，3 s） | 2 | 同上，bundle citation 已修；**被取代**：citation 的 `root` 取到了同一 gate 内的 `readback` 键 |
+| 3 | **`$EV/head-qualification-20261001T140822Z`** | 新取 `…ownership-20261001T140822Z`（rc=0，3 s） | **2** | **记录运行**：`HEAD_SEARCH_QUALIFICATION_REFUSED`，missing=4 / violations=2，1 s |
+
+记录运行的命令（安装版 console script）：
+
+```
+$FINAL_RUN/install/so101_demo_py/lib/so101_demo_py/so101_head_search_calibration qualify \
+  --run-root $EV/head-qualification-20261001T140822Z \
+  --final-run $FINAL_RUN \
+  --promoted-config $FINAL_RUN/install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_v2.json \
+  --approved-bundle $CAMPAIGN/head-search-calibration-20261001T122047Z/head-search-calibration-bundle.json \
+  --ownership-receipt $EV/head-qualification-ownership-20261001T140822Z/exclusive-ownership.json \
+  --scenarios-root $CAMPAIGN/qualification-scenarios-20261001T135407Z \
+  --scenario-partitions $FINAL_RUN/install/so101_demo_py/share/so101_demo_py/config/act/head-search-scenario-partitions-v1.json \
+  --production-smoke-root $EV/head-search-smoke-20261001T130757Z
+```
+
+九个 qualification 门的实测：`exclusive_ownership` / `runtime_identity` / `scenario_journal` / `frame_cadence` / `stop_proofs`
+**HOLDS**（后者 40/40）；`approved_values_readback` / `anchor_restarts` / `production_smoke` / `teleop_acceptance` **MISSING**；
+`scenario_terminals` **VIOLATED**。逐字点名的四项缺失：
+
+1. `runtime_readback` —— 资格期间的 17 值 + 4 camera measurement readback 未提供（期望路径
+   `…/head-qualification-20261001T140822Z/qualification-runtime-readback.json` 不存在）；
+2. `restart_receipts` —— default/left/forward 三份独立 `FULL_RESTART` receipt 一份都没有；
+3. `production_smoke journal (production-smoke-journal.json)` —— 给出的 `head-search-smoke-20261001T130757Z` 里只有
+   `coverage-proof.json`（HS-179 的规划覆盖证明），**不是** smoke journal；
+4. `teleop_acceptance_receipt` —— 未提供。
+
+两项 violation **不是**缺失而是**测出来的事实**：逐场景证据独立重算后，`900002`（`forward_anchor`）终态 `TARGET_AMBIGUOUS`、
+`900013`（`distractor_present`）终态 `TARGET_NOT_FOUND`，而两类声明的都是 `TARGET_LOCKED`——正是 HS-316 记录的 38/2 中的那两项。
+结果：run root 下只有 `qualification-verdict.json` 与 `calibration-state.json`，**没有任何 pass 文档**；全程未启动 stack/检测器/ROS node，
+运行前后进程表与 GPU compute app 均为空。**没有为了让门通过而放松任何一条。**
+
+### (e) 真资格通过还缺什么
+
+1. production smoke 的真实生产者：sealed journal + 消费它的 aggregator（含 ROS 反馈三次样本停车证明）；
+2. 三个 anchor 各一次独立 `FULL_RESTART` 的 receipt（本轮已把字段契约写死在 `DECLARED_CONTRACTS`）；
+3. 资格期间在本次 run root 下做的 17 值 + 4 camera measurement readback；
+4. Teleop 验收栈 + `e2e/head-camera.spec.ts` + 截图/cleanup receipt；
+5. `900002`、`900013` 两项重测（或按其条件类别的真实终态重跑 40 场景）。
+   以上仍是**新 toolchain root** 才能满足的：本模块与入口是附加源码改动。
+
+### (f) 验证
+
+| 项 | run dir / 命令 | rc | 计数 |
+| --- | --- | --- | --- |
+| 新模块 RED→GREEN | `test_act_head_search_aggregate.py`（37 例）；RED = 模块不存在时 2 个文件 collect error + qualification 用例断言旧行为失败（`scratch/hs317/logs/red.txt`），citation 的 root 取值另有独立 RED（`scratch/hs317/logs/red-citation.txt`，把 citation 的 root 回退成同门内任一读到的键即 1 failed） | 0（GREEN） | 37 passed（连同 CLI/qualification 共 **130**） |
+| 被改动的既有测试（**故意**） | `test_head_search_calibration_cli.py` 的 3 个 digest-scan 用例改写为新行为（净 +2），`test_act_head_search_qualification.py::test_head_only_report_does_not_grant_task8_ready` 改为「hex fixture 一律拒绝 + 用 closed report 证明 task8 拒绝」 | 0 | 83 passed |
+| 阶段回归（HS-288..316 + 新文件，36 文件，`-n 8`） | `HS317_TMPDIR=scratch/hs317/tmp-regression bash scratch/hs317/run-tests.sh -q -n 8 $(cat scratch/hs317/regression-files.txt)` | 0 | **954 passed**（HS-316 的 915 + 新增 37 + CLI 净增 2） |
+| 全量 demo 套件（8 workers，baseline run-dir 布局） | `$EV/scratch/pytest-xdist8-hs317-demo-suite-final.4054ba2c`（最终代码；同 label 的 `…3734d610` 是同一批计数、在最后两处 citation 修补之前，保留为对照） | 1 | **175 failed / 6440 passed / 152 skipped / 86 errors**（82.30 s），261 节点，与最新基线 `pytest-xdist8-hs316-demo-suite.6305f7d5`（175/6401/152/86）**逐节点 diff = 0 行**；passed +39 = 本模块 37 + CLI 净增 2。`tempfile.gettempdir()` 落于该 run dir 的 `tmp/`，CPU/workers 记入 `interpreter-and-cpu.json`（`-n 8`，24 逻辑 CPU） |
+| 记录运行的可复现性 | `scratch/hs317/logs/run-of-record-reproducibility.txt`：用**提交后的**规则对 900002 / 900013 的逐场景证据重算，`(verdict, code, detail)` 与记录运行逐字相同；记录 verdict sha256 `b9f2892c…` | 0 | RUN_OF_RECORD_REPRODUCIBLE: True |
+| （无效调用，保留不计）一次与全量套件**并发**的阶段回归 | 我先把全量套件放后台跑、又同时启动 8 worker 回归（合计 16 worker / 24 CPU） | 1 | 1 failed（`test_act_head_search_stop_measurement.py::test_confirm_stop_needs_three_consecutive_qualifying_feedback` 的 `pacing_faithful` 断言，属负载敏感的实时节拍检查）：该用例单跑 **25 passed**、不在 HS-316 基线失败节点集内，负载消除后同一命令 **954 passed rc=0**。**记为资源争用观察，不计作源码回归**；并发那次不计入结论 |
+
+### (g) 本轮声明的推断（待评审，逐条照录）
+
+① **(c).1** 的 verification/report 拆分；② **(c).2** 的契约声明与 ownership 新鲜度边界；③ 逐场景规则**独立重算**而不是复用
+`head_search_scenarios.classify_scenario`（后者在 journal 行上没有 `attempts`、只有 `attempt_summaries`，直接复用会对中断类误判）；
+④ classification 的码表沿用 HS-316 的「locked / expected-not-found / expected-ambiguous 才 pass」，`TARGET_NOT_FOUND` 追加
+coverage complete 义务，其余一律非 pass；⑤ Teleop 验收的 `qualification_report` 允许指向**同 runtime/bundle 的先前** closed report
+（不要求是本次 run 刚写出的那一份），否则第十道门与 plan Step 6 的顺序互锁；⑥ 第 1 次运行的 run root 用的是 HS-315 receipt 的
+`planned_run_root`，该 root 因此被占用，后续两次都重新取 Step 1 receipt。
+
+**本轮证据与生命周期**：`$EV/head-qualification-20261001T140822Z/{qualification-verdict.json,calibration-state.json}`（记录运行）、
+`$EV/head-qualification-ownership-20261001T140822Z/exclusive-ownership.json`（其 Step 1 receipt）、
+`$EV/head-qualification-{20261001T132757Z,20261001T140734Z}/`、`$EV/head-qualification-ownership-20261001T140734Z/`
+（两次被取代的尝试，保留）、`$EV/scratch/pytest-xdist8-hs317-demo-suite.3734d610/`（全量套件）、
+工作树 `scratch/hs317/`（`run-tests.sh`、`run-ownership.sh`、`run-qualify.sh`、`run-qualify-record.sh`、`regression-files.txt`、
+`logs/{red.txt,green.txt,regression.txt,real-run.txt,real-run-record.txt,ownership-*.txt}`、`record-utc.txt`、`tmp-*`）、
+`$EV/reviews/task14-gap-audit.md`（第 4/8 行改判 + §4 增补 + 新增 §8）。
+以上**均为删除候选，未删除**；HS-300..316 的产物只读引用，未改动。工作树 `git status --porcelain`：见本轮提交后的 `?? runs/`（既有未跟踪）。

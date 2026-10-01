@@ -48,7 +48,14 @@ def test_the_runner_refuses_any_existing_run_root(tmp_path: Path) -> None:
 
 
 def test_head_only_report_does_not_grant_task8_ready(tmp_path: Path) -> None:
-    report = qualify_head_search(
+    """A closed head-only report grants nothing Task 8 owns - and a digest-only fixture is no report.
+
+    Deliberately changed in HS-317: this test used to hand `qualify_head_search` a mapping of
+    well-formed hex digests and assert it published a pass. That is the HS-233/HS-315 defect, and the
+    aggregate phase now refuses it; the task8 refusal is proven on a closed report document instead.
+    """
+
+    refused = qualify_head_search(
         {
             "run_root": tmp_path / "qualify",
             "evidence": {"production_smoke": "b" * 64, "scenarios": "c" * 64},
@@ -57,12 +64,16 @@ def test_head_only_report_does_not_grant_task8_ready(tmp_path: Path) -> None:
         },
         tmp_path / "qualify",
     )
+    assert refused["status"] != HEAD_SEARCH_QUALIFIED
+    assert not (tmp_path / "qualify" / "head-search-qualified-report.json").exists()
+
+    report = _qualified_report(tmp_path / "qualified")
     assert report["status"] == HEAD_SEARCH_QUALIFIED
     with pytest.raises(ValueError, match="TASK8"):
         require_gate(report, "task8_live")
-    for refused in ("release", "recorder", "retreat", "pick"):
+    for refused_gate in ("release", "recorder", "retreat", "pick"):
         with pytest.raises(ValueError, match="TASK8"):
-            require_gate(report, refused)
+            require_gate(report, refused_gate)
 
 
 def test_serve_teleop_requires_closed_head_only_report(tmp_path: Path) -> None:

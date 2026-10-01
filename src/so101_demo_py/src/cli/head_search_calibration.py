@@ -45,6 +45,7 @@ from typing import TYPE_CHECKING
 
 from so101_demo.act import head_search_ownership as ownership
 from so101_demo.act.head_search_qualification import (
+    HEAD_SEARCH_QUALIFIED,
     qualification_parser,
     qualify_head_search,
     serve_teleop,
@@ -2994,36 +2995,60 @@ def main(argv: list[str] | None = None) -> int:
             run_root, parsed.approved_bundle_sha256, parsed.promoted_config
         )
     if parsed.command == "qualify":
-        evidence_root = (
-            Path(parsed.evidence_root) if parsed.evidence_root else run_root / "evidence"
-        )
-        promoted = (
-            Path(parsed.promoted_config)
-            if parsed.promoted_config
-            else run_root / "head-search-bundle.json"
-        )
-        evidence = (
-            {path.stem: _digest(path) for path in sorted(evidence_root.glob("*.json"))}
-            if evidence_root.is_dir()
-            else {}
-        )
-        try:
-            report = qualify_head_search(
-                {
-                    "run_root": run_root,
-                    "runtime_id": run_root.name,
-                    "bundle_sha256": _digest(promoted),
-                    "evidence": evidence,
-                },
-                run_root,
+        # the aggregate phase: only the declared evidence that was actually presented goes in, and an
+        # absent flag stays absent so the verdict refuses it by name instead of defaulting to something
+        inputs = {
+            name: value
+            for name, value in (
+                ("final_run", parsed.final_run),
+                ("production_config", parsed.promoted_config),
+                ("approved_bundle", parsed.approved_bundle),
+                ("ownership_receipt", parsed.ownership_receipt),
+                ("runtime_readback", parsed.runtime_readback),
+                ("production_smoke_root", parsed.production_smoke_root),
+                ("scenarios_root", parsed.scenarios_root),
+                ("restart_receipts", parsed.restart_receipts),
+                ("teleop_acceptance_receipt", parsed.teleop_acceptance_receipt),
+                ("scenario_partitions", parsed.scenario_partitions),
             )
+            if value is not None
+        }
+        expected_runtime = {
+            key: value
+            for key, value in (
+                ("source_commit", parsed.expected_source_commit),
+                ("production_config_sha256", parsed.expected_production_config_sha256),
+                ("values_sha256", parsed.expected_values_sha256),
+                ("weight_sha256_declared", parsed.expected_weights_sha256),
+            )
+            if value is not None
+        }
+        if expected_runtime:
+            inputs["expected_runtime"] = expected_runtime
+        try:
+            report = qualify_head_search(inputs, run_root)
         except ValueError as error:
             if "RUN_ROOT_ALREADY_EXISTS" not in str(error):
                 raise
             print(str(error), file=sys.stderr)
             return 2
-        print(f"{report['status']} {report['evidence_sha256_set']}")
-        return 0
+        if report["status"] == HEAD_SEARCH_QUALIFIED:
+            print(f"{report['status']} {report['runtime_id']}")
+            return 0
+        # a refusal is not a traceback: every missing item and every violated gate is named, and the
+        # exit code says no pass was published
+        for reason in report["blocking_reasons"]:
+            print(
+                f"{reason['code']} {reason['gate']}: {reason['item']}: {reason['detail']}",
+                file=sys.stderr,
+            )
+        print(
+            f"{report['status']} missing={len(report['missing'])} "
+            f"violations={len(report['violations'])} "
+            f"verdict={run_root / 'qualification-verdict.json'}",
+            file=sys.stderr,
+        )
+        return 2
     if parsed.command == "serve-teleop":
         # the closed report is read from where it was written, never from the root this owner will claim
         if parsed.report is None or not Path(parsed.report).is_file():
