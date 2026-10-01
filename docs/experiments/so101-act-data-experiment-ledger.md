@@ -44340,3 +44340,20 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
 - its derivation behind CP-2332; F5's regression fixed with step one landed and step two one clause from diagnosis;
 - HEAD 7b242cfe4; goal active.
+
+## CP-2354 - The epoch relation passes; the refuser is one of the two clauses I judged sound
+
+- Reading instead of guessing settled the epoch question: the port's evidence carries release_epoch as a parameter
+- (test_act_release_boundary.py:44) and its own assertions put the rows in (1, 2) - 1 before the release, 2 after
+- (line 267) - while the runner emits the release event naming the epoch it entered, which is initial 1 plus one, so
+- 2. With the declared initial at 1, the row at 1 is exempt and the row at 2 is named. The relation CP-2292 added
+- therefore passes, and CP-2353's inference was wrong.
+- That leaves exactly the two clauses the probe's print truncated - observed_row and ref_group - and one of my two
+- judgements about them must be wrong: either the runner does not copy both nested records into the rows it writes
+- from the port's evidence, or the reference the fixture appends does not satisfy the accepted-plus-complete-group
+- test the way its keys suggest.
+- So the next probe prints exactly those two, one per line, with no other clause competing for the width - two
+- booleans that end the diagnosis the previous probe began.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+- its derivation behind CP-2332; F5's regression fixed with step one landed and step two two booleans from
+- diagnosis; HEAD c5c6b2333; goal active.
