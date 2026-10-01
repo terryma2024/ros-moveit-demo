@@ -53792,3 +53792,33 @@ sentence: the class the consumer checks for is never the class the producer cons
 Both take `worker_roots` first, so the substitution is small; the ACT verifier additionally takes `endpoint_inputs`,
 `audit_manifest` and `scope`, and the composition has the first of those available from the spec
 (`expected_final_cup_pose_world`) while the audit pair is per-episode. That is the wiring to complete.
+
+
+## CP-2797 — Correction 4's feasibility: the spec carries one of the three inputs the ACT verifier needs
+
+```python
+    expected_final_cup_pose_world: tuple[float, ...]          # contracts/CLI spec, e.g. mujoco_parallel_batch.py:186
+    ...
+        expected_final_cup_pose_world=tuple(expected_final_cup_pose_world),   # :1410
+```
+
+So the spec the composition builds from already carries the **final** endpoint target - which is why
+`SealedResultAdapter` accepts it - but it carries neither the **endpoint policy** nor the **initial** target.
+`endpoint_records_from_audit` reads all three from its `inputs` (`initial_target`, `final_target`, `endpoint_policy`), and
+the initial target is a property of the episode rather than of the batch.
+
+That makes correction 4 a small design question rather than a one-line substitution: for the production composition to
+build a port that performs the endpoint judgement, either
+
+- the verifier's inputs become resolvable lazily - a callable or a per-episode resolution, since the initial pose only
+  exists once the episode does - or
+- the endpoint policy becomes part of the frozen spec (it is a frozen configuration document like the runtime policy that
+  already travels with the batch), leaving only the initial target to be resolved per episode.
+
+Both are legitimate and they differ in where the policy's identity lives, which is exactly the kind of thing the design
+already decided once for the runtime policy (`runtime_policy_sha256` in the provenance). The read that settles it is what
+the endpoint policy's own identity is bound to elsewhere - whether the first-episode path freezes it into the inputs
+document, which `first_episode_inputs.py` would show.
+
+I am recording it rather than choosing silently, because the choice is visible in the frozen-inputs contract and therefore
+in what E3 will replay.
