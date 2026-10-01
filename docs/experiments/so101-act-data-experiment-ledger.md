@@ -53529,3 +53529,28 @@ said the same thing three different ways.
 
 Round state unchanged: four production changes and the chain test uncommitted, two temporary prints to remove, correction
 2's test passing throughout, correction 3's one call site from its assertion.
+
+
+## CP-2787 — The third caller is seal_attempt, and the residual puzzle needs one print inside verify_audit_manifest
+
+```python
+    def seal_attempt(self, lease: LeaseIdentity, decision) -> str:
+        if _identity(lease) != self.identity:
+            ...
+        if episode_path is None or _safe(Path(episode_path)) != self.episode_root / "seal.json":
+            ...
+            episode = verify_episode_seal(episode_path, audit_manifest=self.audit_manifest,
+                                          scope=self.scope)
+```
+
+So `result_store.py:159` belongs to **`seal_attempt`**, a third method reading the same two attributes the test configures -
+and requiring the episode seal at exactly `self.episode_root / "seal.json"`, which is the pre-publish location. Every path
+in play therefore carries the `audit` segment, and the failing path that did not remains the one unexplained detail.
+
+The instrument for it is now unambiguous: a print **inside** `verify_audit_manifest`, at its first line, showing the path
+it received. Every caller-side path has been read and every one of them includes `audit/`, so the discrepancy is either in
+how `Path(...)` composes there or in a call whose arguments come from somewhere not yet read - and a print at the callee
+settles it without another round of caller-side inference.
+
+That is the state: correction 2's chain test passes; correction 3's is one path from its assertion; four production changes
+and the chain test are uncommitted; and two temporary prints (store, test) remain to be removed when it goes green.
