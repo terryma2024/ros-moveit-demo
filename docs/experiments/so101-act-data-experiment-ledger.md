@@ -50556,3 +50556,21 @@ Two corrections stand as the record of this stretch: my gate was too narrow (CP-
 wrong twice (CP-2658's and CP-2660's readings), and the actual cause was a detail about the shell. The remedy is the
 recipe, recorded here so the next run starts from it: **`zsh -c 'source /opt/ros/jazzy/setup.zsh; source <underlays>;
 source <this worktree>/install/setup.zsh; source env.zsh; ...'`**.
+
+
+## CP-2664 — Under the correct recipe the whole package is green: zero failures
+
+The full sweep, run under `zsh -c` with the underlays sourced and this worktree's install last, reached **99% with
+`FAILED` lines: 0**. So the package's own test directory passes as a whole, and the 129 failures of CP-2659 were,
+entirely and only, the bash-versus-zsh sourcing fact of CP-2662/2663 - not my changes, not the user's tests, and not the
+`COLCON_IGNORE`.
+
+That closes the arc this stretch opened when it first ran a directory-wide sweep: my gate was too narrow (CP-2659), I
+predicted the wrong cause twice (CP-2658, CP-2660), the classification pointed at the Task-8 family (CP-2660), one
+failing test's own error message named the resolution path (CP-2661), and the environment facts explained it (CP-2662)
+before the corrected run proved it (CP-2663) and now the whole sweep confirms it.
+
+Two things are worth keeping. First, the recipe - `zsh -c` with the source order - belongs in every future gate, because
+without it the numbers measure the harness rather than the code. Second, the narrower nine-suite gate was not wrong to
+exist: it covered the files under change and it stayed green throughout, which is what a working gate should do; what was
+wrong was treating it as a statement about the package rather than about the files it named.
