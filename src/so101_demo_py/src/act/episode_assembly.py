@@ -33,6 +33,7 @@ def assemble_episode_capture(
     scope: dict,
     guard=None,
     audit_writer=None,
+    **capture_options,
 ) -> ContinuousEpisodeCapture:
     """Build the capture for one episode, with its recorder and audit writer.
 
@@ -60,4 +61,8 @@ def assemble_episode_capture(
         guard=guard,
         audit=audit,
         audit_writer=audit_writer,
+        # the capture's own remaining options - `scope` (the path of the file the writer puts the scope document in,
+        # which is not the document itself), `deadline_s`, `monotonic` - pass straight through rather than being
+        # duplicated here, so a caller that needs them is not forced to assemble the recorder and writer by hand
+        **capture_options,
     )
