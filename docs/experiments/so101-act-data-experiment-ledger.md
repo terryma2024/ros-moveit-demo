@@ -44547,3 +44547,39 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
 - landed and its derivation behind CP-2332; F5's regression fixed, step one landed, and three seal-side blockers
 - fixed across CP-2362/CP-2363/CP-2365; HEAD f56af73d3; goal active.
+
+
+## CP-2366 — User-authorized three-key dispatch received (7A609A6F), K1/K2 = B, K3 authorized
+
+- **Dispatch**: UUID `7A609A6F-ADC2-45E2-A7E6-EECBC1785DC4`, handoff at
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/keys-endpoint-dispatch-20261001.52jBTwK0/`
+  (`so101-keys-endpoint-handoff-20261001.md`, its Astra/High design review note, and `docs/superpowers/`).
+  Executed directly on ai-station, no self-SSH. Receipt written to `receipt-7a609a6f.txt` (2167 bytes) **after** updating
+  the visible task list, in the order the handoff requires.
+- **Options accepted**: **K1 = B** (a legal window derived from actual camera acquisitions; positive must
+  seal/readback, and single-missing reference/event/physics keeps the camera window legal so coverage is tested
+  specifically); **K2 = B** (the source side must provide provable observation correlation — `task_scene._observe()`
+  has no source time today — with a versioned closed schema, seal and independent verifier in sync, fabricated equal
+  times refused, real MuJoCo production-chain evidence).
+- **K3 read in full** (`specs/2026-10-01-so101-act-endpoint-pose-acceptance-design.md`, 135 lines): a new policy
+  `config/act/endpoint_pose_acceptance_v1.yaml` with closed keys and the five thresholds 0.010 m / 0.15 rad /
+  0.020 m / 0.010 m / 0.15 rad; a development runtime `config/act/endpoint_pose_development_runtime_v1.yaml` whose
+  complete initial YAML is `path_step_s 0.002`, `path_clearance_m 0.002`, `max_age_s 0.1`, `max_skew_s 0.1`,
+  `support_distance_max_m 0.002`, `hard_stops.rtf_min 0.90`, `disk_free_min_bytes 53687091200`; precedence
+  CLI config > installed defaults; one immutable effective-config artifact per run with its hash, approval
+  `user_empirical_default` (never `nonhead_calibration`, never a fabricated measurement PASS).
+- **Behavioural contracts to implement**: endpoints are the first fresh cup pose before the first arm/gripper
+  dispatch and the first fresh cup pose after stop confirmation, with the stated timing inequalities and
+  `0 <= t_capture - t_pose <= 0.1 s`; the MoveIt expert ends on `expert_sequence_complete`, an ACT rollout freezes
+  `stop_rule=first_final_pose_match_v1`; the five old process-quality fields stop being preconditions anywhere while
+  real safety gates stay; `checks.endpoint_pose` has the closed key list with `xyz_xyzw` poses.
+- **Phased acceptance**: directed RED->GREEN for F5's open part and K1/K2 first, then E1/E2 implementation, then a code
+  freeze before the full package gates, then one real installed `act_first_episode` run through Recorder, seal,
+  fresh-process QC and the actual Coordinator commit — UT green is explicitly not closure. New scratch and new
+  evidence subdirectories under the existing root only; no push, no evidence deletion, no real hardware, no second
+  stack; only dst writes this worktree.
+- **Goal**: active (revision 8); the user authorized continuation with the 1000-round budget not reset. No model-side
+  self-resume was or will be attempted.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+  its derivation now unblocked by K1 = B; F5's regression fixed with step one landed and step two's seal-side blockers
+  (CP-2362/2363/2365) fixed; HEAD 1dabdc489; goal active.
