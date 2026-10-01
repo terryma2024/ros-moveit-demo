@@ -55286,3 +55286,39 @@ Recorded mid-hunt deliberately: the next rounds should resume from `parallel_bat
 `campaign_supervisor.py`, and the worker modules beside them) rather than re-walking the three layers already excluded.
 Which is also the honest shape of this stretch - the wiring is not five small edits in a known place; it is a place that
 has to be found first, and finding it has already taken several reads.
+
+
+## CP-2857 — The wiring spec, written down so it survives the context that found it
+
+Eight rounds of reading produced a plan with no unknowns left in it. Recording it at patch level, because the reading that
+found it is expensive and the implementation is mechanical:
+
+**Where**: `runtime/parallel_worker_runtime.py`, class `ParallelWorkerRuntime` (`:735`), whose episode arc is
+`reset_point` (`:1027`) -> `point_initial_gate` (`:1066`) -> `localize_and_admit_pose` (`:1120`) -> `plan_expert` (`:1162`)
+-> `execute_expert` (`:1253`) -> `capture_terminal` (`:1300`).
+
+**Pieces**:
+
+1. **State**: a per-episode holder on the runtime (synchronizer + capture + the episode's coordinates), created when a
+   point starts and cleared when it ends. `RgbObservationSynchronizer(max_age_s=..., max_skew_s=...)` reset with the
+   episode's `session_id`.
+2. **Push**: in `_capture_fresh_rgb` (`:936`), after `captured` passes its three validations, push
+   `captured.source_stamp_monotonic_s` as the sim time - **it already is sim time**, the receipt's `source_clock` must be
+   `"ros_sim"` (`:348-349`) - for `head`/`wrist` from the receipt's own stream, and for `arm`/`neck` from the numeric
+   evidence so all four buffers hold a stamp within the window (CP-2824).
+3. **Assemble and start**: at `point_initial_gate` (or `reset_point`), build the capture with
+   `assemble_episode_capture(sampler=LiveSampler(holder.synchronizer), physical_audit=PhysicalAuditAdapter(extract),
+   identity=..., provenance=..., inputs=..., episode_root=<the store's episode root>, scope=build_collection_scope(...),
+   scope_path=str(episode_audit_pair(<that root>)[1]))`, then `capture.start(session_id, attempt_id, reset_epoch, start_s)`
+   with the gate's simulation time.
+4. **Finish**: at `capture_terminal`, `capture.finish(action_boundary_monotonic_s, window={"start_s": <the gate's sim
+   time>, "end_s": action_boundary_monotonic_s, "label_cutoff_s": action_boundary_monotonic_s}, outcome=<the episode's
+   own outcome>)` - **the window is required or it will not seal**; then hand the audit pair to the store (pre-publish) and
+   to the verifier (published), and let the coordinator commit.
+5. **The extraction** (`physical_audit`): `live_evidence_sample(...)`'s eleven values (CP-2841) shaped by
+   `PhysicalAuditAdapter`, which insists on the thirteen keys (CP-2845).
+
+**Verification after each piece**: the runtime's own suites plus the chain, under `zsh -c` with the worktree's install (the
+bash-sourced-setup trap produces ~186 false failures).
+
+This is the whole of what remains between the objective and a recorded episode on the production path.
