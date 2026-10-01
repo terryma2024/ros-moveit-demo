@@ -43910,3 +43910,24 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - sites, the three measured values and this datum. Reverted; green, nothing half-applied.
 - F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed and its derivation handed off here; F5's
 - regression fixed with its two items behind the same surgery; F12 two of three; HEAD caa97c23e; goal paused.
+
+## CP-2333 - F12's threading: the helper's return contract is what blocks the natural route
+
+- Read this round: the port reads the feedback off the OBSERVATION (search_port.py:440 inside _search_evidence at
+- 313, which takes the observation as its parameter and reads search_result, physical_readback and planning_scene
+- from it), and the boundary's verifier chain (boundary.py:863-869) calls _remember_planning_scene_receipt(observed)
+- then _remember_controller_feedback(observed) - both of which cache on the boundary and return None by their own
+- documented contract, so they can sit in the `or` chain without changing its verdict.
+- That contract is exactly what blocks the natural threading the verdict asks for: the replacement observation has
+- to exist before the port is invoked, but the records are produced by a helper that cannot return them without
+- changing how the chain reads its verdict.
+- Two routes, both one pass once chosen: (a) build the replacement where the port is invoked (sequence_phase, line
+- 652, which already receives `observed`), reading the boundary's cached self._controller_feedback and passing
+- dataclasses.replace(observed, controller_feedback=...) to the port, leaving the chain's contract untouched; or
+- (b) keep the helper's cache and add a second, chain-safe accessor the port call uses. (a) is the smaller change
+- and preserves the `or` chain's semantics exactly.
+- Recorded with the two routes rather than attempted at the end of this context: it is a structural edit across the
+- boundary and the port's caller, which is the shape that has cost this stretch the most rounds.
+- F1 and F14 closed; F3 closed; F13 three of four with its scene item behind CP-2285; F11's divergence fixed and its
+- derivation behind CP-2332's contract choice; F5's regression fixed with its two items behind the same surgery;
+- F12 two of three with this route chosen; HEAD 5ee4a02d8; goal paused.
