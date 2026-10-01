@@ -49740,3 +49740,24 @@ kinematics the scene geometry derivation already performs - not a new invention,
 
 That is the next read, and it is a better question than the one I was asking: not "why does my test fail" but "where does
 this repository already turn a configuration into a pose".
+
+
+## CP-2628 — Where the configuration lives, and the two candidate reuse points
+
+The search for "configuration to pose" turned up two concrete things rather than one:
+
+- **`ros/rgbd_cup_pose_node.py:432 pose_message_from_frame(...)`** - a frame-to-pose-message helper, i.e. a pose
+  built from a vision frame rather than from the model's configuration;
+- **`model_qpos` is consumed by six adapters** - `calibration_motion.py`, `pick_place_approach_path_screen.py`,
+  `stationary_bridge_history.py`, **`physics.py`**, `cadence_correct_search_history.py`, `physics_step_fence.py` - so
+  the model configuration is a real, used currency in this repository, handled on the adapter side rather than in
+  `act/`.
+
+That reframes E2's gap usefully. The QC needs a pose, the audit carries `model_qpos`, and the code that already reads
+`model_qpos` lives in the adapters - most plausibly `adapters/act/physics.py`, which is where the physics records are
+built. So the honest next step is to read that adapter's use of the configuration: if it already turns `model_qpos`
+into an end-effector or cup pose, the QC can reuse that; if it only validates or forwards the configuration, then the
+pose has to be computed somewhere, and knowing *where* is the difference between a reuse and an invention.
+
+Either way the question has moved from "my test is red" to a specific one about this repository's existing machinery,
+which is where the last several pieces of this work have been found.
