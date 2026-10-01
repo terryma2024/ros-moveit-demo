@@ -47477,3 +47477,18 @@ window and print the verdict - False sends the next step to CP-2497's inert read
 runner's row/binding interaction.
 
 Tree state unchanged: 35 dirty entries (the user's), no probe markers, audit suite 74 passed.
+
+
+### CP-2508 — The physics row is accepted; bind_row refuses from the inside
+
+Two facts from this attempt. First, the recipe of CP-2507 works: the physics row with the suite's seven-field
+observation was accepted, so the earlier `AUDIT_SOURCE_KIND_INVALID` is explained and closed. Second, the failure moved
+to `bind_row`, and its signature is `bind_row(self, row_index, sim_time_s, head_id, wrist_id, reference_sequence)` -
+exactly the five arguments I passed, in exactly that order - so the `AUDIT_ROW_INVALID` is raised from inside: either
+`_ROW_FIELDS` requires something beyond the five keys it builds, or the row index `0` is rejected by a rule I have not
+read.
+
+`_ROW_FIELDS` is printed beside this entry, and the direct test is otherwise complete: writer, ten acquisitions per
+camera on a 10 Hz grid, one physics row, the binding, then `writer._window_matches_rows(window)` with the CP-2495
+window. With the field set in hand the verdict is one run away, and the test was withdrawn again so the tree stays at
+the user's 35 entries with the audit suite at 74 passed.
