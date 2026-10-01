@@ -753,6 +753,7 @@ class ParallelWorkerRuntime:
         execute_result: Callable[[Any, Any, Any], Any] | None = None,
         consumer_ready: Callable[[Any], bool] | None = None,
         capture_rgb: Callable[[Path, float], SourceStampedCapture] | None = None,
+        open_episode: Callable[[Any], Any] | None = None,
         capture_numeric_evidence: Callable[
             [Any, Any, Path, float], NumericEvidenceReceipt
         ]
@@ -806,6 +807,10 @@ class ParallelWorkerRuntime:
         self._capture_numeric_evidence = capture_numeric_evidence or _required(
             "capture_numeric_evidence"
         )
+        # the episode being recorded for a point, opened by whoever holds the frozen inputs and the episode's own root
+        # (the CLI, which also knows the scope values and where the audit pair goes). Optional: a runtime that does not
+        # record is still a valid runtime, which is why this is not among REQUIRED.
+        self._open_episode = open_episode
         self._cancel_motion = cancel_motion or (lambda _lease: True)
         self._confirm_no_controller_goal = confirm_no_controller_goal or (
             lambda _lease: True
