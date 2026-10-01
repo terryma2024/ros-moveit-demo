@@ -46442,3 +46442,27 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   placeholders.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD d4e311a4f; goal active.
+
+
+## CP-2459 — The twenty-two field recipe, and which fields have a frozen source
+
+- `prepare_batch` returns `PreparedBatch(start_guard, request, adaptive_request, config, config_path,
+  adaptive_config_path, points_path, catalog, expected_final_cup_pose_world, catalog_sha256, selection_sha256,
+  broker_image, yolo_weights, yolo_weights_sha256, grounded_root, grounded_manifest_sha256, provenance, manifest,
+  provenance_inputs, provenance_verifier, start_guard_evidence, resume)` - the exact recipe this task's `run` has to
+  reproduce for one worker.
+- Fillable from the frozen set: `config` and `config_path` (the frozen runtime document, already parsed by
+  `load_runtime_config_any_schema`), `request` (the four-field `BatchRequest` with one point, already built),
+  `expected_final_cup_pose_world` (the target the endpoint rule compares against), `provenance`, `manifest` and
+  `provenance_inputs` (read from the frozen tree so the composition verifies what was frozen), `provenance_verifier`
+  (the module's own `verify_provenance`), `points_path` plus `catalog` plus their two hashes (a one-point
+  `TaskPointList` written under the LIVE_ROOT), `start_guard`/`start_guard_evidence` (None for a single episode) and
+  `resume` (False).
+- Without a frozen source, and therefore the next decision rather than a mapping: `broker_image`, `yolo_weights` and
+  `yolo_weights_sha256` (no detector role exists), and `grounded_root`/`grounded_manifest_sha256` (no grounded role
+  exists either - the twelve roles are anchor_scene, scene_model, collection_config, runtime_config, path_policy,
+  placement_qc, rgb_skew, resource_thresholds, contact_proposal, contact_activation, reset_recipe and
+  reference_interpolation). The honest treatment is to state their absence in the run's own record rather than pass
+  placeholders that would imply a detector or a container was involved.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 84fe4b5f3; goal active.
