@@ -46731,3 +46731,28 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   production factory" wording is satisfied by the default composition factory plus a deployment-appropriate verifier.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 677458b5b; goal active.
+
+
+## CP-2474 — The composition is the W2 sweep vehicle, and the single-episode design is elsewhere
+
+- `_catalog(path)` is unconditional: it hashes the file, refuses unless the digest equals the module's single
+  `_CATALOG_SHA256`, refuses unless the document's keys are exactly `{schema_version, points}` with
+  `schema_version == 1`, and then refuses unless `len(points) == 20`. So the point catalogue it accepts is **the one
+  approved twenty-point sweep catalogue** - a one-point catalogue cannot pass either check, no matter how honestly it
+  is built.
+- Taken with the rest of this stretch's readings, the picture is now unambiguous: `ProductionBatchComposition` wants
+  the twenty-point catalogue, a provenance verifier demanding YOLO weights, a grounded-SAM root and a specific broker
+  image, and (on the campaign path) a macOS-only execution profile. It is the **W2 parallel-sweep vehicle**, and the
+  plan's own sentence about this milestone says what to do instead: run "the original non-Head Task7 installed
+  `run --inputs --root --mode preselected_target_diagnostic --lifecycle FULL_RESTART`" - a command that does not exist
+  yet (CP-2417), whose design is the one the dispatch directory carries:
+  `docs/superpowers/specs/2026-09-30-so101-act-nonhead-first-episode-design.md`.
+- So the honest next read is that design's Task 7 (and the original non-Head plan's Task 6/7 acceptance), not more
+  probing of the sweep composition. Building the single-episode runner from that design is the plan's intended work;
+  forcing the sweep vehicle to accept one point would be the "second implementation" the plan forbids, wearing the
+  sweep's clothes.
+- Recorded plainly because it changes the shape of the remaining work: the fourth piece is not "drive the sweep
+  composition with one worker" but "implement the non-Head first-episode run its own design specifies", and everything
+  this stretch built - the frozen inputs, the policy, the guards, the environment - is what that runner will consume.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 1708b00dc; goal active.
