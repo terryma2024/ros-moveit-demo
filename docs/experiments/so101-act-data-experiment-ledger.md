@@ -48215,3 +48215,18 @@ end). Everywhere else in these logs, `EXIT=` appears in prompts and in quoted ev
 
 No other change this round: the revision 2 document stands, the queue in the `k2-review` window is still working on it,
 and the three options from CP-2543 remain open with the user.
+
+
+## CP-2547 — bind_row's post-record checks, and where the direct test's refusal most likely sits
+
+Read the lines after `_closed(record, _ROW_FIELDS, "AUDIT_ROW_INVALID")` in `bind_row`. It enforces three more things:
+the head and wrist ids may not be the same acquisition ("the same acquisition in both slots is never a real stereo
+pair"); each id must be a key in `self._acquisitions` ("a row may not be bound to an acquisition the audit never saw",
+`AUDIT_BINDING_UNKNOWN`); and each frame's own `camera` must match the slot it is bound into. So a direct-predicate
+fixture needs ten minted acquisitions **appended**, a seven-field physics row, and a binding whose head id is a head
+frame and wrist id a wrist frame - all of which the earlier attempt did, which means its `AUDIT_ROW_INVALID` came from
+the record's own field checks (`_integer`/`_finite`/`_closed`) rather than from these, and the next attempt should read
+those three helpers' expectations rather than guess again.
+
+The re-review is still running: this round's `tail -1` on `reviews/k2-protocol-recheck.log` is empty, which by the rule
+CP-2546 recorded means no completion marker, so the verdict is not in yet and the log keeps growing.
