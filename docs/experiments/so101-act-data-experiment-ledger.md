@@ -45319,3 +45319,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   with the plan's positives and safety negatives.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD f321259f7;
   goal active.
+
+
+## CP-2403 — `inspect` runs end to end, and the four blockers are exactly the authorized roles
+
+- `read_candidate_registry`'s docstring named the answer: the registry is "the one `inspect_inputs` writes", and
+  `inspect_inputs(source_root, ledger) -> dict` already existed at `first_episode_inputs.py:938`, read-only, selecting
+  nothing by recency and defaulting nothing. So the CLI's `inspect` is now three lines calling it and writing the
+  document - the missing piece was wiring, never a second implementation, which is what CP-2385/CP-2388/CP-2398 kept
+  describing as "candidate discovery to be written".
+- Measured after the rebuild: `act_first_episode inspect --source-root . --ledger <ledger> --output /tmp/cand.json`
+  exits **0** and writes a real registry - `kind ACT_FIRST_EPISODE_INPUT_CANDIDATES`, schema 1, **twelve roles**, and
+  **four blockers**, the first two being `path_policy` and `placement_qc`. Those four are exactly the roles the
+  dispatch's K3 authorization supplies empirical values for, so the remaining E1 work on this axis is to register the
+  landed policy and runtime documents as the approved candidates for them - the plan's "same policy role in both real
+  input registries" - rather than to invent anything.
+- The run also recorded the environment recipe precisely: the entry needs `PYTHONPATH="<worktree site-packages>:<venv
+  site-packages>"` in that order, because the worktree's `so101_demo` must win over the main repo's `build/` shadow
+  while `mujoco` still resolves from the analysis venv at
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/test-venv/lib/python3.12/site-packages`.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's CLI now
+  inspect/prepare/preflight with inspect verified end to end. HEAD 9e3a90106; goal active.
