@@ -46821,3 +46821,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   connected components to completion - after which §6's three states are what get judged.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 0b9e61f94; goal active.
+
+
+## CP-2478 — The catalogue lines up with the endpoint rule exactly
+
+- Its document is exactly `{schema_version, points}` with twenty points, so it passes `_catalog`'s shape checks, and
+  its first point is `id: task_start`, `label: "Task start anchor"`, `cup_position_world_m: [0.02, -0.28, 0.165]` -
+  which is precisely the **start** pose the endpoint rule uses (the same numbers CP-2382's verbatim calculator test
+  asserted), while the final target this session's `run` takes, `[-0.07, -0.23, 0.165]`, is the design's end pose.
+- So the pieces line up without inventing anything: the catalogue names the episode's start, the CLI's seven-value
+  flag carries the end pose the sealed-result adapter validates, and the request selects exactly one of the twenty
+  ids - a single episode through the real Coordinator, Worker and Recorder, which is section 4's requirement rather
+  than a simplification of it.
+- Remaining before the drive, all three now fully specified: the deployment-appropriate provenance verifier (stating
+  what it establishes), the twenty-two-field `PreparedBatch` with `points_path` pointing at this catalogue and
+  `catalog`/`catalog_sha256` from `_catalog`, and the driver that runs the connected components to completion.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 9ad21d509; goal active.
