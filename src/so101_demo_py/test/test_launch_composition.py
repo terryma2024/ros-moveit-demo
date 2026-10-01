@@ -157,7 +157,10 @@ def test_mujoco_scene_setup_receives_the_launch_readiness_budget() -> None:
     scene_setup = stack.scene_setup
 
     assert evaluate_parameters(context, scene_setup._Node__parameters) == (
-        {"readiness_timeout_s": 123.0},
+        # use_sim_time joined this node deliberately: its readiness timeout is a duration on the same simulation clock
+        # everything else in the stack runs on, and a node measuring it against system time was one of the two clocks
+        # whose disagreement the TF listener kept reporting
+        {"use_sim_time": True, "readiness_timeout_s": 123.0},
     )
 
 
