@@ -2641,6 +2641,7 @@ class ProductionBatchComposition:
         supervisor=None,
         broker_command_builder=None,
         container_brokers: bool = True,
+        endpoint_inputs=None,
         provenance_revalidator=None,
         broker_health_client_factory=UnixRpcClient,
         container_runner=subprocess.run,
@@ -2686,6 +2687,10 @@ class ProductionBatchComposition:
         if type(container_brokers) is not bool:
             raise ValueError("CONTAINER_BROKERS_INVALID")
         self._uses_production_broker_container = container_brokers
+        # the endpoint inputs a port needs to judge endpoints: the frozen policy and the final target. Present, the
+        # composition builds a port the coordinator's ACT gate recognises; absent, the generic adapter
+        # keeps its own paths (CP-2796/CP-2800)
+        self._endpoint_inputs = endpoint_inputs
         self.journal = None
         self._startup_stage = "allocator_create"
         self.allocator = WorkerResourceAllocator(
