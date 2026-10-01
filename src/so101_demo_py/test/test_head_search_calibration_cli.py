@@ -2859,3 +2859,109 @@ def test_the_run_entry_observes_the_measured_values_off_the_running_components(t
 
     assert phase_inputs.readback_observer is observe_measured_readbacks
     assert phase_inputs.startup_readbacks is None
+
+
+def test_check_ownership_publishes_a_stack_free_receipt(tmp_path: Path, monkeypatch) -> None:
+    """Step 1's gate is an installed entry: a clean machine is recorded, a second owner is refused."""
+
+    from so101_demo.act import head_search_ownership as ownership
+
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+
+    def observation(name: str, **overrides):
+        fields = {"command": (), "rc": 0, "rows": (), "value": None, "note": ""}
+        fields.update(overrides)
+        return ownership.ResourceObservation(name=name, **fields)
+
+    def clean_observers(**kwargs):
+        return {
+            "process_table": lambda: observation("process_table"),
+            "ros_graph": lambda: observation("ros_graph", value="clean"),
+            "gpu_processes": lambda: observation("gpu_processes"),
+            "tmux_panes": lambda: observation("tmux_panes"),
+            "evidence_root": lambda: observation("evidence_root", value="usable"),
+            "planned_run_root": lambda: observation("planned_run_root", value="absent"),
+            "ament_prefix": lambda: observation("ament_prefix", value="/frozen/so101_demo_py"),
+        }
+
+    monkeypatch.setattr(ownership, "default_observers", clean_observers)
+    run_root = tmp_path / "gate"
+    assert (
+        main(
+            [
+                "check-ownership",
+                "--run-root",
+                str(run_root),
+                "--evidence-root",
+                str(evidence),
+                "--expected-package-prefix",
+                "/frozen/so101_demo_py",
+            ]
+        )
+        == 0
+    )
+    receipt = json.loads((run_root / ownership.RECEIPT_NAME).read_text(encoding="utf-8"))
+    assert receipt["status"] == ownership.EXCLUSIVE_OWNERSHIP_OK
+    assert receipt["refusals"] == []
+
+    def busy_observers(**kwargs):
+        observers = clean_observers(**kwargs)
+        observers["process_table"] = lambda: observation(
+            "process_table", rows=({"pid": 5, "kind": "stack", "command": "move_group"},)
+        )
+        return observers
+
+    monkeypatch.setattr(ownership, "default_observers", busy_observers)
+    other = tmp_path / "gate-busy"
+    assert (
+        main(
+            [
+                "check-ownership",
+                "--run-root",
+                str(other),
+                "--evidence-root",
+                str(evidence),
+            ]
+        )
+        == 2
+    )
+    refused = json.loads((other / ownership.RECEIPT_NAME).read_text(encoding="utf-8"))
+    assert refused["status"] == ownership.EXCLUSIVE_OWNERSHIP_REFUSED
+    assert [item["code"] for item in refused["refusals"]] == ["STACK_OWNER_ACTIVE"]
+
+
+def test_check_ownership_refuses_a_reused_gate_root_and_an_unreadable_runtime(
+    tmp_path: Path,
+) -> None:
+    existing = tmp_path / "gate"
+    existing.mkdir()
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    assert (
+        main(
+            [
+                "check-ownership",
+                "--run-root",
+                str(existing),
+                "--evidence-root",
+                str(evidence),
+            ]
+        )
+        == 2
+    )
+    assert (
+        main(
+            [
+                "check-ownership",
+                "--run-root",
+                str(tmp_path / "fresh"),
+                "--evidence-root",
+                str(evidence),
+                "--final-run",
+                str(tmp_path / "missing-toolchain"),
+            ]
+        )
+        == 2
+    )
+    assert not (tmp_path / "fresh").exists(), "a refused identity must not leave a half-claimed root"

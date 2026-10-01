@@ -1,8 +1,11 @@
-"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, measure-selection-rule, measure-operating-point, verify-promoted-config, qualify.
+"""The formal head search calibration CLI: check-ownership, run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, measure-selection-rule, measure-operating-point, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
-trajectory precondition and the run status live (plan rule 4). Every subcommand refuses a run root that
+trajectory precondition and the run status live (plan rule 4). `check-ownership` is Task 14 Step 1's
+stack-free gate: it reads the process table, ROS graph, GPU processes, tmux panes and evidence root,
+refuses any second owner by name, binds the frozen runtime identity, writes its receipt into a brand-new
+root and starts nothing (`so101_demo.act.head_search_ownership`). Every subcommand refuses a run root that
 already exists, so there is no way to resume or continue a stage. `measure-coarse-step`,
 `measure-mujoco`, `measure-search-timing`, `measure-deadband-candidates`, `measure-camera` and
 `measure-workspace-projection` are the measurement flights the run cannot take itself - the run declares
@@ -40,6 +43,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from so101_demo.act import head_search_ownership as ownership
 from so101_demo.act.head_search_qualification import (
     qualification_parser,
     qualify_head_search,
@@ -2629,8 +2633,88 @@ def _transport_runtime_identity(parsed) -> dict:
     return identity
 
 
+def _ownership_parser() -> argparse.ArgumentParser:
+    """Step 1's entry: the gate root, the campaign root, and the frozen runtime it must match."""
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration check-ownership",
+        description=(
+            "Read the fresh process table, ROS graph, GPU processes, tmux ownership and evidence root, "
+            "refuse any second owner, and bind the frozen runtime of record before a qualifier starts"
+        ),
+    )
+    parser.add_argument("--run-root", type=Path, required=True, help="a brand-new gate root")
+    parser.add_argument("--evidence-root", type=Path, required=True, help="the registered campaign root")
+    parser.add_argument("--planned-run-root", type=Path, help="the qualifier root that must not exist")
+    parser.add_argument("--final-run", type=Path, help="the frozen Task 13 runtime root of record")
+    parser.add_argument(
+        "--production-config", type=Path, help="a promoted config; defaults to the frozen install copy"
+    )
+    parser.add_argument("--expected-source-commit")
+    parser.add_argument("--expected-production-config-sha256")
+    parser.add_argument("--expected-values-sha256")
+    parser.add_argument("--expected-weights-sha256")
+    parser.add_argument("--expected-package-prefix")
+    return parser
+
+
+def _check_ownership(arguments: list[str]) -> int:
+    """Run the stack-free ownership gate, write its receipt, and fail closed on any refusal."""
+
+    parsed = _ownership_parser().parse_args(arguments)
+    if parsed.production_config is not None and parsed.final_run is None:
+        print(
+            "RUNTIME_IDENTITY_UNREADABLE: --production-config is read relative to --final-run",
+            file=sys.stderr,
+        )
+        return 2
+    expected: dict[str, str] = {}
+    if parsed.expected_source_commit:
+        expected["source_commit"] = parsed.expected_source_commit
+    if parsed.expected_production_config_sha256:
+        expected["production_config_sha256"] = parsed.expected_production_config_sha256
+    if parsed.expected_values_sha256:
+        expected["values_sha256"] = parsed.expected_values_sha256
+    if parsed.expected_weights_sha256:
+        expected["weight_sha256_declared"] = parsed.expected_weights_sha256
+    runtime = None
+    if parsed.final_run is not None:
+        # the identity is read before the run root is claimed: a bad runtime must leave nothing behind
+        try:
+            runtime = ownership.read_runtime_identity(
+                parsed.final_run, production_config=parsed.production_config
+            )
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 2
+    try:
+        document = ownership.check_exclusive_ownership(
+            run_root=parsed.run_root,
+            evidence_root=parsed.evidence_root,
+            planned_run_root=parsed.planned_run_root,
+            runtime=runtime,
+            expected_runtime=expected or None,
+            expected_package_prefix=parsed.expected_package_prefix,
+        )
+    except ValueError as error:
+        if "RUN_ROOT_ALREADY_EXISTS" not in str(error):
+            raise
+        print(str(error), file=sys.stderr)
+        return 2
+    if document["status"] == ownership.EXCLUSIVE_OWNERSHIP_OK:
+        print(f"{document['status']} {document['run_root']}")
+        return 0
+    codes = ",".join(str(item["code"]) for item in document["refusals"])
+    print(f"{document['status']} {codes}", file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
+    # Step 1's gate is stack-free and runs before any run root is claimed: it must not be routed through
+    # the qualifier's four-subcommand parser, which owns the runners that do start things
+    if arguments[:1] == ["check-ownership"]:
+        return _check_ownership(arguments[1:])
     # `run` declares the inputs of the eight phases, so its entry is the run module's and not a stub
     if arguments[:1] == ["run"]:
         return _run(arguments[1:])
