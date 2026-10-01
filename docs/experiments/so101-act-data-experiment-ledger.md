@@ -41732,3 +41732,21 @@ operating point 的正式联合搜索（把本 campaign 的临时脚本逻辑**�
 - `run` 的 phase 序列是**固定八段**（§8.2 已列），没有 `--resume`，`run-status.json` 仅供审计。
 
 **下一步**：按上表重写 `docs/superpowers/plans/2026-10-01-so101-head-search-calibration-runtime-plan.md`，再送同一会话复审；**通过前不写实现代码**。
+
+## HS-281 — revision 2 复审判决：仍为 REJECT（五条新 finding），首轮五条中两条已关闭
+
+复审（同一会话、GPT-6.1-Sol high、1m27s）全文存 `$HEAD_EVIDENCE/reviews/task13-runtime-plan/verdict-rev2.md`。
+
+**它确认已修复的**：coarse-step 映射与 admission 规则已改正。
+
+**新的五条（revision 3 必须落实）**：
+
+1. **晋级机制不得被我改写**：仍是 **`apply_patch` 一次 + `verify-promoted-config`**；而且**逐字节比对的对象是"审批 ↔ bundle"，不是"审批 ↔ 已晋级配置"**。
+   ——我在 revision 2 里自造了一个 `promote` 命令并让它在晋级后校验，这与计划 Task 13 Step 3 的机制不符；
+2. **轨迹前置条件必须放在 phase 之外**：在**任何 neck 运动之前**就 gated，并作为正式资格验证的前置；"before phase 6/7 validation"**不够**（我把它放在 §1 规则 7，位置偏低）；
+3. **provenance 仍缺**：显式 **runtime identity**、**生效值强制（effective-value enforcement）**、必需的**受控依赖**、以及**完整的输出产物清单**；
+4. **测试仍缺**：**held-out 微调验证**、**sim-time 提交检查**、以及**任何一次 stop-latency 超限都必须判失败**；
+5. **Step 4 必须显式跑两个完整八 worker 的 source suite**：`so101_demo_py/test` **与** `so101_teleop/test`；写"package gate + source gate"**不够**。
+
+**过程记录**：该复审再次把 scratch 写到 `/root/runtime_plan_review`（证据根之外、我无权读取）；本条判决是我从会话面板回滚区恢复后落盘的。
+**下一版（revision 3）按上述五条重写后再送审；在通过前不写实现代码。**
