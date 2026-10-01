@@ -48277,3 +48277,30 @@ record construction - which is the one part of the method this stretch has never
 `bind_row`'s opening lines with their whitespace made visible, and no further reasoning from memory.
 
 The re-review is still running (`tail -1` empty).
+
+
+## CP-2551 — bind_row's opening is exactly as expected, so the log's line numbers are the suspect
+
+Printed verbatim with whitespace made visible, `bind_row` opens:
+
+```python
+    def bind_row(self, row_index, sim_time_s, head_id, wrist_id, reference_sequence) -> None:
+        self._require_open()
+        record = {"row_index": _integer(row_index, "AUDIT_ROW_INVALID"),
+                  "sim_time_s": _finite(sim_time_s, "AUDIT_ROW_INVALID", nonnegative=True),
+                  "head_acquisition_id": head_id, "wrist_acquisition_id": wrist_id,
+                  "reference_sequence": _integer(reference_sequence, "AUDIT_ROW_INVALID")}
+```
+
+There is no line between `_require_open()` and the record, and CP-2548/2549 established that all four validators accept
+exactly the values the traceback printed as locals. So these lines cannot raise `AUDIT_ROW_INVALID` for this call - and
+that leaves the reading of the log itself as the suspect. The test that produced it was appended to the test module and
+then **withdrawn in the same round**, so its line numbers (`1435`, `1440`) described a file state that no longer
+exists, and the nearby lines shown in the traceback can belong to a different test that happened to sit at those
+offsets.
+
+The honest conclusion is that this stretch has been reasoning about a traceback whose coordinates moved under it, and
+the fix is procedural rather than forensic: next time, run the fixture and read the traceback **from the same run**,
+with the file unchanged between the run and the reading. That is CP-2504's lesson applied to its own evidence.
+
+The re-review is still running (`tail -1` empty).
