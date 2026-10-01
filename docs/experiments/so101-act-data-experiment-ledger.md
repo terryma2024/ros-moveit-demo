@@ -50041,3 +50041,33 @@ That converts E2's quality item from a code change into an **assertion**: the ho
 first-episode chain does not import the measurement contract, so that "quality stopped being a precondition" is a
 measured property rather than a claim about what I happened to read. Together with CP-2639's safety list - the runner's
 codes, all of which stay - that is the checklist E2 was asked to produce, and both halves are now concrete.
+
+
+## CP-2642 — The property is measured; the corroborating scan has a flaw of my own
+
+The first test passes and it is the one that matters:
+
+```
+QUALITY act_first_episode.py -> none
+QUALITY episode_qc.py -> none
+QUALITY episode_audit.py -> none
+QUALITY pick_place_runner.py -> none
+QUALITY recorder.py -> none
+QUALITY result_store.py -> none
+```
+
+So the amendment's claim holds as a **measured** property of the six files that produce, judge and seal an episode: none
+of them imports the process-quality calibration contract, which is therefore not a precondition for success on this
+path.
+
+The second test fails, and the failure is mine: its scan reports `users: []` while a grep plainly shows
+`cli/act_build_task8_calibration_report.py` and `cli/act_measure_task8_calibration.py` importing it. My AST helper
+therefore misses those imports - they are made **inside functions** (`from so101_demo.act.task8_measurement_contract
+import ...` in a function body), and while `ast.walk` does descend into nested nodes, something about how I collect the
+names does not survive that shape. Rather than adjust the assertion until it agrees with my scan, the honest move is to
+fix the scan or to drop the corroborating test - it was never the property under test, and a helper that disagrees with
+`grep` is not evidence.
+
+The next round fixes the helper (the imports are `ImportFrom` nodes with `module` starting
+`so101_demo.act.task8_measurement_contract`, and their `level` may matter) and re-runs both, so the isolation is
+corroborated by a tool that reads the same thing grep does.
