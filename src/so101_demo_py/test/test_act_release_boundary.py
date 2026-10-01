@@ -467,11 +467,31 @@ class _OneFieldFlipped(FakePort):
         super().__init__()
         self._flipped = (phase, flip)
 
-    def _evidence(self, phase, epoch, **overrides):
-        document = super()._evidence(phase, epoch, **overrides)
-        if phase == self._flipped[0]:
+    def _apply(self, phase, document):
+        if document is not None and phase == self._flipped[0]:
             document = {**document, **self._flipped[1]}
         return document
+
+    def _evidence(self, phase, epoch, **overrides):
+        return self._apply(phase, super()._evidence(phase, epoch, **overrides))
+
+    def run_phase(self, phase, request):
+        # the runner reads every phase's evidence through this call (pick_place_runner.py:355), so it is the one
+        # override that has to be here for the release group to be exercised at all
+        return self._apply(phase, super().run_phase(phase, request))
+
+    # the release group's evidence does not come from _evidence: the runner takes it from these builders, so the
+    # override is applied wherever the runner will read it rather than only where the hold group is built
+    def set_down(self, request):
+        return self._apply("FINAL_CHECK", super().set_down(request))
+
+    def release_preflight(self, request):
+        # its own key: the preflight and the release phase are two gates with two codes, so a flip meant for one must
+        # not leak into the other (CP-2813)
+        return self._apply("RELEASE_PREFLIGHT", super().release_preflight(request))
+
+    def run_retreat_segment(self, direction, distance, request):
+        return self._apply("RADIAL_RETREAT", super().run_retreat_segment(direction, distance, request))
 
 
 def test_close_requires_bilateral_contact():
@@ -505,3 +525,39 @@ def test_hold_requires_every_predicate(phase, flip):
 # `release_preflight` (pick_place_runner.py:238), so its negatives need the override applied to those builders
 # instead. Recorded rather than guessed at, because a negative whose flip never reaches the runner passes for the
 # wrong reason and fails for the right one, which is what all twelve cases did here.
+
+
+@pytest.mark.parametrize("flip", [
+    {"holding_state": "EMPTY"},
+    {"cup_supported": False},
+    {"fresh": False},
+    {"planning_attached": False},
+])
+def test_the_release_preflight_refuses_each_predicate(flip):
+    """The first of the release half's two gates: four predicates, code RELEASE_UNSUPPORTED (CP-2813)."""
+    port = _OneFieldFlipped("RELEASE_PREFLIGHT", **flip)
+    with pytest.raises(PickPlaceError, match="RELEASE_UNSUPPORTED"):
+        PickPlaceRunner(port).run(request())
+
+
+@pytest.mark.parametrize("phase", ["RELEASE", "RADIAL_RETREAT"])
+@pytest.mark.parametrize("flip", [
+    {"holding_state": "HOLDING"},
+    {"released": False},
+    {"cup_supported": False},
+    {"no_fingertip_contact": False},
+])
+def test_the_release_phase_refuses_each_predicate(phase, flip):
+    """The second gate: the same four names on the other side of the opening, code RELEASE_NOT_CONFIRMED.
+
+    These flips are keyed to the phase, so the preflight - which the run must pass first - is left exactly as the
+    fixture builds it; that separation is what the earlier attempt lacked when one key served both gates.
+    """
+    port = _OneFieldFlipped(phase, **flip)
+    with pytest.raises(PickPlaceError, match="RELEASE_NOT_CONFIRMED"):
+        PickPlaceRunner(port).run(request())
+
+# FINAL_CHECK is deliberately not in the test above: its four flips failed there, and the reason is that it is not
+# guarded by the release conjunction at all - the run reads it through set_down, whose own checks raise
+# FINAL_PLACEMENT_INVALID (pick_place_runner.py:232). So the release half has not two gates but three, and this one
+# needs its own negatives with its own code rather than being folded in with the phase's.
