@@ -46875,3 +46875,26 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   marker shaped to slip past it.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 789593d98; goal active.
+
+
+## CP-2481 — The precise protocol gap: the composition's broker is container-and-detector shaped
+
+- Answered the question CP-2480 left open. The composition does **not** merely carry those fields: it calls
+  `image_record(self.spec.broker_image)` (3119), builds broker records from `yolo_weights_sha256` and
+  `grounded_manifest_sha256` (2998-2999), and passes `yolo_weights=self.spec.yolo_weights.resolve()` and
+  `grounded_root=self.spec.grounded_root.resolve()` (3133-3134) into the worker's launch.
+- So an absence marker cannot slip past this path - and it should not: the broker this vehicle stands up expects a
+  **container image** and a **detector**, which the amendment explicitly excludes ("do not implement containers"; the
+  milestone is MuJoCo-only). That makes this a genuine **protocol gap** rather than a missing value, and the honest
+  report is the one the plan asks for: the default production composition on this path cannot serve a MuJoCo-only
+  single episode, because its broker requires a perception container that this amendment forbids standing up.
+- What would close it is a composition whose broker is container-free - the design's §4 chain says to use the real
+  Coordinator, Worker and result interfaces in a one-worker configuration, which is exactly what this vehicle does,
+  but its broker half is built around the excluded container. Whether that half can be configured away or needs its
+  own approved design is a question for the coordinator and the user, not something to improvise here; improvising it
+  would be the "second, simplified scheduler or Recorder" the design forbids.
+- Everything on this side of the gap is ready and recorded: the frozen inputs with zero blockers, the endpoint policy
+  and calculator, the guards, the V2 request, the deployment provenance verifier, the environment with RobotSystem
+  activated, and the pinned catalogue whose `task_start` matches the endpoint rule.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 2176ec44e;
+  goal active.
