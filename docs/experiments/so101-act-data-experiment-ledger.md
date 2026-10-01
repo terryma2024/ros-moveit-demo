@@ -43834,3 +43834,25 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Then the four suites. This is the transcription for the next attempt; three values, each measured this round.
 - F1 and F14 closed; F3 closed; F13 three of four; F11 one probe from done; F5's regression fixed; F12 two of
 - three; HEAD a18a65289; goal paused.
+
+## CP-2329 - F11's derivation handed off for good, with three fixtures named and two measured
+
+- Fifth attempt, and the three measured edits worked for the two fixtures they targeted: with _window() at 1.1/1.2
+- and the self-consistent fixture at 1.1/1.1 the suite fell to a single failure -
+- test_a_formal_audit_may_not_seal_without_source_coverage, a THIRD fixture whose window no longer matches its
+- rows. Its rows are unmeasured, so this is the same wall one fixture further along.
+
+- What the next worker has, which this stretch did not start with:
+-   * the relation the verdict asks for: |endpoint - extreme| <= tolerance, replacing enclosure;
+-   * the shared literal: _window() at lines 722-723, with first_command_s 1.0 and physics_end_s 1.2;
+-   * measured histories: the relabelled-coverage fixture's rows are [1.1, 1.2] (support, retract) and the
+-     self-consistent fixture's five rows are all at 1.1; the third fixture's are not yet known;
+-   * the trap: every fixture that seals _window() shares one literal, so satisfying one moves the others, and the
+-     fix is to give each fixture the endpoints its own history supports rather than to tune the shared value.
+
+- The recipe for finishing it: measure the third fixture's rows the same way (one probe, withdrawn in the same
+- run), then set every sealing fixture's window from its own rows in one pass, then apply the derivation.
+- Reverted; green (72 passed plus the artifact suite) and nothing half-applied remains. This stretch moves on to
+- F5's per-kind history, whose correction is equally concrete and whose fixtures are not shared this way.
+- F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed and its derivation handed off here;
+- F5's regression fixed; F12 two of three; HEAD 03135f8a4; goal paused.
