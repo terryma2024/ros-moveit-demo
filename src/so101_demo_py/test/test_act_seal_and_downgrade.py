@@ -17,7 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
 from so101_demo.act.episode_assembly import (EpisodeSink, LiveSampler, PhysicalAuditAdapter,
                                               PointEpisode, ProductionProducer,
-                                              assemble_episode_capture, episode_audit_pair)
+                                              assemble_episode_capture, episode_audit_pair,
+                                              physical_audit_from_captured)
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
 from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
 from so101_demo.act.episode_qc import endpoint_qc_document
@@ -509,3 +510,23 @@ def test_an_episode_sink_takes_frames_only_while_an_episode_is_open(tmp_path):
     assert (episode_root / "seal.json").is_file()
     sink.current = None
     assert sink.record("head", stamp_s=1.1, pixels=frame) is False
+
+
+def test_the_capture_and_the_run_together_supply_exactly_the_thirteen_keys():
+    """The last piece of the wiring: where the audit's thirteen names actually come from (CP-2857/CP-2837)."""
+    captured = {"world": {"step": 7}, "scene": {"objects": []}, "contact": {"held": True},
+                "reference": {"time_s": 2.5, "source": "mujoco", "positions": [0.1, 0.2, 0.3]},
+                "source_stamps_s": {"head": 2.4, "wrist": 2.4}}
+    audit = physical_audit_from_captured(
+        captured, reset_epoch=2, release_epoch=1, release_event=False, release_time_s=0.0,
+        phase="CLOSE", controller_state={"active": True})
+    # exactly the thirteen the recorder's closed channel requires, and no more
+    assert set(audit) == set(PhysicalAuditAdapter.KEYS)
+    assert audit["mujoco_truth"] == {"step": 7} and audit["planning_scene"] == {"objects": []}
+    assert audit["physical_stamps"] == {"head": 2.4, "wrist": 2.4}
+    assert audit["reference_time_s"] == 2.5 and audit["reference_source"] == "mujoco"
+    # and a capture missing one of its seven is refused rather than half-filled
+    with pytest.raises(ValueError, match="CAPTURE_EVIDENCE_MISSING"):
+        physical_audit_from_captured({k: v for k, v in captured.items() if k != "world"},
+                                     reset_epoch=2, release_epoch=1, release_event=False, release_time_s=0.0,
+                                     phase="CLOSE", controller_state={})

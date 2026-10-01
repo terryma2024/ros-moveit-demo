@@ -20,7 +20,8 @@ from .episode_audit import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
-           "ProductionProducer", "assemble_episode_capture", "episode_audit_pair"]
+           "ProductionProducer", "assemble_episode_capture", "episode_audit_pair",
+           "physical_audit_from_captured"]
 
 
 def assemble_episode_capture(
@@ -348,3 +349,35 @@ class EpisodeSink:
         if self.outcome is None:
             raise ValueError("EPISODE_OUTCOME_MISSING")
         return episode.finish(end_s, outcome=dict(self.outcome))
+
+
+def physical_audit_from_captured(captured: dict, *, reset_epoch: int, release_epoch: int, release_event: bool,
+                                 release_time_s: float, phase: str, controller_state: dict) -> dict:
+    """Compose one row's physical audit from a readback capture and the run's own facts.
+
+    The thirteen names the recorder's closed channel requires (CP-2837) come from two places, and this is where they
+    meet. Seven ride on the capture itself - `PickPlacePhysicalReadback.capture` returns them under its own names, and
+    they are the physics and perception facts nothing else can supply: the MuJoCo world, the planning scene, the
+    contacts, the source stamps, and the reference the endpoint rule measures against. The other six are facts about
+    the run rather than about an instant - the two epochs, the release event and its time, the phase the sequence is
+    in, and the controller state - which is why they are arguments here instead of being dug out of the capture.
+
+    Deliberately a pure function: what it does is rename and gather, so it can be tested without a robot, and the only
+    thing it must not do is invent a value it cannot see.
+    """
+    try:
+        world = captured["world"]
+        scene = captured["scene"]
+        contact = captured["contact"]
+        reference = captured["reference"]
+        stamps = captured["source_stamps_s"]
+    except KeyError as error:
+        raise ValueError(f"CAPTURE_EVIDENCE_MISSING: {error.args[0]}") from error
+    return {
+        "reset_epoch": int(reset_epoch), "release_epoch": int(release_epoch),
+        "release_event": bool(release_event), "release_time_s": float(release_time_s),
+        "physical_stamps": dict(stamps), "phase": str(phase),
+        "reference_time_s": float(reference["time_s"]), "reference_source": str(reference["source"]),
+        "reference_positions": reference["positions"], "mujoco_truth": world,
+        "contacts": contact, "planning_scene": scene, "controller_state": dict(controller_state),
+    }
