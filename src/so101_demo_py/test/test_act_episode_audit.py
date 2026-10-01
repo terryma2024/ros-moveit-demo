@@ -1050,11 +1050,12 @@ def test_readback_refuses_a_formal_stream_that_steps_without_a_release(tmp_path)
     document["files"]["episode.json"] = {"path": "episode.json", "size": len(identity_bytes),
                                          "sha256": hashlib.sha256(identity_bytes).hexdigest()}
     document["identity"] = {**identity(), "lease": _lease()}
-    # the stream steps to epoch 1, and no release event names that step (CP-2137/CP-2141)
+    # the stream steps to epoch 2 - later than the episode's declared initial 1 - and no release event names it,
+    # because the declared initial epoch is exempt from transition naming (T3-F3, eighth verdict)
     events_lines = (audit / "events.jsonl").read_text().splitlines()
     events_bytes = ("\n".join(json.dumps({**json.loads(line),
                                            "identity": {**json.loads(line)["identity"], "lease": _lease(),
-                                                        "release_epoch": 1}},
+                                                        "release_epoch": 2}},
                                           sort_keys=True, separators=(",", ":"))
                                for line in events_lines) + "\n").encode()
     audit.joinpath("events.jsonl").write_bytes(events_bytes)

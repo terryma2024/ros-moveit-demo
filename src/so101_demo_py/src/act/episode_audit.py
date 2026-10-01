@@ -1303,7 +1303,15 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             _step = _row["identity"].get("release_epoch")
             if type(_step) is int:
                 _named[_step] = _named.get(_step, False) or _row["kind"] == "release"
-        if any(step > 0 and not seen for step, seen in _named.items()):
+        # T3-F3 (eighth verdict): the episode's declared initial epoch is not a transition and is not required to
+        # be named by a release event; every later epoch still is, which is what a re-signed stream must not skip
+        try:
+            _initial = json.loads((audit / "audit-manifest.json").read_bytes())["identity"]["release_epoch"]
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError):
+            _initial = 0
+        if type(_initial) is not int:
+            _initial = 0
+        if any(step > _initial and not seen for step, seen in _named.items()):
             raise ValueError("AUDIT_EVENT_INVALID")
 
     epoch: int | None = None
