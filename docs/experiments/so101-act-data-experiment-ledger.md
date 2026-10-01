@@ -47559,3 +47559,18 @@ is alive, the marker is absent, and the verdict is collected when it lands rathe
 Next for the approved route: read what a builder must return (the command's shape, where `_start_broker` consumes it)
 and then have the single-episode `run` supply a plain-process broker command, which closes the container-free path and
 lets the composition be driven for real.
+
+
+## CP-2512 — What a container-free builder must return
+
+The default branch builds its command with `container_run_argv(evidence_root, runtime_root=..., runtime_ipc_root=...,
+input_root=..., image_id=..., yolo_weights=..., grounded_root=..., gpu_groups=..., uid=os.getuid(), ...)`, so the
+builder's contract is the **same command shape**, minus everything that only exists because the default route runs a
+container: no `image_id`, no `yolo_weights`, no `grounded_root`, no `gpu_groups` (those are docker's GPU plumbing).
+What a plain-process broker needs is what the broker itself consumes - the evidence root plus the runtime, IPC and
+input roots, and the uid - which the composition already holds as `self.spec.request.evidence_root`,
+`self.broker_runtime_root`, `self.runtime_ipc_root` and `self.broker_input_root`.
+
+The remaining detail is the spawn site: where `command` is handed to the launcher and what shape it expects (argv list
+versus a small record), which is the next read. After that the approved route is complete - a builder returning that
+command - and the composition can be driven with one worker, no container, and every real check intact.
