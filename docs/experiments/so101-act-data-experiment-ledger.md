@@ -47348,3 +47348,25 @@ truncation answers it in the same run as the fixture).
 With CP-2498's rule in hand, the fixture change is then exact: set `collection_start_s`/`collection_end_s` from the
 **acquisition** stamps (0.1 and 1.0 in the 10 Hz version), not from the physics times, unless the physics times turn
 out to share those extremes.
+
+
+### CP-2500 — The physics history is 0.1 through 1.2, and the refusal survives the collection fix
+
+Measuring instead of guessing paid again. The fixture printed the runner's physics times:
+**`[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.9, 1.0, 1.1, 1.2]`** - ten rows, starting at 0.1, ending at **1.2**, with a gap
+from 0.6 to 0.9. So the physics extremes are 0.1 and 1.2, while the acquisitions (and therefore the observed camera
+extremes) are 0.1 and 1.0.
+
+With that known, the fixture was rebuilt to satisfy CP-2498's trailing rule - `collection_start_s = 0.1` and
+`collection_end_s = 1.0` taken from the **acquisition** stamps, `first_command_s = 0.1` and `physics_end_s = 1.2`
+from the physics times - and it **still** returns `AUDIT_WINDOW_INVALID`. So the trailing rule was not the refuser
+either, and the mismatch I named in CP-2498 is real but not decisive.
+
+What that leaves, with every clause now read at least once: the physics history contains a gap (0.6 -> 0.9) that no
+schedule rule looks at, the cameras are a clean 10 Hz grid, and the two remaining unchecked possibilities are a clause
+whose input I have still not printed (the read-style probe of CP-2497 would show them all in one line) or a clause
+that compares the window against something outside this predicate - the freeze's own row admission, which the seal
+performs around this call.
+
+The fixture is withdrawn (tree back to the user's 35 entries, audit suite 74 passed) and the recording above carries
+the physics times verbatim, so the next round starts from a measurement rather than a guess.
