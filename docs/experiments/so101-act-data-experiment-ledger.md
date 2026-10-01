@@ -44789,3 +44789,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   fence in `adapters/act/pick_place_search_segment.py` and the port's observation return in
   `control/planning_scene/task_scene.py`.
 - HEAD d83fa9d0e (the tree's own HEAD is authoritative at implementation time); goal active.
+
+
+## CP-2376 — The hybrid's correct window derived in full, from the two rule sets together
+
+- The contradiction that survived CP-2373/2374 dissolves when the two rule families are solved together:
+  `_window_ok` demands `collection_start_s <= first_command_s <= physics_end_s` **and**
+  `collection_start_s <= physics_end_s <= collection_end_s` with every schedule instant inside
+  `[collection_start_s, collection_end_s]`; `_window_matches_observed` demands `first_command_s` and `physics_end_s`
+  equal the physics history's min and max. Together they force the window's own edges to *contain the run*, which the
+  hybrid's window (borrowed from `_window()`, starting at 1.0) could not do while the run's physics start at 0.1 -
+  `abs(1.0 - 0.1) = 0.9`, far beyond tolerance, which is the refusal no print had shown.
+- The derived, complete window for that fixture, with the acquisitions minted at the run's own instants:
+  `source_schedule = {"head": [0.1, 0.5, 1.0], "wrist": [0.1, 0.5, 1.0]}`, `collection_start_s = 0.1`,
+  `collection_end_s = 1.0`, `first_command_s = 0.1`, `physics_end_s = 1.0`, `label_cutoff_s = 1.0` (the bound row's
+  instant, satisfying `start <= cutoff <= physics`), and the check `cutoff + 0.1 <= physics + tolerance` holds at
+  1.1 against 1.1 exactly.
+- The first attempt at this fixture had the acquisitions at 0.1/0.5/1.0 and was refused for the borrowed window's
+  edges; the later attempts moved the acquisitions to the window instead of the window to the run. The correct
+  direction is the second: **the window describes the run**, which is also what K1's legal-window construction does.
+- Next write: the fixture with that window, one run, then `verify_audit_manifest` - F5's step two.
+- HEAD 03e2d96e2; goal active.
