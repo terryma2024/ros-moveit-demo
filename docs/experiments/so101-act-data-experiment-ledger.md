@@ -51303,3 +51303,36 @@ the next attempt starts from there rather than from a second guess.
 My half-written test was reverted rather than left red: the worktree's `src` count is back to the user's 35 entries, and
 what remains from this round is the knowledge - both refusal codes, their exact conditions, and where the working
 pattern lives.
+
+
+## CP-2694 — The passing-episode recipe, verbatim, and how the downgrade test will use it
+
+`test_act_recorder.py` builds a passing episode like this:
+
+```python
+def outcome(status="PASSED"):
+    return {"status": status, "reason": "complete" if status == "PASSED" else "search_failed",
+            "task8_success": status == "PASSED", "stopped_confirmed": True}
+
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
+                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
+    recorder.append(observation(1.0), (0.,) * 6, audit(1.0))
+    recorder.append(observation(1.1), (0.1,) * 6, audit(1.1, release_epoch=1, release_event=True,
+                                                        reference_positions=(0.1,) * 6))
+    recorder.append(observation(1.2), (0.2,) * 6, audit(1.2, release_epoch=1,
+        release_time_s=1.08, reference_positions=(0.2,) * 6))
+    seal_path = recorder.finish(outcome())
+    assert verify_episode_seal(seal_path)["status"] == "PASSED" ...
+```
+
+Three `append` calls at 1.0, 1.1 and 1.2 satisfy the grid, the earlier of them carries the release epoch and event, and
+the seal comes out `PASSED` with `qc_passed True` and - worth keeping - **`committed is False`**, which is the design's
+third state made explicit in the recorder's own vocabulary.
+
+So the downgrade test writes the same three appends, but with the cup's recorded world pose **mismatching the frozen
+targets** the endpoint policy is given. The episode then still claims `PASSED` - that is the point, since the claim is
+the run's own - while the fresh process's endpoint verdict comes out `FAIL`, and the verifier's returned status must be
+`FAILED`. Both halves are now available: the fixture shape from CP-2692 and this recipe for a genuinely passing episode.
+
+For the record, that is the third shape this stretch has now read before writing (the outcome schema, the grid
+requirement, and the recipe), and the reason the previous attempt was reverted rather than patched.
