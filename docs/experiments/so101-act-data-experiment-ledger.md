@@ -44427,3 +44427,20 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
 - its derivation behind CP-2332; F5's regression fixed with step one landed and step two ten booleans from
 - diagnosis; HEAD 088806046; goal active.
+
+## CP-2359 - The six-term probe is rehearsed and works; the next run is a one-shot
+
+- Instrumented _formal_coverage_ok with a print of the six terms (streams, reference group, release event, phases,
+- kinds, observed), ran it against the EXISTING self-consistent fixture, and read:
+-   PROBE1 streams: True  PROBE2 refgroup: True  PROBE3 release: True  PROBE4 phases: True  PROBE5 kinds: True
+-   PROBE6 observed: True
+- with the test itself passing. So the instrumentation is correct, the print names each term, and the module was
+- restored immediately afterwards (zero dirty entries).
+- That turns F5's step two into a mechanical one-shot for the next context: paste this same instrumentation, re-add
+- the runner-backed fixture as CP-2342 describes, run it once, and the line that prints False is the clause the
+- hybrid fails - after which the fix is one edit and the four suites.
+- The four guards CP-2357 enumerates are not in this print; if all six read True on the hybrid, the next print widens
+- to those four, which the same instrumentation pattern covers.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+- its derivation behind CP-2332; F5's regression fixed with step one landed and step two one rehearsed probe from
+- diagnosis; HEAD b737c1c65; goal active.
