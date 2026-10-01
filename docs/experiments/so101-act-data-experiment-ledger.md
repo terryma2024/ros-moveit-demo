@@ -53381,3 +53381,28 @@ survive - the print and the call do not see the same values (the attributes may 
 the code I am reading is not the code that ran (the plan root's `pypath` overlay is a copy, and this stretch has been
 bitten by that before). The second is checkable in one command and, given the history, worth checking before another
 round of reading.
+
+
+## CP-2781 — The overlay is ruled out, the stale assignments removed, and the verifier's pair is the last unknown
+
+Two checks this round, both decisive in their own way:
+
+**The overlay is in sync.** All four files this chain touches - `result_store.py`, `recorder.py`, `continuous_capture.py`,
+`episode_audit.py` - are byte-identical between the worktree's source and the plan root's `pypath` copy. So the code I read
+is the code that runs, and the alternative explanation of CP-2780's contradiction is eliminated.
+
+**The stale assignments were the contradiction.** The test was setting `verifier.audit_manifest` and `verifier.scope` to
+the *pre-publish* paths after constructing the verifier with the post-publish ones - so the store's verification saw files
+(and printed `True`), while the verifier later looked at paths the publish had moved. Removing those two assignments is
+correct, and with the constructor's pair in force the refusal is now `FileNotFoundError` → `AUDIT_MANIFEST_INVALID` for the
+verifier's path.
+
+Which leaves one honest unknown rather than a contradiction: the published location is
+`<workspace>/sealed/episode/audit/…` as measured (CP-2774), `store.seal` returns the `sealed` directory, and yet the pair
+the verifier holds does not resolve. The instrument is the one that worked last time - print the two paths the verifier
+holds and the tree that exists after the seal - rather than another inference from paths computed elsewhere.
+
+For the record, the chain's state: correction 2's test passes throughout; four production changes are uncommitted (the
+acquisition stream from frames, bindings where rows are recorded, the store supplying the v2 pair at three sites, and the
+audit writer accepting an existing episode root); and the store still carries a temporary print that will be removed with
+the fix.
