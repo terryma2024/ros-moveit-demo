@@ -1661,6 +1661,7 @@ def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
     composition = ProductionBatchComposition(
         spec, resource_probe=Probe(), claim_root=scratch / "race-claims",
         supervisor=Supervisor(), broker_command_builder=lambda _owner: ("broker",),
+        container_brokers=False,   # the bare host program `broker` is not a container (CP-2684)
         broker_health_client_factory=HealthClient,
     )
     ready = {
@@ -3160,6 +3161,7 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
         broker_command_builder=lambda owner: (
             "broker", str(owner.broker_spec_path),
         ),
+        container_brokers=False,   # the bare host program `broker` is not a container (CP-2684)
     )
     composition.coordinator.register_worker("worker-01", generation=1)
     old_process = composition._start_broker()

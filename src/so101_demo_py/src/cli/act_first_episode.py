@@ -299,7 +299,10 @@ def _run(arguments) -> int:
         provenance=provenance, manifest=manifest,
         provenance_inputs=provenance_inputs, provenance_verifier=_nonhead_provenance,
         start_guard_evidence=None, resume=False)
-    composition = ProductionBatchComposition(spec, broker_command_builder=_broker_command)
+    # this route runs the broker as a host process beside the run, so its spec names the host copy of the runtime
+    # config rather than the container mount (CP-2680/2681)
+    composition = ProductionBatchComposition(spec, broker_command_builder=_broker_command,
+                                             container_brokers=False)
     # the drive, exactly as the batch path does it: the composition runs itself, its summary becomes an outcome
     # document, and the document is written as the aggregate beside the run's own evidence
     from so101_demo.cli.mujoco_parallel_batch import _run_with_shutdown_signals, _write_json, outcome_document

@@ -2640,6 +2640,7 @@ class ProductionBatchComposition:
         worker_launcher=None,
         supervisor=None,
         broker_command_builder=None,
+        container_brokers: bool = True,
         provenance_revalidator=None,
         broker_health_client_factory=UnixRpcClient,
         container_runner=subprocess.run,
@@ -2679,7 +2680,12 @@ class ProductionBatchComposition:
             manifest_path=spec.request.evidence_root / "owned-processes.json",
         )
         self._container_runner = container_runner
-        self._uses_production_broker_container = broker_command_builder is None
+        # the spec is written before any builder runs (3002 vs 3110), so this cannot be inferred from the command:
+        # it is declared, defaulting to the repository's long-standing container route, and the container-free CLI
+        # path says otherwise explicitly (CP-2680/2681)
+        if type(container_brokers) is not bool:
+            raise ValueError("CONTAINER_BROKERS_INVALID")
+        self._uses_production_broker_container = container_brokers
         self.journal = None
         self._startup_stage = "allocator_create"
         self.allocator = WorkerResourceAllocator(
