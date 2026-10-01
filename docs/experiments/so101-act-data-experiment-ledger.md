@@ -43707,3 +43707,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - whose verdict text is equally concrete, and this item returns with the threading design above.
 - F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
 - F12 two of three; F13 narrowed; HEAD a1dc4c646; goal paused.
+
+## CP-2320 - F13: the observer's verdict now fences the broker's reference store
+
+- _reference offered the frame to the observer only after writing _references, _reference_names and
+- _reference_sequences, and ignored accept() returning False - so a source-floor or ordering rejection did not
+- stop the frame from becoming this epoch's cached measurement. The observer is now consulted first, inside the
+- same lock, and a rejected frame returns without storing anything. GREEN 215 passed.
+- F13's remaining items: the delayed-callback fence the verdict asks for beyond bookkeeping, the audit's feedback
+- collections still accepting arm-only or repeated controller kinds, and scene production, which stays behind the
+- owner's CP-2285 ruling.
+- F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
+- F12 two of three; F13 one of four; HEAD 17094b51f; goal paused.
