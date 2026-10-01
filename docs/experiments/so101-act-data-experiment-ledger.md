@@ -44498,3 +44498,20 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
 - landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two's seal-side blocker
 - fixed here; HEAD ccebea374; goal active.
+
+## CP-2363 - The tenth clause: the initial epoch was read from a file that does not exist at seal time
+
+- Found by elimination after CP-2362 removed the ninth clause: the two phase lists are IDENTICAL (runner PHASES and
+- audit FORMAL_PHASES, same nine in the same order), so the completion clause held; the six coverage terms and the
+- writers tie all read true. What was left is that the coverage predicate's epoch clause reads the declared initial
+- epoch from audit-manifest.json - a file the writer only creates WHEN it seals. At seal time the read fails, initial
+- falls back to 0, and then every positive epoch looks unnamed: the hybrid's rows carry the ports literal epoch 1
+- while the release event names 2, so 1 > 0 and unnamed, and the seal refuses with a coverage code.
+- The fix reads whichever of audit-manifest.json and the episode's own identity is present, so the declared initial
+- epoch is known at both boundaries. GREEN 204 passed, wider gate recorded.
+- Expected effect: the hybrid should now seal past this clause, leaving only fixture details - to be confirmed by
+- re-adding the fixture, which is one run. That also explains the whole CP-2352..CP-2361 sequence: ten checks
+- apparently true against a refusal, because the eleventh check lived in a file that did not exist yet.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
+- landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two's seal-side blockers
+- both fixed (CP-2362, CP-2363); HEAD 7fc5f9e18; goal active.
