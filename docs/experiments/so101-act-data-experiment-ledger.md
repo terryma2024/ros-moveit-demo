@@ -50734,3 +50734,28 @@ outcome the recorder's `finish` expects, which the layer above supplies.
 
 That makes the first of the reviewer's corrections a small, localised change with a named place: one call in
 `finish`, carrying the manifest and the scope, proven by a test that seals a v2 episode and verifies it.
+
+
+## CP-2672 — The three facts: the audit is an object nobody seals, and the capture holds no scope
+
+Read rather than guessed, as promised:
+
+1. **`self.audit` is the `EpisodeAuditWriter` object**, not a path: `:308` calls
+   `self.audit.append_source("references", {...})` when a reference is wired. And **nothing in the module calls
+   `self.audit.seal(...)`** - so the capture writes rows into the episode audit and never seals it. The audit's own
+   sealing step is missing too, which is the same "sealing side unwired" picture at one level lower.
+2. **`_tail_paths()` (`:460`) returns the per-row writer's paths** - it calls `self.audit_writer(row["observation"],
+   row["audit"])` (466) and collects what that returns - so it is not the audit manifest either.
+3. **The capture holds no scope**: the word does not appear in the module at all, so the scope document the seal must
+   name has no route into it today.
+
+So the first of the reviewer's corrections is not one call but a short sequence, and now it is fully specified:
+
+- the constructor gains the **scope** (the freezer's document, or its path), beside `audit`;
+- `finish` seals the audit it has been writing into - `self.audit.seal(window)` - taking the manifest path that call
+  returns;
+- and then finishes the recorder with **both**: `recorder.finish(outcome, audit_manifest=<that path>, scope=<the scope>)`,
+  where `outcome` also has to be supplied, since `finish(physical_end_s)` does not carry one.
+
+Every one of those four facts - the audit object, the absent seal, the tail paths' meaning, and the absent scope - came
+from reading, and the two mistakes this stretch made by writing first are why that order is now the rule.
