@@ -51,9 +51,3 @@ start_guard:
   ram_minimum_bytes: 1073741824
   ram_minimum_fraction: 0.05
   gpu_minimum_bytes: 1073741824
-
-# The amendment's two resource hard stops, made explicit in the controlled runtime configuration rather than
-# chosen between historical candidates (design section 5.1): the RTF floor and the free-disk floor.
-hard_stops:
-  rtf_min: 0.90
-  disk_free_min_bytes: 53687091200
