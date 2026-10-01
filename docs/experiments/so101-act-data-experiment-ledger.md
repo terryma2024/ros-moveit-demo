@@ -43546,3 +43546,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Next: read the five residual bodies in full, then repair in dependency order, with F5's epoch regression first
 - because this ledger introduced it; F1 and F14 stay untouched.
 - HEAD 27817b926; goal paused.
+
+## CP-2308 - F5's regression fixed: the declared initial epoch is exempt, later epochs stay fenced
+
+- The eighth verdict's F5 residual said it exactly: the relation this ledger added at CP-2292 required every physics
+- epoch to appear in named_epochs, which contains only release-event epochs, so an episode whose physics starts at
+- its declared initial epoch was rejected - a regression against normal histories, and mine.
+- The rule now reads the episode's declared release_epoch from the audit manifest's identity, exempts it from
+- transition naming, and keeps fencing every later epoch plus the non-decreasing sequence. Missing or malformed
+- identity falls back to zero, which is the conservative reading. GREEN 204 passed, wider gate recorded.
+- F5's other half stands as the verdict describes: the per-kind check accepts a single row per kind with equal
+- timestamps, and the retained positive artifact is still the preset FORMAL_PHASES summary, so the runner-backed
+- fixture (CP-2293's hybrid) remains the fix for coverage and for the summary artifact alike.
+- F1 and F14 closed by the eighth verdict; F3/F5/F11/F12/F13 narrowed; HEAD 959f2989f; goal paused.
