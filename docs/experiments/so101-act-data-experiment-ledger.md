@@ -44641,3 +44641,21 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's divergence fixed with its
   alignment landed and its derivation waiting on K1's rewrite; F5's regression fixed, step one landed, step two past
   the coverage gate; HEAD 63fd6817d; goal active.
+
+
+## CP-2369 — K1 landed: coverage and window each own a negative on a legal camera window
+
+- `test_coverage_owns_a_missing_record_while_the_window_stays_valid`: builds `_self_consistent_formal`, seals it and
+  verifies the manifest (the positive path), then empties `physics.jsonl` **while the camera schedule and the window
+  it supports stay valid** - and the readback reports `AUDIT_FORMAL_COVERAGE_INCOMPLETE`. The first attempt emptied
+  `references.jsonl` instead and hit `AUDIT_BINDING_REFERENCE_INVALID`, because the row binding resolves that
+  reference; emptying the physics history is the record coverage needs and the binding does not.
+- `test_a_window_naming_an_unacquired_instant_is_refused_as_a_window`: seals a window whose head schedule names 1.15,
+  an instant no acquisition holds, and the seal reports `AUDIT_WINDOW_INVALID`.
+- Both run in the same suite as the audit's 74 tests, GREEN 206 passed with the wider gate, and the JUnit/rc pointer
+  is `logs/task3-k1-negatives.run` under the plan root. What the plan asks for beyond this is the positive proven
+  through a **fresh process** and, for the runtime half, the real producer - which is the hybrid route already past
+  its coverage gate (CP-2368).
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's divergence fixed with its
+  alignment landed and its derivation waiting on the K1 window knowledge; F5's regression fixed, step one landed,
+  step two past the coverage gate with the window next; HEAD 55cc7029d; goal active.
