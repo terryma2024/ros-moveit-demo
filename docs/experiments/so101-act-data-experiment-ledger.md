@@ -54412,3 +54412,30 @@ E3 has the assembly it needs to run under the frozen inputs after a `FULL_RESTAR
 
 This is the largest instance yet of the pattern that produced nine fixes this stretch - a component written to its
 contract, and no caller - and it is the last one between this milestone and its objective.
+
+
+## CP-2820 — Correction to CP-2818/CP-2819: the synchronizer IS wired, and my grep was truncated
+
+```
+src/adapters/act/pick_place_sources.py:10    from so101_demo.act.synchronizer import RgbObservationSynchronizer
+src/adapters/act/pick_place_sources.py:63            self.rgb = RgbObservationSynchronizer(
+src/adapters/act/ros_observation.py:76               self.synchronizer.push(stream, self.session_id, stamp, pixels, ...)
+```
+
+So the real producer **is** constructed in production and **is** fed frames by the ROS observation adapter. My previous two
+entries said nothing in `src/` constructs it, and that was wrong: the grep that produced it was piped through `head -4`,
+which showed four unrelated `DeviceSynchronizer` lines from the perception benchmark and cut off before
+`pick_place_sources.py:63`. Same failure mode as CP-2788's "the failing test never reaches it" - a truncated read
+promoted to a conclusion - and the second time in this stretch it has happened to me.
+
+What is actually true, and worth stating precisely:
+
+- the **producer side is wired**: the synchronizer is built in the adapter layer and pushed to from the observation
+  adapter, which is where frames and stamps come from;
+- the **capture side is not**: `ContinuousEpisodeCapture` still has no production caller (that part of CP-2818 stands - I
+  checked it with a full-package search, not a truncated one);
+- and the file that builds the synchronizer, `adapters/act/pick_place_sources.py`, is one of the seven the coordinator is
+  editing in parallel, so it is off limits to me by the standing rule.
+
+So the missing wire is narrower than I wrote: it is the capture side only, and it has to be built where the episode path
+already holds a synchronizer - or given one from the adapter that builds it, without touching that file.
