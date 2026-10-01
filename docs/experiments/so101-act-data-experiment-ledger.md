@@ -50090,3 +50090,27 @@ quality contract), already passes and is unaffected: it names concrete files tha
 Worth stating plainly for the record: this is the third time the `pypath` overlay has shaped an observation in this
 stretch (CP-2439/2451, and now here), always as a difference between what the source tree says and what the running copy
 does. Reading which copy a result came from is now a reflex worth naming in the ledger.
+
+
+## CP-2644 — The mode check, verbatim, and why the negative is cheap to write
+
+```python
+    manifest = json.loads((inputs / "inputs-manifest.json").read_bytes())
+    if manifest.get("mode") != arguments.mode:
+        print(f"act_first_episode: the frozen set was prepared for {manifest.get('mode')!r}, "
+              f"not {arguments.mode!r}", file=sys.stderr)
+        return 2
+```
+
+So the CLI refuses a run whose `--mode` disagrees with the frozen set, prints which mode the set was prepared for, and
+returns 2 - and it does so **before** the `--final-cup-pose` handling, so the refusal is about the mode and not about a
+missing argument.
+
+That makes the plan's last listed negative - "diagnostic turned formal" - cheap and honest to test: write a minimal
+`inputs-manifest.json` carrying `mode: preselected_target_diagnostic` into a temporary directory, call the CLI's `main`
+with `--mode formal`, and assert `rc == 2` with the printed reason naming the frozen mode. No fixture reaches outside
+the worktree and no behaviour is mocked, because the check reads only that one document.
+
+With that, seven of the plan's eight negatives are covered or asserted, and the remaining one - "safety stop but the
+endpoints match" - is a question about what the QC may claim rather than about what it computes, which the design
+settles in its own words: the seal's status is a claim, and the independent verdict is what a fresh process recomputes.
