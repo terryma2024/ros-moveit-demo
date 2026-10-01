@@ -52487,3 +52487,34 @@ of E2's corrections are proven end to end on real components.
 The uncommitted edits in the chain-test file now stand at five alignments, each asserted after application, each having
 moved the failure one level deeper - from `EPISODE_SCOPE_INVALID` through `EPISODE_SEAL_AUDIT_EPISODE_MISMATCH`,
 `EPISODE_TIME_GAP`, `EPISODE_SEAL_ROWS_MISMATCH` and now to this.
+
+
+## CP-2744 — The adapter's exact shape, from the callers that already use it
+
+```
+    writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id, ...)        test_act_episode_audit.py:73
+    writer.bind_row(0, 1.0, frame.acquisition_id, "s/1/wrist/1", 1)           :122
+    writer.bind_row(0, 1.0, head.acquisition_id, wrist.acquisition_id, 1)     :138
+```
+
+Three existing callers, and they agree: the row index starts at 0 and counts up; the instant is the row's `sim_time_s`;
+the two identifiers are the acquisitions' own; and `reference_sequence` is **1** for a single accepted reference, which is
+exactly the case here.
+
+So the callback the capture needs is six lines:
+
+```python
+def audit_writer(observation, audit):
+    index = len(bound)
+    bound.append(index)
+    audit_writer_target.bind_row(index, observation["sim_time_s"],
+                                 audit["head_acquisition_id"], audit["wrist_acquisition_id"], 1)
+```
+
+where `audit_writer_target` is the same `EpisodeAuditWriter` that seals, and the identifiers are available precisely
+because the capture keeps them in the row's audit even though it strips them from the recorder's channel (the fix
+committed as b47532954 puts that separation in place, and this adapter is what it was for).
+
+That is the last piece of the chain, and with it the seal's rows and bindings should agree, `EPISODE_SEAL_ROWS_MISMATCH`
+should disappear, and both of E2's corrections will be proven end to end on real components - a capture, a recorder, an
+audit writer, a seal, a verifier and the endpoint QC, all of them the production classes.
