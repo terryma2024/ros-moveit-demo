@@ -1122,6 +1122,14 @@ class ParallelWorkerRuntime:
             self._paused_for_inference.add(key)
         return gate
 
+        # the episode begins here: whoever holds the frozen inputs and the episode's own root opens it (CP-2857), and
+        # the reset boundary this gate was given is the instant it starts at. Optional by design, so a runtime without
+        # the port keeps working exactly as before.
+        if self._open_episode is not None:
+            episode = self._open_episode(lease)
+            if episode is not None:
+                episode.start(boundary)
+                self._episode_state[key] = episode
     def reset_and_validate_point(self, lease: Any):
         receipt = self.reset_point(lease)
         return receipt, self.point_initial_gate(lease, receipt)
