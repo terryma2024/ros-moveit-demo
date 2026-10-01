@@ -49416,3 +49416,28 @@ nothing enters a payload unclassified.
 
 This is the same shape as the other two pieces: a measured addition to a closed set, where the measurement is what keeps
 the edit to one pass instead of two.
+
+
+## CP-2612 — The three payload categories are not the same kind of object
+
+```
+95: _EVENT_STRINGS = {"phase": "phase", "reason": "reason", "owner": "dispatch", "permit_id": "accept"}
+96: _EVENT_FLAGS = {"stopped_confirmed", "table_contact", "supported", "no_fingertip_contact",
+                    "placement_stable", "retreat_stable"}
+98: _EVENT_COUNTS = {"left_contacts", "right_contacts"}
+```
+
+`_EVENT_STRINGS` is a **dict** - key to the kind that owns it, so a string key is declared per kind - while the other two
+are plain sets. That is why the third piece's `_EVENT_STRINGS | frozenset(...)` raised
+`TypeError: unsupported operand type(s) for |: 'dict'...`: the union was applied to a mapping. The revert was immediate
+and the tree is back to zero `k2_` markers with both suites green.
+
+It also tells me exactly how to write the edit: K2's string keys go into that dict as entries
+(`"apply_event_id": "k2_apply"`, `"query_id": "k2_query"`, `"receipt_id": "k2_receipt"`), while `accepted` joins the
+flags set, the two byte counts join the counts set, and the new float and nullable-string categories are new objects of
+their own. The kind-level key check is already enforced elsewhere - `set(payload) == _EVENT_PAYLOADS[kind]` - so the
+dict's role here is membership, which the `in` test in `_payload_typed` gives it.
+
+Two failed attempts on this one piece, both caught before any harm, both recorded: the acquisition producer being left
+out of the ordering edit, and the union applied to a mapping. The remedy each time was the same - read the literal,
+then write.
