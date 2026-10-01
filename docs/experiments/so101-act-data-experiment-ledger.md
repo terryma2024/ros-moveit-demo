@@ -50448,3 +50448,37 @@ What happens next is a separation, not a guess: list all 129 failures by file, s
 changed surface (the audit, the result store, the runner, the composition, the CLI) from the ones that belong to the
 user's own untracked tests, and fix only mine. The prediction recorded in CP-2658 - that the failures would be the
 user's files - is **falsified** by these names, which is worth saying plainly.
+
+
+## CP-2660 — The 129 failures are dominated by the Task-8 suites, so a baseline is required
+
+The classification:
+
+```
+ 32  test_act_task8_readback.py
+ 18  test_act_task8_motion_phases.py
+ 10  test_act_task8_bottom_io_geometry.py
+  7  test_act_task8_contact_pairs.py
+  6  test_act_task8_search_boundary.py
+  5  test_act_task8_case_documents.py
+  5  test_act_execution_stack_launch.py
+  4  test_act_task8_sealed_artifact.py
+  4  test_act_task8_planning_scene_port.py
+  3  test_act_task8_sealed_raw_sources.py, test_act_task8_nine_phase_case.py,
+     test_act_task8_full_case_joined_chain.py, test_act_task8_close_execution.py
+  2  test_parallel_adaptive_pool.py ...
+```
+
+and both spot-checked files - `test_act_task8_readback.py` and `test_parallel_batch_cli.py` - are **tracked**, so the
+user's untracked tests are **not** the explanation CP-2658 predicted. These are assertion failures, not the collection
+errors a missing overlay produces, and they cluster in the Task-8 family - readback, motion phases, sealed artifacts,
+case documents - which is precisely the neighbourhood of the audit's schema, the result store and the runner.
+
+So the question is now a measurement rather than an opinion: were these failing **before** this stretch's changes? The
+cheapest honest baseline is to check out the audit module as it stood at an earlier commit - the changes are all
+committed, so `git checkout <commit> -- <path>` gives a real baseline - and run one failing suite against it. If it fails
+identically, the failures are pre-existing and the working tree's state, not mine; if it passes, my change is the cause
+and the fix is mine to make.
+
+Nothing is hidden by this: the ledger records that my gate was too narrow (CP-2659), that my prediction was wrong
+(CP-2660), and that the next action is the baseline that decides between the two explanations.
