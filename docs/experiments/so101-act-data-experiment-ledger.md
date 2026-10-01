@@ -47430,3 +47430,17 @@ stretch's many commits to that module, and a stale copy would explain a check th
 The diff between the two copies is printed beside this entry, and the test was withdrawn (tree back to the user's 35
 entries, audit suite 74 passed). If the copies differ, refreshing the overlay is a one-command fix that unblocks the
 fifteen-line direct test; if they are identical, the refusal must be read from the module's own line numbers instead.
+
+
+### CP-2505 — The refusal is in the writer `_formal_writer` builds, not in the kind list
+
+Two measurements settle the contradiction of CP-2504. The test file is 1421 lines long, and the traceback named line
+1435 - which is inside the test I had just appended, at exactly the offset of its `append_source("physics", ...)` call.
+And the overlay copy is in sync with the source, whose `SOURCE_KINDS` is `("events", "references", "physics")`. Both
+facts together mean the kind was valid and the call was mine, so the refusal must come from the writer object rather
+than from the kind list: `_formal_writer` builds a writer whose accepted source kinds are narrower than the module's,
+or it wraps `append_source` with its own check.
+
+The next read is therefore `_formal_writer` itself, one grep away, and the fifteen-line direct test follows immediately
+after - using whatever physics-source route that helper's writer actually offers (a construction the suite's other
+formal fixtures already use, since they append physics rows successfully).
