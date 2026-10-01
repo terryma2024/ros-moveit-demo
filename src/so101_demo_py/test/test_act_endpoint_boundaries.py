@@ -1,0 +1,50 @@
+"""E2: the initial endpoint sample must come from after the reset and before the gripper dispatch (CP-2620)."""
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from so101_demo.act.pick_place_runner import PickPlaceRunner
+from so101_demo.act.episode_audit import EpisodeAuditWriter
+from test_act_episode_audit import scope, _lease
+from test_act_release_boundary import FakePort, request as boundary_request
+
+
+def _sealed(tmp_path):
+    """Run one episode through the fake port with a real audit, and return the rows it wrote."""
+
+    # the audit's identity is built from the request the run will receive, so the two agree by construction
+    # rather than by relaxing the identity check the audit performs (CP-2621)
+    tmp_path.mkdir(parents=True, exist_ok=True)   # as the audit suite's own writer helper does
+    request = boundary_request()
+    audit_scope = dict(scope(), mode="formal")
+    identity = {"session_id": request["session_id"], "attempt_id": request["attempt_id"],
+                "reset_epoch": 1, "release_epoch": 1, "scene_id": audit_scope["scene_id"],
+                "seed": audit_scope["seed"], "mode": audit_scope["mode"]}
+    lease = _lease(attempt_id=request["attempt_id"])
+    audit = EpisodeAuditWriter(tmp_path / "formal", audit_scope, {**identity, "lease": lease},
+                               {"inputs_sha256": "a" * 64})
+    PickPlaceRunner(FakePort(), audit=audit).run(request)
+    return audit
+
+
+def test_the_first_cup_pose_precedes_the_gripper_dispatch(tmp_path):
+    audit = _sealed(tmp_path)
+    rows = [json.loads(line) for line in (tmp_path / "formal" / "audit" / "physics.jsonl").read_text().splitlines()]
+    events = [json.loads(line) for line in (tmp_path / "formal" / "audit" / "events.jsonl").read_text().splitlines()]
+    pose_rows = [row for row in rows
+                 if isinstance(row.get("observation"), dict)
+                 and ("cup_position_world_m" in row["observation"] or "cup_position_m" in row["observation"])]
+    close_rows = [row for row in rows if row.get("kind") == "pose" and row.get("sequence") is not None]
+    close_event = [event for event in events
+                   if event.get("kind") == "phase_complete" and event["payload"].get("phase") == "CLOSE"]
+    print("BOUNDARY poses:", len(pose_rows), "| first pose task_sequence:",
+          pose_rows[0]["task_sequence"] if pose_rows else None,
+          "| CLOSE task_sequence:", close_event[0]["task_sequence"] if close_event else None)
+    assert pose_rows, "the run wrote no cup pose at all"
+    assert close_event, "the run recorded no CLOSE phase"
+    # the design's initial sample means "after the reset and before the arm-gripper dispatch", which holds exactly
+    # when the first pose row precedes the CLOSE phase in the single task-level order
+    assert pose_rows[0]["task_sequence"] < close_event[0]["task_sequence"]
