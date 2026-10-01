@@ -55322,3 +55322,39 @@ found it is expensive and the implementation is mechanical:
 bash-sourced-setup trap produces ~186 false failures).
 
 This is the whole of what remains between the objective and a recorded episode on the production path.
+
+
+## CP-2858 — The full package gate, and why its 79 failures are not from this work
+
+Loaded the `so101-dev` skill as the repository rules require before further SO-101 changes, and it immediately named a gap
+in my practice: I had been running file subsets, while the gate is the **whole** `src/so101_demo_py/test/` package under
+`pytest-xdist` with `min(8, CPUs)` workers, recording CPU count, worker count, scope, exit code, JUnit and skips. Ran it
+that way:
+
+```
+cpus=32  workers=8  scratch=<evidence root>/experiments/nonhead-first-episode-plan.hKhvkON3/scratch/nonhead-tests.04kxmzyy
+TMPDIR/TMP/TEMP inside that scratch, verified by tempfile.gettempdir()
+rc=1   79 failed, 6041 passed, 163 skipped, 17 warnings in 85.36s   junit 1272551 bytes
+```
+
+The failures are concentrated and none of them is mine: 18 in `test_act_task8_motion_phases`, 6 in `test_act_task8_search_boundary`,
+5 in `test_act_task8_case_documents`, and smaller groups in the other task8 files, all reporting that
+`PickPlaceSearchBoundary` has no `search` or no `_gate_facts`; and 16 in `test_controller_reservation_client` on an event wait.
+
+Checked rather than assumed, and the first guess was wrong in an instructive way: the file is **not** dirty, and both the
+source and the worktree install copy **do** have `search` (1) and `_gate_facts` (3) - so this is not the stale-install
+problem that explained the `use_sim_time` mystery. What it is: the coordinator's own three most recent commits on this
+branch (`cf6ab45ba`, `86d25f51b`, `afd61fbcb` - "derive the controller-reference gate from the verifier's proof", "derive
+the planning gate so the boundary helper asserts none", "control the boundary's last two gates...") are mid-migration,
+moving gates into the verifier's proof, and the tests have not caught up yet.
+
+**HEAD is `a156a66d9` - my last commit - and all ten of this stretch's commits are ancestors of it** (`ca70535e9`,
+`9cdb5742a`, `c135e39d1`, `0d1f8e7f6`, `6dfb928c3`, `101489a72`, `822aa8d1a`, `74d75333b`, `3ef81cdc4`, `5a7095096`,
+`a156a66d9`), verified with `git merge-base --is-ancestor` rather than by reading the log. Nothing of this work was
+overwritten.
+
+Half the round budget is gone at this checkpoint. The recording wiring is five of six pieces in - the per-episode state,
+`PointEpisode`, the `open_episode` port, the frame push, and the seal at the terminal capture, all committed with their
+suites green - with only the extraction behind `physical_audit` still to write, deliberately raising
+`EPISODE_EXTRACTION_PENDING` until then. The objective's endpoint still needs the coordinator's own two steps (kill the
+stuck launch, re-run) because no episode can be recorded until a run produces one.
