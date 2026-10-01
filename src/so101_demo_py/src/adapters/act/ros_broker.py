@@ -222,15 +222,20 @@ class RosBrokerDriver:
         if len(velocities)!=len(NAMES[kind]) or not 0<=stamp:return
         with self._lock:
             received=self.monotonic()
+            # T3-F13 (eighth verdict): the observer owns the source floor and the ordering fence, and its verdict
+            # was ignored - so a frame it rejected still landed here. The frame is offered first, and a rejected
+            # one is not a measurement this epoch holds.
+            _observer=getattr(self,'_reference_frames',None)
+            if _observer is not None and _observer.accept(
+                    kind,message,received_monotonic_s=received) is False:
+                return
             self._references[kind]=(values,velocities,received,stamp)
             if not hasattr(self,"_reference_names"):
                 # a driver built without __init__ (restores, focused tests) still keeps this history
                 self._reference_names={};self._reference_sequences={}
             self._reference_names[kind]=tuple(message.joint_names)
             self._reference_sequences[kind]=self._reference_sequences.get(kind,0)+1
-            observer=getattr(self,'_reference_frames',None)
-            if observer is not None:
-                observer.accept(kind,message,received_monotonic_s=received)
+
 
     def controller_feedback(self,kind,when):
         """The ratified `controller_feedback` record for one kind, from the state this driver holds.
