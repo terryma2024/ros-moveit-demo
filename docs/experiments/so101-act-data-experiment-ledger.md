@@ -51356,3 +51356,30 @@ One thing still unread before the test can be written correctly: the keys `audit
 the cup's recorded world pose **mismatch** the frozen targets while leaving everything else valid - and getting that
 wrong would produce a verdict of `INCOMPLETE` rather than the `FAIL` the correction is about. That read is the next
 round's first act, and then the test is short.
+
+
+## CP-2696 — Correction 3's test depends on correction 2: the recorder's episode has no audit to judge
+
+Writing the downgrade test with the recipe produced a different refusal than expected:
+
+```
+E   FileNotFoundError: ... nonhead-tests.Df7y8FIa/pyt...
+    raise ValueError("AUDIT_MANIFEST_INVALID") from error
+```
+
+The endpoint QC reads the episode through `verify_audit_manifest`, and **the recorder's episode carries no
+`audit-manifest.json`** - it has its own records and seal, but not the raw audit the QC is defined over. That is exactly
+what CP-2667 found from the other direction: the v2 sealing side, which binds the raw audit and the scope into the seal,
+is not wired at all.
+
+So the two corrections have an order, and it is not the order I was working in:
+
+- **correction 2** (bind the sealed audit into the episode) is a **prerequisite** of
+  **correction 3**'s test (a verdict that can change the terminal status), because without an audit there is nothing for
+  the fresh process to judge;
+- the check I committed in `ca89fa9b3` is still correct and still needed - it fires whenever `endpoint_inputs` is
+  supplied - but its end-to-end proof has to wait for the audit to reach the episode.
+
+My half-written test is reverted again, and the worktree is back to the user's 35 entries. The next round goes to
+correction 2's producer side - the capture that seals its audit (CP-2671) and the path that must hand the manifest and
+scope to the recorder - which is now known to unblock both corrections at once.
