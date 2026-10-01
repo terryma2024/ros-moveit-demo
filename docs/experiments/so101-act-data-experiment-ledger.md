@@ -54775,3 +54775,19 @@ So the fix is one wrapper, not a design change: E3's test needs a `physical_audi
 `recorder_physical_audit` with the identity overridden - and nothing in production has to move. Worth recording as the
 fourth time this stretch that a fixture's hardcoded coordinate hid a real dependency until a caller with different values
 drove the same path.
+
+
+## CP-2833 — The physical-audit fix works, and the next refusal is the v2 pair again
+
+With `physical_audit` reporting the lease's identifiers (`{**recorder_physical_audit(at_s), "attempt_id":
+current.attempt_id}`), `EPISODE_SCOPE_INVALID` is gone - so CP-2832's diagnosis was right and the row's coordinates are
+now the coordinator's. The next refusal is `EPISODE_SEAL_AUDIT_INCOMPLETE`, which is the v2 clause: a seal that names an
+audit manifest and a scope is only verified when the caller supplies both, and something is supplying neither.
+
+In this test the store's pair is set immediately before `store.seal(...)` from `episode_audit_pair(store.episode_root)` -
+the pre-publish paths, which is the phase CP-2777 measured the store's own verification to need - so the next read is
+whether the attributes are what `seal` consults, or whether the pair has to be passed where the store is constructed, or
+whether the refusal is raised by a different `verify_episode_seal` call than the store's (the verifier's own, later).
+
+The test is reverted so the tree stays green, and the E3 test is now three alignments from its assertion rather than six:
+the window, the lease identity and the physical audit are all settled.
