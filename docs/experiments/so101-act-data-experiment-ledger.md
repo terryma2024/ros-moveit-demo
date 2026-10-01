@@ -55241,3 +55241,25 @@ a host that has no torch - which is precisely what the run in progress is doing.
 
 Recorded before editing because the change touches the spec's provenance fields as well as the composition call, and it is
 the coordinator's decision that authorises it.
+
+
+## CP-2855 — The wiring written as a checklist, because the objective waits on it
+
+Nothing in `src/` assembles a capture (`ContinuousEpisodeCapture` appears only at its own definition), so the coordinator's
+next run will get a healthy stack and no episode. The handover now carries the step as five numbered edits rather than as a
+principle:
+
+1. **extract** the per-instant values via `live_evidence_sample(...)`, with `source_received_monotonic_s` coming from the
+   sampler rather than from the row;
+2. **shape** them with `PhysicalAuditAdapter`, which fails at the sample if any of the thirteen is missing;
+3. **build the scope** with `build_collection_scope(...)` from the frozen inputs' own values;
+4. **assemble** with `assemble_episode_capture(sampler=LiveSampler(sources.rgb), ...)`, including the scope's document and
+   its path;
+5. **drive** it and `finish(..., window=...)` - without a window it does not seal.
+
+plus the phase rule for handing it on (pre-publish pair for the store, published pair for the verifier, and
+`ActCollectionResultVerifier` as the port the coordinator's gate recognises).
+
+Written because this is now the single thing between the objective and its completion, and because a checklist with file
+and line references is what the coordinator can act on between other work - whereas the same content as prose has already
+been read once and not yet acted on.
