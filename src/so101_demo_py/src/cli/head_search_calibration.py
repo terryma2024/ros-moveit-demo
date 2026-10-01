@@ -23,7 +23,9 @@ flat measurement plan the installed controller is constructed with, the six-fiel
 runtime contract fixes - and `measure-bundle-inputs` produces the declared geometry and perception
 parameter blocks with the live effective-value readback
 (`so101_demo.act.head_search_calibration_admission_document`,
-`so101_demo.act.head_search_calibration_bundle_inputs`).
+`so101_demo.act.head_search_calibration_bundle_inputs`), and `measure-episode-records` reshapes the
+installed phase-3 measurement document into the per-seed contract phase 4's gate declares
+(`so101_demo.act.head_search_episode_records`).
 """
 
 from __future__ import annotations
@@ -261,6 +263,16 @@ BUNDLE_INPUTS_REQUIRED_FILE_FLAGS = (
 BUNDLE_INPUTS_OPTIONAL_FILE_FLAGS = (
     ("operating_point_measurements", "--operating-point-measurements"),
 )
+
+#: the `measure-episode-records` entry: the installed phase-3 measurement document whose calibration
+#: frames are the episodes, the sealed partitions that declare which seeds the split holds, and the
+#: brand-new directory the gate's `--episode-records` points at
+EPISODE_RECORDS_REQUIRED_FLAGS = (
+    ("operating_point_measurements", "--operating-point-measurements"),
+    ("episode_partitions", "--episode-partitions"),
+    ("output_dir", "--output-dir"),
+)
+EPISODE_RECORDS_REQUIRED_FILE_FLAGS = ("operating_point_measurements", "episode_partitions")
 
 
 #: the `measure-deadband-candidates` entry: the sealed scene the lock trials step the neck in, the sealed
@@ -1937,6 +1949,86 @@ def _measure_bundle_inputs(arguments: list[str]) -> int:
     return 0
 
 
+def _episode_records_parser() -> argparse.ArgumentParser:
+    """The `measure-episode-records` entry: the measurement document, the partitions and the output.
+
+    The entry measures nothing: phase 4's gate reads one document per declared seed, and the installed
+    phase-3 flight's measurement document already holds those frames. The library re-shapes them verbatim
+    and refuses a seed, a candidate's measurement or a domain that is missing.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-episode-records",
+        description=(
+            "Write the gate's --episode-records from the installed phase-3 measurement document: one "
+            "document per declared seed, every measured frame verbatim"
+        ),
+    )
+    parser.add_argument(
+        "--operating-point-measurements", type=Path, help="the installed phase-3 measurement document"
+    )
+    parser.add_argument(
+        "--episode-partitions", type=Path, help="the sealed scenario partitions the seeds come from"
+    )
+    parser.add_argument("--split", default="calibration", help="the partition the episodes belong to")
+    parser.add_argument(
+        "--output-dir", type=Path, help="the brand-new directory the per-seed documents own"
+    )
+    return parser
+
+
+def _measure_episode_records(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the re-shaping to the library module."""
+
+    parsed = _episode_records_parser().parse_args(arguments)
+    missing = [flag for name, flag in EPISODE_RECORDS_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name in EPISODE_RECORDS_REQUIRED_FILE_FLAGS
+        if not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_episode_records import record_episode_records
+
+    try:
+        result = record_episode_records(
+            measurements=parsed.operating_point_measurements,
+            partitions=parsed.episode_partitions,
+            output_dir=parsed.output_dir,
+            split=parsed.split,
+            command=_command_line(arguments, subcommand="measure-episode-records"),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    print(
+        f"EPISODE_RECORDS_RECORDED split={receipt['split']} seeds={receipt['seed_count']} "
+        f"frames={receipt['frame_count']} output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
 def _has_file(value) -> bool:
     """Every declared file must exist: a repeated flag declares one file per candidate."""
 
@@ -2592,6 +2684,10 @@ def main(argv: list[str] | None = None) -> int:
     # effective-value readback are produced here
     if arguments[:1] == ["measure-bundle-inputs"]:
         return _measure_bundle_inputs(arguments[1:])
+    # phase 4's gate reads the measured calibration episodes one document per seed: this entry reshapes
+    # the installed phase-3 measurement document into that declared contract, verbatim
+    if arguments[:1] == ["measure-episode-records"]:
+        return _measure_episode_records(arguments[1:])
     parsed = qualification_parser().parse_args(arguments)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":
