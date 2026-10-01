@@ -45652,3 +45652,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   controller logs landing under the new LIVE_ROOT.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished and measured (inspect, prepare, preflight all rc=0). HEAD 04b1b9747; goal active.
+
+
+## CP-2419 — The execution surface the single-episode run has to synthesize
+
+- `prepare_batch(argv=None, *, provenance_verifier=verify_provenance, start_guard=None) -> PreparedBatch` calls
+  `_reject_legacy_quota_flag(argv)` and then `build_parser().parse_args(argv)`, so the batch path is a **flat-flag**
+  CLI rather than a subcommand one. Its parser accepts, among others: `--batch-kind`, `--batch-id`, `--config`,
+  `--evidence-root`, `--contract-version`, `--broker-image`, `--broker-image-id`, `--grounded-root`,
+  `--grounded-manifest-sha256`, `--measurement-authorization` (and its sha256), `--adaptive-config`,
+  `--adaptive-workers`, `--initial-points-per-worker`, `--fallback-worker-counts`, `--max-infra-attempts-per-point`,
+  `--live-headroom-*`, and the retry quartet (`--original-*`).
+- So the first-episode `run` is not a thin wrapper: it has to **synthesize that specification from the frozen input
+  set** - one worker, the inputs root as the execution root, the requested mode and `FULL_RESTART` - and supply the
+  contract, broker-image and authorization fields the batch path expects. That is the plan's E2/E3 integration work
+  stated concretely, and it is a multi-pass build rather than a flag addition.
+- Recorded so the scale is not understated in later reports: the input half is finished and measured, while the
+  execution half - this synthesis, the live run, the fresh-process QC, the coordinator commit and the isolated-copy
+  negatives - remains the main line, to be built and verified one failing command at a time.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 0e2dd1440;
+  goal active.
