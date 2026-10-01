@@ -55080,3 +55080,21 @@ That is the last interface in the handover that was implicit, and it is now writ
 It also closes the loop on the extraction: `live_evidence_sample(...)` and `capture_evidence_fields(...)` are where those
 thirteen values come from, and the split recorded at CP-2842 is what keeps their receipt mapping from having to go through
 the row.
+
+
+## CP-2846 — Both ends of the extraction contract, and the repository's own reason for the split
+
+`build_live_evidence_sample` (`task8_live_evidence.py:251`), which `live_evidence_sample` delegates to, documents what each
+of its eleven arguments must carry - `frame` carries `wrist_frame_valid`/`wrist_target_visible`, `contact` the four contact
+booleans plus `observation_valid`, `measurements` the unit-bearing scalars and vectors - and states its own reason for
+existing:
+
+> "The port and readback adapters own the values; this function owns the shape, so both call sites cannot drift apart."
+
+Which is precisely the division this handover describes, written in the repository before this stretch began: **the values
+belong to the extraction, the shape is owned in one place.** My `PhysicalAuditAdapter` is that same idea at the other end
+of the seam - it does not compute the thirteen keys, it insists they are there - so the two classes are two ends of one
+contract rather than two designs that happen to meet.
+
+Recorded in the handover with the table, so whoever extracts has both the inputs' requirements and the output's in one
+document, and can see that the repository already decided this split once.
