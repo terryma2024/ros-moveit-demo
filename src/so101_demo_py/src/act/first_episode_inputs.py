@@ -49,8 +49,11 @@ EMPIRICAL_AUTHORIZATION_KIND = "ACT_NONHEAD_EMPIRICAL_AUTHORIZATION"
 _ROLE_FIELDS = frozenset({"status", "candidates", "selected", "identity", "blocker"})
 _REGISTRY_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_commit",
                               "config_sha256", "evidence_root", "roles"})
+# the amendment's freezer binds the collection mode, the endpoint policy and the development runtime into the
+# manifest as well, so the closed field set acknowledges what the writer now writes (CP-2415)
 _MANIFEST_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_commit",
-                              "config_sha256", "evidence_root", "roles", "inputs_sha256"})
+                              "config_sha256", "evidence_root", "roles", "inputs_sha256",
+                              "mode", "endpoint_policy", "runtime_policy"})
 _MANIFEST_ROLE_FIELDS = frozenset({"path", "sha256", "bytes", "approval", "identity"})
 _APPROVALS = frozenset({"source_controlled", "disabled_proposal", "user_activation",
                         "nonhead_calibration", "user_empirical_default"})
@@ -375,8 +378,10 @@ def _verify_roles(registry: dict) -> dict:
     if documents["contact_activation"]["evidence_root"] != registry["evidence_root"]:
         raise ValueError("INPUT_ACTIVATION_STALE")
     for role in INPUT_ROLES:
-        if registry["roles"][role]["selected"]["approval"] in ("nonhead_calibration",
-                                                              "user_empirical_default"):
+        # the amendment's split: a historical calibration report still has to pass the non-Head safety gate, while
+        # the values the user authorized this round carry their own provenance and are not a calibration report - the
+        # five process-quality fields stop being a precondition here without removing any real safety check
+        if registry["roles"][role]["selected"]["approval"] == "nonhead_calibration":
             require_nonhead_gate(documents[role])
     return payloads
 
