@@ -50213,3 +50213,27 @@ outside E2** (in which case the right output is a ledger note saying so, not a n
 The design's three states and the amendment's rule that a report may judge endpoints but not quality both point at the
 second: the endpoint verdict is a claim about poses, and "the run was valid and failed" is the honest way to record a
 safety stop beside it.
+
+
+## CP-2649 — All sixteen InvalidRun sites are validity failures, so the category has no producer here
+
+The codes, grouped: "workflow trace or checkpoint freshness contract failed" (twice), "verify-batch requires all
+expected values and evidence root", "transactional reset receipt is stale or mismatched", "run requires batch,
+lifecycle, count, bundle, evidence, domain, and ...", "qualification manifest records are invalid", "qualification
+manifest lifecycle mismatch", "qualification manifest bundle mismatch", "owner evidence manifest is missing",
+"workflow owner configuration failed", "qualification manifest is unreadable".
+
+Every one of them is a statement about whether the run **can be qualified** - its inputs present, its receipts fresh, its
+manifests matching and readable, its owner evidence there, its configuration valid. None of them is "the run was valid
+and failed", which is why `ValidRunFailure` has no producer: the qualification layer judges **validity**, and outcome is
+a different axis.
+
+So the honest answer to CP-2648's two readings is the first: `ValidRunFailure` is **reserved** for a purpose this layer
+does not have. If a producer is wanted - and the design's three states suggest one is, for a safety stop beside a passing
+endpoint verdict - it belongs at the **result** side, where the outcome is written: `result_store.py`'s seal and the
+recorder, which today set `qc_passed` from the run's own status (CP-2626). That is a note and a reading rather than a
+change to qualification, and it is the outcome of this round.
+
+Worth recording as the pattern it is: three rounds of reading have now shown that E2's "wiring" is mostly a matter of
+connecting existing categories rather than adding new ones - and that when a category looks unused, the first question is
+whether it is reserved rather than whether it is missing.
