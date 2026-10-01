@@ -15,9 +15,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
-from so101_demo.act.episode_assembly import (LiveSampler, PhysicalAuditAdapter, PointEpisode,
-                                              ProductionProducer, assemble_episode_capture,
-                                              episode_audit_pair)
+from so101_demo.act.episode_assembly import (EpisodeSink, LiveSampler, PhysicalAuditAdapter,
+                                              PointEpisode, ProductionProducer,
+                                              assemble_episode_capture, episode_audit_pair)
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
 from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
 from so101_demo.act.episode_qc import endpoint_qc_document
@@ -477,3 +477,25 @@ def test_a_point_episode_records_frames_and_seals(tmp_path):
                                            "task8_success": False, "stopped_confirmed": True})
     assert summary.sample_count == 0 or summary.sample_count >= 0
     assert (episode_root / "seal.json").is_file()
+
+
+def test_an_episode_sink_takes_frames_only_while_an_episode_is_open(tmp_path):
+    """The shared object a capture port is given before the episode that will consume its frames exists (CP-2857)."""
+    import numpy as np
+
+    sink = EpisodeSink()
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    # no episode yet - a calibration pass or a dry run is not an error
+    assert sink.record("head", stamp_s=1.0, pixels=frame) is False
+
+    episode_root = tmp_path / "episode"
+    episode = PointEpisode(
+        identity=IDENTITY, provenance=PROVENANCE, inputs={"inputs_sha256": "a" * 64},
+        episode_root=episode_root, scope=SCOPE,
+        scope_path=str(episode_audit_pair(episode_root)[1]),
+        physical_audit=recorder_physical_audit, monotonic=lambda: 0.0)
+    episode.start(1.0)
+    sink.current = episode
+    assert sink.record("head", stamp_s=1.0, pixels=frame) is True
+    sink.current = None
+    assert sink.record("head", stamp_s=1.1, pixels=frame) is False

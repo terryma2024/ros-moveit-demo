@@ -19,8 +19,8 @@ from .continuous_capture import ContinuousEpisodeCapture
 from .episode_audit import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
-__all__ = ["LiveSampler", "PhysicalAuditAdapter", "PointEpisode", "ProductionProducer",
-           "assemble_episode_capture", "episode_audit_pair"]
+__all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
+           "ProductionProducer", "assemble_episode_capture", "episode_audit_pair"]
 
 
 def assemble_episode_capture(
@@ -306,3 +306,28 @@ class PointEpisode:
         """Seal the episode: the window is `[the gate's instant, this boundary]`, and without it there is no seal."""
         return self.capture.finish(float(end_s), window={"start_s": self._start_s, "end_s": float(end_s),
                                                          "label_cutoff_s": float(end_s)}, outcome=outcome)
+
+
+class EpisodeSink:
+    """The one object a capture port and a worker runtime can both be given before either exists.
+
+    A run builds its `capture_rgb` port first and hands it to the worker runtime afterwards, so the port cannot be
+    given the episode itself - the episode does not exist until a point starts. This is the small shared thing in
+    between: the runtime sets `current` when it opens a point's episode and clears it when the point ends, and the port
+    asks for it while it has the pixels in hand. Everything else about recording lives in `PointEpisode`.
+    """
+
+    def __init__(self) -> None:
+        self.current = None
+
+    def record(self, camera: str, *, stamp_s: float, pixels, received_monotonic_s: float | None = None) -> bool:
+        """Offer one captured frame to the current episode; returns whether anything took it.
+
+        A run without an open episode - a calibration pass, a dry run, a port used outside an episode - is not an error,
+        and returning a boolean rather than raising keeps that distinction where it belongs.
+        """
+        episode = self.current
+        if episode is None:
+            return False
+        episode.push(camera, stamp_s=stamp_s, pixels=pixels, received_monotonic_s=received_monotonic_s)
+        return True
