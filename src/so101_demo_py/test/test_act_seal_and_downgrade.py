@@ -344,3 +344,14 @@ def test_an_endpoint_failing_episode_cannot_be_committed_as_success(tmp_path):
         assert coordinator.snapshot().points["scene-1"].terminal is True
     finally:
         journal.close()
+
+
+def test_the_producer_keeps_the_receipt_mapping_out_of_the_recorded_row():
+    """CP-2842's split: the row records `source_stamps`; the extraction can still read the receipt times."""
+    producer = ProductionProducer()
+    producer.stamps["head"].append(1.0)
+    producer.stamps["wrist"].append(1.0)
+    _, row_audit = producer.sample_with_audit("session-1", "attempt-1", 1.0)
+    assert set(row_audit) == {"source_stamps"}
+    received = producer.source_received_monotonic_s()
+    assert set(received) == {"head", "wrist", "arm", "neck"}

@@ -100,6 +100,8 @@ class ProductionProducer:
         self.stamps = {stream: [] for stream in self.STREAMS}
         self._pushed = 0
         self._latest = None
+        #: the synchronizer's own audit from the last sample (CP-2842)
+        self.last_source_audit: dict = {}
 
     def sample_with_audit(self, session_id, attempt_id, at_s):
         """Return the observation for `at_s` and the source audit an episode row records."""
@@ -125,7 +127,19 @@ class ProductionProducer:
                 self._latest = stamp
             self._pushed += 1
         observation, audit = self.synchronizer.sample_with_audit(session_id, attempt_id, at_s)
+        # the full audit is kept here for the extraction path, which needs the receipt mapping as well
+        # (`live_evidence_sample`'s `source_received_monotonic_s`); the episode row still records only `source_stamps`,
+        # because the recorder's channel is closed at sixteen keys (CP-2842)
+        self.last_source_audit = dict(audit)
         return observation, {key: value for key, value in audit.items() if key in ("source_stamps",)}
+
+    def source_received_monotonic_s(self) -> dict:
+        """The receipt times of the last sample, by stream - for the extraction, not for a row.
+
+        `live_evidence_sample` takes this mapping while the recorder refuses it, so the two travel separately: this
+        accessor is the extraction's, and `sample_with_audit`'s audit is the row's.
+        """
+        return dict(self.last_source_audit.get("source_received_wall_s") or {})
 
 
 def episode_audit_pair(episode_root: Path) -> tuple[Path, Path]:
