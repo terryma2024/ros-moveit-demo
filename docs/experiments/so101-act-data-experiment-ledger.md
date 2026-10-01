@@ -54733,3 +54733,27 @@ reverted with the test.
 
 Recorded rather than guessed, because the last three rounds each advanced by one refusal and this one is the first that
 cannot be advanced by aligning a caller: the callers already agree.
+
+
+## CP-2831 — The check's own print, and what it shows where the chain already passes
+
+A temporary print inside the recorder's scope check - the three values it compares, from the dict it was handed - makes
+the comparison visible, and in the chain test it reads:
+
+```
+AUDITCHECK row: 'session-1' 'attempt-1' 2 | recorder: 'session-1' 'attempt-1' 2
+```
+
+equal on both sides, which is why the chain test passes. The row's three values come from the capture's own coordinates,
+set by `start(...)`, and the chain helper starts its capture with exactly `("session-1", "attempt-1", 2, 1.0)` - the same
+values the recorder was built with.
+
+Which locates E3's `EPISODE_SCOPE_INVALID` more precisely than the previous rounds could: since the row's values come from
+`start(...)` and E3's test starts its capture with the lease's identifiers, the two sides should agree there too - so the
+refusal is not explained by the coordinates at all, and the next observation has to be made with E3's test present rather
+than by reasoning about it. That is a two-part step: keep the print in place, write the test, watch which values differ,
+then remove both.
+
+The print is reverted so the tree is green (`7 passed` in the chain file and the unit file together), nothing of mine is
+uncommitted, and the next round does the two-part step in one go rather than leaving instrumentation in production code
+between rounds.
