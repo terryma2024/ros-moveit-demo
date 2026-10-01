@@ -54098,3 +54098,26 @@ module will name what it requires (`_EVIDENCE_GATES` is already visible in the c
 Also recorded for planning: `test_act_task8.py` is the family with the pre-existing failures (61-62 across the module-wide
 gate, `AttributeError` on `PickPlaceSearchBoundary`), which the coordinator has been offered as a separate line of work and
 which must not be confused with anything this stretch changes.
+
+
+## CP-2808 — The right fixture is a method, and the name "evidence" is a trap again
+
+`test_act_held_cup_state.py:18 def evidence():` looked like the fixture the predicate negatives need, and it is not: it
+builds a MuJoCo scene snapshot with a model digest, `qpos`/`qvel` and a pause flag - the *attachment* evidence, whose
+subject is a physics identity, not a phase's safety predicates. Same word, different thing, and the second time this
+stretch that a shared name has pointed at the wrong module (`ActCollectionResultVerifier` was the first).
+
+The fixtures that do build phase evidence are methods:
+
+```
+test_act_release_boundary.py:440    def evidence(self, phase, request):
+test_act_task8.py:39                def evidence(self, phase, req):
+```
+
+both keyed by `phase` and `request`, which is exactly the shape CP-2806's ten predicates need - flip one field of a
+passing document per test and assert the specific code. `test_act_release_boundary.py` is the more promising of the two
+for the RELEASE / RADIAL_RETREAT / FINAL_CHECK group (its own name says so) and is not in the family with the
+pre-existing failures, while `test_act_task8.py` is, so the four negatives belong beside the former.
+
+With that, correction 5's work is located rather than guessed: one fixture to reuse, ten negatives to write across the
+three groups, and the three `test_act_episode_qc.py` corrections that are its other half.
