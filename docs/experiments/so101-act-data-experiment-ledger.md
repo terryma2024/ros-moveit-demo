@@ -50022,3 +50022,22 @@ may measure and must not overstate - maps onto a concrete question for the next 
 gate can be relaxed to a measurement without weakening any safety check.
 
 That is the last substantial piece of E2, and it is a read of two files rather than a design question.
+
+
+## CP-2641 — The quality contract is not on the first-episode path, which is the amendment's whole point
+
+`task8_measurement_contract.py` (246 lines) is imported by exactly two modules, and both are Task-8 calibration tools:
+
+- `cli/act_build_task8_calibration_report.py` - `load_measurement_contract(...)`;
+- `cli/act_measure_task8_calibration.py` - `close_measurement_batch`, `load_measurement_contract`,
+  `require_v2_identity`, and it records `measurement_contract_sha256` in its identity.
+
+So the quality gate lives on the **calibration/measurement** path and **not** on the first-episode path this milestone
+runs: `act_first_episode.py`, `episode_qc.py` and `episode_audit.py` never consult it, and the amendment's goal line -
+"run the collection chain with configurable empirical thresholds, **removing process-quality calibration as a
+precondition for success**" - therefore holds here **by construction** rather than by a change still to be made.
+
+That converts E2's quality item from a code change into an **assertion**: the honest artefact is a test that the
+first-episode chain does not import the measurement contract, so that "quality stopped being a precondition" is a
+measured property rather than a claim about what I happened to read. Together with CP-2639's safety list - the runner's
+codes, all of which stay - that is the checklist E2 was asked to produce, and both halves are now concrete.
