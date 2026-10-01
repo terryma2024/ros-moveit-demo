@@ -42071,3 +42071,38 @@ frozen 与规则记录不一致也算 `CAL_VALUE_MUTATED`；⑦ 只摘要 phase-
 **Task 13 内部进度**：§0 + phase **1/2/3/5/8** 完成（累计 16+18+38+31+21 = **124 个新用例**，各自 RED→GREEN、全套件零新增失败）；
 **phase 4**（复用既有 gate + CLI 编排接线）、**phase 6/7**（搜索参数、时序与停车参数，需运行时）未开始。
 证据 `scratch/hs293/`（含 `hs293-SUMMARY.md`）列为删除候选，未删除。
+
+## HS-294 — phase 4 与 `run` 编排接线完成：`run` 现在真的走到 phase 5 才停（并以 `CAL_PHASE_UNIMPLEMENTED` 如实失败）
+
+**提交** `4619df73`（新增两个文件 + 修改 `src/so101_demo_py/src/cli/head_search_calibration.py`；`git status --porcelain` 为空；普通 `git commit`，钩子 rc=0）：
+
+- 新 `src/so101_demo_py/src/act/head_search_calibration_run.py`：`PHASES`、`UNIMPLEMENTED_PHASES`、`PHASE_ARTIFACTS`、
+  `check_trajectory_contract`、`claim_run_root`、`require_one_safe_interval`、`bundle_under_assembly`、
+  `evaluate_frozen_candidates`、`execute_calibration_run` 等。
+- 新 `src/so101_demo_py/test/test_act_head_search_calibration_run_orchestration.py`（22 用例）。
+
+**`run` 的端到端行为（与 HS-233 的空壳形成对照）**：入口先做**有界轨迹前置检查**（构造已安装的 `HeadSearchController`，**不发运动**）
+→ 认领全新 root → **一次** `CalibrationResourceBinder` → phase 1（输入/admission/绑定）→ phase 2（几何 + 覆盖，含"单一安全区间"检查）
+→ phase 3（operating point）→ phase 4（**进程内**复用既有 gate，产出 `model-comparison.json` 与 `model-selection-verdict.json`）
+→ phase 5（readback）→ **在 phase 6 `search_parameters` 停止**，以 **`CAL_PHASE_UNIMPLEMENTED`** 落 **FAILED** `run-status.json`（只写它），
+phase 6/7/8 未跑、无 bundle/manifest、**无 `--resume` 路径**。
+
+**新增拒绝码**：`CAL_TRAJECTORY_CONTRACT_UNSATISFIED`、`CAL_PHASE_UNIMPLEMENTED`、`CAL_SAFE_INTERVAL_MISMATCH`、
+`CAL_CANDIDATE_EVALUATION_FAILED`，以及 CLI 侧 `HEAD_SEARCH_RUN_INPUTS_INCOMPLETE`。
+
+**验证链**：RED（模块缺失 collection error，rc=1；CLI 侧 ImportError，rc=1）→ GREEN **36 passed, rc=0**（提交后复跑仍 rc=0）
+→ 回归 **156 passed**（14 + 16+18+38+21+31+6+12）→ 全套件 **175 failed / 5742 passed / 152 skipped / 86 errors**，
+与基线**节点级 261 个 FAILED/ERROR `diff` 为空、+26 passed、0 新增失败/错误**。
+
+**一处必须单独说明的既有测试改动（不是削弱断言）**：它**修改了 `test/test_head_search_calibration_cli.py`**——其中两个测试断言的正是
+**HS-233 的空壳行为**（`frozen-runtime.json` → `RUN_SUCCEEDED` + `run-receipt.json`/`calibration-state.json`），也就是这次要修掉的东西。
+属于"**被钉住的错误期望被替换**"，它照实声明了；我按同一标准接受，并在下一次复审里一并提请定夺。
+另：它的临时脚本曾创建 `./-p/` 夹具目录，已移到 `scratch/hs294/stray-arg-p-fixture`，**未删除**。
+
+**它声明的推断（待评审）**：① phase 4 名与 phase 1 产物名（设计 §8.3 未规定）；② 前置拒绝发生在八 phase 之外，入口处**不认领、不落盘**；
+③ `production_search_config` 即构造已安装 controller 所用配置；④ `phases_run` 只计完成者，拒绝者仅出现在 `first_failing_phase`；
+⑤ phase 5 读的是**装配中的** bundle（设计 §7.2 把它排在 6/7/8 之前）；⑥ gate 适配器把 `--output` 固定到 run root 并记录其退出码；
+⑦ `CAL_SAFE_INTERVAL_MISMATCH` 为自拟码；⑧ 未编码的 phase 异常直接抛出（不发明码），已有证据留在盘上。
+
+**Task 13 内部进度**：§0 + phase **1/2/3/4/5/8** 就位（累计新用例 **16+18+38+22+31+21 = 146**）；**phase 6/7 未实现**，
+`run` 会在那里如实失败——这正是"安装入口"与"空壳"的分界。
