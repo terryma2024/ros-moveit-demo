@@ -26,6 +26,11 @@ from so101_demo.parallel_batch.contracts import LeaseIdentity, RunMode
 from test_act_continuous_capture import (AcquisitionGuard, AcquisitionMinter, FakeSampler, feed,
                                          reference)
 from test_act_recorder import PROVENANCE
+from so101_demo.parallel_batch.coordinator import BatchCoordinator
+from so101_demo.parallel_batch.journal import CoordinatorJournal
+from so101_demo.parallel_batch.contracts import (BatchKindV2, BatchRequestV2, RunMode,
+                                                 load_parallel_runtime_config_v2)
+
 
 POLICY = Path(__file__).resolve().parents[1] / "config/act/endpoint_pose_acceptance_v1.yaml"
 SCOPE = {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1, "mode": "preselected_target_diagnostic",
@@ -262,3 +267,80 @@ def test_the_audit_pair_is_named_where_the_readers_resolve_it(tmp_path):
     manifest, scope = episode_audit_pair(episode_root)
     assert manifest == episode_root / "audit" / "audit-manifest.json"
     assert scope == episode_root / "audit" / "source.json"
+
+
+def test_an_endpoint_failing_episode_cannot_be_committed_as_success(tmp_path):
+    """E3's closed loop, software side (CP-2827/CP-2828).
+
+    An episode sealed through the production assembly - the seam plus the real producer - committed through a
+    real `BatchCoordinator` whose port is the ACT verifier. It claims PASSED; its endpoint verdict is not
+    PASS; so the coordinator must not record a success. Three dependencies had to be honoured, each measured
+    rather than assumed: `finish` needs a `window` or the capture never seals; a row's identifiers come from
+    the physical audit rather than from `start(...)`, so that callable reports the lease's attempt; and the
+    audit pair must be the pre-publish paths when the store verifies (CP-2777).
+    """
+    policy = load_endpoint_policy(POLICY)
+    journal = CoordinatorJournal.create(tmp_path / "journal", "batch-a")
+    try:
+        root = tmp_path / "w00"
+        verifier = ActCollectionResultVerifier(
+            {"w00": root}, endpoint_inputs={"initial_target": [0.0] * 7, "final_target": [0.0] * 7,
+                                            "endpoint_policy": policy})
+        request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("scene-1",), 1,
+                                 tmp_path / "journal", BatchKindV2.FIRST_PASS)
+        config = load_parallel_runtime_config_v2(
+            Path(__file__).resolve().parents[1] / "config/mujoco/parallel_batch_v2.yaml")
+        coordinator = BatchCoordinator(journal, request, config=config,
+                                       clock=lambda: 0., result_port=verifier)
+        coordinator.register_worker("w00", generation=1)
+        current = coordinator.grant_lease("w00", generation=1)
+        coordinator.ack_lease(current, request_key="ack-1")
+        gate = {"schema_version": 1, "kind": "POINT_INITIAL_GATE",
+                "batch_id": current.batch_id, "coordinator_epoch": current.coordinator_epoch,
+                "worker_id": current.worker_id, "worker_generation": current.worker_generation,
+                "point_id": current.point_id, "attempt_id": current.attempt_id,
+                "lease_generation": current.lease_generation, "reset_epoch": "reset-1",
+                "simulation_session_id": "session-1", "reset_completed_monotonic_s": 1.,
+                "source_frame_monotonic_s": 2., "canonical_joints": True,
+                "no_controller_goal": True, "no_attachment": True, "no_contact": True,
+                "no_stale_node": True}
+        coordinator.ack_attempt_started(current, request_key="start-1", gate_summary=gate)
+        workspace = coordinator.snapshot().workers["w00"].workspace
+        store = ActCollectionResultStore(workspace, current, clock=lambda: 1.)
+
+        def physical_audit(at_s):
+            return {**recorder_physical_audit(at_s),
+                    "session_id": IDENTITY["session_id"], "attempt_id": current.attempt_id}
+
+        capture = assemble_episode_capture(
+            sampler=ProductionProducer(), physical_audit=physical_audit,
+            identity={**IDENTITY, "attempt_id": current.attempt_id}, provenance=PROVENANCE,
+            inputs={"inputs_sha256": "a" * 64}, episode_root=store.episode_root, scope=SCOPE,
+            scope_path=str(episode_audit_pair(store.episode_root)[1]),
+            deadline_s=120.0, monotonic=lambda: 0.0)
+        minter = AcquisitionMinter()
+        capture.start(IDENTITY["session_id"], current.attempt_id, IDENTITY["reset_epoch"], 1.0)
+        for stamp in (1.0, 1.1, 1.2, 1.3):
+            for camera in ("head", "wrist"):
+                feed(capture, minter, camera=camera, stamp_s=stamp, session="session-1", reset_epoch=2)
+            capture.on_reference(reference(stamp + 0.1))
+            capture.drain()
+        capture.finish(1.4, window={"start_s": 1.0, "end_s": 1.4, "label_cutoff_s": 1.4},
+                       outcome={"status": "PASSED", "reason": "completed",
+                                "task8_success": True, "stopped_confirmed": True})
+        manifest, scope = episode_audit_pair(store.episode_root)
+        store.audit_manifest = manifest
+        store.scope = scope
+        sealed = store.seal(store.episode_root / "seal.json")
+
+        # the verifier re-verifies the episode, so it needs the pair as well - and by now the store has published,
+        # so this is the post-publish location (CP-2777)
+        published_manifest, published_scope = episode_audit_pair(sealed / "episode")
+        verifier.audit_manifest = published_manifest
+        verifier.scope = published_scope
+        result = coordinator.commit_result(current, str(sealed), request_key="result-1")
+        # the episode claimed PASSED and the endpoint verdict was not PASS, so this is not a success
+        assert result["status"] == "FAILED"
+        assert coordinator.snapshot().points["scene-1"].terminal is True
+    finally:
+        journal.close()
