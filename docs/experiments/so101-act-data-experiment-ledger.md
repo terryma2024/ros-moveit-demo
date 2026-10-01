@@ -51877,3 +51877,31 @@ is the capture's drain/service loop: where it decides that a pending row is read
 
 This is the sixth fact in this one test, and like the others it is a real contract rather than a repetition: the grid is
 exact, the time is the observation's own, and the sampler's stamps do not reach the recorder unmediated.
+
+
+## CP-2721 — Found it: a row is written only once its reference is ready
+
+```python
+    def _service_pending(self) -> int:
+        written = 0
+        while self._pending and self._reference_state(self._pending[0]) == "ready":
+            row = self._pending[0]
+            entry = self._references[row["target_s"]]
+            ...
+                self.recorder.append(row["observation"], entry["positions"], audit)
+```
+
+So the capture does not write a row when a frame arrives: it writes it when the row's **reference** is ready, indexing
+`self._references` by the row's `target_s`. My tests fed frames - head and wrist at 1.0, 1.1, 1.2 - and drained, but
+never fed a reference, so the rows stayed pending and the recorder received too few of them for a PASSED grid.
+
+That explains both tests at once, and it is consistent with what the correction-2 test showed: it sealed successfully
+with a FAILED outcome precisely because a FAILED outcome does not require a grid, so its zero-row episode was legal.
+
+The instruments are already in the harness: `reference(at_s, *, accepted=True, positions=None)` builds
+`{"source": "CONTROLLER_REFERENCE", "requested_sim_time_s": round(at_s, 6), "positions": [...], "accepted": True}`, and
+`capture.on_reference(message)` delivers it. Feeding one reference per instant should make each row ready in turn, and the
+grid then follows the frames' stamps - which are already the 0.1 steps the recorder demands.
+
+This is the seventh fact this one test has surfaced, and the first that is about the *flow* rather than about a document:
+frames queue, references release.
